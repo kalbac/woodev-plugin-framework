@@ -14,6 +14,25 @@ import { Button } from '@wordpress/components';
 import ControlField from '../components/control-field';
 import { testConnection } from './rest';
 
+/**
+ * Whether a connection field counts as filled: a wp-config constant, a typed value, or a masked secret that is
+ * already saved (`is_set`) all do, even though a saved secret's input is empty.
+ *
+ * @param {Object} field  the field schema.
+ * @param {*}      edited the staged value, `undefined` when the field has no edit.
+ * @return {boolean} whether the field is satisfied.
+ */
+export function isFieldFilled( field, edited ) {
+	if ( field.constant_managed ) {
+		return true;
+	}
+	const current = edited ?? field.value;
+	if ( current !== '' && current !== null && current !== undefined ) {
+		return true;
+	}
+	return !! ( field.sensitive && field.is_set );
+}
+
 export default function ConnectionBlock( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ result, setResult ] = useState( section.status || null );
@@ -47,20 +66,8 @@ export default function ConnectionBlock( { providerId, section, values, conditio
 	};
 
 	// Gate the action button on every field being satisfied. A handshake block
-	// (no fields) is vacuously satisfied → always enabled. A masked secret that
-	// is already saved (is_set) or backed by a wp-config constant counts as
-	// filled even though its input is empty.
-	const allFieldsFilled = Object.keys( section.fields ).every( ( settingId ) => {
-		const field = section.fields[ settingId ];
-		if ( field.constant_managed ) {
-			return true;
-		}
-		const current = values[ settingId ] ?? field.value;
-		if ( current !== '' && current !== null && current !== undefined ) {
-			return true;
-		}
-		return !! ( field.sensitive && field.is_set );
-	} );
+	// (no fields) is vacuously satisfied → always enabled.
+	const allFieldsFilled = Object.keys( section.fields ).every( ( settingId ) => isFieldFilled( section.fields[ settingId ], values[ settingId ] ) );
 
 	return (
 		<div className="woodev-connection">

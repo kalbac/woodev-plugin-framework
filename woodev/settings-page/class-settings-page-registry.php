@@ -270,7 +270,7 @@ final class Settings_Page_Registry {
 			}
 
 			// Titled cards gathering some of those fields and actions (Settings_Section::with_groups()).
-			$groups = self::build_groups( $section, array_keys( $entry['fields'] ), array_column( $entry['actions'] ?? [], 'id' ) );
+			$groups = self::build_groups( $section, array_keys( $entry['fields'] ), array_column( $entry['actions'] ?? [], 'id' ), $handler );
 			if ( [] !== $groups ) {
 				$entry['groups'] = $groups;
 			}
@@ -311,9 +311,10 @@ final class Settings_Page_Registry {
 	 * @param Settings_Section $section    the section.
 	 * @param string[]         $field_ids  ids of the section's fields in declaration order.
 	 * @param string[]         $action_ids ids of the section's actions in declaration order.
-	 * @return array<int,array{id:string,title:string,description:string,notice:string,fields:string[],actions:string[]}>
+	 * @param object|null      $handler    the tab's settings handler, asked about a table's check cells.
+	 * @return array<int,array<string,mixed>> each group with `id`, `title`, `description`, `notice`, `fields`, `actions` and, for a table group, `table`.
 	 */
-	private static function build_groups( Settings_Section $section, array $field_ids, array $action_ids ): array {
+	private static function build_groups( Settings_Section $section, array $field_ids, array $action_ids, $handler = null ): array {
 		$taken_fields  = [];
 		$taken_actions = [];
 		$resolved      = [];
@@ -328,7 +329,7 @@ final class Settings_Page_Registry {
 
 			$taken_fields  = array_merge( $taken_fields, $fields );
 			$taken_actions = array_merge( $taken_actions, $actions );
-			$resolved[]    = [
+			$entry         = [
 				'id'          => $group->get_id(),
 				'title'       => $group->get_title(),
 				'description' => wp_kses_post( $group->get_description() ),
@@ -336,9 +337,101 @@ final class Settings_Page_Registry {
 				'fields'      => $fields,
 				'actions'     => $actions,
 			];
+
+			if ( null !== $group->get_table() ) {
+				$entry['table'] = self::build_table( $group->get_table(), $field_ids, $handler );
+			}
+
+			$resolved[] = $entry;
 		}
 
 		return $resolved;
+	}
+
+	/**
+	 * Resolves a group's table for the browser: columns, rows, and each cell with what the page cannot know itself.
+	 *
+	 * A field cell naming a field the section does not carry is dropped (the cell shows empty). A check cell is
+	 * told whether the handler can test it and what the last check said, like a connection section's block.
+	 *
+	 * @since 2.0.26
+	 *
+	 * @param Settings_Table $table     the table.
+	 * @param string[]       $field_ids ids of the section's fields.
+	 * @param object|null    $handler   the tab's settings handler.
+	 * @return array{row_title:string,columns:array<int,array{id:string,label:string}>,rows:array<int,array<string,mixed>>}
+	 */
+	private static function build_table( Settings_Table $table, array $field_ids, $handler ): array {
+		$columns = [];
+
+		foreach ( $table->get_columns() as $column_id => $label ) {
+			$columns[] = [
+				'id'    => (string) $column_id,
+				'label' => $label,
+			];
+		}
+
+		$rows = [];
+
+		foreach ( $table->get_rows() as $row ) {
+			$cells = [];
+
+			foreach ( $row['cells'] as $column_id => $cell ) {
+				$cell = self::build_table_cell( $cell, $field_ids, $handler );
+
+				if ( null !== $cell ) {
+					$cells[ (string) $column_id ] = $cell;
+				}
+			}
+
+			$rows[] = [
+				'id'    => $row['id'],
+				'label' => $row['label'],
+				'cells' => (object) $cells,
+			];
+		}
+
+		return [
+			'row_title' => $table->get_row_title(),
+			'columns'   => $columns,
+			'rows'      => $rows,
+		];
+	}
+
+	/**
+	 * One table cell as the browser reads it.
+	 *
+	 * @since 2.0.26
+	 *
+	 * @param array<string,mixed> $cell      the cell.
+	 * @param string[]            $field_ids ids of the section's fields.
+	 * @param object|null         $handler   the tab's settings handler.
+	 * @return array<string,mixed>|null Null for a field cell the section does not carry.
+	 */
+	private static function build_table_cell( array $cell, array $field_ids, $handler ): ?array {
+		$type = $cell['type'] ?? '';
+
+		if ( Settings_Table::CELL_FIELD === $type && ! in_array( $cell['setting'], $field_ids, true ) ) {
+			return null;
+		}
+
+		if ( Settings_Table::CELL_CHECK !== $type ) {
+			return $cell;
+		}
+
+		$cell['supports_test'] = $handler instanceof Composite_Settings_Handler
+			? $handler->supports_connection_test( $cell['connection'] )
+			: $handler instanceof \Woodev_Settings_Connection_Test;
+
+		if ( $handler instanceof \Woodev_Settings_Connection_Status ) {
+			$status = $handler->get_connection_status( $cell['connection'] );
+
+			if ( null !== $status ) {
+				$cell['status'] = $status->to_array();
+			}
+		}
+
+		return $cell;
 	}
 
 	/**

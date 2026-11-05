@@ -65,9 +65,11 @@ export const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
  * @param {Function} props.onChange change handler.
  * @param {boolean}  props.isSet    whether a secret is already stored.
  * @param {boolean}  [props.disabled] whether the control is disabled (D11).
+ * @param {string}   [props.savedPlaceholder] placeholder shown while a secret is stored and nothing is typed.
+ * @param {string}   [props.ariaLabel] accessible name of the input when no visible label is drawn (`schema.aria_label`).
  * @return {Object} React element.
  */
-function PasswordControl( { value, onChange, isSet, disabled } ) {
+function PasswordControl( { value, onChange, isSet, disabled, savedPlaceholder, ariaLabel } ) {
 	const [ show, setShow ] = useState( false );
 	const hasValue = '' !== ( value ?? '' );
 
@@ -79,9 +81,10 @@ function PasswordControl( { value, onChange, isSet, disabled } ) {
 			__next40pxDefaultSize: true,
 			type: show && hasValue ? 'text' : 'password',
 			value: value ?? '',
-			placeholder: isSet && ! hasValue ? '•••••• сохранено — введите новое для замены' : '',
+			placeholder: isSet && ! hasValue ? ( savedPlaceholder || '•••••• сохранено — введите новое для замены' ) : '',
 			disabled,
 			onChange,
+			'aria-label': ariaLabel || undefined,
 		} ),
 		hasValue &&
 			createElement(
@@ -188,9 +191,11 @@ function ColorControl( { value, optional, onChange, disabled } ) {
  * @param {boolean}  props.hasEdit    whether an explicit edit is staged for this field.
  * @param {Function} [props.onRevert] drops the staged edit (enables the clear affordance).
  * @param {boolean}  [props.disabled] whether the control is disabled (D11).
+ * @param {string}   [props.savedPlaceholder] shorter placeholder for a tight cell (`schema.saved_placeholder`).
+ * @param {string}   [props.clearLabel] shorter clear link text for a tight cell (`schema.clear_label`).
  * @return {Object} React element.
  */
-function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled } ) {
+function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled, savedPlaceholder, clearLabel, ariaLabel } ) {
 	const hasValue = '' !== ( value ?? '' );
 	const canClear = isSet && 'function' === typeof onRevert;
 
@@ -222,7 +227,7 @@ function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled } 
 	return createElement(
 		Fragment,
 		null,
-		createElement( PasswordControl, { value, onChange, isSet, disabled } ),
+		createElement( PasswordControl, { value, onChange, isSet, disabled, savedPlaceholder, ariaLabel } ),
 		canClear && ! hasValue &&
 			createElement(
 				'button',
@@ -232,7 +237,7 @@ function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled } 
 					disabled,
 					onClick: () => onChange( '' ),
 				},
-				'Очистить сохранённое'
+				clearLabel || 'Очистить сохранённое'
 			)
 	);
 }
@@ -387,6 +392,9 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 			createElement( SecretControl, {
 				value: value ?? '',
 				isSet: !! schema.is_set,
+				savedPlaceholder: schema.saved_placeholder,
+				clearLabel: schema.clear_label,
+				ariaLabel: schema.aria_label,
 				hasEdit,
 				onRevert,
 				onChange,
@@ -473,11 +481,12 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 
 		case 'records-table':
 			// The consumer's server-side row check comes back as `schema.serverError`, shown under the table.
-			return withAnatomy( schema, createElement( RecordsTable, {
+			// The wrapper lets the settings page give the table the card's width instead of the 425px control column.
+			return createElement( 'div', { className: 'woodev-records-field' }, withAnatomy( schema, createElement( RecordsTable, {
 				value: value ?? schema.value ?? '', onChange: ( next ) => { setTouched( true ); onChange( next ); }, disabled,
 				columns: schema.columns || [], name: settingId || 'records', country: schema.country || '',
 				addLabel: schema.add_label, emptyText: schema.empty_text,
-			} ), error );
+			} ), error ) );
 
 		case 'search-select':
 			return withAnatomy( schema, createElement( SearchSelectField, {
@@ -619,7 +628,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 		case 'password':
 			return withAnatomy(
 				schema,
-				createElement( PasswordControl, { value, disabled, onChange } ),
+				createElement( PasswordControl, { value, disabled, onChange, ariaLabel: schema.aria_label } ),
 				error
 			);
 
@@ -651,6 +660,8 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				onChange,
 				onBlur,
 				'aria-invalid': !! error,
+				// A caller that draws no visible label (the settings fields table) names the input here.
+				'aria-label': schema.aria_label || undefined,
 			} );
 
 			return withAnatomy(

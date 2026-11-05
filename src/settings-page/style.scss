@@ -12,6 +12,7 @@
 @use '../components/tabs';
 @use '../components/location-picker';
 @use '../components/group';
+@use '../components/fields-table';
 
 // The settings surface's own label-column width. Wider than the shared
 // `$label-col` token (182px) because the operator set it by eye on the rig,
@@ -309,8 +310,10 @@ $settings-label-col: 200px;
 	&-note { color: wd.$muted; }
 }
 
-// The packaging editor uses the available card width; ordinary settings retain their control column.
-.woodev-settings .woodev-boxes-field .woodev-field {
+// The packaging editor and the records table use the available card width; ordinary settings retain their
+// control column. A records table in the 425px control column clipped «Удалить» and wrapped every address.
+.woodev-settings .woodev-boxes-field .woodev-field,
+.woodev-settings .woodev-records-field .woodev-field {
 	grid-template-columns: $settings-label-col minmax( 0, 1fr );
 	@media ( max-width: 782px ) { grid-template-columns: 1fr; }
 }

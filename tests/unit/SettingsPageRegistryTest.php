@@ -3,7 +3,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Settings\{Settings_Group, Settings_Page_Registry, Settings_Provider, Settings_Section};
+use Woodev\Framework\Settings\{Settings_Group, Settings_Page_Registry, Settings_Provider, Settings_Section, Settings_Table};
 use Woodev\Framework\Shipping\Settings\{Shipping_Tool, Tool_Result};
 
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
@@ -746,5 +746,48 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertCount( 1, $sections[0]['groups'], 'the second group has nothing left, so it is omitted' );
 		$this->assertSame( 'a', $sections[0]['groups'][0]['id'] );
 		$this->assertSame( [ 'token' ], $sections[0]['groups'][0]['fields'], 'the unknown "ghost" id is ignored' );
+	}
+
+	private function table_provider( $handler ): Settings_Provider {
+		$table = Settings_Table::create( 'Сервис', [ 'key' => 'Ключ API', 'check' => '' ] )->with_row(
+			'api',
+			'API',
+			[
+				'key'   => Settings_Table::field( 'token' ),
+				'check' => Settings_Table::check( 'api', [ 'token' ], 'Проверить' ),
+			]
+		)->with_row( 'lost', 'Lost', [ 'key' => Settings_Table::field( 'ghost' ) ] );
+
+		return Settings_Provider::create(
+			'carrier',
+			'Перевозчик',
+			$handler,
+			[ Settings_Section::create( 'services', 'Сервисы', [ 'token' ] )->with_groups( [ Settings_Group::create( 'table', 'Сервисы' )->with_table( $table ) ] ) ]
+		);
+	}
+
+	public function test_build_sections_serialises_a_group_table_and_drops_a_cell_of_an_unknown_field(): void {
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $this->table_provider( $this->make_connection_handler() ) ] );
+		$group    = $sections[0]['groups'][0];
+
+		$this->assertSame( [ 'token' ], $group['fields'], 'the table field is the group\'s member; the unknown "ghost" is not' );
+		$this->assertSame( 'Сервис', $group['table']['row_title'] );
+		$this->assertSame( [ [ 'id' => 'key', 'label' => 'Ключ API' ], [ 'id' => 'check', 'label' => '' ] ], $group['table']['columns'] );
+		$this->assertSame( [ 'api', 'lost' ], array_column( $group['table']['rows'], 'id' ) );
+		$this->assertSame( [ 'key', 'check' ], array_keys( (array) $group['table']['rows'][0]['cells'] ) );
+		$this->assertSame( [], (array) $group['table']['rows'][1]['cells'], 'a row whose only field is unknown keeps no cell' );
+	}
+
+	public function test_a_table_check_knows_whether_the_handler_can_test_it_and_what_the_last_check_said(): void {
+		$plain  = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $this->table_provider( $this->make_connection_handler() ) ] );
+		$status = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $this->table_provider( $this->make_connection_handler_with_status() ) ] );
+
+		$plain_check  = ( (array) $plain[0]['groups'][0]['table']['rows'][0]['cells'] )['check'];
+		$status_check = ( (array) $status[0]['groups'][0]['table']['rows'][0]['cells'] )['check'];
+
+		$this->assertTrue( $plain_check['supports_test'] );
+		$this->assertArrayNotHasKey( 'status', $plain_check );
+		$this->assertSame( 'Подключено', $status_check['status']['message'] );
+		$this->assertSame( 'api', $status_check['connection'] );
 	}
 }
