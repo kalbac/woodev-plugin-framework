@@ -189,7 +189,7 @@ pieces, both checked before every outbound call:
 
 | Piece | Rule |
 |---|---|
-| Daily cap | Connector field «Лимит запросов в сутки» (empty = no limit). Defaults pre-filled: ORS 1 900 (free 2 000/day, G §A), Yandex 1 000 (cheapest tariff), others empty; `dadata_geocode` fixed 5 000 (half the free 10 000/day shared with interactive hints, no UI). Counter `woodev_range_rate_calls_<id>_<Ymd UTC>` (non-autoload, created with `add_option( …, '0' )`). **Reservation is one conditional update:** `UPDATE wp_options SET option_value = option_value + 1 WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d`; only the request whose update affected 1 row may call out (`wp_cache_delete` after). 0 rows → fallback, reason `daily_cap`. No cap → plain increment for the statistics only |
+| Daily cap | Connector field «Лимит запросов в сутки» (empty = no limit). Defaults pre-filled: ORS 1 900 (free 2 000/day, G §A), Yandex 1 000 (cheapest tariff), others empty; `dadata_geocode` fixed 5 000 (half the free 10 000/day shared with interactive hints, no UI). Counter `woodev_range_rate_calls_<id>_<Ymd UTC>` (non-autoload, created with `INSERT IGNORE` — never `add_option()`, whose read-then-insert race could reset a reserved slot; C2 critic r1, s218). **Reservation is one conditional update:** `UPDATE wp_options SET option_value = option_value + 1 WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d`; only the request whose update affected 1 row may call out (`wp_cache_delete` after). 0 rows → fallback, reason `daily_cap`. No cap → plain increment for the statistics only |
 | Circuit breaker | transient `woodev_range_rate_breaker_<id>`: 401/403 «ключ отклонён» → open 1 h + admin notice. **429 is classified:** `Retry-After` present → honour it (capped at 24 h); body/headers that CONFIRM daily exhaustion (provider-specific, UNVERIFIED for each until fixtures are recorded) → until next UTC midnight; otherwise (e.g. ORS 40/min) → 60 s, doubling per repeat to 15 min. 5xx / timeout → open after 3 consecutive failures for 5 min, doubling to 1 h cap. One success closes it |
 | Timeout | framework `Woodev_API_Request_Purpose::RATES` short timeout already applies inside `calculate_rate()` (fw `class-shipping-method.php:1315-1320`); never retried |
 | Bound | no same-key request coalescing (KISS): two concurrent cache misses for one address may both call out, and **both are counted against the cap**, so the merchant's cap is enforced exactly. Steady state ≈ one call per distinct (address, instance) per cache TTL. A 3 000-quote/day shop with 40 % distinct addresses: ≈1 200 route calls/day, never above the cap |
@@ -330,15 +330,20 @@ every other provider.
 | Modes | driving → `driving-car`, walking → `foot-walking`, cycling → `cycling-regular`; **no traffic** (G §A) → `driving_traffic` not offered |
 | Errors | 401/403 key, 429 quota (2 000/day, 40/min), 404 «no route» code — UNVERIFIED codes |
 
-### 4.3 2GIS Routing API 7.0.0 (`2gis`)
+### 4.3 2GIS Distance Matrix API (`2gis`)
+
+> **Operator decision 05.11.2026 (s218):** Distance Matrix API, NOT Routing API — it is the service made for «distance and
+> travel time A → B», the same shape as Yandex (§4.4) and Google (§4.6). Replaces the coordinator's provisional P13. 2GIS
+> geocoding is never used: DaData is always the geocoder (D3).
 
 | | |
 |---|---|
-| Endpoint | `POST https://routing.api.2gis.com/routing/7.0.0/global?key=<key>` — path READ (docs.2gis.com routing overview, 05.11.2026); host UNVERIFIED. Routing API (one route = 1 unit) rather than Distance Matrix: we need exactly one pair after the nearest-warehouse choice; same 6 700 ₽/10k price either way |
-| Request | `{"points":[{"type":"stop","lon":…,"lat":…},{…}], "transport":"driving"\|"walking"\|"bicycle", "route_mode":"fastest", "traffic_mode":"jam"\|"statistics", "filters":["toll_road"]}` — field names UNVERIFIED; **x = lon, y = lat order fixed** (v1 suspected swap, R §8.4) |
-| Response | `result[0].total_distance` (m), `result[0].total_duration` (s) — UNVERIFIED |
-| Modes | driving → `traffic_mode: statistics` (predicted; 2GIS documents real-time OR statistical traffic, READ — a pure no-traffic mode is UNVERIFIED), driving_traffic → `jam`, walking, cycling. v1 always used `jam` (R §2) |
-| Avoid | tolls only — UNVERIFIED |
+| Endpoint | `POST https://routing.api.2gis.com/get_dist_matrix?key=<key>&version=2.0` — path from the 2GIS Distance Matrix docs, UNVERIFIED until the worker re-reads docs.2gis.com (the host answered `403 invalid_key` to a dead key on 05.11.2026, so it exists) |
+| Request | 1 × 1 matrix: `{"points":[{"lat":…,"lon":…},{"lat":…,"lon":…}],"sources":[0],"targets":[1], …mode fields}` — field names UNVERIFIED; read the docs page, do not guess; **lat/lon named fields, never positional** (v1 suspected swap, R §8.4) |
+| Response | per-pair `distance` (m), `duration` (s), status — UNVERIFIED; fixture from the docs example |
+| Modes | driving / driving_traffic (real-time vs statistical traffic — read the docs for the matrix's own mode names), walking, cycling only if the matrix supports them — §4.8 offers only what the docs list |
+| Avoid | tolls only if the matrix supports it — UNVERIFIED |
+| Billing | 1 matrix cell = 1 unit, same 6 700 ₽ / 10 000 package as Routing (research G §A); demo key: 1 month, 1 000 requests per service |
 
 ### 4.4 Yandex Distance Matrix (`yandex`)
 
@@ -888,7 +893,7 @@ Version 2.0.0, «Requires Woodev Framework 2.0.26+» (F1), materials package per
 | P10 | New-instance distance rounding | settled by D14: `ceil` whole km, selectable; migrated `round` | §3.3 |
 | P11 | Cache TTLs where terms are unread (2GIS, Mapbox, Google, DaData) | 7 d / 1 d / 1 d / 30 d (empty geocode 1 h); traffic modes 1 h; straight line never cached | §2.4 |
 | P12 | Daily-cap defaults | ORS 1 900, Yandex 1 000, others unlimited; automatic DaData geocode 5 000 (no UI) | §2.5 |
-| P13 | 2GIS: Routing API vs Distance Matrix | Routing API (one pair per quote) | §4.3 |
+| P13 | 2GIS: Routing API vs Distance Matrix | **Distance Matrix API — operator decision 05.11.2026 (s218)**, replaces the provisional «Routing API» | §4.3 |
 | P14 | Default notice placement | `rate` «Показывать под методом» | §6.2 |
 | P15 | Warehouse address precision | street/city-level accepted with a warning | §3.1 |
 | P16 | v1 region/city hint switches set to «no» | not migrated — v2 has no «off» mode for the cascade; the report tells the merchant | §8 |
