@@ -101,7 +101,8 @@ the setting's type is rejected with `_doing_it_wrong()`; `toggle`/`checkbox` fit
 - **`boxes-table`** is the inline table over the box-list text; `box_preset` seeds it.
 - **`records-table`** is a generic add / edit / delete table over a **string** setting holding a JSON list of rows
   (`''` = none; read it back with `Woodev\Framework\Settings\Records_Table::decode()`). Args: `columns` (required —
-  `[ 'id', 'type' => text | location-picker | main-radio, 'label', 'required', 'level', 'placeholder' ]`),
+  `[ 'id', 'type' => text | location-picker | main-radio, 'label', 'required', 'level', 'provider', 'placeholder' ]`; `provider` is a location-picker
+  column's fixed suggestion source, e.g. `'dadata'`, used even with checkout address suggestions off),
   `row_validator` (`fn( array $row, int $index ): true|string` — a string is the Russian message shown under the
   table), `add_label`, `empty_text`, and `country` for the address cells. The server re-checks required cells,
   a readable address and exactly one main row before the hook runs. It knows nothing about its records.

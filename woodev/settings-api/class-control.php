@@ -243,7 +243,7 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 * The columns of a `TYPE_RECORDS_TABLE` control, in display order. Empty for every other control type.
 		 *
 		 * @since 2.0.26
-		 * @var array<int,array{id:string,type:string,label:string,required:bool,level:string,placeholder:string}>
+		 * @var array<int,array{id:string,type:string,label:string,required:bool,level:string,placeholder:string,provider:string}>
 		 */
 		private array $columns = [];
 
@@ -719,7 +719,11 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 *
 		 * Each column is `[ 'id' => 'name', 'type' => COLUMN_*, 'label' => 'Название' ]`, plus the optional
 		 * `required` (the cell must be filled; ignored for the radio, which has its own rule), `placeholder`
-		 * and, for a location-picker cell, `level` (`region` | `settlement` | `address`, default `address`).
+		 * and, for a location-picker cell, `level` (`region` | `settlement` | `address`, default `address`)
+		 * and `provider` (the id of the suggestion source this cell always searches, e.g. `dadata`; it
+		 * ignores the checkout address-suggestions switch and the active provider; an id no provider is
+		 * registered under is refused by the search route with a 400, and `provider` on any other column
+		 * type is dropped).
 		 * The ids are the keys of a stored row, so they must be unique.
 		 *
 		 * @since 2.0.26
@@ -751,6 +755,7 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 					'required'    => ! empty( $column['required'] ),
 					'level'       => (string) ( $column['level'] ?? 'address' ),
 					'placeholder' => (string) ( $column['placeholder'] ?? '' ),
+					'provider'    => self::normalize_column_provider( $column ),
 				];
 			}
 
@@ -765,10 +770,26 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 * The columns of a `TYPE_RECORDS_TABLE` control.
 		 *
 		 * @since 2.0.26
-		 * @return array<int,array{id:string,type:string,label:string,required:bool,level:string,placeholder:string}>
+		 * @return array<int,array{id:string,type:string,label:string,required:bool,level:string,placeholder:string,provider:string}>
 		 */
 		public function get_columns(): array {
 			return $this->columns;
+		}
+
+		/**
+		 * The suggestion source a column is pinned to: only an address column can name one, and only as a
+		 * string. Anything else is no pin (`''`) — a malformed value must not reach the search request.
+		 *
+		 * @since 2.0.26
+		 * @param array<string,mixed> $column one raw column definition.
+		 * @return string provider id, or `''` for the store's active source.
+		 */
+		private static function normalize_column_provider( array $column ): string {
+			if ( self::COLUMN_LOCATION_PICKER !== $column['type'] || ! is_string( $column['provider'] ?? null ) ) {
+				return '';
+			}
+
+			return sanitize_key( $column['provider'] );
 		}
 
 		/**

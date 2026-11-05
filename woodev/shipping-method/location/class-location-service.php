@@ -3536,6 +3536,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * {@see self::provider_for_level()} applies for
 		 * `Location_Record::LEVEL_ADDRESS` — an override must not bypass a
 		 * store-wide switch the ordinary chain itself already honours.
+		 * The one exception is a PINNED provider (`$pinned`): a settings-page
+		 * field that names its own source (a records-table address column,
+		 * #1603) is the merchant's admin tool, not the checkout's feature, so
+		 * the checkout switch does not govern it.
 		 *
 		 * Deliberately bypasses {@see self::FILTER_PROVIDER_FOR_LEVEL}: that
 		 * filter's own docblock documents it as filtering the D15 CHAIN's
@@ -3550,13 +3554,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @param string      $level       One of {@see Location_Record::LEVELS}.
 		 * @param string|null $country     ISO-3166 alpha-2 country code, or
 		 *                                 `null` for the country-blind check.
+		 * @param bool        $pinned      The provider was named by the field itself (#1603), so the
+		 *                                 `address_suggestions` store gate is skipped. Default `false`.
 		 *
 		 * @return Location_Provider|null
 		 *
 		 * @throws \InvalidArgumentException When `$level` is not one of
 		 *                                    {@see Location_Record::LEVELS}.
 		 */
-		public function provider_by_id( string $provider_id, string $level, ?string $country = null ): ?Location_Provider {
+		public function provider_by_id( string $provider_id, string $level, ?string $country = null, bool $pinned = false ): ?Location_Provider {
 			if ( ! in_array( $level, Location_Record::LEVELS, true ) ) {
 				throw new \InvalidArgumentException(
 					sprintf(
@@ -3567,7 +3573,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				);
 			}
 
-			if ( Location_Record::LEVEL_ADDRESS === $level && ! $this->registry->get_address_suggestions_raw() ) {
+			if ( ! $pinned && Location_Record::LEVEL_ADDRESS === $level && ! $this->registry->get_address_suggestions_raw() ) {
 				return null;
 			}
 

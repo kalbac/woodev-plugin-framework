@@ -197,6 +197,12 @@ export interface LocationPickerFieldProps {
 	 */
 	provider?: string;
 	/**
+	 * `provider` is this field's own fixed source (a records-table address column, #1603), not the
+	 * live preview of the `active_provider` select: the server then skips the checkout
+	 * address-suggestions switch for it. The default-locality picker leaves this off.
+	 */
+	providerPinned?: boolean;
+	/**
 	 * The level a search runs at. The default-locality setting is always a settlement; a records-table
 	 * address cell asks for `address`. Both store the same serialized record.
 	 */
@@ -217,6 +223,7 @@ export default function LocationPickerField( {
 	value,
 	country,
 	provider = '',
+	providerPinned = false,
 	level = DEFAULT_LEVEL,
 	placeholder,
 	disabled = false,
@@ -253,7 +260,7 @@ export default function LocationPickerField( {
 				restRoot={ namespaceRoot( restRoot ) }
 				nonce={ nonce }
 				endpoint={ ADMIN_SUGGEST_ENDPOINT }
-				params={ provider ? { provider } : undefined }
+				params={ provider ? { provider, ...( providerPinned ? { provider_pinned: '1' } : {} ) } : undefined }
 				disabled={ disabled }
 				onChange={ choose }
 			/>

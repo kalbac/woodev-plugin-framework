@@ -274,7 +274,7 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	/** @var array<int, string> */
 	public array $has_provider_calls = [];
 
-	/** @var array<int, array{0: string, 1: string, 2: string|null}> */
+	/** @var array<int, array{0: string, 1: string, 2: string|null, 3: bool}> */
 	public array $provider_by_id_calls = [];
 
 	/**
@@ -477,8 +477,8 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		return in_array( $provider_id, $this->registered_provider_ids, true );
 	}
 
-	public function provider_by_id( string $provider_id, string $level, ?string $country = null ): ?Location_Provider {
-		$this->provider_by_id_calls[] = [ $provider_id, $level, $country ];
+	public function provider_by_id( string $provider_id, string $level, ?string $country = null, bool $pinned = false ): ?Location_Provider {
+		$this->provider_by_id_calls[] = [ $provider_id, $level, $country, $pinned ];
 
 		return $this->providers_by_id[ $provider_id ] ?? null;
 	}
@@ -878,6 +878,11 @@ final class LocationControllerTest extends TestCase {
 			}
 		);
 		Functions\when( 'rest_ensure_response' )->returnArg();
+		Functions\when( 'rest_sanitize_boolean' )->alias(
+			static function ( $value ): bool {
+				return is_string( $value ) ? ! in_array( strtolower( $value ), [ 'false', '0', '' ], true ) : (bool) $value;
+			}
+		);
 		// Task 14: check_admin_permission()'s own denial status, and
 		// handle_admin_locate_request()'s WC_Geolocation fallback path.
 		Functions\when( 'rest_authorization_required_code' )->justReturn( 401 );
@@ -3204,7 +3209,7 @@ final class LocationControllerTest extends TestCase {
 		$this->assertCount( 0, $chain_provider->suggest_calls, 'the D15-chain-resolved provider must never be queried once an override is given' );
 		$this->assertSame( [], $service->provider_for_level_calls, 'the chain must never even be walked when an override is given' );
 		$this->assertSame( [ 'dadata' ], $service->has_provider_calls );
-		$this->assertSame( [ [ 'dadata', Location_Record::LEVEL_SETTLEMENT, null ] ], $service->provider_by_id_calls );
+		$this->assertSame( [ [ 'dadata', Location_Record::LEVEL_SETTLEMENT, null, false ] ], $service->provider_by_id_calls );
 	}
 
 	public function test_admin_suggest_unknown_override_provider_returns_400_never_falling_back_to_the_stored_provider(): void {
@@ -3355,7 +3360,7 @@ final class LocationControllerTest extends TestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( [], $result['suggestions'] );
 		$this->assertSame(
-			[ [ 'dadata', Location_Record::LEVEL_SETTLEMENT, null ] ],
+			[ [ 'dadata', Location_Record::LEVEL_SETTLEMENT, null, false ] ],
 			$service->provider_by_id_calls,
 			'provider_by_id() must stay country-blind — the country mismatch is caught later, via provider_serves_level()'
 		);
@@ -3377,6 +3382,54 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( [], $service->has_provider_calls, 'an absent provider param must resolve through the ordinary D15 chain untouched' );
 		$this->assertSame( [], $service->provider_by_id_calls );
 		$this->assertCount( 1, $service->provider_for_level_calls );
+	}
+
+	/**
+	 * #1603: a records-table column that names its own source sends `provider_pinned`; the override
+	 * reaches the service as pinned (the checkout switch does not apply). The default-locality
+	 * picker's live preview (above) sends no such param and stays unpinned.
+	 */
+	public function test_admin_suggest_passes_a_pinned_provider_to_the_service(): void {
+		$override = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, null, false, null, null, [ 'dadata' ], [ 'dadata' => $override ] );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_ADDRESS, 'country' => 'RU', 'provider' => 'dadata', 'provider_pinned' => '1' ]
+		);
+		$ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertSame( [ [ 'dadata', Location_Record::LEVEL_ADDRESS, null, true ] ], $service->provider_by_id_calls );
+		$this->assertCount( 1, $override->suggest_calls, 'the pinned provider is the one queried' );
+		$this->assertSame( [], $service->provider_for_level_calls, 'the chain is never walked' );
+	}
+
+	public function test_admin_suggest_pinned_flag_without_a_provider_is_ignored(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'provider_pinned' => '1' ]
+		);
+		$ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertSame( [], $service->provider_by_id_calls );
+		$this->assertCount( 1, $service->provider_for_level_calls );
+	}
+
+	public function test_admin_suggest_pinned_unknown_provider_is_still_refused(): void {
+		$service = new Location_Controller_Fake_Service( true, null );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_ADDRESS, 'country' => 'RU', 'provider' => 'nope', 'provider_pinned' => '1' ]
+		);
+		$result = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_location_unknown_provider', $result->get_error_code() );
+		$this->assertSame( [], $service->provider_by_id_calls );
 	}
 
 	public function test_suggest_public_route_never_touches_the_override_seam_even_with_a_provider_param(): void {
