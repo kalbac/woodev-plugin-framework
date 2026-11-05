@@ -70,13 +70,13 @@ test( 'one row per service under the declared headers, the coefficient in the li
 	expect( line.queryByRole( 'button' ) ).toBeNull();
 } );
 
-test( 'a field cell shows the control without its label or description', () => {
+test( 'a field cell holds the control alone: no label, description or tip icon', () => {
 	render( <Harness /> );
 
 	expect( screen.queryByText( 'Коэффициент дороги' ) ).toBeNull();
 	expect( screen.queryByText( 'Длинное описание' ) ).toBeNull();
-	// The tooltip text stays reachable beside the control.
-	expect( screen.getByLabelText( 'Где взять ключ' ) ).toBeInTheDocument();
+	expect( screen.queryByLabelText( 'Где взять ключ' ) ).toBeNull();
+	expect( document.querySelector( '.woodev-field__tip' ) ).toBeNull();
 } );
 
 test( 'a saved key is masked, never echoed, and the status says «Подключён»', () => {
@@ -84,8 +84,8 @@ test( 'a saved key is masked, never echoed, and the status says «Подключ
 
 	const mapbox = within( rowOf( 'Mapbox' ) );
 	expect( mapbox.getByText( '● Подключён' ) ).toBeInTheDocument();
-	expect( mapbox.getByPlaceholderText( /сохранено/ ) ).toHaveValue( '' );
-	expect( mapbox.getByRole( 'button', { name: 'Очистить сохранённое' } ) ).toBeInTheDocument();
+	expect( mapbox.getByPlaceholderText( '•••••• сохранено' ) ).toHaveValue( '' );
+	expect( mapbox.getByRole( 'button', { name: 'Очистить' } ) ).toBeInTheDocument();
 	expect( within( rowOf( 'Google' ) ).getByText( '○ Не подключён' ) ).toBeInTheDocument();
 } );
 

@@ -39,33 +39,56 @@
 		white-space: nowrap;
 	}
 
-	// One logical row stays one visual row: the cell holds the control and its tip side by side.
+	// One logical row stays one visual row. `.woodev-settings .woodev-field` (label | control grid, 12px padding) would
+	// make every cell tall, so the cell's field is flattened here with a selector that outranks it.
 	&__field {
 		display: flex;
 		align-items: center;
 		gap: wd.$gap-sm;
 
-		.woodev-field {
-			display: block;
-			flex: 1 1 auto;
-			margin: 0;
-			padding: 0;
-			min-width: 0;
-		}
-
+		// The control and, for a stored secret, its «Очистить» link share one line.
 		.woodev-field__control {
+			display: flex;
+			flex: 1 1 auto;
+			align-items: center;
+			gap: wd.$gap;
 			min-width: 0;
 		}
 
-		// A masked key's placeholder («сохранено — введите новое для замены») must stay readable.
-		.woodev-field__password {
-			min-width: 300px;
+		.woodev-field__secret-clear-link {
+			margin-top: 0;
+			white-space: nowrap;
 		}
 
-		// A number is short: keep the control the width of its digits so its tip stays next to it.
-		.woodev-field:has( input[type="number"] ) {
-			flex: 0 1 140px;
+		// The key fills its column.
+		.woodev-field__password {
+			flex: 1 1 auto;
+			min-width: 0;
 		}
+
+		.components-base-control {
+			margin: 0;
+		}
+
+		// A number is short: keep the control the width of its digits.
+		.woodev-field:has( input[type="number"] ) {
+			flex: 0 0 168px;
+			min-width: 168px;
+		}
+	}
+
+	// Outranks `.woodev-settings .woodev-field`.
+	.woodev-fields-table__field .woodev-field {
+		display: block;
+		flex: 1 1 auto;
+		margin: 0;
+		padding: 0;
+		min-width: 0;
+	}
+
+	// The key column takes what the other columns leave.
+	&__cell:has( .woodev-field__password ) {
+		width: 100%;
 	}
 
 	&__prefix {
@@ -98,11 +121,12 @@
 	// The answer to a check sits under its row, across the whole table.
 	&__result-row td {
 		padding-top: 0;
+		padding-bottom: wd.$gap-sm;
 	}
 
 	&__result {
 		display: block;
-		padding: wd.$gap-sm wd.$gap;
+		padding: wd.$gap-xs wd.$gap;
 		border-radius: wd.$radius-sm;
 		font-size: 13px;
 		line-height: 1.5;

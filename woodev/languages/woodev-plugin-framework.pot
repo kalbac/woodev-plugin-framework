@@ -6726,3 +6726,7 @@ msgstr ""
 #: assets/build/settings-page/index.js
 msgid "✖ Ошибка"
 msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "•••••• сохранено"
+msgstr ""

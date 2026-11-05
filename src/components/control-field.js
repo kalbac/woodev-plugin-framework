@@ -65,9 +65,10 @@ export const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
  * @param {Function} props.onChange change handler.
  * @param {boolean}  props.isSet    whether a secret is already stored.
  * @param {boolean}  [props.disabled] whether the control is disabled (D11).
+ * @param {string}   [props.savedPlaceholder] placeholder shown while a secret is stored and nothing is typed.
  * @return {Object} React element.
  */
-function PasswordControl( { value, onChange, isSet, disabled } ) {
+function PasswordControl( { value, onChange, isSet, disabled, savedPlaceholder } ) {
 	const [ show, setShow ] = useState( false );
 	const hasValue = '' !== ( value ?? '' );
 
@@ -79,7 +80,7 @@ function PasswordControl( { value, onChange, isSet, disabled } ) {
 			__next40pxDefaultSize: true,
 			type: show && hasValue ? 'text' : 'password',
 			value: value ?? '',
-			placeholder: isSet && ! hasValue ? '•••••• сохранено — введите новое для замены' : '',
+			placeholder: isSet && ! hasValue ? ( savedPlaceholder || '•••••• сохранено — введите новое для замены' ) : '',
 			disabled,
 			onChange,
 		} ),
@@ -188,9 +189,11 @@ function ColorControl( { value, optional, onChange, disabled } ) {
  * @param {boolean}  props.hasEdit    whether an explicit edit is staged for this field.
  * @param {Function} [props.onRevert] drops the staged edit (enables the clear affordance).
  * @param {boolean}  [props.disabled] whether the control is disabled (D11).
+ * @param {string}   [props.savedPlaceholder] shorter placeholder for a tight cell (`schema.saved_placeholder`).
+ * @param {string}   [props.clearLabel] shorter clear link text for a tight cell (`schema.clear_label`).
  * @return {Object} React element.
  */
-function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled } ) {
+function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled, savedPlaceholder, clearLabel } ) {
 	const hasValue = '' !== ( value ?? '' );
 	const canClear = isSet && 'function' === typeof onRevert;
 
@@ -222,7 +225,7 @@ function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled } 
 	return createElement(
 		Fragment,
 		null,
-		createElement( PasswordControl, { value, onChange, isSet, disabled } ),
+		createElement( PasswordControl, { value, onChange, isSet, disabled, savedPlaceholder } ),
 		canClear && ! hasValue &&
 			createElement(
 				'button',
@@ -232,7 +235,7 @@ function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled } 
 					disabled,
 					onClick: () => onChange( '' ),
 				},
-				'Очистить сохранённое'
+				clearLabel || 'Очистить сохранённое'
 			)
 	);
 }
@@ -387,6 +390,8 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 			createElement( SecretControl, {
 				value: value ?? '',
 				isSet: !! schema.is_set,
+				savedPlaceholder: schema.saved_placeholder,
+				clearLabel: schema.clear_label,
 				hasEdit,
 				onRevert,
 				onChange,

@@ -17,7 +17,6 @@ import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import ControlFieldSource from '../components/control-field';
-import FieldTip from '../components/field-tip';
 import { isFieldFilled } from './connection-block';
 import { testConnection } from './rest';
 
@@ -161,8 +160,17 @@ export default function FieldsTable( { providerId, table, fields, values, condit
 				{ cell.prefix && <span className="woodev-fields-table__prefix">{ cell.prefix }</span> }
 				<ControlField
 					settingId={ settingId }
-					// The column header names the field; the description and tooltip live beside it, not in a label.
-					schema={ { ...schema, name: '', description: '', tooltip: '', serverError: ( serverErrors || {} )[ settingId ] } }
+					// The column header names the field, so a cell holds the control alone: no label, description or tip
+					// (a hint belongs in the group's notice). A stored secret gets the short placeholder and clear link.
+					schema={ {
+						...schema,
+						name: '',
+						description: '',
+						tooltip: '',
+						saved_placeholder: __( '•••••• сохранено', 'woodev-plugin-framework' ),
+						clear_label: __( 'Очистить', 'woodev-plugin-framework' ),
+						serverError: ( serverErrors || {} )[ settingId ],
+					} }
 					value={ values[ settingId ] ?? schema.value }
 					conditionValues={ conditionValues || values }
 					onChange={ ( next: unknown ) => {
@@ -176,7 +184,6 @@ export default function FieldsTable( { providerId, table, fields, values, condit
 					} }
 					showErrors={ !! showErrors }
 				/>
-				<FieldTip text={ schema.tooltip as string } />
 			</div>
 		);
 	};
