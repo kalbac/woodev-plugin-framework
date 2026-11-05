@@ -515,7 +515,7 @@ class LicenseEnvelopeVerifierTest extends TestCase {
 		\Brain\Monkey\Filters\expectApplied( 'woodev_license_authority_pubkey' )->never();
 
 		$this->assertSame(
-			(string) \constant( \Woodev_License_Envelope_Verifier::PUBKEY_CONSTANT ),
+			\Woodev_License_Envelope_Verifier::PRODUCTION_PUBKEY,
 			\Woodev_License_Envelope_Verifier::resolve_public_key( false )
 		);
 	}

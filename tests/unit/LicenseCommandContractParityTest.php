@@ -213,14 +213,13 @@ class LicenseCommandContractParityTest extends TestCase {
 	}
 
 	/**
-	 * Stored-option contracts: prefix + names + the pubkey constant name.
+	 * Stored-option contracts: prefix + names.
 	 *
 	 * @return void
 	 */
 	public function test_option_and_constant_names_frozen(): void {
 		$this->assertSame( 'woodev_license_command_nonces_', Woodev_License_Command_Nonce_Store::OPTION_PREFIX );
 		$this->assertSame( 'woodev_license_command_acks', Woodev_License_Command_Acks::OPTION_NAME );
-		$this->assertSame( 'WOODEV_LICENSE_AUTHORITY_PUBKEY', Woodev_License_Envelope_Verifier::PUBKEY_CONSTANT );
 		$this->assertSame(
 			'woodev_license_remote_deactivation_notices',
 			\Woodev_License_Command_Deactivate_Plugin::NOTICES_OPTION
@@ -327,13 +326,13 @@ class LicenseCommandContractParityTest extends TestCase {
 	 * @return void
 	 */
 	public function test_production_pubkey_is_not_placeholder(): void {
-		if ( '' === (string) WOODEV_LICENSE_AUTHORITY_PUBKEY ) {
+		if ( '' === Woodev_License_Envelope_Verifier::PRODUCTION_PUBKEY ) {
 			$this->markTestSkipped(
-				'Awaiting production WOODEV_LICENSE_AUTHORITY_PUBKEY capture — woodev-core spec wp-eval snippet (operator step).'
+				'Awaiting production authority key capture — woodev-core spec wp-eval snippet (operator step).'
 			);
 		}
 
-		$raw = base64_decode( (string) WOODEV_LICENSE_AUTHORITY_PUBKEY, true );
+		$raw = base64_decode( Woodev_License_Envelope_Verifier::PRODUCTION_PUBKEY, true );
 
 		$this->assertNotFalse( $raw, 'Production pubkey must be strict base64.' );
 		$this->assertSame( Woodev_License_Envelope_Verifier::PUBLIC_KEY_BYTES, strlen( (string) $raw ) );
