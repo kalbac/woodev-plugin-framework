@@ -43,7 +43,7 @@ const RECORDS_SPEC = {
 	empty_text: 'У вас пока нет ни одного склада. Добавьте адрес, откуда курьер везёт заказы.',
 	columns: [
 		{ id: 'name', type: 'text', label: 'Название', required: true },
-		{ id: 'address', type: 'location-picker', label: 'Адрес', required: true, level: 'address' },
+		{ id: 'address', type: 'location-picker', label: 'Адрес', required: true, level: 'address', provider: 'dadata' },
 		{ id: 'is_main', type: 'main-radio', label: 'Основной' },
 	],
 	value: JSON.stringify( [

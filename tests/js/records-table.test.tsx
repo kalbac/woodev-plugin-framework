@@ -9,8 +9,8 @@ import { validateField } from '../../src/components/validate';
 jest.mock( '../../src/components/location-picker-field', () => ( {
 	__esModule: true,
 	...jest.requireActual( '../../src/components/location-picker-field' ),
-	default: ( { value, level, disabled, onChange }: { value: string; level: string; disabled?: boolean; onChange: ( v: string ) => void } ) => (
-		<button type="button" data-level={ level } disabled={ disabled } onClick={ () => onChange( JSON.stringify( { key: 'k-new', label: 'г Подольск, ул Ленина, д 1' } ) ) }>
+	default: ( { value, level, provider, providerPinned, disabled, onChange }: { value: string; level: string; provider?: string; providerPinned?: boolean; disabled?: boolean; onChange: ( v: string ) => void } ) => (
+		<button type="button" data-level={ level } data-provider={ provider } data-pinned={ String( !! providerPinned ) } disabled={ disabled } onClick={ () => onChange( JSON.stringify( { key: 'k-new', label: 'г Подольск, ул Ленина, д 1' } ) ) }>
 			{ 'pick address' + ( value ? ' (set)' : '' ) }
 		</button>
 	),
@@ -25,13 +25,13 @@ const COLUMNS: RecordColumn[] = [
 const place = ( label: string ) => JSON.stringify( { key: 'k-' + label, label } );
 const stored = ( ...rows: Array<Record<string, unknown>> ) => JSON.stringify( rows );
 
-function Harness( { initial = '', onValue = jest.fn() }: { initial?: string; onValue?: ( v: string ) => void } ) {
+function Harness( { initial = '', onValue = jest.fn(), columns = COLUMNS }: { initial?: string; onValue?: ( v: string ) => void; columns?: RecordColumn[] } ) {
 	const [ value, setValue ] = useState( initial );
 	return (
 		<>
 			<RecordsTable
 				value={ value }
-				columns={ COLUMNS }
+				columns={ columns }
 				name="warehouses"
 				addLabel="Добавить склад"
 				emptyText="Складов пока нет."
@@ -63,6 +63,25 @@ test( 'the address cell is a location picker at the declared level', () => {
 	fireEvent.click( screen.getByRole( 'button', { name: 'Добавить склад' } ) );
 
 	expect( screen.getByRole( 'button', { name: 'pick address' } ) ).toHaveAttribute( 'data-level', 'address' );
+} );
+
+test( 'an address column with a provider hands it to the picker as pinned (#1603)', () => {
+	const pinned = COLUMNS.map( ( column ) => ( 'address' === column.id ? { ...column, provider: 'dadata' } : column ) );
+	render( <Harness columns={ pinned } /> );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Добавить склад' } ) );
+
+	const picker = screen.getByRole( 'button', { name: 'pick address' } );
+	expect( picker ).toHaveAttribute( 'data-provider', 'dadata' );
+	expect( picker ).toHaveAttribute( 'data-pinned', 'true' );
+} );
+
+test( 'an address column without a provider keeps the picker unpinned', () => {
+	render( <Harness /> );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Добавить склад' } ) );
+
+	const picker = screen.getByRole( 'button', { name: 'pick address' } );
+	expect( picker ).toHaveAttribute( 'data-provider', '' );
+	expect( picker ).toHaveAttribute( 'data-pinned', 'false' );
 } );
 
 test( 'a row with an empty required cell is not saved and says what is missing', () => {

@@ -492,9 +492,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 							 * when eligible, resolves that EXACT named provider instead
 							 * of walking Location_Service::provider_for_level()'s D15
 							 * chosen -> fallback chain; see that method's own docblock.
+							 *
+							 * `provider_pinned` (#1603) marks that id as a field's own fixed
+							 * source (a records-table address column) rather than a live
+							 * preview of the active-provider select; only then is the
+							 * checkout `address_suggestions` switch skipped.
 							 */
 							'provider' => [
 								'type'              => 'string',
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'provider_pinned' => [
+								'type'              => 'boolean',
 								'validate_callback' => 'rest_validate_request_arg',
 							],
 						],
@@ -758,6 +767,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              {@see self::handle_suggest_request()}, which never reads
 		 *              that param at all. An absent/empty `provider` keeps the
 		 *              original D15-chain behaviour unchanged.
+		 * @since 2.0.26 Reads `provider_pinned` (#1603): a records-table column that names its own
+		 *               `provider` sends it, so the checkout `address_suggestions` switch does not
+		 *               switch that field off. The default-locality picker never sends it.
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
@@ -769,7 +781,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			return $this->perform_suggest(
 				$request,
 				'woodev_location_admin_sug_rl_',
-				'' === $provider_override ? null : $provider_override
+				'' === $provider_override ? null : $provider_override,
+				rest_sanitize_boolean( $request->get_param( 'provider_pinned' ) )
 			);
 		}
 
@@ -954,10 +967,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * @param string|null      $provider_override  Admin-only explicit provider id
 		 *                                              override, or `null` for the
 		 *                                              ordinary D15 chain resolution.
+		 * @param bool             $provider_pinned    The override is a field's own fixed source
+		 *                                              (#1603), not a live preview, so the
+		 *                                              `address_suggestions` store switch is
+		 *                                              skipped for it. Ignored without an override.
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>, within_applied: bool, within_status: string, scope_narrowing: string}
 		 */
-		private function perform_suggest( $request, string $rate_limit_key, ?string $provider_override = null ) {
+		private function perform_suggest( $request, string $rate_limit_key, ?string $provider_override = null, bool $provider_pinned = false ) {
 
 			if ( $this->is_rate_limited( $rate_limit_key, self::SUGGEST_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
@@ -1072,7 +1089,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				// `self::WITHIN_STATUS_UNSERVED_LEVEL` unconditionally — a
 				// coarser, less true answer than the one the request already
 				// gets. That would be a loss of information, not a fix.
-				$provider = $this->service->provider_by_id( $provider_override, $level );
+				$provider = $this->service->provider_by_id( $provider_override, $level, null, $provider_pinned );
 			} else {
 				$provider = $this->service->provider_for_level( $level, $country );
 			}

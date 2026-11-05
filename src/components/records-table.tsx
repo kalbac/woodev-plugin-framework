@@ -35,6 +35,8 @@ export interface RecordColumn {
 	required?: boolean;
 	/** Location-picker cells only: the level a search runs at. */
 	level?: LocationLevel;
+	/** Location-picker cells only: the suggestion source this cell always searches (e.g. `dadata`). */
+	provider?: string;
 	placeholder?: string;
 }
 
@@ -257,6 +259,8 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 						value={ cellText( draft.row, column ) }
 						country={ country }
 						level={ column.level || 'address' }
+						provider={ column.provider || '' }
+						providerPinned={ !! column.provider }
 						placeholder={ column.placeholder }
 						disabled={ disabled }
 						onChange={ setCell }

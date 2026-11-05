@@ -96,6 +96,25 @@ final class RecordsTableTest extends TestCase {
 		}
 	}
 
+	/**
+	 * #1603: only an address column keeps a `provider`, normalised like a registry id; a column
+	 * without one — or any other column type — carries an empty string. An id nobody registered is
+	 * kept here (the registry is not built yet at schema time) and refused by the search route.
+	 */
+	public function test_only_an_address_column_keeps_its_provider(): void {
+		Functions\when( 'sanitize_key' )->alias( static fn( $key ) => preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) ) );
+
+		$control = new \Woodev_Control();
+		$control->set_columns( [
+			[ 'id' => 'name', 'type' => 'text', 'provider' => 'dadata' ],
+			[ 'id' => 'address', 'type' => 'location-picker', 'provider' => ' DaData ' ],
+			[ 'id' => 'other', 'type' => 'location-picker' ],
+			[ 'id' => 'junk', 'type' => 'location-picker', 'provider' => [ 'dadata' ] ],
+		] );
+
+		$this->assertSame( [ '', 'dadata', '', '' ], array_column( $control->get_columns(), 'provider' ) );
+	}
+
 	public function test_no_rows_is_valid_in_both_spellings(): void {
 		$handler = $this->handler();
 

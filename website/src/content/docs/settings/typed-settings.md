@@ -137,7 +137,7 @@ $rows = \Woodev\Framework\Settings\Records_Table::decode( $settings->get_value( 
 | Column type | The cell |
 |---|---|
 | `text` | A text field. |
-| `location-picker` | An address search. The cell stores the picked record as JSON. `level` (`region`, `settlement` or `address`, default `address`) sets what the search finds. |
+| `location-picker` | An address search. The cell stores the picked record as JSON. `level` (`region`, `settlement` or `address`, default `address`) sets what the search finds. `provider` (optional, for example `'dadata'`) makes this column always search that suggestion source, even when address suggestions are switched off at checkout or another source is active. Without it the column follows the store's active source. An id no source is registered under is refused by the search, so the merchant sees an error instead of another source's results. |
 | `main-radio` | The «основной» choice. Exactly one row has it while the table has rows; the first row added is main. |
 
 When the merchant saves, the framework checks required cells, that an address was picked from the suggestions and

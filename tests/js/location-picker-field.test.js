@@ -303,6 +303,47 @@ describe( 'LocationPickerField', () => {
 		expect( params.get( 'provider' ) ).toBe( 'dadata' );
 	} );
 
+	test( 'a pinned provider also sends `provider_pinned`, so the server skips the checkout switch (#1603)', async () => {
+		apiFetch.mockResolvedValueOnce( { suggestions: [] } );
+
+		render(
+			createElement( LocationPickerField, {
+				value: '',
+				country: 'RU',
+				level: 'address',
+				provider: 'dadata',
+				providerPinned: true,
+				onChange: () => {},
+			} )
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Выберите локацию…' } ) );
+		const search = await screen.findByPlaceholderText( 'Начните вводить название…' );
+		fireEvent.change( search, { target: { value: 'Мос' } } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		const params = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams;
+		expect( params.get( 'provider' ) ).toBe( 'dadata' );
+		expect( params.get( 'provider_pinned' ) ).toBe( '1' );
+	} );
+
+	test( 'a live-preview provider (not pinned) never sends `provider_pinned`', async () => {
+		apiFetch.mockResolvedValueOnce( { suggestions: [] } );
+
+		render(
+			createElement( LocationPickerField, { value: '', country: 'RU', provider: 'dadata', onChange: () => {} } )
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Выберите локацию…' } ) );
+		const search = await screen.findByPlaceholderText( 'Начните вводить название…' );
+		fireEvent.change( search, { target: { value: 'Мос' } } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		const params = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams;
+		expect( params.get( 'provider' ) ).toBe( 'dadata' );
+		expect( params.has( 'provider_pinned' ) ).toBe( false );
+	} );
+
 	test( 'no provider prop omits the `provider` query param entirely, not just empty', async () => {
 		apiFetch.mockResolvedValueOnce( { suggestions: [] } );
 

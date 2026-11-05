@@ -2020,6 +2020,60 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 		}
 
+		/**
+		 * #1603: the switch is off AND another provider is the active one. A PINNED
+		 * `dadata` (a records-table column naming its source) still resolves; the
+		 * same id without the pin keeps being refused by the switch, as before.
+		 */
+		public function test_a_pinned_provider_ignores_the_address_suggestions_switch_and_the_active_provider(): void {
+			$active = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			$this->stub_providers_filter( [ $active ] );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					if ( 'woodev_location_token' === $name ) {
+						return 'tok';
+					}
+					if ( 'woodev_location_active_provider' === $name ) {
+						return 'svc-fixture';
+					}
+					if ( 'woodev_location_address_suggestions' === $name ) {
+						return false;
+					}
+
+					return $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_ADDRESS, 'RU' ), 'the checkout chain stays switched off' );
+			$this->assertNull( $service->provider_by_id( 'dadata', Location_Record::LEVEL_ADDRESS ), 'an unpinned override still obeys the switch (#380)' );
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_by_id( 'dadata', Location_Record::LEVEL_ADDRESS, null, true ) );
+		}
+
+		public function test_a_pinned_provider_that_is_not_configured_still_resolves_to_nothing(): void {
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_address_suggestions' === $name ? false : $default;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+
+			$service = new Location_Service( $registry );
+
+			$this->assertNull( $service->provider_by_id( 'dadata', Location_Record::LEVEL_ADDRESS, null, true ), 'no token: pinning skips the switch, not the credentials check' );
+		}
+
 		public function test_provider_for_level_filter_still_fires_for_address_while_the_gate_is_closed(): void {
 			// The seam must stay alive even while the gate suppresses the
 			// chain walk (framework rule: never remove an extension seam) —
