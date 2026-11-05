@@ -44,6 +44,15 @@ if ( ! class_exists( 'Woodev_License_Envelope_Verifier' ) ) :
 		const PUBKEY_CONSTANT = 'WOODEV_LICENSE_AUTHORITY_PUBKEY';
 
 		/**
+		 * Name of the constant that enables the key override in test environments.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @var string
+		 */
+		const TEST_KEYS_CONSTANT = 'WOODEV_LICENSE_TEST_KEYS';
+
+		/**
 		 * Ed25519 detached-signature length in bytes (protocol-fixed).
 		 *
 		 * Equals SODIUM_CRYPTO_SIGN_BYTES; declared here as a literal so the length
@@ -170,6 +179,27 @@ if ( ! class_exists( 'Woodev_License_Envelope_Verifier' ) ) :
 			$verified = sodium_crypto_sign_verify_detached( $raw_signature, self::canonical_json( $payload ), $raw_public_key );
 
 			return true === $verified ? $payload : null;
+		}
+
+		/**
+		 * Resolves the base64 public key used to verify licence envelopes.
+		 *
+		 * Returns the embedded production key. The woodev_license_authority_pubkey
+		 * filter is applied only when the WOODEV_LICENSE_TEST_KEYS constant is truthy,
+		 * so the key can be overridden in test environments and nowhere else. An
+		 * empty/undecodable key makes every verification fail — the safe default.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param bool|null $allow_override Whether the filter is honoured; null reads WOODEV_LICENSE_TEST_KEYS (a test seam).
+		 * @return string The base64 public key.
+		 */
+		public static function resolve_public_key( ?bool $allow_override = null ): string {
+
+			$allow_override = $allow_override ?? ( defined( self::TEST_KEYS_CONSTANT ) && (bool) constant( self::TEST_KEYS_CONSTANT ) );
+			$key            = defined( self::PUBKEY_CONSTANT ) ? (string) constant( self::PUBKEY_CONSTANT ) : '';
+
+			return $allow_override ? (string) apply_filters( 'woodev_license_authority_pubkey', $key ) : $key;
 		}
 	}
 

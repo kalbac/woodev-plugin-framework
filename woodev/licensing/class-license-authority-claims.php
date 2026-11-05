@@ -334,10 +334,10 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 		/**
 		 * Resolves the base64 public key used to verify claims.
 		 *
-		 * Defaults to the embedded WOODEV_LICENSE_AUTHORITY_PUBKEY constant (the
-		 * production key), overridable through the woodev_license_authority_pubkey
-		 * filter so tests can inject the fixture key. An empty/undecodable key makes
-		 * every verification fail — the safe default (license required).
+		 * Delegates to Woodev_License_Envelope_Verifier::resolve_public_key(): the
+		 * embedded production key, overridable only in test environments. An
+		 * empty/undecodable key makes every verification fail — the safe default
+		 * (license required).
 		 *
 		 * @since 2.0.0
 		 *
@@ -345,9 +345,7 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 		 */
 		private function get_public_key(): string {
 
-			$default = defined( 'WOODEV_LICENSE_AUTHORITY_PUBKEY' ) ? (string) WOODEV_LICENSE_AUTHORITY_PUBKEY : '';
-
-			return (string) apply_filters( 'woodev_license_authority_pubkey', $default );
+			return Woodev_License_Envelope_Verifier::resolve_public_key();
 		}
 	}
 
