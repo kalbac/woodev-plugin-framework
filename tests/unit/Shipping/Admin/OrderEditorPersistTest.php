@@ -300,6 +300,30 @@ final class OrderEditorPersistTest extends TestCase {
 		$this->assertTrue( $city_changed['requires_settlement_selection'] );
 	}
 
+	/**
+	 * Range-shipping city mode spec §4.4: city mode posts a nested settlement's own name
+	 * («Черкизово», DaData files it under «г Пушкино»), so the order editor must still reuse
+	 * the order's saved record for it — and for the parent name saved before.
+	 */
+	public function test_prefill_reuses_a_nested_settlement_named_by_its_own_name(): void {
+		$stored = Location_Record::from_array(
+			[
+				'key'               => 'cdek:cherkizovo',
+				'provider_id'       => 'cdek',
+				'level'             => Location_Record::LEVEL_SETTLEMENT,
+				'country'           => 'RU',
+				'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+				'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+			]
+		)->to_array();
+
+		$own = $this->prefill( 'Черкизово', '', $stored, $this->active_location_service( 'cdek' ) );
+		$this->assertSame( 'cdek:cherkizovo', $own['location']['key'] );
+
+		$parent = $this->prefill( 'Пушкино', '', $stored, $this->active_location_service( 'cdek' ) );
+		$this->assertSame( 'cdek:cherkizovo', $parent['location']['key'] );
+	}
+
 	public function test_the_point_is_put_under_every_pickup_slot_and_handed_to_the_persistence_core(): void {
 		$calls    = [];
 		$provider = $this->register( $this->checkout_handler( $calls ), null );

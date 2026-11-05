@@ -509,6 +509,48 @@ class CheckoutHandlerCustomSettlementGuardTest extends TestCase {
 		}
 	}
 
+	/**
+	 * DaData's «рп Черкизово»: the parent city in `settlement`, its own name nested.
+	 */
+	private static function cherkizovo(): Location_Record {
+		return Location_Record::from_array( [
+			'key'               => 'dadata:cherkizovo',
+			'provider_id'       => 'dadata',
+			'level'             => Location_Record::LEVEL_SETTLEMENT,
+			'country'           => 'RU',
+			'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+			'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+			'label'             => 'Московская обл, г Пушкино, рп Черкизово',
+		] );
+	}
+
+	/**
+	 * Range-shipping city mode spec §4.4 / F2: city mode posts a nested place's own name. With
+	 * `ajax-select2` and custom localities OFF the guard must not refuse it at placement.
+	 */
+	public function test_a_nested_settlement_city_passes_classic_placement(): void {
+		Functions\expect( 'wc_add_notice' )->never();
+
+		$this->run_checkout_process(
+			new Checkout_Handler_Custom_Settlement_Fake_Location_Service( false, Location_Provider_Registry::MODE_AJAX_SELECT2, self::cherkizovo() ),
+			[
+				'billing_country' => 'RU',
+				'billing_city'    => 'Черкизово',
+			]
+		);
+	}
+
+	/**
+	 * A client that predates city mode still posts the parent («Пушкино») for the same pick.
+	 */
+	public function test_a_nested_settlement_record_still_accepts_its_parent_name(): void {
+		Functions\expect( 'wc_add_notice' )->never();
+
+		$handler = self::handler( false, Location_Provider_Registry::MODE_AJAX_SELECT2, self::cherkizovo() );
+
+		$this->assertTrue( $handler->guard_custom_settlement( [ 'billing_city' => 'Пушкино' ], 'RU', 'billing' ) );
+	}
+
 	public function test_shipping_section_stands_down_when_only_the_billing_country_is_served(): void {
 		Functions\expect( 'wc_add_notice' )->never();
 

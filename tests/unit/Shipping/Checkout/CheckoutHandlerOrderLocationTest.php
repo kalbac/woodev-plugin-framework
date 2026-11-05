@@ -148,4 +148,26 @@ final class CheckoutHandlerOrderLocationTest extends TestCase {
 		$wrong_city->commit_for_test( $this->order( 'Тверь' ), 'carrier_method' );
 		$this->assertArrayNotHasKey( Checkout_Handler::ORDER_LOCATION_META_KEY, $this->meta );
 	}
+
+	/**
+	 * Range-shipping city mode spec §4.4: an order placed with City «Черкизово» over the рп
+	 * Черкизово record (DaData's parent «Пушкино» in `settlement`) keeps its location meta.
+	 */
+	public function test_an_order_with_a_nested_settlement_city_keeps_its_location_meta(): void {
+		$cherkizovo = Location_Record::from_array(
+			[
+				'key'               => 'dadata:cherkizovo',
+				'provider_id'       => 'dadata',
+				'level'             => Location_Record::LEVEL_SETTLEMENT,
+				'country'           => 'RU',
+				'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+				'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+			]
+		);
+
+		$handler = new Checkout_Order_Location_Probe( new Checkout_Order_Location_Fake_Service( true, $cherkizovo ) );
+		$handler->commit_for_test( $this->order( 'Черкизово' ), 'carrier_method' );
+
+		$this->assertSame( 'dadata:cherkizovo', $this->meta[ Checkout_Handler::ORDER_LOCATION_META_KEY ]['key'] );
+	}
 }

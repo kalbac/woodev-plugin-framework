@@ -2465,4 +2465,136 @@ class CheckoutConfigTest extends TestCase {
 
 		$this->assertSame( 'KZ', $config['location']['defaultCountry'] );
 	}
+
+	// -------------------------------------------------------------------------
+	// City mode — the closed settlement choice (range-shipping city mode spec §4.2,
+	// framework 2.0.26).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A listed settlement record.
+	 *
+	 * @param array<string, mixed> $overrides Payload overrides.
+	 */
+	private static function city_mode_place( string $slug, string $name, array $overrides = [] ): Location_Record {
+		return Location_Record::from_array(
+			array_merge(
+				[
+					'key'         => 'dadata:' . $slug,
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'settlement'  => [ 'name' => $name, 'type' => 'г' ],
+					'label'       => 'г ' . $name,
+				],
+				$overrides
+			)
+		);
+	}
+
+	/**
+	 * Builds the location block with city mode listing `$records`.
+	 *
+	 * @param Location_Record[] $records    Listed places.
+	 * @param bool              $hide_field The merchant's «hide the field» flag.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function city_mode_location_block( array $records, bool $hide_field ): array {
+		Location_Service::reset_settlement_choices_for_tests();
+		Filters\expectApplied( Location_Service::FILTER_SETTLEMENT_CHOICES )->andReturn(
+			[
+				'records'    => $records,
+				'hide_field' => $hide_field,
+			]
+		);
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'RU', 'KZ' ], Location_Provider_Registry::MODE_TYPEAHEAD, [], 'RU', null, null, true );
+
+		try {
+			return ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU', 'KZ' ], $service ) )->build( Checkout_Fields::from_array( [] ) )['location'];
+		} finally {
+			Location_Service::reset_settlement_choices_for_tests();
+		}
+	}
+
+	public function test_city_mode_config_with_one_hidden_place(): void {
+		$block = $this->city_mode_location_block( [ self::city_mode_place( 'moscow', 'Москва' ) ], true );
+
+		$this->assertSame( [ 'RU' ], array_keys( $block['allowed'] ) );
+		$this->assertSame(
+			[ 'key', 'label', 'level', 'record', 'value' ],
+			array_keys( $block['allowed']['RU'][0] ),
+			'the popular wire shape plus value'
+		);
+		$this->assertSame( 'Москва', $block['allowed']['RU'][0]['value'] );
+		$this->assertSame( 'dadata:moscow', $block['allowed']['RU'][0]['record']['key'] );
+		$this->assertTrue( $block['hideSettlement'] );
+		$this->assertFalse( $block['allowCustomSettlement'], 'the store setting allows custom settlements, city mode does not' );
+		$this->assertFalse( $block['levels']['RU']['region'] );
+		$this->assertFalse( $block['levels']['KZ']['region'] );
+	}
+
+	public function test_city_mode_config_with_three_places_never_hides_the_field(): void {
+		$block = $this->city_mode_location_block(
+			[
+				self::city_mode_place( 'moscow', 'Москва' ),
+				self::city_mode_place( 'khimki', 'Химки' ),
+				self::city_mode_place( 'kommunarka', 'Коммунарка', [ 'settlement' => [ 'name' => 'Коммунарка', 'type' => 'п' ] ] ),
+			],
+			true
+		);
+
+		$this->assertSame( [ 'Москва', 'Химки', 'Коммунарка' ], array_column( $block['allowed']['RU'], 'value' ) );
+		$this->assertFalse( $block['hideSettlement'], 'hiding works for exactly one place' );
+		$this->assertFalse( $block['allowCustomSettlement'] );
+		$this->assertFalse( $block['levels']['RU']['region'] );
+	}
+
+	public function test_city_mode_nested_place_value_is_its_own_name(): void {
+		$cherkizovo = self::city_mode_place(
+			'cherkizovo',
+			'Пушкино',
+			[ 'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ] ]
+		);
+
+		$block = $this->city_mode_location_block( [ $cherkizovo ], false );
+
+		$this->assertSame( 'Черкизово', $block['allowed']['RU'][0]['value'] );
+		$this->assertFalse( $block['hideSettlement'] );
+	}
+
+	public function test_city_mode_keys_are_absent_while_nothing_is_listed(): void {
+		$block = $this->city_mode_location_block( [], true );
+
+		$this->assertArrayNotHasKey( 'allowed', $block );
+		$this->assertArrayNotHasKey( 'hideSettlement', $block );
+		$this->assertTrue( $block['allowCustomSettlement'], 'the store setting is served unchanged' );
+		$this->assertTrue( $block['levels']['RU']['region'] );
+	}
+
+	public function test_city_mode_my_account_config_has_none_of_the_keys(): void {
+		Location_Service::reset_settlement_choices_for_tests();
+		Filters\expectApplied( Location_Service::FILTER_SETTLEMENT_CHOICES )->zeroOrMoreTimes()->andReturn(
+			[
+				'records'    => [ self::city_mode_place( 'moscow', 'Москва' ) ],
+				'hide_field' => true,
+			]
+		);
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'RU' ], Location_Provider_Registry::MODE_TYPEAHEAD, [], 'RU', null, null, true );
+		$config  = new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service );
+
+		// The My Account form's config is built exactly this way (Checkout_Handler::enqueue_account_assets()).
+		$block = Location_Service::without_settlement_choices(
+			static fn() => $config->build( Checkout_Fields::from_array( [] ) )['location']
+		);
+
+		Location_Service::reset_settlement_choices_for_tests();
+
+		$this->assertArrayNotHasKey( 'allowed', $block );
+		$this->assertArrayNotHasKey( 'hideSettlement', $block );
+		$this->assertTrue( $block['allowCustomSettlement'] );
+		$this->assertTrue( $block['levels']['RU']['region'] );
+	}
 }

@@ -277,6 +277,36 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 		$this->assertSame( [], $config['pickup_method_ids'] );
 	}
 
+	/**
+	 * City mode restricts the checkout only (range-shipping city mode spec §1, A11): the My
+	 * Account form's config carries none of its keys even while it lists places.
+	 */
+	public function test_the_account_form_config_carries_no_city_mode_keys(): void {
+		Location_Service::reset_settlement_choices_for_tests();
+		$listed = $this->record();
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value = null ) use ( $listed ) {
+				return Location_Service::FILTER_SETTLEMENT_CHOICES === $tag
+					? [
+						'records'    => [ $listed ],
+						'hide_field' => true,
+					]
+					: $value;
+			}
+		);
+
+		try {
+			[ , $localized ] = $this->enqueue_on_account( 'billing' );
+		} finally {
+			Location_Service::reset_settlement_choices_for_tests();
+		}
+
+		$location = $localized[0][2]['location'];
+
+		$this->assertArrayNotHasKey( 'allowed', $location );
+		$this->assertArrayNotHasKey( 'hideSettlement', $location );
+	}
+
 	public function test_the_shipping_form_describes_the_shipping_field_only(): void {
 		[ , $localized ] = $this->enqueue_on_account( 'shipping' );
 
@@ -318,6 +348,45 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 		$location = $localized[0][2]['location'];
 		$this->assertSame( 'settlement', $location['current']['level'] );
 		$this->assertNull( $location['defaultLocality'] );
+	}
+
+	/**
+	 * Range-shipping city mode spec §4.4: `city_names_record()` matches a nested record by its
+	 * own name («Черкизово») and by its parent («Пушкино»), but not by another city.
+	 *
+	 * @dataProvider cities_for_the_nested_record
+	 */
+	public function test_a_nested_record_is_named_by_its_own_name_and_its_parent( string $saved_city, bool $kept ): void {
+		$cherkizovo = Location_Record::from_array(
+			[
+				'key'               => 'test:cherkizovo',
+				'provider_id'       => 'test',
+				'level'             => Location_Record::LEVEL_SETTLEMENT,
+				'country'           => 'RU',
+				'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+				'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+			]
+		);
+
+		$method = new \ReflectionMethod( Checkout_Handler::class, 'city_names_record' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true ); // A no-op (and deprecated) from 8.1.
+		}
+
+		$handler = new Account_Address_Handler( Checkout_Fields::from_array( [] ), 'carrier', new Account_Address_Fake_Service( true, $cherkizovo ) );
+
+		$this->assertSame( $kept, $method->invoke( $handler, $saved_city, $cherkizovo, 'RU' ) );
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: bool}>
+	 */
+	public static function cities_for_the_nested_record(): array {
+		return [
+			'own name'      => [ 'Черкизово', true ],
+			'parent name'   => [ 'Пушкино', true ],
+			'another place' => [ 'Москва', false ],
+		];
 	}
 
 	public function test_a_record_the_saved_city_does_not_name_is_not_handed_to_the_form(): void {
