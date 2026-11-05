@@ -199,6 +199,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		private static int $settlement_choices_suspended = 0;
 
 		/**
+		 * How many {@see self::in_checkout_view()} calls are in progress.
+		 *
+		 * @since 2.0.26
+		 * @var int
+		 */
+		private static int $checkout_view_depth = 0;
+
+		/**
 		 * Whether {@see self::resolve_default()} already ran in THIS request (#1025).
 		 *
 		 * The RESOLUTION is memoized — a record, or `null` for a miss or a failure — not the
@@ -1169,7 +1177,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 				// City mode asks no region (spec §4.2), so a stored one is not part of the chain
 				// the checkout shows — skipped without breaking the levels below it.
-				if ( Location_Record::LEVEL_REGION === $level && $this->has_settlement_choices() ) {
+				if ( Location_Record::LEVEL_REGION === $level && $this->settlement_choices_narrow_this_read() ) {
 					continue;
 				}
 
@@ -1253,11 +1261,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * placed against — a locality the address form no longer shows. Like (a) and (b)
 		 * it only READS.
 		 *
-		 * (d) NOT LISTED (city mode spec §4.4, 2.0.26): while city mode lists places
+		 * (d) NOT LISTED (city mode spec §4.4, 2.0.26) — checkout VIEW reads only
+		 * ({@see self::in_checkout_view()}): while city mode lists places
 		 * ({@see self::get_settlement_choices()}), a settlement record that is none of them —
 		 * a returning customer's Тула — is read as absent, so the checkout shows the
 		 * placeholder, or the single place as the fixed default. Presentation, not validation:
-		 * the stored blob is kept and nothing is refused at submit.
+		 * rating, the My Account suggestion scope and order placement keep the record, the
+		 * stored blob is kept and nothing is refused at submit.
 		 *
 		 * `$for_country` (optional, #350/#352 follow-up — call-site-aware
 		 * country authority): when given, rule (b) compares against IT
@@ -2393,6 +2403,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		public static function reset_settlement_choices_for_tests(): void {
 			self::$settlement_choices           = null;
 			self::$settlement_choices_suspended = 0;
+			self::$checkout_view_depth          = 0;
+		}
+
+		/**
+		 * Runs `$callback` as a checkout VIEW read: the reads that build what the checkout or the
+		 * cart calculator SHOWS — the only place city mode's list narrows the customer's location
+		 * (spec §4.4). Inside it, a settlement the list does not name, a stored region and a saved
+		 * city naming no listed place read as absent, so the field shows its placeholder or the
+		 * single place as the fixed default.
+		 *
+		 * Everything else reads the customer's location as before city mode — rating, the
+		 * `/location/suggest` scope of the My Account form, order placement and its #531 guard: the
+		 * list is presentation, never a boundary, and nothing is refused at submit (K10).
+		 * Nested calls unwind correctly; a throwing callback cannot leave the view in force.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param callable $callback Called with no arguments.
+		 *
+		 * @return mixed Whatever `$callback` returns.
+		 */
+		public static function in_checkout_view( callable $callback ) {
+			++self::$checkout_view_depth;
+
+			try {
+				return $callback();
+			} finally {
+				--self::$checkout_view_depth;
+			}
+		}
+
+		/**
+		 * Whether this read is a checkout view read while city mode lists places — the condition
+		 * of every list-membership rule ({@see self::in_checkout_view()}).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return bool
+		 */
+		private function settlement_choices_narrow_this_read(): bool {
+			return self::$checkout_view_depth > 0 && $this->has_settlement_choices();
 		}
 
 		/**
@@ -2438,9 +2489,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * Whether city mode lists places and `$record` is a settlement that is not one of them —
-		 * such a record is read as absent by the checkout (city mode spec §4.4: a returning
-		 * customer's saved Тула). Presentation only: nothing is deleted or refused at submit.
+		 * Whether this is a checkout view read ({@see self::in_checkout_view()}) while city mode
+		 * lists places, and `$record` is a settlement that is not one of them — such a record is
+		 * read as absent by the checkout view (city mode spec §4.4: a returning customer's saved
+		 * Тула). Every other read keeps it: nothing is deleted or refused at submit.
 		 *
 		 * @since 2.0.26
 		 *
@@ -2449,7 +2501,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return bool
 		 */
 		private function is_outside_settlement_choices( Location_Record $record ): bool {
-			if ( Location_Record::LEVEL_SETTLEMENT !== $record->level() || ! $this->has_settlement_choices() ) {
+			if ( Location_Record::LEVEL_SETTLEMENT !== $record->level() || ! $this->settlement_choices_narrow_this_read() ) {
 				return false;
 			}
 
@@ -2464,7 +2516,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 		/**
 		 * The saved WooCommerce city the checkout may build on ({@see self::customer_saved_city()}),
-		 * or `''` when city mode makes it irrelevant (spec §4.4).
+		 * or `''` when city mode makes it irrelevant to the checkout VIEW (spec §4.4,
+		 * {@see self::in_checkout_view()}) — every other read gets the saved city as before.
 		 *
 		 * With one listed place that place is the fixed default whatever the customer saved, so
 		 * the saved city must not block it. With several, a saved city naming none of them is
@@ -2477,7 +2530,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		private function saved_city_for_checkout(): string {
 			$city = $this->customer_saved_city();
 
-			if ( '' === $city || ! $this->has_settlement_choices() ) {
+			if ( '' === $city || ! $this->settlement_choices_narrow_this_read() ) {
 				return $city;
 			}
 

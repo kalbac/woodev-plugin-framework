@@ -321,7 +321,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			];
 
 			if ( null !== $this->location_service && $this->location_service->is_active() ) {
-				$config['location'] = $this->build_location_block( $this->location_service );
+				$service            = $this->location_service;
+				$config['location'] = \Woodev\Framework\Shipping\Location\Location_Service::in_checkout_view(
+					fn() => $this->build_location_block( $service )
+				);
 			}
 
 			return $config;
@@ -343,7 +346,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * as rule (c) of {@see \Woodev\Framework\Shipping\Location\Location_Service::is_customer_record_stale()}.
 		 * An address that names no city yet leaves it alone.
 		 *
+		 * Every read is a checkout VIEW read
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::in_checkout_view()}), so city
+		 * mode's list applies to the selection exactly as to the block.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Built inside the checkout view.
 		 *
 		 * @return array<string, mixed>|null The block, or `null` when no location service was injected or
 		 *                                   the layer is inactive (no provider configured) — the chooser
@@ -354,12 +362,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				return null;
 			}
 
-			$config    = $this->build_location_block( $this->location_service );
-			$customer  = $this->location_service->get_customer_record();
+			$service = $this->location_service;
+
+			return \Woodev\Framework\Shipping\Location\Location_Service::in_checkout_view( fn() => $this->build_blocks_location_config( $service ) );
+		}
+
+		/**
+		 * The body of {@see self::build_location_config()}, run inside the checkout view.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active location service.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private function build_blocks_location_config( \Woodev\Framework\Shipping\Location\Location_Service $service ): array {
+			$config    = $this->build_location_block( $service );
+			$customer  = $service->get_customer_record();
 			$selection = null;
 
 			if ( null !== $customer && ! $customer['implicit'] ) {
-				$settlement = $this->location_service->get_customer_record_at( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT );
+				$settlement = $service->get_customer_record_at( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT );
 
 				if ( null !== $settlement ) {
 					$selection = [ 'record' => $settlement->to_array() ];
