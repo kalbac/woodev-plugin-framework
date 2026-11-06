@@ -934,6 +934,11 @@ class CheckoutConfigTest extends TestCase {
 			$config->build( Checkout_Fields::from_array( [] ) )['location'] + [ 'selection' => null ],
 			$config->build_location_config()
 		);
+		$this->assertSame(
+			Location_Record::russian_region_aliases(),
+			$config->build_location_config()['regionNameAliases'],
+			'the browser receives the exact server map, independently of the active state list'
+		);
 		// The classic config must not grow the Blocks-only key.
 		$this->assertArrayNotHasKey( 'selection', $config->build( Checkout_Fields::from_array( [] ) )['location'] );
 	}
