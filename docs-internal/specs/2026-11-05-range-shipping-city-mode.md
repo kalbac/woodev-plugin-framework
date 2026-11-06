@@ -1,6 +1,11 @@
 # «Доставка в пределах города» (range shipping 2.0.0) — design
 
-**Date:** 2026-11-05. **Status:** draft r6 (06.11.2026) — history in the [revision log](#revision-log). r3 was **rewritten after the operator's
+**Date:** 2026-11-05. **Status:** draft r7.1 (06.11.2026) — history in the [revision log](#revision-log). **r7** applies the operator's decision of
+06.11.2026 (K15, #1642): every listed place belongs to a **country**, the admin picks the country first, and the checkout applies city mode **per the
+customer's country** — a country with no listed place keeps the ordinary field. **r7.1** folds in the r7 critic's seven findings (the data wires,
+hook registration, billing-only fallback, pickup guard, the checkout-view country, the §3.2 row) and records the operator's confirmation of every
+§10 item (K16, K17). Its implementation plan is
+[plans/2026-11-06-1642-city-mode-country.md](../plans/2026-11-06-1642-city-mode-country.md). r3 was **rewritten after the operator's
 redirect of 05.11.2026** (§0, binding): the list of places is the **granularity of the checkout's settlement choice and of the active provider's address
 suggestions**, not a delivery boundary. The delivery boundary stays where it already is — the range method's own distance grid. r1/r2 designed a
 store-wide server-side restriction; §9 lists what was removed and why. **r4** replaced K11 («a federal city includes its districts») with the operator's
@@ -9,7 +14,8 @@ store-wide server-side restriction; §9 lists what was removed and why. **r4** r
 `woocommerce-edostavka` PR), and DaData address suggestions for such a record are scoped **by that id** (city OR settlement); FIAS is Russia-only, so
 outside Russia the scope is country + the record's own locality name, for every provider. **r5.1** applies the r5 critic's four must-fix findings (revision
 log). **r6** applies the operator's decision after his rig look of 06.11.2026 (§4.2 behaviour table, card F5 #1627): one place is plain text, several
-places are a plain dropdown, the State row is hidden in both. Nothing in this revision blocks on the operator; §10 lists provisional choices.
+places are a plain dropdown, the State row is hidden in both. Nothing in this revision blocks on the operator; §10 records his decisions on the
+choices that were provisional (all confirmed 06.11.2026).
 **Target:** the same release `2.0.0` of «Расчёт стоимости доставки за расстояние» (plugin id `range_rate`) as
 [2026-11-05-range-shipping-v2-design.md](2026-11-05-range-shipping-v2-design.md) (called **v2 spec** below; its D1–D16 are binding). Two repos change:
 this framework (small, **in framework 2.0.26 itself — still unreleased, draft release PR #1606**) and `kalbac/woocommerce-range-shipping` (settings
@@ -55,6 +61,9 @@ Operator's redirect, 05.11.2026 (binding, overrides r1/r2's framing):
 | K12 | **A record keeps its FIAS id, whichever provider made it.** The CDEK provider keeps the dictionary row's `fias_guid` (and, as today, its coordinates) in the CDEK location record instead of dropping it (READ `woocommerce-edostavka` `includes/location/class-cdek-location-provider.php:22` «FIAS is not used»; the adapter already matches on it, `class-cdek-location-adapter.php:206`). It is a **separate `woocommerce-edostavka` card and PR (E1)**; the CDEK plugin release is not part of this wave | operator, 05.11.2026 late (s218 «City-mode r5 inputs») |
 | K13 | **DaData address suggestions for a listed place with a FIAS id are scoped by that id — as a city OR as a settlement** (`locations` keys `city_fias_id`, then `settlement_fias_id`; §4.3). This is still K11′: the id is the place's own, handed on as-is, and DaData decides what lies under it | operator, 05.11.2026 late |
 | K14 | **FIAS is Russia-only.** Outside Russia DaData's ids are OpenStreetMap/GeoNames ids and CDEK rows carry no `fias_guid`, so **every non-RU record, whichever provider made it, is scoped by country + the record's own locality name** — DaData's OSM/GeoNames ids are no longer used for scoping. A Russian record without a FIAS id takes the same name path. One provider-agnostic rule, decided in the framework's DaData provider, nothing in the range plugin (§4.3) | operator, 05.11.2026 late; non-RU DaData case settled by the coordinator 06.11.2026 (r5.1: the operator's input wins) |
+| K15 | **A country per place (r7).** A listed place belongs to its record's own `country` (already stored — **no migration**). **Admin:** the add row asks «Страна» first, then «Населённый пункт», whose suggestions search **only that country**; the choices are WooCommerce «Доставка в страны» ∩ the countries the location provider chain suggests for (`location.countries`); exactly one choice → no dropdown, the country is filled in and shown as text; table rows `Страна — Населённый пункт — Изменить — Удалить`, **sorted by country**; a row whose country has left «Доставка в страны» is **kept and flagged** «страна не входит в доставку — на оформлении не показывается». **Checkout, classic and block, by the customer's country:** one place there → fixed text, «Регион» hidden; several → a list (classic select2, #1634); **none → the ordinary field with suggestions and region, city mode does not apply, and nothing at order placement requires a listed place**. The «Скрывать поле» inactivity condition («more than one place») is **counted per country**. Narrows K4: «store-wide» now means «for every listed country» | operator, 06.11.2026 (s220, #1642 variant 2) |
+| K16 | **How K15 reads where the code forced a reading** (were §10 items 3–7): «Скрывать поле» counted per country is **`min`** — the switch is inactive only while **every** listed country has more than one place (RU 3 + KZ 1 → active, it hides the KZ field only); the country choices **keep countries without address suggestions** (AM AZ KG TJ TM on the measured rig — the place works, the street is typed freely); the **per-country copy** of §3.3 r7 and §6 and the **«every row flagged» notice** of §3.4 ship as written; the block's «several places» stays a **native `<select>`** (#1634 changed classic only) | operator, 06.11.2026 (s220: «всё по рекомендациям») |
+| K17 | **CDEK rows saved before E1 get no migration and no notice** (they stay name-scoped, branch 3, until re-picked), and **E1 ships with the next regular CDEK release**, not as its own hotfix (were §10 items 1–2) | operator, 06.11.2026 (s220: «всё по рекомендациям») |
 
 ## 1. Goal, scope, non-goals
 
@@ -114,6 +123,56 @@ critic). The row keeps the record as the picker produced it (the provider's own 
 save). The hide toggle cannot depend on the row count (ADR-008 has no such operator), so it is visible whenever the mode is on, its text says it works
 for one place, and it takes effect only when the list has exactly one.
 
+**r7 — the country of a place (K15).** The table gains a **«Страна» column before «Населённый пункт»**. It is **derived, not stored**: its value is the
+`country` of the record in the `city` cell, so the stored row stays `{ "city": "<Location_Record JSON>" }` and every row saved before r7 already has its
+country (no migration). A new framework records-table column type `location-country` (plan WP-D) carries it:
+
+| Column key | Value |
+|---|---|
+| `of` | `city` — the location-picker column whose record supplies the country and whose search the chosen country scopes |
+| `options` | the countries a **new or edited** row may choose: `WC()->countries->get_shipping_countries()` ∩ `Location_Service::get_supported_countries()` (`location.countries`), as `City_Limit::country_options()` `{ code, name }` in WooCommerce's order |
+| `in_scope` | the codes a stored row may carry **without the flag**: WooCommerce «Доставка в страны» only — not `location.countries`, so a removed DaData key (K8, every provider country gone) flags nothing |
+| `default` *(r7.1, resolved by the framework, not declared)* | the code a new row starts on: `WC()->countries->get_base_country()` when it is among `options`, else the first option's code, `''` without options. Added to the column schema by `Field_Schema`; `window.woodevSettings` carries no store country, so the client cannot work it out itself |
+| `names` *(r7.1, resolved by the framework, not declared)* | `code => WooCommerce country name` for every code in `options` **and** every country of the setting's stored rows (the `of` records' `country`) — so a flagged row whose country left both `options` and shipping still shows «Казахстан» and sorts by it; the code itself only where WooCommerce knows no name |
+
+- **Form.** «Страна» comes first. Several `options` → a select; exactly one → no select, the country is shown as text and used; a new row starts on
+  `default` (the store's base country when it is among `options`, else the first option). The chosen code is passed as `country` to **that row's** location picker
+  (today every picker cell gets the control-wide `schema.country`, which the range plugin leaves empty, so the admin `/default-locality/suggest` route
+  searches `resolve_default_country()` — the store's base country; see «Coverage» below). Changing the country of a row whose picked record is of
+  another country clears that cell.
+- **Table.** `Страна — Населённый пункт — Изменить — Удалить`; the «Страна» cell shows `names[code]` — the WooCommerce country name (the code when
+  WooCommerce does not know it). Rows are **kept sorted by the country name** (stable within a country, so the merchant's order of places inside a country stays) — the
+  table re-sorts the value on every add and edit, so what is saved is what is shown.
+- **Flag.** A row whose record's country is not in `in_scope` keeps its place in the table and shows, in its «Страна» cell, the note
+  «страна не входит в доставку — на оформлении не показывается». It is never deleted or refused (§3.2); the plugin does not publish it (§3.4).
+- **«Скрывать поле».** Its `disabled_if` becomes a **per-country** row count: the framework `count` condition gains `per` (a `location-country`
+  column id — rows grouped by their record's country, only countries in that column's `in_scope`) and `aggregate` (`min` / `max`), plan WP-D and an
+  ADR-008 amendment. The aggregate is **`min`** (operator, K16) — the switch is inactive while **every** listed country has more than one place,
+  because it then has nothing to hide. The save-time clearing in `City_Mode_Settings::update_value()` follows the same rule. **r7.1 — the server
+  half needs the column declarations.** `Woodev_Setting::evaluate_conditions()` today receives only a flat list of records-table ids (third argument),
+  so it cannot find the `of` cell or `in_scope`; both PHP save paths — `Woodev_Abstract_Settings::filter_visible_values()` and the composite
+  handler's own copy (`class-composite-settings-handler.php`) — pass instead a map **records-table id → its column declarations**
+  (`Woodev_Control::get_columns()`), built from the registered controls. A `count` without `per`, and a table without a `location-country` column,
+  count every row exactly as today. Without this the browser would enable the switch for RU 3 + KZ 1 while the save strips it (plan WP-D).
+
+**Coverage, measured 06.11.2026** (the rig, DaData + CDEK configured, CDEK the active provider, WooCommerce ships to all countries; read-only
+`wp eval`, country codes only):
+
+| | Countries |
+|---|---|
+| DaData `get_countries()` (`DEFAULT_COUNTRIES`, filter `FILTER_COUNTRIES`) | AM AZ BY KG KZ RU TJ TM UZ |
+| CDEK provider `get_countries()` | AM BY KG KZ RU UZ |
+| `location.countries` (`get_supported_countries()`, the union over the chain) = the r7 «Страна» choices on this rig | AM AZ BY KG KZ RU TJ TM UZ |
+| settlement level — `provider_for_level( settlement, c )` | CDEK: AM BY KG KZ RU UZ · DaData (D15 fallback): AZ TJ TM |
+| address level — `provider_for_level( address, c )` | DaData: BY KZ RU UZ · **none**: AM AZ KG TJ TM |
+
+So every choice can add a place (the settlement level resolves in all nine), but in **AM, AZ, KG, TJ, TM** a listed place has **no address
+suggestions** — the buyer types the street freely (DaData's GeoNames tier is city-only, `Dadata_Provider::get_countries()` docblock). That is the same
+as checkout without city mode there; the choices keep these countries and the page text adds nothing (operator, K16). **What s219 saw** («a RU shop cannot add a foreign city through the
+picker»): the picker had no country input at all — `records-table.tsx` hands every location cell the control's `schema.country`, empty for this
+setting, and `perform_suggest()` then searches `resolve_default_country()` (RU on the rig), through CDEK, so «Алматы» found nothing. The «Страна»
+select above is exactly the missing input; no provider change is needed.
+
 ### 3.2 Validation on Save (server)
 
 | Rule | Message |
@@ -122,6 +181,8 @@ for one place, and it takes effect only when the list has exactly one.
 | A row is not a valid settlement record: its JSON is refused by `Location_Record::from_array()` (e.g. no `key`, or a `key` prefix that disagrees with `provider_id`); its `level` is not `settlement`; its `provider_id` is not a registered provider; or its `settlement.name` is empty. **No FIAS id is required from any provider** — neither the canonical `Location_Record::fias_id` (optional, §4.3) nor DaData's native `raw.fias_id` (a valid foreign DaData record may have an empty one and a derived key). A row without the canonical id is scoped by country + name (K14) | «Выберите населённый пункт из подсказок.» |
 | The same place twice (equal keys) | «Этот населённый пункт уже в списке.» |
 | Mode off | the list is kept and not validated |
+| **r7.1:** a row whose country is **not selectable now** (outside `options` — e.g. it left `location.countries`, or the DaData key was removed, K8) but is still in «Доставка в страны» (`in_scope`) | **not an error, not flagged, published** — the K8 fallback still needs it (§3.1 `in_scope`, §3.4) |
+| **r7.1:** a row whose country is **outside «Доставка в страны»** (`in_scope`) | **not an error** — kept and flagged (§3.1), not published (§3.4); the picker is the gate for new rows, and a crafted row in such a country is simply not published |
 
 No upper bound (operator). A list emptied by a crafted write is read as «feature off» and the tab says so (§3.4).
 
@@ -152,17 +213,35 @@ No upper bound (operator). A list emptied by a crafted write is read as «featur
    населённый пункт сервис подсказок: например, при «Москва» в списке Зеленоград
    сам не добавится — если вы возите и туда, добавьте его отдельной строкой.
    То же для посёлка, который покупатель должен видеть отдельно.
-   ┌────┬─────────────────────────────────────────────────────────────┬────┐
-   │ 1  │ г Москва                                                    │ 🗑 │
-   │ 2  │ г Химки, Московская обл                                     │ 🗑 │
-   └────┴─────────────────────────────────────────────────────────────┴────┘
-                                                       [ + Добавить город ]
+   ┌──────────────────────────┬─────────────────────────────┬──────────────────────┐
+   │ Страна                   │ Населённый пункт            │                      │
+   ├──────────────────────────┼─────────────────────────────┼──────────────────────┤
+   │ Беларусь                 │ г Минск                     │ Изменить   Удалить   │
+   │   страна не входит в     │                             │                      │
+   │   доставку — на оформле- │                             │                      │
+   │   нии не показывается    │                             │                      │
+   │ Казахстан                │ г Алматы                    │ Изменить   Удалить   │
+   │ Россия                   │ г Москва                    │ Изменить   Удалить   │
+   │ Россия                   │ г Химки, Московская обл     │ Изменить   Удалить   │
+   └──────────────────────────┴─────────────────────────────┴──────────────────────┘
+   ┌─ Добавить город ───────────────────────────────────────────────────────────────┐
+   │ Страна            [ Россия                ▾ ]   ← no select with one country   │
+   │ Населённый пункт  [ начните вводить…        ]   ← searches that country only   │
+   │                                              [ Отмена ]  [ Сохранить ]         │
+   └────────────────────────────────────────────────────────────────────────────────┘
+                                                       [ Добавить город ]
 
    [ ] Скрывать поле «Населённый пункт»
        Работает, когда в списке один город: покупателю не нужно его выбирать, поля
        на оформлении заказа не будет, город подставится сам. Поле «Адрес» остаётся —
        без адреса заказ не доставить.
 ```
+
+**r7 copy (operator, K16).** With places per country, three plugin strings say «per country»: the mode description gains «Для
+страны, в которой у вас нет населённых пунктов, поле работает как обычно.»; the hide-field description becomes «Работает для страны, в которой в
+списке один населённый пункт: …» (rest unchanged); its `disabled_reason` becomes «Сейчас в каждой стране списка несколько населённых пунктов.
+Переключатель работает для страны, где в списке один.» The flag text is the operator's own. The table mock above shows the
+r7 shape only; the shipped strings of PR #41 stay where r7 does not touch them.
 
 Empty table text: «Добавьте хотя бы один населённый пункт — город, посёлок или район города.» The «Важно» box is the operator's explicit-warning
 requirement; it shows whenever the switch is on. Admin strings are Russian msgids in the plugin; the few buyer strings the framework adds (placeholder
@@ -179,6 +258,14 @@ Notices on the tab are computed on render, never stored:
 | Licence not in force (K7) | «Режим «Доставка в пределах города» сейчас не работает: лицензия не действует. Покупатели видят обычное поле «Населённый пункт» и могут выбрать любой город. Введите или продлите лицензионный ключ — режим включится сам.» |
 | DaData key missing or DaData unreachable (K8) | «Подсказки адресов сейчас не работают: не указан ключ DaData или сервис недоступен. Покупатель по-прежнему выбирает город только из вашего списка, но адрес вводит без подсказок.» |
 | Mode on, list empty (crafted write) | «Список пуст — режим не действует. Добавьте хотя бы один населённый пункт.» |
+| **r7:** mode on, every row flagged (no listed country is in «Доставка в страны») | «Ни одна страна из списка не входит в доставку — режим не действует.» (operator, K16) |
+
+**r7 — what is published (K15).** `City_Mode` publishes only the rows whose record's country is in WooCommerce «Доставка в страны» (the same
+`in_scope` predicate as the flag, one helper in `City_List`); `is_in_force()` needs at least one such row. `hide_field` is published as the **stored
+switch**, no longer pre-multiplied by «exactly one place»: the framework applies it to each country that has exactly one place (§4.2). The
+`woodev_location_default_locality` hook answers **the single place of the country it is asked about** (the framework passes that country, §4.2), not
+«the only record of the whole list». **r7.1:** the callback is registered with **`accepted_args = 2`** (`add_filter( FILTER_DEFAULT_LOCALITY, …, 10,
+2 )` in `City_Mode::register()`) — WordPress's default of one would deliver only `$current`, and the country would never reach it.
 
 ## 4. Checkout
 
@@ -214,6 +301,44 @@ region option (State still empty after the City is filled) the State row stays v
 | **«Адрес»** | Untouched: still shown and required wherever the shop's own «Поля» policy shows it; city mode never hides or relaxes it | Same |
 
 The `hideSettlement` flag acts on exactly one place; with several places the select stays whatever the flag says (the plugin disables the toggle then — plugin card, not this repo).
+
+**#1634 (operator, 06.11.2026, merged in PR #1637)** already replaced the classic «Several places» cell: the closed list is **select2** (selectWoo, like
+WooCommerce's «Страна»), still with **no request** — the options are the listed places; the search box shows only above five places
+(`minimumResultsForSearch`); without selectWoo on the page the plain `<select>` stays. The block cell is unchanged (native `<select>`, #1634: «Блочное
+оформление не затрагивается»).
+
+**r7 — everything above is per the customer's country (K15).** «Customer's country» is the delivery section's country (§4.1): the live
+`billing_country` / `shipping_country` field on the clients. **r7.1 — on the server it is the checkout-view country**, a new
+`Location_Service::checkout_view_country()`: on the **initial classic page build** (no AJAX, no REST / Store API request) the country of the
+**delivery target** — `WC()->customer->get_{target}_country()`, `target` = billing for a billing-only shop or while the «Доставить по другому
+адресу» default is unchecked, shipping when it is checked (`Address_Target::classic_default()`, the body of today's private
+`Checkout_Handler::classic_checkout_default_target()`, moved so both classes share it); on every later request `customer_shipping_country()`
+(WooCommerce's `update_order_review` has copied billing into shipping while the box is off, and the Store API cart address is the delivery
+address); `resolve_default_country()` when empty. The r7 text named `customer_shipping_country()` for the first render too, which reads the
+**saved shipping** country only: a returning customer with saved billing RU (one listed place) and saved shipping UZ, delivering to billing, would
+get the page-load config — `defaultLocality`, the fixed policy — computed for UZ, so the classic closed-text City would show the RU place without the
+seeded record that `prefill()` and the address lock need. `customer_shipping_country()` itself and its existing consumers (staleness rule
+(b), issues #346 and #587) are unchanged. The config keys change as follows (replaces the four rows of the key table above):
+
+| Key | r7 value |
+|---|---|
+| `allowed[country]` | as before — but only for countries that have a **published** place (§3.4), so a flagged row never reaches the checkout |
+| `hideSettlement` | the merchant's **stored switch** as published; a client applies it only where `allowed[country]` has exactly one place (classic `syncHiddenSettlementRows()` already checks `places.length`; block mounts `single-place.tsx` only for one place) |
+| `allowCustomSettlement` | **the store's own value, no longer clamped** — a client treats a country with `allowed[country]` as closed (no free text: classic `closed-*` renderers compute `allowCustomSettlement && ! allowedPlaces( country )`); a country without places keeps the store rule, on the server too (`guard_custom_settlement()` is unchanged). **r7.1 — the classic pickup City guard** (`holdsGuardedSettlement()`, #961) holds the settlement when the country has a closed list **whatever the shop's ordinary field mode**, OR under the existing rule (`ajax-select2` and custom off): today its `'ajax-select2' === settlementAxisMode()` test alone would let a pickup point's City overwrite a listed place in a `typeahead` shop, although `resolveModeRenderer()` renders that country as `closed-*` |
+| `levels[country].region` | `false` **only for a country with `allowed[country]`**; every other country keeps its D15 answer |
+| `defaultLocality` | the fixed default is the single place **of the customer's country**: `woodev_location_default_locality` is applied as `apply_filters( tag, null, $country )`, `$country = checkout_view_country()` (r7.1); a country with several or no places gets no filtered default and the store's own «Локация» policy |
+
+Two rows join the behaviour table:
+
+| Case | Classic | Block |
+|---|---|---|
+| **No place in the customer's country** | The settlement field is whatever the shop's «Локация» settings make it (typeahead / select2 search / related list), the region row is asked as usual, address suggestions are scoped as usual — the listed places of other countries are neither offered nor used. At placement nothing requires a listed place: the #531 guard applies the store's own rule exactly as without city mode, and no city-mode rule exists on the server (K10) | The ordinary combobox and State row (`allowedPlaces( config, country ) === null` → `closedChoice` false in `locality-chooser.tsx`) |
+| **The customer changes country** | The settlement widget is re-resolved for the new country (closed list ↔ text ↔ the shop's own mode) — today `reconcileAfterCheckoutUpdate()` re-attaches only when the input element itself was replaced, so the country-change path must re-attach when `resolveModeRenderer()` would now pick another renderer or another country's list; the existing `clearCountryScope()` / `/forget` clears the old country's chain; a single place of the new country is written from `allowed[country][0]` on the client (the server's `defaultLocality` was computed for the render-time country only); the region row follows `syncHiddenSettlementRows()` | Already per country (`allowedPlaces( config, country )`, `singlePlace()`); the switch must leave no stale City/State of the previous country's single place (Jest) |
+
+`Location_Service`'s list-membership reads (§4.4) are per country too: `settlement_choices_narrow_this_read()`, `is_outside_settlement_choices()`,
+`saved_city_for_checkout()`, the region skip in `get_customer_chain()` and `names_listed_settlement()` look only at the places of the country concerned
+(the record's own country, or `checkout_view_country()`, r7.1); `Checkout_Handler::is_rejected_city_prefill()` uses the section's own country. A
+returning customer whose saved city is in a country without places keeps it, street and postcode included.
 
 ### 4.3 Address suggestions inside the chosen place — one provider-agnostic rule (K11′, K12–K14)
 
@@ -347,6 +472,14 @@ One shared rule, not six: F2 adds one helper (on `Location_Record` — e.g. `loc
 | DaData **key removed** (K8) | the location layer is inactive (`Location_Service::is_active()`, READ 274-298): no location config, no cascade. **Classic:** the plugin turns the delivery City into a WooCommerce `select` of the listed `value`s through `woocommerce_checkout_fields` — only while the layer is inactive, so it never meets the cascade. **Block:** the native City stays a text field — a K5 gap (§8). Notice §3.4 |
 | List empty (crafted) | treated as off; notice §3.4 |
 
+**r7:** the key-removed classic `select` is per country too — `City_Select_Fallback` publishes the listed `value`s **keyed by country**, the server
+renders the City as a `select` only when the delivery country at render has places, and `assets/js/city-select.js` swaps select ↔ text when the buyer
+changes the country (it already swaps by section). A country without places keeps the text City. **r7.1:** the script is loaded in a
+**billing-only shop too** — `City_Select_Fallback::enqueue_script()` drops its `wc_ship_to_billing_address_only()` exclusion, which dated from the
+script's only job being the «Доставить по другому адресу» swap; with no checkbox on the page the billing City is the delivery City. Without that, a
+billing-only shop shipping to RU and KZ would keep the server-rendered RU select after the buyer switches to KZ. When both countries have lists the
+existing select's options are replaced.
+
 No outbound call is added anywhere: the choice is local, `/select` already exists, suggestions are DaData's existing call.
 
 ## 6. Interaction with the range method and other carriers
@@ -354,7 +487,9 @@ No outbound call is added anywhere: the choice is local, `/select` already exist
 - **Range method:** unchanged. It prices by distance (v2 spec §2.3); an address beyond its maximum distance gets no rate. With one place the chain is
   the item's DaData record, so a cart-page quote without a street takes the settlement point, precision `approximate`, with the v2 spec §6.2 notice.
 - **Other Woodev carriers (СДЭК, Яндекс, Почта, Ozon):** they read the same checkout field and chain, so their buyers also choose only listed places —
-  what the «Важно» box tells the merchant. Their pickup maps are not restricted (§9).
+  what the «Важно» box tells the merchant. Their pickup maps are not restricted (§9). **r7:** only in the countries that have listed places; a buyer
+  in any other country chooses freely, so the box's «их покупатели тоже не смогут выбрать город вне вашего списка» is true per listed country (copy:
+  operator, K16).
 - **Non-Woodev methods:** not touched.
 - **Older framework copies in other plugins:** irrelevant — the loader runs the highest copy (READ `class-framework-resolver.php`); `Range_Plugin`
   bundles ≥ 2.0.26.
@@ -447,7 +582,18 @@ E1 acceptance (unit tests): a dictionary row with `fias_guid` gives a record who
 `enrich_selected_record()` adds `fias_id` when coordinates are absent; the adapter's existing FIAS lookup tests stay green; the plugin's phpcs and test
 suite green.
 
-**Waves.** W-A: F2 ∥ C14. W-B: F3 ∥ E1. W-C: C15. Inside the v2 spec's W5 slot; C13 (e2e, materials) waits for C15 because the product text describes this
+**r7 cards (K15, issue #1642)** — four independent work packages with disjoint files, then the plugin package; files, tests and sizes in
+[the r7 plan](../plans/2026-11-06-1642-city-mode-country.md):
+
+| Package | Repo / files | Depends | Size |
+|---|---|---|---|
+| **WP-A** framework PHP — per-country config keys, per-country narrowing, the default-locality filter's `$country`, the checkout-view country (r7.1) | `checkout/class-checkout-config.php`, `location/class-location-service.php`, `checkout/class-checkout-handler.php`, `pickup/class-address-target.php` + unit tests | — | M |
+| **WP-B** framework classic JS — re-attach on country change, per-country custom-settlement clamp, single place of a newly chosen country, the pickup City guard independent of the shop's mode (r7.1) | `location-cascade.js` (+ `location-select-modes.js` only if the clamp needs it) + Jest | WP-A's wire (stated in §4.2, coded against it) | M |
+| **WP-C** framework block TS — country switch, per-country `levels.region` | `src/checkout-blocks/*` + Jest | same | S |
+| **WP-D** framework admin — `location-country` records-table column (+ resolved `default` / `names`, r7.1), per-row picker country, sorted rows, the per-country `count` condition with column declarations on both PHP save paths (r7.1) | `settings-api/class-control.php`, `settings-api/class-setting.php`, `settings-api/abstract-class-settings.php`, `settings-page/class-records-table.php`, `settings-page/class-field-schema.php`, `settings-page/class-composite-settings-handler.php`, `src/components/records-table.tsx`, `src/components/validate.js`, ADR-008 + tests | — | M |
+| **WP-E** plugin — the «Страна» column, publication by shipping country, per-country hide/disabled/clear, notices, per-country fallback (also in billing-only shops, r7.1), the default-locality hook with `accepted_args = 2` (r7.1) | `woocommerce-range-shipping` `includes/city-mode/*`, `assets/js/city-select.js` + tests | WP-A, WP-D (signatures) | M |
+
+**Waves.** W-A: F2 ∥ C14. W-B: F3 ∥ E1. W-C: C15. **r7:** WP-A ∥ WP-B ∥ WP-C ∥ WP-D, then WP-E, then the §8 rows A13–A18 inside C15's rig run. Inside the v2 spec's W5 slot; C13 (e2e, materials) waits for C15 because the product text describes this
 tab. E1 is not on the range plugin's release path: city mode works with today's CDEK release by name (branch 3) and becomes FIAS-exact when E1 ships.
 
 ## 8. Acceptance on the rig
@@ -473,6 +619,12 @@ block for every row**; a row passes when the placed order's City/State/street ar
 | A10 | Settings: save with the mode on and an empty list; with a duplicate; with a crafted row that is a `region`-level record (posted by editing the request). Then save a list of real picks without a canonical `fias_id` — DaData Москва, DaData Ташкент, CDEK Алматы; toggle the mode on | The first three: blocking errors of §3.2, nothing saved. The real picks save without error. The two dependent fields appear on toggle and are saved |
 | A11 | Mode switched off after use; My Account address edit with the mode on | Off: the shop's own «Локация» behaviour, no leftovers. My Account: the unrestricted picker as today |
 | A12 | Another carrier active (СДЭК) | Its buyers also pick only listed places; its pickup map is not restricted (§9) |
+| **A13** | r7 · **Россия, several places** (Москва, Химки, пос. Коммунарка) in a shop that ships to RU, KZ, UZ | Admin: «Страна» before «Населённый пункт», «Россия» chosen, the three places found and listed under «Россия». Checkout, country RU: select2 of exactly the three, no settlement `/suggest`, State hidden; the order says the picked place |
+| **A14** | r7 · **a second country with its own place** (Казахстан → Алматы; then a second KZ place) | Admin: with «Казахстан» chosen «Алматы» is found (with «Россия» it is not); the table lists Казахстан before Россия. Checkout KZ, one place: «Алматы» as text, State hidden, the `/suggest` log shows `country_iso_code: KZ` + `city: Алматы` (branch 3); with two KZ places a select2 list. RU → KZ → RU switches re-render each time with no City/State left from the other country; the placed order is right for each |
+| **A15** | r7 · **a country without places** (Узбекистан) | Checkout UZ: the shop's ordinary settlement field with suggestions and a region row, Ташкент chosen by search, the order **places** (no city-mode refusal); the #531 guard applies only the store's own rule. A returning customer with a saved UZ city keeps it, street included |
+| **A16** | r7 · **a single-country shop** («Доставка в страны» = Россия only) | Admin: no country dropdown — «Россия» is shown as text and used for the search; checkout as A1–A3 |
+| **A17** | r7 · **a flagged row** — Казахстан removed from «Доставка в страны» after A14 | Admin: the KZ rows stay, each with «страна не входит в доставку — на оформлении не показывается»; saving the page keeps them. Checkout: KZ cannot be chosen (WooCommerce), RU is unchanged; with **every** listed country removed, the mode reads as off (§3.4 r7 notice) and the checkout is ordinary. «Скрывать поле»: inactive / active per the `min` rule (K16), live as rows are added and removed |
+| **A18** | Card #1642 «Проверка» · prices of other carriers in city mode | With city mode on and СДЭК active, the СДЭК rate for a listed place comes from a **live** carrier request (request log / debug log), not from a cached quote of another city |
 
 **Block gaps allowed after release (K5),** only if classic is complete: the key-removed `select` fallback (block keeps a text City) and the rejected-city
 placeholder hint. Not deferrable: the closed choice, the hidden single place, the address-store write and clearing, the nested `value`.
@@ -500,15 +652,24 @@ Everything below existed only to make the list a store-wide boundary, so it goes
 Still applied from the reviews: the record is stored whole (r1 finding 2), a nested settlement posts its own name and survives the staleness rule
 (r1/r2 finding 3), the clients' real behaviour per surface (r1 finding 4), release in 2.0.26 (r1 finding 10), boolean `show_if` (r1 finding 11).
 
-## 10. Open for the operator
+## 10. Decided by the operator
 
-Provisional, reversible choices made in r5 so nothing waits. Each names what changes if he decides otherwise.
+Items 1–7 were provisional, reversible choices (r5, r7) made so nothing waited. **The operator confirmed all seven exactly as written on
+06.11.2026 (s220: «всё по рекомендациям»)**; they are binding now and recorded in §0 as K16 and K17. The numbering is kept, because the plan and
+earlier reports cite it.
 
-1. **No migration and no notice for CDEK rows saved before E1.** They stay name-scoped (branch 3) until the merchant re-picks the row; city mode is new in
-   2.0.0, so such rows exist only on shops that used it between the range release and the next CDEK release. Reversal: C14 re-enriches rows without
-   `fias_id` on the settings render (one bounded CDEK lookup per row) or shows a debug-mode hint.
-2. **E1 ships with the next regular CDEK release**, not as its own hotfix. Until then CDEK shops get the r4 name scoping, measured right for Москва /
-   Зеленоград / Коммунарка (§4.3 rows 10-12). Reversal: a CDEK patch release right after the range release.
+1. **No migration and no notice for CDEK rows saved before E1** (K17). They stay name-scoped (branch 3) until the merchant re-picks the row; city mode
+   is new in 2.0.0, so such rows exist only on shops that used it between the range release and the next CDEK release.
+2. **E1 ships with the next regular CDEK release**, not as its own hotfix (K17). Until then CDEK shops get the r4 name scoping, measured right for
+   Москва / Зеленоград / Коммунарка (§4.3 rows 10-12).
+3. **«Скрывать поле» counted per country = `min`** (K16). The switch is inactive while **every** listed country has more than one place (RU 3 +
+   KZ 1 → active, and it hides the KZ field only). It is one value of the `aggregate` key (§3.1); the save-time clearing follows it.
+4. **The country choices include countries with no address suggestions** (K16; AM, AZ, KG, TJ, TM on the measured rig — §3.1 «Coverage»), because
+   `location.countries` includes them. A place there works as a choice; the street is typed freely. No extra help text.
+5. **Per-country wording** of three plugin strings (§3.3 r7 copy) and of the «Важно» box (§6) ships as written (K16).
+6. **A notice when every row is flagged** (§3.4) ships as written (K16).
+7. **The block's «several places» stays a native `<select>`** (K16) — #1634 changed the classic checkout only and says so; K15's «several → select2
+   (#1634)» reads as «the #1634 list», not as select2 in Blocks.
 
 ## Revision log
 
@@ -521,6 +682,8 @@ Provisional, reversible choices made in r5 so nothing waits. Each names what cha
 | r5 | 06.11.2026 | Operator's late inputs of 05.11.2026: K12 (a record keeps its FIAS id; CDEK stops dropping `fias_guid` — card **E1**, separate edostavka PR), K13 (DaData scoped by that id, `city_fias_id` then `settlement_fias_id`), K14 (FIAS is Russia-only; no id → country + name). New `Location_Record::fias_id` field and DaData branch 2 in F2 (§4.3). **Contradicts r4 in one place:** r4 said §4.3 needs no framework code and no card — superseded (§9). K6-K10 and K11′ unchanged. §7 rewritten with per-card acceptance and E1; §8 gains A1c (twice), A1d, A1e; §10 added |
 | r5.1 | 06.11.2026 | Codex (gpt-6.1-sol) r5 review, four must-fix findings applied. (1) The canonical `Location_Record::fias_id` is kept apart from DaData's native `raw.fias_id`; §3.2 requires no FIAS id from any provider and names the exact invalid payloads; C14/A10 add successful saves of real RU and non-RU mapper output. (2) §4.4 lists every consumer of the parent-city projection (`Checkout_Handler::settlement_record_value()` / `guard_custom_settlement()` / `city_names_record()` / `record_names_city()` + `remember_checkout_location()`, `Location_Service::record_names_city()`, `Order_Editor::location_record_names_city()`); F2 fixes them through one helper, with a PHP case posting «Черкизово» under `ajax-select2` + custom localities off. (3) Coordinator decision: the operator's input wins — outside RU every provider, DaData included, is scoped by country + own locality name (OSM ids no longer used; a framework-wide change); §4.3, K14, F2 tests, C15 fixtures and A1e updated, r5's §10 item 1 dropped. (4) The region-only third retry is deleted; the only allowed third shape is the `region_fias_id` + `city_fias_id` pair, with a Москва positive and a Зеленоград negative probe in F2/C15 |
 | r6 | 06.11.2026 | Operator's decision after his rig look (card F5 #1627, «operator, 06.11.2026»): §4.2 behaviour table rewritten — one place = plain text (not a locked field), several places = a plain dropdown of exactly the listed places (no select2 search box, no settlement `/suggest`), the State row hidden in both (kept visible only while a filled City leaves it empty); block checkout: native `<select>` instead of the combobox, native City row replaced by it |
+| r7 | 06.11.2026 | Operator's decision K15 (#1642, variant 2): a country per place. §0 K15; §3.1 the derived «Страна» column (`location-country`, `options` = shipping ∩ `location.countries`, `in_scope` = shipping), per-row picker country, sorted rows, the flag, the per-country `count` condition, the measured coverage and what s219 saw; §3.2 a foreign-country row is not an error; §3.3 table mock + provisional copy; §3.4 publication by shipping country, `hide_field` as stored, default locality per country; §4.2 #1634 recorded, per-country config keys, two behaviour rows (no place in the country, country switch), per-country §4.4 reads; §5 per-country key-removed fallback; §6; §7 packages WP-A–WP-E; §8 A13–A18; §10 items 3–7. Plan: `plans/2026-11-06-1642-city-mode-country.md` |
+| r7.1 | 06.11.2026 | The r7 critic's seven findings (Codex) folded in, and the operator's confirmation of §10. (1) §3.1: the PHP count evaluator gets each records-table's column declarations from both save paths (`Woodev_Abstract_Settings::filter_visible_values()` and the composite handler); (2) §3.4: the default-locality callback is registered with `accepted_args = 2`; (3) §5: the key-removed fallback script also loads in a billing-only shop; (4) §4.2: the classic pickup City guard holds a listed place whatever the shop's field mode; (5) §4.2: the server's per-country reads use the new `checkout_view_country()` (the delivery target's country on the first render), not `customer_shipping_country()`; (6) §3.1: the `location-country` column gains framework-resolved `default` (base country) and `names` (options ∪ stored countries); (7) §3.2: «not selectable now» (outside `options`) is neither flagged nor unpublished — only «outside shipping» (`in_scope`) is. Operator, 06.11.2026 (s220, «всё по рекомендациям»): §10 items 1–7 confirmed as written → K16, K17; §3.1, §3.3, §3.4, §6, §8 A17 and §10 now cite the decisions instead of «provisional». Plan r2: files per package, tests per finding |
 
 ## Related
 
@@ -529,3 +692,4 @@ Provisional, reversible choices made in r5 so nothing waits. Each names what cha
 - [2026-08-24-popular-settlements-design.md](2026-08-24-popular-settlements-design.md) — the popular-list wire shape the closed list reuses (§4.2).
 - [2026-08-12-location-provider-design.md](2026-08-12-location-provider-design.md) — provider capabilities and the DaData `locations` filter behind §4.3.
 - [../adr/008-conditional-fields-operator-set.md](../adr/008-conditional-fields-operator-set.md) — why a toggle's `show_if` value is boolean and the hide toggle cannot depend on a row count (§3.1).
+- [../plans/2026-11-06-1642-city-mode-country.md](../plans/2026-11-06-1642-city-mode-country.md) — the r7 implementation plan (work packages WP-A–WP-E).
