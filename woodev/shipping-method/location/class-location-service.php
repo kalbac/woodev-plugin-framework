@@ -2631,7 +2631,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return $stored;
 			}
 
-			return null !== $current_provider ? $this->reresolve_fixed_default( $current_provider, $stored, $across_providers ) : null;
+			if ( null === $current_provider ) {
+				return null;
+			}
+
+			$cache_key = 'woodev_location_stranded_' . hash( 'sha256', $stored->key() . '|' . $current_provider->get_id() . '|' . ( $across_providers ? 'wide' : 'exact' ) );
+			$cached    = get_transient( $cache_key );
+
+			if ( is_array( $cached ) && array_key_exists( 'record', $cached ) ) {
+				return is_array( $cached['record'] ) ? Location_Record::from_array( $cached['record'] ) : null;
+			}
+
+			$result = $this->reresolve_fixed_default( $current_provider, $stored, $across_providers );
+			// Five minutes suppresses repeated page-load lookups without making a provider outage or changed directory sticky.
+			set_transient( $cache_key, [ 'record' => null !== $result ? $result->to_array() : null ], 5 * 60 );
+
+			return $result;
 		}
 
 		/**
