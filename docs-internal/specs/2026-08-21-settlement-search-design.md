@@ -1,5 +1,7 @@
 # Settlement search — replacing the preset settlement list
 
+**Status:** PARTIAL — decision 1 IMPLEMENTED in s109; the remaining decisions are not part of #437.
+
 > Design, 2026-08-21 (s84). Decision 1 implemented in s109; remaining decisions are not part of #437.
 > Supersedes the settlement half of `2026-08-18-shipping-settings-v2-design.md`.
 

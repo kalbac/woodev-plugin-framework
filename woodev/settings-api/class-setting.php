@@ -895,16 +895,18 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * (so PHP and the JS mirror agree, and enum option keys round-trip). An unset or
 		 * non-scalar controlling value is the empty string — no special-casing.
 		 *
+		 * Count rules may group rows by a location-country column (`per`) and take `min` / `max`.
+		 * Only in-scope countries form groups; no groups means no match.
 		 * Mirrored in src/components/validate.js::evaluateConditions — KEEP IN SYNC.
 		 * Rule table: conditional-fields design spec §5.
 		 *
 		 * @since 2.0.2
-		 * @param array<string,mixed> $conditions show_if group (relation + members), or one bare condition.
-		 * @param array<string,mixed> $values     controlling setting_id => current value.
-		 * @param string[]            $records_table_ids setting ids that store records-table rows (added in 2.0.26).
+		 * @param array<string,mixed>                          $conditions show_if group (relation + members), or one bare condition.
+		 * @param array<string,mixed>                          $values     controlling setting_id => current value.
+		 * @param array<string,array<int,array<string,mixed>>> $records_tables records-table columns by setting id (added in 2.0.26).
 		 * @return bool true when the field should be visible.
 		 */
-		public static function evaluate_conditions( array $conditions, array $values, array $records_table_ids = [] ): bool {
+		public static function evaluate_conditions( array $conditions, array $values, array $records_tables = [] ): bool {
 
 			if ( empty( $conditions ) ) {
 				return true;
@@ -936,17 +938,17 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 				switch ( $operator ) {
 					case 'count':
-						$rows       = in_array( $setting_id, $records_table_ids, true ) ? \Woodev\Framework\Settings\Records_Table::decode( $raw ) : null;
+						$rows       = isset( $records_tables[ $setting_id ] ) ? \Woodev\Framework\Settings\Records_Table::decode( $raw ) : null;
 						$comparison = (string) ( $condition['comparison'] ?? '' );
 						$threshold  = $condition['value'] ?? null;
-						$count      = is_array( $rows ) ? count( $rows ) : 0;
+						$count      = self::condition_row_count( $rows ?? [], $records_tables[ $setting_id ] ?? [], $condition );
 						$valid      = is_int( $threshold ) && $threshold >= 0;
 						if ( is_string( $threshold ) && preg_match( '/^(0|[1-9][0-9]*)$/', $threshold ) ) {
 							$max_length = strlen( (string) PHP_INT_MAX );
 							$valid      = strlen( $threshold ) < $max_length || ( strlen( $threshold ) === $max_length && strcmp( $threshold, (string) PHP_INT_MAX ) <= 0 );
 						}
 						$number     = $valid ? (int) $threshold : 0;
-						$match      = in_array( $setting_id, $records_table_ids, true ) && $valid;
+						$match      = isset( $records_tables[ $setting_id ] ) && $valid && null !== $count;
 						if ( $match ) {
 							switch ( $comparison ) {
 								case '>':
@@ -997,6 +999,53 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 			}
 
 			return 'AND' === $relation;
+		}
+
+		/**
+		 * Counts rows, optionally aggregating the in-scope countries of a location-country column.
+		 *
+		 * @since 2.0.26
+		 * @param array<int,array<string,mixed>> $rows decoded rows.
+		 * @param array<int,array<string,mixed>> $columns table columns.
+		 * @param array<string,mixed>            $condition count rule.
+		 * @return int|null count, or null for an invalid grouping or no in-scope countries.
+		 */
+		private static function condition_row_count( array $rows, array $columns, array $condition ): ?int {
+
+			if ( ! isset( $condition['per'] ) ) {
+				return count( $rows );
+			}
+
+			foreach ( $columns as $column ) {
+				if ( $condition['per'] !== $column['id'] || Woodev_Control::COLUMN_LOCATION_COUNTRY !== $column['type'] ) {
+					continue;
+				}
+
+				$groups = [];
+				foreach ( $rows as $row ) {
+					$cell    = $row[ $column['of'] ] ?? '';
+					$record  = is_string( $cell ) ? json_decode( $cell, true ) : null;
+					$country = is_array( $record ) ? ( $record['country'] ?? '' ) : '';
+					if ( is_string( $country ) && in_array( $country, $column['in_scope'], true ) ) {
+						$groups[ $country ] = ( $groups[ $country ] ?? 0 ) + 1;
+					}
+				}
+
+				if ( [] === $groups ) {
+					return null;
+				}
+
+				switch ( $condition['aggregate'] ?? '' ) {
+					case 'min':
+						return min( $groups );
+					case 'max':
+						return max( $groups );
+					default:
+						return null;
+				}
+			}
+
+			return null;
 		}
 
 		/**

@@ -2514,10 +2514,10 @@ class CheckoutConfigTest extends TestCase {
 			]
 		);
 
-		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'RU', 'KZ' ], Location_Provider_Registry::MODE_TYPEAHEAD, [], 'RU', null, null, true );
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => true ], null, [ 'RU', 'KZ', 'UZ' ], Location_Provider_Registry::MODE_TYPEAHEAD, [], 'RU', null, null, true );
 
 		try {
-			return ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU', 'KZ' ], $service ) )->build( Checkout_Fields::from_array( [] ) )['location'];
+			return ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU', 'KZ', 'UZ' ], $service ) )->build( Checkout_Fields::from_array( [] ) )['location'];
 		} finally {
 			Location_Service::reset_settlement_choices_for_tests();
 		}
@@ -2535,12 +2535,12 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertSame( 'Москва', $block['allowed']['RU'][0]['value'] );
 		$this->assertSame( 'dadata:moscow', $block['allowed']['RU'][0]['record']['key'] );
 		$this->assertTrue( $block['hideSettlement'] );
-		$this->assertFalse( $block['allowCustomSettlement'], 'the store setting allows custom settlements, city mode does not' );
+		$this->assertTrue( $block['allowCustomSettlement'], 'the store setting is served as it is; a client treats a listed country as closed' );
 		$this->assertFalse( $block['levels']['RU']['region'] );
-		$this->assertFalse( $block['levels']['KZ']['region'] );
+		$this->assertTrue( $block['levels']['KZ']['region'], 'KZ lists no place, so its region is still asked' );
 	}
 
-	public function test_city_mode_config_with_three_places_never_hides_the_field(): void {
+	public function test_city_mode_config_hide_switch_is_the_stored_one_whatever_the_count(): void {
 		$block = $this->city_mode_location_block(
 			[
 				self::city_mode_place( 'moscow', 'Москва' ),
@@ -2551,9 +2551,30 @@ class CheckoutConfigTest extends TestCase {
 		);
 
 		$this->assertSame( [ 'Москва', 'Химки', 'Коммунарка' ], array_column( $block['allowed']['RU'], 'value' ) );
-		$this->assertFalse( $block['hideSettlement'], 'hiding works for exactly one place' );
-		$this->assertFalse( $block['allowCustomSettlement'] );
+		$this->assertTrue( $block['hideSettlement'], 'the switch is published as stored; a client applies it to a one-place country only' );
+		$this->assertTrue( $block['allowCustomSettlement'] );
 		$this->assertFalse( $block['levels']['RU']['region'] );
+	}
+
+	public function test_city_mode_config_is_per_country(): void {
+		$block = $this->city_mode_location_block(
+			[
+				self::city_mode_place( 'moscow', 'Москва' ),
+				self::city_mode_place( 'khimki', 'Химки' ),
+				self::city_mode_place( 'kommunarka', 'Коммунарка' ),
+				self::city_mode_place( 'almaty', 'Алматы', [ 'country' => 'KZ' ] ),
+			],
+			true
+		);
+
+		$this->assertSame( [ 'RU', 'KZ' ], array_keys( $block['allowed'] ) );
+		$this->assertCount( 3, $block['allowed']['RU'] );
+		$this->assertSame( [ 'Алматы' ], array_column( $block['allowed']['KZ'], 'value' ) );
+		$this->assertFalse( $block['levels']['RU']['region'] );
+		$this->assertFalse( $block['levels']['KZ']['region'] );
+		$this->assertTrue( $block['levels']['UZ']['region'], 'a country without listed places keeps its own answer' );
+		$this->assertTrue( $block['hideSettlement'], 'the stored switch, whatever the total count' );
+		$this->assertTrue( $block['allowCustomSettlement'], 'the store value, not clamped' );
 	}
 
 	public function test_city_mode_nested_place_value_is_its_own_name(): void {

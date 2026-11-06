@@ -7,7 +7,7 @@
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-11-06 (s219, MacBook, after his rig look):** next = **#1634** (city-mode closed list → select2 like WC «Страна», local data, search hidden at ≤5; must land before range 2.0.0), then his look and the release. Framework **2.0.25** released; release PR **#1606 (2.0.26, draft)** @ cf957067 carries #1601 #1602 #1604 #1608–#1610 and the city-mode framework part (#1617 #1618 #1621 #1622 #1623 #1625 #1628 #1629 #1633; spec r5.1 #1611, §4.2 r6) — #1634 joins it. **«Стоимость доставки за расстояние» 2.0.0** in private `kalbac/woocommerce-range-shipping`: **#41** (city mode; includes #42 #44 #45) @ 3e72dd4, loader pin 2.0.25, rig C18 6/6 + C19 PASS, waits for his look; **#43** (DRAFT: pin 2.0.26, CI ref v2.0.26) waits for the tag. Delivery boundary (МКАД/КАД/rings) → range #46 next version (research `research/2026-11-06-delivery-boundary-mkad-kad.md`); merchant zones range #47 on demand. Release order: `sessions/s218.md` «Release order». UNVERIFIED: D2 (`fias_guid` CDEK row), block checkout without a DaData key after F5, tracking carrier links. Rig: 27 test orders #3632–#3658, range build 3e72dd4 + framework `main`, fixture plugins DEACTIVATED (`wiki/local-rig.md`); mu-plugin `zz-woodev-rig-license.php` lists 7698 (repo copy lags, #1597). Materials `~/Desktop/woodev-publications/range-2.0.0/` (gallery 09/10 re-shot; re-shoot 10 after #1634). Open for him: card range#17, referral links, changelog tail, billing-only wording, gallery 02, ORS key, spec §10, credential rotation. Open: key rotation after #1554; #1587; ozon#90 #92; `tracking#7`; #1532 #1528 #1519 #1552; ozon#82 #84; #1538/yandex#152; russian-post#69 #73; edostavka#166 #175; #1571; #1595 #1596 #1600; PR #1478. Later: Ozon Seller (#1574). Detail: `sessions/s219.md`.
-**Earlier sessions:** `SESSION-LOG.md` (index) and `sessions/sNN.md` hold the per-session state of s189–s209.
+**Earlier sessions:** `SESSION-LOG.md` (index) and `sessions/sNN.md` hold the per-session state of every earlier session.
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
 the real signed-envelope route. The admin license REST route refuses an ambiguous id (#907) but
@@ -53,7 +53,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit **7523** (normal + reverse) / jest **3470** on `main` at 2.0.6 (s189, 20.10.2026; CI green on every merged head); Yandex unit **1163** (2.0.4); CDEK unit **1586** (normal, reverse and random order green after edostavka#126); framework unit **7398** / jest **3409** after #1305; full e2e on minified assets **45 passed / 6 failed (#1306, pre-existing) / 1 flake / 3 skipped**; Yandex unit **1159** (yandex#122) / **1160** (#123); CDEK unit **1565** (edostavka#120) / **1576** (#121); CDEK acceptance **98–99 / 1 / 11–12 / 4 BLOCKED** — a different block-checkout pickup case fails each run (#1357), measured 19.10.2026 (s188; was 105/0/12 on 15.10). After #1311 the unit suite skips **1** (was 6) — the Yandex/CDEK contract tests now run on
+**Test measurements:** framework unit **8227** (1 skipped, normal order only) / jest **3790** on `main` @ 24b0bff2 at 2.0.25 (s220, 06.11.2026, measured in a worktree); Yandex unit **1163** (2.0.4); CDEK unit **1586** (normal, reverse and random order green after edostavka#126); full e2e (measured earlier, at 2.0.x — re-run before quoting) on minified assets **45 passed / 6 failed (#1306, pre-existing) / 1 flake / 3 skipped**; Yandex unit **1159** (yandex#122) / **1160** (#123); CDEK unit **1565** (edostavka#120) / **1576** (#121); CDEK acceptance **98–99 / 1 / 11–12 / 4 BLOCKED** — a different block-checkout pickup case fails each run (#1357), measured 19.10.2026 (s188; was 105/0/12 on 15.10). After #1311 the unit suite skips **1** (was 6) — the Yandex/CDEK contract tests now run on
 committed fixtures (s183).
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
@@ -85,7 +85,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open issues — 52 in this repo, measured 03.11.2026 (s211, after 2.0.23 closed five and #1557/#1558 were filed and closed); the s210 figure was 53:** board №6 held 52 framework + 2 edostavka cards in Бэклог before the audit, Инбокс has **1** item, **#922** (Supermemory, parked by his word).
+**Open issues — 63 in this repo, measured 06.11.2026 (s220, after the audit filed #1638–#1640); 52 on 03.11.2026 (s211).** The board split (Бэклог / Инбокс) is on the board, not here.
 ⚠ Count with
 `gh issue list --repo kalbac/woodev-plugin-framework --state open --limit 500 --json number` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
@@ -156,7 +156,7 @@ gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 ⚠ The export button is «Экспорт» (operator, 13.09.2026, #890). Action/menu declarations live in
 [wiki/architecture.md](wiki/architecture.md).
 
-✅ **The rig has two carrier fixtures; the order count is mutable.** Aggregate tests need
+✅ **The rig has two carrier fixtures (deactivated on the rig since s217 — activate them for framework e2e, `wiki/local-rig.md`); the order count is mutable.** Aggregate tests need
 at least two carriers: one source exercises a different shape. Seeders add new rows; they
 do not backfill existing ones (#868), so a new column needs representative rows carrying it.
 
@@ -220,7 +220,7 @@ flakiness, the three field modes and their Russian labels — is one line under 
 ⚠ Before probing `test-cdek` credentials, read gotcha
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
 
-**`@since` ceiling:** `composer.json` → `extra.woodev.planned-release` is the authority and `SinceTagCeilingTest` enforces it; the current values live in `AGENTS.md` (Tech stack table). See `AGENT-RULES.md` Rule 5 (semver, and inherited code → `1.0.0`).
+**`@since` ceiling:** `composer.json` → `extra.woodev.planned-release` is the authority and `SinceTagCeilingTest` enforces it; the current values live in `AGENTS.md` (Conventions table, `@since` row). See `AGENT-RULES.md` Rule 5 (semver, and inherited code → `1.0.0`).
 
 **Agents and Orca — the recipes, the caps and the launch traps are
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).** The two facts
@@ -287,8 +287,7 @@ against 2.0.x and critic-checked; the framework version is read from `Woodev_Plu
 shell recipes and the timings — is [wiki/local-rig.md](wiki/local-rig.md) → "Operating the rig".**
 This section retains mutable state and the operating warnings.
 
-- **Last recorded stack:** WordPress 7.1 + WooCommerce 11.1.0, measured 05.09.2026 (s117),
-  dev `:8973` / tests `:8974`. Measure the served stack before relying on these versions.
+- **Last recorded stack:** WordPress 7.1 + WooCommerce 11.2.1 (HPOS on), WC measured 03.11.2026 (s212; 11.1.0 on 05.09.2026), dev `:8973` / tests `:8974`. Measure the served stack before relying on these versions.
 - **Two machines:** Windows desktop + macOS laptop; inspect container state before use.
   Operating recipes: [wiki/two-machine-setup.md](wiki/two-machine-setup.md).
 - ⛔ **Never `docker volume prune` / `docker system prune --volumes` on this machine.** The

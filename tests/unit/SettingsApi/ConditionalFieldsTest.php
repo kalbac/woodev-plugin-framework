@@ -97,12 +97,72 @@ class ConditionalFieldsTest extends TestCase {
 		$cases = [ '>' => 1, '>=' => 2, '<' => 3, '<=' => 2, '==' => 2 ];
 		foreach ( $cases as $comparison => $threshold ) {
 			$condition = [ 'setting' => 'places', 'operator' => 'count', 'comparison' => $comparison, 'value' => $threshold ];
-			$this->assertTrue( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' ] ), $comparison );
+			$this->assertTrue( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' => [] ] ), $comparison );
 		}
 
 		$condition['comparison'] = '!=';
-		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' ] ) );
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' => [] ] ) );
 		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [] ) );
+	}
+
+	public function test_per_country_count_through_the_real_save_path(): void {
+		foreach ( [ [ 'RU', 'KZ' ], [ 'RU' ], [] ] as $scope ) {
+			$handler = $this->make_handler( [] );
+			$handler->register_setting( 'places', \Woodev_Setting::TYPE_STRING );
+			$handler->register_control( 'places', \Woodev_Control::TYPE_RECORDS_TABLE, [
+				'columns' => [
+					[ 'id' => 'country', 'type' => 'location-country', 'of' => 'city', 'in_scope' => $scope ],
+					[ 'id' => 'city', 'type' => 'location-picker' ],
+				],
+			] );
+			$condition = [ 'setting' => 'places', 'operator' => 'count', 'per' => 'country', 'aggregate' => 'min', 'comparison' => '>', 'value' => 1 ];
+			$handler->register_setting( 'hide', \Woodev_Setting::TYPE_BOOLEAN, [ 'disabled_if' => $condition ] );
+			$rows = json_encode( array_map( static fn( string $code ): array => [ 'city' => json_encode( [ 'country' => $code ] ) ], [ 'RU', 'RU', 'RU', 'KZ' ] ) );
+			$submitted = [ 'places' => $rows, 'hide' => true ];
+			$filtered = $handler->filter_visible_values( $submitted );
+			$this->assertSame( [ 'RU' ] === $scope ? [ 'places' => $rows ] : $submitted, $filtered );
+
+			$condition['aggregate'] = 'max';
+			$handler->get_setting( 'hide' )->set_disabled_if( $condition );
+			$this->assertSame( [] === $scope, isset( $handler->filter_visible_values( $submitted )['hide'] ) );
+
+			unset( $condition['per'], $condition['aggregate'] );
+			$handler->get_setting( 'hide' )->set_disabled_if( $condition );
+			$this->assertArrayNotHasKey( 'hide', $handler->filter_visible_values( $submitted ) );
+		}
+	}
+
+	public function test_country_aggregates_support_each_count_comparison(): void {
+		$columns = [ [ 'id' => 'country', 'type' => 'location-country', 'of' => 'city', 'in_scope' => [ 'RU', 'KZ' ] ] ];
+		$rows = json_encode( array_map( static fn( string $code ): array => [ 'city' => json_encode( [ 'country' => $code ] ) ], [ 'RU', 'RU', 'RU', 'KZ' ] ) );
+		foreach ( [ 'min' => 1, 'max' => 3 ] as $aggregate => $count ) {
+			foreach ( [ '>' => $count - 1, '>=' => $count, '<' => $count + 1, '<=' => $count, '==' => $count ] as $comparison => $threshold ) {
+				$condition = [ 'setting' => 'places', 'operator' => 'count', 'per' => 'country', 'aggregate' => $aggregate, 'comparison' => $comparison, 'value' => $threshold ];
+				$this->assertTrue( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' => $columns ] ) );
+			}
+		}
+	}
+
+	public function test_country_count_rejects_missing_group_and_unknown_aggregate(): void {
+		$columns = [ [ 'id' => 'country', 'type' => 'location-country', 'of' => 'city', 'in_scope' => [ 'RU' ] ] ];
+		$condition = [ 'setting' => 'places', 'operator' => 'count', 'per' => 'country', 'aggregate' => 'min', 'comparison' => '==', 'value' => 0 ];
+		foreach ( [ '', 'broken', '[{"city":"broken"}]', '[{"city":"null"}]', '[{"city":"{\"country\":\"KZ\"}"}]' ] as $rows ) {
+			$this->assertFalse( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' => $columns ] ) );
+		}
+		$condition['aggregate'] = 'sum';
+		$condition['value'] = 1;
+		$rows = json_encode( [ [ 'city' => json_encode( [ 'country' => 'RU' ] ) ] ] );
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' => $columns ] ) );
+	}
+
+	public function test_count_per_requires_a_country_column_of_the_controlling_table(): void {
+		$handler = $this->make_handler( [] );
+		$handler->register_setting( 'places', \Woodev_Setting::TYPE_STRING );
+		$handler->register_control( 'places', \Woodev_Control::TYPE_RECORDS_TABLE, [ 'columns' => [ [ 'id' => 'city', 'type' => 'location-picker' ] ] ] );
+		$handler->get_setting( 'live_key' )->set_show_if( [ 'setting' => 'places', 'operator' => 'count', 'per' => 'city', 'aggregate' => 'min', 'comparison' => '>', 'value' => 1 ] );
+		$this->expectException( \InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Count per requires a location-country column' );
+		\Woodev\Framework\Settings\Field_Schema::from_handler( $handler );
 	}
 
 	public function test_count_operator_rejects_a_non_table_controller_with_a_clear_schema_error(): void {

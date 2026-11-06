@@ -97,22 +97,26 @@ const STREET = {
 	},
 };
 
-function installMarkup( { shipToDifferent = null, cityValue = '', values = {} } = {} ) {
+function installMarkup( { shipToDifferent = null, cityValue = '', country = 'RU', shippingCountry = 'RU', values = {} } = {} ) {
+	const countryOptions = '<option value="RU">Россия</option><option value="KZ">Казахстан</option><option value="UZ">Узбекистан</option>';
 	const row = ( id ) => `<p class="form-row" id="${ id }_field"><input type="text" id="${ id }" name="${ id }" value="${ 'billing_city' === id ? cityValue : ( values[ id ] || '' ) }" /></p>`;
 	const shippingBlock = null === shipToDifferent ? '' : `
 		<input type="checkbox" name="ship_to_different_address" ${ shipToDifferent ? 'checked' : '' } />
-		<select id="shipping_country" name="shipping_country"><option value="RU">Россия</option></select>
+		<select id="shipping_country" name="shipping_country">${ countryOptions }</select>
 		${ row( 'shipping_state' ) }${ row( 'shipping_city' ) }${ row( 'shipping_address_1' ) }${ row( 'shipping_postcode' ) }
 	`;
 
 	document.body.innerHTML = `
 		<form class="checkout woocommerce-checkout">
-			<select id="billing_country" name="billing_country"><option value="RU">Россия</option></select>
+			<select id="billing_country" name="billing_country">${ countryOptions }</select>
 			${ row( 'billing_state' ) }${ row( 'billing_city' ) }${ row( 'billing_address_1' ) }${ row( 'billing_postcode' ) }
 			${ shippingBlock }
 		</form>
 	`;
-	document.getElementById( 'billing_country' ).value = 'RU';
+	document.getElementById( 'billing_country' ).value = country;
+	if ( null !== shipToDifferent ) {
+		document.getElementById( 'shipping_country' ).value = shippingCountry;
+	}
 }
 
 function locationField( level, section ) {
@@ -216,7 +220,8 @@ const selectCalls = () => fetchCalls.filter( ( call ) => call.url.indexOf( '/loc
 
 beforeEach( () => {
 	jest.resetModules();
-	document.body.innerHTML = '';
+	// Each cascade binds delegated listeners to body; resetModules alone leaves them alive.
+	document.body.replaceWith( document.createElement( 'body' ) );
 	delete window[ CONFIG_GLOBAL ];
 	delete window.WoodevLocationRenderers;
 	delete window.WoodevLocationTypeahead;
@@ -495,6 +500,18 @@ describe( 'city mode — one place, delivery moves to the other column (classic)
 		expect( rowHidden( 'shipping_state' ) ).toBe( true );
 	} );
 
+	it( 'keeps a pickup-promoted single place explicit when delivery moves to the other column', () => {
+		boot( oneBothSections(), { shipToDifferent: false } );
+		announcePickupCity();
+		const applied = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => applied.push( event.detail ) );
+
+		toggleShipping();
+
+		expect( cityField( 'shipping_city' ).value ).toBe( MOSCOW.value );
+		expect( applied.filter( ( detail ) => detail.implicit ) ).toHaveLength( 0 );
+	} );
+
 	it( 'fills an empty incoming State with the place\'s instead of leaving the shopper to supply it', () => {
 		boot( oneBothSections(), { shipToDifferent: false } );
 
@@ -548,5 +565,225 @@ describe( 'city mode — picking a street (classic)', () => {
 
 		expect( addressCalls.map( ( call ) => new URL( call.url ).searchParams.get( 'level' ) ) ).toEqual( [ 'address' ] );
 		expect( new URL( addressCalls[ 0 ].url ).searchParams.get( 'within' ) ).toBe( 'dadata:khimki' );
+	} );
+} );
+
+const ALMATY = {
+	key: 'dadata:almaty', label: 'г Алматы', level: 'settlement', value: 'Алматы',
+	record: {
+		key: 'dadata:almaty', provider_id: 'dadata', level: 'settlement', country: 'KZ',
+		region: { type: 'г', name: 'Алматы' }, settlement: { type: 'г', name: 'Алматы' },
+	},
+};
+const TASHKENT = {
+	key: 'dadata:tashkent', label: 'г Ташкент', level: 'settlement', value: 'Ташкент',
+	record: {
+		key: 'dadata:tashkent', provider_id: 'dadata', level: 'settlement', country: 'UZ',
+		region: { type: 'г', name: 'Ташкент' }, settlement: { type: 'г', name: 'Ташкент' },
+	},
+};
+
+function countryConfig( extra = {}, sections = [ 'billing' ] ) {
+	return buildConfig( { sections, extra: {
+		countries: [ 'RU', 'KZ', 'UZ' ],
+		levels: {
+			RU: { region: false, settlement: true, address: true },
+			KZ: { region: false, settlement: true, address: true },
+			UZ: { region: true, settlement: true, address: true },
+		},
+		allowed: { RU: [ MOSCOW, KHIMKI, CHERKIZOVO ], KZ: [ ALMATY ] },
+		allowCustomSettlement: true,
+		...extra,
+	} } );
+}
+
+function changeCountry( code, section = 'billing' ) {
+	const country = document.getElementById( `${ section }_country` );
+	country.value = code;
+	country.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+}
+
+async function confirmPlace( place ) {
+	const calls = selectCalls();
+	calls[ calls.length - 1 ].resolve( {
+		current: { key: place.key, level: 'settlement' }, persisted: true,
+		chain: { settlement: { key: place.key, level: 'settlement' } },
+	} );
+	await flushMicrotasks();
+}
+
+function announcePickupCity( id = 'billing_city' ) {
+	const fields = { [ id ]: 'Город пункта' };
+	document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+		detail: { fields }, bubbles: true,
+	} ) );
+
+	return fields;
+}
+
+describe( 'city mode — country changes (classic, #1642 WP-B)', () => {
+	it( 'switches RU (three) → KZ (one) → UZ (none) → RU, with the right values, rows and requests', async () => {
+		boot( countryConfig() );
+		expect( cityField().tagName ).toBe( 'SELECT' );
+		choosePlace( KHIMKI );
+		expect( rowHidden( 'billing_state' ) ).toBe( true );
+
+		changeCountry( 'KZ' );
+
+		expect( cityField().type ).toBe( 'hidden' );
+		expect( cityField().value ).toBe( ALMATY.value );
+		expect( new FormData( document.querySelector( 'form' ) ).get( 'billing_city' ) ).toBe( ALMATY.value );
+		expect( document.querySelector( '.woodev-city-mode__place' ).textContent ).toBe( ALMATY.value );
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Алматы' );
+		expect( rowHidden( 'billing_state' ) ).toBe( true );
+		expect( suggestCalls() ).toHaveLength( 0 );
+
+		// The single place seeds the same confirmed fixed chain as the initial default.
+		addressWidget().opts.fetch( 'Абая' );
+		await flushMicrotasks();
+		const addressUrl = new URL( suggestCalls()[ 0 ].url );
+		expect( addressUrl.searchParams.get( 'country' ) ).toBe( 'KZ' );
+		expect( addressUrl.searchParams.get( 'within' ) ).toBe( ALMATY.key );
+		expect( suggestCalls().filter( ( call ) => 'settlement' === new URL( call.url ).searchParams.get( 'level' ) ) ).toHaveLength( 0 );
+
+		changeCountry( 'UZ' );
+
+		expect( cityField().type ).toBe( 'text' );
+		expect( cityField().value ).toBe( '' );
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+		expect( document.querySelector( '.woodev-city-mode__place' ) ).toBeNull();
+		expect( rowHidden( 'billing_state' ) ).toBe( false );
+		const widget = typeaheadCalls.find( ( call ) => 'billing_city' === call.el.id );
+		widget.opts.fetch( 'Таш' );
+		await flushMicrotasks();
+		const settlementUrl = new URL( suggestCalls().find( ( call ) => 'settlement' === new URL( call.url ).searchParams.get( 'level' ) ).url );
+		expect( settlementUrl.searchParams.get( 'country' ) ).toBe( 'UZ' );
+		expect( settlementUrl.searchParams.get( 'within' ) ).toBeNull();
+
+		changeCountry( 'RU' );
+
+		expect( widget.detach ).toHaveBeenCalledTimes( 1 );
+		expect( cityField().tagName ).toBe( 'SELECT' );
+		expect( Array.from( cityField().options ).map( ( option ) => option.value ) ).toEqual( [ '', 'Москва', 'Химки', 'Черкизово' ] );
+		expect( cityField().value ).toBe( '' );
+		expect( rowHidden( 'billing_state' ) ).toBe( true );
+	} );
+
+	it( 'replaces the options even when both countries use closed-select, then clears the original input on exit', () => {
+		const secondKz = { ...ALMATY, key: 'dadata:other-kz', value: 'Другой город', record: { ...ALMATY.record, key: 'dadata:other-kz' } };
+		boot( countryConfig( { allowed: { RU: [ MOSCOW, KHIMKI ], KZ: [ ALMATY, secondKz ] } } ), { cityValue: MOSCOW.value } );
+		changeCountry( 'KZ' );
+
+		expect( cityField().tagName ).toBe( 'SELECT' );
+		expect( Array.from( cityField().options ).map( ( option ) => option.value ) ).toEqual( [ '', 'Алматы', 'Другой город' ] );
+		choosePlace( ALMATY );
+		expect( JSON.parse( selectCalls()[ 0 ].init.body ).record.country ).toBe( 'KZ' );
+
+		changeCountry( 'UZ' );
+
+		expect( cityField().tagName ).toBe( 'INPUT' );
+		expect( cityField().value ).toBe( '' );
+		expect( window.WoodevCheckoutFieldStore.getStoreForField( 'billing_city' ).getValue( 'billing_city' ) ).toBe( '' );
+	} );
+
+	it( 'clears a listed city even when the next country has no location provider', () => {
+		boot( countryConfig( { countries: [ 'RU', 'KZ' ] } ), { cityValue: MOSCOW.value } );
+		changeCountry( 'UZ' );
+
+		expect( cityField().tagName ).toBe( 'INPUT' );
+		expect( cityField().value ).toBe( '' );
+		expect( rowHidden( 'billing_state' ) ).toBe( false );
+	} );
+
+	it( 'replaces the text and seeds the new record even when both countries have one place', () => {
+		boot( countryConfig( { ...ONE_PLACE_DEFAULT, allowed: { RU: [ MOSCOW ], KZ: [ ALMATY ] } } ) );
+		changeCountry( 'KZ' );
+
+		expect( cityField().value ).toBe( ALMATY.value );
+		expect( document.querySelectorAll( '.woodev-city-mode__place' ) ).toHaveLength( 1 );
+		expect( document.querySelector( '.woodev-city-mode__place' ).textContent ).toBe( ALMATY.value );
+		expect( announcePickupCity() ).not.toHaveProperty( 'billing_city' );
+	} );
+
+	it( 'applies the hide switch per country, restoring both rows in an unlisted country', () => {
+		boot( countryConfig( { hideSettlement: true } ) );
+		expect( rowHidden( 'billing_city' ) ).toBe( false );
+		changeCountry( 'KZ' );
+		expect( rowHidden( 'billing_city' ) ).toBe( true );
+		changeCountry( 'UZ' );
+		expect( rowHidden( 'billing_city' ) ).toBe( false );
+		expect( rowHidden( 'billing_state' ) ).toBe( false );
+		changeCountry( 'RU' );
+		expect( rowHidden( 'billing_city' ) ).toBe( false );
+	} );
+
+	it( 'passes a per-country custom clamp without changing the published shop setting', () => {
+		const config = countryConfig();
+		boot( config );
+		const closedRenderer = jest.spyOn( window.WoodevLocationRenderers, 'closed-select' );
+		changeCountry( 'UZ' );
+		const widget = typeaheadCalls.find( ( call ) => 'billing_city' === call.el.id );
+		expect( widget.opts.location.allowCustomSettlement ).toBe( true );
+		changeCountry( 'RU' );
+		expect( closedRenderer.mock.calls[ 0 ][ 1 ].location.allowCustomSettlement ).toBe( false );
+		expect( config.location.allowCustomSettlement ).toBe( true );
+	} );
+
+	it( 'keeps the same-country widget on WooCommerce change and updated_checkout churn', () => {
+		boot( countryConfig() );
+		const select = cityField();
+		changeCountry( 'RU' );
+		window.jQuery( document.body ).trigger( 'updated_checkout' );
+		expect( cityField() ).toBe( select );
+		expect( window.jQuery.fn.select2 ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'city mode — pickup City guard per country (#1642 WP-B)', () => {
+	it.each( [ 'typeahead', 'ajax-select2' ] )( 'protects a listed place under %s even with custom settlements on', async ( mode ) => {
+		boot( countryConfig( { mode: { region: 'typeahead', settlement: mode } } ) );
+		choosePlace( KHIMKI );
+		await confirmPlace( KHIMKI );
+
+		expect( announcePickupCity() ).not.toHaveProperty( 'billing_city' );
+		expect( cityField().value ).toBe( KHIMKI.value );
+	} );
+
+	it.each( [ 'typeahead', 'ajax-select2' ] )( 'vetoes the point City in a closed-list country before any place is chosen (%s)', ( mode ) => {
+		boot( countryConfig( { mode: { region: 'typeahead', settlement: mode } } ) );
+		const before = cityField().value;
+
+		expect( announcePickupCity() ).not.toHaveProperty( 'billing_city' );
+		expect( cityField().value ).toBe( before );
+		expect( cityField().value ).not.toBe( 'Город пункта' );
+	} );
+
+	it( 'writes the point City in an unlisted country with custom settlements on', () => {
+		boot( countryConfig(), { country: 'UZ' } );
+		const widget = typeaheadCalls.find( ( call ) => 'billing_city' === call.el.id );
+		pick( widget, TASHKENT );
+
+		expect( announcePickupCity() ).toHaveProperty( 'billing_city', 'Город пункта' );
+		expect( cityField().value ).toBe( 'Город пункта' );
+	} );
+
+	it( 'keeps the existing ajax-select2 guard in an unlisted country with custom settlements off', () => {
+		boot( countryConfig( {
+			mode: { region: 'typeahead', settlement: 'ajax-select2' }, allowCustomSettlement: false,
+			current: { key: TASHKENT.key, level: 'settlement' },
+			chain: { settlement: { key: TASHKENT.key, level: 'settlement' } },
+		} ), { country: 'UZ', cityValue: TASHKENT.value } );
+
+		expect( announcePickupCity() ).not.toHaveProperty( 'billing_city' );
+		expect( cityField().value ).toBe( TASHKENT.value );
+	} );
+
+	it( 'uses the shipping country when delivery and billing have different countries', async () => {
+		boot( countryConfig( {}, [ 'billing', 'shipping' ] ), { country: 'UZ', shipToDifferent: true } );
+		choosePlace( KHIMKI, 'shipping_city' );
+		await confirmPlace( KHIMKI );
+
+		expect( announcePickupCity( 'shipping_city' ) ).not.toHaveProperty( 'shipping_city' );
+		expect( cityField( 'shipping_city' ).value ).toBe( KHIMKI.value );
 	} );
 } );

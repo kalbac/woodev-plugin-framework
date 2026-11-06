@@ -147,6 +147,11 @@ CI workflows: `ci.yml` (jobs: `version`, `lint`, `compat`, `unit-tests`, `test-j
 | `specs/2026-10-21-russian-post-v2-plugin-design.md` | Russian Post v2 plugin (`woodev-russian-post` 2.0.x) | ✅ |
 | `specs/2026-10-27-tbank-v2-plugin-design.md` | T-Bank «Рассрочки и кредиты» v2 plugin (`woodev-vkredit` 2.0.0) — the first payment plugin on v2 | ✅ |
 | `specs/2026-10-30-ozon-delivery-v2-plugin-design.md` | Ozon Delivery plugin (new product, released 2.0.0) — phone-first checkout, plugin-owned postings, returns; s203 decisions in `research/2026-10-30-ozon-gap-refresh/` | ✅ |
+| `specs/2026-11-03-711-roi-analytics.md` | #711 — delivery analytics («Аналитика» tab): data research and implementation spec (PR #1565, merged 03.11.2026) | ✅ |
+| `specs/2026-11-04-tracking-v2-plugin-design.md` | «Отслеживание доставки» 2.0.0 on Framework v2 (`woocommerce-order-tracking-number`) — released 04.11.2026 | ✅ |
+| `specs/2026-11-04-1575-buyer-tracking-display-design.md` | #1575 — buyer-facing tracking display for v2 carriers (framework 2.0.25) | ✅ |
+| `specs/2026-11-05-range-shipping-v2-design.md` | «Стоимость доставки за расстояние» 2.0.0 (`woocommerce-range-shipping`, private) on Framework v2 | draft — plugin release pending |
+| `specs/2026-11-05-range-shipping-city-mode.md` | «Доставка в городе» — the list of places as the granularity of the checkout's settlement choice (framework part in 2.0.26) | draft — release pending |
 
 | Plan | Implements |
 |------|------------|
@@ -157,6 +162,9 @@ CI workflows: `ci.yml` (jobs: `version`, `lint`, `compat`, `unit-tests`, `test-j
 | `plans/2026-08-18-shipping-settings-v2-plan.md` | the «Доставка» tab design |
 | `plans/2026-08-20-shipping-tab-admin-polish.md` | the «Доставка» admin polish batch (#375 #380 #377 #376 #373 #378) |
 | `plans/2026-08-24-popular-settlements-slice-3-plan.md` | popular settlements, slice 3 (#488) |
+| `plans/2026-11-05-s218-range-shipping-overnight.md` | the s218 overnight run — range shipping 2.0.0 to release-ready |
+| `plans/2026-11-06-s219-city-mode-overnight.md` | the s219 overnight run — «Доставка в городе» and the range 2.0.0 release candidate |
+| `plans/2026-11-06-1642-city-mode-country.md` | #1642 — city mode r7, a country per place: work packages WP-A–WP-E |
 
 ⚠ **Four of those plans open with "REQUIRED SUB-SKILL: `superpowers:subagent-driven-development`".**
 That instruction is superseded — parallel work runs through Orca orchestration now
@@ -168,8 +176,8 @@ Only the pre-s60 SP-5 map specs/plans were moved to `archive/specs/` and `archiv
 both are live directories an agent writes to, and `archive/` holds only the pre-s60 ones. No file count
 here: the last two counts written into this line went stale. **The earlier docs audits live in
 `reviews/`** — `2026-08-29-docs-and-board-audit.md` (s104), `2026-09-05-644-part1-contradiction-map.md`
-(s119), `2026-10-12-docs-audit-s171.md`, `2026-10-15-docs-audit-s183.md` and `2026-11-02-docs-audit-s210.md`;
-read them before starting another (next due: s220), so a fixed contradiction is not re-litigated.
+(s119), `2026-10-12-docs-audit-s171.md`, `2026-10-15-docs-audit-s183.md`, `2026-11-02-docs-audit-s210.md` and `2026-11-06-docs-audit-s220.md`;
+read them before starting another (next due: s230), so a fixed contradiction is not re-litigated.
 
 ## Architecture Decision Records
 

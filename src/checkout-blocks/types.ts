@@ -84,7 +84,11 @@ export interface LocationConfig {
 	 * settlement is a closed choice; absent — the settlement is searched as always.
 	 */
 	allowed?: Record< string, AllowedPlace[] >;
-	/** City mode: the merchant hides the settlement field. Works for exactly one listed place. */
+	/**
+	 * City mode: the merchant's switch to hide the settlement field, as stored. It is applied per
+	 * country, and only where that country lists exactly one place — with several places the select
+	 * stays, and a country without places keeps its ordinary field.
+	 */
 	hideSettlement?: boolean;
 	/** Server-side delivery mode, checked against WooCommerce's forcedBillingAddress setting. */
 	billingOnly?: boolean;

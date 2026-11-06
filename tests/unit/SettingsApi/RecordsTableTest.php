@@ -129,6 +129,26 @@ final class RecordsTableTest extends TestCase {
 		$this->assertSame( [ '', 'dadata', '', '' ], array_column( $control->get_columns(), 'provider' ) );
 	}
 
+	public function test_country_is_derived_and_an_out_of_scope_record_is_accepted(): void {
+		$handler = $this->handler();
+		$control = $handler->get_setting( 'warehouses' )->get_control();
+		$control->set_columns( [
+			[ 'id' => 'country', 'type' => 'location-country', 'of' => 'address', 'required' => true, 'in_scope' => [ 'KZ' ], 'options' => [ [ 'code' => 'KZ', 'name' => 'Казахстан' ] ] ],
+			[ 'id' => 'address', 'type' => 'location-picker', 'required' => true ],
+		] );
+		$value = json_encode( [ [ 'address' => self::PLACE ] ] );
+		$this->assertNull( $this->error_for( $handler, $value ) );
+		$this->assertArrayNotHasKey( 'country', Records_Table::decode( $value )[0] );
+		// Even a forged derived cell cannot become a validation requirement.
+		$this->assertNull( $this->error_for( $handler, json_encode( [ [ 'address' => self::PLACE, 'country' => [ 'ignored' ] ] ] ) ) );
+	}
+
+	public function test_country_column_must_reference_a_location_picker(): void {
+		$control = new \Woodev_Control();
+		$this->expectException( \Woodev_Plugin_Exception::class );
+		$control->set_columns( [ [ 'id' => 'country', 'type' => 'location-country', 'of' => 'missing' ] ] );
+	}
+
 	public function test_no_rows_is_valid_in_both_spellings(): void {
 		$handler = $this->handler();
 

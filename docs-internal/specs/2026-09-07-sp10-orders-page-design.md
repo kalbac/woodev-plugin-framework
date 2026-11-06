@@ -1,5 +1,7 @@
 # SP-10 «Заказы доставки» — page design
 
+**Status:** IMPLEMENTED (SP-10).
+
 > Written in s125 (07.09.2026), in English per `DOCS-SCHEMA.md`. **The page SHAPE was settled by the
 > operator in #694 (01.09.2026)** and is not reopened here: one landing page, a tab per carrier,
 > tabs drawn only when carriers > 1, **default view the AGGREGATE table**, menu counter = the SUM
