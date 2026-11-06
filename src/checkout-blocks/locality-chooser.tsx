@@ -13,6 +13,10 @@
  * native address is written only by a reply that is still the latest intent AND finds the form as
  * the shopper left it. «Disagree» is one contract with the server (`invalidation.ts`).
  *
+ * City mode (the merchant listed places): the control is a plain `<select>` of exactly those places —
+ * no search box, no suggestion requests — and the native City and State rows give way to it. A pick
+ * is saved and written like any other.
+ *
  * Hidden — and the native fields work alone — when the location layer is inactive, or when the
  * shipping country is one the provider chain does not serve at the settlement level.
  *
@@ -25,9 +29,10 @@ import type { KeyboardEvent } from 'react';
 import { resetSharedChainSync, sharedChainSync } from './chain-sync';
 import type { ChainSync } from './chain-sync';
 import { publishSettlementScope } from './address-scope';
-import { allowedPlaces, listedPlaceValue, namesListedPlace, placesMatching, singlePlace } from './city-mode';
+import { allowedPlaces, listedPlaceValue, namesListedPlace, singlePlace } from './city-mode';
 import { hasLocalityMoved, isSelectionStale, judgeSavedRecord, shouldClearAddress } from './invalidation';
 import { recordCity, recordCityComponent, resolveNativeAddress } from './mapping';
+import { useHiddenNativeRows } from './native-rows';
 import type { CountryStates } from './mapping';
 import { forgetSelection, selectRecord, suggest, SuggestUnavailableError } from './rest';
 import { SinglePlace } from './single-place';
@@ -331,15 +336,8 @@ function ActiveLocalityChooser( {
 
 		const term = query.trim();
 
-		// City mode: the closed list is filtered locally — nothing is asked of `/suggest`.
+		// City mode: the closed list is a plain select — nothing is searched, nothing asked of `/suggest`.
 		if ( supported && places ) {
-			const found = placesMatching( places, term );
-
-			setSuggestions( found );
-			setActive( found.length > 0 ? 0 : -1 );
-			setSearching( false );
-			setMessage( term !== '' && found.length === 0 ? i18n.noResults ?? '' : '' );
-
 			return undefined;
 		}
 
@@ -504,6 +502,14 @@ function ActiveLocalityChooser( {
 		forget();
 	}, [ commit, forget ] );
 
+	// City mode: the native City row gives way to the select below, and the State row to the place's
+	// region — kept only while the shopper still has to choose it (a city, but no region).
+	const closedChoice = supported && places !== null;
+	const cityLabel = useHiddenNativeRows( billingOnly, {
+		city: closedChoice,
+		state: closedChoice && ! ( address.city !== '' && address.state === '' ),
+	} );
+
 	if ( ! supported ) {
 		return null;
 	}
@@ -532,6 +538,47 @@ function ActiveLocalityChooser( {
 	const helper = searching ? i18n.searching ?? '' : failure || message || unresolvedHint || i18n.hint || '';
 	const showList = open && suggestions.length > 0;
 
+	// City mode: the listed places as a plain dropdown — no search box, no suggestion requests.
+	if ( places ) {
+		return (
+			<div className="woodev-locality-chooser" data-address-type={ addressTarget }>
+				<label className="woodev-locality-chooser__label" htmlFor={ inputId }>
+					{ cityLabel || i18n.label }
+				</label>
+				<select
+					id={ inputId }
+					className="woodev-locality-chooser__input woodev-locality-chooser__select"
+					value={ selection?.key ?? '' }
+					aria-busy={ applying !== 0 }
+					onChange={ ( event ) => {
+						const place = places.find( ( listed ) => listed.key === event.target.value );
+
+						if ( place ) {
+							choose( place );
+						} else {
+							clear();
+						}
+					} }
+				>
+					<option value="">{ i18n.placeholder ?? '' }</option>
+					{ places.map( ( place ) => (
+						<option key={ place.key } value={ place.key }>
+							{ place.record.label || place.value }
+						</option>
+					) ) }
+				</select>
+				<p className="woodev-locality-chooser__hint" aria-live="polite">
+					{ failure || message || i18n.hint || '' }
+				</p>
+				{ syncFailed && (
+					<button type="button" className="woodev-locality-chooser__retry" onClick={ forget }>
+						{ i18n.retry }
+					</button>
+				) }
+			</div>
+		);
+	}
+
 	return (
 		<div className="woodev-locality-chooser" data-address-type={ addressTarget }>
 			<label className="woodev-locality-chooser__label" htmlFor={ inputId }>
@@ -557,14 +604,6 @@ function ActiveLocalityChooser( {
 						setOpen( true );
 					} }
 					onKeyDown={ onKeyDown }
-					onFocus={ () => {
-						// City mode: the closed list is offered on focus, before anything is typed.
-						if ( places ) {
-							setSuggestions( placesMatching( places, query.trim() ) );
-							setActive( 0 );
-							setOpen( true );
-						}
-					} }
 					onBlur={ () => window.setTimeout( () => setOpen( false ), 120 ) }
 				/>
 				{ selection && (

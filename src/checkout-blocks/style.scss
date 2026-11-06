@@ -46,6 +46,11 @@
 		}
 	}
 
+	// City mode: the same box, a native select (WooCommerce draws its own arrow on selects).
+	&__select {
+		padding-right: 0.75em;
+	}
+
 	&__clear {
 		position: absolute;
 		top: 50%;
@@ -142,5 +147,25 @@
 	&__trigger[aria-disabled='true'] {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+}
+
+/**
+ * City mode, ONE listed place (range-shipping city mode spec §4.2): the place as plain text, the
+ * way WooCommerce shows the country when a shop sells to just one.
+ */
+
+.woodev-city-mode-place {
+	margin: 0 0 1.5em;
+
+	&__label {
+		display: block;
+		margin-bottom: 0.4em;
+		font-size: 0.875em;
+		font-weight: 600;
+	}
+
+	&__value {
+		font-weight: 700;
 	}
 }

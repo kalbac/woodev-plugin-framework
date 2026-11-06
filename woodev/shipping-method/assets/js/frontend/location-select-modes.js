@@ -2124,6 +2124,166 @@
 	registry[ 'ajax-select2' ] = attachAjaxSelect2;
 
 	// -------------------------------------------------------------------------
+	// City mode (range-shipping city mode spec §4.2, r6) — the settlement field when the merchant
+	// listed places. The list is known up front, so there is nothing to search: no select2, no
+	// `/suggest`. `options.closedList()` returns the listed places (`popular` wire shape plus the
+	// `value` the field posts); the cascade picks the renderer by how many there are.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The listed places `options.closedList()` answers, or `null` when there are none to render.
+	 *
+	 * @param {Object} options
+	 * @returns {Array|null}
+	 */
+	function closedPlacesOf( options ) {
+		var places = 'function' === typeof options.closedList ? options.closedList() : null;
+
+		return Array.isArray( places ) && places.length > 0 ? places : null;
+	}
+
+	/**
+	 * SEVERAL listed places: the settlement `<input>` becomes a plain `<select>` of exactly those
+	 * places — never enhanced (select2 is only ever bound by {@see buildSelectField}; WooCommerce
+	 * enhances `.country_select` / `.state_select` by class, and this select carries neither). A
+	 * pick resolves the place's record and hands it to `options.onSelect()` — the same
+	 * `/select` route every other renderer uses.
+	 *
+	 * The `<input>` is removed while the `<select>` is live (one id in the document) and put back,
+	 * in place, by `detach()`.
+	 *
+	 * @param {Element} el
+	 * @param {Object}  options
+	 * @returns {{detach: function(): void, el: Element, reset: function(): void}|null}
+	 */
+	function attachClosedSelect( el, options ) {
+		var places = closedPlacesOf( options );
+
+		if ( ! el || 'INPUT' !== el.tagName || ! el.parentNode || ! places ) {
+			return null;
+		}
+
+		var i18n = ( options.location && options.location.i18n ) || {};
+		var select = document.createElement( 'select' );
+		var initialValue = el.value || '';
+		var lastHandledKey = null;
+		var preselected = false;
+		var byKey = {};
+
+		select.id = el.id;
+		select.name = el.name || '';
+		select.className = el.className;
+
+		// The blank leading option is what the shopper sees until they choose: a closed list is
+		// never pre-picked for them (unless the field already holds one of the places).
+		var blank = document.createElement( 'option' );
+
+		blank.value = '';
+		blank.textContent = i18n.placeholder || '';
+		select.appendChild( blank );
+
+		places.forEach( function( place ) {
+			var record = place && place.record;
+
+			if ( ! record || ! place.key || 'string' !== typeof place.value || '' === place.value ) {
+				return;
+			}
+
+			var option = document.createElement( 'option' );
+
+			option.value = place.value;
+			option.textContent = record.label || place.label || place.value;
+			// The RESOLUTION identity: two places may legitimately share one posted name.
+			option.dataset.woodevKey = place.key;
+			byKey[ place.key ] = place;
+			select.appendChild( option );
+
+			if ( place.value === initialValue && ! preselected ) {
+				option.selected = true;
+				preselected = true;
+			}
+		} );
+
+		el.parentNode.insertBefore( select, el );
+		el.parentNode.removeChild( el );
+
+		function handleChange() {
+			var option = select.options[ select.selectedIndex ];
+			var key = option ? option.dataset.woodevKey : null;
+			var place = key ? byKey[ key ] : null;
+
+			if ( ! place || key === lastHandledKey ) {
+				return;
+			}
+
+			lastHandledKey = key;
+			options.onSelect( { record: place.record } );
+		}
+
+		var unbind = bindChangeBothWorlds( select, handleChange );
+
+		return {
+			el: select,
+			// The cascade cleared this field out from under the widget: the same place may be
+			// picked again.
+			reset: function() {
+				lastHandledKey = null;
+			},
+			detach: function() {
+				unbind();
+
+				if ( select.parentNode ) {
+					select.parentNode.insertBefore( el, select );
+					select.parentNode.removeChild( select );
+				}
+			},
+		};
+	}
+
+	/**
+	 * ONE listed place: not a field to fill in but a line of text, the way WooCommerce shows the
+	 * country when the shop sells to just one. The `<input>` stays in the form as `type="hidden"`
+	 * carrying the place — so City still posts exactly as before — and the place's name is shown
+	 * as text beside it. `detach()` restores the input.
+	 *
+	 * @param {Element} el
+	 * @param {Object}  options
+	 * @returns {{detach: function(): void}|null}
+	 */
+	function attachClosedText( el, options ) {
+		var places = closedPlacesOf( options );
+
+		if ( ! el || 'INPUT' !== el.tagName || ! el.parentNode || ! places || 1 !== places.length || ! places[ 0 ].value ) {
+			return null;
+		}
+
+		var place = places[ 0 ];
+		var text = document.createElement( 'strong' );
+		var originalType = el.type;
+
+		text.className = 'woodev-city-mode__place';
+		text.textContent = place.value;
+
+		// What the text says is what posts.
+		el.value = place.value;
+		el.type = 'hidden';
+		el.parentNode.insertBefore( text, el.nextSibling );
+
+		return {
+			detach: function() {
+				if ( text.parentNode ) {
+					text.parentNode.removeChild( text );
+				}
+
+				el.type = originalType;
+			},
+		};
+	}
+
+	registry[ 'closed-select' ] = attachClosedSelect;
+	registry[ 'closed-text' ] = attachClosedText;
+
+	// -------------------------------------------------------------------------
 	// CommonJS (jest) — individual functions, for direct unit testing without going through
 	// `window.WoodevLocationRenderers` for every single test.
 	// -------------------------------------------------------------------------
@@ -2132,6 +2292,8 @@
 		module.exports = {
 			attachRelatedListRegion: attachRelatedListRegion,
 			attachAjaxSelect2: attachAjaxSelect2,
+			attachClosedSelect: attachClosedSelect,
+			attachClosedText: attachClosedText,
 			bindChangeBothWorlds: bindChangeBothWorlds,
 			selectConfigFor: selectConfigFor,
 			matchingPopular: matchingPopular,
