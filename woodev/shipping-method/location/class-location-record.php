@@ -1029,7 +1029,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 
 		/**
 		 * Case, «ё», dash and region-type-word insensitive form of a region name («Московская обл.»,
-		 * «Московская область», «московская» compare equal; so do «…округ — Югра» and «…округ - Югра»).
+		 * «Московская область», «московская» compare equal; so do «…округ — Югра» and «…округ - Югра»,
+		 * and CDEK's «городской округ Алматы» with DaData's «Алматы г», #1642).
 		 *
 		 * The service's saved-city and city-limit matching compare it EXACTLY (#1075); only
 		 * {@see self::regions_disagree()} applies a containment test outside RU and known aliases within RU.
@@ -1049,7 +1050,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 			$name = (string) preg_replace( '/\s+[-–—]+\s+/u', ' ', $name );
 			$name = (string) preg_replace( '/[^\p{L}\p{N}\s-]+/u', ' ', $name );
 			$name = (string) preg_replace(
-				'/(?<![\p{L}\p{N}-])(?:область|обл|край|республика|респ|г|город|автономный|автономная|округ|ао|аобл)(?![\p{L}\p{N}-])/u',
+				'/(?<![\p{L}\p{N}-])(?:область|обл|край|республика|респ|г|город|городской|автономный|автономная|округ|ао|аобл)(?![\p{L}\p{N}-])/u',
 				' ',
 				$name
 			);

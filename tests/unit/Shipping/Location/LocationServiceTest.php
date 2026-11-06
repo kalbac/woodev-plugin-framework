@@ -3729,6 +3729,83 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		/**
+		 * A house of the `svc-fixture` provider in `$city` (KZ), with no ancestors published.
+		 */
+		private function city_mode_house( string $slug, string $city ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => 'svc-fixture:' . $slug,
+					'provider_id' => 'svc-fixture',
+					'level'       => Location_Record::LEVEL_ADDRESS,
+					'country'     => 'KZ',
+					'region'      => [ 'name' => $city, 'type' => 'г' ],
+					'settlement'  => [ 'name' => $city, 'type' => 'г' ],
+					'street'      => [ 'name' => 'Нуридин', 'type' => 'ул' ],
+					'house'       => '10',
+					'label'       => 'ул Нуридин, д 10',
+				]
+			);
+		}
+
+		public function test_city_mode_puts_the_single_place_above_a_stored_address_that_has_no_settlement(): void {
+			// #1642 operator rig: the stored chain held a KZ house and no settlement. With one listed
+			// place the City is fixed text, so nothing could be picked: the street stayed locked and
+			// the #531 guard had no settlement to accept. The house stands in that place.
+			$almaty  = $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' );
+			$places  = [ $this->city_mode_place( 'moscow', 'Москва' ), $almaty ];
+			$service = $this->city_mode_service( $places, $this->city_mode_house( 'nuridin-10', 'Алматы' ), null, '', 'KZ' );
+
+			$chain = Location_Service::in_checkout_view( static fn() => $service->get_customer_chain( 'KZ' ) );
+
+			$this->assertNotNull( $chain );
+			$this->assertSame( [ Location_Record::LEVEL_SETTLEMENT, Location_Record::LEVEL_ADDRESS ], array_keys( $chain['records'] ) );
+			$this->assertSame( 'svc-fixture:almaty', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+			$this->assertSame( Location_Record::LEVEL_ADDRESS, $chain['current'], 'the house stays current' );
+			$this->assertSame( 'svc-fixture:almaty', $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT, 'KZ' )->key(), 'the placement guard reads it outside the view too' );
+		}
+
+		public function test_city_mode_puts_no_place_above_a_stored_address_of_another_locality(): void {
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' ) ], $this->city_mode_house( 'astana-10', 'Астана' ), null, '', 'KZ' );
+
+			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT, 'KZ' ), 'a house of Астана never stands in Алматы' );
+		}
+
+		public function test_city_mode_puts_no_place_above_a_stored_address_when_the_country_lists_several(): void {
+			$places  = [ $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' ), $this->city_mode_place( 'astana', 'Астана', [], 'KZ' ) ];
+			$service = $this->city_mode_service( $places, $this->city_mode_house( 'nuridin-10', 'Алматы' ), null, '', 'KZ' );
+
+			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT, 'KZ' ), 'with a choice the customer picks the place' );
+		}
+
+		public function test_city_mode_seeds_a_place_published_under_a_city_district_region_when_the_saved_region_names_it(): void {
+			// #1642: CDEK names Almaty's region «городской округ Алматы», a WooCommerce free-text
+			// state or another provider says «Алматы» — one region, the type words differ.
+			$almaty   = Location_Record::from_array(
+				[
+					'key'         => 'svc-fixture:almaty',
+					'provider_id' => 'svc-fixture',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'KZ',
+					'region'      => [ 'name' => 'городской округ Алматы', 'type' => '' ],
+					'settlement'  => [ 'name' => 'Алматы', 'type' => '' ],
+					'label'       => 'Алматы, городской округ Алматы',
+				]
+			);
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU', 'KZ', 'UZ' ] );
+
+			$service              = $this->city_mode_service( [ $almaty ], null, $almaty, 'Алматы', 'KZ', $provider );
+			$service->region_name = 'Алматы';
+			$service->resolves    = true;
+
+			$entry = $service->get_customer_record( 'KZ' );
+
+			$this->assertNotNull( $entry );
+			$this->assertSame( 'svc-fixture:almaty', $entry['record']->key() );
+			$this->assertTrue( $entry['implicit'], 'the listed place, seeded as the default' );
+			$this->assertSame( 0, $provider->suggest_calls );
+		}
+
+		/**
 		 * A «Киров» settlement record in `$region` («… область»).
 		 */
 		private function city_mode_kirov( string $slug, string $region ): Location_Record {
