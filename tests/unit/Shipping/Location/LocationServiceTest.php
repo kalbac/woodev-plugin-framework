@@ -3764,6 +3764,41 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'svc-fixture:almaty', $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT, 'KZ' )->key(), 'the placement guard reads it outside the view too' );
 		}
 
+		public function test_city_mode_puts_no_nested_town_above_a_house_of_its_parent_city(): void {
+			// #1642 critic: a DaData «рп Черкизово» record files the town under Пушкино. A house in
+			// Пушкино proper shares that parent city, but it is not in the town: the name must be the
+			// listed place's own locality, not only its parent.
+			$cherkizovo = Location_Record::from_array(
+				[
+					'key'               => 'svc-fixture:cherkizovo',
+					'provider_id'       => 'svc-fixture',
+					'level'             => Location_Record::LEVEL_SETTLEMENT,
+					'country'           => 'RU',
+					'region'            => [ 'name' => 'Московская область', 'type' => '' ],
+					'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+					'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+					'label'             => 'рп Черкизово, г Пушкино',
+				]
+			);
+			$house      = Location_Record::from_array(
+				[
+					'key'         => 'svc-fixture:pushkino-house',
+					'provider_id' => 'svc-fixture',
+					'level'       => Location_Record::LEVEL_ADDRESS,
+					'country'     => 'RU',
+					'region'      => [ 'name' => 'Московская область', 'type' => '' ],
+					'settlement'  => [ 'name' => 'Пушкино', 'type' => 'г' ],
+					'street'      => [ 'name' => 'Чехова', 'type' => 'ул' ],
+					'house'       => '10',
+					'label'       => 'г Пушкино, ул Чехова, 10',
+				]
+			);
+			$service = $this->city_mode_service( [ $cherkizovo ], $house, null, '', 'RU' );
+
+			$this->assertSame( $house->key(), $service->get_customer_record( 'RU' )['record']->key() );
+			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT, 'RU' ), 'a house in Пушкино proper is not in рп Черкизово' );
+		}
+
 		public function test_city_mode_puts_no_place_above_a_stored_address_of_another_locality(): void {
 			$service = $this->city_mode_service( [ $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' ) ], $this->city_mode_house( 'astana-10', 'Астана' ), null, '', 'KZ' );
 

@@ -1231,7 +1231,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * City is fixed text and there is nothing to pick, so the address lock never lifted and the
 		 * #531 placement guard had no settlement to accept. The place is added only when the house
 		 * stands in it ({@see Location_Record::is_within()}, or the cross-provider proof
-		 * {@see Location_Record::is_same_locality_as()} that the store's own chain rebuild uses); with
+		 * {@see Location_Record::is_same_locality_as()} that the store's own chain rebuild uses, and the
+		 * house names the place's own locality, so a house of the parent city is not in its nested town); with
 		 * several places the customer picks one, and a house of another locality is left as it is.
 		 * Nothing is written back: the read serves the chain the cascade expects.
 		 *
@@ -1257,7 +1258,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 			$place = $listed[0];
 
-			if ( ( ! $address->is_within( $place->key() ) && ! $address->is_same_locality_as( $place ) ) || $this->is_customer_record_stale( $place, $for_country ) ) {
+			if ( ( ! $address->is_within( $place->key() ) && ! ( $address->is_same_locality_as( $place ) && $address->names_locality( $place->own_locality_name() ) ) ) || $this->is_customer_record_stale( $place, $for_country ) ) {
 				return $records;
 			}
 
