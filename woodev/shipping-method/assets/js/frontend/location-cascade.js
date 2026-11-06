@@ -4398,8 +4398,10 @@
 		}
 
 		var region = record.region && record.region.name ? String( record.region.name ) : '';
+		// A missing cached alias map intentionally falls back to the city; PHP remains the final guard.
+		var aliases = 'RU' === record.country ? ( entry.location.regionNameAliases || {} ) : null;
 
-		if ( regionNode && regionsDisagree( fieldText( regionNode.fieldId ), region ) ) {
+		if ( regionNode && regionsDisagree( fieldText( regionNode.fieldId ), region, aliases ) ) {
 			return false;
 		}
 
@@ -4469,16 +4471,25 @@
 
 	/**
 	 * Whether two region names are DEFINITELY different (issue #1534) — the client half of
-	 * `Location_Record::regions_disagree()`: both normalised ({@see normalizeRegionName}), the same
-	 * region when one contains the other, and never a disagreement when either side is empty.
+	 * `Location_Record::regions_disagree()`: normalized names ({@see normalizeRegionName})
+	 * compare through the server's shared alias map in RU, by containment elsewhere.
+	 * Unknown RU names and empty components fall back to the city comparison.
 	 *
 	 * @param {string} one
 	 * @param {string} other
+	 * @param {Object|null} aliases Known RU spellings, or null outside RU.
 	 * @returns {boolean}
 	 */
-	function regionsDisagree( one, other ) {
+	function regionsDisagree( one, other, aliases ) {
 		var a = normalizeRegionName( one );
 		var b = normalizeRegionName( other );
+
+		if ( aliases ) {
+			a = Object.prototype.hasOwnProperty.call( aliases, a ) ? aliases[ a ] : '';
+			b = Object.prototype.hasOwnProperty.call( aliases, b ) ? aliases[ b ] : '';
+
+			return '' !== a && '' !== b && a !== b;
+		}
 
 		if ( '' === a || '' === b ) {
 			return false;

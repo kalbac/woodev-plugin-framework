@@ -1533,6 +1533,77 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	/**
+	 * F7: fixture-shaped DaData rows must survive a CDEK region alias, in either locale.
+	 * The locality-only request was already correct; the post-filter emptied Ижевск.
+	 *
+	 * @dataProvider cdek_region_spellings
+	 */
+	public function test_cdek_region_alias_keeps_address_rows_and_the_city_only_request( string $city, string $cdek_region, string $dadata_region, string $locale ): void {
+		$this->set_token( 'tok' );
+		$parent = Location_Record::from_array(
+			[
+				'key'         => 'cdek:224',
+				'provider_id' => 'cdek',
+				'country'     => 'RU',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'region'      => [ 'name' => $cdek_region ],
+				'settlement'  => [ 'name' => $city ],
+				'label'       => $city . ', городской округ ' . $city . ', ' . $cdek_region,
+			]
+		);
+		// A reduced DaData response shape; names reproduce the report, not a live API capture.
+		$row = [
+			'value' => 'ул Ленина',
+			'data'  => [
+				'country_iso_code' => 'RU',
+				'region'           => $dadata_region,
+				'city'             => $city,
+				'city_type'        => 'г',
+				'street'           => 'Ленина',
+				'street_type'      => 'ул',
+			],
+		];
+		$other_city = $row;
+		$other_city['data']['city'] = 'Другой город';
+		$sent = $this->stub_http_sequence(
+			[ (string) json_encode( [ 'suggestions' => [ $row, $other_city ] ] ), '{"suggestions":[]}' ]
+		);
+		$scope = Location_Scope::within( $parent, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		$records = self::provider( $locale )->suggest( 'Ленина', $scope );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame( $city, $records[0]->own_locality_name() );
+		$this->assertCount( 1, $sent, 'a valid city result needs no settlement retry' );
+		$this->assertSame(
+			[
+				'query'          => 'Ленина',
+				'count'          => 20,
+				'from_bound'     => [ 'value' => 'street' ],
+				'to_bound'       => [ 'value' => 'house' ],
+				'language'       => 'ru',
+				'locations'      => [ [ 'country_iso_code' => 'RU', 'city' => $city ] ],
+				'restrict_value' => true,
+			],
+			$sent[0]
+		);
+	}
+
+	/** @return array<string, array{string, string, string, string}> */
+	public static function cdek_region_spellings(): array {
+		$cases = array_merge(
+			json_decode( (string) file_get_contents( dirname( __DIR__, 3 ) . '/_fixtures/location-region-spellings.json' ), true ),
+			json_decode( (string) file_get_contents( dirname( __DIR__, 3 ) . '/_fixtures/location-additional-region-spellings.json' ), true )
+		);
+		$result = [];
+		foreach ( $cases as [ $name, $city, $cdek, $dadata ] ) {
+			foreach ( [ 'ru_RU', 'en_US' ] as $locale ) {
+				$result[ $name . '-' . $locale ] = [ $city, $cdek, $dadata, $locale ];
+			}
+		}
+		return $result;
+	}
+
+	/**
 	 * D7: the name post-filter needs the parent's language, independently of WordPress.
 	 * The HTTP double reproduces DaData's documented ru/en response language switch.
 	 *
@@ -1962,6 +2033,60 @@ final class DadataProviderTest extends TestCase {
 		$this->assertSame( 20, $sent[0]['count'] );
 		$this->assertCount( 1, $records );
 		$this->assertSame( '453430', $records[0]->postcode() );
+	}
+
+	/**
+	 * A known region omitted by CDEK's captured list must still reject a homonym.
+	 * These synthetic same-name rows exercise the post-filter, not actual geography.
+	 *
+	 * @dataProvider additional_region_spellings
+	 */
+	public function test_a_homonym_from_a_region_missing_from_the_cdek_list_is_dropped( string $city, string $cdek_region, string $dadata_region ): void {
+		$this->set_token( 'tok' );
+		$parent = Location_Record::from_array(
+			[
+				'key'         => 'cdek:city',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'region'      => [ 'name' => 'Тульская область' ],
+				'settlement'  => [ 'name' => $city ],
+			]
+		);
+		$sent = $this->stub_http_sequence(
+			[
+				(string) json_encode(
+					[
+						'suggestions' => [
+							self::house_row( 'ул Ленина, д 1', [ 'city' => $city, 'region' => $dadata_region, 'postal_code' => '111111' ] ),
+							self::house_row( 'ул Ленина, д 1', [ 'city' => $city, 'region' => 'Тульская', 'postal_code' => '300001' ] ),
+						],
+					]
+				),
+			]
+		);
+		$scope = Location_Scope::within( $parent, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		$records = self::provider()->suggest( 'Ленина 1', $scope );
+
+		$this->assertCount( 1, $sent );
+		$this->assertCount( 1, $records );
+		$this->assertSame( '300001', $records[0]->postcode() );
+		$aliases = Location_Record::russian_region_aliases();
+		$this->assertSame(
+			$aliases[ Location_Record::normalize_region_name( $dadata_region ) ],
+			$aliases[ Location_Record::normalize_region_name( $cdek_region ) ],
+			'the full region name and the carrier abbreviation must share an identity'
+		);
+	}
+
+	/** @return array<string, array{string, string, string}> */
+	public static function additional_region_spellings(): array {
+		$cases = json_decode( (string) file_get_contents( dirname( __DIR__, 3 ) . '/_fixtures/location-additional-region-spellings.json' ), true );
+		$result = [];
+		foreach ( $cases as [ $name, $city, $cdek, $dadata ] ) {
+			$result[ $name ] = [ $city, $cdek, $dadata ];
+		}
+		return $result;
 	}
 
 	/**

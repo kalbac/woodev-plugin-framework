@@ -83,6 +83,46 @@ A name-scoped request therefore carries an explicit `language`, which `with_lang
 `woodev_location_dadata_language` filter is NOT consulted for it. That bypass is deliberate: removing it re-opens
 the zero-row case above.
 
+## A region-name post-filter can empty a correct request too (s219 F7, #1632)
+
+The CDEK pick `cdek:224` has locality «Ижевск» and region «Удмуртия», without a FIAS id.
+Its exact first request is already correct in both ru_RU and en_US:
+
+```json
+{"query":"Ленина","count":20,"from_bound":{"value":"street"},"to_bound":{"value":"house"},"language":"ru","locations":[{"country_iso_code":"RU","city":"Ижевск"}],"restrict_value":true}
+```
+
+DaData names that region «Удмуртская»; the shared `regions_disagree()` post-filter rejected
+all matching streets, then the settlement retry also returned nothing. Type-word removal
+cannot equate «Удмуртия» / «Удмуртская», «Кабардино-Балкария» / «Кабардино-Балкарская»,
+«Карачаево-Черкесия» / «Карачаево-Черкесская» or «Чечня» / «Чеченская».
+
+```php
+// ❌ Different names alone are treated as proof of different regions.
+$disagrees = $normalized_cdek_name !== $normalized_dadata_name;
+
+// ✅ Only two identified, different RU regions prove disagreement.
+$aliases = Location_Record::russian_region_aliases();
+$one = $aliases[ Location_Record::normalize_region_name( $cdek_name ) ] ?? '';
+$other = $aliases[ Location_Record::normalize_region_name( $dadata_name ) ] ?? '';
+$disagrees = '' !== $one && '' !== $other && $one !== $other;
+```
+
+`Location_Record::RU_REGION_LABELS` now owns the existing CDEK RU list formerly in the
+registry (#1618); zone-state keys stay byte-for-byte unchanged. `russian_region_aliases()`
+adds known DaData spellings, short region aliases and known regions absent from the capture
+(Дагестан, Донецкая Народная, Луганская Народная, Запорожская and Херсонская); `Checkout_Config` sends that same map
+as `regionNameAliases` to the classic pick guard. Unknown spellings fall back to the city
+match. Do not guess by a five-letter stem: Республика Алтай and Алтайский край differ.
+Known different regions still reject homonyms (Благовещенск in Амурская / Башкортостан).
+
+Stable locality ids remain preferable: native RU DaData ids, then a canonical top-level
+FIAS id, already bypass this name path. A foreign provider's opaque `raw`/numeric region
+code or a translated WC state label is not a shared region identifier; do not inspect or
+send it as one. Regression cases include the labels above, Чувашия, Северная Осетия,
+Саха (Якутия), Ханты-Мансийский АО, Москва, Санкт-Петербург, Тула and Казань. These tests
+use reduced DaData-shaped responses and prove the post-filter defect, not a fresh live API run.
+
 ## Related
 
 - [the-cascade-keeps-only-the-key-of-a-confirmed-chain-record.md](the-cascade-keeps-only-the-key-of-a-confirmed-chain-record.md) — the client half of the same CDEK + DaData house path

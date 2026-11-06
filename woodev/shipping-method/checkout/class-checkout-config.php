@@ -1332,6 +1332,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				],
 				'nonce'                 => $this->nonce,
 				'countries'             => array_values( $countries ),
+				// The server and classic pick guard share the same known RU spellings (#1632).
+				'regionNameAliases'     => \Woodev\Framework\Shipping\Location\Location_Record::russian_region_aliases(),
 				// Issue #380: two independent axes — see build_location_block()'s own
 				// docblock — instead of one shared mode string.
 				'mode'                  => [

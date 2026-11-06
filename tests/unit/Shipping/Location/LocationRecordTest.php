@@ -701,6 +701,20 @@ final class LocationRecordTest extends TestCase {
 		$this->assertTrue( $house->is_same_locality_as( $city ) );
 	}
 
+	public function test_russian_region_aliases_match_the_checkout_wire_fixture(): void {
+		$expected = json_decode( (string) file_get_contents( dirname( __DIR__, 3 ) . '/_fixtures/ru-region-aliases.json' ), true );
+		$this->assertSame( $expected, Location_Record::russian_region_aliases() );
+		foreach ( Location_Record::RU_REGION_LABELS as $label ) {
+			$this->assertArrayHasKey( Location_Record::normalize_region_name( $label ), $expected );
+		}
+	}
+
+	public function test_region_aliases_do_not_conflate_altai_republic_with_altai_krai(): void {
+		$city = $this->with_locality( 'cdek:city', [ 'settlement' => [ 'name' => 'Алтайское' ], 'region' => [ 'name' => 'Республика Алтай' ] ] );
+		$house = $this->with_locality( 'dadata:house', [ 'settlement' => [ 'name' => 'Алтайское' ], 'region' => [ 'name' => 'Алтайский край' ] ] );
+		$this->assertFalse( $city->is_same_locality_as( $house ) );
+	}
+
 	public function test_is_same_locality_as_treats_a_missing_region_as_no_disagreement(): void {
 		$house = $this->with_locality(
 			'dadata:house',
