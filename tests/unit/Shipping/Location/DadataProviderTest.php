@@ -1533,6 +1533,67 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	/**
+	 * D7: the name post-filter needs the parent's language, independently of WordPress.
+	 * The HTTP double reproduces DaData's documented ru/en response language switch.
+	 *
+	 * @dataProvider name_scope_languages
+	 */
+	public function test_name_scope_requests_the_parent_language( string $country, string $provider_id, string $name, string $language, string $locale ): void {
+		$this->set_token( 'tok' );
+		$parent = Location_Record::from_array(
+			[
+				'key'         => $provider_id . ':city',
+				'provider_id' => $provider_id,
+				'country'     => $country,
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'settlement'  => [ 'name' => $name ],
+			]
+		);
+		$sent = [];
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_response_message' )->justReturn( 'OK' );
+		Functions\when( 'wp_remote_retrieve_body' )->alias( static fn( array $response ): string => $response['body'] );
+		Functions\when( 'wp_safe_remote_request' )->alias(
+			static function ( string $url, array $args ) use ( &$sent, $name, $language, $country ): array {
+				$body   = json_decode( $args['body'], true );
+				$sent[] = $body;
+				// Same place, transliterated when the requested language disagrees.
+				$city = ( $body['language'] ?? 'ru' ) === $language ? $name : 'Different-script-name';
+
+				$row = static fn( string $locality, string $house ): array => [
+					'value' => 'street ' . $house,
+					'data'  => [
+						'country_iso_code' => $country,
+						'city'             => $locality,
+						'street'           => 'street',
+						'house'            => $house,
+					],
+				];
+
+				return [
+					'body' => json_encode( [ 'suggestions' => [ $row( $city, '1' ), $row( 'Other city', '2' ) ] ] ),
+				];
+			}
+		);
+		$provider = self::provider( $locale );
+		$scope    = Location_Scope::within( $parent, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		$records  = $provider->suggest( 'street 1', $scope );
+
+		$this->assertCount( 1, $records, 'keep the scoped row, still reject another city' );
+		$this->assertSame( $language, $sent[0]['language'] );
+		$this->assertCount( 1, $sent, 'no empty-result settlement retry' );
+	}
+
+	public static function name_scope_languages(): array {
+		return [
+			'cdek-ru-on-en'   => [ 'RU', 'cdek', 'Москва', 'ru', 'en_US' ],
+			'dadata-uz-on-en' => [ 'UZ', 'dadata', 'Ташкент', 'ru', 'en_US' ],
+			'cdek-kz-on-en'   => [ 'KZ', 'cdek', 'Алматы', 'ru', 'en_US' ],
+			'dadata-en-on-ru' => [ 'UZ', 'dadata', 'Tashkent', 'en', 'ru_RU' ],
+		];
+	}
+
+	/**
 	 * City mode spec §4.3 branch 1: a RUSSIAN DaData parent still sends exactly its native ids —
 	 * the request body is the one sent before 2.0.26.
 	 */
@@ -2386,9 +2447,9 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	/**
-	 * A provider whose HTTP client has its locale seam PINNED to `''` — the
+	 * A provider whose HTTP client has its locale seam pinned (by default to `''`) — the
 	 * "express no opinion" value {@see Dadata_Api_Client::with_language()} reads as
-	 * "send no `language` key", which is what every assertion in this class expects.
+	 * "send no `language` key". Locale regressions override it without changing global functions.
 	 *
 	 * Deliberately a seam and not `Functions\when( 'get_locale' )`: a Brain Monkey
 	 * stub DEFINES the function for the whole PHP process and PHP cannot un-define
@@ -2401,16 +2462,31 @@ final class DadataProviderTest extends TestCase {
 	 * `tests/unit/Handlers/` now; the seam, not the rename, is what keeps this
 	 * class independent of traversal order.
 	 *
+	 * @param string $locale Explicit locale; empty leaves language to DaData's default.
+	 *
 	 * @return Dadata_Provider
 	 */
-	private static function provider(): Dadata_Provider {
-		return new class extends Dadata_Provider {
+	private static function provider( string $locale = '' ): Dadata_Provider {
+		return new class( $locale ) extends Dadata_Provider {
+
+			private string $locale;
+
+			public function __construct( string $locale ) {
+				$this->locale = $locale;
+			}
 
 			protected function make_client( string $token, string $secret ): Dadata_Api_Client {
-				return new class( $token, $secret ) extends Dadata_Api_Client {
+				return new class( $token, $secret, $this->locale ) extends Dadata_Api_Client {
+
+					private string $locale;
+
+					public function __construct( string $token, string $secret, string $locale ) {
+						parent::__construct( $token, $secret );
+						$this->locale = $locale;
+					}
 
 					protected function current_locale(): string {
-						return '';
+						return $this->locale;
 					}
 				};
 			}
