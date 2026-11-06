@@ -1,6 +1,6 @@
 # «Доставка в пределах города» (range shipping 2.0.0) — design
 
-**Date:** 2026-11-05. **Status:** draft r5.1 (06.11.2026) — history in the [revision log](#revision-log). r3 was **rewritten after the operator's
+**Date:** 2026-11-05. **Status:** draft r6 (06.11.2026) — history in the [revision log](#revision-log). r3 was **rewritten after the operator's
 redirect of 05.11.2026** (§0, binding): the list of places is the **granularity of the checkout's settlement choice and of the active provider's address
 suggestions**, not a delivery boundary. The delivery boundary stays where it already is — the range method's own distance grid. r1/r2 designed a
 store-wide server-side restriction; §9 lists what was removed and why. **r4** replaced K11 («a federal city includes its districts») with the operator's
@@ -8,7 +8,8 @@ store-wide server-side restriction; §9 lists what was removed and why. **r4** r
 05.11.2026 (K12–K14): a record carries its **FIAS id** wherever its provider knows one (the CDEK provider stops dropping `fias_guid` — card E1, a separate
 `woocommerce-edostavka` PR), and DaData address suggestions for such a record are scoped **by that id** (city OR settlement); FIAS is Russia-only, so
 outside Russia the scope is country + the record's own locality name, for every provider. **r5.1** applies the r5 critic's four must-fix findings (revision
-log). Nothing in this revision blocks on the operator; §10 lists provisional choices.
+log). **r6** applies the operator's decision after his rig look of 06.11.2026 (§4.2 behaviour table, card F5 #1627): one place is plain text, several
+places are a plain dropdown, the State row is hidden in both. Nothing in this revision blocks on the operator; §10 lists provisional choices.
 **Target:** the same release `2.0.0` of «Расчёт стоимости доставки за расстояние» (plugin id `range_rate`) as
 [2026-11-05-range-shipping-v2-design.md](2026-11-05-range-shipping-v2-design.md) (called **v2 spec** below; its D1–D16 are binding). Two repos change:
 this framework (small, **in framework 2.0.26 itself — still unreleased, draft release PR #1606**) and `kalbac/woocommerce-range-shipping` (settings
@@ -200,13 +201,19 @@ calculator — not for My Account: `enqueue_account_assets()` builds its own con
 | `allowCustomSettlement` | `false` while `allowed` is present (a free-text settlement would defeat the choice); the store setting is not rewritten |
 | `levels[country].region` | `false` while `allowed` is present — the region is not asked; the pick writes the place's region into the native State/region field |
 
-| Case | Classic (`location-cascade.js`) | Block (`src/checkout-blocks`) |
+**r6 — operator, 06.11.2026 (after his rig look; replaces the r5.1 rows «several / one shown / one hidden»).** The settlement is never a search field in
+city mode, and the **State row is hidden whenever places are listed** — its value comes from the place, so it is never asked. Where the place maps to no
+region option (State still empty after the City is filled) the State row stays visible, so the shopper can choose it and the order is not stranded.
+
+| Case | Classic (`location-cascade.js`, `location-select-modes.js`) | Block (`src/checkout-blocks`) |
 |---|---|---|
-| **Several places** | The settlement node renders **only `allowed`** as a local list (the `popular` renderer path, filtered locally as the buyer types) and makes **no settlement-level `/suggest` call**, whatever the shop's field mode; placeholder «Выберите город». A pick calls `/select` as today | `locality-chooser.tsx` renders only `allowed` (local filtering for a long list) and makes no settlement `/suggest`; a pick calls `/select`, then writes City = `value` and State from the record's region — a city-mode branch in `mapping.ts::resolveNativeAddress()`, which today skips state when `regionFieldRemoved`; the branch writes it only where the shop has a region field |
-| **One place, field shown** | The fixed default (§2) seeds the chain implicitly; the existing `defaultLocality` path prefills and locks the field | Native City prefilled with `value` and locked |
-| **One place, hidden** | As above, and the settlement (and region) row is hidden by the framework's visibility mechanism (JS + CSS class, the way `address_field=hide_for_pickup` already hides a row — not `unset()`, so the value still posts) | The chooser is not mounted; the client writes City/State/Country of the delivery address into the cart address store (Blocks' hidden field cannot be relied on to post — UNVERIFIED, F3 probe) |
-| **Address pick** | Street/house/postcode filled as today; City/State are **not** rewritten from the address record (that backwards-fill would put «Пушкино» over «Черкизово») | Same |
+| **Several places** | The settlement `<input>` becomes a **plain `<select>`** (renderer `closed-select`): a blank «Select…» option, then exactly the listed places, each posting its `value`. **Never select2** — no search box — and **no settlement `/suggest`**, whatever the shop's field mode (the list is known up front). A pick calls `/select` as today and writes the place's region into State. State row hidden by class from the start | `locality-chooser.tsx` renders a **native `<select>`** of the listed places instead of the combobox; its label is the native City field's own label. The native City row and the State row are hidden by class; a pick calls `/select`, then writes City = `value` and State from the record's region (`mapping.ts::resolveNativeAddress()`). Zero `/suggest` |
+| **One place, field shown** | The fixed default (§2) seeds the chain implicitly; the settlement is **plain text** (renderer `closed-text`): the `<input>` stays in the form as `type="hidden"` carrying the place's `value`, a `<strong class="woodev-city-mode__place">` shows its name — the way WooCommerce shows the country when a shop sells to one. State row hidden once it holds the region | The chooser is not mounted; `single-place.tsx` writes City/State of the place into the cart address store and renders the **place as text** (`.woodev-city-mode-place`, under the native City field's own label). The native City row and (once it holds the place's region) the State row are hidden by class |
+| **One place, hidden** (`hideSettlement`) | As above, and the settlement row is hidden too (JS + CSS class `woodev-field--hidden`, the way `address_field=hide_for_pickup` hides a row — not `unset()`, so the value still posts) | As above, with **no text**: City and State rows hidden by class, the place carried by the address store |
+| **Address pick** | Street/house/postcode filled as today; City/State are **not** rewritten from the address record (that backwards-fill would put «Пушкино» over «Черкизово»). Suggestions stay scoped to the chosen place (§4.3) | Same |
 | **«Адрес»** | Untouched: still shown and required wherever the shop's own «Поля» policy shows it; city mode never hides or relaxes it | Same |
+
+The `hideSettlement` flag acts on exactly one place; with several places the select stays whatever the flag says (the plugin disables the toggle then — plugin card, not this repo).
 
 ### 4.3 Address suggestions inside the chosen place — one provider-agnostic rule (K11′, K12–K14)
 
@@ -513,6 +520,7 @@ Provisional, reversible choices made in r5 so nothing waits. Each names what cha
 | r4 | 05.11.2026 | K11 («federal city includes its districts») replaced by K11′ — the provider decides what a place covers; DaData measured, 16 calls (48c9cb11) |
 | r5 | 06.11.2026 | Operator's late inputs of 05.11.2026: K12 (a record keeps its FIAS id; CDEK stops dropping `fias_guid` — card **E1**, separate edostavka PR), K13 (DaData scoped by that id, `city_fias_id` then `settlement_fias_id`), K14 (FIAS is Russia-only; no id → country + name). New `Location_Record::fias_id` field and DaData branch 2 in F2 (§4.3). **Contradicts r4 in one place:** r4 said §4.3 needs no framework code and no card — superseded (§9). K6-K10 and K11′ unchanged. §7 rewritten with per-card acceptance and E1; §8 gains A1c (twice), A1d, A1e; §10 added |
 | r5.1 | 06.11.2026 | Codex (gpt-6.1-sol) r5 review, four must-fix findings applied. (1) The canonical `Location_Record::fias_id` is kept apart from DaData's native `raw.fias_id`; §3.2 requires no FIAS id from any provider and names the exact invalid payloads; C14/A10 add successful saves of real RU and non-RU mapper output. (2) §4.4 lists every consumer of the parent-city projection (`Checkout_Handler::settlement_record_value()` / `guard_custom_settlement()` / `city_names_record()` / `record_names_city()` + `remember_checkout_location()`, `Location_Service::record_names_city()`, `Order_Editor::location_record_names_city()`); F2 fixes them through one helper, with a PHP case posting «Черкизово» under `ajax-select2` + custom localities off. (3) Coordinator decision: the operator's input wins — outside RU every provider, DaData included, is scoped by country + own locality name (OSM ids no longer used; a framework-wide change); §4.3, K14, F2 tests, C15 fixtures and A1e updated, r5's §10 item 1 dropped. (4) The region-only third retry is deleted; the only allowed third shape is the `region_fias_id` + `city_fias_id` pair, with a Москва positive and a Зеленоград negative probe in F2/C15 |
+| r6 | 06.11.2026 | Operator's decision after his rig look (card F5 #1627, «operator, 06.11.2026»): §4.2 behaviour table rewritten — one place = plain text (not a locked field), several places = a plain dropdown of exactly the listed places (no select2 search box, no settlement `/suggest`), the State row hidden in both (kept visible only while a filled City leaves it empty); block checkout: native `<select>` instead of the combobox, native City row replaced by it |
 
 ## Related
 

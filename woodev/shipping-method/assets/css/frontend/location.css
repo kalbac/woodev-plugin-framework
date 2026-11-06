@@ -493,6 +493,14 @@
 	display: none !important;
 }
 
+/* City mode, ONE listed place (classic): the settlement is a line of text, not a field — the way
+ * WooCommerce shows the country when a shop sells to just one. The value itself posts through the
+ * field's hidden input. */
+.woodev-city-mode__place {
+	display: block;
+	padding: 0.5em 0;
+}
+
 /* -------------------------------------------------------------------------
  * THE FIELD NOTICE (issue #488 slice 3, D7) — and a THIRD deliberate exception to this file's own
  * "the input itself is never styled here" rule, for the same reason the locked-address rule above
