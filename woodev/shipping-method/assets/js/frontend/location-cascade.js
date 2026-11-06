@@ -1100,28 +1100,11 @@
 	 * alone. It is still never the destructive cascade {@see clearDescendants} runs for an actual
 	 * edit (gotcha `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
 	 *
-	 * ISSUE #490 ROUND 2: the OUTGOING node's per-level TEXT is captured into `outgoingLevelText`
-	 * HERE, BEFORE the `detachOne()` loop below runs — never read live inside
-	 * {@see carryChainStateToIncomingNodes} itself, which is why that function takes the map as a
-	 * plain argument instead of reading the DOM on its own. `document.getElementById( fieldId )`
-	 * after `detachOne()` has run is safe ONLY for a widget whose `detach()` leaves the SAME
-	 * element in the DOM (the baseline typeahead, and {@see attachRelatedListRegion}'s native-
-	 * `<select>` watcher — both only unbind listeners). It is NOT safe for a `buildSelectField()`-
-	 * based renderer (`ajax-select2` — `location-select-modes.js`):
-	 * that widget REPLACES the field's original `<input>` with a fresh `<select>` on attach and,
-	 * on `detach()`, swaps the ORIGINAL `<input>` back in VERBATIM — its own docblock is explicit
-	 * that this restore is never synced with whatever the customer picked in the `<select>`. So a
-	 * read taken after `detachOne()` for one of these levels finds the stale pre-attach `<input>`
-	 * — typically empty — never the picked text, regardless of what {@see applyValueToElement}'s
-	 * value-space understands. Measured on the rig (issue #490 round 2): this is exactly why
-	 * settlement (always `ajax-select2` in production) carried in
-	 * NEITHER direction even after round 1's fix, while region (always
-	 * {@see attachRelatedListRegion}'s native-`<select>` watcher, never swapped) carried in both.
-	 * `entry.widgets[ fieldId ].el` is read here instead of `document.getElementById()` for
-	 * exactly this reason — {@see attachOne}'s own docblock already tracks it as "the LIVE
-	 * element" specifically because a DOM-replacing renderer's `el` and the field's own id can
-	 * diverge; reading it while the widget is STILL attached (i.e., before this loop's own
-	 * `detachOne()` call) always gets the picked value, uniformly across every renderer.
+	 * Issue #490 round 2: capture the outgoing level's text while its widget is still attached.
+	 * A renderer's raw detach() may restore its stale original input. Since #1642 detachOne()
+	 * preserves the live value across that swap too; this explicit snapshot still supplies the
+	 * outgoing winner's text to carryChainStateToIncomingNodes(), independently of the incoming
+	 * column's own saved value.
 	 *
 	 * @param {Object} entry
 	 * @returns {boolean} whether the chain changed (a different column took over).
@@ -1144,7 +1127,7 @@
 		} );
 
 		// Issue #490 round 2 — see this function's own docblock for why this is captured from
-		// the STILL-ATTACHED widget, before detachOne() below can lose it.
+		// the STILL-ATTACHED widget, before the outgoing node is detached.
 		var outgoingLevelText = {};
 
 		entry.allNodes.forEach( function( node ) {
@@ -1681,6 +1664,17 @@
 	}
 
 	/**
+	 * Whether the shop permits a custom settlement in this country. A listed country is closed.
+	 *
+	 * @param {Object} entry
+	 * @param {string} country
+	 * @returns {boolean}
+	 */
+	function allowCustomFor( entry, country ) {
+		return !! ( entry.location && entry.location.allowCustomSettlement ) && ! allowedPlaces( entry, country );
+	}
+
+	/**
 	 * The closed list for `node`, or `null`. Only the SETTLEMENT level is ever closed: the region
 	 * is not asked and the address stays a free search.
 	 *
@@ -1781,12 +1775,10 @@
 	}
 
 	/**
-	 * City mode, ONE listed place: when the delivery address moves to the other column («Доставить
-	 * по другому адресу»), the incoming column must hold the place AND its region together. The
-	 * column carry brings the settlement text across but drops a region that contradicts the
-	 * carried record — so the incoming State (a saved Тула, or empty) would stay beside «Москва»,
-	 * and city mode hides that row. The place's record is the authority: fill the ancestors from it,
-	 * the way the first fill of the page does.
+	 * Seeds the delivery country's ONE listed place after a country or address-column switch.
+	 * The render-time defaultLocality belongs to the initial country, so use the live list's
+	 * record and posted value instead. As in prefill(), this is a confirmed fixed default,
+	 * with its ancestors filled before hiding State and its key available for address scoping.
 	 *
 	 * @param {Object} entry
 	 * @returns {void}
@@ -1799,7 +1791,31 @@
 			return;
 		}
 
-		backwardsFill( entry, node, places[ 0 ].record );
+		var place = places[ 0 ];
+		var record = entry.records.settlement;
+		var needsSeed = ! record || record.key !== place.key;
+
+		if ( needsSeed ) {
+			record = shallowCopy( place.record );
+			record.confirmed = true;
+			record.implicit = true;
+			record.implicitSource = 'fixed';
+			entry.records.settlement = record;
+		}
+
+		writeSilently( entry, node.fieldId, place.value );
+
+		if ( record.implicit ) {
+			entry.pendingDefaultLocality = { node: node, record: place.record, level: node.level, key: place.key };
+			applyPendingDefaultLocality( entry );
+		} else {
+			// A column carry keeps an already explicit pick explicit (for example after pickup).
+			backwardsFill( entry, node, place.record );
+		}
+
+		if ( needsSeed ) {
+			fireLocationApplied( entry, { key: place.key, level: node.level }, true );
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -2584,17 +2600,17 @@
 	}
 
 	/**
-	 * Whether `fieldId` is this entry's SETTLEMENT field while the server guard
-	 * (`Checkout_Handler::guard_custom_settlement()`, #531) is enforcing it — `ajax-select2`
-	 * mode, custom settlements not allowed (#528) — and a confirmed settlement record exists.
+	 * Whether `fieldId` holds a settlement record protected by the live country's closed list
+	 * or the server guard (`Checkout_Handler::guard_custom_settlement()`, #531: `ajax-select2`
+	 * with custom settlements off). A closed list applies whatever the shop's ordinary mode.
 	 *
 	 * In that state the guard accepts only a posted settlement equal to the record's own name,
 	 * so a pickup point's locality string («г.Москва», a different spelling, a neighbouring
 	 * settlement) written over the field cannot reach the order: the customer is refused at
 	 * «Place order» with no visible cause (issue #961). The record is what the customer
 	 * picked, so the field keeps it and the announced write is dropped ({@see handlePickupAddressReplacing}).
-	 * With custom settlements allowed, or another mode, the guard is off and the point's own
-	 * locality still replaces the field (issue #339).
+	 * In an unlisted country, custom settlements or another mode leave the point's own
+	 * locality free to replace the field (issue #339).
 	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
@@ -2603,11 +2619,14 @@
 	function holdsGuardedSettlement( entry, fieldId ) {
 		var info = nodeInfo( entry, fieldId );
 
-		return !! info
-			&& 'settlement' === info.level
-			&& !! entry.records.settlement
-			&& 'ajax-select2' === settlementAxisMode( entry )
-			&& ! ( entry.location && entry.location.allowCustomSettlement );
+		if ( ! info || 'settlement' !== info.level || ! entry.records.settlement ) {
+			return false;
+		}
+
+		var country = countryFor( entry, entry.allNodes[ info.index ] );
+
+		return !! allowedPlaces( entry, country )
+			|| ( 'ajax-select2' === settlementAxisMode( entry ) && ! allowCustomFor( entry, country ) );
 	}
 
 	/**
@@ -4706,6 +4725,9 @@
 		// Issue #1542: only a classic checkout address input gets one; `null` everywhere else.
 		var addressGuard = createAddressTimerGuard( node, el );
 		var onSelect = onSelectFor( entry, node );
+		var rendererLocation = shallowCopy( entry.location );
+
+		rendererLocation.allowCustomSettlement = allowCustomFor( entry, countryFor( entry, node ) );
 
 		// Handed to WHICHEVER renderer attaches — a Task 13 mode-specific one or the baseline
 		// typeahead below get the EXACT SAME `fetch`/`onSelect` (spec: "assert the shared code
@@ -4790,7 +4812,7 @@
 			// placeholder rather than to a literal invented client-side.
 			searchPlaceholder: 'string' === typeof i18n.searchPlaceholder ? i18n.searchPlaceholder : '',
 			node: node,
-			location: entry.location,
+			location: rendererLocation,
 			country: function() {
 				return countryFor( entry, node );
 			},
@@ -4808,6 +4830,7 @@
 		options.list = listFor( entry, node, options );
 
 		var renderer = resolveModeRenderer( entry, node );
+		var closedCountry = closedListFor( entry, node ) ? countryFor( entry, node ) : null;
 
 		if ( renderer ) {
 			var api = renderer( el, options );
@@ -4820,7 +4843,9 @@
 				// (captured above, before the renderer ran) is still correct. Storing the
 				// wrong one here would make reconcileAfterCheckoutUpdate()'s own "was this
 				// node replaced by a checkout re-render" check misfire on every single pass.
-				entry.widgets[ node.fieldId ] = { el: api.el || el, api: api };
+				entry.widgets[ node.fieldId ] = {
+					el: api.el || el, api: api, renderer: renderer, closedCountry: closedCountry,
+				};
 
 				if ( addressGuard && ( ! api.el || api.el === el ) ) {
 					addressGuard.arm( entry );
@@ -4840,7 +4865,9 @@
 			return;
 		}
 
-		entry.widgets[ node.fieldId ] = { el: el, api: window.WoodevLocationTypeahead( el, options ) };
+		entry.widgets[ node.fieldId ] = {
+			el: el, api: window.WoodevLocationTypeahead( el, options ), renderer: renderer, closedCountry: closedCountry,
+		};
 
 		if ( addressGuard ) {
 			addressGuard.arm( entry );
@@ -4851,7 +4878,8 @@
 	 * Detaches the widget currently attached to `fieldId`, if any — a safe no-op when nothing
 	 * is attached there. Extracted so both a full teardown ({@see detachAll}) and a per-node
 	 * reconcile ({@see applyCountryArbitration}, {@see reconcileAfterCheckoutUpdate}) share the
-	 * exact same try/catch + registry-cleanup shape.
+	 * exact same try/catch + registry-cleanup shape. Preserve the live field's value when
+	 * teardown restores an original input that may still hold the country we just cleared.
 	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
@@ -4864,6 +4892,9 @@
 			return;
 		}
 
+		var live = document.getElementById( fieldId );
+		var value = live ? live.value : '';
+
 		try {
 			widget.api.detach();
 		} catch ( e ) {
@@ -4872,10 +4903,29 @@
 
 		delete entry.widgets[ fieldId ];
 
+		if ( live && live !== document.getElementById( fieldId ) ) {
+			writeSilently( entry, fieldId, value );
+		}
+
 		if ( entry.addressGuards[ fieldId ] ) {
 			entry.addressGuards[ fieldId ].release();
 			delete entry.addressGuards[ fieldId ];
 		}
+	}
+
+	/**
+	 * Whether the live country now needs another renderer or another country's closed list.
+	 * A list is captured when attached, so two countries using closed-select still differ.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} node
+	 * @param {Object} widget
+	 * @returns {boolean}
+	 */
+	function widgetPresentationChanged( entry, node, widget ) {
+		var closedCountry = closedListFor( entry, node ) ? countryFor( entry, node ) : null;
+
+		return widget.renderer !== resolveModeRenderer( entry, node ) || widget.closedCountry !== closedCountry;
 	}
 
 	/**
@@ -4908,6 +4958,7 @@
 	 * is left completely untouched — attaching a node that should stay attached, or detaching
 	 * one that should stay detached, is a no-op — so e.g. a billing-country change never tears
 	 * down an unrelated, still-valid shipping-section widget's in-progress typeahead session.
+	 * Re-attaches an active node when its renderer or closed-list country changed.
 	 * Never touches field values — "switch back → re-attached with state intact" (Task 11
 	 * spec) still holds, now per node.
 	 *
@@ -4922,6 +4973,9 @@
 			if ( attached && ! active ) {
 				detachOne( entry, node.fieldId );
 			} else if ( ! attached && active ) {
+				attachOne( entry, node );
+			} else if ( attached && widgetPresentationChanged( entry, node, entry.widgets[ node.fieldId ] ) ) {
+				detachOne( entry, node.fieldId );
 				attachOne( entry, node );
 			}
 		} );
@@ -5832,6 +5886,7 @@
 			// {@see isActiveAddressSection}'s own gate below (same `section`, computed once,
 			// mirrors {@see clearCountryScope}'s own internal gate for the identical reason).
 			var clearedEntry = null;
+			var countryChangedEntries = [];
 
 			entries.forEach( function( entry ) {
 				var country = cascadeKey( countryFor( entry, { section: section } ) );
@@ -5841,6 +5896,10 @@
 				}
 
 				entry.resolved[ id ] = country;
+
+				if ( isActiveAddressSection( section ) ) {
+					countryChangedEntries.push( entry );
+				}
 
 				if ( clearCountryScope( entry, id ) && ! clearedEntry ) {
 					clearedEntry = entry;
@@ -5852,7 +5911,7 @@
 			}
 
 			entries.forEach( clearAccountRecordField );
-			handleLayoutRelevantChange();
+			handleLayoutRelevantChange( countryChangedEntries );
 			return;
 		}
 
@@ -5988,9 +6047,10 @@
 	 * is itself a per-node no-op wherever nothing actually changed, so re-running it broadly
 	 * on any of the three is cheap and never thrashes an unaffected widget).
 	 *
+	 * @param {Array} [countryChangedEntries] Entries whose delivery country actually changed.
 	 * @returns {void}
 	 */
-	function handleLayoutRelevantChange() {
+	function handleLayoutRelevantChange( countryChangedEntries ) {
 		// Opportunistic retry (see the suppression section's own docblock): a page whose WC
 		// autocomplete script happens to execute after this one still gets suppressed the first
 		// time the customer touches the country field — no-op once already applied.
@@ -6003,7 +6063,7 @@
 			var columnChanged = rebuildChainForActiveSection( entry );
 			applyCountryArbitration( entry );
 
-			if ( columnChanged ) {
+			if ( columnChanged || ( countryChangedEntries && countryChangedEntries.indexOf( entry ) !== -1 ) ) {
 				reseedSingleListedPlace( entry );
 			}
 
@@ -6100,7 +6160,7 @@
 				live.value = stored;
 			}
 
-			if ( ! current || current.el !== live ) {
+			if ( ! current || current.el !== live || widgetPresentationChanged( entry, node, current ) ) {
 				detachOne( entry, node.fieldId );
 				attachOne( entry, node );
 			}
