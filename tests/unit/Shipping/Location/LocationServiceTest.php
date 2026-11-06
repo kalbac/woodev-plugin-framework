@@ -239,6 +239,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		public int $is_configured_calls = 0;
 		public int $get_suggest_levels_calls = 0;
 
+		/** @var Location_Record[] what {@see self::suggest()} answers (default: nothing). */
+		public array $suggestions = [];
+
+		public int $suggest_calls = 0;
+
 		public function __construct( string $id, array $levels, bool $configured = true, array $countries = [ 'RU' ] ) {
 			$this->id        = $id;
 			$this->levels    = $levels;
@@ -308,7 +313,9 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function suggest( string $query, Location_Scope $scope ): array {
-			return [];
+			++$this->suggest_calls;
+
+			return $this->suggestions;
 		}
 	}
 
@@ -3470,8 +3477,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		 * @param Location_Record|callable(string): ?Location_Record|null $default The filtered fixed default; a callable
 		 *                                                                         is asked with the filter's country argument.
 		 */
-		private function city_mode_service( array $listed, ?Location_Record $stored = null, $default = null, string $saved_city = '', string $customer_country = '' ): Location_Service {
-			$provider = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU', 'KZ', 'UZ' ] );
+		private function city_mode_service( array $listed, ?Location_Record $stored = null, $default = null, string $saved_city = '', string $customer_country = '', ?Location_Service_Fake_Provider $provider = null ): Location_Service {
+			$provider ??= new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU', 'KZ', 'UZ' ] );
 			$registry = $this->activate_owning_provider( $provider );
 
 			Functions\when( 'apply_filters' )->alias(
@@ -3503,6 +3510,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 				private string $customer_country;
 
+				/** @var string the saved region's display name (#1075). */
+				public string $region_name = '';
+
+				/** @var bool whether the #1075 saved-city resolution is on (a logged-in customer). */
+				public bool $resolves = false;
+
 				public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, string $saved_city, string $customer_country ) {
 					parent::__construct( $registry, $store );
 					$this->saved_city       = $saved_city;
@@ -3511,6 +3524,21 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 				protected function customer_saved_city(): string {
 					return $this->saved_city;
+				}
+
+				protected function customer_saved_region_name(): string {
+					return $this->region_name;
+				}
+
+				protected function resolves_saved_city(): bool {
+					return $this->resolves;
+				}
+
+				protected function saved_city_misses(): array {
+					return [];
+				}
+
+				protected function store_saved_city_misses( array $signatures ): void {
 				}
 
 				protected function customer_shipping_country(): string {
@@ -3660,6 +3688,61 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'svc-fixture:almaty', $record->key() );
 			$this->assertTrue( $service->get_customer_record( 'KZ' )['implicit'], 'seeded as the default, the same as after a reload' );
 			$this->assertSame( '', $service->get_saved_city() );
+		}
+
+		public function test_city_mode_keeps_a_saved_homonym_of_another_region_outside_the_view(): void {
+			// Critic, #1642 round 2: the single RU place is Киров of the Kaluga region; a logged-in
+			// customer saved «Киров» of the Kirov region and has no chain. The name alone is not the
+			// place — #1075 must still resolve the customer's own Kirov, not seed the listed one.
+			$kaluga   = $this->city_mode_kirov( 'kirov-kaluga', 'Калужская' );
+			$kirov    = $this->city_mode_kirov( 'kirov-kirov', 'Кировская' );
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU', 'KZ', 'UZ' ] );
+
+			$provider->suggestions = [ $kaluga, $kirov ];
+
+			$service              = $this->city_mode_service( [ $kaluga ], null, $kaluga, 'Киров', 'RU', $provider );
+			$service->region_name = 'Кировская';
+			$service->resolves    = true;
+
+			$entry = $service->get_customer_record( 'RU' );
+
+			$this->assertNotNull( $entry );
+			$this->assertSame( 'svc-fixture:kirov-kirov', $entry['record']->key(), 'the customer\'s own Kirov, not the listed homonym' );
+			$this->assertFalse( $entry['implicit'] );
+			$this->assertSame( 1, $provider->suggest_calls );
+		}
+
+		public function test_city_mode_seeds_the_single_place_when_the_saved_region_agrees(): void {
+			$kaluga   = $this->city_mode_kirov( 'kirov-kaluga', 'Калужская' );
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU', 'KZ', 'UZ' ] );
+
+			$service              = $this->city_mode_service( [ $kaluga ], null, $kaluga, 'Киров', 'RU', $provider );
+			$service->region_name = 'Калужская область';
+			$service->resolves    = true;
+
+			$entry = $service->get_customer_record( 'RU' );
+
+			$this->assertNotNull( $entry );
+			$this->assertSame( 'svc-fixture:kirov-kaluga', $entry['record']->key() );
+			$this->assertTrue( $entry['implicit'], 'the listed place, seeded as the default' );
+			$this->assertSame( 0, $provider->suggest_calls, 'no saved-city lookup for the place itself' );
+		}
+
+		/**
+		 * A «Киров» settlement record in `$region` («… область»).
+		 */
+		private function city_mode_kirov( string $slug, string $region ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => 'svc-fixture:' . $slug,
+					'provider_id' => 'svc-fixture',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'region'      => [ 'name' => $region, 'type' => 'обл' ],
+					'settlement'  => [ 'name' => 'Киров', 'type' => 'г' ],
+					'label'       => 'г Киров, ' . $region . ' обл',
+				]
+			);
 		}
 
 		public function test_city_mode_keeps_a_saved_city_outside_the_view_that_is_not_the_single_place(): void {

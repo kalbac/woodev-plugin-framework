@@ -2628,7 +2628,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				// switch forgets the chain and the form posts that place as text; keeping the text
 				// would keep the default away, and the #531 guard would refuse the order a reload
 				// in that country lets through.
-				return 1 === count( $listed ) && $listed[0]->names_locality( $city ) ? '' : $city;
+				// A name alone is not the place: «Киров» of the Kirov region is not the listed Kirov of
+				// the Kaluga region, so a saved region must agree too — else #1075's resolution stands.
+				return 1 === count( $listed ) && $listed[0]->names_locality( $city ) && $this->saved_region_agrees_with( $listed[0] ) ? '' : $city;
 			}
 
 			if ( 1 === count( $listed ) ) {
@@ -2636,6 +2638,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			return $this->names_listed_settlement( $city, $country ) ? $city : '';
+		}
+
+		/**
+		 * Whether the customer's saved region ({@see self::customer_saved_region_name()}) is the
+		 * region of `$place` — `true` when no region is saved. Compared by the folded name, then
+		 * without type words, like {@see self::record_state_code()}; the settlement's own name stands
+		 * in for a record without a region (a city of federal significance).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param Location_Record $place A listed place.
+		 *
+		 * @return bool
+		 */
+		private function saved_region_agrees_with( Location_Record $place ): bool {
+			$saved = $this->customer_saved_region_name();
+
+			if ( '' === trim( $saved ) ) {
+				return true;
+			}
+
+			$component = $place->region();
+			$name      = null !== $component ? trim( (string) $component['name'] ) : '';
+
+			if ( '' === $name ) {
+				$component = $place->settlement();
+				$name      = null !== $component ? trim( (string) $component['name'] ) : '';
+			}
+
+			foreach ( [ false, true ] as $drop_type_words ) {
+				$wanted = self::fold_region_name( $name, $drop_type_words );
+
+				if ( '' !== $wanted && self::fold_region_name( $saved, $drop_type_words ) === $wanted ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**
