@@ -41,6 +41,8 @@ const mockStore = {
 	 * meta-selector.
 	 */
 	cartLoaded: undefined as boolean | undefined,
+	/** `wc/store/validation` errors by id, as WooCommerce raises them when Place Order is pressed. */
+	validationErrors: {} as Record< string, { message: string; hidden: boolean } >,
 };
 
 const notify = (): void => mockStore.listeners.forEach( ( listener ) => listener() );
@@ -50,6 +52,7 @@ jest.mock( '@wordpress/data', () => {
 		getCustomerData: () => mockStore.customer,
 		getNeedsShipping: () => mockStore.needsShipping,
 		getUseShippingAsBilling: () => mockStore.useShippingAsBilling,
+		getValidationError: ( id: string ) => mockStore.validationErrors[ id ],
 		...( mockStore.cartLoaded === undefined
 			? {}
 			: { hasFinishedResolution: ( name: string ) => name === 'getCartData' && mockStore.cartLoaded === true } ),
@@ -337,6 +340,7 @@ beforeEach( () => {
 	mockStore.hasGate = true;
 	mockStore.refreshHold = null;
 	mockStore.cartLoaded = undefined;
+	mockStore.validationErrors = {};
 	mockStore.needsShipping = true;
 	mockStore.forcedBillingAddress = false;
 	selectReply = { persisted: true };
@@ -395,6 +399,42 @@ describe( 'city mode, several places — Blocks chooser', () => {
 		expect( document.querySelector( '.wc-block-components-address-form__state' ) ).toHaveClass( 'woodev-field--hidden' );
 		expect( document.querySelector( '.wc-block-components-address-form__address_1' ) ).not.toHaveClass( 'woodev-field--hidden' );
 		expect( screen.getByRole( 'combobox' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the hidden native City\'s error at the select when Place Order is pressed with nothing chosen, and focuses it', async () => {
+		installNativeRows();
+		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ] ) } /> );
+		const select = screen.getByRole( 'combobox' );
+
+		// Raised by WooCommerce but not revealed yet: nothing to say.
+		mockStore.validationErrors = { shipping_city: { message: 'Please enter a valid city', hidden: true } };
+		act( () => notify() );
+		expect( screen.queryByRole( 'alert' ) ).toBeNull();
+		expect( select ).not.toHaveAttribute( 'aria-invalid', 'true' );
+
+		// Place Order pressed: the error is revealed — by Blocks on a field that is out of sight.
+		mockStore.validationErrors = { shipping_city: { message: 'Please enter a valid city', hidden: false } };
+		act( () => notify() );
+
+		const alert = screen.getByRole( 'alert' );
+		expect( alert ).toHaveTextContent( 'Please enter a valid city' );
+		expect( select ).toHaveAttribute( 'aria-invalid', 'true' );
+		expect( select ).toHaveAttribute( 'aria-describedby', alert.id );
+		expect( select ).toHaveFocus();
+
+		// A place is chosen and reaches the address: the error goes with the empty City.
+		fireEvent.change( select, { target: { value: KHIMKI.key } } );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Химки' ) );
+		expect( screen.queryByRole( 'alert' ) ).toBeNull();
+		expect( select ).not.toHaveAttribute( 'aria-invalid', 'true' );
+	} );
+
+	it( 'reads the billing City error on the billing-only chooser', () => {
+		mockStore.forcedBillingAddress = true;
+		mockStore.validationErrors = { billing_city: { message: 'Please enter a valid city', hidden: false } };
+		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ], { billingOnly: true } ) } addressTarget="billing" /> );
+
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Please enter a valid city' );
 	} );
 
 	it( 'a pick persists the record, then writes the native City and State of the place', async () => {

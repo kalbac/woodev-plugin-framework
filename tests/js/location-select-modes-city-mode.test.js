@@ -62,6 +62,21 @@ describe( 'attachClosedSelect', () => {
 		expect( onSelect ).toHaveBeenCalledTimes( 2 );
 	} );
 
+	it( 'announces the same place again after the blank option in between', () => {
+		const onSelect = jest.fn();
+		const api = attachClosedSelect( install(), options( [ MOSCOW, KHIMKI ], onSelect ) );
+		const choose = ( index ) => {
+			api.el.selectedIndex = index;
+			api.el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		};
+
+		choose( 2 );
+		choose( 0 );
+		choose( 2 );
+
+		expect( onSelect ).toHaveBeenCalledTimes( 2 );
+	} );
+
 	it( 'does not announce the blank option', () => {
 		const onSelect = jest.fn();
 		const api = attachClosedSelect( install(), options( [ MOSCOW, KHIMKI ], onSelect ) );

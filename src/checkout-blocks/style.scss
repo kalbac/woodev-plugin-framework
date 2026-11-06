@@ -51,6 +51,17 @@
 		padding-right: 0.75em;
 	}
 
+	// City mode: Place Order pressed with nothing chosen — the native City error, shown at the select.
+	&__select[aria-invalid="true"] {
+		border-color: #cc1818;
+	}
+
+	&__error {
+		margin: 0.4em 0 0;
+		color: #cc1818;
+		font-size: 0.8125em;
+	}
+
 	&__clear {
 		position: absolute;
 		top: 50%;

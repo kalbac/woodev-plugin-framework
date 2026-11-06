@@ -34,6 +34,7 @@ import { hasLocalityMoved, isSelectionStale, judgeSavedRecord, shouldClearAddres
 import { recordCity, recordCityComponent, resolveNativeAddress } from './mapping';
 import { useHiddenNativeRows } from './native-rows';
 import type { CountryStates } from './mapping';
+import { readVisibleError } from './pickup-stores';
 import { forgetSelection, selectRecord, suggest, SuggestUnavailableError } from './rest';
 import { SinglePlace } from './single-place';
 import type { AllowedPlace, LocationConfig, Selection, Suggestion, WcAddress } from './types';
@@ -510,6 +511,23 @@ function ActiveLocalityChooser( {
 		state: closedChoice && ! ( address.city !== '' && address.state === '' ),
 	} );
 
+	// City mode: the native City row is hidden, so WooCommerce's «enter a city» error — raised when
+	// Place Order is pressed with nothing chosen — is shown HERE, at the select, and the select gets
+	// the focus the hidden field cannot take. It goes with the City: once a place is in the address
+	// the native field is valid again.
+	const nativeCityError = useSelect(
+		( registrySelect ) => readVisibleError( `${ billingOnly ? 'billing' : 'shipping' }_city`, registrySelect ),
+		[ billingOnly ]
+	);
+	const cityError = closedChoice && address.city === '' ? nativeCityError : '';
+	const selectRef = useRef< HTMLSelectElement | null >( null );
+
+	useEffect( () => {
+		if ( cityError !== '' ) {
+			selectRef.current?.focus();
+		}
+	}, [ cityError ] );
+
 	if ( ! supported ) {
 		return null;
 	}
@@ -548,8 +566,11 @@ function ActiveLocalityChooser( {
 				<select
 					id={ inputId }
 					className="woodev-locality-chooser__input woodev-locality-chooser__select"
+					ref={ selectRef }
 					value={ selection?.key ?? '' }
 					aria-busy={ applying !== 0 }
+					aria-invalid={ cityError !== '' }
+					aria-describedby={ cityError !== '' ? `${ inputId }-error` : undefined }
 					onChange={ ( event ) => {
 						const place = places.find( ( listed ) => listed.key === event.target.value );
 
@@ -567,6 +588,11 @@ function ActiveLocalityChooser( {
 						</option>
 					) ) }
 				</select>
+				{ cityError !== '' && (
+					<p id={ `${ inputId }-error` } className="woodev-locality-chooser__error" role="alert">
+						{ cityError }
+					</p>
+				) }
 				<p className="woodev-locality-chooser__hint" aria-live="polite">
 					{ failure || message || i18n.hint || '' }
 				</p>

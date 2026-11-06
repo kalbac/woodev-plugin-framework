@@ -2212,7 +2212,14 @@
 			var key = option ? option.dataset.woodevKey : null;
 			var place = key ? byKey[ key ] : null;
 
-			if ( ! place || key === lastHandledKey ) {
+			// The blank option un-picks: the same place may be chosen again afterwards.
+			if ( ! place ) {
+				lastHandledKey = null;
+
+				return;
+			}
+
+			if ( key === lastHandledKey ) {
 				return;
 			}
 

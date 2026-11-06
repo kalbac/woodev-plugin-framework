@@ -1124,7 +1124,7 @@
 	 * `detachOne()` call) always gets the picked value, uniformly across every renderer.
 	 *
 	 * @param {Object} entry
-	 * @returns {void}
+	 * @returns {boolean} whether the chain changed (a different column took over).
 	 */
 	function rebuildChainForActiveSection( entry ) {
 		var newChain = buildChain( entry.config.fields );
@@ -1134,7 +1134,7 @@
 		} );
 
 		if ( ! changed ) {
-			return;
+			return false;
 		}
 
 		var newPostcodeNode = derivePostcodeNode( newChain );
@@ -1168,6 +1168,8 @@
 		entry.postcodeFieldId = newPostcodeNode ? newPostcodeNode.fieldId : null;
 
 		carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes, outgoingLevelText );
+
+		return true;
 	}
 
 	/**
@@ -1776,6 +1778,28 @@
 				row.classList.toggle( HIDDEN_ROW_CLASS, hide );
 			}
 		} );
+	}
+
+	/**
+	 * City mode, ONE listed place: when the delivery address moves to the other column («Доставить
+	 * по другому адресу»), the incoming column must hold the place AND its region together. The
+	 * column carry brings the settlement text across but drops a region that contradicts the
+	 * carried record — so the incoming State (a saved Тула, or empty) would stay beside «Москва»,
+	 * and city mode hides that row. The place's record is the authority: fill the ancestors from it,
+	 * the way the first fill of the page does.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function reseedSingleListedPlace( entry ) {
+		var node = chainNodeForLevel( entry, 'settlement' );
+		var places = node && isActiveAddressSection( node.section ) ? closedListFor( entry, node ) : null;
+
+		if ( ! places || 1 !== places.length || ! document.getElementById( node.fieldId ) ) {
+			return;
+		}
+
+		backwardsFill( entry, node, places[ 0 ].record );
 	}
 
 	// -------------------------------------------------------------------------
@@ -5965,8 +5989,13 @@
 			// Issue #458 round 3: re-derive the chain BEFORE arbitrating — a no-op unless the
 			// "ship to a different address" toggle actually moved a level's winner (see
 			// rebuildChainForActiveSection()'s own docblock for why this must run first).
-			rebuildChainForActiveSection( entry );
+			var columnChanged = rebuildChainForActiveSection( entry );
 			applyCountryArbitration( entry );
+
+			if ( columnChanged ) {
+				reseedSingleListedPlace( entry );
+			}
+
 			syncHiddenSettlementRows( entry );
 		} );
 

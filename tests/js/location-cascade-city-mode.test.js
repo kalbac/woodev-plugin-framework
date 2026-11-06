@@ -97,8 +97,8 @@ const STREET = {
 	},
 };
 
-function installMarkup( { shipToDifferent = null, cityValue = '' } = {} ) {
-	const row = ( id ) => `<p class="form-row" id="${ id }_field"><input type="text" id="${ id }" name="${ id }" value="${ 'billing_city' === id ? cityValue : '' }" /></p>`;
+function installMarkup( { shipToDifferent = null, cityValue = '', values = {} } = {} ) {
+	const row = ( id ) => `<p class="form-row" id="${ id }_field"><input type="text" id="${ id }" name="${ id }" value="${ 'billing_city' === id ? cityValue : ( values[ id ] || '' ) }" /></p>`;
 	const shippingBlock = null === shipToDifferent ? '' : `
 		<input type="checkbox" name="ship_to_different_address" ${ shipToDifferent ? 'checked' : '' } />
 		<select id="shipping_country" name="shipping_country"><option value="RU">Россия</option></select>
@@ -273,6 +273,24 @@ describe( 'city mode — several places (classic)', () => {
 		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Московская' );
 		expect( selectCalls() ).toHaveLength( 1 );
 		expect( JSON.parse( selectCalls()[ 0 ].init.body ).record.key ).toBe( 'dadata:khimki' );
+	} );
+
+	it( 'a place chosen again after the blank option is announced again (place → blank → same place)', async () => {
+		boot( buildConfig() );
+
+		choosePlace( KHIMKI );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:khimki', level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: 'dadata:khimki', level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		cityField().selectedIndex = 0;
+		cityField().dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		choosePlace( KHIMKI );
+
+		expect( selectCalls() ).toHaveLength( 2 );
 	} );
 
 	it( 'picking the blank option sends nothing', () => {
@@ -450,6 +468,36 @@ describe( 'city mode — one place, hidden (classic)', () => {
 
 		expect( rowHidden( 'billing_city' ) ).toBe( true );
 		expect( rowHidden( 'shipping_city' ) ).toBe( false );
+	} );
+} );
+
+describe( 'city mode — one place, delivery moves to the other column (classic)', () => {
+	const toggleShipping = () => {
+		const toggle = document.querySelector( '[name="ship_to_different_address"]' );
+		toggle.checked = true;
+		toggle.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	};
+	const oneBothSections = () => buildConfig( {
+		places: [ MOSCOW ], hideSettlement: false, sections: [ 'billing', 'shipping' ], extra: ONE_PLACE_DEFAULT,
+	} );
+
+	it( 'replaces a saved other-region State in the incoming column with the place\'s, before hiding it', () => {
+		boot( oneBothSections(), { shipToDifferent: false, values: { shipping_state: 'Тульская', shipping_city: 'Тула' } } );
+
+		toggleShipping();
+
+		expect( cityField( 'shipping_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Москва' );
+		expect( rowHidden( 'shipping_state' ) ).toBe( true );
+	} );
+
+	it( 'fills an empty incoming State with the place\'s instead of leaving the shopper to supply it', () => {
+		boot( oneBothSections(), { shipToDifferent: false } );
+
+		toggleShipping();
+
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Москва' );
+		expect( rowHidden( 'shipping_state' ) ).toBe( true );
 	} );
 } );
 
