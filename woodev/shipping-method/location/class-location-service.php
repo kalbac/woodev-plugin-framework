@@ -2599,6 +2599,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * it. With several, a saved city naming none of them is ignored — the field then shows its
 		 * placeholder.
 		 *
+		 * Outside the view one rule applies: a saved city that names the country's single place is
+		 * `''`, so that place is seeded as the fixed default — the same record a checkout render
+		 * seeds (#1642: the order placed after a classic live country switch).
+		 *
 		 * @since 2.0.26
 		 * @since 2.0.26 Per country.
 		 *
@@ -2607,17 +2611,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		private function saved_city_for_checkout(): string {
 			$city = $this->customer_saved_city();
 
-			if ( '' === $city || ! $this->checkout_view_lists_places() ) {
+			if ( '' === $city || ! $this->has_settlement_choices() ) {
 				return $city;
 			}
 
 			$country = $this->customer_shipping_country();
+			$listed  = $this->listed_records_for( $country );
 
-			if ( ! $this->settlement_choices_narrow_this_read( $country ) ) {
+			if ( [] === $listed ) {
 				return $city;
 			}
 
-			if ( 1 === count( $this->listed_records_for( $country ) ) ) {
+			if ( ! $this->checkout_view_lists_places() ) {
+				// #1642: outside the view the saved city stands — unless it names the country's
+				// single place, which is then exactly the fixed default. A classic live country
+				// switch forgets the chain and the form posts that place as text; keeping the text
+				// would keep the default away, and the #531 guard would refuse the order a reload
+				// in that country lets through.
+				return 1 === count( $listed ) && $listed[0]->names_locality( $city ) ? '' : $city;
+			}
+
+			if ( 1 === count( $listed ) ) {
 				return '';
 			}
 

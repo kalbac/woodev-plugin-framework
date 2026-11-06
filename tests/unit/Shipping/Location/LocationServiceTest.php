@@ -3644,6 +3644,34 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( Location_Provider_Registry::instance()->get_default_locality_record(), 'the stored fixed default stays unset' );
 		}
 
+		public function test_city_mode_seeds_the_single_place_at_placement_when_the_posted_city_names_it(): void {
+			// #1642 rig: a classic live RU→KZ switch forgets the chain; the form then posts the single
+			// KZ place «Алматы» as plain text and the order is placed outside the checkout view. That
+			// text names the very place the fixed default is, so it must not keep the default away —
+			// the #531 guard needs the record a reload in KZ would have seeded.
+			$almaty  = $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' );
+			$places  = [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ), $almaty ];
+			$default = static fn( string $country ) => 'KZ' === $country ? $almaty : null;
+			$service = $this->city_mode_service( $places, null, $default, 'Алматы', 'KZ' );
+
+			$record = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT, 'KZ' );
+
+			$this->assertNotNull( $record, 'the single place is the customer\'s record at placement' );
+			$this->assertSame( 'svc-fixture:almaty', $record->key() );
+			$this->assertTrue( $service->get_customer_record( 'KZ' )['implicit'], 'seeded as the default, the same as after a reload' );
+			$this->assertSame( '', $service->get_saved_city() );
+		}
+
+		public function test_city_mode_keeps_a_saved_city_outside_the_view_that_is_not_the_single_place(): void {
+			// Outside the view city mode narrows nothing (K10): a saved Тула with Москва the single
+			// place stays the customer's text, and no default replaces it.
+			$moscow  = $this->city_mode_place( 'moscow', 'Москва' );
+			$service = $this->city_mode_service( [ $moscow ], null, $moscow, 'Тула', 'RU' );
+
+			$this->assertSame( 'Тула', $service->get_saved_city() );
+			$this->assertNull( $service->get_customer_record( 'RU' ) );
+		}
+
 		public function test_city_mode_is_suspended_for_a_view_it_does_not_restrict(): void {
 			$tula    = $this->city_mode_place( 'tula', 'Тула' );
 			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ) ], $tula, $this->city_mode_place( 'moscow', 'Москва' ) );
