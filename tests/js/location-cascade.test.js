@@ -3568,7 +3568,10 @@ describe( 'issue #1534 — a foreign house naming the confirmed settlement is po
 		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore );
 	} );
 
-	it.each( require( '../_fixtures/location-region-spellings.json' ) )(
+	it.each( [
+		...require( '../_fixtures/location-region-spellings.json' ),
+		...require( '../_fixtures/location-additional-region-spellings.json' ),
+	] )(
 		'POSTs a DaData house under the CDEK region spelling: %s',
 		async ( name, city, cdekRegion, dadataRegion ) => {
 			boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
@@ -3582,6 +3585,22 @@ describe( 'issue #1534 — a foreign house naming the confirmed settlement is po
 
 			expect( global.fetch.mock.calls.length ).toBe( before + 1 );
 			expect( fetchCalls[ fetchCalls.length - 1 ].url ).toBe( SELECT_URL );
+		}
+	);
+
+	it.each( require( '../_fixtures/location-additional-region-spellings.json' ) )(
+		'does not POST a homonym from a region missing from the CDEK list: %s',
+		async ( name, city, cdekRegion, dadataRegion ) => {
+			boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
+			await confirmCdek( city, 'Тульская область' );
+			const before = global.fetch.mock.calls.length;
+
+			selectViaFake(
+				callFor( 'billing_address_1' ),
+				houseItem( city, { region: { name: dadataRegion } } )
+			);
+
+			expect( global.fetch.mock.calls.length ).toBe( before );
 		}
 	);
 

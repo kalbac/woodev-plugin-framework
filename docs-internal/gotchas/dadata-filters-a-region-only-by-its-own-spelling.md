@@ -110,7 +110,8 @@ $disagrees = '' !== $one && '' !== $other && $one !== $other;
 
 `Location_Record::RU_REGION_LABELS` now owns the existing CDEK RU list formerly in the
 registry (#1618); zone-state keys stay byte-for-byte unchanged. `russian_region_aliases()`
-adds known DaData spellings and short region aliases; `Checkout_Config` sends that same map
+adds known DaData spellings, short region aliases and known regions absent from the capture
+(Дагестан, Донецкая Народная, Луганская Народная, Запорожская and Херсонская); `Checkout_Config` sends that same map
 as `regionNameAliases` to the classic pick guard. Unknown spellings fall back to the city
 match. Do not guess by a five-letter stem: Республика Алтай and Алтайский край differ.
 Known different regions still reject homonyms (Благовещенск in Амурская / Башкортостан).

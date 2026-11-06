@@ -4398,6 +4398,7 @@
 		}
 
 		var region = record.region && record.region.name ? String( record.region.name ) : '';
+		// A missing cached alias map intentionally falls back to the city; PHP remains the final guard.
 		var aliases = 'RU' === record.country ? ( entry.location.regionNameAliases || {} ) : null;
 
 		if ( regionNode && regionsDisagree( fieldText( regionNode.fieldId ), region, aliases ) ) {
