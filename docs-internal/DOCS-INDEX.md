@@ -164,6 +164,7 @@ CI workflows: `ci.yml` (jobs: `version`, `lint`, `compat`, `unit-tests`, `test-j
 | `plans/2026-08-24-popular-settlements-slice-3-plan.md` | popular settlements, slice 3 (#488) |
 | `plans/2026-11-05-s218-range-shipping-overnight.md` | the s218 overnight run — range shipping 2.0.0 to release-ready |
 | `plans/2026-11-06-s219-city-mode-overnight.md` | the s219 overnight run — «Доставка в городе» and the range 2.0.0 release candidate |
+| `plans/2026-11-06-1642-city-mode-country.md` | #1642 — city mode r7, a country per place: work packages WP-A–WP-E |
 
 ⚠ **Four of those plans open with "REQUIRED SUB-SKILL: `superpowers:subagent-driven-development`".**
 That instruction is superseded — parallel work runs through Orca orchestration now
