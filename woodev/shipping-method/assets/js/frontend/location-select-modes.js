@@ -2125,8 +2125,8 @@
 
 	// -------------------------------------------------------------------------
 	// City mode (range-shipping city mode spec §4.2, r6) — the settlement field when the merchant
-	// listed places. The list is known up front, so there is nothing to search: no select2, no
-	// `/suggest`. `options.closedList()` returns the listed places (`popular` wire shape plus the
+	// listed places. The list is known up front, so there is nothing to request: no `/suggest`, no
+	// ajax transport (select2 is bound for the look and the keyboard only). `options.closedList()` returns the listed places (`popular` wire shape plus the
 	// `value` the field posts); the cascade picks the renderer by how many there are.
 	// -------------------------------------------------------------------------
 
@@ -2143,14 +2143,25 @@
 	}
 
 	/**
-	 * SEVERAL listed places: the settlement `<input>` becomes a plain `<select>` of exactly those
-	 * places — never enhanced (select2 is only ever bound by {@see buildSelectField}; WooCommerce
-	 * enhances `.country_select` / `.state_select` by class, and this select carries neither). A
-	 * pick resolves the place's record and hands it to `options.onSelect()` — the same
-	 * `/select` route every other renderer uses.
+	 * The search box of the closed list is shown only above this many places; a shorter list is
+	 * read at a glance, so the box would be noise.
+	 *
+	 * @type {number}
+	 */
+	var CLOSED_SELECT_SEARCH_THRESHOLD = 5;
+
+	/**
+	 * SEVERAL listed places: the settlement `<input>` becomes a `<select>` of exactly those
+	 * places, enhanced with select2/selectWoo the way WooCommerce enhances «Страна» (arrow,
+	 * dropdown) — from the list already in hand, so there is NO ajax transport and no request. The
+	 * search box shows only above {@see CLOSED_SELECT_SEARCH_THRESHOLD} places. Without the
+	 * select2 script on the page it stays a plain `<select>` and works the same. A pick resolves
+	 * the place's record and hands it to `options.onSelect()` — the same `/select` route every
+	 * other renderer uses; select2 raises a jQuery `change` on the select, which
+	 * {@see bindChangeBothWorlds} already listens to.
 	 *
 	 * The `<input>` is removed while the `<select>` is live (one id in the document) and put back,
-	 * in place, by `detach()`.
+	 * in place, by `detach()`, which destroys the select2 instance first.
 	 *
 	 * @param {Element} el
 	 * @param {Object}  options
@@ -2169,6 +2180,7 @@
 		var lastHandledKey = null;
 		var preselected = false;
 		var byKey = {};
+		var placeCount = 0;
 
 		select.id = el.id;
 		select.name = el.name || '';
@@ -2196,6 +2208,7 @@
 			// The RESOLUTION identity: two places may legitimately share one posted name.
 			option.dataset.woodevKey = place.key;
 			byKey[ place.key ] = place;
+			placeCount++;
 			select.appendChild( option );
 
 			if ( place.value === initialValue && ! preselected ) {
@@ -2229,6 +2242,25 @@
 
 		var unbind = bindChangeBothWorlds( select, handleChange );
 
+		// Defensive, as in `buildSelectField()`: selectWoo may be absent (jQuery too) — the plain
+		// `<select>` above is the fallback.
+		var $select = window.jQuery ? window.jQuery( select ) : null;
+
+		if ( $select && 'function' === typeof $select.select2 ) {
+			var config = selectConfigFor( { ajax: false }, {
+				emptyText: i18n.noResults,
+			} );
+
+			// select2 hides the search box when it has fewer results than this: `Infinity` never shows it.
+			config.minimumResultsForSearch = placeCount > CLOSED_SELECT_SEARCH_THRESHOLD ? 0 : Infinity;
+
+			if ( i18n.placeholder ) {
+				config.placeholder = i18n.placeholder;
+			}
+
+			$select.select2( config );
+		}
+
 		return {
 			el: select,
 			// The cascade cleared this field out from under the widget: the same place may be
@@ -2238,6 +2270,17 @@
 			},
 			detach: function() {
 				unbind();
+
+				// Same gate as `buildSelectField()`'s teardown (issue #457): the node's ACTUAL
+				// select2 data, not a closure flag — a WooCommerce fragment refresh may already
+				// have purged it.
+				if ( $select && 'function' === typeof $select.select2 && $select.data( 'select2' ) ) {
+					try {
+						$select.select2( 'destroy' );
+					} catch ( e ) {
+						logError( e );
+					}
+				}
 
 				if ( select.parentNode ) {
 					select.parentNode.insertBefore( el, select );
