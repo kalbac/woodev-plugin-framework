@@ -85,7 +85,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open issues — 61 in this repo, measured 06.11.2026 (s220); 52 on 03.11.2026 (s211).** The board split (Бэклог / Инбокс) is on the board, not here.
+**Open issues — 63 in this repo, measured 06.11.2026 (s220, after the audit filed #1638–#1640); 52 on 03.11.2026 (s211).** The board split (Бэклог / Инбокс) is on the board, not here.
 ⚠ Count with
 `gh issue list --repo kalbac/woodev-plugin-framework --state open --limit 500 --json number` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
