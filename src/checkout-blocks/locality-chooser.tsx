@@ -15,7 +15,9 @@
  *
  * City mode (the merchant listed places): the control is a plain `<select>` of exactly those places —
  * no search box, no suggestion requests — and the native City and State rows give way to it. A pick
- * is saved and written like any other.
+ * is saved and written like any other. It is decided per the delivery country: one place there is
+ * written as text ({@link SinglePlace}), several are chosen, none leaves the ordinary field; a
+ * change of country clears the City and State the previous country's list left in the address.
  *
  * Hidden — and the native fields work alone — when the location layer is inactive, or when the
  * shipping country is one the provider chain does not serve at the settlement level.
@@ -147,6 +149,37 @@ export function LocalityChooser( props: LocalityChooserProps ): JSX.Element | nu
 		( registrySelect ) => readDeliveryAddress( billingOnly, registrySelect ).country.toUpperCase(),
 		[ billingOnly ]
 	);
+
+	// City mode, the customer changes country (spec §4.2): the City and State left behind by the
+	// country they came from — a listed place written or picked there — are not the new country's.
+	const previousCountry = useRef( country );
+
+	useEffect( () => {
+		// WooCommerce empties the country for a moment while it re-renders the form: that is not a country.
+		if ( country === '' ) {
+			return;
+		}
+
+		const left = previousCountry.current;
+		previousCountry.current = country;
+
+		const wasListed = left !== '' && left !== country && isCountrySupported( props.config, left );
+		const leftPlaces = wasListed ? allowedPlaces( props.config, left ) : null;
+
+		if ( ! active || ! leftPlaces ) {
+			return;
+		}
+
+		const current = readDeliveryAddress( billingOnly );
+
+		// The new country's own single place has been written already (by its child): nothing of the old one is left to clear.
+		if ( current.country.toUpperCase() !== country || ! namesListedPlace( leftPlaces, current.city ) ) {
+			return;
+		}
+
+		// Street and postcode stay: the shopper may have typed them, and they say nothing of the place.
+		writeDeliveryLocality( '', props.config.regionFieldRemoved === true ? null : '', billingOnly );
+	}, [ country, active, billingOnly, props.config ] );
 
 	if ( ! active ) {
 		return null;

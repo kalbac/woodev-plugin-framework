@@ -675,3 +675,148 @@ describe( 'city mode, one place hidden — Blocks', () => {
 		expect( document.querySelector( '.woodev-city-mode-place' ) ).toBeNull();
 	} );
 } );
+
+// A place of a second country (K15): Almaty is the ONE place listed for KZ.
+const ALMATY = {
+	key: 'dadata:almaty',
+	label: 'г Алматы',
+	level: 'settlement',
+	value: 'Алматы',
+	record: {
+		key: 'dadata:almaty',
+		provider_id: 'dadata',
+		level: 'settlement',
+		country: 'KZ',
+		region: { name: 'Алматы' },
+		settlement: { name: 'Алматы' },
+	},
+};
+
+// RU lists three places, KZ one, UZ none — and UZ is a country the provider chain serves.
+const threeCountries = ( over: Partial< LocationConfig > = {} ): LocationConfig =>
+	cityMode( [ MOSCOW, KHIMKI, CHERKIZOVO ], {
+		countries: [ 'RU', 'KZ', 'UZ' ],
+		levels: {
+			RU: { region: false, settlement: true, address: true },
+			KZ: { region: false, settlement: true, address: true },
+			UZ: { region: true, settlement: true, address: true },
+		},
+		allowed: { RU: [ MOSCOW, KHIMKI, CHERKIZOVO ], KZ: [ ALMATY ] },
+		...over,
+	} );
+
+describe( 'city mode, the customer changes country — Blocks', () => {
+	/** The shopper changes the delivery country; the way WooCommerce does, State goes empty with it. */
+	const switchCountry = ( country: string ): void => editNative( { country, state: '' } );
+
+	it( 'walks RU (a select) → KZ (one place as text) → UZ (the ordinary combobox) → RU, leaving no place of the country before', async () => {
+		installNativeRows();
+		render( <LocalityChooser config={ threeCountries() } /> );
+
+		// RU, several places: the select; the native City row gives way to it.
+		expect( screen.getByRole( 'combobox' ).tagName ).toBe( 'SELECT' );
+		expect( document.querySelector( '.wc-block-components-address-form__city' ) ).toHaveClass( 'woodev-field--hidden' );
+
+		// The shopper picks Москва.
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'dadata:moscow' } } );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Москва' ) );
+
+		// → KZ: the one place is written and shown as text; no select, no Moscow.
+		switchCountry( 'KZ' );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Алматы' ) );
+
+		expect( screen.queryByRole( 'combobox' ) ).toBeNull();
+		expect( ( document.querySelector( '.woodev-city-mode-place strong' ) as HTMLElement ).textContent ).toBe( 'Алматы' );
+		expect( document.querySelector( '.wc-block-components-address-form__city' ) ).toHaveClass( 'woodev-field--hidden' );
+
+		// → UZ: Almaty goes with its country; the combobox and the State row come back.
+		switchCountry( 'UZ' );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( '' ) );
+
+		expect( document.querySelector( '.woodev-city-mode-place' ) ).toBeNull();
+		expect( screen.getByRole( 'combobox' ).tagName ).toBe( 'INPUT' );
+		expect( document.querySelector( '.wc-block-components-address-form__city' ) ).not.toHaveClass( 'woodev-field--hidden' );
+		expect( document.querySelector( '.wc-block-components-address-form__state' ) ).not.toHaveClass( 'woodev-field--hidden' );
+		expect( mockStore.customer.shippingAddress.state ).toBe( '' );
+
+		// → RU: the select is back with nothing chosen.
+		switchCountry( 'RU' );
+
+		await waitFor( () => expect( screen.getByRole( 'combobox' ).tagName ).toBe( 'SELECT' ) );
+		expect( ( screen.getByRole( 'combobox' ) as HTMLSelectElement ).value ).toBe( '' );
+		expect( mockStore.customer.shippingAddress.city ).toBe( '' );
+	} );
+
+	it( 'asks /suggest for nothing while RU or KZ is the country, and searches normally in UZ', async () => {
+		suggestReply = [];
+		render( <LocalityChooser config={ threeCountries() } /> );
+
+		switchCountry( 'KZ' );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Алматы' ) );
+		await act( async () => {
+			await settle();
+		} );
+
+		expect( suggestRequests() ).toEqual( [] );
+
+		switchCountry( 'UZ' );
+		await waitFor( () => expect( screen.getByRole( 'combobox' ).tagName ).toBe( 'INPUT' ) );
+
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'Таш' } } );
+
+		await waitFor( () => expect( suggestRequests().length ).toBe( 1 ) );
+		expect( decodeURIComponent( suggestRequests()[ 0 ] ) ).toContain( 'country=UZ' );
+	} );
+
+	it( 'a picked RU place does not stay in City when the shopper goes straight to another country with places', async () => {
+		render( <LocalityChooser config={ threeCountries( { allowed: { RU: [ MOSCOW, KHIMKI ], KZ: [ ALMATY, { ...ALMATY, key: 'dadata:astana', value: 'Астана', record: { ...ALMATY.record, key: 'dadata:astana', settlement: { name: 'Астана' } } } ] } } ) } /> );
+
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'dadata:khimki' } } );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Химки' ) );
+
+		switchCountry( 'KZ' );
+
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( '' ) );
+		expect( ( screen.getByRole( 'combobox' ) as HTMLSelectElement ).value ).toBe( '' );
+	} );
+
+	it( 'keeps the street and postcode of a shopper who leaves the one-place country', async () => {
+		render( <LocalityChooser config={ threeCountries() } /> );
+
+		switchCountry( 'KZ' );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Алматы' ) );
+
+		switchCountry( 'UZ' );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( '' ) );
+
+		expect( mockStore.customer.shippingAddress ).toMatchObject( { address_1: 'Ленина 1', postcode: '101000', country: 'UZ' } );
+	} );
+
+	it( 'does not touch a City the shopper typed in the country without places', async () => {
+		render( <LocalityChooser config={ threeCountries() } /> );
+
+		switchCountry( 'KZ' );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Алматы' ) );
+
+		// The shopper types their own city in the same breath as the country change.
+		editNative( { country: 'UZ', state: '', city: 'Ташкент' } );
+		await act( async () => {
+			await settle();
+		} );
+
+		expect( mockStore.customer.shippingAddress.city ).toBe( 'Ташкент' );
+	} );
+
+	it( 'follows the billing address in a billing-only shop', async () => {
+		mockStore.forcedBillingAddress = true;
+		render( <LocalityChooser config={ threeCountries( { billingOnly: true } ) } addressTarget="billing" /> );
+
+		editBilling( { country: 'KZ', state: '' } );
+		await waitFor( () => expect( mockStore.customer.billingAddress.city ).toBe( 'Алматы' ) );
+
+		editBilling( { country: 'UZ', state: '' } );
+
+		await waitFor( () => expect( mockStore.customer.billingAddress.city ).toBe( '' ) );
+		expect( screen.getByRole( 'combobox' ).tagName ).toBe( 'INPUT' );
+	} );
+} );
