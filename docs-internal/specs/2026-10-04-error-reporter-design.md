@@ -1,5 +1,7 @@
 # Framework error reporter (PHP) — design
 
+**Status:** IMPLEMENTED (#130; the resolver start-up duty is sanctioned in ADR-003, #1551).
+
 > Card #130. The s52 checklist (card body) fixed the idea; the operator's s150 decisions (card
 > comments, 04.10.2026) fixed the receiver, consent, scope and anonymity. This spec turns them into
 > classes. JS half → #1081 (D7 below), receiver server → #1082 (not built here).

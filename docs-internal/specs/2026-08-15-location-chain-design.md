@@ -1,5 +1,7 @@
 # Location chain — design for #334 + #330
 
+**Status:** IMPLEMENTED (#334 + #330).
+
 > Written s74 (15.08.2026), before implementation. Both cards share one root; this is the
 > single mechanism that closes both. **The mechanism proposed in card #334 was measured and
 > rejected** — see "Measurement" below.

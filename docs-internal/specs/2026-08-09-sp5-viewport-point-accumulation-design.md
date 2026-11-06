@@ -1,5 +1,7 @@
 # SP-5 — Viewport point accumulation (#234)
 
+**Status:** IMPLEMENTED (#234).
+
 > Session 59, 2026-08-09. Supersedes the framing in issue #234 itself, which was wrong on two
 > counts — see §2. Measurement-backed; every number in §4 was taken on the rig against LIVE
 > Russian Post, not estimated.

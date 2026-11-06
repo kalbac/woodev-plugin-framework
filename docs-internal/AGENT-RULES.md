@@ -346,7 +346,10 @@ forbidden. Two consequences for anyone writing a plugin on v2:
 plugin overrides it; `Woodev_Plugin` already calls
 `Settings\Settings_Page_Registry::instance()->register_plugin( $this )`, and the page is served over
 `woodev/v1/settings`. A multi-carrier plugin returns several providers, one tab each. **This is
-where new settings go unless there is a reason to go elsewhere.**
+where new settings go unless there is a reason to go elsewhere.** ⚠ A `Shipping_Plugin` is the exception to
+"the plugin overrides it": its `get_settings_providers()` builds the carrier's ONE composite tab and a carrier
+does NOT override it (a second provider under the plugin id is a duplicate tab); it overrides
+`get_tab_settings_providers()` instead (`.ai/skills/woodev-shipping-plugin/references/settings-migration.md`).
 
 **The exception also has a seam.** `Shipping_Plugin::get_integration_handler()` returns `null` in
 the base, and `Shipping_Plugin::add_hooks()` only registers `woocommerce_integrations` when a plugin
@@ -364,7 +367,7 @@ for.
 `tests/_fixtures/woodev-test-shipping-method/class-test-cdek-integration.php`
 (`Woodev_Test_Cdek_Integration`, CDEK test-contour Client ID/Secret) predates this rule — it came
 from #375, where the operator objected to those OAuth keys rendering inside the «Локация» section
-even though they authenticate every CDEK call. It is the rig's live example of the exception, and
+even though they authenticate every CDEK call. It is the rig's live example of the exception (the fixture plugin is deactivated on the rig since s217 — activate it before a framework settings-page pass), and
 whether a real plugin would place the same fields there is exactly the judgement call above. Do not
 migrate it as tidy-up; that would remove the only working demonstration of the mechanism.
 

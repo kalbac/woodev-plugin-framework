@@ -1,6 +1,6 @@
 # #711 — Delivery analytics («Аналитика» tab): data research and implementation spec
 
-**Status:** IMPLEMENTED on branch `kalbac/711-roi-analytics` (stages 2 and 3, s212, draft PR #1565 — not merged). See §9 for where the implementation diverged from this text.
+**Status:** IMPLEMENTED — merged as PR #1565 on 03.11.2026 (stages 2 and 3, s212; #711 closed). See §9 for where the implementation diverged from this text.
 **Date:** 2026-11-03 (s212)
 **Scope:** framework only (`woodev-plugin-framework`); every carrier at once; **no framework release** (operator, #711 comment 03.11.2026).
 **Evidence:** framework paths are relative to this worktree (branch `kalbac/711-roi-analytics`, base `3dc1d019`, framework 2.0.23),

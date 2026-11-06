@@ -1,5 +1,7 @@
 # Popular settlements — design
 
+**Status:** IMPLEMENTED.
+
 > Settled with the operator in a brainstorm on 24.08.2026 (s88). Closes the "where the popular
 > list lives and how it is revalidated" open question of
 > [2026-08-21-settlement-search-design.md](2026-08-21-settlement-search-design.md) (#437), which
