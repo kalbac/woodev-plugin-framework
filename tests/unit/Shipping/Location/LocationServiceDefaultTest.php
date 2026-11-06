@@ -373,8 +373,26 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 	final class LocationServiceDefaultTest extends TestCase {
 
+		/** @var \ArrayObject<string, mixed> */
+		private \ArrayObject $transients;
+
 		protected function setUp(): void {
 			parent::setUp();
+
+			$this->transients = new \ArrayObject();
+			$transients       = $this->transients;
+			Functions\when( 'get_transient' )->alias(
+				static function ( $key ) use ( $transients ) {
+					return $transients[ $key ] ?? false;
+				}
+			);
+			Functions\when( 'set_transient' )->alias(
+				static function ( $key, $value, $ttl ) use ( $transients ) {
+					$transients[ $key ] = $value;
+
+					return true;
+				}
+			);
 
 			Functions\when( 'remove_action' )->justReturn( true );
 			Functions\when( '__' )->returnArg( 1 );
@@ -1368,6 +1386,40 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_EXACT, $narrowing, 'the scope was stamped for prov-b' );
 		}
 
+		public function test_stranded_record_re_resolution_cache_is_scoped_to_the_record_and_active_provider(): void {
+			$provider_b = new Default_Test_Fake_Provider(
+				'prov-b',
+				fn() => [ $this->record( 'prov-b:resolved-b', Location_Record::LEVEL_SETTLEMENT ) ]
+			);
+			$this->stub_default_locality_options( 'prov-b' );
+			$stored_a = $this->record( 'prov-a:old-city-a', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
+			$service  = $this->service( $this->activate( [ $provider_b ] ) );
+
+			$result = $service->reresolve_stranded_record( $stored_a );
+			$this->assertNotNull( $result );
+			$this->assertSame( 'prov-b:resolved-b', $result->key() );
+			$result = $service->reresolve_stranded_record( $stored_a );
+			$this->assertNotNull( $result );
+			$this->assertSame( 'prov-b:resolved-b', $result->key() );
+			$this->assertCount( 1, $provider_b->suggest_calls, 'a found record is cached on the next resolution' );
+
+			$stored_b = $this->record( 'prov-a:old-city-b', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
+			$service->reresolve_stranded_record( $stored_b );
+			$this->assertCount( 2, $provider_b->suggest_calls, 'a changed stored key gets a fresh lookup' );
+
+			Location_Provider_Registry::instance()->reset_for_tests();
+			$provider_c = new Default_Test_Fake_Provider(
+				'prov-c',
+				fn() => [ $this->record( 'prov-c:resolved-c', Location_Record::LEVEL_SETTLEMENT ) ]
+			);
+			$this->stub_default_locality_options( 'prov-c' );
+			$service = $this->service( $this->activate( [ $provider_c ] ) );
+			$result = $service->reresolve_stranded_record( $stored_a );
+			$this->assertNotNull( $result );
+			$this->assertSame( 'prov-c:resolved-c', $result->key() );
+			$this->assertCount( 1, $provider_c->suggest_calls, 'a different active provider gets a fresh lookup' );
+		}
+
 		public function test_a_stranded_record_nobody_serves_any_more_is_null(): void {
 			$this->stub_default_locality_options( 'prov-b' );
 			$service = $this->service( $this->activate( [] ) );
@@ -1426,6 +1478,44 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNotNull( $result );
 			$this->assertSame( 'prov-b', $result->provider_id() );
 			$this->assertSame( 'Пушкин, Санкт-Петербург', $result->label() );
+		}
+
+		public function test_exact_and_wide_stranded_record_resolutions_have_separate_cache_entries_in_either_order(): void {
+			$stored    = $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' );
+			$candidate = $this->pushkin_of( 'prov-b', 'Пушкин, Санкт-Петербург', 'Санкт-Петербург', '' );
+			$service   = $this->service_with_new_provider( static fn() => [ $candidate ], $provider );
+
+			$this->assertNull( $service->reresolve_stranded_record( $stored ), 'exact matching refuses the changed label' );
+			$wide_result = $service->reresolve_stranded_record( $stored, true );
+			$this->assertNotNull( $wide_result );
+			$this->assertSame( $candidate->key(), $wide_result->key(), 'wide matching accepts the same locality by name and region' );
+			$this->assertCount( 2, $provider->suggest_calls );
+
+			$this->transients->exchangeArray( [] );
+			$provider->suggest_calls = [];
+
+			$wide_result = $service->reresolve_stranded_record( $stored, true );
+			$this->assertNotNull( $wide_result );
+			$this->assertSame( $candidate->key(), $wide_result->key() );
+			$this->assertNull( $service->reresolve_stranded_record( $stored ), 'the wide result does not leak into exact matching' );
+			$this->assertCount( 2, $provider->suggest_calls );
+		}
+
+		public function test_an_invalid_cached_record_is_ignored_and_re_resolved(): void {
+			$candidate = $this->record( 'prov-b:resolved', Location_Record::LEVEL_SETTLEMENT );
+			$service   = $this->service_with_new_provider( static fn() => [ $candidate ], $provider );
+			$stored    = $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
+
+			$first = $service->reresolve_stranded_record( $stored );
+			$this->assertNotNull( $first );
+			$cache_key = array_key_first( $this->transients->getArrayCopy() );
+			$this->assertIsString( $cache_key );
+			$this->transients[ $cache_key ] = [ 'record' => [ 'key' => 'invalid' ] ];
+
+			$second = $service->reresolve_stranded_record( $stored );
+			$this->assertNotNull( $second );
+			$this->assertSame( $candidate->key(), $second->key() );
+			$this->assertCount( 2, $provider->suggest_calls, 'an invalid transient is treated as a cache miss' );
 		}
 
 		public function test_a_homonym_in_another_region_leaves_the_city_stale(): void {
@@ -1678,7 +1768,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		 * cost, and the merchant's stored option must stay byte-for-byte the
 		 * stale value throughout — nothing a guest does ever advances it.
 		 */
-		public function test_fixed_default_re_resolution_is_never_persisted_to_settings_and_repeats_per_customer(): void {
+		public function test_fixed_default_re_resolution_is_never_persisted_to_settings_and_is_shared_across_customers(): void {
 			$options = [];
 
 			Functions\when( 'get_option' )->alias(
@@ -1718,12 +1808,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				'the merchant option must be UNCHANGED after the first customer\'s resolution'
 			);
 
-			// Customer 2: a genuinely SEPARATE guest — a new registry rebuilt
-			// from the (still unchanged) option, and a new session. Mirrors an
-			// entirely new PHP process the way the old "first customer pays"
-			// test did — the difference under this fix is what it now proves:
-			// the provider IS queried again, because nothing was persisted for
-			// customer 2 to find.
+			// Customer 2: a separate guest and fresh registry, while the transient
+			// suppresses a duplicate provider call for the same stranded record.
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();
 			$registry_2 = $this->activate( [ $active_provider ] );
@@ -1731,7 +1817,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$result_2   = $customer_2->get_customer_record();
 
 			$this->assertSame( 'prov-b:new-city', $result_2['record']->key() );
-			$this->assertCount( 2, $active_provider->suggest_calls, 'a second, separate customer must pay its OWN re-resolution cost — mutant: persisting the re-resolved record to the merchant option' );
+			$this->assertCount( 1, $active_provider->suggest_calls, 'the transient shares the re-resolution across separate customers' );
 			$this->assertSame(
 				wp_json_encode( $stale->to_array() ),
 				$options['woodev_location_default_locality_record'],
@@ -1768,12 +1854,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'prov-a:old-city', $still_stale->key() );
 		}
 
-		/**
-		 * A re-resolution failure is memoized for the REQUEST only (#1025): every read of the
-		 * customer record in one request used to ask the provider again (a hung one cost 8 s per
-		 * read); the next request still retries, so an outage is never sticky.
-		 */
-		public function test_fixed_default_re_resolution_failure_is_asked_once_per_request_and_retried_by_the_next(): void {
+		/** A miss is cached across requests too, so an absent match cannot trigger a lookup on every page view. */
+		public function test_fixed_default_re_resolution_miss_is_cached_across_requests(): void {
 			$stale_provider  = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
 			$active_provider = new Default_Test_Fake_Provider( 'prov-b', static fn() => [] );
 
@@ -1791,11 +1873,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->get_customer_record() );
 			$this->assertNull( $service->get_customer_record() );
 
-			$this->assertCount( 1, $active_provider->suggest_calls, 'the failure is memoized for the rest of the request' );
+			$this->assertCount( 1, $active_provider->suggest_calls, 'the miss is cached for subsequent requests' );
 
 			$this->assertNull( $this->service( $registry )->get_customer_record() );
 
-			$this->assertCount( 2, $active_provider->suggest_calls, 'a new request asks the provider again' );
+			$this->assertCount( 1, $active_provider->suggest_calls, 'the miss remains cached until the transient expires' );
 		}
 
 		// -------------------------------------------------------------------
