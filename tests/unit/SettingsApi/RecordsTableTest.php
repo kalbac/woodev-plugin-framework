@@ -44,6 +44,11 @@ final class RecordsTableTest extends TestCase {
 					'add_label'     => 'Добавить склад',
 					'empty_text'    => 'Складов пока нет.',
 				] );
+				$this->register_setting( 'hide_settlement', \Woodev_Setting::TYPE_BOOLEAN, [
+					'default'     => false,
+					'disabled_if' => [ 'setting' => 'warehouses', 'operator' => 'count', 'comparison' => '>', 'value' => 1 ],
+				] );
+				$this->register_control( 'hide_settlement', \Woodev_Control::TYPE_TOGGLE, [] );
 			}
 		};
 	}
@@ -67,6 +72,15 @@ final class RecordsTableTest extends TestCase {
 		$this->assertSame( 'address', $schema['columns'][1]['level'] );
 		$this->assertSame( 'Добавить склад', $schema['add_label'] );
 		$this->assertSame( 'Складов пока нет.', $schema['empty_text'] );
+	}
+
+	public function test_count_disabled_if_uses_effective_table_rows_before_save(): void {
+		$handler = $this->handler();
+		$two     = json_encode( [ $this->row( 'one', false ), $this->row( 'two', false ) ] );
+		$one     = json_encode( [ $this->row( 'one', false ) ] );
+
+		$this->assertArrayNotHasKey( 'hide_settlement', $handler->filter_visible_values( [ 'warehouses' => $two, 'hide_settlement' => true ] ) );
+		$this->assertSame( [ 'warehouses' => $one, 'hide_settlement' => true ], $handler->filter_visible_values( [ 'warehouses' => $one, 'hide_settlement' => true ] ) );
 	}
 
 	public function test_registration_is_refused_without_columns_or_for_a_non_string_setting(): void {

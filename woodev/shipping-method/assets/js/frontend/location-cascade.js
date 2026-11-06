@@ -850,8 +850,10 @@
 	 * @returns {function(Element, Object): ({detach: Function}|null)|null}
 	 */
 	function resolveModeRenderer( entry, node ) {
-		// City mode: a closed list is a local select whatever the shop's field mode says.
-		var mode = closedListFor( entry, node ) ? 'ajax-select2' : axisModeForLevel( entry, node.level );
+		// City mode: a closed list is never searched, whatever the shop's field mode says — one
+		// place is shown as text, several are a plain select.
+		var closed = closedListFor( entry, node );
+		var mode = closed ? ( 1 === closed.length ? 'closed-text' : 'closed-select' ) : axisModeForLevel( entry, node.level );
 
 		if ( null === mode ) {
 			return null;
@@ -1122,7 +1124,7 @@
 	 * `detachOne()` call) always gets the picked value, uniformly across every renderer.
 	 *
 	 * @param {Object} entry
-	 * @returns {void}
+	 * @returns {boolean} whether the chain changed (a different column took over).
 	 */
 	function rebuildChainForActiveSection( entry ) {
 		var newChain = buildChain( entry.config.fields );
@@ -1132,7 +1134,7 @@
 		} );
 
 		if ( ! changed ) {
-			return;
+			return false;
 		}
 
 		var newPostcodeNode = derivePostcodeNode( newChain );
@@ -1166,6 +1168,8 @@
 		entry.postcodeFieldId = newPostcodeNode ? newPostcodeNode.fieldId : null;
 
 		carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes, outgoingLevelText );
+
+		return true;
 	}
 
 	/**
@@ -1712,11 +1716,35 @@
 	}
 
 	/**
-	 * Hides the settlement and region ROWS of the delivery section while the merchant listed
-	 * exactly one place and asked to hide the field. The fields stay in the form with their
-	 * values — a row hidden by class still posts, which `unset()` on the server would not.
-	 * Every location field is judged by its own section, so the payer's billing row comes back
-	 * the moment «Доставить по другому адресу» moves delivery to shipping.
+	 * The field of `section` that holds `level`, or `null`.
+	 *
+	 * @param {Object} entry
+	 * @param {string} section
+	 * @param {string} level
+	 * @returns {Element|null}
+	 */
+	function locationFieldOf( entry, section, level ) {
+		var fields = entry.config.fields || {};
+		var fieldId = Object.keys( fields ).filter( function( id ) {
+			var field = fields[ id ];
+
+			return field && 'location' === field.source_kind && field.section === section && field.location_level === level;
+		} )[ 0 ];
+
+		return fieldId ? document.getElementById( fieldId ) : null;
+	}
+
+	/**
+	 * Hides the ROWS city mode takes over in the delivery section. The fields stay in the form
+	 * with their values — a row hidden by class still posts, which `unset()` on the server would
+	 * not. Every location field is judged by its own section, so the payer's billing row comes
+	 * back the moment «Доставить по другому адресу» moves delivery to shipping.
+	 *
+	 * - The REGION row: hidden whenever places are listed — the pick (or the single place) writes
+	 *   it. Unless the settlement is filled and the region still is not (the place maps to no
+	 *   region option): then the shopper must be able to choose it, so the row stays.
+	 * - The SETTLEMENT row: hidden only for one place and the «hide the field» flag; otherwise it
+	 *   is the text (one place) or the select (several).
 	 *
 	 * @param {Object} entry
 	 * @returns {void}
@@ -1732,13 +1760,46 @@
 			}
 
 			var places = allowedPlaces( entry, countryFor( entry, { section: field.section } ) );
-			var hide = !! ( entry.location.hideSettlement && places && 1 === places.length && isActiveAddressSection( field.section ) );
+			var listed = !! ( places && isActiveAddressSection( field.section ) );
+			var hide;
+
+			if ( 'region' === field.location_level ) {
+				var city = locationFieldOf( entry, field.section, 'settlement' );
+				var region = document.getElementById( fieldId );
+
+				hide = listed && ! ( city && city.value && region && ! region.value );
+			} else {
+				hide = listed && !! entry.location.hideSettlement && 1 === places.length;
+			}
+
 			var row = document.getElementById( fieldId + '_field' );
 
 			if ( row ) {
 				row.classList.toggle( HIDDEN_ROW_CLASS, hide );
 			}
 		} );
+	}
+
+	/**
+	 * City mode, ONE listed place: when the delivery address moves to the other column («Доставить
+	 * по другому адресу»), the incoming column must hold the place AND its region together. The
+	 * column carry brings the settlement text across but drops a region that contradicts the
+	 * carried record — so the incoming State (a saved Тула, or empty) would stay beside «Москва»,
+	 * and city mode hides that row. The place's record is the authority: fill the ancestors from it,
+	 * the way the first fill of the page does.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function reseedSingleListedPlace( entry ) {
+		var node = chainNodeForLevel( entry, 'settlement' );
+		var places = node && isActiveAddressSection( node.section ) ? closedListFor( entry, node ) : null;
+
+		if ( ! places || 1 !== places.length || ! document.getElementById( node.fieldId ) ) {
+			return;
+		}
+
+		backwardsFill( entry, node, places[ 0 ].record );
 	}
 
 	// -------------------------------------------------------------------------
@@ -3972,6 +4033,8 @@
 			// original reasoning (never make them wait for the round trip) is recorded, and
 			// overturned, in that function's own docblock.
 			refreshAddressLock( entry );
+			// City mode: the pick has just written the region — the region row may go.
+			syncHiddenSettlementRows( entry );
 
 			if ( isActiveAddressSection( node.section ) ) {
 				if ( mayEnterChain( entry, node, record ) ) {
@@ -4661,13 +4724,19 @@
 			// `options.popular` at all, the same "omit rather than hand over an
 			// always-empty primitive" discipline `onAbandon` already follows elsewhere.
 			popular: 'settlement' === node.level ? popularFor( entry, node ) : null,
+			// City mode: the places the merchant listed for this field's country (the `popular`
+			// wire shape plus `value`), or `null` when the settlement is not a closed choice.
+			closedList: function() {
+				var closed = closedListFor( entry, node );
+
+				return closed ? closed.slice() : null;
+			},
 			// Issues #331/#332: see `attachRelatedListRegion()` — the cart's and account form's WooCommerce scripts re-fire `change` with an unchanged value.
 			seedSelectedText: STATE_CHURN_GUARD,
 			// Issue #1071: only for the level that carries the popular list — what the CUSTOMER
 			// picked here, never what the store filled in (#536).
 			pickedSettlement: 'settlement' === node.level ? function() {
-				// City mode: the dropdown keeps offering every listed place after a pick.
-				return closedListFor( entry, node ) ? null : customerPickFor( entry, node.level );
+				return customerPickFor( entry, node.level );
 			} : null,
 			// An address suggestion can be broader than the typed street (DaData can return the
 			// street without the house number). Keep the buyer's text unless they explicitly pick.
@@ -5920,8 +5989,13 @@
 			// Issue #458 round 3: re-derive the chain BEFORE arbitrating — a no-op unless the
 			// "ship to a different address" toggle actually moved a level's winner (see
 			// rebuildChainForActiveSection()'s own docblock for why this must run first).
-			rebuildChainForActiveSection( entry );
+			var columnChanged = rebuildChainForActiveSection( entry );
 			applyCountryArbitration( entry );
+
+			if ( columnChanged ) {
+				reseedSingleListedPlace( entry );
+			}
+
 			syncHiddenSettlementRows( entry );
 		} );
 

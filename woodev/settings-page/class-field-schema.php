@@ -155,11 +155,13 @@ final class Field_Schema {
 			}
 
 			$disabled_if = $setting->get_disabled_if_conditions();
+			self::assert_count_controllers_are_tables( $disabled_if, $handler );
 			if ( ! empty( $disabled_if ) ) {
 				$entry['disabled_if'] = $disabled_if;
 			}
 
 			$show_if = $setting->get_show_if_conditions();
+			self::assert_count_controllers_are_tables( $show_if, $handler );
 			if ( ! empty( $show_if ) ) {
 				$entry['show_if'] = $show_if;
 			}
@@ -177,5 +179,29 @@ final class Field_Schema {
 		}
 
 		return $schema;
+	}
+
+	/**
+	 * Rejects count rules that name anything other than a records-table control.
+	 *
+	 * @since 2.0.26
+	 * @param array<string,mixed>       $conditions         condition group.
+	 * @param \Woodev_Abstract_Settings $handler settings handler.
+	 * @return void
+	 */
+	private static function assert_count_controllers_are_tables( array $conditions, $handler ): void {
+		$members = isset( $conditions['setting'] ) ? [ $conditions ] : $conditions;
+		foreach ( $members as $condition ) {
+			if ( ! is_array( $condition ) || 'count' !== ( $condition['operator'] ?? null ) ) {
+				continue;
+			}
+			$id       = (string) ( $condition['setting'] ?? '' );
+			$settings = $handler->get_settings();
+			$setting  = $settings[ $id ] ?? null;
+			$control  = $setting ? $setting->get_control() : null;
+			if ( ! $control || \Woodev_Control::TYPE_RECORDS_TABLE !== $control->get_type() ) {
+				throw new \InvalidArgumentException( sprintf( 'Count conditions require a records-table controller; "%s" is not a records-table setting.', $id ) );
+			}
+		}
 	}
 }

@@ -17,19 +17,6 @@ export function allowedPlaces( config: LocationConfig, country: string ): Allowe
 	return Array.isArray( places ) && places.length > 0 ? places : null;
 }
 
-/** The listed places whose label or value contains `query` (case-insensitive); an empty query keeps all. */
-export function placesMatching( places: AllowedPlace[], query: string ): AllowedPlace[] {
-	const needle = query.trim().toLowerCase();
-
-	if ( needle === '' ) {
-		return places;
-	}
-
-	return places.filter( ( place ) =>
-		[ place.label, place.value ].some( ( text ) => typeof text === 'string' && text.toLowerCase().includes( needle ) )
-	);
-}
-
 /**
  * The one listed place of `country`, or `null` when there are several or none. One place is not a
  * choice: the clients write it into the address instead of asking.

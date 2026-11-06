@@ -150,6 +150,34 @@ class CompositeSettingsHandlerTest extends TestCase {
 		);
 	}
 
+	public function test_count_disabled_if_resolves_a_records_table_owned_by_a_sibling_handler(): void {
+		$places = $this->make_handler(
+			'places',
+			function ( $handler ) {
+				$handler->register_setting( 'places', \Woodev_Setting::TYPE_STRING );
+				$handler->register_control( 'places', \Woodev_Control::TYPE_RECORDS_TABLE, [
+					'columns' => [ [ 'id' => 'name', 'type' => 'text', 'label' => 'Name' ] ],
+				] );
+			}
+		);
+		$settings = $this->make_handler(
+			'flags',
+			function ( $handler ) {
+				$handler->register_setting( 'hide_settlement', \Woodev_Setting::TYPE_BOOLEAN, [
+					'default'     => false,
+					'disabled_if' => [ 'setting' => 'places', 'operator' => 'count', 'comparison' => '>', 'value' => 1 ],
+				] );
+				$handler->register_control( 'hide_settlement', \Woodev_Control::TYPE_TOGGLE, [] );
+			}
+		);
+		$composite = new Composite_Settings_Handler( 'shipping', [ $places, $settings ] );
+		$two_rows  = '[{"name":"one"},{"name":"two"}]';
+		$one_row   = '[{"name":"one"}]';
+
+		$this->assertSame( [ 'places' => $two_rows ], $composite->filter_visible_values( [ 'places' => $two_rows, 'hide_settlement' => true ] ) );
+		$this->assertSame( [ 'places' => $one_row, 'hide_settlement' => true ], $composite->filter_visible_values( [ 'places' => $one_row, 'hide_settlement' => true ] ) );
+	}
+
 	public function test_filters_cross_handler_conditions_order_independently_and_degrades_unknown_controller_to_empty(): void {
 		$checkout_fields = $this->make_handler(
 			'checkout_fields',
