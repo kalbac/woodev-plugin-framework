@@ -1,5 +1,7 @@
 # Spec — #238: wire cart-change verdict invalidation to a real cart-change signal
 
+**Status:** IMPLEMENTED (#238).
+
 > Written s61 (2026-08-09). Supersedes the framing in issue #238 on two points — see
 > "Where the card is wrong" below. Design decisions here are grounded in a code sweep
 > (agent report, s61); every claim carries a `file:line` in the issue thread or below.

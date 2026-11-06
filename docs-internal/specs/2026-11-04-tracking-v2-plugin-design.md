@@ -1,6 +1,6 @@
 # «Отслеживание доставки» 2.0.0 on Framework v2 — design
 
-**Date:** 2026-11-04 (s214). **Status:** draft for the coordinator and a Codex critic.
+**Date:** 2026-11-04 (s214). **Status:** IMPLEMENTED — plugin 2.0.0 released 04.11.2026 (written as a draft for the coordinator and a Codex critic).
 **Target:** release `2.0.0` of the existing plugin «WooCommerce номер отслеживания заказа» (folder and main file
 `woocommerce-order-tracking-number`, plugin id `wc_order_track_number`, EDD item `2653`, price 3 000 ₽) in the private repo
 `kalbac/woocommerce-order-tracking-number` (empty, created 04.11.2026), rewritten on Framework v2. Cards go to framework
@@ -253,7 +253,7 @@ checking that the pattern works on `Woocommerce_Plugin` and which field types ex
 
 | Section | Field | Type | Default | Notes |
 |---|---|---|---|---|
-| Службы доставки | `own_carriers` | list of rows `{ id, name, link_template }` | empty | Name required; template must contain `{tracking}` (also `{order_id}` allowed) **or** be a plain link (form-only carrier, §6.4); `id` generated once (`own-` + short random), stable across renames. If the settings API has no repeater field type, fall back to a textarea with one `Название | https://…{tracking}` per line (Provisional P4) |
+| Службы доставки | `own_carriers` | list of rows `{ id, name, link_template }` | empty | Name required; template must contain `{tracking}` (also `{order_id}` allowed) **or** be a plain link (form-only carrier, §6.4); `id` generated once (`own-` + short random), stable across renames. If the settings API has no repeater field type, fall back to a textarea with one `Название \| https://…{tracking}` per line (Provisional P4) |
 | Письмо покупателю | `auto_send` | checkbox | **on** | «Отправлять при добавлении номера». Option stored under the settings handler's own key (no v1 key to collide with) |
 | Письмо покупателю | (link) | static | — | «Настроить текст письма» → `admin.php?page=wc-settings&tab=email&section=wc_order_tracking_number_email` (lower-cased class name — the WC convention; W3 verifies on the rig) |
 | Лицензия | licence key/status | framework licence section | — | Whatever the framework provides for a plugin with a download id (A §1 "Licence"); no custom licence UI. If the framework shows it on its own page, this section is a link to it |

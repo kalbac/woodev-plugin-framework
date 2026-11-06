@@ -1,5 +1,7 @@
 # Brainstorm input — V2 location layer, field behaviour and the settings surface
 
+**Status:** INPUT to a brainstorm, not a design — never implemented as such.
+
 > **Written 18.08.2026 (s78) as INPUT to a brainstorm, not as a design.** It exists so the
 > brainstorm starts from what is already built, measured and decided, instead of re-deriving it.
 > Nothing here is a proposal except where a section says so explicitly.

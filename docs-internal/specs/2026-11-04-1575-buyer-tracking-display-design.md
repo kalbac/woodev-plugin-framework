@@ -2,7 +2,7 @@
 
 Revision r2 (04.11.2026): applied review r1 — Q2 decided by the operator (every number its own link, §4 contract rewritten); Ozon `status_changed_at` is converted with `Ozon_Wire::parse_time()` (§2); Q1 stays open.
 
-Status: draft for operator review, 04.11.2026 (s214). Card: kalbac/woodev-plugin-framework#1575. Related: kalbac/woodev-ozon-delivery#88.
+Status: IMPLEMENTED — #1575 closed 04.11.2026, shipped in framework 2.0.25 (draft for operator review on 04.11.2026, s214). Card: kalbac/woodev-plugin-framework#1575. Related: kalbac/woodev-ozon-delivery#88.
 Inputs: `research/2026-11-03-tracking-v2/c2-source-check.md` (§1–2), `…/d-v1-buyer-tracking.md` (§5), `specs/2026-11-04-tracking-v2-plugin-design.md` (§7). Framework APIs below were verified with Serena on the framework tree (paths relative to `woodev/`).
 
 ## 0. Binding decisions (card comments, 04.11.2026)
@@ -184,3 +184,8 @@ Order: W1 → (W2 ∥ W3) → W4. **W1 is NOT releasable alone** (critic R2, fin
 - P5 Date only, not time, in the status line (site format `wc_date_format()`).
 - P6 `Delivery_Status::buyer_label()` Russian wording as listed in §3.4; the operator may reword on the rig.
 - P7 If core does not fire the hook on the thank-you page, add `woocommerce_thankyou` with a once-per-request guard (decided by rig R2, not re-asked).
+
+## Related
+
+- [Tracking v2 plugin design](2026-11-04-tracking-v2-plugin-design.md) — the plugin this display serves (§7)
+- [Buyer-tracking research](../research/2026-11-03-tracking-v2/d-v1-buyer-tracking.md) — the v1 inventory behind §5

@@ -1,5 +1,7 @@
 # Spec — #251: make the embedded (carrier-widget) seam reachable, and prove it with a real carrier
 
+**Status:** IMPLEMENTED (#251).
+
 > Written s63 (10.08.2026). Every claim in §1 is a MEASUREMENT taken on the rig
 > (`http://localhost:8973`) against the live Почта России widget, not a reading of vendor
 > docs. The operator warned that `widget.pochta.ru/docs` / `cms.pochta.ru/docs` are stale;

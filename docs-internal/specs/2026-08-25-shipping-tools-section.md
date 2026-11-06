@@ -1,5 +1,7 @@
 # Секция «Инструменты» на вкладке «Доставка» — design
 
+**Status:** IMPLEMENTED (#488 D8).
+
 > Settled with the operator on 25.08.2026 (s90), after the first attempt at #488 D8 shipped the two
 > merchant actions as two separate fields-less connection sections. That shape was wrong and never
 > reached him for review — this spec replaces it. Written in English per `DOCS-SCHEMA.md`; the
