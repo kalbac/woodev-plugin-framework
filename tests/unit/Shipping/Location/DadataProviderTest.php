@@ -1533,6 +1533,74 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	/**
+	 * F7: fixture-shaped DaData rows must survive a CDEK region alias, in either locale.
+	 * The locality-only request was already correct; the post-filter emptied Ижевск.
+	 *
+	 * @dataProvider cdek_region_spellings
+	 */
+	public function test_cdek_region_alias_keeps_address_rows_and_the_city_only_request( string $city, string $cdek_region, string $dadata_region, string $locale ): void {
+		$this->set_token( 'tok' );
+		$parent = Location_Record::from_array(
+			[
+				'key'         => 'cdek:224',
+				'provider_id' => 'cdek',
+				'country'     => 'RU',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'region'      => [ 'name' => $cdek_region ],
+				'settlement'  => [ 'name' => $city ],
+				'label'       => $city . ', городской округ ' . $city . ', ' . $cdek_region,
+			]
+		);
+		// A reduced DaData response shape; names reproduce the report, not a live API capture.
+		$row = [
+			'value' => 'ул Ленина',
+			'data'  => [
+				'country_iso_code' => 'RU',
+				'region'           => $dadata_region,
+				'city'             => $city,
+				'city_type'        => 'г',
+				'street'           => 'Ленина',
+				'street_type'      => 'ул',
+			],
+		];
+		$other_city = $row;
+		$other_city['data']['city'] = 'Другой город';
+		$sent = $this->stub_http_sequence(
+			[ (string) json_encode( [ 'suggestions' => [ $row, $other_city ] ] ), '{"suggestions":[]}' ]
+		);
+		$scope = Location_Scope::within( $parent, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		$records = self::provider( $locale )->suggest( 'Ленина', $scope );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame( $city, $records[0]->own_locality_name() );
+		$this->assertCount( 1, $sent, 'a valid city result needs no settlement retry' );
+		$this->assertSame(
+			[
+				'query'          => 'Ленина',
+				'count'          => 20,
+				'from_bound'     => [ 'value' => 'street' ],
+				'to_bound'       => [ 'value' => 'house' ],
+				'language'       => 'ru',
+				'locations'      => [ [ 'country_iso_code' => 'RU', 'city' => $city ] ],
+				'restrict_value' => true,
+			],
+			$sent[0]
+		);
+	}
+
+	/** @return array<string, array{string, string, string, string}> */
+	public static function cdek_region_spellings(): array {
+		$cases = json_decode( (string) file_get_contents( dirname( __DIR__, 3 ) . '/_fixtures/location-region-spellings.json' ), true );
+		$result = [];
+		foreach ( $cases as [ $name, $city, $cdek, $dadata ] ) {
+			foreach ( [ 'ru_RU', 'en_US' ] as $locale ) {
+				$result[ $name . '-' . $locale ] = [ $city, $cdek, $dadata, $locale ];
+			}
+		}
+		return $result;
+	}
+
+	/**
 	 * D7: the name post-filter needs the parent's language, independently of WordPress.
 	 * The HTTP double reproduces DaData's documented ru/en response language switch.
 	 *

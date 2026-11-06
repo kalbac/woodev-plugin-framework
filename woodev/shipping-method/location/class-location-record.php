@@ -56,6 +56,107 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		public const LEVELS = [ self::LEVEL_REGION, self::LEVEL_SETTLEMENT, self::LEVEL_ADDRESS ];
 
 		/**
+		 * CDEK's RU region labels from the production
+		 * `/v2/location/regions?country_codes=RU` endpoint, captured on 2026-11-06. The
+		 * shipping-zone editor reads `woocommerce_states`, but the active provider
+		 * may not enumerate regions after a provider switch. This last-resort list
+		 * also keeps existing `RU:<wc_strtoupper(label)>` zone entries editable; the
+		 * active provider's list and other registered RU state lists always win. Shared with
+		 * the cross-provider region comparison, independently of the active WC state list.
+		 *
+		 * @since 2.0.26
+		 * @var string[]
+		 */
+		public const RU_REGION_LABELS = [
+			'Адыгея',
+			'Алтайский край',
+			'Амурская область',
+			'Архангельская область',
+			'Астраханская область',
+			'Байконур',
+			'Башкортостан',
+			'Белгородская область',
+			'Брянская область',
+			'Владимирская область',
+			'Волгоградская область',
+			'Вологодская область',
+			'Воронежская область',
+			'Еврейская автономная область',
+			'Забайкальский край',
+			'Ивановская область',
+			'Ингушетия',
+			'Иркутская область',
+			'Кабардино-Балкария',
+			'Калининградская область',
+			'Калмыкия',
+			'Калужская область',
+			'Камчатский край',
+			'Карачаево-Черкесская Республика',
+			'Кемеровская область - Кузбасс',
+			'Кировская область',
+			'Костромская область',
+			'Краснодарский край',
+			'Красноярский край',
+			'Курганская область',
+			'Курская область',
+			'Ленинградская область',
+			'Липецкая область',
+			'Магаданская область',
+			'Марий Эл',
+			'Мордовия',
+			'Москва',
+			'Московская область',
+			'Мурманская область',
+			'Ненецкий автономный округ',
+			'Нижегородская область',
+			'Новгородская область',
+			'Новосибирская область',
+			'Омская область',
+			'Оренбургская область',
+			'Орловская область',
+			'Пензенская область',
+			'Пермский край',
+			'Приморский край',
+			'Псковская область',
+			'Республика Алтай',
+			'Республика Башкортостан',
+			'Республика Бурятия',
+			'Республика Карелия',
+			'Республика Коми',
+			'Республика Крым',
+			'Республика Саха (Якутия)',
+			'Республика Северная Осетия - Алания',
+			'Республика Тыва',
+			'Республика Хакасия',
+			'Ростовская область',
+			'Рязанская область',
+			'Самарская область',
+			'Санкт-Петербург',
+			'Саратовская область',
+			'Сахалинская область',
+			'Свердловская область',
+			'Севастополь',
+			'Смоленская область',
+			'Ставропольский край',
+			'Тамбовская область',
+			'Татарстан',
+			'Тверская область',
+			'Томская область',
+			'Тульская область',
+			'Тюменская область',
+			'Удмуртия',
+			'Ульяновская область',
+			'Хабаровский край',
+			'Ханты-Мансийский автономный округ - Югра',
+			'Челябинская область',
+			'Чеченская Республика',
+			'Чувашская Республика - Чувашия',
+			'Чукотский автономный округ',
+			'Ямало-Ненецкий автономный округ',
+			'Ярославская область',
+		];
+
+		/**
 		 * Normalized record data. Always carries every key listed in
 		 * {@see self::from_array()}; absent optional scalars are `''` (strings) or
 		 * `null` (numbers, component groups, raw).
@@ -838,11 +939,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		 *
 		 * Providers spell one region differently («Московская область» / «Московская» + «обл»,
 		 * «Республика Саха (Якутия)» / «Саха /Якутия/»), so both names go through
-		 * {@see self::normalize_region_name()} and count as the same region when one normalised
-		 * form contains the other. A region missing on either side is not a disagreement — there is
-		 * nothing to disagree with. `regionsDisagree()` in `location-cascade.js` is the client half.
+		 * {@see self::normalize_region_name()}. For RU, only names identified by
+		 * russian_region_aliases() can disagree; canonical names are compared exactly.
+		 * Elsewhere one normalized name may contain the other. An unknown RU spelling falls
+		 * back to the city match. A missing region
+		 * likewise proves nothing. `regionsDisagree()` in location-cascade.js is the client half.
 		 *
 		 * @since 2.0.20
+		 * @since 2.0.26 Known RU aliases only; unknown spellings fall back to the city.
 		 *
 		 * @param Location_Record $one   One record.
 		 * @param Location_Record $other The other record.
@@ -853,6 +957,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 			$region       = null !== $one->region() ? self::normalize_region_name( $one->region()['name'] ) : '';
 			$other_region = null !== $other->region() ? self::normalize_region_name( $other->region()['name'] ) : '';
 
+			if ( 'RU' === $one->country() && 'RU' === $other->country() ) {
+				$aliases      = self::russian_region_aliases();
+				$region       = $aliases[ $region ] ?? '';
+				$other_region = $aliases[ $other_region ] ?? '';
+
+				return '' !== $region && '' !== $other_region && $region !== $other_region;
+			}
+
 			if ( '' === $region || '' === $other_region ) {
 				return false;
 			}
@@ -861,11 +973,56 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
+		 * Known Russian region spellings mapped to a common name, after normalize_region_name().
+		 *
+		 * CDEK's labels are the shared base; DaData splits the type and sometimes uses an
+		 * adjective («Удмуртская»). Unknown names prove no disagreement: callers fall back to
+		 * the city instead of guessing from a prefix (Алтай and Алтайский край are different).
+		 * Checkout_Config publishes this same map to the classic cascade.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return array<string, string>
+		 */
+		public static function russian_region_aliases(): array {
+			static $aliases = null;
+
+			if ( null === $aliases ) {
+				$aliases = [];
+
+				foreach ( self::RU_REGION_LABELS as $label ) {
+					$name = self::normalize_region_name( $label );
+					$aliases[ $name ] = $name;
+				}
+
+				$aliases += [
+					'удмуртская'           => 'удмуртия',
+					'чувашия'              => 'чувашская чувашия',
+					'чувашская'            => 'чувашская чувашия',
+					'кабардино-балкарская' => 'кабардино-балкария',
+					'карачаево-черкесия'   => 'карачаево-черкесская',
+					'северная осетия'      => 'северная осетия алания',
+					'алания'               => 'северная осетия алания',
+					'саха'                 => 'саха якутия',
+					'якутия'               => 'саха якутия',
+					'ханты-мансийский'     => 'ханты-мансийский югра',
+					'югра'                 => 'ханты-мансийский югра',
+					'кемеровская'          => 'кемеровская кузбасс',
+					'кузбасс'              => 'кемеровская кузбасс',
+					'чечня'                => 'чеченская',
+					'тува'                 => 'тыва',
+				];
+			}
+
+			return $aliases;
+		}
+
+		/**
 		 * Case, «ё», dash and region-type-word insensitive form of a region name («Московская обл.»,
 		 * «Московская область», «московская» compare equal; so do «…округ — Югра» and «…округ - Югра»).
 		 *
 		 * The service's saved-city and city-limit matching compare it EXACTLY (#1075); only
-		 * {@see self::regions_disagree()} applies a containment test to it.
+		 * {@see self::regions_disagree()} applies a containment test outside RU and known aliases within RU.
 		 *
 		 * @internal
 		 *

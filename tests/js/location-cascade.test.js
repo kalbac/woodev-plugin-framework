@@ -200,6 +200,7 @@ function buildConfig( opts ) {
 			endpoints: o.endpoints || { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 			nonce: 'test-nonce',
 			countries: o.countries || [ 'RU' ],
+			regionNameAliases: require( '../_fixtures/ru-region-aliases.json' ),
 			// Issue #380: two independent axes — each 'typeahead' | 'related-list' |
 			// 'ajax-select2' — instead of one shared mode string (spec D7).
 			mode: modeAxes,
@@ -3565,6 +3566,36 @@ describe( 'issue #1534 — a foreign house naming the confirmed settlement is po
 		);
 
 		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore );
+	} );
+
+	it.each( require( '../_fixtures/location-region-spellings.json' ) )(
+		'POSTs a DaData house under the CDEK region spelling: %s',
+		async ( name, city, cdekRegion, dadataRegion ) => {
+			boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
+			await confirmCdek( city, cdekRegion );
+			const before = global.fetch.mock.calls.length;
+
+			selectViaFake(
+				callFor( 'billing_address_1' ),
+				houseItem( city, { region: { name: dadataRegion, type: 'Респ' } } )
+			);
+
+			expect( global.fetch.mock.calls.length ).toBe( before + 1 );
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).toBe( SELECT_URL );
+		}
+	);
+
+	it( 'does not conflate Altai republic and Altai krai when guarding a same-named city', async () => {
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
+		await confirmCdek( 'Алтайское', 'Республика Алтай' );
+		const before = global.fetch.mock.calls.length;
+
+		selectViaFake(
+			callFor( 'billing_address_1' ),
+			houseItem( 'Алтайское', { region: { name: 'Алтайский край' } } )
+		);
+
+		expect( global.fetch.mock.calls.length ).toBe( before );
 	} );
 
 	it( 'POSTs a DaData house whose region is the same region spelled differently', async () => {
