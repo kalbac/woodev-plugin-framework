@@ -18,7 +18,7 @@
 
 'use strict';
 
-import { validateField, validateFields } from '../../src/components/validate';
+import { validateField, validateFields, evaluateConditions } from '../../src/components/validate';
 
 describe( 'validateField — sensitive + required interaction', () => {
 	const sensitiveRequired = { required: true, controlType: 'text', sensitive: true, is_set: true };
@@ -70,5 +70,43 @@ describe( 'validateFields — touched-id map threading', () => {
 	test( 'omitting the touched map entirely still works (back-compat for any other caller)', () => {
 		const errors = validateFields( fields, { cdek_client_id: '' } );
 		expect( errors ).toEqual( {} );
+	} );
+} );
+
+
+describe( 'per-country records-table counts (#1642)', () => {
+	const rows = JSON.stringify( [ 'RU', 'RU', 'RU', 'KZ' ].map( ( country ) => ( { city: JSON.stringify( { country } ) } ) ) );
+	const condition = { setting: 'places', operator: 'count', per: 'country', aggregate: 'min', comparison: '>', value: 1 };
+	const schemas = ( in_scope ) => ( { places: { controlType: 'records-table', columns: [ { id: 'country', type: 'location-country', of: 'city', in_scope } ] } } );
+
+	test.each( [
+		[ [ 'RU', 'KZ' ], 'min', false ],
+		[ [ 'RU' ], 'min', true ],
+		[ [], 'min', false ],
+		[ [ 'RU', 'KZ' ], 'max', true ],
+		[ [ 'RU' ], 'max', true ],
+		[ [], 'max', false ],
+	] )( '%j with %s agrees with both PHP save paths', ( scope, aggregate, expected ) => {
+		expect( evaluateConditions( { ...condition, aggregate }, { places: rows }, schemas( scope ) ) ).toBe( expected );
+	} );
+
+	test( 'without per the same rows count in full, whatever their countries', () => {
+		const { per, aggregate, ...total } = condition;
+		expect( evaluateConditions( total, { places: rows }, schemas( [] ) ) ).toBe( true );
+		expect( evaluateConditions( total, { places: rows }, { places: { controlType: 'records-table' } } ) ).toBe( true );
+	} );
+
+	test( 'no groups, bad records, unknown aggregates and wrong columns do not match', () => {
+		for ( const value of [ '', 'broken', '[{"city":"broken"}]', '[{"city":"null"}]' ] ) {
+			expect( evaluateConditions( { ...condition, comparison: '==', value: 0 }, { places: value }, schemas( [ 'RU' ] ) ) ).toBe( false );
+		}
+		expect( evaluateConditions( { ...condition, aggregate: 'sum' }, { places: rows }, schemas( [ 'RU' ] ) ) ).toBe( false );
+		expect( evaluateConditions( { ...condition, per: 'city' }, { places: rows }, schemas( [ 'RU' ] ) ) ).toBe( false );
+	} );
+
+	test.each( [ [ 'min', 1 ], [ 'max', 3 ] ] )( '%s supports all count comparisons', ( aggregate, count ) => {
+		for ( const [ comparison, value ] of [ [ '>', count - 1 ], [ '>=', count ], [ '<', count + 1 ], [ '<=', count ], [ '==', count ] ] ) {
+			expect( evaluateConditions( { ...condition, aggregate, comparison, value }, { places: rows }, schemas( [ 'RU', 'KZ' ] ) ) ).toBe( true );
+		}
 	} );
 } );

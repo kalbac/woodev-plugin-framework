@@ -17,6 +17,17 @@ While a `disabled_if` condition holds, the submitted value of that field is drop
 
 This amendment adds no nesting and leaves the four original scalar operators unchanged. It replaces the deferred numeric-threshold item only for the records-table row-count operand; arbitrary numeric comparisons and comparisons of other field types remain deferred.
 
+## Amendment — per-country records-table counts (#1642)
+
+**Date:** 2026-11-06
+**Operator decision:** #1642, spec K15–K17
+
+A `count` condition may additionally name `per` (the id of a `location-country` column of the controlling table) and `aggregate` (`min` or `max`). The country is derived from the location record in that column's `of` cell. Rows are grouped only for countries in the column's `in_scope`; countries outside delivery form no group. No groups means the condition does not match, including a comparison against zero. Unknown columns and aggregates also fail closed; schema construction rejects a `per` that is not a `location-country` column of that table.
+
+Example: `{ setting: 'places', operator: 'count', per: 'country', aggregate: 'min', comparison: '>', value: 1 }` disables a hide switch only when every listed delivery country has multiple places. RU 3 + KZ 1 keeps the switch enabled; excluding KZ from `in_scope` leaves RU 3 and disables it. Without `per`, all rows count exactly as before, including warehouse tables without a country column.
+
+The PHP evaluator's third argument is now a map `records-table setting id => column declarations` (`Woodev_Control::get_columns()`), replacing the flat id list added in the unreleased 2.0.26. Both the abstract and composite settings save paths build this map from their registered controls. The JS evaluator reads the same declarations from `fieldSchemas`; all comparisons retain the existing count contract.
+
 ## Context
 
 Plugins need to show/hide a settings field based on other fields' values (e.g. show «API-ключ» only when `mode = live`). The feature (`show_if`) was shipped for both admin surfaces (settings page + setup wizard). The hard constraint is that field visibility must be resolved **identically** in three places — client render, client save-gate, and the authoritative server gate — because the server persists nothing when validation fails (SP-3 atomic REST). A drift between the PHP evaluator and its JS mirror is a silent client/server disagreement bug.

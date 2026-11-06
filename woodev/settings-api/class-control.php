@@ -138,6 +138,11 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		const COLUMN_LOCATION_PICKER = 'location-picker';
 
 		/**
+		 * @var string the country derived from another column's location record; never a stored cell
+		 */
+		const COLUMN_LOCATION_COUNTRY = 'location-country';
+
+		/**
 		 * @var string the «основной» radio: at most one row of the table carries it, exactly one while rows exist
 		 */
 		const COLUMN_MAIN_RADIO = 'main-radio';
@@ -243,7 +248,7 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 * The columns of a `TYPE_RECORDS_TABLE` control, in display order. Empty for every other control type.
 		 *
 		 * @since 2.0.26
-		 * @var array<int,array{id:string,type:string,label:string,required:bool,level:string,placeholder:string,provider:string}>
+		 * @var array<int,array<string,mixed>>
 		 */
 		private array $columns = [];
 
@@ -724,7 +729,9 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 * ignores the checkout address-suggestions switch and the active provider; an id no provider is
 		 * registered under is refused by the search route with a 400, and `provider` on any other column
 		 * type is dropped).
-		 * The ids are the keys of a stored row, so they must be unique.
+		 * A location-country column derives its value from `of` (a location-picker column id). Its
+		 * `options` are `{code, name}` pairs for the form; `in_scope` lists countries whose rows are
+		 * active. It is never stored. The ids must be unique.
 		 *
 		 * @since 2.0.26
 		 * @param array<int,array<string,mixed>> $columns column definitions, in display order.
@@ -733,7 +740,7 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_columns( array $columns ): void {
 
-			$types      = [ self::COLUMN_TEXT, self::COLUMN_LOCATION_PICKER, self::COLUMN_MAIN_RADIO ];
+			$types      = [ self::COLUMN_TEXT, self::COLUMN_LOCATION_PICKER, self::COLUMN_LOCATION_COUNTRY, self::COLUMN_MAIN_RADIO ];
 			$normalized = [];
 
 			foreach ( $columns as $column ) {
@@ -757,6 +764,19 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 					'placeholder' => (string) ( $column['placeholder'] ?? '' ),
 					'provider'    => self::normalize_column_provider( $column ),
 				];
+
+				if ( self::COLUMN_LOCATION_COUNTRY === $column['type'] ) {
+					$normalized[ $id ]['of']       = (string) ( $column['of'] ?? '' );
+					$normalized[ $id ]['options']  = array_values( $column['options'] ?? [] );
+					$normalized[ $id ]['in_scope'] = array_values( $column['in_scope'] ?? [] );
+				}
+			}
+
+			foreach ( $normalized as $column ) {
+				if ( self::COLUMN_LOCATION_COUNTRY === $column['type']
+					&& self::COLUMN_LOCATION_PICKER !== ( $normalized[ $column['of'] ]['type'] ?? null ) ) {
+					throw new Woodev_Plugin_Exception( 'A location-country column must name a location-picker column in of' );
+				}
 			}
 
 			if ( [] === $normalized ) {
@@ -770,7 +790,7 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 * The columns of a `TYPE_RECORDS_TABLE` control.
 		 *
 		 * @since 2.0.26
-		 * @return array<int,array{id:string,type:string,label:string,required:bool,level:string,placeholder:string,provider:string}>
+		 * @return array<int,array<string,mixed>>
 		 */
 		public function get_columns(): array {
 			return $this->columns;

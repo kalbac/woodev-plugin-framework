@@ -551,6 +551,41 @@ class CheckoutHandlerCustomSettlementGuardTest extends TestCase {
 		$this->assertTrue( $handler->guard_custom_settlement( [ 'billing_city' => 'Пушкино' ], 'RU', 'billing' ) );
 	}
 
+	/**
+	 * A UZ place the customer picked through the ordinary field (Uzbekistan lists no city-mode place).
+	 */
+	private static function tashkent(): Location_Record {
+		return Location_Record::from_array( [
+			'key'         => 'dadata:tashkent',
+			'provider_id' => 'dadata',
+			'level'       => Location_Record::LEVEL_SETTLEMENT,
+			'country'     => 'UZ',
+			'settlement'  => [ 'name' => 'Ташкент', 'type' => 'г' ],
+			'label'       => 'г Ташкент',
+		] );
+	}
+
+	/**
+	 * Range-shipping city mode spec §4.2 (r7): a country without listed places keeps the store's
+	 * own rule at placement — `ajax-select2`, custom localities off, a UZ place the customer picked
+	 * is accepted exactly as with city mode off; the guard has no city-mode refusal of any kind.
+	 */
+	public function test_a_country_without_listed_places_gets_the_store_rule_and_passes_a_picked_place(): void {
+		Functions\expect( 'wc_add_notice' )->never();
+
+		$handler = self::handler( false, Location_Provider_Registry::MODE_AJAX_SELECT2, self::tashkent() );
+
+		$this->assertTrue( $handler->guard_custom_settlement( [ 'billing_city' => 'Ташкент' ], 'UZ', 'billing' ) );
+	}
+
+	public function test_a_country_without_listed_places_still_gets_the_store_refusal_for_a_typed_city(): void {
+		Functions\expect( 'wc_add_notice' )->once()->with( self::EXPECTED_MESSAGE, 'error' );
+
+		$handler = self::handler( false, Location_Provider_Registry::MODE_AJAX_SELECT2, self::tashkent() );
+
+		$this->assertFalse( $handler->guard_custom_settlement( [ 'billing_city' => 'Самарканд' ], 'UZ', 'billing' ), 'the #531 rule, the same as without city mode' );
+	}
+
 	public function test_shipping_section_stands_down_when_only_the_billing_country_is_served(): void {
 		Functions\expect( 'wc_add_notice' )->never();
 

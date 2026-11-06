@@ -178,6 +178,36 @@ class CompositeSettingsHandlerTest extends TestCase {
 		$this->assertSame( [ 'places' => $one_row, 'hide_settlement' => true ], $composite->filter_visible_values( [ 'places' => $one_row, 'hide_settlement' => true ] ) );
 	}
 
+	public function test_per_country_count_survives_the_composite_save_path(): void {
+		foreach ( [ [ 'RU', 'KZ' ], [ 'RU' ], [] ] as $scope ) {
+			$places = $this->make_handler( 'places', static function ( $handler ) use ( $scope ) {
+				$handler->register_setting( 'places', \Woodev_Setting::TYPE_STRING );
+				$handler->register_control( 'places', \Woodev_Control::TYPE_RECORDS_TABLE, [
+					'columns' => [
+						[ 'id' => 'country', 'type' => 'location-country', 'of' => 'city', 'in_scope' => $scope ],
+						[ 'id' => 'city', 'type' => 'location-picker' ],
+					],
+				] );
+			} );
+			$condition = [ 'setting' => 'places', 'operator' => 'count', 'per' => 'country', 'aggregate' => 'min', 'comparison' => '>', 'value' => 1 ];
+			$flags = $this->make_handler( 'flags', static function ( $handler ) use ( $condition ) {
+				$handler->register_setting( 'hide', \Woodev_Setting::TYPE_BOOLEAN, [ 'disabled_if' => $condition ] );
+			} );
+			$composite = new Composite_Settings_Handler( 'shipping', [ $places, $flags ] );
+			$rows = json_encode( array_map( static fn( string $code ): array => [ 'city' => json_encode( [ 'country' => $code ] ) ], [ 'RU', 'RU', 'RU', 'KZ' ] ) );
+			$submitted = [ 'places' => $rows, 'hide' => true ];
+			$this->assertSame( [ 'RU' ] === $scope ? [ 'places' => $rows ] : $submitted, $composite->filter_visible_values( $submitted ) );
+
+			$condition['aggregate'] = 'max';
+			$flags->get_setting( 'hide' )->set_disabled_if( $condition );
+			$this->assertSame( [] === $scope, isset( $composite->filter_visible_values( $submitted )['hide'] ) );
+
+			unset( $condition['per'], $condition['aggregate'] );
+			$flags->get_setting( 'hide' )->set_disabled_if( $condition );
+			$this->assertArrayNotHasKey( 'hide', $composite->filter_visible_values( $submitted ) );
+		}
+	}
+
 	public function test_filters_cross_handler_conditions_order_independently_and_degrades_unknown_controller_to_empty(): void {
 		$checkout_fields = $this->make_handler(
 			'checkout_fields',

@@ -141,7 +141,7 @@ final class Field_Schema {
 			}
 
 			if ( $control && \Woodev_Control::TYPE_RECORDS_TABLE === $control->get_type() ) {
-				$entry['columns'] = $control->get_columns();
+				$entry['columns'] = self::records_table_columns( $control->get_columns(), $stored );
 				if ( '' !== $control->get_add_label() ) {
 					$entry['add_label'] = $control->get_add_label();
 				}
@@ -182,6 +182,45 @@ final class Field_Schema {
 	}
 
 	/**
+	 * Resolves the form default and display names for derived country columns.
+	 *
+	 * @since 2.0.26
+	 * @param array<int,array<string,mixed>> $columns declared columns.
+	 * @param mixed                          $stored stored records-table value.
+	 * @return array<int,array<string,mixed>> client columns.
+	 */
+	private static function records_table_columns( array $columns, $stored ): array {
+
+		foreach ( $columns as &$column ) {
+			if ( \Woodev_Control::COLUMN_LOCATION_COUNTRY !== $column['type'] ) {
+				continue;
+			}
+
+			$countries = WC()->countries;
+			$names     = $countries->get_countries();
+			$codes     = array_column( $column['options'], 'code' );
+			$base      = $countries->get_base_country();
+
+			$column['default'] = in_array( $base, $codes, true ) ? $base : ( $codes[0] ?? '' );
+
+			foreach ( Records_Table::decode( $stored ) ?? [] as $row ) {
+				$cell   = $row[ $column['of'] ] ?? '';
+				$record = is_string( $cell ) ? json_decode( $cell, true ) : null;
+				if ( is_array( $record ) && is_string( $record['country'] ?? null ) ) {
+					$codes[] = $record['country'];
+				}
+			}
+
+			$column['names'] = [];
+			foreach ( array_unique( $codes ) as $code ) {
+				$column['names'][ $code ] = $names[ $code ] ?? $code;
+			}
+		}
+
+		return $columns;
+	}
+
+	/**
 	 * Rejects count rules that name anything other than a records-table control.
 	 *
 	 * @since 2.0.26
@@ -201,6 +240,15 @@ final class Field_Schema {
 			$control  = $setting ? $setting->get_control() : null;
 			if ( ! $control || \Woodev_Control::TYPE_RECORDS_TABLE !== $control->get_type() ) {
 				throw new \InvalidArgumentException( sprintf( 'Count conditions require a records-table controller; "%s" is not a records-table setting.', $id ) );
+			}
+			if ( isset( $condition['per'] ) ) {
+				$country_columns = array_filter(
+					$control->get_columns(),
+					static fn( array $column ): bool => $condition['per'] === $column['id'] && \Woodev_Control::COLUMN_LOCATION_COUNTRY === $column['type']
+				);
+				if ( [] === $country_columns ) {
+					throw new \InvalidArgumentException( sprintf( 'Count per requires a location-country column of "%s".', $id ) );
+				}
 			}
 		}
 	}

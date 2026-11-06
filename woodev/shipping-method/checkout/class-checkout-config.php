@@ -1128,9 +1128,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              `location-cascade.js::prefill()` cannot write a locality's
 		 *              text into a field from a bare key.
 		 *
-		 * @since 2.0.26 Gains city mode's `allowed` and `hideSettlement`, and clamps
-		 *              `allowCustomSettlement` / `levels[country].region`, while city mode lists
-		 *              places — see {@see self::with_settlement_choices()}.
+		 * @since 2.0.26 Gains city mode's `allowed` and `hideSettlement`, and turns
+		 *              `levels[country].region` off for each country that lists places — see
+		 *              {@see self::with_settlement_choices()}.
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
@@ -1390,21 +1390,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * Adds city mode's closed settlement choice to a location block (range-shipping city mode
 		 * spec §4.2) — the block is returned unchanged while city mode lists nothing.
 		 *
+		 * Everything here is per country: a client applies it to the customer's country only, and a
+		 * country without listed places keeps the shop's ordinary field.
+		 *
 		 * - `allowed` — `{ [country]: entry[] }`, the listed places in the `popular` wire shape
 		 *   `{ key, label, level, record }`, so a pick posts to `/select` byte-identical to a search
 		 *   pick, plus `value`: the text the City field shows and posts — the place's OWN name
 		 *   ({@see \Woodev\Framework\Shipping\Location\Location_Record::own_locality_name()}), so «рп
 		 *   Черкизово» posts «Черкизово», not its parent «Пушкино».
-		 * - `hideSettlement` — the merchant hides the field, which works for exactly one place.
-		 * - `allowCustomSettlement` — `false`: free text would defeat the choice. The store setting
-		 *   itself is not rewritten.
-		 * - `levels[country].region` — `false` for every country: the region is not asked, the pick
-		 *   writes its own region into the native State field.
+		 * - `hideSettlement` — the merchant's stored switch, as published. A client applies it only
+		 *   to a country with exactly one place, so the total count of places says nothing here.
+		 * - `allowCustomSettlement` — the store's own setting, not rewritten: a client treats a
+		 *   country that has `allowed[country]` as closed (free text would defeat the choice), and a
+		 *   country without places keeps the store's rule.
+		 * - `levels[country].region` — `false` only for a country that has `allowed[country]`: the
+		 *   region is not asked there, the pick writes its own region into the native State field.
+		 *   Every other country keeps its own answer.
 		 *
 		 * The My Account form never gets these keys: its config is built inside
 		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::without_settlement_choices()}.
 		 *
-		 * @since 2.0.26
+		 * @since 2.0.26 Per country: `levels[country].region` only where places are listed, `allowCustomSettlement`
+		 *               no longer clamped, `hideSettlement` is the stored switch.
 		 *
 		 * @param array<string, mixed>                                                                    $block   The location block.
 		 * @param array{records: \Woodev\Framework\Shipping\Location\Location_Record[], hide_field: bool} $choices The service's settlement choices.
@@ -1429,12 +1436,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			}
 
 			foreach ( array_keys( $block['levels'] ) as $country ) {
-				$block['levels'][ $country ]['region'] = false;
+				if ( isset( $allowed[ $country ] ) ) {
+					$block['levels'][ $country ]['region'] = false;
+				}
 			}
 
-			$block['allowed']               = $allowed;
-			$block['hideSettlement']        = $choices['hide_field'] && 1 === count( $choices['records'] );
-			$block['allowCustomSettlement'] = false;
+			$block['allowed']        = $allowed;
+			$block['hideSettlement'] = $choices['hide_field'];
 
 			return $block;
 		}

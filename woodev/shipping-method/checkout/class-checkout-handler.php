@@ -764,11 +764,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * shows empty: WooCommerce would prefill it from a saved city that names none of the listed
 		 * places (range-shipping city mode spec §4.4 — a returning customer's Тула).
 		 *
+		 * Judged against the places of the section's OWN country: a saved city in a country
+		 * without listed places is left alone — city mode does not apply there (spec §4.2).
+		 *
 		 * The checkout view only: the customer's stored address is never edited, and nothing is
 		 * refused at submit. The payer's billing address stays as saved while the order ships to
 		 * a separate shipping address (K6).
 		 *
 		 * @since 2.0.26
+		 * @since 2.0.26 Per country.
 		 *
 		 * @param string $input The field id WooCommerce resolves.
 		 *
@@ -786,16 +790,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return false;
 			}
 
-			$customer = $this->wc_customer();
-			$getter   = 'get_' . $section . '_city';
+			$customer       = $this->wc_customer();
+			$city_getter    = 'get_' . $section . '_city';
+			$country_getter = 'get_' . $section . '_country';
 
-			if ( ! is_object( $customer ) || ! is_callable( [ $customer, $getter ] ) ) {
+			if ( ! is_object( $customer ) || ! is_callable( [ $customer, $city_getter ] ) || ! is_callable( [ $customer, $country_getter ] ) ) {
 				return false;
 			}
 
-			$city = trim( (string) $customer->{$getter}() );
+			// An empty saved country is shown as the store's default country, so that is the one judged.
+			$country = strtoupper( trim( (string) $customer->{$country_getter}() ) );
 
-			return '' !== $city && ! $service->names_listed_settlement( $city );
+			if ( '' === $country ) {
+				$country = $service->resolve_default_country();
+			}
+
+			if ( ! $service->has_settlement_choices_for( $country ) ) {
+				return false;
+			}
+
+			$city = trim( (string) $customer->{$city_getter}() );
+
+			return '' !== $city && ! $service->names_listed_settlement( $city, $country );
 		}
 
 		/**
