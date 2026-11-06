@@ -41,6 +41,8 @@ const mockStore = {
 	 * meta-selector.
 	 */
 	cartLoaded: undefined as boolean | undefined,
+	/** `wc/store/validation` errors by id, as WooCommerce raises them when Place Order is pressed. */
+	validationErrors: {} as Record< string, { message: string; hidden: boolean } >,
 };
 
 const notify = (): void => mockStore.listeners.forEach( ( listener ) => listener() );
@@ -50,6 +52,7 @@ jest.mock( '@wordpress/data', () => {
 		getCustomerData: () => mockStore.customer,
 		getNeedsShipping: () => mockStore.needsShipping,
 		getUseShippingAsBilling: () => mockStore.useShippingAsBilling,
+		getValidationError: ( id: string ) => mockStore.validationErrors[ id ],
 		...( mockStore.cartLoaded === undefined
 			? {}
 			: { hasFinishedResolution: ( name: string ) => name === 'getCartData' && mockStore.cartLoaded === true } ),
@@ -139,6 +142,7 @@ const baseConfig = ( over: Partial< LocationConfig > = {} ): LocationConfig => (
 	billingOnly: false,
 	i18n: {
 		label: 'Find your locality',
+		placeholder: 'Select…',
 		hint: 'Choose a locality to fill in the city and region.',
 		searching: 'Searching…',
 		listLabel: 'Locality suggestions',
@@ -315,7 +319,7 @@ const suggestRequests = (): string[] => fetchCalls.map( ( call ) => call.url ).f
 function installNativeRows(): void {
 	document.body.innerHTML = `
 		<div class="wc-block-components-address-form">
-			<div class="wc-block-components-address-form__city"><input id="shipping-city" /></div>
+			<div class="wc-block-components-address-form__city"><label for="shipping-city">Населённый пункт</label><input id="shipping-city" /></div>
 			<div class="wc-block-components-address-form__state"><input id="shipping-state" /></div>
 			<div class="wc-block-components-address-form__address_1"><input id="shipping-address_1" /></div>
 		</div>`;
@@ -336,6 +340,7 @@ beforeEach( () => {
 	mockStore.hasGate = true;
 	mockStore.refreshHold = null;
 	mockStore.cartLoaded = undefined;
+	mockStore.validationErrors = {};
 	mockStore.needsShipping = true;
 	mockStore.forcedBillingAddress = false;
 	selectReply = { persisted: true };
@@ -354,27 +359,20 @@ beforeEach( () => {
 } );
 
 describe( 'city mode, several places — Blocks chooser', () => {
-	it( 'offers exactly the listed places on focus, before anything is typed, and never calls /suggest', async () => {
+	it( 'is a plain select of exactly the listed places, and never calls /suggest', async () => {
 		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ] ) } /> );
-		fireEvent.focus( screen.getByRole( 'combobox' ) );
 
-		const options = await screen.findAllByRole( 'option' );
+		const select = screen.getByRole( 'combobox' ) as HTMLSelectElement;
 
-		expect( options.map( ( option ) => option.textContent ) ).toEqual( [ 'г Москва', 'г Химки, Московская область' ] );
-		expect( suggestRequests() ).toEqual( [] );
-	} );
-
-	it( 'filters the list locally as the shopper types, with no /suggest request at any length', async () => {
-		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ] ) } /> );
-		const input = screen.getByRole( 'combobox' );
-
-		fireEvent.change( input, { target: { value: 'х' } } );
-		await waitFor( () => expect( screen.getAllByRole( 'option' ) ).toHaveLength( 1 ) );
-		expect( screen.getByRole( 'option' ).textContent ).toBe( 'г Химки, Московская область' );
-
-		fireEvent.change( input, { target: { value: 'Тула' } } );
-		await waitFor( () => expect( screen.queryAllByRole( 'option' ) ).toHaveLength( 0 ) );
-		expect( screen.getByText( 'No results found.' ) ).toBeInTheDocument();
+		expect( select.tagName ).toBe( 'SELECT' );
+		expect( Array.from( select.options ).map( ( option ) => [ option.value, option.textContent ] ) ).toEqual( [
+			[ '', 'Select…' ],
+			[ 'dadata:moscow', 'Москва' ],
+			[ 'dadata:khimki', 'Химки' ],
+		] );
+		// No search box and no suggestion list to type into.
+		expect( document.querySelector( 'input[type="text"]' ) ).toBeNull();
+		expect( screen.queryByRole( 'listbox' ) ).toBeNull();
 
 		await act( async () => {
 			await new Promise( ( resolve ) => setTimeout( resolve, 400 ) );
@@ -382,10 +380,66 @@ describe( 'city mode, several places — Blocks chooser', () => {
 		expect( suggestRequests() ).toEqual( [] );
 	} );
 
+	it( 'takes the merchant\'s wording for the native City field as its label', () => {
+		installNativeRows();
+		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ] ) } /> );
+
+		expect( document.querySelector( '.woodev-locality-chooser__label' )?.textContent ).toBe( 'Населённый пункт' );
+	} );
+
+	it( 'replaces the native City row and hides the State row, flag or not', async () => {
+		installNativeRows();
+		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ], { hideSettlement: true } ) } /> );
+
+		await act( async () => {
+			await settle();
+		} );
+
+		expect( document.querySelector( '.wc-block-components-address-form__city' ) ).toHaveClass( 'woodev-field--hidden' );
+		expect( document.querySelector( '.wc-block-components-address-form__state' ) ).toHaveClass( 'woodev-field--hidden' );
+		expect( document.querySelector( '.wc-block-components-address-form__address_1' ) ).not.toHaveClass( 'woodev-field--hidden' );
+		expect( screen.getByRole( 'combobox' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the hidden native City\'s error at the select when Place Order is pressed with nothing chosen, and focuses it', async () => {
+		installNativeRows();
+		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ] ) } /> );
+		const select = screen.getByRole( 'combobox' );
+
+		// Raised by WooCommerce but not revealed yet: nothing to say.
+		mockStore.validationErrors = { shipping_city: { message: 'Please enter a valid city', hidden: true } };
+		act( () => notify() );
+		expect( screen.queryByRole( 'alert' ) ).toBeNull();
+		expect( select ).not.toHaveAttribute( 'aria-invalid', 'true' );
+
+		// Place Order pressed: the error is revealed — by Blocks on a field that is out of sight.
+		mockStore.validationErrors = { shipping_city: { message: 'Please enter a valid city', hidden: false } };
+		act( () => notify() );
+
+		const alert = screen.getByRole( 'alert' );
+		expect( alert ).toHaveTextContent( 'Please enter a valid city' );
+		expect( select ).toHaveAttribute( 'aria-invalid', 'true' );
+		expect( select ).toHaveAttribute( 'aria-describedby', alert.id );
+		expect( select ).toHaveFocus();
+
+		// A place is chosen and reaches the address: the error goes with the empty City.
+		fireEvent.change( select, { target: { value: KHIMKI.key } } );
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Химки' ) );
+		expect( screen.queryByRole( 'alert' ) ).toBeNull();
+		expect( select ).not.toHaveAttribute( 'aria-invalid', 'true' );
+	} );
+
+	it( 'reads the billing City error on the billing-only chooser', () => {
+		mockStore.forcedBillingAddress = true;
+		mockStore.validationErrors = { billing_city: { message: 'Please enter a valid city', hidden: false } };
+		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ], { billingOnly: true } ) } addressTarget="billing" /> );
+
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Please enter a valid city' );
+	} );
+
 	it( 'a pick persists the record, then writes the native City and State of the place', async () => {
 		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ] ) } /> );
-		fireEvent.focus( screen.getByRole( 'combobox' ) );
-		fireEvent.mouseDown( ( await screen.findAllByRole( 'option' ) )[ 1 ] );
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: KHIMKI.key } } );
 
 		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
 
@@ -398,12 +452,32 @@ describe( 'city mode, several places — Blocks chooser', () => {
 			state: 'МОСКОВСКАЯ ОБЛАСТЬ',
 			country: 'RU',
 		} );
+		expect( suggestRequests() ).toEqual( [] );
+	} );
+
+	it( 'keeps the State row visible when a pick left it empty, so the shopper can choose it', async () => {
+		installNativeRows();
+		const nowhere = { ...KHIMKI, record: { ...KHIMKI.record, region: { name: 'Нигде' } } };
+		render( <LocalityChooser config={ cityMode( [ MOSCOW, nowhere ] ) } /> );
+		await act( async () => {
+			await settle();
+		} );
+
+		expect( document.querySelector( '.wc-block-components-address-form__state' ) ).toHaveClass( 'woodev-field--hidden' );
+
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: nowhere.key } } );
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+		await act( async () => {
+			await settle();
+		} );
+
+		expect( mockStore.customer.shippingAddress ).toMatchObject( { city: 'Химки', state: '' } );
+		expect( document.querySelector( '.wc-block-components-address-form__state' ) ).not.toHaveClass( 'woodev-field--hidden' );
 	} );
 
 	it( 'a nested place posts its OWN name (Черкизово), not its parent\'s (Пушкино), and the pick is kept', async () => {
 		render( <LocalityChooser config={ cityMode( [ CHERKIZOVO, KHIMKI ] ) } /> );
-		fireEvent.focus( screen.getByRole( 'combobox' ) );
-		fireEvent.mouseDown( ( await screen.findAllByRole( 'option' ) )[ 0 ] );
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: CHERKIZOVO.key } } );
 
 		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
 
@@ -412,7 +486,7 @@ describe( 'city mode, several places — Blocks chooser', () => {
 		await act( async () => {
 			await settle();
 		} );
-		expect( screen.getByRole( 'combobox' ) ).toHaveValue( 'Черкизово' );
+		expect( screen.getByRole( 'combobox' ) ).toHaveValue( CHERKIZOVO.key );
 		expect( sent( 'forget' ) ).toHaveLength( 0 );
 	} );
 
@@ -424,7 +498,7 @@ describe( 'city mode, several places — Blocks chooser', () => {
 			await settle();
 		} );
 
-		expect( screen.getByRole( 'combobox' ) ).toHaveValue( 'Черкизово' );
+		expect( screen.getByRole( 'combobox' ) ).toHaveValue( CHERKIZOVO.key );
 		expect( sent( 'forget' ) ).toHaveLength( 0 );
 	} );
 
@@ -461,16 +535,20 @@ describe( 'city mode, several places — Blocks chooser', () => {
 } );
 
 describe( 'city mode, one place shown — Blocks', () => {
-	it( 'writes the place into City and State, locks the native City, and mounts no chooser', async () => {
+	it( 'writes the place into City and State and shows it as plain text — no chooser, no field', async () => {
 		installNativeRows();
 		render( <LocalityChooser config={ cityMode( [ MOSCOW ] ) } /> );
 
 		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
 
 		expect( document.querySelector( '.woodev-locality-chooser' ) ).toBeNull();
+		expect( screen.queryByRole( 'combobox' ) ).toBeNull();
 		expect( mockStore.customer.shippingAddress ).toMatchObject( { city: 'Москва', state: 'МОСКВА', country: 'RU', address_1: 'Ленина 1' } );
-		expect( ( document.getElementById( 'shipping-city' ) as HTMLInputElement ).readOnly ).toBe( true );
-		expect( document.querySelector( '.woodev-field--hidden' ) ).toBeNull();
+		// The text, under the merchant's own wording for the field; the native City row makes way for it.
+		const text = document.querySelector( '.woodev-city-mode-place' ) as HTMLElement;
+		expect( text.textContent ).toBe( 'Населённый пунктМосква' );
+		expect( text.querySelector( 'strong' )?.textContent ).toBe( 'Москва' );
+		expect( document.querySelector( '.wc-block-components-address-form__city' ) ).toHaveClass( 'woodev-field--hidden' );
 		// A saved BLANK city is not a rejected one: the street is left alone.
 		expect( mockStore.customer.shippingAddress.postcode ).toBe( '101000' );
 	} );
@@ -538,6 +616,8 @@ describe( 'city mode, one place hidden — Blocks', () => {
 		} );
 
 		expect( document.querySelector( '.woodev-locality-chooser' ) ).toBeNull();
+		// The flag hides the text too: nothing of ours is on the page.
+		expect( document.querySelector( '.woodev-city-mode-place' ) ).toBeNull();
 		expect( document.querySelector( '.wc-block-components-address-form__city' ) ).toHaveClass( 'woodev-field--hidden' );
 		expect( document.querySelector( '.wc-block-components-address-form__state' ) ).toHaveClass( 'woodev-field--hidden' );
 		expect( document.querySelector( '.wc-block-components-address-form__address_1' ) ).not.toHaveClass( 'woodev-field--hidden' );
@@ -583,7 +663,7 @@ describe( 'city mode, one place hidden — Blocks', () => {
 		expect( mockStore.customer.billingAddress ).toMatchObject( { city: 'Москва', state: 'МОСКВА' } );
 	} );
 
-	it( 'does not hide anything while several places are listed, even with the flag on', async () => {
+	it( 'the flag does nothing while several places are listed: the select stays', async () => {
 		installNativeRows();
 		render( <LocalityChooser config={ cityMode( [ MOSCOW, KHIMKI ], { hideSettlement: true } ) } /> );
 
@@ -591,7 +671,7 @@ describe( 'city mode, one place hidden — Blocks', () => {
 			await settle();
 		} );
 
-		expect( screen.getByRole( 'combobox' ) ).toBeInTheDocument();
-		expect( document.querySelector( '.woodev-field--hidden' ) ).toBeNull();
+		expect( screen.getByRole( 'combobox' ).tagName ).toBe( 'SELECT' );
+		expect( document.querySelector( '.woodev-city-mode-place' ) ).toBeNull();
 	} );
 } );
