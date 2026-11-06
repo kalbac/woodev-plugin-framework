@@ -163,8 +163,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		public const WITHIN_STATUS_NOT_REQUESTED = 'not_requested';
 
 		/**
-		 * `within_status` value: `within` named a level the customer actually
-		 * picked, in the SAME country as this search, and
+		 * `within_status` value: `within` named a customer-chain or merchant-listed
+		 * record, in the SAME country as this search, and
 		 * {@see Location_Scope::within()} accepted it as a parent constraint —
 		 * see {@see self::build_scope()}.
 		 *
@@ -186,8 +186,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 		/**
 		 * `within_status` value: `within` named a key that matches NOTHING in
-		 * the customer's own chain (unknown, stale, already superseded, or the
-		 * customer has no chain at all yet) — see {@see self::build_scope()}.
+		 * the customer's own chain or the merchant's city-mode list (unknown,
+		 * stale, already superseded, or neither source has the record) — see
+		 * {@see self::build_scope()}.
 		 * Silently degraded to a country-wide scope, same as before this field
 		 * existed (issue #330's own rule: "stale client state must never brick
 		 * the field"), but now VISIBLE.
@@ -1971,8 +1972,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * ordinary shape of an address lookup — used to resolve against the
 		 * current record alone, so it was silently ignored the moment `current`
 		 * moved past settlement, and the search fell through to a country-wide
-		 * scope with nothing anywhere saying why). A key that matches NO record
-		 * in the chain at all (unknown, stale, no customer record yet) is
+		 * scope with nothing anywhere saying why). City mode also resolves against
+		 * the merchant's listed records: a single place can be prefilled without
+		 * any customer chain write. The customer chain is checked first so any
+		 * selection-time enrichment is retained. A key that matches neither source is
 		 * treated exactly like an ABSENT `within` — never an error (spec Task 8:
 		 * "stale client state must never brick the field") — and a key that DOES
 		 * match but sits at the wrong level for this search (e.g. a region key
@@ -2040,6 +2043,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              ever being called with a malformed country when
 		 *              `$within_key` is non-empty.
 		 *
+		 * @since 2.0.26 Also resolves merchant-listed city-mode records without a customer chain.
+		 *
 		 * @param string $country    Normalized ISO-3166 alpha-2 country code.
 		 * @param string $level      One of {@see Location_Record::LEVELS} — already validated by the caller.
 		 * @param string $within_key Normalized `within` param, possibly `''`.
@@ -2070,6 +2075,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 			$chain   = $this->service->get_customer_chain( $country );
 			$records = null !== $chain ? $chain['records'] : [];
+
+			// A single listed place has no chooser and need not have a /select write (Blocks).
+			// Resolve its key from the merchant's records too; a saved/enriched chain wins.
+			$records = array_merge( array_values( $records ), $this->service->get_settlement_choices()['records'] );
 
 			foreach ( $records as $chain_record ) {
 				if ( $chain_record->key() !== $within_key ) {

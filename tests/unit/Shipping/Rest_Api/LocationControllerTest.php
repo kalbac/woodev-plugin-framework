@@ -441,6 +441,13 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		];
 	}
 
+	/** @var Location_Record[] City-mode records, independent of the customer chain. */
+	public array $settlement_choices = [];
+
+	public function get_settlement_choices(): array {
+		return [ 'records' => $this->settlement_choices, 'hide_field' => false ];
+	}
+
 	public function supports_locate(): bool {
 		return $this->supports_locate;
 	}
@@ -1757,6 +1764,82 @@ final class LocationControllerTest extends TestCase {
 	// that failed to resolve VISIBLE, instead of indistinguishable from a
 	// genuine country-wide search.
 	// -------------------------------------------------------------------
+
+	/**
+	 * D1: a single listed place has no chooser and no /select write in Blocks.
+	 *
+	 * @dataProvider listed_scope_cases
+	 */
+	public function test_suggest_scopes_a_listed_place_without_a_customer_chain( string $provider_id, string $country, string $name ): void {
+		$place = Location_Record::from_array(
+			[
+				'key'         => $provider_id . ':listed-city',
+				'provider_id' => $provider_id,
+				'country'     => $country,
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'settlement'  => [ 'name' => $name ],
+			]
+		);
+		$captured = null;
+		$provider = new Location_Controller_Fake_Provider(
+			static function ( string $query, Location_Scope $scope ) use ( &$captured ): array {
+				$captured = $scope;
+
+				return [];
+			}
+		);
+		$service                    = new Location_Controller_Fake_Service( true, $provider );
+		$service->settlement_choices = [ $place ];
+		$ctrl   = new Location_Controller_Probe( $service );
+		$result = $ctrl->handle_suggest_request(
+			new WP_REST_Request( [ 'q' => 'улица', 'level' => 'address', 'country' => $country, 'within' => $place->key() ] )
+		);
+
+		$this->assertSame( 'applied', $result['within_status'] );
+		$this->assertSame( $place, $captured->parent_record() );
+		$this->assertSame( $country, $captured->country() );
+		$this->assertSame( [], $service->set_calls, 'scoping is a read, never a customer write' );
+	}
+
+	public static function listed_scope_cases(): array {
+		return [
+			'dadata-uz'      => [ 'dadata', 'UZ', 'Ташкент' ],
+			'cdek-kz'        => [ 'cdek', 'KZ', 'Алматы' ],
+			'ru-non-default' => [ 'cdek', 'RU', 'Химки' ],
+		];
+	}
+
+	public function test_listed_scope_keeps_the_cross_country_guard(): void {
+		$place   = $this->record( 'dadata:moscow', Location_Record::LEVEL_SETTLEMENT );
+		$service = new Location_Controller_Fake_Service( true, new Location_Controller_Fake_Provider( static fn() => [] ) );
+		$service->settlement_choices = [ $place ];
+		$result = ( new Location_Controller_Probe( $service ) )->handle_suggest_request(
+			new WP_REST_Request( [ 'q' => 'улица', 'level' => 'address', 'country' => 'UZ', 'within' => $place->key() ] )
+		);
+
+		$this->assertFalse( $result['within_applied'] );
+		$this->assertSame( 'cross_country', $result['within_status'] );
+	}
+
+	public function test_listed_scope_prefers_the_enriched_customer_chain_record(): void {
+		$listed    = $this->record( 'dadata:moscow', Location_Record::LEVEL_SETTLEMENT );
+		$enriched = Location_Record::from_array( array_merge( $listed->to_array(), [ 'fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ] ) );
+		$captured = null;
+		$provider = new Location_Controller_Fake_Provider(
+			static function ( string $query, Location_Scope $scope ) use ( &$captured ): array {
+				$captured = $scope;
+
+				return [];
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, $provider, [ 'record' => $enriched, 'implicit' => false, 'saved_at' => 0 ] );
+		$service->settlement_choices = [ $listed ];
+		( new Location_Controller_Probe( $service ) )->handle_suggest_request(
+			new WP_REST_Request( [ 'q' => 'улица', 'level' => 'address', 'country' => 'RU', 'within' => $listed->key() ] )
+		);
+
+		$this->assertSame( $enriched, $captured->parent_record() );
+	}
 
 	public function test_suggest_within_applied_is_true_when_within_resolves(): void {
 		$parent   = $this->region_record( 'dadata:region-1' );

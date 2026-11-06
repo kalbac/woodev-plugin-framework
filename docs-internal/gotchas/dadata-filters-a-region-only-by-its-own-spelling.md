@@ -59,6 +59,27 @@ $locations = [ [ 'city' => 'Черкизово' ], [ 'settlement' => 'Черки
 $locations = [ [ 'country_iso_code' => 'RU', 'city' => 'Черкизово' ] ];
 ```
 
+## Locale is part of a name-scoped request (s219 F4)
+
+DaData's client normally derives `language` from WordPress. On an `en_US` site, a stored
+Cyrillic parent (CDEK Москва, DaData Ташкент, CDEK Алматы) receives transliterated child rows.
+The locality post-filter then rejects every row even though the upstream search succeeded.
+For the NAME path only, `build_suggest_body()` explicitly requests `ru` when the parent's
+own locality name contains Cyrillic, otherwise `en`. The existing client preserves an explicit
+language, including for the settlement retry. FIAS/native-id requests keep their locale behaviour.
+This retains the homonym guard without another remote translation lookup.
+
+```php
+// ❌ A Cyrillic parent compared to locale-driven transliterated rows.
+$records = $provider->suggest( $query, $scope ); // language=en → Moscow ≠ Москва
+
+// ✅ The request asks for the stored locality name's script before the same post-filter runs.
+$body['language'] = 1 === preg_match( '/\p{Cyrillic}/u', $parent->own_locality_name() ) ? 'ru' : 'en';
+```
+
+Reference: [DaData address request parameters](https://dadata.ru/api/suggest/address/),
+`Dadata_Api_Client::with_language()`. Regression: `DadataProviderTest::test_name_scope_requests_the_parent_language`.
+
 ## Related
 
 - [the-cascade-keeps-only-the-key-of-a-confirmed-chain-record.md](the-cascade-keeps-only-the-key-of-a-confirmed-chain-record.md) — the client half of the same CDEK + DaData house path

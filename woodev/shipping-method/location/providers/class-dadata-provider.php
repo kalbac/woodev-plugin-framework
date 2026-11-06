@@ -987,6 +987,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.21 Asks for {@see self::FILTERED_SUGGESTION_COUNT} under a foreign locality parent.
+		 * @since 2.0.26 Requests the stored name's language when the locality is scoped by name.
 		 *
 		 * @param Location_Scope $scope Lookup scope.
 		 *
@@ -995,13 +996,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		private function build_suggest_body( Location_Scope $scope ): array {
 			[ $from_bound, $to_bound ] = self::suggest_bounds( $scope->level() );
 
-			$count = null !== self::foreign_locality_parent( $scope ) ? self::FILTERED_SUGGESTION_COUNT : self::SUGGESTION_COUNT;
+			$parent = self::foreign_locality_parent( $scope );
+			$count  = null !== $parent ? self::FILTERED_SUGGESTION_COUNT : self::SUGGESTION_COUNT;
 
 			$body = [
 				'count'      => $count,
 				'from_bound' => [ 'value' => $from_bound ],
 				'to_bound'   => [ 'value' => $to_bound ],
 			];
+
+			if ( null !== $parent ) {
+				// DaData transliterates names for language=en. The name post-filter must read
+				// the same script as the stored locality, even after a WordPress locale change.
+				$body['language'] = 1 === preg_match( '/\p{Cyrillic}/u', $parent->own_locality_name() ) ? 'ru' : 'en';
+			}
 
 			$locations = $this->build_locations_constraint( $scope );
 

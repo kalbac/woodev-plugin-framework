@@ -28,6 +28,8 @@
 - [shipping/location] **After `/select` (and after a reload) the cascade holds only the KEY of a confirmed chain record — a client check that needs the settlement's name reads the field's VALUE (never a select's option text), not `entry.records`.** → [the-cascade-keeps-only-the-key-of-a-confirmed-chain-record](../gotchas/the-cascade-keeps-only-the-key-of-a-confirmed-chain-record.md) (s208, s209)
 - [shipping/location] **DaData's `locations` filter matches `region` only against DaData's own spelling — CDEK's «Свердловская область» gives 0 houses. Send a foreign locality alone as `city`, retry as `settlement`; drop other-region results server-side.** → [dadata-filters-a-region-only-by-its-own-spelling](../gotchas/dadata-filters-a-region-only-by-its-own-spelling.md) (s209)
 
+- [shipping/location] **A single prefilled Blocks place may have no customer-chain record; resolve its `within` key against merchant-listed records too, with the chain taking precedence.** → [a-single-place-key-can-have-no-customer-chain-record](../gotchas/a-single-place-key-can-have-no-customer-chain-record.md) (s219 F4)
+
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
