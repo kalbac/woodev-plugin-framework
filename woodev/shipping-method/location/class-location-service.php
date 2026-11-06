@@ -72,13 +72,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 		/**
 		 * Filter tag: a fixed default locality that overrides the store's own «Локация» policy for
-		 * this request, without writing it (city mode spec §2, §4.2). Receives `null` and returns a
+		 * this request, without writing it (city mode spec §2, §4.2). Receives `null` and the
+		 * customer's country code (ISO-3166 alpha-2, upper-case) and returns a
 		 * {@see Location_Record} or `null`; a record makes the policy `fixed` with that record.
 		 *
-		 * City mode hooks it with its single listed place, so that place is prefilled exactly like
-		 * a merchant's fixed default.
+		 * City mode hooks it with the single listed place of that country, so that place is
+		 * prefilled exactly like a merchant's fixed default; a country with several or no places
+		 * gets `null` and the store's own policy. A consumer registers with `accepted_args = 2`,
+		 * or WordPress delivers only the first argument.
 		 *
 		 * @since 2.0.26
+		 * @since 2.0.26 Passes the customer's country as the second argument.
 		 * @var string
 		 */
 		public const FILTER_DEFAULT_LOCALITY = 'woodev_location_default_locality';
@@ -1177,9 +1181,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 					continue;
 				}
 
-				// City mode asks no region (spec §4.2), so a stored one is not part of the chain
-				// the checkout shows — skipped without breaking the levels below it.
-				if ( Location_Record::LEVEL_REGION === $level && $this->settlement_choices_narrow_this_read() ) {
+				// City mode asks no region in a country with listed places (spec §4.2), so a stored
+				// one is not part of the chain the checkout shows there — skipped without breaking
+				// the levels below it.
+				if ( Location_Record::LEVEL_REGION === $level && $this->checkout_view_lists_places() && $this->settlement_choices_narrow_this_read( $for_country ?? $this->customer_shipping_country() ) ) {
 					continue;
 				}
 
@@ -2296,19 +2301,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		/**
 		 * The fixed default {@see self::FILTER_DEFAULT_LOCALITY} answers for this request, or `null`.
 		 *
+		 * Asked for the customer's country ({@see self::customer_shipping_country()}), which the
+		 * filter receives as its second argument: city mode lists places per country, so the
+		 * single place of one country is not the default of another.
+		 *
 		 * Off while {@see self::without_settlement_choices()} runs: the filter exists for city mode,
-		 * and My Account keeps the store's own policy.
+		 * and My Account keeps the store's own policy. Off too while city mode lists no place — it
+		 * has nothing to answer, and the customer's country is not looked up for nothing.
 		 *
 		 * @since 2.0.26
 		 *
 		 * @return Location_Record|null
 		 */
 		private function filtered_default_locality(): ?Location_Record {
-			if ( self::$settlement_choices_suspended > 0 ) {
+			if ( self::$settlement_choices_suspended > 0 || ! $this->has_settlement_choices() ) {
 				return null;
 			}
 
-			$record = apply_filters( self::FILTER_DEFAULT_LOCALITY, null );
+			$record = apply_filters( self::FILTER_DEFAULT_LOCALITY, null, $this->customer_shipping_country() );
 
 			return $record instanceof Location_Record ? $record : null;
 		}
@@ -2350,17 +2360,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Whether city mode lists any place in one country right now.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code (upper-case).
+		 *
+		 * @return bool
+		 */
+		public function has_settlement_choices_for( string $country ): bool {
+			return [] !== $this->listed_records_for( $country );
+		}
+
+		/**
 		 * Whether free City text names one of the listed places
 		 * ({@see Location_Record::names_locality()}).
 		 *
 		 * @since 2.0.26
+		 * @since 2.0.26 Gains `$country`: city mode lists places per country, so a city is judged
+		 *               against the places of the country it belongs to.
 		 *
-		 * @param string $city City text.
+		 * @param string $city    City text.
+		 * @param string $country ISO-3166 alpha-2 country code whose places are searched; `''`
+		 *                        (the default) searches the places of every country, for a caller
+		 *                        that has no country.
 		 *
 		 * @return bool
 		 */
-		public function names_listed_settlement( string $city ): bool {
+		public function names_listed_settlement( string $city, string $country = '' ): bool {
 			foreach ( $this->get_settlement_choices()['records'] as $listed ) {
+				if ( '' !== $country && $country !== $listed->country() ) {
+					continue;
+				}
+
 				if ( $listed->names_locality( $city ) ) {
 					return true;
 				}
@@ -2437,15 +2469,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * Whether this read is a checkout view read while city mode lists places — the condition
-		 * of every list-membership rule ({@see self::in_checkout_view()}).
+		 * Whether this read is a checkout view read while city mode lists places in `$country` —
+		 * the condition of every list-membership rule ({@see self::in_checkout_view()}). A country
+		 * without listed places keeps the ordinary field, so nothing narrows there.
+		 *
+		 * @since 2.0.26
+		 * @since 2.0.26 Per country.
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code of the read.
+		 *
+		 * @return bool
+		 */
+		private function settlement_choices_narrow_this_read( string $country ): bool {
+			return $this->checkout_view_lists_places() && [] !== $this->listed_records_for( $country );
+		}
+
+		/**
+		 * Whether this is a checkout view read while city mode lists a place in ANY country — the
+		 * cheap check to make before looking up the customer's country, which a read outside
+		 * city mode must not need.
 		 *
 		 * @since 2.0.26
 		 *
 		 * @return bool
 		 */
-		private function settlement_choices_narrow_this_read(): bool {
+		private function checkout_view_lists_places(): bool {
 			return self::$checkout_view_depth > 0 && $this->has_settlement_choices();
+		}
+
+		/**
+		 * The listed places of one country, in the order city mode published them.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code.
+		 *
+		 * @return Location_Record[]
+		 */
+		private function listed_records_for( string $country ): array {
+			$listed = [];
+
+			foreach ( $this->get_settlement_choices()['records'] as $record ) {
+				if ( $country === $record->country() ) {
+					$listed[] = $record;
+				}
+			}
+
+			return $listed;
 		}
 
 		/**
@@ -2492,22 +2562,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 		/**
 		 * Whether this is a checkout view read ({@see self::in_checkout_view()}) while city mode
-		 * lists places, and `$record` is a settlement that is not one of them — such a record is
-		 * read as absent by the checkout view (city mode spec §4.4: a returning customer's saved
-		 * Тула). Every other read keeps it: nothing is deleted or refused at submit.
+		 * lists places in the record's own country, and `$record` is a settlement that is not one
+		 * of them — such a record is read as absent by the checkout view (city mode spec §4.4: a
+		 * returning customer's saved Тула). A record of a country without listed places is never
+		 * outside the list. Every other read keeps it: nothing is deleted or refused at submit.
 		 *
 		 * @since 2.0.26
+		 * @since 2.0.26 Per country: judged against the places of the record's own country.
 		 *
 		 * @param Location_Record $record A stored or resolved record.
 		 *
 		 * @return bool
 		 */
 		private function is_outside_settlement_choices( Location_Record $record ): bool {
-			if ( Location_Record::LEVEL_SETTLEMENT !== $record->level() || ! $this->settlement_choices_narrow_this_read() ) {
+			if ( Location_Record::LEVEL_SETTLEMENT !== $record->level() || ! $this->settlement_choices_narrow_this_read( $record->country() ) ) {
 				return false;
 			}
 
-			foreach ( $this->get_settlement_choices()['records'] as $listed ) {
+			foreach ( $this->listed_records_for( $record->country() ) as $listed ) {
 				if ( $listed->key() === $record->key() ) {
 					return false;
 				}
@@ -2521,26 +2593,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * or `''` when city mode makes it irrelevant to the checkout VIEW (spec §4.4,
 		 * {@see self::in_checkout_view()}) — every other read gets the saved city as before.
 		 *
-		 * With one listed place that place is the fixed default whatever the customer saved, so
-		 * the saved city must not block it. With several, a saved city naming none of them is
-		 * ignored — the field then shows its placeholder.
+		 * Judged against the places of the customer's country ({@see self::customer_shipping_country()}):
+		 * a country without listed places keeps whatever city was saved. With one listed place that
+		 * place is the fixed default whatever the customer saved, so the saved city must not block
+		 * it. With several, a saved city naming none of them is ignored — the field then shows its
+		 * placeholder.
 		 *
 		 * @since 2.0.26
+		 * @since 2.0.26 Per country.
 		 *
 		 * @return string
 		 */
 		private function saved_city_for_checkout(): string {
 			$city = $this->customer_saved_city();
 
-			if ( '' === $city || ! $this->settlement_choices_narrow_this_read() ) {
+			if ( '' === $city || ! $this->checkout_view_lists_places() ) {
 				return $city;
 			}
 
-			if ( 1 === count( $this->get_settlement_choices()['records'] ) ) {
+			$country = $this->customer_shipping_country();
+
+			if ( ! $this->settlement_choices_narrow_this_read( $country ) ) {
+				return $city;
+			}
+
+			if ( 1 === count( $this->listed_records_for( $country ) ) ) {
 				return '';
 			}
 
-			return $this->names_listed_settlement( $city ) ? $city : '';
+			return $this->names_listed_settlement( $city, $country ) ? $city : '';
 		}
 
 		/**

@@ -3,7 +3,7 @@
 **Date:** 2026-11-05. **Status:** draft r7.1 (06.11.2026) — history in the [revision log](#revision-log). **r7** applies the operator's decision of
 06.11.2026 (K15, #1642): every listed place belongs to a **country**, the admin picks the country first, and the checkout applies city mode **per the
 customer's country** — a country with no listed place keeps the ordinary field. **r7.1** folds in the r7 critic's seven findings (the data wires,
-hook registration, billing-only fallback, pickup guard, the checkout-view country, the §3.2 row) and records the operator's confirmation of every
+hook registration, billing-only fallback, pickup guard, the §3.2 row; the checkout-view country, finding 5, was dropped by the coordinator — §4.2) and records the operator's confirmation of every
 §10 item (K16, K17). Its implementation plan is
 [plans/2026-11-06-1642-city-mode-country.md](../plans/2026-11-06-1642-city-mode-country.md). r3 was **rewritten after the operator's
 redirect of 05.11.2026** (§0, binding): the list of places is the **granularity of the checkout's settlement choice and of the active provider's address
@@ -308,17 +308,12 @@ WooCommerce's «Страна»), still with **no request** — the options are t
 оформление не затрагивается»).
 
 **r7 — everything above is per the customer's country (K15).** «Customer's country» is the delivery section's country (§4.1): the live
-`billing_country` / `shipping_country` field on the clients. **r7.1 — on the server it is the checkout-view country**, a new
-`Location_Service::checkout_view_country()`: on the **initial classic page build** (no AJAX, no REST / Store API request) the country of the
-**delivery target** — `WC()->customer->get_{target}_country()`, `target` = billing for a billing-only shop or while the «Доставить по другому
-адресу» default is unchecked, shipping when it is checked (`Address_Target::classic_default()`, the body of today's private
-`Checkout_Handler::classic_checkout_default_target()`, moved so both classes share it); on every later request `customer_shipping_country()`
-(WooCommerce's `update_order_review` has copied billing into shipping while the box is off, and the Store API cart address is the delivery
-address); `resolve_default_country()` when empty. The r7 text named `customer_shipping_country()` for the first render too, which reads the
-**saved shipping** country only: a returning customer with saved billing RU (one listed place) and saved shipping UZ, delivering to billing, would
-get the page-load config — `defaultLocality`, the fixed policy — computed for UZ, so the classic closed-text City would show the RU place without the
-seeded record that `prefill()` and the address lock need. `customer_shipping_country()` itself and its existing consumers (staleness rule
-(b), issues #346 and #587) are unchanged. The config keys change as follows (replaces the four rows of the key table above):
+`billing_country` / `shipping_country` field on the clients, and on the server `Location_Service::customer_shipping_country()` as it is today.
+**Accepted gap (coordinator, 06.11.2026, after the repeat critic):** a returning customer whose saved billing country differs from the saved
+shipping country, delivering to billing, gets the page-load config (`defaultLocality`, the fixed policy) for the saved *shipping* country until the
+first `update_order_review`; this is rare and self-heals, because the classic checkout fires `update_order_review` on page load and the posted
+country is current from then on, and a first-render country (`checkout_view_country()`) would need its own surface boundary for the classic page,
+AJAX, REST and the Store API, which the case does not justify. The config keys change as follows (replaces the four rows of the key table above):
 
 | Key | r7 value |
 |---|---|
@@ -326,7 +321,7 @@ seeded record that `prefill()` and the address lock need. `customer_shipping_cou
 | `hideSettlement` | the merchant's **stored switch** as published; a client applies it only where `allowed[country]` has exactly one place (classic `syncHiddenSettlementRows()` already checks `places.length`; block mounts `single-place.tsx` only for one place) |
 | `allowCustomSettlement` | **the store's own value, no longer clamped** — a client treats a country with `allowed[country]` as closed (no free text: classic `closed-*` renderers compute `allowCustomSettlement && ! allowedPlaces( country )`); a country without places keeps the store rule, on the server too (`guard_custom_settlement()` is unchanged). **r7.1 — the classic pickup City guard** (`holdsGuardedSettlement()`, #961) holds the settlement when the country has a closed list **whatever the shop's ordinary field mode**, OR under the existing rule (`ajax-select2` and custom off): today its `'ajax-select2' === settlementAxisMode()` test alone would let a pickup point's City overwrite a listed place in a `typeahead` shop, although `resolveModeRenderer()` renders that country as `closed-*` |
 | `levels[country].region` | `false` **only for a country with `allowed[country]`**; every other country keeps its D15 answer |
-| `defaultLocality` | the fixed default is the single place **of the customer's country**: `woodev_location_default_locality` is applied as `apply_filters( tag, null, $country )`, `$country = checkout_view_country()` (r7.1); a country with several or no places gets no filtered default and the store's own «Локация» policy |
+| `defaultLocality` | the fixed default is the single place **of the customer's country**: `woodev_location_default_locality` is applied as `apply_filters( tag, null, $country )`, `$country = customer_shipping_country()`; a country with several or no places gets no filtered default and the store's own «Локация» policy |
 
 Two rows join the behaviour table:
 
@@ -337,7 +332,7 @@ Two rows join the behaviour table:
 
 `Location_Service`'s list-membership reads (§4.4) are per country too: `settlement_choices_narrow_this_read()`, `is_outside_settlement_choices()`,
 `saved_city_for_checkout()`, the region skip in `get_customer_chain()` and `names_listed_settlement()` look only at the places of the country concerned
-(the record's own country, or `checkout_view_country()`, r7.1); `Checkout_Handler::is_rejected_city_prefill()` uses the section's own country. A
+(the record's own country, or `customer_shipping_country()`); `Checkout_Handler::is_rejected_city_prefill()` uses the section's own country. A
 returning customer whose saved city is in a country without places keeps it, street and postcode included.
 
 ### 4.3 Address suggestions inside the chosen place — one provider-agnostic rule (K11′, K12–K14)
@@ -587,7 +582,7 @@ suite green.
 
 | Package | Repo / files | Depends | Size |
 |---|---|---|---|
-| **WP-A** framework PHP — per-country config keys, per-country narrowing, the default-locality filter's `$country`, the checkout-view country (r7.1) | `checkout/class-checkout-config.php`, `location/class-location-service.php`, `checkout/class-checkout-handler.php`, `pickup/class-address-target.php` + unit tests | — | M |
+| **WP-A** framework PHP — per-country config keys, per-country narrowing, the default-locality filter's `$country` | `checkout/class-checkout-config.php`, `location/class-location-service.php`, `checkout/class-checkout-handler.php` + unit tests | — | M |
 | **WP-B** framework classic JS — re-attach on country change, per-country custom-settlement clamp, single place of a newly chosen country, the pickup City guard independent of the shop's mode (r7.1) | `location-cascade.js` (+ `location-select-modes.js` only if the clamp needs it) + Jest | WP-A's wire (stated in §4.2, coded against it) | M |
 | **WP-C** framework block TS — country switch, per-country `levels.region` | `src/checkout-blocks/*` + Jest | same | S |
 | **WP-D** framework admin — `location-country` records-table column (+ resolved `default` / `names`, r7.1), per-row picker country, sorted rows, the per-country `count` condition with column declarations on both PHP save paths (r7.1) | `settings-api/class-control.php`, `settings-api/class-setting.php`, `settings-api/abstract-class-settings.php`, `settings-page/class-records-table.php`, `settings-page/class-field-schema.php`, `settings-page/class-composite-settings-handler.php`, `src/components/records-table.tsx`, `src/components/validate.js`, ADR-008 + tests | — | M |
@@ -683,7 +678,7 @@ earlier reports cite it.
 | r5.1 | 06.11.2026 | Codex (gpt-6.1-sol) r5 review, four must-fix findings applied. (1) The canonical `Location_Record::fias_id` is kept apart from DaData's native `raw.fias_id`; §3.2 requires no FIAS id from any provider and names the exact invalid payloads; C14/A10 add successful saves of real RU and non-RU mapper output. (2) §4.4 lists every consumer of the parent-city projection (`Checkout_Handler::settlement_record_value()` / `guard_custom_settlement()` / `city_names_record()` / `record_names_city()` + `remember_checkout_location()`, `Location_Service::record_names_city()`, `Order_Editor::location_record_names_city()`); F2 fixes them through one helper, with a PHP case posting «Черкизово» under `ajax-select2` + custom localities off. (3) Coordinator decision: the operator's input wins — outside RU every provider, DaData included, is scoped by country + own locality name (OSM ids no longer used; a framework-wide change); §4.3, K14, F2 tests, C15 fixtures and A1e updated, r5's §10 item 1 dropped. (4) The region-only third retry is deleted; the only allowed third shape is the `region_fias_id` + `city_fias_id` pair, with a Москва positive and a Зеленоград negative probe in F2/C15 |
 | r6 | 06.11.2026 | Operator's decision after his rig look (card F5 #1627, «operator, 06.11.2026»): §4.2 behaviour table rewritten — one place = plain text (not a locked field), several places = a plain dropdown of exactly the listed places (no select2 search box, no settlement `/suggest`), the State row hidden in both (kept visible only while a filled City leaves it empty); block checkout: native `<select>` instead of the combobox, native City row replaced by it |
 | r7 | 06.11.2026 | Operator's decision K15 (#1642, variant 2): a country per place. §0 K15; §3.1 the derived «Страна» column (`location-country`, `options` = shipping ∩ `location.countries`, `in_scope` = shipping), per-row picker country, sorted rows, the flag, the per-country `count` condition, the measured coverage and what s219 saw; §3.2 a foreign-country row is not an error; §3.3 table mock + provisional copy; §3.4 publication by shipping country, `hide_field` as stored, default locality per country; §4.2 #1634 recorded, per-country config keys, two behaviour rows (no place in the country, country switch), per-country §4.4 reads; §5 per-country key-removed fallback; §6; §7 packages WP-A–WP-E; §8 A13–A18; §10 items 3–7. Plan: `plans/2026-11-06-1642-city-mode-country.md` |
-| r7.1 | 06.11.2026 | The r7 critic's seven findings (Codex) folded in, and the operator's confirmation of §10. (1) §3.1: the PHP count evaluator gets each records-table's column declarations from both save paths (`Woodev_Abstract_Settings::filter_visible_values()` and the composite handler); (2) §3.4: the default-locality callback is registered with `accepted_args = 2`; (3) §5: the key-removed fallback script also loads in a billing-only shop; (4) §4.2: the classic pickup City guard holds a listed place whatever the shop's field mode; (5) §4.2: the server's per-country reads use the new `checkout_view_country()` (the delivery target's country on the first render), not `customer_shipping_country()`; (6) §3.1: the `location-country` column gains framework-resolved `default` (base country) and `names` (options ∪ stored countries); (7) §3.2: «not selectable now» (outside `options`) is neither flagged nor unpublished — only «outside shipping» (`in_scope`) is. Operator, 06.11.2026 (s220, «всё по рекомендациям»): §10 items 1–7 confirmed as written → K16, K17; §3.1, §3.3, §3.4, §6, §8 A17 and §10 now cite the decisions instead of «provisional». Plan r2: files per package, tests per finding |
+| r7.1 | 06.11.2026 | The r7 critic's seven findings (Codex) folded in, and the operator's confirmation of §10. (1) §3.1: the PHP count evaluator gets each records-table's column declarations from both save paths (`Woodev_Abstract_Settings::filter_visible_values()` and the composite handler); (2) §3.4: the default-locality callback is registered with `accepted_args = 2`; (3) §5: the key-removed fallback script also loads in a billing-only shop; (4) §4.2: the classic pickup City guard holds a listed place whatever the shop's field mode; (5) §4.2: ~~the server's per-country reads use the new `checkout_view_country()`~~ — dropped 06.11.2026 (coordinator, repeat critic): they use `customer_shipping_country()`, the saved-billing ≠ saved-shipping first-render case is an accepted, self-healing gap; (6) §3.1: the `location-country` column gains framework-resolved `default` (base country) and `names` (options ∪ stored countries); (7) §3.2: «not selectable now» (outside `options`) is neither flagged nor unpublished — only «outside shipping» (`in_scope`) is. Operator, 06.11.2026 (s220, «всё по рекомендациям»): §10 items 1–7 confirmed as written → K16, K17; §3.1, §3.3, §3.4, §6, §8 A17 and §10 now cite the decisions instead of «provisional». Plan r2: files per package, tests per finding |
 
 ## Related
 
