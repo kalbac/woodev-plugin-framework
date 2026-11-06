@@ -3,6 +3,7 @@ import { useState } from '@wordpress/element';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import BoxesTable, { parseBoxRows, serializeBoxRows, validateBoxesText } from '../../src/components/boxes-table';
+import RecordsTable from '../../src/components/records-table';
 import SearchSelectField from '../../src/components/search-select-field';
 import ControlField from '../../src/components/control-field';
 import { buildSavePayload, validatableFields } from '../../src/settings-page/app';
@@ -84,6 +85,33 @@ test( 'disabled_if uses show_if operators/relations and excludes disabled edits 
 	expect( buildSavePayload( fields, { city: '', mode: 'auto' }, { mode: 'auto', enabled: true } ) ).toEqual( { mode: 'auto' } );
 	expect( validatableFields( fields, { mode: 'auto', enabled: true } ) ).toEqual( { mode: fields.mode } );
 	expect( buildSavePayload( fields, { city: 99, mode: 'manual' }, { mode: 'manual', enabled: true } ) ).toEqual( { city: 99, mode: 'manual' } );
+} );
+
+test( 'count conditions compare records-table row counts with every comparator', () => {
+	const fields = { places: { controlType: 'records-table' } };
+	const values = { places: '[{"name":"one"},{"name":"two"}]' };
+	for ( const [ comparison, value ] of [ [ '>', 1 ], [ '>=', 2 ], [ '<', 3 ], [ '<=', 2 ], [ '==', 2 ] ] ) {
+		expect( evaluateConditions( { setting: 'places', operator: 'count', comparison, value }, values, fields ) ).toBe( true );
+	}
+	expect( evaluateConditions( { setting: 'places', operator: 'count', comparison: '>', value: 2 }, values, fields ) ).toBe( false );
+	expect( evaluateConditions( { setting: 'places', operator: 'count', comparison: '>', value: 1 }, values, { places: { controlType: 'text' } } ) ).toBe( false );
+} );
+
+test( 'a disabled_if count condition updates live as records-table rows are removed', () => {
+	function CountConditionForm() {
+		const [ places, setPlaces ] = useState( '[{"name":"one"},{"name":"two"}]' );
+		const fields = { places: { controlType: 'records-table' }, enabled: { controlType: 'toggle' } };
+		const rule = { setting: 'places', operator: 'count', comparison: '>', value: 1 };
+		return <>
+			<RecordsTable value={ places } columns={ [ { id: 'name', type: 'text', label: 'Название' } ] } name="places" addLabel="Добавить" onChange={ setPlaces } />
+			<ControlField schema={ { type: 'boolean', controlType: 'toggle', disabled_if: rule } } value={ false } onChange={ jest.fn() } conditionValues={ { places } } conditionFields={ fields } />
+		</>;
+	}
+	render( <CountConditionForm /> );
+	const toggle = screen.getByRole( 'checkbox' );
+	expect( toggle ).toBeDisabled();
+	fireEvent.click( screen.getByRole( 'button', { name: 'Удалить, 1' } ) );
+	expect( toggle ).toBeEnabled();
 } );
 
 test( 'search-select hydrates saved labels and debounces at two characters, preserving numeric ids', async () => {

@@ -313,7 +313,14 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 		// stripping. A condition may name a setting owned by a sibling handler;
 		// splitting first would make that controller look unregistered and turn it
 		// into the empty string.
-		$hidden = [];
+		$hidden            = [];
+		$records_table_ids = [];
+		foreach ( $this->get_settings() as $id => $registered_setting ) {
+			$registered_control = $registered_setting->get_control();
+			if ( $registered_control && \Woodev_Control::TYPE_RECORDS_TABLE === $registered_control->get_type() ) {
+				$records_table_ids[] = (string) $id;
+			}
+		}
 
 		foreach ( array_keys( $values ) as $setting_id ) {
 			$setting = $this->get_setting( (string) $setting_id );
@@ -325,7 +332,7 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 
 			$control  = $setting->get_control();
 			$disabled = $setting->get_disabled_if_conditions();
-			if ( ( $control && $control->is_disabled() ) || ( ! empty( $disabled ) && \Woodev_Setting::evaluate_conditions( $disabled, $this->effective_condition_values( $disabled, $values ) ) ) ) {
+			if ( ( $control && $control->is_disabled() ) || ( ! empty( $disabled ) && \Woodev_Setting::evaluate_conditions( $disabled, $this->effective_condition_values( $disabled, $values ), $records_table_ids ) ) ) {
 				$hidden[] = $setting_id;
 				continue;
 			}
@@ -336,7 +343,7 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 				continue;
 			}
 
-			if ( ! \Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values ) ) ) {
+			if ( ! \Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values ), $records_table_ids ) ) {
 				$hidden[] = $setting_id;
 			}
 		}

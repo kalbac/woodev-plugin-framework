@@ -412,6 +412,12 @@ export default function App() {
 		return { ...context, ...collectStepValues() };
 	}
 
+	function collectConditionSchemas() {
+		const schemas = {};
+		steps.forEach( ( s ) => Object.assign( schemas, s.fields || {} ) );
+		return schemas;
+	}
+
 	/**
 	 * Settles the promise a custom component is waiting on for a destructive action.
 	 *
@@ -626,7 +632,7 @@ export default function App() {
 
 			const visibleFields = {};
 			Object.keys( step.fields || {} ).forEach( ( id ) => {
-				if ( isFieldVisible( step.fields[ id ], conditionValues ) ) {
+				if ( isFieldVisible( step.fields[ id ], conditionValues, collectConditionSchemas() ) ) {
 					visibleFields[ id ] = step.fields[ id ];
 				}
 			} );
@@ -915,7 +921,7 @@ export default function App() {
 			createElement( Resolved, {
 				step,
 				values: values[ step.id ] || {},
-				onChange: onStepChange,
+						onChange: onStepChange,
 				errors: fieldErrors,
 				showErrors,
 				busy: busy || null !== actionBusy,
@@ -1007,6 +1013,7 @@ export default function App() {
 						step,
 						values: values[ step.id ] || {},
 						conditionValues: collectConditionValues(),
+						conditionFields: collectConditionSchemas(),
 													onChange: onStepChange,
 						showErrors,
 						serverErrors: fieldErrors,

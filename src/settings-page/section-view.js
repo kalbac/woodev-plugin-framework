@@ -46,7 +46,8 @@ export default function SectionView( { providerId, section, tabFields, values, c
 	const groupedFieldIds = new Set( groups.flatMap( ( group ) => group.fields ) );
 	const isVisible = ( settingId ) => isFieldVisible(
 		section.fields[ settingId ],
-		section.fields[ settingId ].box_preset ? effectiveValues : ( conditionValues || values )
+		section.fields[ settingId ].box_preset ? effectiveValues : ( conditionValues || values ),
+		tabFields || section.fields
 	);
 	// A preset belongs to its group's card when a group names it; an ungrouped preset stays in the shared
 	// table below the fields, exactly as before.
@@ -68,6 +69,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 			schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
 			value={ values[ settingId ] ?? section.fields[ settingId ].value }
 			conditionValues={ conditionValues || values }
+			conditionFields={ tabFields || section.fields }
 			providerMismatchBaseline={ tabFields && tabFields.active_provider && tabFields.active_provider.value }
 			onChange={ ( next ) => onFieldChange( settingId, next ) }
 			hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }

@@ -4,6 +4,17 @@
 
 **Date:** 2026-07-05
 
+## Amendment — records-table row-count conditions (#1627)
+
+**Date:** 2026-11-06
+**Operator decision:** #1627
+
+A real plugin needs to disable a setting while an editable places table has multiple rows, and re-enable it as the merchant removes rows. Add the `count` operator as a typed operand for `Woodev_Control::TYPE_RECORDS_TABLE` controllers. The condition shape is `{ setting, operator: 'count', comparison, value }`, where `comparison` is one of `>`, `>=`, `<`, `<=`, `==` and `value` is a non-negative integer row threshold. Example: `['setting' => 'places', 'operator' => 'count', 'comparison' => '>', 'value' => 1]`.
+
+The count is taken from the records-table JSON list and is recomputed from current unsaved browser values. PHP uses the same row decoder on the effective submitted-or-stored value, before validation and persistence. A count condition naming a non-records-table setting is an authoring error: field-schema construction rejects it with an `InvalidArgumentException`, and evaluation fails closed if no records-table type metadata is available. Other operators retain their v1 string-comparison semantics.
+
+This amendment adds no nesting and leaves the four original scalar operators unchanged. It replaces the deferred numeric-threshold item only for the records-table row-count operand; arbitrary numeric comparisons and comparisons of other field types remain deferred.
+
 ## Context
 
 Plugins need to show/hide a settings field based on other fields' values (e.g. show «API-ключ» only when `mode = live`). The feature (`show_if`) was shipped for both admin surfaces (settings page + setup wizard). The hard constraint is that field visibility must be resolved **identically** in three places — client render, client save-gate, and the authoritative server gate — because the server persists nothing when validation fails (SP-3 atomic REST). A drift between the PHP evaluator and its JS mirror is a silent client/server disagreement bug.

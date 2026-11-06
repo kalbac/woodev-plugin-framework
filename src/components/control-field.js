@@ -355,7 +355,7 @@ function withAnatomy( schema, control, error ) {
  * @return {Object} React element.
  * @since 2.0.2
  */
-export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues, settingId, providerMismatchBaseline } ) {
+export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues, conditionFields, settingId, providerMismatchBaseline } ) {
 	// Must be called unconditionally before any early return (React hook rules).
 	const [ touched, setTouched ] = useState( false );
 
@@ -380,7 +380,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 	// silently ignoring input — its reason already reached us as `schema.disabled_reason`
 	// (withAnatomy renders it separately from `schema.description`).
 	// Computed before the sensitive branch below so SecretControl gets it too.
-	const disabled = isFieldDisabled( schema, conditionValues || {} );
+	const disabled = isFieldDisabled( schema, conditionValues || {}, conditionFields || {} );
 	schema = { ...schema, disabled };
 
 	// A sensitive value is masked: empty input + "saved" placeholder; typing a new

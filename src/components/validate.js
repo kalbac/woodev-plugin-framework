@@ -292,7 +292,7 @@ function toComparable( value ) {
  * @param {Object}       values     controlling settingId => current value.
  * @return {boolean} true when visible.
  */
-export function evaluateConditions( conditions, values ) {
+export function evaluateConditions( conditions, values, fieldSchemas = {} ) {
 	if ( ! conditions ) {
 		return true;
 	}
@@ -308,6 +308,7 @@ export function evaluateConditions( conditions, values ) {
 		const operator = condition.operator ?? '=';
 		const target = condition.value ?? '';
 		const raw = values[ settingId ];
+		const sourceSchema = fieldSchemas[ settingId ];
 		const current =
 			null === raw || undefined === raw || 'object' === typeof raw
 				? ''
@@ -315,6 +316,26 @@ export function evaluateConditions( conditions, values ) {
 
 		let match;
 		switch ( operator ) {
+			case 'count': {
+				const rows = sourceSchema && 'records-table' === sourceSchema.controlType ? parseRecordRows( raw ) : null;
+				const threshold = condition.value;
+				const comparison = condition.comparison;
+				const validThreshold = ( 'number' === typeof threshold && Number.isSafeInteger( threshold ) && threshold >= 0 ) || ( 'string' === typeof threshold && /^(0|[1-9][0-9]*)$/.test( threshold ) && Number.isSafeInteger( Number( threshold ) ) );
+				match = Array.isArray( rows ) && validThreshold;
+				if ( match ) {
+					const count = rows.length;
+					const targetCount = Number( threshold );
+					switch ( comparison ) {
+						case '>': match = count > targetCount; break;
+						case '>=': match = count >= targetCount; break;
+						case '<': match = count < targetCount; break;
+						case '<=': match = count <= targetCount; break;
+						case '==': match = count === targetCount; break;
+						default: match = false; break;
+					}
+				}
+				break;
+			}
 			case '=':
 				match = current === toComparable( target );
 				break;
@@ -354,15 +375,28 @@ export function evaluateConditions( conditions, values ) {
  * @param {Object} values controlling settingId => current value.
  * @return {boolean} true when visible.
  */
-export function isFieldVisible( schema, values ) {
+export function isFieldVisible( schema, values, fieldSchemas = {} ) {
 	if ( ! schema || ! schema.show_if ) {
 		return true;
 	}
-	return evaluateConditions( schema.show_if, values );
+	return evaluateConditions( schema.show_if, values, fieldSchemas );
 }
 
 /** Same evaluator as show_if, applied to live unsaved values. Empty = no disablement. */
-export function isFieldDisabled( schema, values ) {
+export function isFieldDisabled( schema, values, fieldSchemas = {} ) {
 	return !! schema.disabled || ( schema.disabled_if && Object.keys( schema.disabled_if ).length > 0
-		? evaluateConditions( schema.disabled_if, values ) : false );
+		? evaluateConditions( schema.disabled_if, values, fieldSchemas ) : false );
+}
+
+/** Parse the records-table's stored JSON list. Malformed stored data has zero rows, matching PHP. */
+function parseRecordRows( value ) {
+	if ( 'string' !== typeof value || '' === value.trim() ) {
+		return [];
+	}
+	try {
+		const rows = JSON.parse( value );
+		return Array.isArray( rows ) && rows.every( ( row ) => row && 'object' === typeof row && ! Array.isArray( row ) ) ? rows : [];
+	} catch ( error ) {
+		return [];
+	}
 }

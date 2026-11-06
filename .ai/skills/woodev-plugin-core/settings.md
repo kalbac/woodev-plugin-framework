@@ -137,8 +137,9 @@ Rules that bit us:
   `format-validator-null-strlen-deprecation`). A custom `validate` callable receives the value and returns
   `bool`; its `validate_message` is shown on failure. The client mirrors the shared rules; a callable has
   no JS twin, so the field is marked server-validated and the server stays the authority.
-- **Conditional fields (`show_if`):** a flat group `[ 'setting' => id, 'operator' => '=', 'value' => v ]`,
-  or `'relation' => 'AND'|'OR'` plus a list. Operators: `=`, `!=`, `in`, `not_in` — nothing else; an unknown
+- **Conditional fields (`show_if` / `disabled_if`):** a flat group `[ 'setting' => id, 'operator' => '=', 'value' => v ]`,
+  or `'relation' => 'AND'|'OR'` plus a list. Operators: `=`, `!=`, `in`, `not_in`; for a `records-table` controller only,
+  `'operator' => 'count'` takes `'comparison' => '>'|'>='|'<'|'<='|'=='` and an integer `'value'` row threshold. An unknown
   operator hides the field. `in`/`not_in` take a plain list. Compare to a select/radio KEY and to a
   boolean for a toggle. Write "show when mode is live" as `= 'live'`, not `!= 'test'` (the latter also
   shows while unset). A hidden field is neither validated nor stored (`filter_visible_values()`). `show_if`

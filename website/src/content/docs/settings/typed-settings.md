@@ -359,6 +359,26 @@ $this->register_setting(
 | `!=` | it does not equal `value` |
 | `in` | it is one of the values in the `value` list |
 | `not_in` | it is none of the values in the `value` list |
+| `count` | the controlling `records-table` has a row count that matches `comparison` (`>`, `>=`, `<`, `<=` or `==`) against the integer `value` |
+
+Use `count` only with a `records-table` control. It reads the table's current rows, including unsaved edits. For example, disable a toggle while a places table has more than one row:
+
+```php
+<?php
+$this->register_setting(
+	'hide_settlement',
+	\Woodev_Setting::TYPE_BOOLEAN,
+	[
+		'name'        => __( 'Hide the settlement field', 'my-plugin' ),
+		'disabled_if' => [
+			'setting'    => 'places',
+			'operator'   => 'count',
+			'comparison' => '>',
+			'value'      => 1,
+		],
+	]
+);
+```
 
 Rules worth knowing:
 
