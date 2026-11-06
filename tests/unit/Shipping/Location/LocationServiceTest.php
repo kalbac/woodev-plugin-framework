@@ -3445,14 +3445,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		 * @param string $slug    Native id.
 		 * @param string $name    Settlement name.
 		 * @param array  $nested  Optional nested settlement `{ name, type }`.
+		 * @param string $country ISO-3166 alpha-2 country of the place.
 		 */
-		private function city_mode_place( string $slug, string $name, array $nested = [] ): Location_Record {
+		private function city_mode_place( string $slug, string $name, array $nested = [], string $country = 'RU' ): Location_Record {
 			return Location_Record::from_array(
 				[
 					'key'               => 'svc-fixture:' . $slug,
 					'provider_id'       => 'svc-fixture',
 					'level'             => Location_Record::LEVEL_SETTLEMENT,
-					'country'           => 'RU',
+					'country'           => $country,
 					'settlement'        => [ 'name' => $name, 'type' => 'г' ],
 					'nested_settlement' => [] !== $nested ? $nested : null,
 					'label'             => 'г ' . $name,
@@ -3463,16 +3464,18 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		/**
 		 * A service whose provider owns every fixture record, whose city mode lists `$listed`
 		 * (with `$default` as the filtered fixed default) and whose customer has `$stored`
-		 * saved and `$saved_city` in WooCommerce.
+		 * saved and `$saved_city` in WooCommerce, in `$customer_country` (`''` = the store default).
 		 *
-		 * @param Location_Record[] $listed Listed places.
+		 * @param Location_Record[]                          $listed           Listed places.
+		 * @param Location_Record|callable(string): ?Location_Record|null $default The filtered fixed default; a callable
+		 *                                                                         is asked with the filter's country argument.
 		 */
-		private function city_mode_service( array $listed, ?Location_Record $stored = null, ?Location_Record $default = null, string $saved_city = '' ): Location_Service {
-			$provider = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] );
+		private function city_mode_service( array $listed, ?Location_Record $stored = null, $default = null, string $saved_city = '', string $customer_country = '' ): Location_Service {
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU', 'KZ', 'UZ' ] );
 			$registry = $this->activate_owning_provider( $provider );
 
 			Functions\when( 'apply_filters' )->alias(
-				static function ( string $tag, $value = null ) use ( $provider, $listed, $default ) {
+				static function ( string $tag, $value = null, $country = null ) use ( $provider, $listed, $default ) {
 					switch ( $tag ) {
 						case Location_Provider_Registry::FILTER_PROVIDERS:
 							return [ $provider ];
@@ -3482,7 +3485,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 								'hide_field' => false,
 							];
 						case Location_Service::FILTER_DEFAULT_LOCALITY:
-							return $default;
+							return is_callable( $default ) ? $default( (string) $country ) : $default;
 						default:
 							return $value;
 					}
@@ -3495,16 +3498,23 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				$store->set( $stored, false );
 			}
 
-			return new class( $registry, $store, $saved_city ) extends Location_Service {
+			return new class( $registry, $store, $saved_city, $customer_country ) extends Location_Service {
 				private string $saved_city;
 
-				public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, string $saved_city ) {
+				private string $customer_country;
+
+				public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, string $saved_city, string $customer_country ) {
 					parent::__construct( $registry, $store );
-					$this->saved_city = $saved_city;
+					$this->saved_city       = $saved_city;
+					$this->customer_country = $customer_country;
 				}
 
 				protected function customer_saved_city(): string {
 					return $this->saved_city;
+				}
+
+				protected function customer_shipping_country(): string {
+					return '' !== $this->customer_country ? $this->customer_country : parent::customer_shipping_country();
 				}
 			};
 		}
@@ -3539,6 +3549,75 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], null, null, 'г. Химки' );
 
 			$this->assertSame( 'г. Химки', $service->get_saved_city() );
+		}
+
+		public function test_city_mode_does_not_read_a_saved_uz_record_as_outside_the_list_while_ru_lists_places(): void {
+			// A country without listed places keeps the ordinary field: the saved Tashkent is
+			// judged against UZ's (empty) list, not against the places of RU.
+			$tashkent = $this->city_mode_place( 'tashkent', 'Ташкент', [], 'UZ' );
+			$service  = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], $tashkent, null, '', 'UZ' );
+
+			$entry = Location_Service::in_checkout_view( static fn() => $service->get_customer_record() );
+
+			$this->assertNotNull( $entry, 'the UZ record survives the checkout view' );
+			$this->assertSame( 'svc-fixture:tashkent', $entry['record']->key() );
+		}
+
+		public function test_city_mode_still_ignores_an_unlisted_record_of_a_country_that_lists_places(): void {
+			// The same list, the RU customer: Тула is outside the RU places.
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], $this->city_mode_place( 'tula', 'Тула' ), null, '', 'RU' );
+
+			$this->assertNull( Location_Service::in_checkout_view( static fn() => $service->get_customer_record() ) );
+		}
+
+		public function test_city_mode_keeps_a_saved_city_of_a_country_without_listed_places(): void {
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], null, null, 'Ташкент', 'UZ' );
+
+			$this->assertSame( 'Ташкент', Location_Service::in_checkout_view( static fn() => $service->get_saved_city() ) );
+		}
+
+		public function test_city_mode_judges_a_saved_city_by_the_places_of_the_customers_country_only(): void {
+			// «Алматы» is a listed KZ place; for an RU customer it names nothing RU lists.
+			$places = [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ), $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' ), $this->city_mode_place( 'astana', 'Астана', [], 'KZ' ) ];
+
+			$russian    = $this->city_mode_service( $places, null, null, 'Алматы', 'RU' );
+			$kazakhstan = $this->city_mode_service( $places, null, null, 'Алматы', 'KZ' );
+
+			$this->assertSame( '', Location_Service::in_checkout_view( static fn() => $russian->get_saved_city() ) );
+			$this->assertSame( 'Алматы', Location_Service::in_checkout_view( static fn() => $kazakhstan->get_saved_city() ) );
+		}
+
+		public function test_city_mode_names_a_listed_settlement_in_the_given_country_only(): void {
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' ) ] );
+
+			$this->assertTrue( $service->names_listed_settlement( 'Алматы', 'KZ' ) );
+			$this->assertFalse( $service->names_listed_settlement( 'Алматы', 'RU' ) );
+			$this->assertTrue( $service->names_listed_settlement( 'Алматы' ), 'no country searches every country' );
+			$this->assertTrue( $service->has_settlement_choices_for( 'KZ' ) );
+			$this->assertFalse( $service->has_settlement_choices_for( 'UZ' ) );
+		}
+
+		public function test_city_mode_default_locality_filter_receives_the_customers_country(): void {
+			$moscow    = $this->city_mode_place( 'moscow', 'Москва' );
+			$received  = [];
+			$for_place = static function ( string $country ) use ( $moscow, &$received ) {
+				$received[] = $country;
+
+				return 'RU' === $country ? $moscow : null;
+			};
+
+			$russian    = $this->city_mode_service( [ $moscow, $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' ), $this->city_mode_place( 'astana', 'Астана', [], 'KZ' ) ], null, $for_place, '', 'RU' );
+			$kazakhstan = $this->city_mode_service( [ $moscow, $this->city_mode_place( 'almaty', 'Алматы', [], 'KZ' ), $this->city_mode_place( 'astana', 'Астана', [], 'KZ' ) ], null, $for_place, '', 'KZ' );
+
+			$this->assertSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, $russian->get_default_locality_policy() );
+			$this->assertSame( 'svc-fixture:moscow', $russian->resolve_default()->key() );
+			$this->assertSame( [ 'RU', 'RU' ], $received, 'the filter is asked for the RU customer\'s country' );
+
+			$received = [];
+
+			$this->assertNotSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, $kazakhstan->get_default_locality_policy(), 'two KZ places give no filtered default' );
+			$this->assertNull( $kazakhstan->resolve_default() );
+			$this->assertSame( [ 'KZ', 'KZ' ], $received );
 		}
 
 		public function test_city_mode_single_place_is_the_fixed_default_from_the_filter_without_touching_the_stored_option(): void {
