@@ -1,19 +1,30 @@
 import '@testing-library/jest-dom';
 import { useState } from '@wordpress/element';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react';
 import RecordsTable, { getRowError, parseRecordRows, validateRecordsValue, type RecordColumn } from '../../src/components/records-table';
 import ControlField from '../../src/components/control-field';
 import { validateField } from '../../src/components/validate';
+import apiFetch from '@wordpress/api-fetch';
+
+let mockUseRealPicker = false;
+jest.mock( '@wordpress/api-fetch' );
 
 // The real picker searches over REST; the address cell only needs "a record gets picked".
 jest.mock( '../../src/components/location-picker-field', () => ( {
 	__esModule: true,
 	...jest.requireActual( '../../src/components/location-picker-field' ),
-	default: ( { value, level, provider, providerPinned, disabled, onChange }: { value: string; level: string; provider?: string; providerPinned?: boolean; disabled?: boolean; onChange: ( v: string ) => void } ) => (
-		<button type="button" data-level={ level } data-provider={ provider } data-pinned={ String( !! providerPinned ) } disabled={ disabled } onClick={ () => onChange( JSON.stringify( { key: 'k-new', label: 'г Подольск, ул Ленина, д 1' } ) ) }>
-			{ 'pick address' + ( value ? ' (set)' : '' ) }
-		</button>
-	),
+	default: ( props: { value: string; level: string; country?: string; provider?: string; providerPinned?: boolean; disabled?: boolean; onChange: ( v: string ) => void } ) => {
+		if ( mockUseRealPicker ) {
+			const RealPicker = jest.requireActual( '../../src/components/location-picker-field' ).default;
+			return <RealPicker { ...props } />;
+		}
+		const { value, level, country, provider, providerPinned, disabled, onChange } = props;
+		return (
+			<button type="button" data-level={ level } data-country={ country } data-provider={ provider } data-pinned={ String( !! providerPinned ) } disabled={ disabled } onClick={ () => onChange( JSON.stringify( { key: 'k-new', label: 'г Подольск, ул Ленина, д 1', ...( country ? { country } : {} ) } ) ) }>
+				{ 'pick address' + ( value ? ' (set)' : '' ) }
+			</button>
+		);
+	},
 } ) );
 
 const COLUMNS: RecordColumn[] = [
@@ -228,4 +239,123 @@ test( 'ControlField wraps the table so the settings page can give it the whole c
 
 	// The settings stylesheet stretches `.woodev-records-field .woodev-field`; without the wrapper the table sat in the 425px control column.
 	expect( container.querySelector( '.woodev-records-field > .woodev-field .woodev-records' ) ).not.toBeNull();
+} );
+
+
+const COUNTRY_COLUMNS: RecordColumn[] = [
+	{ id: 'country', type: 'location-country', label: 'Страна', of: 'city', required: true,
+		options: [ { code: 'KZ', name: 'Казахстан' }, { code: 'RU', name: 'Россия' } ],
+		in_scope: [ 'RU', 'KZ' ], default: 'RU', names: { RU: 'Россия', KZ: 'Казахстан' } },
+	{ id: 'city', type: 'location-picker', label: 'Населённый пункт', level: 'settlement', required: true },
+];
+const city = ( country: string, label: string ) => JSON.stringify( { key: 'k-' + label, country, label } );
+const openCityForm = () => fireEvent.click( screen.getByRole( 'button', { name: 'Добавить склад' } ) );
+const pickCity = () => fireEvent.click( screen.getByRole( 'button', { name: /pick address/ } ) );
+const saveCity = () => fireEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+
+test( 'one country is text without a select, and the derived column is never stored', () => {
+	const columns = [ { ...COUNTRY_COLUMNS[ 0 ], options: [ { code: 'RU', name: 'Россия' } ] }, COUNTRY_COLUMNS[ 1 ] ];
+	render( <Harness columns={ columns } /> );
+	openCityForm();
+	expect( screen.queryByRole( 'combobox' ) ).toBeNull();
+	expect( screen.getByText( 'Россия' ) ).toBeInTheDocument();
+	expect( screen.getByRole( 'button', { name: 'pick address' } ) ).toHaveAttribute( 'data-country', 'RU' );
+	pickCity();
+	saveCity();
+	expect( saved()[ 0 ] ).not.toHaveProperty( 'country' );
+	expect( JSON.parse( saved()[ 0 ].city as string ).country ).toBe( 'RU' );
+	expect( validateRecordsValue( JSON.stringify( saved() ), columns ) ).toBeNull();
+} );
+
+test( 'the server default wins over option order and changing country clears a mismatched pick', () => {
+	render( <Harness columns={ COUNTRY_COLUMNS } /> );
+	openCityForm();
+	expect( screen.getByRole( 'combobox', { name: 'Страна' } ) ).toHaveValue( 'RU' );
+	pickCity();
+	fireEvent.change( screen.getByRole( 'combobox', { name: 'Страна' } ), { target: { value: 'KZ' } } );
+	expect( screen.getByRole( 'button', { name: 'pick address' } ) ).toHaveAttribute( 'data-country', 'KZ' );
+	saveCity();
+	expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Выберите «Населённый пункт» из подсказок.' );
+	pickCity();
+	saveCity();
+	expect( JSON.parse( saved()[ 0 ].city as string ).country ).toBe( 'KZ' );
+} );
+
+test( 'add and edit keep country-name order stable within a country', () => {
+	render( <Harness columns={ COUNTRY_COLUMNS } initial={ stored( { id: 1, city: city( 'RU', 'Москва' ) }, { id: 2, city: city( 'RU', 'Тула' ) } ) } /> );
+	openCityForm();
+	fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'KZ' } } );
+	pickCity();
+	saveCity();
+	expect( saved().map( ( row ) => JSON.parse( row.city as string ).country ) ).toEqual( [ 'KZ', 'RU', 'RU' ] );
+	expect( saved().slice( 1 ).map( ( row ) => row.id ) ).toEqual( [ 1, 2 ] );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Изменить, 2' } ) );
+	fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'KZ' } } );
+	pickCity();
+	saveCity();
+	expect( saved().map( ( row ) => JSON.parse( row.city as string ).country ) ).toEqual( [ 'KZ', 'KZ', 'RU' ] );
+	expect( saved()[ 1 ].id ).toBe( 1 );
+	expect( saved()[ 2 ].id ).toBe( 2 );
+} );
+
+test( 'a flagged country outside options shows and sorts by its server-resolved name', () => {
+	const columns = [ { ...COUNTRY_COLUMNS[ 0 ], options: [ { code: 'RU', name: 'Россия' } ], in_scope: [ 'RU' ] }, COUNTRY_COLUMNS[ 1 ] ];
+	render( <Harness columns={ columns } initial={ stored( { city: city( 'RU', 'Москва' ) }, { city: city( 'KZ', 'Алматы' ) } ) } /> );
+	const first = screen.getAllByRole( 'row' )[ 1 ];
+	expect( within( first ).getByText( 'Казахстан' ) ).toBeInTheDocument();
+	expect( within( first ).getByText( 'страна не входит в доставку — на оформлении не показывается' ) ).toBeInTheDocument();
+	openCityForm();
+	pickCity();
+	saveCity();
+	expect( JSON.parse( saved()[ 0 ].city as string ).country ).toBe( 'KZ' );
+	expect( saved() ).toHaveLength( 3 );
+} );
+
+test( 'no provider options does not flag a country still in shipping scope or remove its record', () => {
+	const columns = [ { ...COUNTRY_COLUMNS[ 0 ], options: [], default: '' }, COUNTRY_COLUMNS[ 1 ] ];
+	render( <Harness columns={ columns } initial={ stored( { city: city( 'RU', 'Москва' ) } ) } /> );
+	expect( screen.queryByText( 'страна не входит в доставку — на оформлении не показывается' ) ).toBeNull();
+	fireEvent.click( screen.getByRole( 'button', { name: 'Изменить, 1' } ) );
+	expect( screen.getByRole( 'button', { name: /pick address/ } ) ).toBeDisabled();
+	saveCity();
+	expect( saved() ).toEqual( [ { city: city( 'RU', 'Москва' ) } ] );
+} );
+
+test( 'an unknown country name falls back to its code', () => {
+	render( <Harness columns={ COUNTRY_COLUMNS } initial={ stored( { city: city( 'XX', 'Unknown' ) } ) } /> );
+	expect( screen.getByText( 'XX' ) ).toBeInTheDocument();
+} );
+
+test( 'the real picker request carries the selected row country', async () => {
+	mockUseRealPicker = true;
+	jest.useFakeTimers();
+	const fetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
+	fetch.mockResolvedValue( { suggestions: [] } );
+	( window as Window & { woodevSettings?: unknown } ).woodevSettings = { restRoot: 'https://example.test/wp-json/woodev/v1/settings', nonce: 'n' };
+	try {
+		render( <Harness columns={ COUNTRY_COLUMNS } /> );
+		openCityForm();
+		fireEvent.change( screen.getByRole( 'combobox', { name: 'Страна' } ), { target: { value: 'KZ' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Выберите локацию…' } ) );
+		fireEvent.change( await screen.findByPlaceholderText( 'Начните вводить название…' ), { target: { value: 'Алм' } } );
+		await act( async () => { jest.advanceTimersByTime( 300 ); } );
+		await waitFor( () => expect( fetch ).toHaveBeenCalled() );
+		const request = fetch.mock.calls[ fetch.mock.calls.length - 1 ][ 0 ] as { url: string };
+		expect( new URL( request.url ).searchParams.get( 'country' ) ).toBe( 'KZ' );
+		expect( new URL( request.url ).pathname ).toBe( '/wp-json/woodev/v1/location/default-locality/suggest' );
+	} finally {
+		mockUseRealPicker = false;
+		jest.useRealTimers();
+	}
+} );
+
+
+test( 'editing an old foreign row with one offered country uses that country without a select', () => {
+	const columns = [ { ...COUNTRY_COLUMNS[ 0 ], options: [ { code: 'RU', name: 'Россия' } ], in_scope: [ 'RU' ] }, COUNTRY_COLUMNS[ 1 ] ];
+	render( <Harness columns={ columns } initial={ stored( { city: city( 'KZ', 'Алматы' ) } ) } /> );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Изменить, 1' } ) );
+	expect( screen.queryByRole( 'combobox' ) ).toBeNull();
+	expect( screen.getByRole( 'button', { name: 'pick address' } ) ).toHaveAttribute( 'data-country', 'RU' );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Отмена' } ) );
+	expect( saved() ).toEqual( [ { city: city( 'KZ', 'Алматы' ) } ] );
 } );

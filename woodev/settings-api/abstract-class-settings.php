@@ -469,7 +469,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		 * @return array<string,mixed> the submitted map with hidden fields removed.
 		 */
 		public function filter_visible_values( array $values, ?array $available = null ): array {
-			$records_table_ids = $this->records_table_setting_ids();
+			$records_tables = $this->records_table_columns();
 
 			// Resolve every field's visibility against the ORIGINAL submitted map first,
 			// then strip — so a chained dependency (a controller that is itself hidden)
@@ -486,7 +486,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 				$control  = $setting->get_control();
 				$disabled = $setting->get_disabled_if_conditions();
-				if ( ( $control && $control->is_disabled() ) || ( ! empty( $disabled ) && Woodev_Setting::evaluate_conditions( $disabled, $this->effective_condition_values( $disabled, $values, $available ), $records_table_ids ) ) ) {
+				if ( ( $control && $control->is_disabled() ) || ( ! empty( $disabled ) && Woodev_Setting::evaluate_conditions( $disabled, $this->effective_condition_values( $disabled, $values, $available ), $records_tables ) ) ) {
 					$hidden[] = $setting_id;
 					continue;
 				}
@@ -497,7 +497,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					continue;
 				}
 
-				if ( ! Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values, $available ), $records_table_ids ) ) {
+				if ( ! Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values, $available ), $records_tables ) ) {
 					$hidden[] = $setting_id;
 				}
 			}
@@ -510,20 +510,20 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		}
 
 		/**
-		 * The registered records-table setting ids, for count conditions.
+		 * The registered records-table columns, keyed by setting id, for count conditions.
 		 *
 		 * @since 2.0.26
-		 * @return string[]
+		 * @return array<string,array<int,array<string,mixed>>>
 		 */
-		private function records_table_setting_ids(): array {
-			$ids = [];
+		private function records_table_columns(): array {
+			$columns = [];
 			foreach ( $this->get_settings() as $id => $setting ) {
 				$control = $setting->get_control();
 				if ( $control && Woodev_Control::TYPE_RECORDS_TABLE === $control->get_type() ) {
-					$ids[] = (string) $id;
+					$columns[ (string) $id ] = $control->get_columns();
 				}
 			}
-			return $ids;
+			return $columns;
 		}
 
 		/**

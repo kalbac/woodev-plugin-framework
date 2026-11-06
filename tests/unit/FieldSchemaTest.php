@@ -82,6 +82,53 @@ class FieldSchemaTest extends TestCase {
 		};
 	}
 
+	/**
+	 * WC() instrumentation must not leak into other tests (brain-monkey-function-pollution).
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_country_columns_resolve_defaults_and_names_from_woocommerce(): void {
+		$countries = Mockery::mock();
+		$countries->shouldReceive( 'get_base_country' )->andReturn( 'RU' );
+		$countries->shouldReceive( 'get_countries' )->andReturn( [ 'RU' => 'Россия', 'KZ' => 'Казахстан', 'UZ' => 'Узбекистан' ] );
+		Functions\when( 'WC' )->justReturn( (object) [ 'countries' => $countries ] );
+
+		foreach ( [
+			[ [ 'code' => 'KZ', 'name' => 'Казахстан' ], [ 'code' => 'RU', 'name' => 'Россия' ] ],
+			[ [ 'code' => 'KZ', 'name' => 'Казахстан' ] ],
+			[],
+		] as $options ) {
+			$handler = $this->make_handler( static function ( $handler ) use ( $options ) {
+				$rows = array_map( static fn( string $code ): array => [ 'city' => json_encode( [ 'country' => $code ] ) ], [ 'UZ', 'XX' ] );
+				$handler->register_setting( 'places', \Woodev_Setting::TYPE_STRING, [ 'default' => json_encode( $rows ) ] );
+				$handler->register_control( 'places', \Woodev_Control::TYPE_RECORDS_TABLE, [
+					'columns' => [
+						[ 'id' => 'country', 'type' => 'location-country', 'of' => 'city', 'options' => $options, 'in_scope' => [ 'RU' ], 'default' => 'XX', 'names' => [ 'RU' => 'Wrong' ] ],
+						[ 'id' => 'city', 'type' => 'location-picker' ],
+					],
+				] );
+			} );
+			$column = Field_Schema::from_handler( $handler )['places']['columns'][0];
+			$this->assertSame( 2 === count( $options ) ? 'RU' : ( $options[0]['code'] ?? '' ), $column['default'] );
+			$this->assertSame( 'Узбекистан', $column['names']['UZ'] );
+			$this->assertSame( 'XX', $column['names']['XX'] );
+			foreach ( $options as $option ) {
+				$this->assertSame( $option['name'], $column['names'][ $option['code'] ] );
+			}
+			$this->assertSame( $options, $column['options'] );
+		}
+	}
+
+	public function test_table_without_country_columns_gets_no_country_metadata(): void {
+		$handler = $this->make_handler( static function ( $handler ) {
+			$handler->register_setting( 'warehouses', \Woodev_Setting::TYPE_STRING );
+			$handler->register_control( 'warehouses', \Woodev_Control::TYPE_RECORDS_TABLE, [ 'columns' => [ [ 'id' => 'address', 'type' => 'location-picker' ] ] ] );
+		} );
+		$control = $handler->get_setting( 'warehouses' )->get_control();
+		$this->assertSame( $control->get_columns(), Field_Schema::from_handler( $handler )['warehouses']['columns'] );
+	}
+
 	public function test_builds_entry_with_control_metadata(): void {
 		$control = Mockery::mock();
 		$control->shouldReceive( 'get_type' )->andReturn( 'range' );

@@ -92,6 +92,11 @@ final class Records_Table {
 
 		foreach ( $columns as $column ) {
 
+			// The country is derived from the location record, never validated as a stored cell.
+			if ( \Woodev_Control::COLUMN_LOCATION_COUNTRY === $column['type'] ) {
+				continue;
+			}
+
 			$cell = $row[ $column['id'] ] ?? '';
 
 			if ( \Woodev_Control::COLUMN_MAIN_RADIO === $column['type'] ) {

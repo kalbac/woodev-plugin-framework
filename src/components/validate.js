@@ -281,6 +281,42 @@ function toComparable( value ) {
 	return String( value );
 }
 
+/** Counts rows using the same in-scope country grouping as PHP's condition_row_count(). */
+function conditionRowCount( rows, columns, condition ) {
+	if ( undefined === condition.per || null === condition.per ) {
+		return rows.length;
+	}
+
+	const column = columns.find( ( candidate ) => candidate.id === condition.per && 'location-country' === candidate.type );
+	if ( ! column ) {
+		return null;
+	}
+
+	const groups = new Map();
+	for ( const row of rows ) {
+		let record;
+		try {
+			record = 'string' === typeof row[ column.of ] ? JSON.parse( row[ column.of ] ) : null;
+		} catch ( error ) {
+			record = null;
+		}
+		const country = record?.country;
+		if ( 'string' === typeof country && ( column.in_scope || [] ).includes( country ) ) {
+			groups.set( country, ( groups.get( country ) || 0 ) + 1 );
+		}
+	}
+
+	if ( ! groups.size ) {
+		return null;
+	}
+
+	switch ( condition.aggregate ) {
+		case 'min': return Math.min( ...groups.values() );
+		case 'max': return Math.max( ...groups.values() );
+		default: return null;
+	}
+}
+
 /**
  * Evaluates a show_if condition group against current field values.
  *
@@ -322,9 +358,9 @@ export function evaluateConditions( conditions, values, fieldSchemas = {} ) {
 				const threshold = condition.value;
 				const comparison = condition.comparison;
 				const validThreshold = ( 'number' === typeof threshold && Number.isSafeInteger( threshold ) && threshold >= 0 ) || ( 'string' === typeof threshold && /^(0|[1-9][0-9]*)$/.test( threshold ) && Number.isSafeInteger( Number( threshold ) ) );
-				match = Array.isArray( rows ) && validThreshold;
+				const count = Array.isArray( rows ) ? conditionRowCount( rows, sourceSchema.columns || [], condition ) : null;
+				match = Array.isArray( rows ) && validThreshold && null !== count;
 				if ( match ) {
-					const count = rows.length;
 					const targetCount = Number( threshold );
 					switch ( comparison ) {
 						case '>': match = count > targetCount; break;

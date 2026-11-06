@@ -10,21 +10,21 @@
  * Keys no column declares (a consumer's own `id`) are carried through every edit untouched.
  *
  * CELLS: `text`; `location-picker` (the settings-page `LocationPickerField`, storing the picked record's JSON
- * string); `main-radio` (a boolean, exactly one row carries it while rows exist — the first row added is
+ * string); `location-country` (a country derived from a picker record, with a form-only choice); `main-radio` (a boolean, exactly one row carries it while rows exist — the first row added is
  * main, and the main row cannot be deleted while others remain).
  *
  * EDITING happens in a form under the table (add and edit are the same form); its «Сохранить» checks the
  * required cells before the row reaches the page's own unsaved state. The whole list is persisted by the
  * page's Save, where the server re-checks everything (`Records_Table::get_error()`).
  *
- * Deliberately not here: sorting, paging, bulk actions, import.
+ * Country columns keep rows sorted by country name; paging, bulk actions and import are not part of this control.
  *
  * @package woodev-plugin-framework
  */
 
 import { useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, CheckboxControl, TextControl } from '@wordpress/components';
+import { Button, CheckboxControl, SelectControl, TextControl } from '@wordpress/components';
 import LocationPickerField, { parseStoredRecord } from './location-picker-field';
 import type { LocationLevel } from './location-picker';
 import { parseRecordRows } from './record-rows';
@@ -35,7 +35,7 @@ export type { RecordRow } from './record-rows';
 
 export interface RecordColumn {
 	id: string;
-	type: 'text' | 'location-picker' | 'main-radio';
+	type: 'text' | 'location-picker' | 'location-country' | 'main-radio';
 	label: string;
 	required?: boolean;
 	/** Location-picker cells only: the level a search runs at. */
@@ -43,6 +43,13 @@ export interface RecordColumn {
 	/** Location-picker cells only: the suggestion source this cell always searches (e.g. `dadata`). */
 	provider?: string;
 	placeholder?: string;
+	/** Country columns derive their value from this location-picker column. */
+	of?: string;
+	options?: Array<{ code: string; name: string }>;
+	in_scope?: string[];
+	/** Server-resolved new-row country and names, including stored countries no longer offered. */
+	default?: string;
+	names?: Record<string, string>;
 }
 
 /** The stored form of a list of rows. */
@@ -56,6 +63,32 @@ const cellText = ( row: RecordRow, column: RecordColumn ): string => {
 	return 'string' === typeof cell ? cell : '';
 };
 
+/** A country is read from the referenced record, never from a separate stored cell. */
+const recordCountry = ( row: RecordRow, column: RecordColumn ): string => {
+	try {
+		const record = JSON.parse( String( row[ column.of || '' ] || '' ) );
+		return 'string' === typeof record?.country ? record.country : '';
+	} catch ( error ) {
+		return '';
+	}
+};
+
+const countryName = ( column: RecordColumn, code: string ): string => column.names?.[ code ] || code;
+
+/** Stable within a country; a table without country columns keeps its original order. */
+const sortRows = ( rows: RecordRow[], columns: RecordColumn[] ): RecordRow[] => {
+	const column = columns.find( ( candidate ) => 'location-country' === candidate.type );
+	if ( ! column ) {
+		return rows;
+	}
+
+	return [ ...rows ].sort( ( a, b ) => {
+		const first = countryName( column, recordCountry( a, column ) );
+		const second = countryName( column, recordCountry( b, column ) );
+		return first.localeCompare( second );
+	} );
+};
+
 const isMain = ( row: RecordRow, column: RecordColumn ): boolean => true === row[ column.id ];
 
 const findMainColumn = ( columns: RecordColumn[] ): RecordColumn | undefined => columns.find( ( column ) => 'main-radio' === column.type );
@@ -63,7 +96,7 @@ const findMainColumn = ( columns: RecordColumn[] ): RecordColumn | undefined => 
 /** What is wrong with one row's cells, or `null` — the client twin of `Records_Table::get_cell_error()`. */
 export function getRowError( columns: RecordColumn[], row: RecordRow ): string | null {
 	for ( const column of columns ) {
-		if ( 'main-radio' === column.type ) {
+		if ( 'main-radio' === column.type || 'location-country' === column.type ) {
 			continue;
 		}
 
@@ -116,6 +149,8 @@ interface Draft {
 	/** Position in the list, or `null` for a row being added. */
 	index: number | null;
 	row: RecordRow;
+	/** Form-only countries are kept out of the stored row. */
+	countries: Record<string, string>;
 }
 
 export interface RecordsTableProps {
@@ -137,15 +172,28 @@ export interface RecordsTableProps {
  * @return {JSX.Element} the table, its «add» button and, while one is open, the row form.
  */
 export default function RecordsTable( { value, columns, name, country = '', addLabel, emptyText, disabled = false, onChange }: RecordsTableProps ) {
-	const rows = parseRecordRows( value );
+	const rows = sortRows( parseRecordRows( value ), columns );
+	const countryColumns = columns.filter( ( column ) => 'location-country' === column.type );
 	const mainColumn = findMainColumn( columns );
 	const [ draft, setDraft ] = useState<Draft | null>( null );
 	const [ draftError, setDraftError ] = useState<string | null>( null );
 	// Row actions wait while a form is open: a delete would shift the row the form is editing.
 	const rowsLocked = disabled || null !== draft;
 
-	const openForm = ( next: Draft | null ) => {
-		setDraft( next );
+	const openForm = ( next: Omit<Draft, 'countries'> | null ) => {
+		const countries: Record<string, string> = {};
+		if ( next ) {
+			for ( const column of countryColumns ) {
+				const storedCountry = recordCountry( next.row, column );
+				const options = column.options || [];
+				const selected = 1 === options.length ? options[ 0 ].code : storedCountry || column.default || '';
+				countries[ column.id ] = selected;
+				if ( storedCountry && storedCountry !== selected ) {
+					next.row[ column.of || '' ] = '';
+				}
+			}
+		}
+		setDraft( next ? { ...next, countries } : null );
 		setDraftError( null );
 	};
 
@@ -181,7 +229,7 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 		const savedIndex = null === draft.index ? next.length - 1 : draft.index;
 		const becameMain = mainColumn && isMain( draft.row, mainColumn );
 
-		onChange( serializeRecordRows( becameMain ? withMain( next, savedIndex ) : next ) );
+		onChange( serializeRecordRows( sortRows( becameMain ? withMain( next, savedIndex ) : next, columns ) ) );
 		openForm( null );
 	};
 
@@ -190,6 +238,18 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 	};
 
 	const cell = ( row: RecordRow, column: RecordColumn, index: number ) => {
+		if ( 'location-country' === column.type ) {
+			const code = recordCountry( row, column );
+			return (
+				<>
+					{ countryName( column, code ) }
+					{ code && ! ( column.in_scope || [] ).includes( code ) && (
+						<div>{ __( 'страна не входит в доставку — на оформлении не показывается', 'woodev-plugin-framework' ) }</div>
+					) }
+				</>
+			);
+		}
+
 		if ( 'main-radio' === column.type ) {
 			return (
 				<input
@@ -223,6 +283,44 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 
 		const setCell = ( cellValue: unknown ) => setDraft( { ...draft, row: { ...draft.row, [ column.id ]: cellValue } } );
 
+		if ( 'location-country' === column.type ) {
+			const options = column.options || [];
+			const selected = draft.countries[ column.id ];
+			const changeCountry = ( code: string ) => {
+				const row = { ...draft.row };
+				if ( recordCountry( row, column ) && recordCountry( row, column ) !== code ) {
+					row[ column.of || '' ] = '';
+				}
+				setDraft( { ...draft, row, countries: { ...draft.countries, [ column.id ]: code } } );
+			};
+
+			if ( options.length <= 1 ) {
+				return (
+					<div>
+						<span className="woodev-records__form-label">{ column.label }</span>
+						{ countryName( column, selected ) }
+					</div>
+				);
+			}
+
+			const choices = options.map( ( option ) => ( { value: option.code, label: option.name, disabled: false } ) );
+			if ( selected && ! options.some( ( option ) => option.code === selected ) ) {
+				choices.unshift( { value: selected, label: countryName( column, selected ), disabled: true } );
+			}
+
+			return (
+				<SelectControl
+					__nextHasNoMarginBottom
+					__next40pxDefaultSize
+					label={ column.label }
+					value={ selected }
+					options={ choices }
+					disabled={ disabled }
+					onChange={ changeCountry }
+				/>
+			);
+		}
+
 		if ( 'main-radio' === column.type ) {
 			// The main row hands the role over only by another row taking it; the very first row is main.
 			const locked = null === draft.index ? ! rows.length : isMain( rows[ draft.index ], column );
@@ -238,17 +336,19 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 		}
 
 		if ( 'location-picker' === column.type ) {
+			const countryColumn = countryColumns.find( ( candidate ) => candidate.of === column.id );
+			const pickerCountry = countryColumn ? draft.countries[ countryColumn.id ] : country;
 			return (
 				<div className="woodev-records__form-field">
 					<span className="woodev-records__form-label">{ column.label }</span>
 					<LocationPickerField
 						value={ cellText( draft.row, column ) }
-						country={ country }
+						country={ pickerCountry }
 						level={ column.level || 'address' }
 						provider={ column.provider || '' }
 						providerPinned={ !! column.provider }
 						placeholder={ column.placeholder }
-						disabled={ disabled }
+						disabled={ disabled || !! ( countryColumn && ! countryColumn.options?.some( ( option ) => option.code === pickerCountry ) ) }
 						onChange={ setCell }
 					/>
 				</div>
@@ -314,7 +414,7 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 
 			{ draft ? (
 				<div className="woodev-records__form" role="group" aria-label={ null === draft.index ? ( addLabel || __( 'Добавить', 'woodev-plugin-framework' ) ) : __( 'Изменить', 'woodev-plugin-framework' ) }>
-					{ columns.map( ( column ) => <div key={ column.id }>{ formCell( column ) }</div> ) }
+					{ [ ...countryColumns, ...columns.filter( ( column ) => 'location-country' !== column.type ) ].map( ( column ) => <div key={ column.id }>{ formCell( column ) }</div> ) }
 					{ draftError && <div className="woodev-field__error" role="alert">{ draftError }</div> }
 					<div className="woodev-records__form-actions">
 						<Button variant="tertiary" onClick={ () => openForm( null ) }>{ __( 'Отмена', 'woodev-plugin-framework' ) }</Button>
