@@ -749,6 +749,15 @@ describe( 'city mode — pickup City guard per country (#1642 WP-B)', () => {
 		expect( cityField().value ).toBe( KHIMKI.value );
 	} );
 
+	it.each( [ 'typeahead', 'ajax-select2' ] )( 'vetoes the point City in a closed-list country before any place is chosen (%s)', ( mode ) => {
+		boot( countryConfig( { mode: { region: 'typeahead', settlement: mode } } ) );
+		const before = cityField().value;
+
+		expect( announcePickupCity() ).not.toHaveProperty( 'billing_city' );
+		expect( cityField().value ).toBe( before );
+		expect( cityField().value ).not.toBe( 'Город пункта' );
+	} );
+
 	it( 'writes the point City in an unlisted country with custom settlements on', () => {
 		boot( countryConfig(), { country: 'UZ' } );
 		const widget = typeaheadCalls.find( ( call ) => 'billing_city' === call.el.id );

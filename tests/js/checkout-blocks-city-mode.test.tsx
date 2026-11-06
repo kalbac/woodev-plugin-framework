@@ -769,7 +769,25 @@ describe( 'city mode, the customer changes country — Blocks', () => {
 	} );
 
 	it( 'a picked RU place does not stay in City when the shopper goes straight to another country with places', async () => {
-		render( <LocalityChooser config={ threeCountries( { allowed: { RU: [ MOSCOW, KHIMKI ], KZ: [ ALMATY, { ...ALMATY, key: 'dadata:astana', value: 'Астана', record: { ...ALMATY.record, key: 'dadata:astana', settlement: { name: 'Астана' } } } ] } } ) } /> );
+		// KZ lists two places, so leaving RU must clear City instead of auto-filling the only place.
+		const astana = {
+			...ALMATY,
+			key: 'dadata:astana',
+			label: 'г Астана',
+			value: 'Астана',
+			record: {
+				...ALMATY.record,
+				key: 'dadata:astana',
+				region: { name: 'Астана' },
+				settlement: { name: 'Астана' },
+			},
+		};
+		const allowed = {
+			RU: [ MOSCOW, KHIMKI ],
+			KZ: [ ALMATY, astana ],
+		};
+
+		render( <LocalityChooser config={ threeCountries( { allowed } ) } /> );
 
 		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'dadata:khimki' } } );
 		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Химки' ) );

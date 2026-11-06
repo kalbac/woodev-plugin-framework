@@ -2619,14 +2619,21 @@
 	function holdsGuardedSettlement( entry, fieldId ) {
 		var info = nodeInfo( entry, fieldId );
 
-		if ( ! info || 'settlement' !== info.level || ! entry.records.settlement ) {
+		if ( ! info || 'settlement' !== info.level ) {
 			return false;
 		}
 
 		var country = countryFor( entry, entry.allNodes[ info.index ] );
 
-		return !! allowedPlaces( entry, country )
-			|| ( 'ajax-select2' === settlementAxisMode( entry ) && ! allowCustomFor( entry, country ) );
+		// A closed list alone is enough: with no place chosen yet the field is still the list's,
+		// and a point's locality string must not seed it. The #961 rule below needs a record.
+		if ( allowedPlaces( entry, country ) ) {
+			return true;
+		}
+
+		return !! entry.records.settlement
+			&& 'ajax-select2' === settlementAxisMode( entry )
+			&& ! allowCustomFor( entry, country );
 	}
 
 	/**
