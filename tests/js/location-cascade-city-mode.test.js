@@ -3,8 +3,8 @@
  *
  * While `config.location.allowed` lists places for the country, the classic cascade:
  * - ONE place: shows the settlement as plain text (the input stays in the form as a hidden field
- *   that posts the place); SEVERAL: a plain `<select>` of exactly those places, no select2, and no
- *   settlement-level `/suggest` either way;
+ *   that posts the place); SEVERAL: a `<select>` of exactly those places enhanced with select2 (no ajax),
+ *   and no settlement-level `/suggest` either way;
  * - hides the REGION row (its value comes from the place), and the settlement row too when one place
  *   is listed and `hideSettlement` is on;
  * - leaves the city and region alone when a street suggestion is picked.
@@ -164,7 +164,7 @@ function boot( config, markup = {} ) {
 	window.jQuery = global.jQuery;
 	window.WoodevCheckoutFieldStore = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js' );
 
-	// select2 must never be bound in city mode: a spy on the jQuery plugin proves it.
+	// A spy on the jQuery plugin: city mode enhances the closed list with it, without ajax.
 	global.jQuery.fn.select2 = jest.fn();
 	typeaheadCalls = [];
 	window.WoodevLocationRenderers = {};
@@ -241,11 +241,15 @@ describe( 'city mode — several places (classic)', () => {
 		expect( typeaheadCalls.map( ( call ) => call.el.id ) ).not.toContain( 'billing_city' );
 	} );
 
-	it( 'is never enhanced with select2 (no search box)', () => {
+	it( 'is enhanced with select2 from the known list (no ajax, no search box for two places)', () => {
 		boot( buildConfig() );
 
-		expect( window.jQuery.fn.select2 ).not.toHaveBeenCalled();
-		expect( document.querySelector( '.select2-container' ) ).toBeNull();
+		expect( window.jQuery.fn.select2 ).toHaveBeenCalledTimes( 1 );
+
+		const config = window.jQuery.fn.select2.mock.calls[ 0 ][ 0 ];
+
+		expect( config ).not.toHaveProperty( 'ajax' );
+		expect( config.minimumResultsForSearch ).toBe( Infinity );
 	} );
 
 	it( 'posts a nested place under its OWN name, not its parent\'s', () => {

@@ -105,6 +105,96 @@ describe( 'attachClosedSelect', () => {
 	} );
 } );
 
+describe( 'attachClosedSelect — select2 enhancement', () => {
+	const places = ( count ) => Array.from( { length: count }, ( _, index ) => place( 'p' + index, 'Город ' + index, 'г Город ' + index ) );
+
+	beforeEach( () => {
+		window.jQuery = require( 'jquery' );
+		window.jQuery.fn.select2 = jest.fn( function() {
+			return this;
+		} );
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+		delete window.jQuery;
+	} );
+
+	it( 'enhances the select with select2 from the known list: no ajax, no request', () => {
+		attachClosedSelect( install(), options( places( 3 ) ) );
+
+		expect( window.jQuery.fn.select2 ).toHaveBeenCalledTimes( 1 );
+
+		const config = window.jQuery.fn.select2.mock.calls[ 0 ][ 0 ];
+
+		expect( config ).not.toHaveProperty( 'ajax' );
+		expect( config.width ).toBe( '100%' );
+		expect( config.placeholder ).toBe( 'Выбрать…' );
+		expect( config.language ).toBeDefined();
+	} );
+
+	it( 'hides the search box for up to 5 places and shows it above', () => {
+		const minimumFor = ( count ) => {
+			window.jQuery.fn.select2.mockClear();
+			attachClosedSelect( install(), options( places( count ) ) );
+
+			return window.jQuery.fn.select2.mock.calls[ 0 ][ 0 ].minimumResultsForSearch;
+		};
+
+		expect( minimumFor( 3 ) ).toBe( Infinity );
+		expect( minimumFor( 5 ) ).toBe( Infinity );
+		expect( minimumFor( 6 ) ).toBe( 0 );
+	} );
+
+	it( 'still sets the address when select2 reports the pick as a jQuery change', () => {
+		const onSelect = jest.fn();
+		const api = attachClosedSelect( install(), options( [ MOSCOW, KHIMKI ], onSelect ) );
+
+		api.el.selectedIndex = 2;
+		window.jQuery( api.el ).trigger( 'change' );
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onSelect ).toHaveBeenCalledWith( { record: KHIMKI.record } );
+	} );
+
+	it( 'destroys the select2 instance on detach, before restoring the input', () => {
+		const input = install();
+		const api = attachClosedSelect( input, options( [ MOSCOW, KHIMKI ] ) );
+
+		// The stub does not set the select2 data key a real instance carries.
+		window.jQuery( api.el ).data( 'select2', {} );
+		window.jQuery.fn.select2.mockClear();
+
+		api.detach();
+
+		expect( window.jQuery.fn.select2 ).toHaveBeenCalledWith( 'destroy' );
+		expect( document.getElementById( 'billing_city' ) ).toBe( input );
+	} );
+
+	it( 'does not destroy an instance that was already purged', () => {
+		const api = attachClosedSelect( install(), options( [ MOSCOW, KHIMKI ] ) );
+
+		window.jQuery.fn.select2.mockClear();
+		api.detach();
+
+		expect( window.jQuery.fn.select2 ).not.toHaveBeenCalled();
+	} );
+
+	it( 'falls back to the plain select when jQuery has no select2', () => {
+		delete window.jQuery.fn.select2;
+
+		const onSelect = jest.fn();
+		const api = attachClosedSelect( install(), options( [ MOSCOW, KHIMKI ], onSelect ) );
+
+		api.el.selectedIndex = 1;
+		api.el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( api.el.tagName ).toBe( 'SELECT' );
+		expect( onSelect ).toHaveBeenCalledWith( { record: MOSCOW.record } );
+		expect( () => api.detach() ).not.toThrow();
+	} );
+} );
+
 describe( 'attachClosedText', () => {
 	it( 'keeps the input as a hidden field carrying the place and shows the place as text', () => {
 		const input = install( 'Тула' );
