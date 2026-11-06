@@ -15,6 +15,7 @@ require_once dirname( __DIR__, 3 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/class-helper.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/class-setting.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/settings-page/class-records-table.php';
 
 /**
  * @covers \Woodev_Setting::evaluate_conditions
@@ -89,6 +90,28 @@ class ConditionalFieldsTest extends TestCase {
 		// controlling fields are scalar in v1; an array value is treated as empty.
 		$c = [ [ 'setting' => 'm', 'value' => 'x' ] ];
 		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $c, [ 'm' => [ 'x' ] ] ) );
+	}
+
+	public function test_count_operator_supports_each_row_comparator(): void {
+		$rows = '[{"name":"one"},{"name":"two"}]';
+		$cases = [ '>' => 1, '>=' => 2, '<' => 3, '<=' => 2, '==' => 2 ];
+		foreach ( $cases as $comparison => $threshold ) {
+			$condition = [ 'setting' => 'places', 'operator' => 'count', 'comparison' => $comparison, 'value' => $threshold ];
+			$this->assertTrue( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' ] ), $comparison );
+		}
+
+		$condition['comparison'] = '!=';
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [ 'places' ] ) );
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $condition, [ 'places' => $rows ], [] ) );
+	}
+
+	public function test_count_operator_rejects_a_non_table_controller_with_a_clear_schema_error(): void {
+		$handler = $this->make_handler( [] );
+		$handler->get_setting( 'live_key' )->set_show_if( [ 'setting' => 'mode', 'operator' => 'count', 'comparison' => '>', 'value' => 1 ] );
+
+		$this->expectException( \InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Count conditions require a records-table controller' );
+		\Woodev\Framework\Settings\Field_Schema::from_handler( $handler );
 	}
 
 	public function test_show_if_accepts_array_directly(): void {

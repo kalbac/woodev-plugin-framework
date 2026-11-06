@@ -86,6 +86,50 @@ test( 'disabled_if uses show_if operators/relations and excludes disabled edits 
 	expect( buildSavePayload( fields, { city: 99, mode: 'manual' }, { mode: 'manual', enabled: true } ) ).toEqual( { city: 99, mode: 'manual' } );
 } );
 
+test( 'count conditions compare records-table row counts with every comparator', () => {
+	const fields = { places: { controlType: 'records-table' } };
+	const values = { places: '[{"name":"one"},{"name":"two"}]' };
+	for ( const [ comparison, value ] of [ [ '>', 1 ], [ '>=', 2 ], [ '<', 3 ], [ '<=', 2 ], [ '==', 2 ] ] ) {
+		expect( evaluateConditions( { setting: 'places', operator: 'count', comparison, value }, values, fields ) ).toBe( true );
+	}
+	expect( evaluateConditions( { setting: 'places', operator: 'count', comparison: '>', value: 2 }, values, fields ) ).toBe( false );
+	expect( evaluateConditions( { setting: 'places', operator: 'count', comparison: '>', value: 1 }, values, { places: { controlType: 'text' } } ) ).toBe( false );
+} );
+
+test( 'a disabled_if count condition updates live as records-table rows are removed', () => {
+	function CountConditionForm() {
+		const [ values, setValues ] = useState( {} );
+		const fields = {
+			places: { name: 'Places', type: 'string', controlType: 'records-table', value: '[{"name":"one"},{"name":"two"}]', columns: [ { id: 'name', type: 'text', label: 'Name' } ] },
+			hide_settlement: { name: 'Hide settlement', type: 'boolean', controlType: 'toggle', value: false, disabled_if: { setting: 'places', operator: 'count', comparison: '>', value: 1 } },
+		};
+		const conditionValues = { ...Object.fromEntries( Object.entries( fields ).map( ( [ id, field ] ) => [ id, values[ id ] ?? field.value ] ) ), ...values };
+		return <SectionView
+			section={ { fields } }
+			tabFields={ fields }
+			values={ values }
+			conditionValues={ conditionValues }
+			onFieldChange={ ( id, value ) => setValues( ( previous ) => ( { ...previous, [ id ]: value } ) ) }
+			onFieldRevert={ jest.fn() }
+		/>;
+	}
+	render( <CountConditionForm /> );
+	const toggle = screen.getByRole( 'checkbox' );
+	expect( toggle ).toBeDisabled();
+	fireEvent.click( screen.getByRole( 'button', { name: 'Удалить, 1' } ) );
+	expect( toggle ).toBeEnabled();
+} );
+
+test( 'the settings save gate receives record-table metadata for disabled_if count conditions', () => {
+	const field = { disabled_if: { setting: 'places', operator: 'count', comparison: '>', value: 1 }, value: false };
+	const fields = { hide_settlement: field };
+	const conditionFields = { ...fields, places: { controlType: 'records-table' } };
+	const values = { places: '[{"name":"one"},{"name":"two"}]', hide_settlement: false };
+
+	expect( validatableFields( fields, values, conditionFields ) ).toEqual( {} );
+	expect( buildSavePayload( fields, { hide_settlement: true }, values, conditionFields ) ).toEqual( {} );
+} );
+
 test( 'search-select hydrates saved labels and debounces at two characters, preserving numeric ids', async () => {
 	fetchMock.mockResolvedValue( { options: [ { value: 99, label: 'Тула' } ] } );
 	const onChange = jest.fn();

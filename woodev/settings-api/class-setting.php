@@ -901,9 +901,10 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @since 2.0.2
 		 * @param array<string,mixed> $conditions show_if group (relation + members), or one bare condition.
 		 * @param array<string,mixed> $values     controlling setting_id => current value.
+		 * @param string[]            $records_table_ids setting ids that store records-table rows (added in 2.0.26).
 		 * @return bool true when the field should be visible.
 		 */
-		public static function evaluate_conditions( array $conditions, array $values ): bool {
+		public static function evaluate_conditions( array $conditions, array $values, array $records_table_ids = [] ): bool {
 
 			if ( empty( $conditions ) ) {
 				return true;
@@ -934,6 +935,41 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 				$target_str = is_scalar( $target ) ? (string) $target : '';
 
 				switch ( $operator ) {
+					case 'count':
+						$rows       = in_array( $setting_id, $records_table_ids, true ) ? \Woodev\Framework\Settings\Records_Table::decode( $raw ) : null;
+						$comparison = (string) ( $condition['comparison'] ?? '' );
+						$threshold  = $condition['value'] ?? null;
+						$count      = is_array( $rows ) ? count( $rows ) : 0;
+						$valid      = is_int( $threshold ) && $threshold >= 0;
+						if ( is_string( $threshold ) && preg_match( '/^(0|[1-9][0-9]*)$/', $threshold ) ) {
+							$max_length = strlen( (string) PHP_INT_MAX );
+							$valid      = strlen( $threshold ) < $max_length || ( strlen( $threshold ) === $max_length && strcmp( $threshold, (string) PHP_INT_MAX ) <= 0 );
+						}
+						$number     = $valid ? (int) $threshold : 0;
+						$match      = in_array( $setting_id, $records_table_ids, true ) && $valid;
+						if ( $match ) {
+							switch ( $comparison ) {
+								case '>':
+									$match = $count > $number;
+									break;
+								case '>=':
+									$match = $count >= $number;
+									break;
+								case '<':
+									$match = $count < $number;
+									break;
+								case '<=':
+									$match = $count <= $number;
+									break;
+								case '==':
+									$match = $count === $number;
+									break;
+								default:
+									$match = false;
+									break;
+							}
+						}
+						break;
 					case '=':
 						$match = ( $current === $target_str );
 						break;

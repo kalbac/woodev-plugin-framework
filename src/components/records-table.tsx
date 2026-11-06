@@ -27,6 +27,11 @@ import { __, sprintf } from '@wordpress/i18n';
 import { Button, CheckboxControl, TextControl } from '@wordpress/components';
 import LocationPickerField, { parseStoredRecord } from './location-picker-field';
 import type { LocationLevel } from './location-picker';
+import { parseRecordRows } from './record-rows';
+import type { RecordRow } from './record-rows';
+
+export { parseRecordRows } from './record-rows';
+export type { RecordRow } from './record-rows';
 
 export interface RecordColumn {
 	id: string;
@@ -38,25 +43,6 @@ export interface RecordColumn {
 	/** Location-picker cells only: the suggestion source this cell always searches (e.g. `dadata`). */
 	provider?: string;
 	placeholder?: string;
-}
-
-/** One row: the declared cells, plus whatever else the consumer stored on it. */
-export type RecordRow = Record<string, unknown>;
-
-/** Reads the stored JSON list; anything that is not a list of objects is no rows. */
-export function parseRecordRows( value: unknown ): RecordRow[] {
-	if ( 'string' !== typeof value || '' === value.trim() ) {
-		return [];
-	}
-
-	try {
-		const rows: unknown = JSON.parse( value );
-		const isRow = ( row: unknown ): row is RecordRow => !! row && 'object' === typeof row && ! Array.isArray( row );
-
-		return Array.isArray( rows ) && rows.every( isRow ) ? rows : [];
-	} catch ( error ) {
-		return [];
-	}
 }
 
 /** The stored form of a list of rows. */

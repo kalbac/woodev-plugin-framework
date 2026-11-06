@@ -43,11 +43,11 @@ function isSameValue( a, b ) {
  * @param {Object} edits  staged edits for this tab (settingId => value).
  * @return {Object} `edits` with any disabled-field keys removed.
  */
-export function buildSavePayload( fields, edits, values ) {
+export function buildSavePayload( fields, edits, values, conditionFields = fields ) {
 	const effective = values || Object.fromEntries( Object.entries( fields ).map( ( [ id, field ] ) => [ id, edits[ id ] ?? field.value ] ) );
 	const payload = {};
 	Object.keys( edits ).forEach( ( id ) => {
-		if ( fields[ id ] && isFieldDisabled( fields[ id ], effective ) ) {
+		if ( fields[ id ] && isFieldDisabled( fields[ id ], effective, conditionFields ) ) {
 			return;
 		}
 		payload[ id ] = edits[ id ];
@@ -67,10 +67,10 @@ export function buildSavePayload( fields, edits, values ) {
  * @param {Object} values current effective values (settingId => value).
  * @return {Object} the subset of `fields` eligible for validation.
  */
-export function validatableFields( fields, values ) {
+export function validatableFields( fields, values, conditionFields = fields ) {
 	const out = {};
 	Object.keys( fields ).forEach( ( id ) => {
-		if ( isFieldVisible( fields[ id ], values ) && ! isFieldDisabled( fields[ id ], values ) ) {
+		if ( isFieldVisible( fields[ id ], values, conditionFields ) && ! isFieldDisabled( fields[ id ], values, conditionFields ) ) {
 			out[ id ] = fields[ id ];
 		}
 	} );
@@ -249,10 +249,16 @@ export default function App() {
 		} );
 
 		const effectiveValues = {};
+		const tabFieldSchemas = {};
 		( tab.sections || [] ).forEach( ( s ) => {
-			Object.entries( s.fields || {} ).forEach( ( [ id, field ] ) => { effectiveValues[ id ] = providerEdits[ id ] ?? field.value; } );
+			Object.entries( s.fields || {} ).forEach( ( [ id, field ] ) => {
+				effectiveValues[ id ] = providerEdits[ id ] ?? field.value;
+				if ( ! s.is_connection ) {
+					tabFieldSchemas[ id ] = field;
+				}
+			} );
 		} );
-		let payload = buildSavePayload( sectionFields, sectionEdits, effectiveValues );
+		let payload = buildSavePayload( sectionFields, sectionEdits, effectiveValues, tabFieldSchemas );
 
 		// SP-2: a connection section's credential fields skip client-side field
 		// validation and the provider-mismatch check entirely (unchanged from
@@ -262,18 +268,13 @@ export default function App() {
 			// Tab-wide effective values (excluding connection sections, same as
 			// before) so a cross-section `show_if` still resolves correctly even
 			// though only this section's fields are being validated/saved.
-			const allFields = {};
-			( tab.sections || [] ).forEach( ( s ) => {
-				if ( ! s.is_connection ) {
-					Object.assign( allFields, s.fields || {} );
-				}
-			} );
+			const allFields = tabFieldSchemas;
 			const merged = {};
 			Object.keys( allFields ).forEach( ( id ) => {
 				merged[ id ] = providerEdits[ id ] ?? allFields[ id ].value;
 			} );
 
-			const visibleFields = validatableFields( sectionFields, merged );
+			const visibleFields = validatableFields( sectionFields, merged, allFields );
 
 			const clientErrors = validateFields( visibleFields, merged, sectionEdits );
 
@@ -297,7 +298,7 @@ export default function App() {
 				return; // block REST — reveal fresh client errors only
 			}
 
-			payload = buildSavePayload( sectionFields, sectionEdits, merged );
+			payload = buildSavePayload( sectionFields, sectionEdits, merged, allFields );
 		}
 
 		setSaving( providerId );

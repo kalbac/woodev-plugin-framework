@@ -50,14 +50,14 @@ function controlKind( schema ) {
  * @param {Object}   context      saved values of fields on OTHER steps, so a show_if may depend on them.
  * @return {Array} list of React elements.
  */
-function renderFields( step, values, onChange, showErrors, serverErrors, context ) {
+function renderFields( step, values, onChange, showErrors, serverErrors, context, conditionFields ) {
 	const stepValues = { ...( context || {} ) };
 	Object.keys( step.fields || {} ).forEach( ( id ) => {
 		stepValues[ id ] = values[ id ] ?? step.fields[ id ].value;
 	} );
 
 	const entries = Object.entries( step.fields || {} ).filter( ( [ , schema ] ) =>
-		isFieldVisible( schema, stepValues )
+		isFieldVisible( schema, stepValues, conditionFields || step.fields )
 	);
 	const blocks = [];
 	let group = null;
@@ -124,14 +124,14 @@ function renderFields( step, values, onChange, showErrors, serverErrors, context
  *                                      a plugin-supplied step component (D4), inside the same frame.
  * @return {Object} React element.
  */
-export default function StepView( { step, values, onChange, showErrors, serverErrors, conditionValues, body: customBody } ) {
+export default function StepView( { step, values, onChange, showErrors, serverErrors, conditionValues, conditionFields, body: customBody } ) {
 	const body = customBody
 		? customBody
 		: 'settings' === step.type
 		? createElement(
 			'div',
 			{ className: 'woodev-setup__fields' },
-			renderFields( step, values, onChange, showErrors, serverErrors, conditionValues )
+			renderFields( step, values, onChange, showErrors, serverErrors, conditionValues, conditionFields )
 		)
 		: createElement( 'div', {
 			className: 'woodev-setup__content',
