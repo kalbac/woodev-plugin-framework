@@ -18,7 +18,6 @@
 > **From s140 a row is ONE LINE of at most 600 characters, enforced by `lint:docs` (#930)** — the
 > gate kept firing because rows had become paragraphs copied out of the session file.
 
-- **[s219 F4](sessions/s219-f4.md)** — 2026-11-06 — City-mode rig source fixes: listed-place scope without a customer chain, DaData name-path language; D3/D9 investigated; PR #1623, commit `3255aa71`. Unit 8175, Jest 3739.
 - **[s217](sessions/s217.md)** — 2026-11-05 — **Brainstorm + design spec for «Стоимость доставки за расстояние» v2** (`specs/2026-11-05-range-shipping-v2-design.md`, D1–D16, two Codex critic rounds): DaData always, six distance services as connectors with a free straight-line default, warehouses table, redesigned rules grid, both checkouts, 4 000 ₽. Rig fixtures deactivated; #1597 #1598 filed.
 - **[s218](sessions/s218.md)** — 2026-11-05 — **Range shipping 2.0.0: overnight build + afternoon admin redesign**: plugin C1–C12, #31–#38 merged; fw #1601 #1602 #1604 #1608–#1610 merged, release PR #1606 (2.0.26) draft; v1→v2 prices 23/23; 2GIS/Google/Yandex/Mapbox live; new «Доставка в городе» for 2.0.0 (spec fw #1611 in review). Nothing published.
 - **[s216](sessions/s216.md)** — 2026-11-05 — **Release wave: framework 2.0.25 (#1593), Ozon 2.0.4, Yandex 2.0.15, «Отслеживание доставки» 2.0.0 on EDD 2653 (3 000 ₽, one site).** After his look: card claims fixed against code, new 1000×750 cover + 512 icon (Codex), shots moved into the gallery. #1575 #1583 #1577 closed.

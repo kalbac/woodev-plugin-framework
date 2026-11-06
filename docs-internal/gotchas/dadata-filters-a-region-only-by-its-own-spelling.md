@@ -79,6 +79,9 @@ $body['language'] = 1 === preg_match( '/\p{Cyrillic}/u', $parent->own_locality_n
 
 Reference: [DaData address request parameters](https://dadata.ru/api/suggest/address/),
 `Dadata_Api_Client::with_language()`. Regression: `DadataProviderTest::test_name_scope_requests_the_parent_language`.
+A name-scoped request therefore carries an explicit `language`, which `with_language()` keeps — so the
+`woodev_location_dadata_language` filter is NOT consulted for it. That bypass is deliberate: removing it re-opens
+the zero-row case above.
 
 ## Related
 
