@@ -218,8 +218,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * single {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_location_service()}
 		 * instance into the checkout handler and the pickup handler's selection scope (the pickup
 		 * handler itself already reads it); only an explicitly injected instance stays separate. Per
-		 * request only: the next request asks the provider again, so an outage never
-		 * outlives it. Cleared wherever the customer's record is written or forgotten
+		 * request only for ordinary default resolution (for example, geo-IP). A stranded
+		 * fixed default separately caches its re-resolution outcome in a five-minute
+		 * transient (#1624), so provider failures recover promptly without retrying on every
+		 * page view. Cleared wherever the customer's record is written or forgotten
 		 * ({@see self::forget_default_resolution()}).
 		 *
 		 * @since 2.0.2
@@ -2548,8 +2550,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * its `provider_id` namespace is still valid — otherwise it is
 		 * STRANDED (the store switched providers since it was picked) and is
 		 * re-resolved by components through whichever provider the chain now
-		 * resolves for that level ({@see self::reresolve_fixed_default()}), for
-		 * THIS call only.
+		 * resolves for that level ({@see self::reresolve_fixed_default()}). It writes no
+		 * store setting and caches the outcome in a five-minute transient (#1624).
 		 *
 		 * PURE READ, no store-settings write (review finding F2): this method
 		 * is reached from {@see self::get_customer_record()}'s lazy trigger,
@@ -2561,12 +2563,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * merchant's configured default to whatever a re-resolution happens to
 		 * match. Earlier revisions REPLACED the stored record here so only the
 		 * first customer after a provider switch paid the re-resolution cost;
-		 * that "optimization" WAS the vulnerability, so it is gone — every
-		 * stranded request now re-computes, but each CUSTOMER still only pays
-		 * once, because the computed record is written to THAT customer's own
-		 * session/account via {@see self::get_customer_record()}'s caller, not
-		 * to the shared merchant setting. Persisting a re-resolved record onto
-		 * the merchant's own setting (so later customers skip the
+		 * that "optimization" WAS the vulnerability, so it is gone. Each
+		 * stranded lookup outcome is instead cached for five minutes without
+		 * changing the merchant setting; a found record still travels through
+		 * THAT customer's session/account via the caller. Persisting a re-resolved
+		 * record onto the merchant's own setting (so later customers skip the
 		 * re-computation too) belongs in an authenticated admin action or a
 		 * scheduled resync — neither exists yet in this codebase; the settings
 		 * page instead surfaces the stranded state live (never from a stored
@@ -2610,7 +2611,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * {@see self::reresolve_fixed_default()}). The one routine behind the `fixed` default and behind every
 		 * other record a merchant stored, e.g. the cities of a method's city limit.
 		 *
-		 * PURE READ: writes nothing. The caller decides what to keep.
+		 * Writes no store setting. Caches the stranded lookup outcome in a five-minute transient (#1624);
+		 * the caller decides what to keep.
 		 *
 		 * `$across_providers` is the city limit's wider matching (#1185): a settlement is also accepted by bare name +
 		 * region, and the bare name is asked as a second query. The `fixed` default keeps the exact-label rule.
@@ -2639,7 +2641,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			$cached    = get_transient( $cache_key );
 
 			if ( is_array( $cached ) && array_key_exists( 'record', $cached ) ) {
-				return is_array( $cached['record'] ) ? Location_Record::from_array( $cached['record'] ) : null;
+				if ( null === $cached['record'] ) {
+					return null;
+				}
+
+				if ( is_array( $cached['record'] ) ) {
+					try {
+						return Location_Record::from_array( $cached['record'] );
+					} catch ( \InvalidArgumentException $exception ) {
+						// Ignore an entry written by an older or incompatible record schema.
+					}
+				}
 			}
 
 			$result = $this->reresolve_fixed_default( $current_provider, $stored, $across_providers );

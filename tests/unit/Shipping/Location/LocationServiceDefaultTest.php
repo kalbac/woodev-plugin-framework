@@ -1480,6 +1480,44 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'Пушкин, Санкт-Петербург', $result->label() );
 		}
 
+		public function test_exact_and_wide_stranded_record_resolutions_have_separate_cache_entries_in_either_order(): void {
+			$stored    = $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' );
+			$candidate = $this->pushkin_of( 'prov-b', 'Пушкин, Санкт-Петербург', 'Санкт-Петербург', '' );
+			$service   = $this->service_with_new_provider( static fn() => [ $candidate ], $provider );
+
+			$this->assertNull( $service->reresolve_stranded_record( $stored ), 'exact matching refuses the changed label' );
+			$wide_result = $service->reresolve_stranded_record( $stored, true );
+			$this->assertNotNull( $wide_result );
+			$this->assertSame( $candidate->key(), $wide_result->key(), 'wide matching accepts the same locality by name and region' );
+			$this->assertCount( 2, $provider->suggest_calls );
+
+			$this->transients->exchangeArray( [] );
+			$provider->suggest_calls = [];
+
+			$wide_result = $service->reresolve_stranded_record( $stored, true );
+			$this->assertNotNull( $wide_result );
+			$this->assertSame( $candidate->key(), $wide_result->key() );
+			$this->assertNull( $service->reresolve_stranded_record( $stored ), 'the wide result does not leak into exact matching' );
+			$this->assertCount( 2, $provider->suggest_calls );
+		}
+
+		public function test_an_invalid_cached_record_is_ignored_and_re_resolved(): void {
+			$candidate = $this->record( 'prov-b:resolved', Location_Record::LEVEL_SETTLEMENT );
+			$service   = $this->service_with_new_provider( static fn() => [ $candidate ], $provider );
+			$stored    = $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
+
+			$first = $service->reresolve_stranded_record( $stored );
+			$this->assertNotNull( $first );
+			$cache_key = array_key_first( $this->transients->getArrayCopy() );
+			$this->assertIsString( $cache_key );
+			$this->transients[ $cache_key ] = [ 'record' => [ 'key' => 'invalid' ] ];
+
+			$second = $service->reresolve_stranded_record( $stored );
+			$this->assertNotNull( $second );
+			$this->assertSame( $candidate->key(), $second->key() );
+			$this->assertCount( 2, $provider->suggest_calls, 'an invalid transient is treated as a cache miss' );
+		}
+
 		public function test_a_homonym_in_another_region_leaves_the_city_stale(): void {
 			$service = $this->service_with_new_provider(
 				fn() => [ $this->pushkin_of( 'prov-b', 'Пушкино, Московская область', 'Московская область', 'обл' ) ],
