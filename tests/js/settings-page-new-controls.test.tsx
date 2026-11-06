@@ -3,7 +3,6 @@ import { useState } from '@wordpress/element';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import BoxesTable, { parseBoxRows, serializeBoxRows, validateBoxesText } from '../../src/components/boxes-table';
-import RecordsTable from '../../src/components/records-table';
 import SearchSelectField from '../../src/components/search-select-field';
 import ControlField from '../../src/components/control-field';
 import { buildSavePayload, validatableFields } from '../../src/settings-page/app';
@@ -99,19 +98,36 @@ test( 'count conditions compare records-table row counts with every comparator',
 
 test( 'a disabled_if count condition updates live as records-table rows are removed', () => {
 	function CountConditionForm() {
-		const [ places, setPlaces ] = useState( '[{"name":"one"},{"name":"two"}]' );
-		const fields = { places: { controlType: 'records-table' }, enabled: { controlType: 'toggle' } };
-		const rule = { setting: 'places', operator: 'count', comparison: '>', value: 1 };
-		return <>
-			<RecordsTable value={ places } columns={ [ { id: 'name', type: 'text', label: 'Название' } ] } name="places" addLabel="Добавить" onChange={ setPlaces } />
-			<ControlField schema={ { type: 'boolean', controlType: 'toggle', disabled_if: rule } } value={ false } onChange={ jest.fn() } conditionValues={ { places } } conditionFields={ fields } />
-		</>;
+		const [ values, setValues ] = useState( {} );
+		const fields = {
+			places: { name: 'Places', type: 'string', controlType: 'records-table', value: '[{"name":"one"},{"name":"two"}]', columns: [ { id: 'name', type: 'text', label: 'Name' } ] },
+			hide_settlement: { name: 'Hide settlement', type: 'boolean', controlType: 'toggle', value: false, disabled_if: { setting: 'places', operator: 'count', comparison: '>', value: 1 } },
+		};
+		const conditionValues = { ...Object.fromEntries( Object.entries( fields ).map( ( [ id, field ] ) => [ id, values[ id ] ?? field.value ] ) ), ...values };
+		return <SectionView
+			section={ { fields } }
+			tabFields={ fields }
+			values={ values }
+			conditionValues={ conditionValues }
+			onFieldChange={ ( id, value ) => setValues( ( previous ) => ( { ...previous, [ id ]: value } ) ) }
+			onFieldRevert={ jest.fn() }
+		/>;
 	}
 	render( <CountConditionForm /> );
 	const toggle = screen.getByRole( 'checkbox' );
 	expect( toggle ).toBeDisabled();
 	fireEvent.click( screen.getByRole( 'button', { name: 'Удалить, 1' } ) );
 	expect( toggle ).toBeEnabled();
+} );
+
+test( 'the settings save gate receives record-table metadata for disabled_if count conditions', () => {
+	const field = { disabled_if: { setting: 'places', operator: 'count', comparison: '>', value: 1 }, value: false };
+	const fields = { hide_settlement: field };
+	const conditionFields = { ...fields, places: { controlType: 'records-table' } };
+	const values = { places: '[{"name":"one"},{"name":"two"}]', hide_settlement: false };
+
+	expect( validatableFields( fields, values, conditionFields ) ).toEqual( {} );
+	expect( buildSavePayload( fields, { hide_settlement: true }, values, conditionFields ) ).toEqual( {} );
 } );
 
 test( 'search-select hydrates saved labels and debounces at two characters, preserving numeric ids', async () => {

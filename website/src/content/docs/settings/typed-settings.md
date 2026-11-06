@@ -380,6 +380,8 @@ $this->register_setting(
 );
 ```
 
+While a `disabled_if` rule holds, the submitted value of that disabled field is omitted and its stored value stays unchanged. If the value drives plugin behavior, read it together with the row count or reset it when saving.
+
 Rules worth knowing:
 
 - Values are compared as strings. For a select or radio, compare with the option **key**. For a toggle, use `true` or `false`.

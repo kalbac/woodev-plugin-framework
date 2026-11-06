@@ -1,5 +1,6 @@
 import { validateBoxesText, validateBoxCost } from './boxes-table';
 import { validateRecordsValue } from './records-table';
+import { parseRecordRows } from './record-rows';
 
 /**
  * UI-kit — client-side field validation (mirror of the PHP server validator).
@@ -386,17 +387,4 @@ export function isFieldVisible( schema, values, fieldSchemas = {} ) {
 export function isFieldDisabled( schema, values, fieldSchemas = {} ) {
 	return !! schema.disabled || ( schema.disabled_if && Object.keys( schema.disabled_if ).length > 0
 		? evaluateConditions( schema.disabled_if, values, fieldSchemas ) : false );
-}
-
-/** Parse the records-table's stored JSON list. Malformed stored data has zero rows, matching PHP. */
-function parseRecordRows( value ) {
-	if ( 'string' !== typeof value || '' === value.trim() ) {
-		return [];
-	}
-	try {
-		const rows = JSON.parse( value );
-		return Array.isArray( rows ) && rows.every( ( row ) => row && 'object' === typeof row && ! Array.isArray( row ) ) ? rows : [];
-	} catch ( error ) {
-		return [];
-	}
 }

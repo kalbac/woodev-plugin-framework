@@ -1014,7 +1014,7 @@ export default function App() {
 						values: values[ step.id ] || {},
 						conditionValues: collectConditionValues(),
 						conditionFields: collectConditionSchemas(),
-													onChange: onStepChange,
+						onChange: onStepChange,
 						showErrors,
 						serverErrors: fieldErrors,
 						body: step.component ? renderComponentBody() : null,
