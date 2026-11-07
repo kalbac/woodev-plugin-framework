@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.28] — 2026-11-07
+### Bug Fixes
+- **shipping**: Leave the city field alone for a cart with nothing to ship (#1664)
+
+- **shipping**: Virtual cart — also keep the locale city and withhold location descriptors (#1664)
+
+- **location**: Leaving a filled region field no longer wipes the settlement; the rendered settlement can be re-picked (#1663)
+
+- **location**: Drop select2's cached option data when the seeded value is parked (#1663)
+
+
+### Build
+- Rebuild bundles for #1663 in the primary checkout
+
+- Rebuild location-select-modes.min.js for #1663
+
+
+
 ## [2.0.27] — 2026-11-07
 ### Bug Fixes
 - Plugin settings links open the Woodev settings tab
