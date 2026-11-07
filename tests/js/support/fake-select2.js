@@ -203,6 +203,31 @@ function installFakeSelect2( $ ) {
 
 				$el.trigger( $.Event( 'select2:select', { params: { data: resultItem } } ) );
 			},
+
+			/**
+			 * A customer CLICKING `resultItem` in the open list, with selectWoo's own rule for a
+			 * result whose id equals the selected value (issue #1663): such a result is rendered
+			 * `data-selected="true"`, and a click or Enter on it only closes the list — no `change`,
+			 * no `select2:select` (selectWoo.full.js, `results:select` and the `mouseup` handler on
+			 * `.select2-results__option[data-selected]`). Anything else is a {@see pick}.
+			 *
+			 * Separate from {@see pick} on purpose: older tests pick the same id twice and rely on
+			 * `pick()` always selecting.
+			 *
+			 * @param {{id: string, text: string, key: string}} resultItem
+			 * @returns {void}
+			 */
+			clickResult: function( resultItem ) {
+				if ( String( $el.val() ) !== String( resultItem.id ) ) {
+					instance.pick( resultItem );
+
+					return;
+				}
+
+				isOpen = false;
+				$el.trigger( 'select2:closing' );
+				$el.trigger( 'select2:close' );
+			},
 		};
 
 		instances.push( instance );

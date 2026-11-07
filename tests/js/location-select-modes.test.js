@@ -4027,3 +4027,100 @@ describe( 'issue #1071: popular list only before the customer picks', () => {
 		expect( JSON.stringify( fetchSpy.mock.calls[ 0 ] ) ).toContain( 'Пушк' );
 	} );
 } );
+
+// -----------------------------------------------------------------------
+// Issue #1663 — re-picking the settlement the page already shows
+// -----------------------------------------------------------------------
+//
+// select2/selectWoo answers a click on a result whose id equals the selected value with a
+// plain close: no `select2:select`, so no `/select`. The seeded `<option>` (#447) is exactly
+// such a value when the cascade holds no record of it, so the widget blanks it while the
+// list is open and puts it back on a close without a pick.
+
+describe( 'issue #1663: re-picking the rendered settlement when the cascade holds no record', () => {
+	const MOSCOW = { key: 'dadata:moscow', value: 'Москва', level: 'settlement', record: { key: 'dadata:moscow', label: 'г Москва' } };
+	let picked;
+	let options;
+	let instance;
+
+	function mount() {
+		document.body.innerHTML = '<input type="text" id="shipping_city" name="shipping_city" value="Москва" />';
+
+		const mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		const instances = installFakeSelect2( window.jQuery );
+
+		options = buildOptions( {
+			node: { level: 'settlement', fieldId: 'shipping_city' },
+			fetch: jest.fn( () => Promise.resolve( [ MOSCOW ] ) ),
+			pickedSettlement: () => picked,
+		} );
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+		instance = instances[ 0 ];
+
+		return document.getElementById( 'shipping_city' );
+	}
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'an unresolved seed is blanked while the list is open, so no result counts as already selected', () => {
+		picked = null;
+		const select = mount();
+
+		instance.open();
+
+		expect( select.value ).toBe( '' );
+	} );
+
+	it( 'picking the result named like the seed is a real pick: onSelect fires once, the field holds the value, no duplicate option', async () => {
+		picked = null;
+		const select = mount();
+
+		const q = instance.query( 'Моск' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		instance.clickResult( q.success.mock.calls[ 0 ][ 0 ].results[ 0 ] );
+		await tick();
+
+		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( options.onSelect ).toHaveBeenCalledWith( { record: MOSCOW.record } );
+		expect( select.value ).toBe( 'Москва' );
+		expect( Array.from( select.options ).filter( ( o ) => 'Москва' === o.value ) ).toHaveLength( 1 );
+	} );
+
+	it( 'closing the list without a pick puts the seeded value back, selected', () => {
+		picked = null;
+		const select = mount();
+
+		instance.open();
+		instance.close();
+
+		expect( select.value ).toBe( 'Москва' );
+		expect( select.options[ 0 ].selected ).toBe( true );
+		expect( options.onSelect ).not.toHaveBeenCalled();
+	} );
+
+	it( 'a customer pick standing in the cascade leaves the seed alone — the server already has the record', () => {
+		picked = { name: 'Москва' };
+		const select = mount();
+
+		instance.open();
+
+		expect( select.value ).toBe( 'Москва' );
+	} );
+
+	it( 'a second open after a pick has nothing to blank — the picked option stays selected', async () => {
+		picked = null;
+		const select = mount();
+
+		const q = instance.query( 'Моск' );
+		await Promise.resolve().then( () => Promise.resolve() );
+		instance.clickResult( q.success.mock.calls[ 0 ][ 0 ].results[ 0 ] );
+		await tick();
+
+		instance.open();
+
+		expect( select.value ).toBe( 'Москва' );
+	} );
+} );

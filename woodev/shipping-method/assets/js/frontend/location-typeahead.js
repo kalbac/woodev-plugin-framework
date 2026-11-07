@@ -149,7 +149,11 @@
  * settlement to be unresolved about), an `Escape` since the last keystroke (`escaped`, an
  * explicit customer cancel — never silently overridden by an auto-adopt or a report), or a blur
  * whose value is exactly what {@see selectItem} itself just wrote (`committedValue` — a blur
- * firing right after a genuine pick must not re-decide anything). A rejected fetch, or the widget
+ * firing right after a genuine pick must not re-decide anything), or a blur with no `input`
+ * event since the field was focused (`touched`, issue #1663 — a value the page rendered or the
+ * cascade wrote silently is already as committed as it will get; re-selecting its first
+ * suggestion would overwrite the customer's saved record and wipe every level below it). A
+ * rejected fetch, or the widget
  * detaching while the flush/chain above is still pending, also does nothing at all — see
  * {@see handleBlur}'s own body. A query shorter than `minChars` is DIFFERENT from all of these —
  * see the bullet list above: it never adopts, but it does report, `resolved: false`.
@@ -408,6 +412,17 @@
 		 * to decide.
 		 */
 		var committedValue = null;
+
+		/**
+		 * @type {boolean} whether the text may have changed since the customer focused the field —
+		 * set by every `input` event, cleared on `focus`. A blur with nothing typed in between
+		 * leaves a value the page rendered (or the cascade wrote silently) exactly as it was, so
+		 * there is nothing for {@see handleBlur} to adopt or report (issue #1663: leaving a
+		 * pre-filled region field re-selected its first suggestion and wiped the settlement below
+		 * it). Starts `true` unless the field is already focused at attach — a blur can only follow
+		 * a focus, which clears it.
+		 */
+		var touched = document.activeElement !== input;
 
 		/**
 		 * @type {{generation: number, query: string, promise: Promise}|null} the most recently
@@ -755,6 +770,7 @@
 			// See the file docblock's ABANDON section: Escape is an explicit cancel, but only
 			// until the customer actually types again — a fresh keystroke re-arms the auto-adopt.
 			escaped = false;
+			touched = true;
 
 			if ( null !== debounceTimer ) {
 				clearTimeout( debounceTimer );
@@ -958,7 +974,7 @@
 
 			var query = input.value;
 
-			if ( '' === query || escaped || query === committedValue ) {
+			if ( '' === query || escaped || query === committedValue || ! touched ) {
 				closeListbox();
 
 				return;
@@ -1023,6 +1039,11 @@
 			} );
 		}
 
+		function handleFocus() {
+			touched = false;
+		}
+
+		input.addEventListener( 'focus', handleFocus );
 		input.addEventListener( 'input', handleInput );
 		input.addEventListener( 'keydown', handleKeydown );
 		input.addEventListener( 'blur', handleBlur );
@@ -1051,6 +1072,7 @@
 				debounceTimer = null;
 			}
 
+			input.removeEventListener( 'focus', handleFocus );
 			input.removeEventListener( 'input', handleInput );
 			input.removeEventListener( 'keydown', handleKeydown );
 			input.removeEventListener( 'blur', handleBlur );

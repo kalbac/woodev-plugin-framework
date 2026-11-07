@@ -86,4 +86,39 @@ describe( 'fake-select2 — MEASURED event order (issue #525)', () => {
 
 		expect( order ).toEqual( [ 'change', 'select2:closing', 'select2:close', 'select2:select' ] );
 	} );
+	test( 'clickResult() on the already-selected value only closes — no change, no select2:select (issue #1663)', () => {
+		const instances = installFakeSelect2( window.jQuery );
+		const $select = window.jQuery( '#city' );
+		const order = [];
+
+		[ 'select2:closing', 'select2:close', 'select2:select', 'change' ].forEach( function( name ) {
+			$select.on( name, function() {
+				order.push( name );
+			} );
+		} );
+
+		$select.append( '<option value="a" selected>A</option>' );
+		$select.select2( { ajax: { transport: jest.fn() } } );
+		instances[ 0 ].open();
+		instances[ 0 ].clickResult( { id: 'a', text: 'A', key: 'k1' } );
+
+		expect( order ).toEqual( [ 'select2:closing', 'select2:close' ] );
+	} );
+
+	test( 'clickResult() on a different value is a real pick', () => {
+		const instances = installFakeSelect2( window.jQuery );
+		const $select = window.jQuery( '#city' );
+		const order = [];
+
+		$select.on( 'select2:select', function() {
+			order.push( 'select2:select' );
+		} );
+
+		$select.append( '<option value="a" selected>A</option>' );
+		$select.select2( { ajax: { transport: jest.fn() } } );
+		instances[ 0 ].open();
+		instances[ 0 ].clickResult( { id: 'b', text: 'B', key: 'k2' } );
+
+		expect( order ).toEqual( [ 'select2:select' ] );
+	} );
 } );

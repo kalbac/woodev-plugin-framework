@@ -1371,6 +1371,15 @@
 		var dataByKey = {};
 		var lastHandledKey = null;
 
+		/** @type {HTMLOptionElement|null} the pre-selected `<option>` carrying the value the page rendered (issue #447). */
+		var seededOption = null;
+
+		/**
+		 * @type {string|null} the real value of {@see seededOption} while {@see parkUnresolvedSeed}
+		 * has blanked it for the open dropdown, `null` otherwise.
+		 */
+		var parkedSeedValue = null;
+
 		/**
 		 * @type {function(): void|null} cancels the MOST RECENTLY started `ajax-select2` request,
 		 * or `null` when none has ever started (or the last one already settled/was cancelled).
@@ -1698,8 +1707,65 @@
 			}
 		}
 
+		/**
+		 * Issue #1663: lets the customer re-pick the settlement the page already shows when
+		 * the cascade holds no record of it.
+		 *
+		 * The seeded `<option>` (issue #447) is the text WooCommerce rendered from the saved
+		 * customer data — a value, not a pick: no `dataset.woodevKey`, no record behind it. After
+		 * a region change wiped the settlement record, clicking "г Москва" in the list
+		 * answers a field already holding "Москва": select2/selectWoo marks a result whose id
+		 * equals the selected value `data-selected="true"` and a click on such a result only
+		 * closes the list (selectWoo.full.js, `results:select` and the `mouseup` handler) — no
+		 * `select2:select`, so no `/select`, and the order is refused for a settlement "not in
+		 * the list" for good.
+		 *
+		 * While the list is open the seed is therefore blanked, so no result counts as already
+		 * selected and a click on the one naming the same place is a real pick;
+		 * {@see restoreParkedSeed} undoes it on close. Only for an unresolved seed: with a
+		 * customer pick standing, the server already has the record and a re-pick has nothing to
+		 * add. `options.pickedSettlement` exists for the settlement level only.
+		 *
+		 * @returns {void}
+		 */
+		function parkUnresolvedSeed() {
+			if (
+				null !== parkedSeedValue || ! seededOption || ! seededOption.parentNode || ! seededOption.selected
+				|| seededOption.dataset.woodevKey || 'function' !== typeof options.pickedSettlement || options.pickedSettlement()
+			) {
+				return;
+			}
+
+			parkedSeedValue = seededOption.value;
+			seededOption.value = '';
+		}
+
+		/**
+		 * Undoes {@see parkUnresolvedSeed} when the list closes. Nothing picked (Escape, click
+		 * away, a result that was already selected): the field still holds the blanked seed, so its
+		 * value goes back. A pick: select2 has already appended and selected its own `<option>`
+		 * (`change` precedes `select2:close`, see {@see handleSelect2Close}), which supersedes the
+		 * seed — it is removed rather than restored, so two options never share one value.
+		 *
+		 * @returns {void}
+		 */
+		function restoreParkedSeed() {
+			if ( null === parkedSeedValue ) {
+				return;
+			}
+
+			if ( '' === select.value ) {
+				seededOption.value = parkedSeedValue;
+			} else if ( seededOption.parentNode ) {
+				seededOption.parentNode.removeChild( seededOption );
+			}
+
+			parkedSeedValue = null;
+		}
+
 		function handleSelect2Open() {
 			dropdownOpen = true;
+			parkUnresolvedSeed();
 
 			// Issue #527: re-opening the list is one of the transitions that invalidates a
 			// scheduled flush, and it was the only one that did not cancel it — a pick
@@ -1799,6 +1865,7 @@
 		 */
 		function handleSelect2Close() {
 			dropdownOpen = false;
+			restoreParkedSeed();
 			cancelScheduledAbandonFlush();
 			scheduleAbandonFlush();
 		}
@@ -1916,7 +1983,7 @@
 			// which does the same thing for the same reason) — without it the select renders
 			// with NO options at all until the first keystroke.
 			if ( initialValue ) {
-				var seededOption = document.createElement( 'option' );
+				seededOption = document.createElement( 'option' );
 
 				seededOption.value = initialValue;
 				seededOption.textContent = initialValue;
