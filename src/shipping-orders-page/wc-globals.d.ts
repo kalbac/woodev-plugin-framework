@@ -312,6 +312,13 @@ export interface WcChartProps {
 	query?: Record< string, string | undefined >;
 	legendPosition?: 'bottom' | 'side' | 'top' | 'hidden';
 	tooltipValueFormat?: string | ( ( value: number ) => string );
+	/** Date label formatters: a d3 format string or a function of a `Date` (the function form is what lets a locale in). */
+	xFormat?: string | ( ( date: Date ) => string );
+	x2Format?: string | ( ( date: Date ) => string );
+	tooltipLabelFormat?: string | ( ( date: Date ) => string );
+	screenReaderFormat?: string | ( ( date: Date ) => string );
+	/** Overrides the legend's per-series total (the default is the SUM of the series' points — wrong for a ratio). */
+	legendTotals?: Record< string, number >;
 	valueType?: string;
 }
 

@@ -28,6 +28,21 @@ export function seriesValue( series: AnalyticsSeries | undefined, metric: ChartM
 	return series[ metric ];
 }
 
+/**
+ * The legend's per-carrier total for a RATIO metric: the share over the whole period — the very figure the carrier's own
+ * KPI numbers use — instead of the sum of the per-interval percentages that `Chart` shows by default («2 977,8 %», #1652).
+ * `undefined` for a countable metric, where the default sum is right.
+ */
+export function legendTotals( carriers: AnalyticsCarrier[], metric: ChartMetric ): Record< string, number > | undefined {
+	if ( 'delivered_share' !== metric ) {
+		return undefined;
+	}
+
+	return Object.fromEntries(
+		carriers.map( ( carrier ) => [ carrier.label, Math.round( ( carrier.current.delivered_share ?? 0 ) * 1000 ) / 10 ] )
+	);
+}
+
 /** `Chart` parses `YYYY-MM-DDTHH:mm:ss`. */
 function chartDate( day: string ): string {
 	return `${ day }T00:00:00`;
