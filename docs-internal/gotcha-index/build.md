@@ -35,3 +35,4 @@
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
 - [build/release] **The Homelab `gh` token expired (401 on private release assets), so the EDD worker could not download the ZIP; the coordinator passes GitHub's ~5-minute pre-signed asset redirect URL, which carries no credential.** → [homelab-gh-token-expired-hand-the-worker-a-pre-signed-asset-url](../gotchas/homelab-gh-token-expired-hand-the-worker-a-pre-signed-asset-url.md) (s213)
+- [build/hooks] **`pre-push` in a linked scratch worktree without `node_modules` refuses a release-branch merge that brought build inputs — merge and push the release branch from the PRIMARY checkout.** → [pre-push-in-a-linked-scratch-worktree-without-node-modules-refuses-a-release-merge](../gotchas/pre-push-in-a-linked-scratch-worktree-without-node-modules-refuses-a-release-merge.md) (s220)

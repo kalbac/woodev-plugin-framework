@@ -33,3 +33,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [shipping/location] **A CDEK region label («городской округ Алматы») as the free-text State of a country without a WC state list breaks a «State, City» geocode (DaData: 0 results).** → [a-cdek-region-label-in-a-country-without-wc-states-breaks-a-geocoder-query](../gotchas/a-cdek-region-label-in-a-country-without-wc-states-breaks-a-geocoder-query.md) (s220)
