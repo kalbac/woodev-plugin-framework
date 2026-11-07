@@ -30,19 +30,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		private array $statuses;
 
 		/**
-		 * @var string Default subject.
+		 * @var string|\Closure Default subject: a string, or a closure that translates it when it is read.
 		 */
-		private string $default_subject;
+		private $default_subject;
 
 		/**
-		 * @var string Default heading.
+		 * @var string|\Closure Default heading: a string, or a closure that translates it when it is read.
 		 */
-		private string $default_heading;
+		private $default_heading;
 
 		/**
-		 * @var string Default body.
+		 * @var string|\Closure Default body: a string, or a closure that translates it when it is read.
 		 */
-		private string $default_body;
+		private $default_body;
 
 		/**
 		 * @var bool Whether this email is enabled by default.
@@ -76,33 +76,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		private string $own_tracking_number = '';
 
 		/**
-		 * @var string Default body used instead of {@see self::$default_body} when the order has several parcels and the
-		 *             merchant has not written a body of their own; empty when this email has no such variant.
+		 * @var string|\Closure Default body used instead of {@see self::$default_body} when the order has several parcels and
+		 *                      the merchant has not written a body of their own; empty when this email has no such variant.
 		 */
-		private string $default_body_multiple;
+		private $default_body_multiple;
 
 		/**
-		 * @var string Default body used instead of {@see self::$default_body} when the order has ONE parcel that is only a
-		 *             link (no number, e.g. Yandex) and the merchant has not written a body of their own; empty for none.
+		 * @var string|\Closure Default body used instead of {@see self::$default_body} when the order has ONE parcel that is
+		 *                      only a link (no number, e.g. Yandex) and the merchant has not written a body of their own;
+		 *                      empty for none.
 		 */
-		private string $default_body_link_only;
+		private $default_body_link_only;
 
 		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
-		 * @param string   $id              Email id.
-		 * @param string   $title           Admin title.
-		 * @param string   $description     Admin description.
-		 * @param string[] $statuses        Triggering canonical states.
-		 * @param string   $subject         Default subject.
-		 * @param string   $heading         Default heading.
-		 * @param string   $body            Default body.
-		 * @param bool     $enabled         Whether enabled by default.
-		 * @param string   $body_multiple   Default body for an order with several parcels (@since 2.0.25); empty for none.
-		 * @param string   $body_link_only  Default body for one parcel that has a link but no number (@since 2.0.25); empty for none.
+		 * @param string          $id              Email id.
+		 * @param string          $title           Admin title.
+		 * @param string          $description     Admin description.
+		 * @param string[]        $statuses        Triggering canonical states.
+		 * @param string|\Closure $subject        Default subject. A closure (`static fn(): string => __( … )`) is run each time the
+		 *                                        text is read, so it comes out in the locale in force then (@since 2.0.27).
+		 * @param string|\Closure $heading        Default heading; string or closure, as the subject.
+		 * @param string|\Closure $body           Default body; string or closure, as the subject.
+		 * @param bool            $enabled        Whether enabled by default.
+		 * @param string|\Closure $body_multiple  Default body for an order with several parcels (@since 2.0.25); empty for none.
+		 * @param string|\Closure $body_link_only Default body for one parcel that has a link but no number (@since 2.0.25); empty for none.
 		 */
-		public function __construct( string $id, string $title, string $description, array $statuses, string $subject, string $heading, string $body, bool $enabled, string $body_multiple = '', string $body_link_only = '' ) {
+		public function __construct( string $id, string $title, string $description, array $statuses, $subject, $heading, $body, bool $enabled, $body_multiple = '', $body_link_only = '' ) {
 			$this->id               = $id;
 			$this->title            = $title;
 			$this->description      = $description;
@@ -135,17 +137,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'label' => __( 'Send this email to the customer', 'woodev-plugin-framework' ),
 					'default' => $this->default_enabled ? 'yes' : 'no',
 				],
+				// The three texts carry NO 'default' (as WooCommerce's own emails): an untouched field stays empty, so
+				// get_default_*() is read at send time in the shop's locale. The form shows the default as a placeholder.
 				'subject'    => [
 					'title' => __( 'Subject', 'woodev-plugin-framework' ),
 					'type' => 'text',
 					'description' => __( 'Available placeholders: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}.', 'woodev-plugin-framework' ),
-					'default' => $this->default_subject,
+					'placeholder' => $this->get_default_subject(),
+					'default' => '',
 					'desc_tip' => true,
 				],
 				'heading'    => [
 					'title' => __( 'Heading', 'woodev-plugin-framework' ),
 					'type' => 'text',
-					'default' => $this->default_heading,
+					'placeholder' => $this->get_default_heading(),
+					'default' => '',
 				],
 				'email_type' => [
 					'title' => __( 'Email type', 'woodev-plugin-framework' ),
@@ -158,7 +164,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'title' => __( 'Email body', 'woodev-plugin-framework' ),
 					'type' => 'textarea',
 					'css' => 'width: 400px; height: 100px;',
-					'default' => $this->default_body,
+					'placeholder' => $this->get_default_body(),
+					'default' => '',
 					'description' => __( 'Placeholders can be inserted in curly braces.', 'woodev-plugin-framework' ),
 					'desc_tip' => true,
 				],
@@ -208,12 +215,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			if ( ! is_email( $this->get_recipient() ) ) {
 				return;
 			}
-			$this->placeholders = $this->get_placeholders( $order, $this->provider );
-			// Claim this order/email before the side effect so a re-delivered webhook cannot
-			// pass the deduplication check while this send is in progress.
-			// The value names the status that sent it, for diagnostics; any non-empty value means "sent".
-			\Woodev_Order_Compatibility::update_order_meta( $order, $flag, $this->current_status );
-			$this->send( $this->get_recipient(), $this->get_subject(), $this->get_content(), $this->get_headers(), $this->get_attachments() );
+			// A status can change while an administrator is on the site, in the administrator's language; the buyer reads
+			// the mail in the shop's. Every default text below is translated when read, so switch first.
+			$this->setup_locale();
+			try {
+				$this->placeholders = $this->get_placeholders( $order, $this->provider );
+				// Claim this order/email before the side effect so a re-delivered webhook cannot
+				// pass the deduplication check while this send is in progress.
+				// The value names the status that sent it, for diagnostics; any non-empty value means "sent".
+				\Woodev_Order_Compatibility::update_order_meta( $order, $flag, $this->current_status );
+				$this->send( $this->get_recipient(), $this->get_subject(), $this->get_content(), $this->get_headers(), $this->get_attachments() );
+			} finally {
+				$this->restore_locale();
+			}
 		}
 
 		/**
@@ -407,24 +421,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		}
 
 		/**
+		 * Default subject, in the locale in force now: the shop's once {@see self::trigger()} has switched to it.
+		 *
 		 * @return string
 		 */
 		public function get_default_subject() {
-			return $this->default_subject;
+			return $this->resolve_default( $this->default_subject );
 		}
 
 		/**
+		 * Default heading, in the locale in force now.
+		 *
 		 * @return string
 		 */
 		public function get_default_heading() {
-			return $this->default_heading;
+			return $this->resolve_default( $this->default_heading );
 		}
 
 		/**
+		 * Default body, in the locale in force now.
+		 *
 		 * @return string
 		 */
 		public function get_default_body(): string {
-			return $this->default_body;
+			return $this->resolve_default( $this->default_body );
+		}
+
+		/**
+		 * A default text as a string: a closure is run now, so its `__()` reads the locale in force now.
+		 *
+		 * @param string|\Closure $text String or closure.
+		 * @return string
+		 */
+		private function resolve_default( $text ): string {
+			return (string) ( $text instanceof \Closure ? $text() : $text );
 		}
 
 		/**
@@ -438,20 +468,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		 * @return string
 		 */
 		private function body_text(): string {
-			$body = (string) $this->get_option( 'body', $this->default_body );
+			$default = $this->get_default_body();
+			$body    = (string) $this->get_option( 'body', $default );
 
-			if ( count( $this->shipments ) > 1 && '' !== $this->default_body_multiple && $body === $this->default_body ) {
-				return $this->default_body_multiple;
+			if ( count( $this->shipments ) > 1 ) {
+				$multiple = $this->resolve_default( $this->default_body_multiple );
+				if ( '' !== $multiple && $body === $default ) {
+					return $multiple;
+				}
 			}
 
 			// One parcel that is only a link: no empty «Tracking number: .» — the link line stands alone.
-			if (
-				1 === count( $this->shipments )
-				&& '' === $this->shipments[0]->get_number()
-				&& '' !== $this->default_body_link_only
-				&& $body === $this->default_body
-			) {
-				return $this->default_body_link_only;
+			if ( 1 === count( $this->shipments ) && '' === $this->shipments[0]->get_number() && $body === $default ) {
+				$link_only = $this->resolve_default( $this->default_body_link_only );
+				if ( '' !== $link_only ) {
+					return $link_only;
+				}
 			}
 
 			return $body;

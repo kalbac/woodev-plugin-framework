@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
 // The framework honours the key override below only in test environments.
 defined( 'WOODEV_LICENSE_TEST_KEYS' ) || define( 'WOODEV_LICENSE_TEST_KEYS', true );
 
-const WOODEV_RIG_LICENSE_FIXTURE_IDS = [ '9001', '9002', '9003', '9004', '9005', '9006' ];
+const WOODEV_RIG_LICENSE_FIXTURE_IDS = [ '9001', '9002', '9003', '9004', '9005', '9006', '8772', '58107', '7698' ];
 
 /**
  * The rig-local keypair, generated once and kept in an option.
