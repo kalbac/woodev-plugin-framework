@@ -255,7 +255,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @since 2.0.2
 		 * @var array<int, string>
 		 */
-		private const REGION_TYPE_WORDS = [ 'область', 'обл', 'край', 'республика', 'респ', 'автономный', 'автономная', 'округ', 'ао', 'федеральный', 'город', 'г', 'region', 'oblast', 'republic', 'province', 'state', 'county', 'city', 'of' ];
+		private const REGION_TYPE_WORDS = [ 'область', 'обл', 'край', 'республика', 'респ', 'автономный', 'автономная', 'округ', 'ао', 'федеральный', 'город', 'городской', 'г', 'region', 'oblast', 'republic', 'province', 'state', 'county', 'city', 'of' ];
 
 		/**
 		 * Signature of the saved city already looked up in THIS request (#1075), so a miss costs
@@ -1199,6 +1199,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				$records[ $level ] = $chain['records'][ $level ];
 			}
 
+			$records = $this->with_single_place_settlement( $records, $for_country );
+
 			if ( [] === $records ) {
 				return null;
 			}
@@ -1220,6 +1222,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				'implicit' => $chain['implicit'],
 				'saved_at' => $chain['saved_at'],
 			];
+		}
+
+		/**
+		 * Puts a country's single city-mode place above a stored house that has no settlement (#1642).
+		 *
+		 * Such a chain was found on the rig: a KZ house, no settlement. With one listed place the
+		 * City is fixed text and there is nothing to pick, so the address lock never lifted and the
+		 * #531 placement guard had no settlement to accept. The place is added only when the house
+		 * stands in it ({@see Location_Record::is_within()}, or the cross-provider proof
+		 * {@see Location_Record::is_same_locality_as()} that the store's own chain rebuild uses, and the
+		 * house names the place's own locality, so a house of the parent city is not in its nested town); with
+		 * several places the customer picks one, and a house of another locality is left as it is.
+		 * Nothing is written back: the read serves the chain the cascade expects.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param array<string, Location_Record> $records     Gated records, in cascade order.
+		 * @param string|null                    $for_country See {@see self::is_customer_record_stale()}.
+		 *
+		 * @return array<string, Location_Record>
+		 */
+		private function with_single_place_settlement( array $records, ?string $for_country ): array {
+			$address = $records[ Location_Record::LEVEL_ADDRESS ] ?? null;
+
+			if ( null === $address || isset( $records[ Location_Record::LEVEL_SETTLEMENT ] ) || ! $this->has_settlement_choices() ) {
+				return $records;
+			}
+
+			$listed = $this->listed_records_for( $address->country() );
+
+			if ( 1 !== count( $listed ) ) {
+				return $records;
+			}
+
+			$place = $listed[0];
+
+			if ( ( ! $address->is_within( $place->key() ) && ! ( $address->is_same_locality_as( $place ) && $address->names_locality( $place->own_locality_name() ) ) ) || $this->is_customer_record_stale( $place, $for_country ) ) {
+				return $records;
+			}
+
+			$ordered = [];
+
+			foreach ( Location_Record::LEVELS as $level ) {
+				if ( Location_Record::LEVEL_SETTLEMENT === $level ) {
+					$ordered[ $level ] = $place;
+				} elseif ( isset( $records[ $level ] ) ) {
+					$ordered[ $level ] = $records[ $level ];
+				}
+			}
+
+			return $ordered;
 		}
 
 		/**

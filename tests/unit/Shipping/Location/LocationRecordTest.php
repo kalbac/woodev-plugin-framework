@@ -715,6 +715,13 @@ final class LocationRecordTest extends TestCase {
 		$this->assertFalse( $city->is_same_locality_as( $house ) );
 	}
 
+	public function test_normalize_region_name_drops_the_city_district_type_words(): void {
+		// #1642: CDEK publishes Almaty's region as «городской округ Алматы», DaData as «Алматы г».
+		// A plugin comparing region stems (the range plugin's locality match) must see one region.
+		$this->assertSame( 'алматы', Location_Record::normalize_region_name( 'городской округ Алматы' ) );
+		$this->assertSame( Location_Record::normalize_region_name( 'Алматы г' ), Location_Record::normalize_region_name( 'городской округ Алматы' ) );
+	}
+
 	public function test_is_same_locality_as_treats_a_missing_region_as_no_disagreement(): void {
 		$house = $this->with_locality(
 			'dadata:house',

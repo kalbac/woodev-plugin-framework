@@ -49,6 +49,7 @@ const TYPE_WORDS = new Set( [
 	'ао',
 	'федеральный',
 	'город',
+	'городской',
 	'г',
 	'region',
 	'oblast',
