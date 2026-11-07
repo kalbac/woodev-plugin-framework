@@ -35,6 +35,11 @@ describe( 'normalizeRegionName', () => {
 		expect( normalizeRegionName( 'Республика Алтай' ) ).toBe( 'алтай' );
 		expect( normalizeRegionName( 'Орёл' ) ).toBe( 'орел' );
 	} );
+
+	it( 'drops the city-district type words (#1642: CDEK «городской округ Алматы» is DaData «Алматы г»)', () => {
+		expect( normalizeRegionName( 'городской округ Алматы' ) ).toBe( 'алматы' );
+		expect( normalizeRegionName( 'Алматы г' ) ).toBe( 'алматы' );
+	} );
 } );
 
 describe( 'recordCity', () => {
