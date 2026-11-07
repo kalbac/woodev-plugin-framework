@@ -257,7 +257,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 * @return array<string, array<string, array<string, mixed>>>
 		 */
 		public function filter_country_locale( $locale ): array {
-			return self::locale_contribution( $this->effective(), (array) $locale, $this->shipping_countries() );
+			return self::locale_contribution( $this->effective(), (array) $locale, $this->shipping_countries(), Checkout_Config::cart_needs_shipping() );
 		}
 
 		/**
@@ -294,7 +294,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 			 * @param bool                                                 $restore whether to restore the settlement invariants.
 			 * @param array<string, array<string, array<string, mixed>>> $fields  the checkout fields array so far (after this policy's own contribution).
 			 */
-			if ( apply_filters( 'woodev_checkout_field_policy_restore_invariants', true, $fields ) ) {
+			// A cart with nothing to ship has no settlement to restore: the site's own field setup stands (#1664).
+			if ( Checkout_Config::cart_needs_shipping() && apply_filters( 'woodev_checkout_field_policy_restore_invariants', true, $fields ) ) {
 				$fields = $this->restore_invariants( $fields, $this->default_address_fields() );
 
 				$this->persist_overrides();
@@ -452,10 +453,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 *                                                                                 `postcode_field` are read).
 		 * @param array<string, array<string, array<string, mixed>>> $locale             the locale array to contribute onto.
 		 * @param string[]                                           $shipping_countries every shipping country of the store (S5).
+		 * @param bool                                               $needs_shipping     whether the cart has anything to ship; when it has not,
+		 *                                                                                the city's `required` is left as the locale had it (#1664).
 		 *
 		 * @return array<string, array<string, array<string, mixed>>>
 		 */
-		public static function locale_contribution( array $settings, array $locale, array $shipping_countries ): array {
+		public static function locale_contribution( array $settings, array $locale, array $shipping_countries, bool $needs_shipping = true ): array {
 			$preset           = ! empty( $settings['field_order_preset'] );
 			$region_removed   = 'remove' === ( $settings['region_field'] ?? 'show' );
 			$postcode_removed = 'remove' === ( $settings['postcode_field'] ?? 'show' );
@@ -509,7 +512,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 				// Settlement invariant — always, re-asserted LAST. Task 7 extends this
 				// same seam with restoration of a third-party-removed city field; this
 				// line is the already-required baseline it builds on.
-				$locale[ $country ]['city']['required'] = true;
+				if ( $needs_shipping ) {
+					$locale[ $country ]['city']['required'] = true;
+				}
 			}
 
 			return $locale;

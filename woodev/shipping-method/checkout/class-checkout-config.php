@@ -501,6 +501,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		}
 
 		/**
+		 * Whether the cart being checked out needs shipping at all.
+		 *
+		 * A cart of virtual/downloadable products has no delivery address to settle, so the
+		 * checkout layer must leave the city/settlement fields the way the site configured them
+		 * (a field-manager plugin or theme may hide `billing_city` for such a cart) and run no
+		 * settlement validation on them (issue #1664).
+		 *
+		 * Answers `true` — the existing behaviour — whenever the answer is not known: no
+		 * WooCommerce, no cart (REST, admin, unit suite; `WC()->cart` is only loaded for
+		 * frontend and Store API requests), or the order-pay page, whose cart is not the order
+		 * being paid for.
+		 *
+		 * @since 2.0.28
+		 *
+		 * @return bool
+		 */
+		public static function cart_needs_shipping(): bool {
+			if ( ! function_exists( 'WC' ) ) {
+				return true;
+			}
+
+			$cart = WC()->cart ?? null;
+
+			if ( ! is_object( $cart ) || ! method_exists( $cart, 'needs_shipping' ) ) {
+				return true;
+			}
+
+			if ( function_exists( 'is_checkout_pay_page' ) && is_checkout_pay_page() ) {
+				return true;
+			}
+
+			return (bool) $cart->needs_shipping();
+		}
+
+		/**
 		 * The method ids of WooCommerce's OWN pickup — the legacy «Самовывоз» (`local_pickup`) and, on a store whose
 		 * checkout page is the Checkout block, the block's `pickup_location`. WooCommerce keeps the list itself
 		 * (`woocommerce_local_pickup_methods`); this reads it, so a pickup method another extension adds there counts too.

@@ -226,3 +226,36 @@ describe( 'place-order gate on/off — «Блокировать оформлен
 		expect( placeOrderDisabled() ).toBe( true );
 	} );
 } );
+
+/**
+ * A cart with nothing to ship (issue #1664). The gate counts every required descriptor the
+ * server publishes, so `Checkout_Handler` withholds the Location-Provider ones when the cart
+ * needs no delivery address; the pair below pins both halves of that contract.
+ */
+describe( 'place-order gate on a cart with nothing to ship (issue #1664)', () => {
+
+	it( 'blocks on a required location descriptor whose input the page does not have — why the server must not publish it', () => {
+		installMarkup();
+		document.getElementById( 'billing_city_field' ).remove();
+
+		const config = buildConfig( { billing_city: { source_kind: 'location', location_level: 'settlement', required: true } } );
+		config.takeover = {};
+
+		boot( config );
+
+		expect( placeOrderDisabled() ).toBe( true );
+	} );
+
+	it( 'leaves #place_order alone when the config carries no location descriptor and the city is gone', () => {
+		installMarkup();
+		document.getElementById( 'billing_city_field' ).remove();
+
+		const config = buildConfig();
+		config.fields = {};
+		config.takeover = {};
+
+		boot( config );
+
+		expect( placeOrderDisabled() ).toBe( false );
+	} );
+} );
