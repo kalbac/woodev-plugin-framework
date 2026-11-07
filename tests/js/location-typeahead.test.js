@@ -1158,6 +1158,79 @@ describe( 'ABANDON — adopt or report on blur (issue #350)', () => {
 		expect( input.value ).toBe( 'Жуковский' );
 	} );
 
+	// Issue #1663: a value the PAGE rendered (second order of a session, WooCommerce's saved
+	// customer data) is not one this widget ever committed, so `committedValue` cannot cover it.
+	// Focusing the field and leaving it untouched must not re-select the first suggestion —
+	// that `/select` would wipe every level below the region from the session.
+	test( 'focus then blur on a value the page rendered selects and reports nothing (#1663)', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'г Москва' }, { label: 'Москва, Москва' } ] ) );
+
+		input.value = 'Москва';
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.dispatchEvent( new Event( 'focus' ) );
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+
+		expect( fetchMock ).not.toHaveBeenCalled();
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onAbandon ).not.toHaveBeenCalled();
+		expect( input.value ).toBe( 'Москва' );
+	} );
+
+	test( 'editing a rendered value after focus still adopts on blur (#1663 does not weaken #350)', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'Тула' }, { label: 'Тулун' } ] ) );
+
+		input.value = 'Москва';
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.dispatchEvent( new Event( 'focus' ) );
+		input.value = 'тул';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onSelect ).toHaveBeenCalledWith( { label: 'Тула' } );
+		expect( input.value ).toBe( 'Тула' );
+	} );
+
+	test( 'a second focus starts untouched again — typing on the first visit does not carry over (#1663)', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [ { label: 'Тула' } ] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon } );
+
+		input.dispatchEvent( new Event( 'focus' ) );
+		input.value = 'тул';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+
+		input.dispatchEvent( new Event( 'focus' ) );
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
 	test( 'blur while the debounce is still pending flushes it and then adopts', async () => {
 		jest.useFakeTimers();
 		const onSelect = jest.fn();
