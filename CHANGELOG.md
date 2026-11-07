@@ -1,6 +1,200 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.26] — 2026-11-07
+### Bug Fixes
+- **licensing**: Harden the licence signing-key check
+
+- **licensing**: Keep the embedded authority key in a class constant
+
+- **settings**: Records-table review round 1 (#1598)
+
+- **settings**: Fields table — name every cell input, respect show_if in cells
+
+- **settings**: Fields table shows the check result line only after a click; add a per-row key link
+
+- **settings**: Fields table keeps a stored failure as «Ошибка» while a fresh check is pending
+
+- **shipping**: Pass manual status poll arguments
+
+- **location**: Preserve CDEK regions in zone editor
+
+- **location**: Scope RU fallback to shipping zones
+
+- **location**: Cover zone save AJAX lookups
+
+- **location**: City mode list narrows the checkout view only (F2 critic MF1)
+
+- **location**: City mode single place — nested default value, wrong saved State (F3 critic)
+
+- **location**: Preserve listed city scope and name language
+
+- **location**: Cache stranded default re-resolution
+
+- **location**: City mode round 2 — column switch re-seeds the single place, blank→same place re-announces, Blocks shows the City error at the select, spec §4.3–10 restored (#1627)
+
+- **location**: Match CDEK region aliases in address suggestions
+
+- **location**: Identify regions absent from the CDEK capture
+
+- **location**: Enhance the city-mode closed list with select2
+
+- **checkout**: Apply classic city mode per country
+
+- **checkout**: A closed list alone vetoes the pickup City; tidy the RU→KZ blocks test
+
+- **location**: Seed the single listed place when the posted city names it
+
+- **location**: The single-place exception needs the saved region to agree
+
+- **location**: One Almaty region, and a place above an orphan house
+
+- **location**: An inferred settlement must name the house's own locality
+
+
+### Documentation
+- **s216**: Save the release-wave session and hand off range shipping
+
+- **s217**: Range shipping v2 brainstorm, design spec and overnight handoff
+
+- **s218**: Interim overnight notes, 2GIS Distance Matrix decision, counter wording
+
+- **s218**: Session save — range shipping 2.0.0 release-ready, handoff for s219
+
+- **s218**: Afternoon — admin redesign, live services, «Доставка в городе» spec; handoff for s219
+
+- **s218**: City mode is a locality choice + suggestion scope, not a delivery boundary (operator)
+
+- **s218**: City-mode spec r3 done; handoff points at its review
+
+- **s218**: City spec r4 — provider decides what a listed place covers (measured)
+
+- **s218**: R5 inputs (CDEK fias_guid, FIAS RU-only), 2.0.26 scope, Pochta #74
+
+- **s218**: Trim handoff under its budget
+
+- **s218**: Mapbox needs no card, only Google needs a non-RU card; Pochta 2.0.13 released
+
+- **s218**: Trim handoff
+
+- **s218**: Handoff for the s219 overnight session (city mode + release-ready 2.0.0)
+
+- **shipping**: Clarify status poll arguments
+
+- **specs**: Range shipping 2.0.0 «Доставка в пределах города» design
+
+- **specs**: City-mode spec r2 — resolve Codex review findings 1-11, record operator decisions
+
+- **specs**: City-mode spec r3 — rewrite to the operator's granularity framing
+
+- **specs**: City-mode spec r4 — K11' provider-agnostic scoping replaces the federal-city rule, DaData measured
+
+- **specs**: City mode r5 — FIAS-scoped suggestions, CDEK fias_guid
+
+- **specs**: City mode r5.1 — apply the r5 critic's four must-fix findings
+
+- **specs**: City mode r5.1 — order-editor scope wording, status label
+
+- **location**: Record F4 validation and rig follow-up
+
+- **location**: Correct pre-fix regression count
+
+- Keep session-state edits out of F4; note the language filter bypass
+
+- Save session s219
+
+- **research**: Delivery boundary — settlement, MKAD/KAD (Fable 5.1, s219)
+
+- **s219**: Session save after the operator's rig look
+
+- **audit**: S220 contradiction map
+
+- **audit**: S220 fixes — stale state, spec statuses, index rows, Rule 8
+
+- **audit**: Apply the s220 audit critic's two count corrections
+
+- **audit**: Move the critic note above Related, name the filed cards
+
+- **spec**: City mode r7 — country per place (#1642)
+
+- **spec**: City mode r7 — fold the critic's findings (#1642)
+
+- **s220**: Session save — select2, docs audit, country per place
+
+- **s220**: #41 merged after local-ci
+
+- **s220**: Fix the CURRENT-STATE range sentence
+
+
+### Features
+- **settings**: Records-table control — add, edit, delete rows of cells (#1598)
+
+- **settings**: Records-table address column accepts a suggestion provider (#1603)
+
+- **settings**: Fixed-rows fields table + full-width records table
+
+- **settings**: Help tips on Settings_Table column headers and cell fields
+
+- **location**: City mode framework PHP — settlement choices, FIAS scoping (F2)
+
+- **location**: City mode checkout clients — classic cascade + Blocks chooser (F3)
+
+- **settings**: Compare table row counts in conditions
+
+- **location**: City mode — one place as plain text, several as a plain dropdown, State hidden (#1627)
+
+- **shipping**: City mode reads its places per country (WP-A)
+
+- **checkout-blocks**: Clear the left country's place when the delivery country changes
+
+- **settings**: Add country-aware records table controls
+
+
+### Tests
+- Generate the foreign test key at runtime instead of a literal
+
+- **location**: Cover stranded cache modes and stale entries
+
+- **settings**: Cover table count condition gates
+
+
+### Build
+- Rebuild bundles for the records-table provider column (#1603)
+
+- **settings**: Rebuild bundles for the fields-table accessible names and show_if cells
+
+- **settings**: Rebuild settings-page and ui-kit-gallery bundles for the result line and row link
+
+- **settings**: Rebuild settings-page and ui-kit-gallery bundles for the pending-check status
+
+- Rebuild bundles for city mode checkout clients (F3)
+
+- Rebuild bundles after the F3 critic fixes
+
+- Rebuild bundles for table row-count conditions (F6)
+
+- Rebuild bundles for city mode closed fields (F5)
+
+- Rebuild bundles after the F5 critic fixes
+
+- Rebuild bundles after merging main into F6
+
+- Rebuild bundles for the CDEK region alias map (F7)
+
+- Rebuild location-select-modes.min.js for the closed select2
+
+- Rebuild bundles and catalogue for #1642
+
+
+### Style
+- **settings**: Fields table polish — row alignment, flush table card, readable masked key
+
+- **settings**: Compact fields table — one-line rows, key fills its column, no per-cell tips
+
+- **settings**: Fields table — same key and limit input geometry in every row
+
+
+
 ## [2.0.25] — 2026-11-04
 ### Bug Fixes
 - **shipping**: Keep the default handed-over email unchanged for zero or one parcel (#1575)
