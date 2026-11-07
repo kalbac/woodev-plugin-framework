@@ -8,9 +8,9 @@
 
 # Ждёт кнопки оператора
 
-1. **Посмотреть живое:** карточка https://woodev.ru/downloads/range-shipping-cost (новый текст, подзаголовок, обложка/иконка B, 9 кадров, FAQ), документация из 8 статей (главная https://woodev.ru/docs/plagin-stoimosti-dostavki-za-rasstoyanie), демо https://range.wootest.ru. Заголовок карточки «Расчёт стоимости доставки за расстояние» — моё временное решение.
-2. **Черновики блога** (публикует он): 146749 «доставка за расстояние 2.0» и 146783 «Аналитика доставки» — превью `https://woodev.ru/?p=<id>&preview=true`.
-3. **TG — его:** пост о плагине расстояния в пн 09.11 (со ссылкой на статью 146749 после публикации), пост об аналитике во вт/ср (ссылка на 146783). Тексты и квадратные картинки: `~/Desktop/woodev-publications/range-2.0.0/telegram.md` + `range-2.0.0/blog-cover/tg-1080.png`, `~/Desktop/woodev-publications/analytics/telegram.md` + `analytics/cover/tg-1080.png`.
+0. **Структура документации** (s221): woodev-theme PR #43 (v1.0.32) — нужен критик (Codex) + скриншоты 375–1280 на staging + ЕГО взгляд, затем мерж = выпуск темы (квота Actions — вероятно ручной `gh release create`), затем перенос рубрик скриптом `woodev-ru/docs/reports/2026-11-07-docs-migration-dry-run.php` (сначала dry-run).
+
+3. **TG — его** (статьи 146749 и 146783 он уже опубликовал; картинки `~/Desktop/woodev-publications/range-2.0.0/tg-range-2.png`, `analytics/tg-analytics-2.png`): пост о плагине расстояния в пн 09.11 (со ссылкой на статью 146749 после публикации), пост об аналитике во вт/ср (ссылка на 146783). Тексты и квадратные картинки: `~/Desktop/woodev-publications/range-2.0.0/telegram.md` + `range-2.0.0/blog-cover/tg-1080.png`, `~/Desktop/woodev-publications/analytics/telegram.md` + `analytics/cover/tg-1080.png`.
 4. **Ключ лицензии 1909** один раз попал в журнал воркера Homelab (через `renewal_url`, не в документы) — ротация его решение.
 5. Без изменений: #1639 (Инбокс), #1474, #1428, #1550; ротация ключей после #1554; #1509 #1475 #1476; ozon#90.
 
@@ -112,7 +112,7 @@ edostavka#166; #1279; #1415; R3 #24; #1500; yandex#140 п. 2; woodev-russian-pos
 # С чего начать
 
 0. Скиллы `orchestration` + `orca-team`; CLI `/Applications/Orca.app/Contents/Resources/bin/orca`; watchdog — `run_in_background`; при структурном Codex-воркере проверять `orchestration check --run` самому (гоча s221).
-1. Пройти с ним «Ждёт кнопки» п. 1–2 по сути; его правки карточки/документации — Homelab-воркерами (маршруты в `sessions/s221.md`, отчёт homelab-ai `docs/reports/2026-11-07-range-2.0.0-edd.md`).
+1. «Ждёт кнопки» п. 0 (тема + перенос рубрик); правки сайта — Homelab-воркерами (маршруты в `sessions/s221.md`).
 2. Затем очередь — по его слову (#1651–#1653 мелкие, D2/Yandex из п. 3).
 
 # Что доказано замером
