@@ -6,6 +6,8 @@
  * Every place the checkout layer touches the Location-Provider fields asks the one shared
  * answer, {@see Checkout_Config::cart_needs_shipping()}:
  *   - `Checkout_Field_Policy::filter_checkout_fields()` — the city invariant restoration;
+ *   - `Checkout_Field_Policy::filter_country_locale()` — the locale's `city.required` invariant;
+ *   - `Checkout_Handler::cart_effective_fields()` — the descriptors the browser config publishes;
  *   - `Checkout_Handler::inject()` — the managed (location) field injection;
  *   - `Checkout_Handler::validate()` — the location field's own `required` check;
  *   - `Checkout_Handler::guard_custom_settlement()` — the #531 settlement backstop.
@@ -77,6 +79,9 @@ final class Virtual_Cart_Fake_Location_Service extends Location_Service {
 /**
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Config::cart_needs_shipping
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::filter_checkout_fields
+ * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::filter_country_locale
+ * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::locale_contribution
+ * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::cart_effective_fields
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::guard_custom_settlement
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::inject
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::validate
@@ -313,5 +318,104 @@ final class CheckoutVirtualCartTest extends TestCase {
 
 		$this->assertTrue( $out['billing']['billing_city']['required'] );
 		$this->assertTrue( $out['shipping']['shipping_city']['required'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Checkout_Field_Policy::filter_country_locale() — reaches the block checkout too
+	// -------------------------------------------------------------------------
+
+	/**
+	 * `shipping_countries()` reads `WC()->countries`; give the stub one.
+	 */
+	private function stub_cart_with_countries( bool $needs_shipping ): void {
+		$this->stub_cart( $needs_shipping );
+		Functions\when( 'WC' )->justReturn(
+			(object) [
+				'customer'  => null,
+				'cart'      => WC()->cart,
+				'countries' => new class() {
+					public function get_shipping_countries(): array {
+						return [ 'RU' => 'Россия' ];
+					}
+
+					public function get_default_address_fields(): array {
+						return [];
+					}
+				},
+			]
+		);
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_virtual_cart_keeps_the_locale_city_requirement_as_it_was(): void {
+		$this->stub_cart_with_countries( false );
+
+		$out = $this->policy()->filter_country_locale( [ 'RU' => [ 'city' => [ 'required' => false ] ] ] );
+
+		$this->assertFalse( $out['RU']['city']['required'] );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_physical_cart_still_gets_the_locale_city_required(): void {
+		$this->stub_cart_with_countries( true );
+
+		$out = $this->policy()->filter_country_locale( [ 'RU' => [ 'city' => [ 'required' => false ] ] ] );
+
+		$this->assertTrue( $out['RU']['city']['required'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Checkout_Handler::cart_effective_fields() — what the browser config publishes
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The descriptors the classic browser config is built from (`enqueue_assets()` feeds
+	 * `cart_effective_fields()` to `Checkout_Config::build()`).
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function published_descriptors( Checkout_Fields $fields ): array {
+		$handler = new class( $fields, 'carrier', new Virtual_Cart_Fake_Location_Service() ) extends Checkout_Handler {
+			public function published(): array {
+				return $this->cart_effective_fields();
+			}
+		};
+
+		return $handler->published();
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_virtual_cart_publishes_no_location_descriptor_but_keeps_the_others(): void {
+		$this->stub_cart( false );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'billing_city' )->set_type( 'text' )->set_required( true )->source_location( 'settlement' )->to_array(),
+			Field::create( 'billing_phone' )->set_type( 'tel' )->to_array(),
+		] );
+
+		$this->assertSame( [ 'billing_phone' ], array_keys( self::published_descriptors( $fields ) ) );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_physical_cart_publishes_the_location_descriptors(): void {
+		$this->stub_cart( true );
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'billing_city' )->set_type( 'text' )->set_required( true )->source_location( 'settlement' )->to_array(),
+		] );
+
+		$this->assertSame( [ 'billing_city', 'shipping_city' ], array_keys( self::published_descriptors( $fields ) ) );
 	}
 }

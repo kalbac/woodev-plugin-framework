@@ -176,13 +176,13 @@ function buildConfig( opts ) {
 	const section = o.section || 'billing';
 	const fields = {};
 
-	if ( o.region ) {
+	if ( o.region && ! o.omitDescriptors ) {
 		fields[ fieldIdFor( 'region', section ) ] = locationField( 'region', section );
 	}
-	if ( o.settlement ) {
+	if ( o.settlement && ! o.omitDescriptors ) {
 		fields[ fieldIdFor( 'settlement', section ) ] = locationField( 'settlement', section );
 	}
-	if ( o.address ) {
+	if ( o.address && ! o.omitDescriptors ) {
 		fields[ fieldIdFor( 'address', section ) ] = locationField( 'address', section );
 	}
 
@@ -9943,5 +9943,23 @@ describe( '#1426 — a stale page nonce must not break the location layer', () =
 
 		expect( selectRequests().length ).toBe( 1 );
 		expect( notice() ).not.toBeNull();
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// A cart with nothing to ship (issue #1664)
+// -----------------------------------------------------------------------
+
+describe( 'a cart with nothing to ship — the server publishes no location descriptor', () => {
+
+	it( 'leaves the billing street live when the site removed the city (no settlement record can ever exist)', () => {
+		// The page the shopper gets: city removed by the site, street kept. `Checkout_Handler` withholds
+		// the region/settlement/address descriptors, so the cascade has no chain to lock the street on.
+		boot( { address: true, omitDescriptors: true } );
+
+		const street = document.getElementById( 'billing_address_1' );
+
+		expect( street.disabled ).toBe( false );
+		expect( street.hasAttribute( 'aria-disabled' ) ).toBe( false );
 	} );
 } );

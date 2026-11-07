@@ -1181,7 +1181,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				$this->wc_country_codes(),
 				$this->location_service(),
 				$field_settings
-			) )->build( Checkout_Fields::from_array( array_values( $this->effective_fields() ) ) );
+			) )->build( Checkout_Fields::from_array( array_values( $this->cart_effective_fields() ) ) );
 			// No `required` string here any more (#274): the client no longer renders an
 			// inline «Заполните обязательное поле.» under the field or under the pickup
 			// trigger — none of СДЭК/Яндекс/Почта does, and a blocked control needs no
@@ -2948,16 +2948,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$this->reconcile_pickup_declarations();
 
 			$country = $this->current_country();
-			$ships   = Checkout_Config::cart_needs_shipping();
 
-			foreach ( $this->effective_fields() as $id => $field ) {
+			// A cart with nothing to ship keeps the site's own city/settlement setup: a field the site
+			// removed is not brought back, a field it kept is not made required or re-typed (#1664).
+			foreach ( $this->cart_effective_fields() as $id => $field ) {
 				$field_section = '' !== ( $field['section'] ?? '' ) ? (string) $field['section'] : $section;
-
-				// A cart with nothing to ship keeps the site's own city/settlement setup: a field the site
-				// removed is not brought back, a field it kept is not made required or re-typed (#1664).
-				if ( ! $ships && 'location' === ( $field['source_kind'] ?? null ) ) {
-					continue;
-				}
 
 				if ( ! isset( $checkout_fields[ $field_section ] ) || ! is_array( $checkout_fields[ $field_section ] ) ) {
 					$checkout_fields[ $field_section ] = [];
@@ -3384,14 +3379,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		public function validate( array $values, array $state = [] ): bool {
 			$valid              = true;
 			$blank_required_ids = [];
-			$ships              = Checkout_Config::cart_needs_shipping();
 
-			foreach ( $this->effective_fields() as $id => $field ) {
-				// A Location-Provider field is the delivery address; a cart with nothing to ship does not owe one (#1664).
-				if ( ! $ships && 'location' === ( $field['source_kind'] ?? null ) ) {
-					continue;
-				}
-
+			// A cart with nothing to ship owes no delivery address, so no Location-Provider field (#1664).
+			foreach ( $this->cart_effective_fields() as $id => $field ) {
 				$value    = $values[ $id ] ?? '';
 				$required = Checkout_Condition::is_required( Checkout_Config::resolve_required( $field['required'] ), $state );
 
@@ -4853,6 +4843,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			return $effective;
+		}
+
+		/**
+		 * {@see self::effective_fields()} for the cart being checked out: without the Location-Provider
+		 * fields when the cart has nothing to ship (issue #1664).
+		 *
+		 * A cart of virtual products has no delivery address, so the site's own city/street setup stands:
+		 * the framework neither injects, validates nor publishes to the browser (`location-cascade.js`
+		 * would lock the street, `checkout-field-classic.js` would block «Оформить заказ») a field
+		 * the cart does not need. Only the CHECKOUT-time callers use this; reads of saved orders
+		 * keep {@see self::effective_fields()}.
+		 *
+		 * @since 2.0.28
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		protected function cart_effective_fields(): array {
+			$fields = $this->effective_fields();
+
+			if ( Checkout_Config::cart_needs_shipping() ) {
+				return $fields;
+			}
+
+			return array_filter(
+				$fields,
+				static function ( array $field ): bool {
+					return 'location' !== ( $field['source_kind'] ?? null );
+				}
+			);
 		}
 
 		/**
