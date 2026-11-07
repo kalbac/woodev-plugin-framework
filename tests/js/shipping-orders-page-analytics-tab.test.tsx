@@ -356,7 +356,7 @@ describe( 'AnalyticsTab', () => {
 		render( <AnalyticsTab /> );
 		await screen.findByTestId( 'chart' );
 
-		expect( chartProps.legendTotals ).toEqual( { СДЭК: 66.7 } );
+		expect( chartProps.legendTotals.СДЭК ).toBeCloseTo( 66.67 );
 	} );
 
 	it( 'a countable metric keeps the legend\'s own sum of the points (#1652)', async () => {

@@ -160,7 +160,13 @@ describe( 'legendTotals', () => {
 	const carrier = ( label: string, share: number | null ) => ( { id: label, label, current: { delivered_share: share } } ) as unknown as AnalyticsCarrier;
 
 	it( 'is the period-wide share in percent for the ratio metric, 0 over nothing', () => {
-		expect( legendTotals( [ carrier( 'СДЭК', 0.8333 ), carrier( 'Яндекс', null ) ], 'delivered_share' ) ).toEqual( { СДЭК: 83.3, Яндекс: 0 } );
+		const totals = legendTotals( [ carrier( 'СДЭК', 0.8333 ), carrier( 'Яндекс', null ) ], 'delivered_share' );
+		expect( totals?.СДЭК ).toBeCloseTo( 83.33 );
+		expect( totals?.Яндекс ).toBe( 0 );
+	} );
+
+	it( 'keeps a tiny positive share positive, so Chart does not drop the series (its keys filter totals <= 0)', () => {
+		expect( legendTotals( [ carrier( 'СДЭК', 0.0004 ) ], 'delivered_share' )?.СДЭК ).toBeGreaterThan( 0 );
 	} );
 
 	it( 'is left to the legend (its own sum) for a countable metric', () => {
