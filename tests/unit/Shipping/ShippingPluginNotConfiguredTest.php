@@ -182,7 +182,8 @@ namespace Woodev\Tests\Unit\Shipping {
 
 	/**
 	 * @covers \Woodev\Framework\Shipping\Shipping_Plugin::is_configured
-	 * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_not_configured_notice_url
+	 * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_settings_url
+ * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_not_configured_notice_url
 	 * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_not_configured_notice_capability
 	 */
 	final class ShippingPluginNotConfiguredTest extends TestCase {
@@ -280,6 +281,30 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$this->assertStringContainsString( 'page=woodev-settings&tab=acme-carrier', $plugin->handler->notices[0]['message'] );
 			$this->assertStringNotContainsString( 'wc-settings', $plugin->handler->notices[0]['message'] );
+		}
+
+		public function test_the_settings_url_of_a_tab_backed_carrier_is_its_woodev_settings_tab(): void {
+
+			/** @var Shipping_Not_Configured_Tab_Fixture $plugin */
+			$plugin = $this->plugin( false, Shipping_Not_Configured_Tab_Fixture::class );
+
+			$this->assertSame( 'https://shop.test/wp-admin/admin.php?page=woodev-settings&tab=acme-carrier', $plugin->get_settings_url() );
+			$this->assertStringContainsString( 'href="https://shop.test/wp-admin/admin.php?page=woodev-settings&tab=acme-carrier"', $plugin->get_settings_link() );
+		}
+
+		public function test_the_settings_url_of_a_carrier_without_an_integration_is_its_woodev_settings_tab(): void {
+
+			$plugin = $this->plugin( null );
+
+			$this->assertNull( $plugin->get_integration_handler() );
+			$this->assertSame( 'https://shop.test/wp-admin/admin.php?page=woodev-settings&tab=acme-carrier', $plugin->get_settings_url() );
+		}
+
+		public function test_the_settings_url_of_an_integration_backed_carrier_stays_on_the_integration_page(): void {
+
+			$plugin = $this->plugin( false );
+
+			$this->assertStringContainsString( 'page=wc-settings&tab=integration&section=acme-carrier', $plugin->get_settings_url() );
 		}
 
 		public function test_the_shipping_notice_asks_for_the_carrier_tab_capability(): void {

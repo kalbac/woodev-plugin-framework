@@ -108,6 +108,11 @@ class Notice_Fake_Location_Provider extends Abstract_Location_Provider {
  */
 class Notice_Bare_Shipping_Plugin_Fixture extends Shipping_Plugin {
 
+	// built without the constructor, so the plugin id is never set; the notices link to the plugin's settings tab
+	public function get_id() {
+		return 'notice-stub';
+	}
+
 	protected function get_shipping_method_classes(): array {
 		return [];
 	}

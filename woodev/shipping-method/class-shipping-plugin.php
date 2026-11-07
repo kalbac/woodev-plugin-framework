@@ -2368,25 +2368,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * The "not configured" notice links to where the credentials it checks are edited: the carrier's own tab on
-		 * the Woodev settings page (tab id = the plugin id, see {@see self::get_settings_providers()}) when the
-		 * carrier contributes its settings there — the normal case — and the integration's own settings page while
-		 * the configuration is still integration-backed ({@see self::is_configuration_integration_backed()}).
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return string
-		 */
-		protected function get_not_configured_notice_url(): string {
-
-			if ( $this->is_configuration_integration_backed() ) {
-				return (string) $this->get_settings_url();
-			}
-
-			return admin_url( 'admin.php?page=woodev-settings&tab=' . rawurlencode( $this->get_id() ) );
-		}
-
-		/**
 		 * The capability of the carrier's tab: the first one declared by a contribution of
 		 * {@see self::get_tab_settings_providers()} (that is how the composite tab takes it, see
 		 * {@see self::get_settings_providers()}), else `manage_woocommerce` — a carrier is a WooCommerce plugin.
@@ -2735,22 +2716,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * Gets the plugin settings URL.
+		 * Gets the plugin settings URL: the carrier's own tab on the Woodev settings page (tab id = the plugin id,
+		 * every carrier has one — see {@see self::get_settings_providers()}), or the WooCommerce integration page
+		 * while the configuration is still integration-backed ({@see self::is_configuration_integration_backed()}).
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.27 The carrier's tab on `woodev-settings`, not the WooCommerce integration page.
 		 *
 		 * @param string|null $plugin_id unused
 		 * @return string
 		 */
 		public function get_settings_url( $plugin_id = null ): string {
-			return add_query_arg(
-				[
-					'page'    => 'wc-settings',
-					'tab'     => 'integration',
-					'section' => $this->get_id(),
-				],
-				admin_url( 'admin.php' )
-			);
+
+			if ( $this->is_configuration_integration_backed() ) {
+				return add_query_arg(
+					[
+						'page'    => 'wc-settings',
+						'tab'     => 'integration',
+						'section' => $this->get_id(),
+					],
+					admin_url( 'admin.php' )
+				);
+			}
+
+			return \Woodev\Framework\Settings\Settings_Page_Registry::get_tab_url( $this->get_id() );
 		}
 
 		/**

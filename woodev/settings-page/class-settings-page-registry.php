@@ -72,6 +72,19 @@ final class Settings_Page_Registry {
 	}
 
 	/**
+	 * The URL of a tab of the settings page — the one builder every link to a tab goes through
+	 * (plugin-list «Настройки» link, "not configured" notices, the legacy redirect).
+	 *
+	 * @since 2.0.27
+	 *
+	 * @param string $tab_id the tab id (= the provider id).
+	 * @return string
+	 */
+	public static function get_tab_url( string $tab_id ): string {
+		return admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&tab=' . rawurlencode( $tab_id ) );
+	}
+
+	/**
 	 * Resolves a provider's capability per the spec rules.
 	 *
 	 * 1. explicit declaration wins; 2. WC-dependent plugin → manage_woocommerce;
@@ -815,9 +828,7 @@ final class Settings_Page_Registry {
 				continue;
 			}
 
-			wp_safe_redirect(
-				admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&tab=' . rawurlencode( $provider->get_id() ) )
-			);
+			wp_safe_redirect( self::get_tab_url( $provider->get_id() ) );
 			exit;
 		}
 	}
