@@ -8,7 +8,7 @@
 
 import { buildAnalyticsQuery } from '../../src/shipping-orders-page/analytics/analytics-rest';
 import { methodRows } from '../../src/shipping-orders-page/analytics/tables';
-import { buildChartData, isChartEmpty, seriesValue } from '../../src/shipping-orders-page/analytics/chart-data';
+import { buildChartData, isChartEmpty, legendTotals, seriesValue } from '../../src/shipping-orders-page/analytics/chart-data';
 import { DASH, formatCount, formatDays, formatMoney, formatShare } from '../../src/shipping-orders-page/analytics/format';
 import type { AnalyticsCarrier, AnalyticsInterval, AnalyticsRequest, AnalyticsSeries } from '../../src/shipping-orders-page/analytics/types';
 
@@ -153,5 +153,23 @@ describe( 'methodRows', () => {
 		expect( rows ).toHaveLength( 2 );
 		expect( rows[ 0 ].map( ( cell ) => cell.value ) ).toEqual( [ 'СДЭК: пункт', 'СДЭК', 4, 10000, 600 ] );
 		expect( String( rows[ 1 ][ 3 ].display ).replace( /\s/g, '' ) ).toContain( '30000' );
+	} );
+} );
+
+describe( 'legendTotals', () => {
+	const carrier = ( label: string, share: number | null ) => ( { id: label, label, current: { delivered_share: share } } ) as unknown as AnalyticsCarrier;
+
+	it( 'is the period-wide share in percent for the ratio metric, 0 over nothing', () => {
+		const totals = legendTotals( [ carrier( 'СДЭК', 0.8333 ), carrier( 'Яндекс', null ) ], 'delivered_share' );
+		expect( totals?.СДЭК ).toBeCloseTo( 83.33 );
+		expect( totals?.Яндекс ).toBe( 0 );
+	} );
+
+	it( 'keeps a tiny positive share positive, so Chart does not drop the series (its keys filter totals <= 0)', () => {
+		expect( legendTotals( [ carrier( 'СДЭК', 0.0004 ) ], 'delivered_share' )?.СДЭК ).toBeGreaterThan( 0 );
+	} );
+
+	it( 'is left to the legend (its own sum) for a countable metric', () => {
+		expect( legendTotals( [ carrier( 'СДЭК', 0.5 ) ], 'orders' ) ).toBeUndefined();
 	} );
 } );

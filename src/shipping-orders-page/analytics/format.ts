@@ -44,3 +44,22 @@ export function formatShare( ratio: number | null | undefined ): string {
 export function formatDays( value: number | null | undefined ): string {
 	return isNumber( value ) ? new Intl.NumberFormat( LOCALE, { maximumFractionDigits: 1 } ).format( value ) : DASH;
 }
+
+/**
+ * The chart's date labels in Russian (#1653). `Chart` formats its axis and tooltip dates with d3's `timeFormat`, whose built-in names are
+ * English («Oct 2026», «October 15, 2026») and which has no locale prop — but `xFormat`, `x2Format`, `tooltipLabelFormat` and
+ * `screenReaderFormat` each accept a FUNCTION taking a `Date` (`getFormatter()` in the installed `Chart`), so `Intl` supplies the names.
+ * The same d3 shapes as the defaults: a day number, a month with year, a full date.
+ */
+const DAY = new Intl.DateTimeFormat( LOCALE, { day: '2-digit' } );
+const MONTH = new Intl.DateTimeFormat( LOCALE, { month: 'short' } );
+const FULL_DATE = new Intl.DateTimeFormat( LOCALE, { day: 'numeric', month: 'long', year: 'numeric' } );
+
+export const chartDateFormats = {
+	/** Axis tick: «01». */
+	x: ( date: Date ): string => DAY.format( date ),
+	/** Axis month line under the ticks: «окт. 2026». */
+	x2: ( date: Date ): string => `${ MONTH.format( date ) } ${ date.getFullYear() }`,
+	/** Tooltip title and screen-reader label: «15 октября 2026 г.». */
+	full: ( date: Date ): string => FULL_DATE.format( date ),
+};

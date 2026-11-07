@@ -88,6 +88,7 @@ class StatefulDatePicker extends Component< any, { period: string } > {
 class StatefulChart extends Component< any, { visible: string[] } > {
 	constructor( props: any ) {
 		super( props );
+		chartProps = props;
 		this.state = { visible: StatefulChart.nonZeroKeys( props.data ) };
 	}
 
@@ -107,6 +108,7 @@ class StatefulChart extends Component< any, { visible: string[] } > {
 
 	render() {
 		const { title, interval, chartType, path, query } = this.props;
+		chartProps = this.props;
 
 		return (
 			<div data-testid="chart">
@@ -119,6 +121,8 @@ class StatefulChart extends Component< any, { visible: string[] } > {
 	}
 }
 
+/** The props the last rendered `Chart` stand-in received, for what the page hands the component beyond text. */
+let chartProps: any;
 let query: Record< string, string | undefined >;
 let listeners: Array< () => void >;
 const updateQueryString = jest.fn();
@@ -162,6 +166,8 @@ function installWooCommerce() {
 			// The installed `SummaryNumber`: `onToggle` makes it the mobile collapse BUTTON (chevron, `is-dropdown-button`), `href` makes it a
 			// link that selects the tile, neither makes it a plain figure. A link click does what wc-admin's `Link` does: it navigates.
 			SummaryNumber: ( props: any ) => {
+				// `reverseTrend` flips WooCommerce's red/green for the delta badge: lower is better.
+				const flag = { 'data-reverse-trend': String( Boolean( props.reverseTrend ) ) };
 				const text = (
 					<>
 						{ props.label }: { props.value } ({ props.delta ?? 'no delta' }) { props.children }
@@ -170,7 +176,7 @@ function installWooCommerce() {
 
 				if ( props.onToggle ) {
 					return (
-						<button type="button" data-chevron aria-expanded={ false } onClick={ props.onToggle }>
+						<button type="button" data-chevron aria-expanded={ false } onClick={ props.onToggle } { ...flag }>
 							{ text }
 						</button>
 					);
@@ -179,6 +185,7 @@ function installWooCommerce() {
 				if ( props.href ) {
 					return (
 						<a
+							{ ...flag }
 							href={ props.href }
 							aria-current={ props.selected ? 'page' : undefined }
 							onClick={ ( event ) => {
@@ -193,7 +200,7 @@ function installWooCommerce() {
 					);
 				}
 
-				return <div>{ text }</div>;
+				return <div { ...flag }>{ text }</div>;
 			},
 			// `FilterPicker` is URL-driven: a pick rewrites its own param and the `staticParams` kept from the query.
 			FilterPicker: ( { config, path, query: current }: any ) => (
@@ -272,6 +279,26 @@ describe( 'AnalyticsTab', () => {
 		expect( screen.getByText( /^От заказа до вручения/ ).closest( 'a' ) ).toBeNull();
 	} );
 
+	it( 'the delivery-time tiles reverse the trend — a shorter time is the good direction, like fewer returns (#1651)', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+		const { unmount } = render( <AnalyticsTab /> );
+		await screen.findByText( /Заказы: 10/ );
+
+		expect( screen.getByText( /^От заказа до вручения, дней:/ ).closest( '[data-reverse-trend]' ) ).toHaveAttribute( 'data-reverse-trend', 'true' );
+		expect( screen.getByText( /^Отказы и возвраты:/ ).closest( '[data-reverse-trend]' ) ).toHaveAttribute( 'data-reverse-trend', 'true' );
+		expect( screen.getByText( /^Заказы:/ ).closest( '[data-reverse-trend]' ) ).toHaveAttribute( 'data-reverse-trend', 'false' );
+		unmount();
+
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( {
+			...RESPONSE,
+			totals: { ...RESPONSE.totals, current: metrics( { avg_days_handover_to_delivery: 2.5, handover_sample: 3 } ) },
+		} );
+		render( <AnalyticsTab /> );
+		await screen.findByText( /Заказы: 10/ );
+
+		expect( screen.getByText( /^От передачи до вручения, дней:/ ).closest( '[data-reverse-trend]' ) ).toHaveAttribute( 'data-reverse-trend', 'true' );
+	} );
+
 	it( 'the time tile stays the order-to-delivery figure until a status log has an exact sample (#1564)', async () => {
 		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
 		render( <AnalyticsTab /> );
@@ -317,6 +344,41 @@ describe( 'AnalyticsTab', () => {
 
 		expect( screen.getByText( /^Выручка:/ ).closest( 'a' ) ).toBeNull();
 		expect( document.querySelector( '[data-chevron]' ) ).toBeNull();
+	} );
+
+	it( 'the legend total of the share metric is the share over the whole period, not the sum of the interval shares (#1652)', async () => {
+		query = { chart: 'delivered_share' };
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( {
+			...RESPONSE,
+			carriers: [ { ...RESPONSE.carriers[ 0 ], current: metrics( { delivered_share: 0.6667 } ) } ],
+		} );
+
+		render( <AnalyticsTab /> );
+		await screen.findByTestId( 'chart' );
+
+		expect( chartProps.legendTotals.СДЭК ).toBeCloseTo( 66.67 );
+	} );
+
+	it( 'a countable metric keeps the legend\'s own sum of the points (#1652)', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+
+		render( <AnalyticsTab /> );
+		await screen.findByTestId( 'chart' );
+
+		expect( chartProps.legendTotals ).toBeUndefined();
+	} );
+
+	it( 'hands the chart Russian date formatters, since d3 would print the axis and the tooltip in English (#1653)', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+
+		render( <AnalyticsTab /> );
+		await screen.findByTestId( 'chart' );
+
+		const day = new Date( 2026, 9, 15 );
+		expect( chartProps.xFormat( day ) ).toBe( '15' );
+		expect( chartProps.x2Format( day ) ).toBe( 'окт. 2026' );
+		expect( chartProps.tooltipLabelFormat( day ) ).toBe( '15 октября 2026 г.' );
+		expect( chartProps.screenReaderFormat( day ) ).toBe( '15 октября 2026 г.' );
 	} );
 
 	it( 'plots the metric the URL names', async () => {

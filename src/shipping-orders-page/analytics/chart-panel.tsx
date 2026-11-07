@@ -15,8 +15,8 @@
  */
 
 import { __ } from '@wordpress/i18n';
-import { buildChartData, isChartEmpty } from './chart-data';
-import { formatCount, formatMoney, formatShare } from './format';
+import { buildChartData, isChartEmpty, legendTotals } from './chart-data';
+import { chartDateFormats, formatCount, formatMoney, formatShare } from './format';
 import type { WcQuery } from './wc-query';
 import type { AnalyticsResponse, ChartMetric } from './types';
 
@@ -81,6 +81,11 @@ export function ChartPanel( { data, metric, query, loading, path }: ChartPanelPr
 			query={ query }
 			legendPosition="bottom"
 			tooltipValueFormat={ tooltipFormat( metric, data.currency ) }
+			legendTotals={ legendTotals( data.carriers, metric ) }
+			xFormat={ chartDateFormats.x }
+			x2Format={ chartDateFormats.x2 }
+			tooltipLabelFormat={ chartDateFormats.full }
+			screenReaderFormat={ chartDateFormats.full }
 		/>
 	);
 }

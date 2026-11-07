@@ -4,7 +4,7 @@
  * Four tiles drive the chart (the selected one is underlined, like in WooCommerce's reports); the other two are plain
  * figures. A chart tile is a LINK to the same page with `chart=<metric>` (`href` from `getNewPath()`), the way WooCommerce's
  * own reports select a tile — not `onToggle`, which is the mobile open/close toggle of a collapsed list (a button with a chevron
- * and a shorter, clipped tile). The two bad-outcome tiles use `reverseTrend`, so a rise in returns is red. The time tile is honest about what it is,
+ * and a shorter, clipped tile). The bad-outcome tile and the two time tiles use `reverseTrend`: a rise in returns is red, and a shorter delivery time is green (#1651). The time tile is honest about what it is,
  * with the sample size beside it: the order-to-delivery time, measured only where the order has a completion date — until the status log
  * (#1564) has seen an order from the carrier taking the parcel to the buyer receiving it; from then on the exact handover-to-delivery time.
  *
@@ -55,12 +55,14 @@ function tiles( data: AnalyticsResponse ): TileSpec[] {
 					chart: null,
 					label: __( 'От передачи до вручения, дней', 'woodev-plugin-framework' ),
 					value: ( m ) => formatDays( m.avg_days_handover_to_delivery ),
+					reverseTrend: true,
 			  }
 			: {
 					key: 'avg_days_to_delivery',
 					chart: null,
 					label: __( 'От заказа до вручения, дней', 'woodev-plugin-framework' ),
 					value: ( m ) => formatDays( m.avg_days_to_delivery ),
+					reverseTrend: true,
 			  },
 	];
 }
