@@ -94,40 +94,68 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'title'       => __( 'Delivery: Handed over', 'woodev-plugin-framework' ),
 					'description' => __( 'Sent to the customer when a shipment is handed over to the carrier.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::CREATED, Delivery_Status::IN_TRANSIT ],
-					'subject'     => __( 'Order {order_number} has been handed over for delivery', 'woodev-plugin-framework' ),
-					'heading'     => __( 'Your order has been handed over for delivery', 'woodev-plugin-framework' ),
-					'body'        => __( 'Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}', 'woodev-plugin-framework' ),
+					'subject'     => static function (): string {
+						return __( 'Order {order_number} has been handed over for delivery', 'woodev-plugin-framework' );
+					},
+					'heading'     => static function (): string {
+						return __( 'Your order has been handed over for delivery', 'woodev-plugin-framework' );
+					},
+					'body'        => static function (): string {
+						return __( 'Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}', 'woodev-plugin-framework' );
+					},
 					// Zero or one parcel keep the sentence above untouched; several parcels read better as a list.
-					'body_multiple' => __( "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}", 'woodev-plugin-framework' ),
+					'body_multiple' => static function (): string {
+						return __( "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}", 'woodev-plugin-framework' );
+					},
 					// One parcel that is only a link (no number): the link line stands alone, no empty «Tracking number: .».
-					'body_link_only' => __( "Your shipment has been handed over to {carrier_name}.\nTrack your shipment: {tracking_url}", 'woodev-plugin-framework' ),
+					'body_link_only' => static function (): string {
+						return __( "Your shipment has been handed over to {carrier_name}.\nTrack your shipment: {tracking_url}", 'woodev-plugin-framework' );
+					},
 					'enabled'     => true,
 				],
 				'customer_shipment_pickup' => [
 					'title'       => __( 'Delivery: Ready for pickup', 'woodev-plugin-framework' ),
 					'description' => __( 'Sent to the customer when a shipment is ready for pickup.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::READY_FOR_PICKUP ],
-					'subject'     => __( 'Order {order_number} is waiting at the pickup point', 'woodev-plugin-framework' ),
-					'heading'     => __( 'Your order is waiting at the pickup point', 'woodev-plugin-framework' ),
-					'body'        => __( 'Pick up order {order_number} at the pickup point: {pickup_point}.', 'woodev-plugin-framework' ),
+					'subject'     => static function (): string {
+						return __( 'Order {order_number} is waiting at the pickup point', 'woodev-plugin-framework' );
+					},
+					'heading'     => static function (): string {
+						return __( 'Your order is waiting at the pickup point', 'woodev-plugin-framework' );
+					},
+					'body'        => static function (): string {
+						return __( 'Pick up order {order_number} at the pickup point: {pickup_point}.', 'woodev-plugin-framework' );
+					},
 					'enabled'     => true,
 				],
 				'customer_shipment_delivered' => [
 					'title'       => __( 'Delivery: Delivered', 'woodev-plugin-framework' ),
 					'description' => __( 'Sent to the customer after delivery.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::DELIVERED ],
-					'subject'     => __( 'Order {order_number} has been delivered', 'woodev-plugin-framework' ),
-					'heading'     => __( 'Your order has been delivered', 'woodev-plugin-framework' ),
-					'body'        => __( 'Order {order_number} has been delivered.', 'woodev-plugin-framework' ),
+					'subject'     => static function (): string {
+						return __( 'Order {order_number} has been delivered', 'woodev-plugin-framework' );
+					},
+					'heading'     => static function (): string {
+						return __( 'Your order has been delivered', 'woodev-plugin-framework' );
+					},
+					'body'        => static function (): string {
+						return __( 'Order {order_number} has been delivered.', 'woodev-plugin-framework' );
+					},
 					'enabled'     => true,
 				],
 				'customer_shipment_exception' => [
 					'title'       => __( 'Delivery: Returned', 'woodev-plugin-framework' ),
 					'description' => __( 'Sent to the customer after a return or failed delivery.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::RETURNED, Delivery_Status::FAILED ],
-					'subject'     => __( 'There is a problem with the delivery of order {order_number}', 'woodev-plugin-framework' ),
-					'heading'     => __( 'There is a problem with your delivery', 'woodev-plugin-framework' ),
-					'body'        => __( 'We could not deliver order {order_number}. Please contact the store for details.', 'woodev-plugin-framework' ),
+					'subject'     => static function (): string {
+						return __( 'There is a problem with the delivery of order {order_number}', 'woodev-plugin-framework' );
+					},
+					'heading'     => static function (): string {
+						return __( 'There is a problem with your delivery', 'woodev-plugin-framework' );
+					},
+					'body'        => static function (): string {
+						return __( 'We could not deliver order {order_number}. Please contact the store for details.', 'woodev-plugin-framework' );
+					},
 					'enabled'     => false,
 				],
 			];

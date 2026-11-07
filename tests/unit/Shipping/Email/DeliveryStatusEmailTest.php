@@ -31,6 +31,12 @@ namespace {
 			public $object;
 			public array $form_fields = [];
 			public array $placeholders = [];
+			/** @var array<string,string> Settings the merchant saved (WooCommerce keeps them in the email's option). */
+			public array $saved = [];
+			/** The locale in force: the administrator's until setup_locale() switches to the shop's. */
+			public static string $locale = 'en_US';
+			/** @var string[] setup_locale() / restore_locale() calls, in order. */
+			public static array $locale_log = [];
 
 			public function __construct() {
 				$this->init_form_fields();
@@ -40,14 +46,20 @@ namespace {
 			}
 
 			public function init_form_fields() {}
-			public function get_option( string $key, $default = '' ) { return $this->form_fields[ $key ]['default'] ?? $default; }
+			/** Like WC_Settings_API::get_option(): the saved value, else the field default; an empty one gives way to $default. */
+			public function get_option( string $key, $default = '' ) {
+				$value = $this->saved[ $key ] ?? ( $this->form_fields[ $key ]['default'] ?? '' );
+				return '' === $value ? $default : $value;
+			}
+			public function setup_locale() { self::$locale_log[] = 'setup'; self::$locale = 'ru_RU'; }
+			public function restore_locale() { self::$locale_log[] = 'restore'; self::$locale = 'en_US'; }
 			/** Like WooCommerce (class-wc-email.php): a BOOLEAN, `'yes' === $this->enabled`. A stub that answered 'yes'/'no' hid the bug of comparing it with 'yes'. */
 			public function is_enabled() { return 'yes' === $this->enabled; }
 			public function is_valid(): bool { return true; }
 			public function get_recipient(): string { return $this->recipient; }
 			public function get_subject(): string { return $this->format_string( $this->get_option( 'subject', $this->get_default_subject() ) ); }
 			public function get_heading(): string { return $this->format_string( $this->get_option( 'heading', $this->get_default_heading() ) ); }
-			public function get_content(): string { return $this->format_string( $this->get_option( 'body', '' ) ); }
+			public function get_content(): string { return $this->format_string( $this->get_option( 'body', $this->get_default_body() ) ); }
 			public function get_headers(): string { return ''; }
 			public function get_attachments(): array { return []; }
 			public function get_email_type_options(): array { return [ 'html' => 'HTML' ]; }
@@ -82,7 +94,9 @@ final class DeliveryStatusEmailTest extends TestCase {
 		parent::setUp();
 		$this->meta = [];
 		OrderUtil::$hpos_enabled = false;
-		\WC_Email::$sent = [];
+		\WC_Email::$sent       = [];
+		\WC_Email::$locale     = 'en_US';
+		\WC_Email::$locale_log = [];
 		$property = new \ReflectionProperty( Delivery_Status_Emails::class, 'emails' );
 		if ( PHP_VERSION_ID < 80100 ) {
 			$property->setAccessible( true );
@@ -119,6 +133,54 @@ final class DeliveryStatusEmailTest extends TestCase {
 			$this->assertStringNotContainsString( '{carrier_name}', \WC_Email::$sent[0][2] );
 		} finally {
 			$registry->reset_for_tests();
+		}
+	}
+
+	public function test_default_texts_are_translated_in_the_locale_at_send_time_not_the_one_at_construction(): void {
+		$russian = [
+			'Order {order_number} has been handed over for delivery' => 'Заказ {order_number} передан в доставку',
+			'Your order has been handed over for delivery'           => 'Ваш заказ передан в доставку',
+			'Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}' => 'Ваше отправление передано в {carrier_name}. Номер: {tracking_number}. {tracking_url}',
+		];
+		// The language of whoever is on the site: English until setup_locale() switches to the shop's.
+		Functions\when( '__' )->alias( static fn( $msgid, $domain = '' ) => 'ru_RU' === \WC_Email::$locale ? ( $russian[ $msgid ] ?? $msgid ) : $msgid );
+
+		$email = Delivery_Status_Emails::instance()->register_emails( [] )['customer_shipment_created'];
+
+		$this->assertSame( 'Order {order_number} has been handed over for delivery', $email->get_default_subject(), 'read in the administrator\'s locale' );
+		$this->assertSame( '', $email->form_fields['subject']['default'], 'an untouched field is empty, not frozen in the constructor locale' );
+		$this->assertSame( 'Order {order_number} has been handed over for delivery', $email->form_fields['subject']['placeholder'] );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] ) );
+
+		$this->assertSame( [ 'setup', 'restore' ], \WC_Email::$locale_log );
+		$this->assertSame( 'Заказ 123 передан в доставку', \WC_Email::$sent[0][1] );
+		$this->assertStringStartsWith( 'Ваше отправление передано в', \WC_Email::$sent[0][2] );
+		$this->assertSame( 'Order {order_number} has been handed over for delivery', $email->get_default_subject(), 'the administrator\'s locale is back' );
+	}
+
+	public function test_a_text_the_merchant_saved_is_never_replaced_by_a_default(): void {
+		Functions\when( '__' )->alias( static fn( $msgid, $domain = '' ) => 'ru_RU' === \WC_Email::$locale ? 'ПЕРЕВОД' : $msgid );
+		$email                   = Delivery_Status_Emails::instance()->register_emails( [] )['customer_shipment_created'];
+		$email->saved['subject'] = 'My own subject {order_number}';
+		$email->saved['body']    = 'My own body';
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] ) );
+
+		$this->assertSame( 'My own subject 123', \WC_Email::$sent[0][1] );
+		$this->assertSame( 'My own body', \WC_Email::$sent[0][2] );
+	}
+
+	public function test_a_plain_string_default_still_works_and_the_locale_is_restored_when_sending_throws(): void {
+		$email = $this->email( [ Delivery_Status::CREATED ], true, 'Plain subject' );
+		$this->assertSame( 'Plain subject', $email->get_default_subject() );
+
+		Functions\when( 'apply_filters' )->alias( static function () { throw new \RuntimeException( 'filter failed' ); } );
+		try {
+			$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] ) );
+			$this->fail( 'The filter exception was expected.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( [ 'setup', 'restore' ], \WC_Email::$locale_log );
 		}
 	}
 
@@ -414,7 +476,7 @@ final class DeliveryStatusEmailTest extends TestCase {
 		$property->setValue( Delivery_Status_Emails::instance(), [] );
 		$email = Delivery_Status_Emails::instance()->register_emails( [] )['customer_shipment_created'];
 		if ( null !== $saved_body ) {
-			$email->form_fields['body']['default'] = $saved_body;
+			$email->saved['body'] = $saved_body;
 		}
 		$provider = $this->carrier_with_shipments( $shipments );
 		$plugin   = Mockery::mock( \Woodev\Framework\Shipping\Shipping_Plugin::class );
