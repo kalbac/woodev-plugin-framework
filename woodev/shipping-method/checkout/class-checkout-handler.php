@@ -2399,6 +2399,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return bool true when nothing blocks checkout; false when a notice was added
 		 */
 		public function guard_custom_settlement( array $values, string $country, string $active_section ): bool {
+			// Nothing to ship, nothing to settle: the settlement field is not this checkout's business (#1664).
+			if ( ! Checkout_Config::cart_needs_shipping() ) {
+				return true;
+			}
+
 			$service = $this->location_service();
 
 			if ( $service->is_custom_settlement_allowed() ) {
@@ -2943,9 +2948,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$this->reconcile_pickup_declarations();
 
 			$country = $this->current_country();
+			$ships   = Checkout_Config::cart_needs_shipping();
 
 			foreach ( $this->effective_fields() as $id => $field ) {
 				$field_section = '' !== ( $field['section'] ?? '' ) ? (string) $field['section'] : $section;
+
+				// A cart with nothing to ship keeps the site's own city/settlement setup: a field the site
+				// removed is not brought back, a field it kept is not made required or re-typed (#1664).
+				if ( ! $ships && 'location' === ( $field['source_kind'] ?? null ) ) {
+					continue;
+				}
 
 				if ( ! isset( $checkout_fields[ $field_section ] ) || ! is_array( $checkout_fields[ $field_section ] ) ) {
 					$checkout_fields[ $field_section ] = [];
@@ -3372,8 +3384,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		public function validate( array $values, array $state = [] ): bool {
 			$valid              = true;
 			$blank_required_ids = [];
+			$ships              = Checkout_Config::cart_needs_shipping();
 
 			foreach ( $this->effective_fields() as $id => $field ) {
+				// A Location-Provider field is the delivery address; a cart with nothing to ship does not owe one (#1664).
+				if ( ! $ships && 'location' === ( $field['source_kind'] ?? null ) ) {
+					continue;
+				}
+
 				$value    = $values[ $id ] ?? '';
 				$required = Checkout_Condition::is_required( Checkout_Config::resolve_required( $field['required'] ), $state );
 

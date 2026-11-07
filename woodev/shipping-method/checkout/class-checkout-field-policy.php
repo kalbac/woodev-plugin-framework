@@ -294,7 +294,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 			 * @param bool                                                 $restore whether to restore the settlement invariants.
 			 * @param array<string, array<string, array<string, mixed>>> $fields  the checkout fields array so far (after this policy's own contribution).
 			 */
-			if ( apply_filters( 'woodev_checkout_field_policy_restore_invariants', true, $fields ) ) {
+			// A cart with nothing to ship has no settlement to restore: the site's own field setup stands (#1664).
+			if ( Checkout_Config::cart_needs_shipping() && apply_filters( 'woodev_checkout_field_policy_restore_invariants', true, $fields ) ) {
 				$fields = $this->restore_invariants( $fields, $this->default_address_fields() );
 
 				$this->persist_overrides();
