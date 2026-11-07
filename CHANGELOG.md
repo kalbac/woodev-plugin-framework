@@ -1,6 +1,26 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.27] — 2026-11-07
+### Bug Fixes
+- Plugin settings links open the Woodev settings tab
+
+- **shipping**: Translate delivery e-mail defaults in the shop locale at send time (#1587)
+
+- **analytics**: Delivery-time trend colour, share legend total, Russian chart dates
+
+- **analytics**: Keep the share legend total unrounded, rebuild bundles
+
+
+### Documentation
+- **s221**: Session save — framework 2.0.26 and range 2.0.0 released
+
+- **s221**: Afternoon — settings links, Ozon links, covers, docs structure
+
+- **s221**: Evening — theme 1.0.32 + docs migration live, TG scheduled
+
+
+
 ## [2.0.26] — 2026-11-07
 ### Bug Fixes
 - **licensing**: Harden the licence signing-key check
