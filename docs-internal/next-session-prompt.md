@@ -1,6 +1,6 @@
 > Составлено по итогам s220 (06–07.11.2026, МакБук, с оператором). Формат: `DOCS-SCHEMA.md` → Handoff Format.
 >
-> Checkout — `main` после PR сохранения s220. Открытые PR: #1478 (s198), **#1606** (фреймворк 2.0.26, черновик, `kalbac/fw-release-2026`, `main` влит после #1645); диапазон: **#41** (`kalbac/s219-c14` @ 6840d53, его взгляд пройден 07.11), **#43** (черновик, ждёт тега).
+> Checkout — `main` после PR сохранения s220. Открытые PR: #1478 (s198), **#1606** (фреймворк 2.0.26, черновик, `kalbac/fw-release-2026`, `main` влит после #1645); диапазон: **#41 СМЕРЖЕН** 07.11 (local-ci 2/2, CI зелёный); **#43** (черновик, перенацелен на `main`, ждёт тега; возможно нужен rebase).
 
 # Режим следующей сессии
 
@@ -16,7 +16,7 @@
 
 # Обязательства (перенос)
 
-1. **Выпуск 2.0.0** (`woocommerce-range-shipping#13`, s218→s220) — код готов, не опубликован. Перед тегом: local-ci #41 зелёный (терминал «local-ci · woocommerce-range-shipping · PR #41», worktree `s220-pr41-ci` — удалить после), мерж #41; переснять кадр 09 (колонка «Страна») и дописать в card/docs/changelog/blog/telegram «страна у каждого пункта».
+1. **Выпуск 2.0.0** (`woocommerce-range-shipping#13`, s218→s220) — код готов, не опубликован. #41 смержен. Перед тегом: rebase #43 на `main`; переснять кадр 09 (колонка «Страна») и дописать в card/docs/changelog/blog/telegram «страна у каждого пункта».
 2. **«Доставка в городе»** (`#13`) — D2 **НЕ ПРОВЕРЕНО** (строка СДЭК с `fias_guid`); Yandex в режиме города — живой ли расчёт, не доказано; мелочи s219 D5 D6 D8 D10–D12 и s220 «Not verified» — `sessions/s220.md`. Текст A17 в спеке («KZ нельзя выбрать») неверен при продаже во все страны — поправить.
 3. **Ссылки служб «Отслеживания»** (s215, #1577) — UNVERIFIED. В силе.
 4. **#1587** (s215) — письма фреймворка на языке админа; не начато. `tracking#7` — «Потом».
@@ -110,7 +110,7 @@ edostavka#166; #1279; #1415; R3 #24; #1500; yandex#140 п. 2; woodev-russian-pos
 # С чего начать
 
 0. Скиллы `orchestration` + `orca-team`; CLI `/Applications/Orca.app/Contents/Resources/bin/orca`; watchdog — `run_in_background`, не `&`.
-1. Прочитать терминал local-ci #41 (exit, каждый job). Зелёный → критик уже был (WP-E и fix2-range: Codex sol) → мерж #41. Красный → починить.
+1. #43: rebase на `main` диапазона, local-ci (`LOCAL_CI_DOCKER_HOST=unix:///Users/maksimmartirosov/.orbstack/run/docker.sock`, `npx -y run-local-ci run --workflow …`).
 2. Кадр 09 + тексты материалов (воркер Haiku/Sonnet по `gallery/manifest.md`), его взгляд.
 3. Его пункты из «Ждёт кнопки» п. 2 — по одному, по сути.
 4. Выпуск по Release order.
@@ -131,7 +131,7 @@ edostavka#166; #1279; #1415; R3 #24; #1500; yandex#140 п. 2; woodev-russian-pos
 |---|---|
 | Дерево | `main` после PR сохранения s220; гочи — 505 |
 | Выпуски | фреймворк 2.0.25; СДЭК 2.3.0.15; Яндекс 2.0.15; Почта 2.0.13; Ozon 2.0.4; Отслеживание 2.0.0 |
-| Открытые PR | #1478, #1606; диапазон #41, #43; СДЭК #175 |
-| Плагин | `woocommerce-range-shipping` (приватный) `main` f7ec676; #41 @ 6840d53 |
+| Открытые PR | #1478, #1606; диапазон #43; СДЭК #175 |
+| Плагин | `woocommerce-range-shipping` (приватный) `main` = #41 смержен (6840d53) |
 | Риг | режим города ВКЛ (RU Москва/Химки/Реутов + KZ Алматы); метод диапазона в зоне «Locations not covered…»; заказы #3632–#3683 |
-| После выпуска 2.0.0 удалить | `~/Projects/legacy-v1/woocommerce-range-shipping`, `~/Desktop/woodev-publications/range-2.0.0/`, worktree `s220-pr41-ci` |
+| После выпуска 2.0.0 удалить | `~/Projects/legacy-v1/woocommerce-range-shipping`, `~/Desktop/woodev-publications/range-2.0.0/` |
