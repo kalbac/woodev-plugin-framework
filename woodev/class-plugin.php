@@ -1091,8 +1091,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Where the "not configured" notice sends the merchant: the plugin's settings page.
 		 *
-		 * Defaults to {@see self::get_settings_url()}; a plugin whose settings live elsewhere than that
-		 * (the carrier's tab on the Woodev settings page) overrides this, not `get_settings_url()`.
+		 * Defaults to {@see self::get_settings_url()}; a plugin whose notice must point elsewhere overrides this,
+		 * not `get_settings_url()`.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1812,10 +1812,17 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *        sub-identifier for plugins with multiple parallel settings pages
 		 *        (ie a plugin with multiple gateway variants)
 		 *
-		 * @return string plugin settings URL
+		 * @return string plugin settings URL: the plugin's tab on the Woodev settings page, '' for a plugin with no tab
 		 * @see Woodev_Plugin::get_settings_link()
 		 */
 		public function get_settings_url( $plugin_id = null ) {
+
+			foreach ( (array) $this->get_settings_providers() as $provider ) {
+				if ( $provider instanceof \Woodev\Framework\Settings\Settings_Provider ) {
+					return \Woodev\Framework\Settings\Settings_Page_Registry::get_tab_url( $provider->get_id() );
+				}
+			}
+
 			return '';
 		}
 
