@@ -70,6 +70,32 @@ function installFakeSelect2( $ ) {
 	$.fn.select2 = jest.fn( function( config ) {
 		var $el = this;
 		var request = null;
+
+		/**
+		 * selectWoo's `SelectAdapter.prototype.item()` (selectWoo.full.js): the data of an
+		 * `<option>` is built from its DOM once and then CACHED with `$.data( option, 'data' )`,
+		 * and `current()` / `Results.setClasses()` read that cache, never the live `option.value`.
+		 * Reproduced here so a test sees what the real library sees (issue #1663: rewriting only
+		 * `option.value` left the cached id behind).
+		 *
+		 * @param {Element} option
+		 * @returns {{id: string, text: string, element: Element}}
+		 */
+		function itemOf( option ) {
+			var data = $.data( option, 'data' );
+
+			if ( null == data ) {
+				data = { id: option.value, text: option.textContent, element: option };
+				$.data( option, 'data', data );
+			}
+
+			return data;
+		}
+
+		// selectWoo reads (and so caches) every option while it renders the selection at init.
+		$el.find( 'option' ).each( function() {
+			itemOf( this );
+		} );
 		var isOpen = false;
 
 		/**
@@ -210,6 +236,8 @@ function installFakeSelect2( $ ) {
 			 * `data-selected="true"`, and a click or Enter on it only closes the list — no `change`,
 			 * no `select2:select` (selectWoo.full.js, `results:select` and the `mouseup` handler on
 			 * `.select2-results__option[data-selected]`). Anything else is a {@see pick}.
+			 * "Selected" is judged on the options' CACHED data ({@see itemOf}), as the real
+			 * library does, not on the live `<select>` value.
 			 *
 			 * Separate from {@see pick} on purpose: older tests pick the same id twice and rely on
 			 * `pick()` always selecting.
@@ -218,7 +246,11 @@ function installFakeSelect2( $ ) {
 			 * @returns {void}
 			 */
 			clickResult: function( resultItem ) {
-				if ( String( $el.val() ) !== String( resultItem.id ) ) {
+				var selectedIds = $el.find( ':selected' ).map( function() {
+					return String( itemOf( this ).id );
+				} ).get();
+
+				if ( -1 === selectedIds.indexOf( String( resultItem.id ) ) ) {
 					instance.pick( resultItem );
 
 					return;

@@ -4073,6 +4073,26 @@ describe( 'issue #1663: re-picking the rendered settlement when the cascade hold
 		expect( select.value ).toBe( '' );
 	} );
 
+	it( 'select2\'s cached data for the seed follows the parked value — a stale cached id would keep the result "selected" (C3, #1666)', () => {
+		picked = null;
+		const select = mount();
+		const seed = select.options[ 0 ];
+
+		expect( window.jQuery.data( seed, 'data' ).id ).toBe( 'Москва' ); // cached at init, as selectWoo does.
+
+		instance.open();
+
+		const cached = window.jQuery.data( seed, 'data' );
+
+		expect( null == cached || '' === cached.id ).toBe( true );
+
+		instance.close();
+
+		const restored = window.jQuery.data( seed, 'data' );
+
+		expect( null == restored || 'Москва' === restored.id ).toBe( true );
+	} );
+
 	it( 'picking the result named like the seed is a real pick: onSelect fires once, the field holds the value, no duplicate option', async () => {
 		picked = null;
 		const select = mount();

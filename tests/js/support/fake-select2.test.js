@@ -121,4 +121,27 @@ describe( 'fake-select2 — MEASURED event order (issue #525)', () => {
 
 		expect( order ).toEqual( [ 'select2:select' ] );
 	} );
+	test( 'clickResult() judges "selected" on the options\' CACHED data, as selectWoo does — a rewritten DOM value alone changes nothing (C3, #1666)', () => {
+		const instances = installFakeSelect2( window.jQuery );
+		const $select = window.jQuery( '#city' );
+		const order = [];
+
+		$select.on( 'select2:select', function() {
+			order.push( 'select2:select' );
+		} );
+
+		$select.append( '<option value="a" selected>A</option>' );
+		$select.select2( { ajax: { transport: jest.fn() } } );
+		$select.find( 'option:selected' )[ 0 ].value = ''; // DOM rewritten, cache still says "a".
+		instances[ 0 ].open();
+		instances[ 0 ].clickResult( { id: 'a', text: 'A', key: 'k1' } );
+
+		expect( order ).toEqual( [] );
+
+		window.jQuery( $select.find( 'option:selected' )[ 0 ] ).removeData( 'data' );
+		instances[ 0 ].open();
+		instances[ 0 ].clickResult( { id: 'a', text: 'A', key: 'k1' } );
+
+		expect( order ).toEqual( [ 'select2:select' ] );
+	} );
 } );

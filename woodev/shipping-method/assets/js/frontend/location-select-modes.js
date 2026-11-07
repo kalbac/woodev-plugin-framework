@@ -1708,6 +1708,26 @@
 		}
 
 		/**
+		 * Writes `value` to {@see seededOption} AND drops select2's cached data for it — see the
+		 * body for why the DOM value alone is not enough.
+		 *
+		 * @param {string} value
+		 * @returns {void}
+		 */
+		function setSeedValue( value ) {
+			seededOption.value = value;
+
+			// select2/selectWoo caches an option's data (id included) with `$.data( option, 'data' )`
+			// the first time it reads it, and `Results.setClasses()` judges "already selected" on
+			// that cache, not on the live `option.value` (selectWoo.full.js, `SelectAdapter.item()`).
+			// Without this the id stays "Москва", the result stays `data-selected="true"` and a
+			// click on it still only closes the list (Codex critic C3, PR #1666).
+			if ( window.jQuery ) {
+				window.jQuery( seededOption ).removeData( 'data' );
+			}
+		}
+
+		/**
 		 * Issue #1663: lets the customer re-pick the settlement the page already shows when
 		 * the cascade holds no record of it.
 		 *
@@ -1737,7 +1757,7 @@
 			}
 
 			parkedSeedValue = seededOption.value;
-			seededOption.value = '';
+			setSeedValue( '' );
 		}
 
 		/**
@@ -1755,7 +1775,7 @@
 			}
 
 			if ( '' === select.value ) {
-				seededOption.value = parkedSeedValue;
+				setSeedValue( parkedSeedValue );
 			} else if ( seededOption.parentNode ) {
 				seededOption.parentNode.removeChild( seededOption );
 			}
