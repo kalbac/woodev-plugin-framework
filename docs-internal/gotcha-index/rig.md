@@ -29,6 +29,7 @@
 
 - [rig/loader] **A fixture below the winner's `backwards_compatible` floor is silently dropped (nothing registered); the floor moves with the winner, so raising one fixture un-drops others (s163).** → [a-fixture-plugin-below-the-winners-backwards-compatible-floor-is-silently-dropped](../gotchas/a-fixture-plugin-below-the-winners-backwards-compatible-floor-is-silently-dropped.md) (s161, s163)
 - [rig/probes] **`wp wc shipping_zone_method delete <zone> <instance>` deletes instance `<zone>` — it took Free shipping twice. Delete via REST after a GET that proves the row; never put that CLI line in a brief.** → [wp-wc-shipping-zone-method-delete-takes-the-first-number-as-the-instance](../gotchas/wp-wc-shipping-zone-method-delete-takes-the-first-number-as-the-instance.md) (s165)
+- [rig/wp-env] **A host dir recreated under a nested mount reads EMPTY in the wp-env containers until `docker restart`: rig pages fatal, integration dies on `woodev-test-plugin/woodev/class-plugin.php`.** → [the-tests-cli-container-loses-its-nested-mounts-after-the-host-dir-is-recreated](../gotchas/the-tests-cli-container-loses-its-nested-mounts-after-the-host-dir-is-recreated.md) (s222)
 
 ## Related
 
