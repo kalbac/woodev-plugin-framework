@@ -55,7 +55,10 @@ paging or bulk actions; it is not the list-page component either.
    scanner covers exactly those folders and allows the same-layer prefix
    `Woodev\Framework\Marketplace\`. The infrastructure folders this decision adds (stores,
    jobs, settings, admin, the base class) use WordPress and are outside its scope; they
-   still never import a concrete marketplace.
+   still never import a concrete marketplace. Marketplace semantics found inside the donor
+   layer — the `field:KEY` price source, the price-send cadence, the article length and
+   normalisation, the export rule set, the stock formula — leave it as adapter-supplied
+   policy; the framework keeps the mechanics.
 3. **Module scope, Shipping/Payment pattern.** The framework module owns every
    marketplace-neutral part: domain values and contracts, persistence (schema, stores,
    lifecycle, uninstall), the account claim and run model, schedulers and job runners, the
