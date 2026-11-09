@@ -8,24 +8,13 @@
 namespace Woodev\Tests\Unit\Marketplace\Catalog;
 
 use PHPUnit\Framework\TestCase;
-use Woodev\Framework\Marketplace\Catalog\Rules\Category_Exists_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Category_Mapped_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Currency_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Dictionary_Values_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Dimensions_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Images_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Offer_Id_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Required_Fields_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Selling_Price_Rule;
-use Woodev\Framework\Marketplace\Catalog\Rules\Variation_Group_Rule;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Field_Definition;
 use Woodev\Framework\Marketplace\Catalog\Mapping;
 use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Catalog\Source;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
-use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Article_Policy;
-use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Field_Price_Source;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 
 /**
  * Builds a product that passes every rule, so a test breaks exactly one thing and reads exactly one issue.
@@ -105,8 +94,8 @@ abstract class Validator_Test_Case extends TestCase {
 				'offer_id_owner'         => static function ( string $offer_id ): ?int { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter -- Callback signature.
 					return null;
 				},
-				'article_policy'         => new Fake_Article_Policy(),
-				'price_source'           => new Fake_Field_Price_Source(),
+				'article_policy'         => $this->adapter()->article_policy(),
+				'price_source'           => $this->adapter()->price_source(),
 				'shop_currency'          => 'RUB',
 				'account_currency'       => 'RUB',
 			),
@@ -128,25 +117,21 @@ abstract class Validator_Test_Case extends TestCase {
 	}
 
 	/**
-	 * Returns a validator with the rule list a marketplace of the Ozon kind passes in: all ten rules, in the merchant order.
+	 * Returns the adapter whose answers these suites use: the values the Ozon adapter passes in, so every donor expectation holds.
+	 *
+	 * @return Fake_Marketplace_Adapter
+	 */
+	protected function adapter(): Fake_Marketplace_Adapter {
+		return Fake_Marketplace_Adapter::with_donor_values();
+	}
+
+	/**
+	 * Returns a validator over the rule list the adapter supplies (all ten rules, in the merchant order, for the donor values).
 	 *
 	 * @return Export_Validator
 	 */
 	protected function validator(): Export_Validator {
-		return new Export_Validator(
-			array(
-				new Category_Mapped_Rule(),
-				new Category_Exists_Rule(),
-				new Required_Fields_Rule( true ),
-				new Dictionary_Values_Rule(),
-				new Dimensions_Rule(),
-				new Images_Rule(),
-				new Offer_Id_Rule(),
-				new Selling_Price_Rule(),
-				new Currency_Rule(),
-				new Variation_Group_Rule(),
-			)
-		);
+		return new Export_Validator( $this->adapter()->export_rules() );
 	}
 
 	/**

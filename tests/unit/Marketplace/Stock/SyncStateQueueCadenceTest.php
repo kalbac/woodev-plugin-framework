@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Schema;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 
@@ -72,7 +73,16 @@ final class SyncStateQueueCadenceTest extends TestCase {
 	 * @return void
 	 */
 	public function test_donor_parity_with_the_ozon_values(): void {
-		$this->assertSame( array( 1, 2 ), $this->due( new Sync_Cadence( 0, 5 ) ) );
+		$this->assertSame( array( 1, 2 ), $this->due( Fake_Marketplace_Adapter::with_donor_values()->stock_cadence() ) );
+	}
+
+	/**
+	 * The default fake marketplace caps stock attempts at three, through its adapter.
+	 *
+	 * @return void
+	 */
+	public function test_a_marketplace_with_another_cap_gets_another_selection(): void {
+		$this->assertSame( array( 1, 2 ), $this->due( ( new Fake_Marketplace_Adapter() )->stock_cadence() ) );
 	}
 
 	/**

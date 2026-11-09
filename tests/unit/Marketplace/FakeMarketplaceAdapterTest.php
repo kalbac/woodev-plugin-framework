@@ -14,12 +14,14 @@ use Woodev\Framework\Marketplace\Account\Credential_Health;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Catalog\Article_Policy;
 use Woodev\Framework\Marketplace\Catalog\Card_Exporter;
 use Woodev\Framework\Marketplace\Catalog\Catalog_Schema;
 use Woodev\Framework\Marketplace\Catalog\Mapping;
 use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Governor\Bucket_Spec;
 use Woodev\Framework\Marketplace\Governor\Request_Governor;
+use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Ledger\Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Inbound_Decoder;
@@ -33,7 +35,9 @@ use Woodev\Framework\Marketplace\Price\Price_Calculator;
 use Woodev\Framework\Marketplace\Price\Price_Line;
 use Woodev\Framework\Marketplace\Price\Price_Pusher;
 use Woodev\Framework\Marketplace\Price\Price_Rule;
+use Woodev\Framework\Marketplace\Price\Price_Currency;
 use Woodev\Framework\Marketplace\Stock\Stock_Line;
+use Woodev\Framework\Marketplace\Stock\Stock_Policy;
 use Woodev\Framework\Marketplace\Stock\Stock_Pusher;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Account_Store;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Clock;
@@ -573,5 +577,62 @@ final class FakeMarketplaceAdapterTest extends TestCase {
 		$again = $ledger->claim( 1, 10 );
 		$this->assertCount( 1, $again->events() );
 		$this->assertTrue( $ledger->fail( $second_id, $again->token(), 'gave up' ) );
+	}
+
+	/**
+	 * Critic round 1, finding 2: the one adapter contract exposes every F1 policy answer, typed, so the framework can wire a
+	 * marketplace from it alone.
+	 *
+	 * @return void
+	 */
+	public function test_the_contract_exposes_the_policy_answers(): void {
+		$contract = new \ReflectionClass( Marketplace_Adapter::class );
+
+		foreach ( array(
+			'price_source'   => '?' . \Woodev\Framework\Marketplace\Price\Price_Source::class,
+			'price_cadence'  => Sync_Cadence::class,
+			'stock_cadence'  => Sync_Cadence::class,
+			'article_policy' => Article_Policy::class,
+			'export_rules'   => 'array',
+			'stock_policy'   => Stock_Policy::class,
+		) as $method => $type ) {
+			$this->assertTrue( $contract->hasMethod( $method ), $method );
+			$return = $contract->getMethod( $method )->getReturnType();
+			$this->assertNotNull( $return, $method );
+			$this->assertSame( $type, ( $return->allowsNull() && 'array' !== $type ? '?' : '' ) . ltrim( (string) preg_replace( '/^\?/', '', (string) $return ), '\\' ), $method );
+		}
+	}
+
+	/**
+	 * A marketplace unlike Ozon answers with its own values, and the layer's classes follow them: no price source, so a
+	 * marketplace-shaped rule is refused; its own cadence, article length, rule list and stock formula.
+	 *
+	 * @return void
+	 */
+	public function test_a_non_ozon_marketplace_supplies_its_own_answers(): void {
+		$this->assertNull( $this->adapter->price_source() );
+		$this->assertSame( array( 600, 4 ), array( $this->adapter->price_cadence()->min_interval(), $this->adapter->price_cadence()->max_attempts() ) );
+		$this->assertSame( array( 0, 3 ), array( $this->adapter->stock_cadence()->min_interval(), $this->adapter->stock_cadence()->max_attempts() ) );
+		$this->assertSame( 20, $this->adapter->article_policy()->max_length() );
+		$this->assertCount( 4, $this->adapter->export_rules() );
+		$this->assertSame( 9, $this->adapter->stock_policy()->pushed_quantity( 7, 2 ), 'the reservation is added' );
+
+		$this->expectException( \InvalidArgumentException::class );
+		Price_Currency::for_product( 'RUB', 'CNY', 'field:_cny_price', \Mockery::mock( 'WC_Product' )->shouldIgnoreMissing(), null, $this->adapter->price_source() );
+	}
+
+	/**
+	 * The donor values are an adapter too, so the suites that keep Ozon's expectations draw them from the same seam.
+	 *
+	 * @return void
+	 */
+	public function test_the_donor_values_come_from_the_same_seam(): void {
+		$donor = Fake_Marketplace_Adapter::with_donor_values();
+
+		$this->assertNotNull( $donor->price_source() );
+		$this->assertSame( array( 360, 5 ), array( $donor->price_cadence()->min_interval(), $donor->price_cadence()->max_attempts() ) );
+		$this->assertSame( 50, $donor->article_policy()->max_length() );
+		$this->assertCount( 10, $donor->export_rules() );
+		$this->assertSame( Stock_Policy::FORMULA_WC_ONLY, $donor->stock_policy()->formula() );
 	}
 }

@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Catalog\Article_Policy;
 use Woodev\Framework\Marketplace\Catalog\Offer_Id;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Article_Policy;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 
 /**
  * D4 of the marketplace design: freezing the article and the normalise-then-fallback order belong to the layer; the length, the
@@ -23,13 +24,25 @@ final class OfferIdTest extends TestCase {
 	 * @return void
 	 */
 	public function test_donor_parity_with_the_ozon_values(): void {
-		$offer_id = new Offer_Id( new Fake_Article_Policy( 50 ) );
+		$offer_id = new Offer_Id( Fake_Marketplace_Adapter::with_donor_values()->article_policy() );
 
 		$this->assertSame( 'Диван-красный-3м', $offer_id->for_product( null, '  Диван красный 3м  ', 10 ) );
 		$this->assertSame( 'wc-10', $offer_id->for_product( null, '   ', 10 ) );
 		$this->assertSame( str_repeat( 'Я', 50 ), $offer_id->for_product( null, str_repeat( 'Я', 60 ), 10 ) );
 		$this->assertSame( 50, $offer_id->max_length() );
 		$this->assertSame( 'SKU-1', $offer_id->normalise( ' SKU 1' ) );
+	}
+
+	/**
+	 * The default fake marketplace accepts 20 characters, and its adapter says so.
+	 *
+	 * @return void
+	 */
+	public function test_the_adapters_policy_decides_the_length(): void {
+		$offer_id = new Offer_Id( ( new Fake_Marketplace_Adapter() )->article_policy() );
+
+		$this->assertSame( 20, $offer_id->max_length() );
+		$this->assertSame( str_repeat( 'Я', 20 ), $offer_id->for_product( null, str_repeat( 'Я', 60 ), 10 ) );
 	}
 
 	/**

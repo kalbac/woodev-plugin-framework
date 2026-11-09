@@ -11,11 +11,24 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Credential_Health;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Catalog\Article_Policy;
 use Woodev\Framework\Marketplace\Catalog\Card_Exporter;
 use Woodev\Framework\Marketplace\Catalog\Catalog_Schema;
+use Woodev\Framework\Marketplace\Catalog\Validation_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Category_Exists_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Category_Mapped_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Currency_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Dictionary_Values_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Dimensions_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Images_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Offer_Id_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Required_Fields_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Selling_Price_Rule;
+use Woodev\Framework\Marketplace\Catalog\Rules\Variation_Group_Rule;
 use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
 use Woodev\Framework\Marketplace\Diagnostics\Support_Report;
 use Woodev\Framework\Marketplace\Governor\Bucket_Spec;
+use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Ledger\Inbound_Decoder;
 use Woodev\Framework\Marketplace\Orders\Order_DTO;
 use Woodev\Framework\Marketplace\Orders\Order_Line;
@@ -23,11 +36,15 @@ use Woodev\Framework\Marketplace\Orders\Order_Source;
 use Woodev\Framework\Marketplace\Orders\Status_Map;
 use Woodev\Framework\Marketplace\Price\Money;
 use Woodev\Framework\Marketplace\Price\Price_Pusher;
+use Woodev\Framework\Marketplace\Price\Price_Source;
+use Woodev\Framework\Marketplace\Stock\Stock_Policy;
 use Woodev\Framework\Marketplace\Stock\Stock_Pusher;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Article_Policy;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Card_Exporter;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Catalog_Schema;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Clock;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Credential_Health;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Field_Price_Source;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Source;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Price_Pusher;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Stock_Pusher;
@@ -96,11 +113,36 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	private $exporter;
 
 	/**
+	 * The marketplace's policy answers: price source, cadences, article policy, rule list, stock policy.
+	 *
+	 * @var array<string,mixed>
+	 */
+	private $policies;
+
+	/**
 	 * Builds the adapter and its parts around one clock.
 	 *
-	 * @param Fake_Clock|null $clock Clock; a new one when null.
+	 * Without `$policies` the answers are those of a Wildberries-style marketplace, deliberately unlike Ozon's: no price source beyond
+	 * the neutral shapes, prices at most once in ten minutes with four attempts, stock with three, 20-character articles, four
+	 * rules, and the reservation added to the stock it pushes.
+	 *
+	 * @param Fake_Clock|null     $clock    Clock; a new one when null.
+	 * @param array<string,mixed> $policies Answers that replace the defaults: `price_source`, `price_cadence`, `stock_cadence`,
+	 *                                      `article_policy`, `export_rules`, `stock_policy`.
 	 */
-	public function __construct( ?Fake_Clock $clock = null ) {
+	public function __construct( ?Fake_Clock $clock = null, array $policies = [] ) {
+		$this->policies = array_merge(
+			[
+				'price_source'   => null,
+				'price_cadence'  => new Sync_Cadence( 600, 4 ),
+				'stock_cadence'  => new Sync_Cadence( 0, 3 ),
+				'article_policy' => new Fake_Article_Policy( 20 ),
+				'export_rules'   => [ new Category_Mapped_Rule(), new Required_Fields_Rule( true ), new Offer_Id_Rule(), new Selling_Price_Rule() ],
+				'stock_policy'   => new Stock_Policy( Stock_Policy::FORMULA_PLUS_RESERVED ),
+			],
+			$policies
+		);
+
 		$this->clock    = $clock ?? new Fake_Clock();
 		$this->health   = new Fake_Credential_Health( $this->clock );
 		$this->stock    = new Fake_Stock_Pusher();
@@ -108,6 +150,39 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 		$this->orders   = new Fake_Order_Source();
 		$this->schema   = new Fake_Catalog_Schema();
 		$this->exporter = new Fake_Card_Exporter( $this->clock );
+	}
+
+	/**
+	 * Builds the adapter with the values the Ozon adapter passes in, for the suites that moved with the layer and keep their donor
+	 * expectations: the `field:KEY` price source, 360 s / 5 attempts for prices, 0 s / 5 for stock, 50-character articles, all ten
+	 * rules in the merchant order, plain WC stock.
+	 *
+	 * @param Fake_Clock|null $clock Clock; a new one when null.
+	 * @return self
+	 */
+	public static function with_donor_values( ?Fake_Clock $clock = null ): self {
+		return new self(
+			$clock,
+			[
+				'price_source'   => new Fake_Field_Price_Source(),
+				'price_cadence'  => new Sync_Cadence( 360, 5 ),
+				'stock_cadence'  => new Sync_Cadence( 0, 5 ),
+				'article_policy' => new Fake_Article_Policy( 50 ),
+				'export_rules'   => [
+					new Category_Mapped_Rule(),
+					new Category_Exists_Rule(),
+					new Required_Fields_Rule( true ),
+					new Dictionary_Values_Rule(),
+					new Dimensions_Rule(),
+					new Images_Rule(),
+					new Offer_Id_Rule(),
+					new Selling_Price_Rule(),
+					new Currency_Rule(),
+					new Variation_Group_Rule(),
+				],
+				'stock_policy'   => new Stock_Policy( Stock_Policy::FORMULA_WC_ONLY ),
+			]
+		);
 	}
 
 	/**
@@ -278,6 +353,60 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 			new Bucket_Spec( 'prices', 10, 6, 5 ),
 			new Bucket_Spec( 'content_write', 10, 60, 5 ),
 		);
+	}
+
+	/**
+	 * Returns the price source, if any.
+	 *
+	 * @return Price_Source|null
+	 */
+	public function price_source(): ?Price_Source {
+		return $this->policies['price_source'];
+	}
+
+	/**
+	 * Returns the limits on price sends.
+	 *
+	 * @return Sync_Cadence
+	 */
+	public function price_cadence(): Sync_Cadence {
+		return $this->policies['price_cadence'];
+	}
+
+	/**
+	 * Returns the limits on stock sends.
+	 *
+	 * @return Sync_Cadence
+	 */
+	public function stock_cadence(): Sync_Cadence {
+		return $this->policies['stock_cadence'];
+	}
+
+	/**
+	 * Returns the article policy.
+	 *
+	 * @return Article_Policy
+	 */
+	public function article_policy(): Article_Policy {
+		return $this->policies['article_policy'];
+	}
+
+	/**
+	 * Returns the full-scope rule list.
+	 *
+	 * @return Validation_Rule[]
+	 */
+	public function export_rules(): array {
+		return $this->policies['export_rules'];
+	}
+
+	/**
+	 * Returns the stock formula in force.
+	 *
+	 * @return Stock_Policy
+	 */
+	public function stock_policy(): Stock_Policy {
+		return $this->policies['stock_policy'];
 	}
 
 	/**

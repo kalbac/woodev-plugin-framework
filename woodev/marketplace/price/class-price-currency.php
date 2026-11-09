@@ -112,7 +112,7 @@ final class Price_Currency {
 			return new self( $shop, $target, null, $source->price( $rule, $target, $product, $parent_product ), true );
 		}
 
-		if ( self::is_marketplace_shape( $rule ) ) {
+		if ( ! self::is_neutral_shape( $rule ) ) {
 			throw new \InvalidArgumentException( 'The currency rule needs a price source the marketplace did not supply.' );
 		}
 
@@ -120,16 +120,16 @@ final class Price_Currency {
 	}
 
 	/**
-	 * Tells whether a rule has a shape of the marketplace's own, which only a {@see Price_Source} can read: `name:value`, where the
-	 * name is neither `fixed` nor `rate`.
+	 * Tells whether a rule is one of the layer's own shapes: empty, `fixed:...` or `rate:...`. Every other rule, whatever it looks
+	 * like, belongs to the marketplace and only a {@see Price_Source} that supports it may read it.
 	 *
 	 * @since 2.0.29
 	 *
 	 * @param string $rule Trimmed rule.
 	 * @return bool
 	 */
-	public static function is_marketplace_shape( string $rule ): bool {
-		return 1 === preg_match( '/^[a-z_]+:/', $rule ) && 1 !== preg_match( '/^(?:fixed|rate):/', $rule );
+	public static function is_neutral_shape( string $rule ): bool {
+		return '' === $rule || 0 === strpos( $rule, 'fixed:' ) || 0 === strpos( $rule, 'rate:' );
 	}
 
 	/**

@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Price;
 use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Schema;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 
@@ -109,7 +110,17 @@ final class PriceSyncQueueCadenceTest extends TestCase {
 	 * @return void
 	 */
 	public function test_donor_parity_with_the_ozon_values(): void {
-		$this->assertSame( array( 1, 3, 5 ), $this->due( new Sync_Cadence( 360, 5 ) ) );
+		$this->assertSame( array( 1, 3, 5 ), $this->due( Fake_Marketplace_Adapter::with_donor_values()->price_cadence() ) );
+	}
+
+	/**
+	 * The default fake marketplace asks for ten minutes between sends and four attempts, and says so through its adapter: the queue
+	 * holds back both recent sends and parks the pair that failed five times, but tries the one that failed twice.
+	 *
+	 * @return void
+	 */
+	public function test_a_marketplace_with_other_numbers_gets_other_selections(): void {
+		$this->assertSame( array( 1, 5 ), $this->due( ( new Fake_Marketplace_Adapter() )->price_cadence() ) );
 	}
 
 	/**

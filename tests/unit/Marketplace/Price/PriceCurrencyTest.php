@@ -157,7 +157,7 @@ final class PriceCurrencyTest extends TestCase {
 	public function test_a_marketplace_shape_without_a_source_is_refused(): void {
 		$product = $this->product( array( '_cny_price' => '88' ) );
 
-		$this->assertTrue( Price_Currency::is_marketplace_shape( 'field:_cny_price' ) );
+		$this->assertFalse( Price_Currency::is_neutral_shape( 'field:_cny_price' ) );
 
 		$this->expectException( \InvalidArgumentException::class );
 		$this->cny( 'field:_cny_price', $product );
@@ -177,9 +177,9 @@ final class PriceCurrencyTest extends TestCase {
 
 		$this->assertFalse( $currency->is_one_way() );
 		$this->assertSame( '20.00', $currency->from_shop( '10' )->to_string() );
-		$this->assertFalse( Price_Currency::is_marketplace_shape( 'rate:2' ) );
-		$this->assertFalse( Price_Currency::is_marketplace_shape( 'fixed:CNY' ) );
-		$this->assertFalse( Price_Currency::is_marketplace_shape( '' ) );
+		$this->assertTrue( Price_Currency::is_neutral_shape( 'rate:2' ) );
+		$this->assertTrue( Price_Currency::is_neutral_shape( 'fixed:CNY' ) );
+		$this->assertTrue( Price_Currency::is_neutral_shape( '' ) );
 	}
 
 	/**
@@ -201,5 +201,66 @@ final class PriceCurrencyTest extends TestCase {
 	 */
 	public function test_the_source_names_its_choice(): void {
 		$this->assertSame( 'Взять цену из поля товара', ( new Fake_Field_Price_Source() )->label() );
+	}
+
+	/**
+	 * Critic round 1, finding 1: every rule outside the neutral shapes is refused without a source that supports it, whatever its
+	 * spelling (digits, hyphens, capitals, no colon). It used to price the shop amount unconverted and call it resolved.
+	 *
+	 * @dataProvider unsupported_spellings
+	 * @param string $rule Rule.
+	 * @return void
+	 */
+	public function test_no_spelling_of_an_unsupported_rule_is_priced_unconverted( string $rule ): void {
+		$product = $this->product( array( '_cny_price' => '88' ) );
+
+		try {
+			$this->cny( $rule, $product );
+			$this->fail( 'no source: ' . $rule );
+		} catch ( \InvalidArgumentException $e ) {
+			$this->assertStringContainsString( 'price source', $e->getMessage() );
+		}
+
+		try {
+			$this->cny( $rule, $product, new Fake_Field_Price_Source() ); // Supports `field:KEY` only.
+			$this->fail( 'non-matching source: ' . $rule );
+		} catch ( \InvalidArgumentException $e ) {
+			$this->assertStringContainsString( 'price source', $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Spellings the old `/^[a-z_]+:/` test let through.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function unsupported_spellings(): array {
+		return array(
+			'digit in name'  => array( 'table2:retail' ),
+			'capitals'       => array( 'TABLE:retail' ),
+			'hyphen in name' => array( 'price-list:retail' ),
+			'no colon'       => array( 'something' ),
+			'unknown field'  => array( 'Field:_cny_price' ),
+		);
+	}
+
+	/**
+	 * Positive control: the same spellings are priced once a source supports them.
+	 *
+	 * @return void
+	 */
+	public function test_a_supporting_source_prices_any_spelling(): void {
+		$source = \Mockery::mock( Price_Source::class );
+		$source->shouldReceive( 'supports' )->andReturnUsing(
+			static function ( string $rule ): bool {
+				return 'price-list:retail' === $rule;
+			}
+		);
+		$source->shouldReceive( 'price' )->with( 'price-list:retail', 'CNY', \Mockery::any(), null )->andReturn( Money::from_string( '5', 'CNY' ) );
+
+		$currency = $this->cny( 'price-list:retail', $this->product(), $source );
+
+		$this->assertTrue( $currency->is_one_way() );
+		$this->assertSame( '5.00', $currency->field_price()->to_string() );
 	}
 }
