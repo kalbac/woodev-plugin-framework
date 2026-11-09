@@ -1,306 +1,316 @@
-# Marketplace layer and PHP-driven React admin
+# Marketplace module and PHP-driven React admin
 
-> Design for framework #1675, based on the operator's 2026-11-10 decisions.
+> Design for framework #1675, round 2 (2026-11-10). Decisions: [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md).
 > Proposed APIs below do not exist yet. Implementation is separate, after design review.
 
 ## Scope and reference baseline
 
-All stand-alone marketplace pages are React: Настройки, Товары, Заказы, Сопоставление,
-Инструменты, Диагностика. PHP owns definitions, permissions, business decisions and strings;
-TypeScript owns reusable interaction. Product edit tabs, variation panels and order metaboxes
-inside WooCommerce remain classic. Marketplace settings belong to the marketplace menu.
-Shared marketplace settings may later have a Woodev tab, but none is introduced here.
-Analytics is reserved only; no marketplace analytics UI, calculations or endpoints are built.
+Every stand-alone marketplace page is React and PHP-driven ([Rule 9](../AGENT-RULES.md)):
+Настройки, Товары, Заказы, Сопоставление, Инструменты, Диагностика. PHP owns definitions,
+permissions, business decisions and strings; TypeScript owns reusable interaction. Screens
+embedded in WooCommerce's own UI — the product edit tab, the variation panel, the order
+metabox — stay classic. Marketplace settings live under the marketplace's own menu.
+Analytics is a reserved slot only.
 
-References inspected on 2026-11-10:
+Binding operator decisions this round implements (PR #1676 comments, 2026-11-10):
 
-- Framework `dcfe58d7`: [agent rules](../AGENT-RULES.md) Rule 9,
-  [architecture](architecture.md), [shipping application](../../src/shipping-orders-page/app.tsx),
-  [page entry](../../src/shipping-orders-page/index.tsx),
-  [registry](../../woodev/shipping-method/admin/orders/class-orders-registry.php),
-  [orders REST controller](../../woodev/shipping-method/rest-api/class-orders-controller.php),
-  [settings registry](../../woodev/settings-page/class-settings-page-registry.php) and shared components.
-- Read-only Ozon source: specification `docs/spec/ozon-seller-v2-spec.md` §7–8, wiki and
-  `includes/marketplace/`; merged products/mappings code read from that repository's local
-  `origin/main`, `7abfd0e605078494717946e1c42bb4e848240782`, because its primary checkout
-  `bb3b059` predates those screens. These are source provenance identifiers, not a promise
-  that the private branch has stopped moving. No private operational data is reproduced here.
-- The supplied local WooCommerce source path was absent. Upstream WooCommerce source was
-  inspected instead: revision `20949b8c161e518123bd3afabf0f439c92786498`,
-  `plugins/woocommerce/src/Admin/PageController.php::register_page()`,
-  `docs/extensions/settings-and-config/working-with-woocommerce-admin-pages.md`,
-  `packages/js/components/src/table/{README.md,types.ts}`. The source, rather than its older
-  documented default capability, governs this design: always pass an explicit capability.
-- Context7 and Serena were unavailable. Existing installed `@wordpress/components`
-  `src/modal/{README.md,index.tsx,types.ts}` and upstream TableCard source were inspected as
-  fallbacks. Retain the shipping stack and its existing WordPress modal integration; do not
-  add `@wordpress/dataviews` or install/bundle `@woocommerce/components`. Context7 review
-  and a supported-version smoke test remain implementation prerequisites (question Q3).
+| # | Decision |
+|---|---|
+| B1 | `\Woodev\Framework\Marketplace\Marketplace_Plugin extends \Woodev\Framework\Woocommerce_Plugin`, like `Shipping_Plugin` / `Woodev_Payment_Gateway_Plugin`; the base class owns menu, pages and settings registration through `wc_admin_register_page()` without `parent`. |
+| B2 | Namespace `Woodev\Framework\Marketplace\*`. |
+| B3 | Delivery is not touched: «Заказы доставки» stays where and as it is; the records table is a new component that only takes it as a reference. No card changes `src/shipping-orders-page/**` or `woodev/shipping-method/**`. |
+| B4 | Menu icon = the Ozon Seller v1 icon; landing page «Товары»; order Настройки / Товары / Заказы / Сопоставление / Инструменты / Диагностика. Variable products = parent row with expandable variations, each with its own state and progress. Q3 as the R1 critic ruled. |
+| B5 | Analytics: reserved slot only. Multi-account is not dropped. |
+| B6 | (s225) The module holds **all** logic that is not specific to one marketplace — accounts, sync/queue/governor, links, mappings, records table, menu/pages/settings, diagnostics, lifecycle — built like the Shipping and Payment modules. The plugin keeps only its adapter, API client and marketplace-specific rules. |
 
-This document supersedes the Ozon spec's provisional §7.1 option B and §8 classic stand-alone
-screens/default Woodev settings placement. It preserves their domain requirements.
+References read for this round:
 
-## Ownership and dependency direction
+- Framework `1935ca99` through Serena (activated on this worktree): `Woocommerce_Plugin`,
+  `Shipping_Plugin` (constructor, abstract `get_shipping_method_classes()` / `get_api()`,
+  `get_settings_url()`), `Woodev_Payment_Gateway_Plugin`, `Woodev_Plugin::init_settings_page()`
+  and `get_settings_url()`, `Settings_Page_Registry` (`get_tab_url()`, `collect_entries()`,
+  `register_page()`, `maybe_redirect_legacy()`), `Orders_Registry::register_page()` /
+  `build_page_args()` and the [shipping orders page](../../src/shipping-orders-page/app.tsx)
+  file set (reference only).
+- Ozon Seller, read-only: `origin/main` `5d00c10` (four merges after the R1 critic's
+  `7abfd0e`; the marketplace layer is unchanged) and the released tag `v1.1.7`.
+- WooCommerce `PageController::register_page()`: with no `parent` it calls `add_menu_page()`
+  with `icon` and `position` (verified by the operator and by the R1 critic). Context7 was not
+  consulted this round; Q3's version gate below covers what it would have answered.
+
+This page supersedes the Ozon spec's §7.1 option B and its §8 classic stand-alone screens and
+Woodev → Настройки placement. Their domain requirements stay.
+
+## Module shape — the Shipping and Payment pattern
+
+| | Shipping | Payment | Marketplace (this design) |
+|---|---|---|---|
+| Base plugin class | `Woodev\Framework\Shipping\Shipping_Plugin` | `Woodev_Payment_Gateway_Plugin` | `Woodev\Framework\Marketplace\Marketplace_Plugin` |
+| What the plugin implements | `get_shipping_method_classes()`, `get_api()`, carrier `Shipping_Method` subclasses, `Orders_Provider` | gateway subclasses, API request/response classes | `get_marketplace_adapter()` returning a `Marketplace_Adapter`, `get_marketplace_menu()`, page list, API client, wire mappers |
+| What the framework owns | checkout, pickup, export, documents, orders page, settings sections, REST | checkout flow, tokens, admin handlers, REST | accounts, persistence, claim/run model, jobs, inbound intake, sync flows, settings, diagnostics, embedded screens, every stand-alone page |
+| Folder | `woodev/shipping-method/` | `woodev/payment-gateway/` | `woodev/marketplace/` |
 
 ```text
-Ozon plugin composition, guards, stores, jobs, remote adapters
-       |                       |
-       v                       v
-Woodev\Marketplace\*     Woodev\Framework\Admin\*
-domain/queue primitives  pages + records + settings mounts
-       |                       |
-       v                       v
-PHP / WC_Order /         PHP definitions + local REST projections
-WC_Product / wpdb              |
-                               v
-                       generic framework React bundle
+Ozon plugin:  Plugin extends Marketplace_Plugin
+              Ozon_Adapter implements Marketplace_Adapter
+              Ozon_Client (Woodev_API_Base), mappers, Ozon-only rules, v1 migration
+                         |
+                         v
+woodev/marketplace/  Marketplace_Plugin ── pages/menu/settings/assets (admin/)
+                     infrastructure: stores, schema, jobs, intake, settings, diagnostics
+                         |                     |
+                         v                     v
+                     domain folders        Woodev\Framework\Admin\Records\*  (generic,
+                     (pure PHP + WC_*/wpdb) src/admin-records/                not marketplace)
 ```
 
-No generic table class imports marketplace, shipping or Ozon domain classes. No marketplace
-domain class imports admin infrastructure. A marketplace plugin continues to extend
-`Woodev\Framework\Woocommerce_Plugin` and composes the registries; a new plugin base class is
-unnecessary. Ozon-specific serializers, card states, endpoints, labels flow, schema migrations,
-table prefixes, credentials and scheduling stay in the plugin.
+Infrastructure classes depend on the domain contracts and on WordPress; they never import a
+concrete marketplace. The records engine knows neither marketplace nor shipping field names.
 
-## Marketplace module placement
+## Classification of the Ozon plugin (`5d00c10`)
 
-Move existing `includes/marketplace/<folder>/` symbols to `woodev/marketplace/<folder>/`
-without changing their `Woodev\Marketplace\<Folder>` FQCNs. This namespace exception is
-deliberate, recorded in [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md).
-The inventory below reflects the merged donor revision, not only the earlier §7.2 sketches.
-Each row covers the named folder; nested catalog rules retain `Catalog\Rules`.
+Rule for every move: retype from the Ozon concrete (`Ozon_Account_Store`, `Ozon_Link_Store`,
+`Ozon_Error`, `Ozon_Client`) to the framework contract; every marketplace rule found inside a
+generic class becomes an adapter method (example: `Ozon_Export_Service::queue()` skips
+virtual and downloadable products because "Ozon sells goods that ship" — that is an adapter
+eligibility answer, not a framework constant). No behaviour changes beyond that.
 
-| Folder | Symbols to transfer |
+| Ozon source | Goes to | Notes |
+|---|---|---|
+| `includes/marketplace/**` (85 files, all folders) | framework, domain folders | Pure move + rename (F1). |
+| `jobs/` run model: `Account_Run`, `Claim_Lost`, `Job_Gate`; `ozon/account/` `Claim_Fence`, `First_Remote_Write`, `Account_Pause` | framework | Pause trigger = adapter error classification. The v1 write gate in `Job_Gate::allows_writes()` becomes a plugin-supplied gate (see v1 migration). |
+| `jobs/` schedulers and runners: export batch/run, poll task, link jobs, flush sync, price flush/recompute/refresh, refresh catalog, posting jobs, drain events, handler registry, `Event_Handler`, noop handler | framework | Runners call the adapter for the remote half (card exporter, card lifecycle reader, link resolver, pushers, readers, catalog refresher, order source). `Tree_Changed_Handler` is Ozon's event type: plugin. |
+| `lifecycle/` `Schema`, `Lifecycle`, `Uninstaller`, `Schema_Exception`; `class-persistence-exception.php` | framework | One table set per marketplace plugin, prefix `woodev_{marketplace id}_` (Ozon keeps `woodev_ozon_`). `V1_Migration` stays plugin. |
+| `ozon/account/Ozon_Account_Store`, `ozon/links/` stores and values (`Ozon_Link_Store`, `Link_Record`, `Link_Detacher`, `Card_Linker`, `Link_Progress_Store`, `Link_Report_Store`, `Pinned_Offer_Id`, `Shop_Sku_Source`) | framework `Wpdb_*` stores | Column and enum names become neutral where they are Ozon-named (`client_id`, `api_key_enc`, `to_ozon`, stock mode `ozon`). Allowed: v2 is unreleased. |
+| `ozon/catalog/` stores and generic logic: `Mapping_Store`, `Profile_Store`, `Profile_Sources`, `Product_Field_Catalog`, `Category_Ancestry`, `Mapped_Pairs`, `Export_Context(_Builder)`, `Export_Price_Policy`, `Link_Context_Resolver`, `Cards_Snapshot_Store`, `Catalog_Cache`, `Card_Created_Seeder`, `Card_Matcher`, `Ozon_Export_Service` (as `Export_Service`), `Refresh_Result`, `Link_Resolve_Exception` | framework | Ozon card shape stays out: `Ozon_Card_Builder`, `Ozon_Card_Lifecycle`, `Ozon_Catalog_Schema`, `Ozon_Validation_Context`, `Ozon_Link_Resolver`, `Catalog_Fetcher`, `Catalog_Refresher`, `Category_Tree`, `Card_Images` stay plugin behind adapter contracts. |
+| `stock/**`, `ozon/price/` `Price_Intents`, `Price_Refresh_Guard`, `Price_Refresher`, `Refresh_Result` | framework | `Ozon_Stock_Pusher`, `Ozon_Price_Pusher`, `Ozon_Price_Reader` stay plugin. |
+| `ozon/labels/` `Label_Store`, `Label_Download`, `Label_Jobs`, exceptions | framework | `Label_Service`'s remote calls become an adapter label provider (`Capability::GET_LABEL`). |
+| `ozon/notifications/` intake side: `Ozon_Notification_Intake` (as `Notification_Intake`), `Intake_Response`, `Push_Rate_Limiter`, `Notification_Url`, `Notification_Account(_Reader)`, `Last_Notification_Reader`, `Registration_Refresher`, `Account_Read_Exception`; `rest/Notifications_Controller` | framework | Route `woodev/v1/marketplace/{marketplace id}/notifications` or the existing path, decided in F9a; the decoder (`Ozon_Event_Decoder`), push types, source-IP policy, `Ozon_Notifications` registration API and `Notification_Entry` stay plugin. `compat/Legacy_Webhook_Route` (v1 URL) stays plugin. |
+| `orders/` `Order_Query`, `Wc_Order_Store`, `Order_Meta_Contract`; `Cancel_Ajax`, `Cancel_Modal` | framework | The cancel metabox is an embedded classic screen; reasons and the remote cancel come from the adapter (`Capability::CANCEL_ORDER`). `ozon/orders/` posting mapper/source/refresher/catch-up/canceller/reasons/meta stay plugin. |
+| `settings/**` | framework | Accounts sections render adapter-declared credential fields; the notifications section renders only when the adapter supports push. |
+| `diagnostics/**` | framework | Ozon endpoint facts in `Diagnostics_Page` become an adapter `Report_Section` (already in the contract). |
+| `admin/` `Admin_Guard`, `Key_Expiry_Notices`; `admin/product/**`; `admin/products/` reader, filter, bulk planner, state badge, remote-cards query/tab logic; `admin/mappings/` inputs, check, products, AJAX logic | framework | Re-expressed as records providers, REST handlers and custom views; the classic HTML/`WP_List_Table` classes are deleted, not moved. `Ozon_Category_Finder` becomes a framework search over `Catalog_Schema` unless the adapter needs a remote search. |
+| `admin/` `Admin_Menu`, `Admin_Page`, `Admin_List_Table`, `Placeholder_Tab`, `Products_Tab`, all views and `products.js` | deleted | Replaced by the base class and the React pages. |
+| `licensing/License_Gate` | framework | The licence gate is the default for every plugin; jobs consult it through the base class. |
+| `class-*-module.php` wiring | framework base class | The base wires the flows from the adapter, as `Shipping_Plugin::includes()` / `add_hooks()` do; the plugin overrides factories only. |
+| `ozon/api/**`, `Ozon_Client_Factory`, `Ozon_Credential_Health`, `ozon/orders/**`, the Ozon-shaped catalog classes above | plugin | The adapter half. |
+| `migration/**`, `lifecycle/V1_Migration`, `compat/**` | plugin | v1 data is Ozon's; the migration writes through the framework stores and supplies the write gate. |
+
+The table is a classification, not a file list: each transfer card refreshes it against the
+donor `main` it starts from and accounts for every added symbol.
+
+## Adapter contract
+
+The existing `Marketplace_Adapter` (`id`, `supports`, `credential_health`, `stock_pusher`,
+`price_pusher`, `order_source`, `catalog_schema`, `card_exporter`, `inbound_decoder`,
+`bucket_specs`) stays the single object a plugin hands the framework. Moved flows need more
+answers; each is added in the card that moves its consumer, nullable where a capability may
+be absent (the pattern `price_pusher(): ?Price_Pusher` already uses):
+
+| Consumer that moves | Adapter answer it needs |
 |---|---|
-| `account` | `Account`, `Account_Store`, `Credential_Health`, `Health_Result`, `Key_Expiry`, `Secret_Cipher` |
-| `capabilities` | `Capability`, `Marketplace_Adapter` |
-| `governor` | `Bucket_Spec`, `Request_Governor`, `Token_Bucket_Governor`, `Throttle_Store`, `Throttle_Row`, `Wpdb_Throttle_Store` |
-| `ledger` | `Async_Task`, `Task_Status`, `Item_Result`, `Claimed_Batch`, `Claimable` trait, `Task_Ledger`, `Wpdb_Task_Ledger`, `Inbound_Event`, `Inbound_Decoder`, `Event_Ledger`, `Wpdb_Event_Ledger` |
-| `links` | `Product_Link`, `Link_Store` |
-| `stock` | `Stock_Line`, `Stock_Pusher`, `Stock_Policy`, `Sync_State_Store`, `Sync_State_Queue` |
-| `price` | `Money`, `Price_Rule`, `Price_Pair`, `Price_Calculator`, `Price_Line`, `Push_Receipt`, `Price_Pusher`, `Currency_Conversion`, `Price_Currency`, `Price_Intent`, `Price_Override`, `Price_Sync_Queue`, `Flush_Result` |
-| `orders` | `Order_DTO`, `Order_Line`, `Order_Group`, `Status_Map`, `Pull_Result`, `Order_Source`, `Order_Writer`, `Order_Store`, `Order_Registry`, `Registry_Order_Writer`, `Order_Claim_Exception` |
-| `catalog` | `Field_Definition`, `Catalog_Schema`, `Source`, `Source_Resolver`, `Mapping`, `Profile`, `Dictionary_Resolution`, `Offer_Id`, `Offer_Id_Likeness`, `Validation_Context`, `Validation_Rule`, `Validation_Report`, `Bulk_Validation_Report`, `Export_Validator`, `Card_Exporter` |
-| `catalog/rules` | `Category_Exists_Rule`, `Category_Mapped_Rule`, `Currency_Rule`, `Dictionary_Values_Rule`, `Dimensions_Rule`, `Images_Rule`, `Offer_Id_Rule`, `Required_Fields_Rule`, `Selling_Price_Rule`, `Variation_Group_Rule` |
-| `diagnostics` | `Report_Section`, `Support_Report`, `Why_Not_Syncing`, `Api_Error_Ring` |
+| Accounts store and settings | credential field definitions and their validation; display name of the external id |
+| Run model | error classification (auth refused → pause, throttled, retryable, permanent) |
+| Export / poll runners | card lifecycle reader for import results; export eligibility of a product |
+| Link jobs, remote-cards tab | link resolver (remote card listing by article/page) |
+| Catalog refresh | catalog refresher |
+| Price refresh | price reader (`from_marketplace` direction) |
+| Labels, cancel | label provider, cancel reasons and canceller |
+| Notifications | registrar, source policy, push type list |
+| Orders | order meta contract (already an interface in the plugin) |
+| Every page | merchant-facing marketplace name and menu icon |
 
-Transfer behavior and tests first; do not redesign queues during relocation. Refresh this
-inventory against the donor main at implementation time and account for every added symbol.
-Constructors accepting database/table names, clocks, ciphers and callbacks keep those inputs;
-the framework creates no plugin tables or cron hooks on load. Preserve ciphertext format,
-claim fencing, money units, task statuses and idempotency. Audit any translation literals
-separately: framework-owned translatable strings use the framework domain and catalogues,
-while plugin-specific status labels stay supplied by Ozon PHP.
+Adapter methods return domain contracts, never arrays shaped for one screen. Strings the
+adapter supplies are already translated in the plugin's text domain.
 
-Wiring obligations:
+## `Marketplace_Plugin` base class
 
-- Run [the class-map generator](../../bin/generate-class-map.php). It already scans all of
-  `woodev/` and includes classes, interfaces and traits; its namespace-directory validation
-  currently applies only to `Woodev\Framework\*`. Add an explicit
-  `Woodev\Marketplace\` → `woodev/marketplace/` naming rule and negative tests, rather than
-  allowing this namespace to bypass directory validation.
-- Add marketplace directories to `composer.json`'s development `autoload.classmap`, including
-  nested rules. The WordPress `class-*.php` convention is not Composer PSR-4 file naming.
-  Extend [ClassMapCompletenessTest](../../tests/unit/ClassMapCompletenessTest.php); verify a
-  real vendored boot with Composer disabled and two plugins sharing the winning copy.
-- Runtime remains [the selected framework autoloader](../../woodev/class-framework-autoloader.php).
-  Example map entry: `Woodev\Marketplace\Price\Money` →
-  `woodev/marketplace/price/class-money.php`. Do not add marketplace files to shipping's
-  eager include list; [ADR-012](../adr/012-shipping-includes-stays-authoritative.md) remains
-  scoped to shipping. Keep eager lists complete for any shipping file moved out of its tree.
-- Port donor `LayerDependencyTest`, its tokenizer scanner and negative fixtures. Forbid Ozon
-  symbols/string dependencies, plugin classes, framework imports, WordPress functions,
-  constants and classes except the `ABSPATH` entry guard and explicit `WC_Product`,
-  `WC_Order`, `wpdb` allowances. PHP standard types/functions and same-layer symbols are
-  allowed. Comments mentioning a marketplace are not dependencies. Scan every actual file,
-  including traits and new folders; never rely on an old fixed file-count threshold alone.
-- Move the fake second-marketplace contract tests with the layer: grouped orders in all
-  arrival orders, minor-unit money, asynchronous price acceptance/quarantine/duplicate tasks,
-  nullable card task ids, poll-only orders and stock key resolution. Preserve the existing
-  scanner's positive and negative controls, not just a green scan of the donor tree.
-
-## PHP registration API
-
-All signatures are PHP 7.4 sketches. Descriptor arrays below have validated documented shapes;
-they are not unchecked arrays copied directly to JS. Public/protected implementation methods
-need normal typed parameters, return types and PHPDoc. Pure descriptor builders are static.
-Framework admin infrastructure uses `Woodev\Framework\Admin`; settings types stay in
-`Woodev\Framework\Settings`.
+PHP 7.4 sketch. Like `Shipping_Plugin`, the constructor calls the parent, then its own
+`includes()` / `add_hooks()`; registration methods are private.
 
 ```php
-// Woodev\Framework\Admin
-final class Marketplace_Page_Registry {
-    public static function instance(): self;
-    public function register_menu( \Woodev_Plugin $plugin, array $menu ): void;
-    public function register_page( string $menu_id, array $page ): void;
-    public function get_page_url( string $page_id, array $query = [] ): string;
-}
+namespace Woodev\Framework\Marketplace;
 
-// Woodev\Framework\Admin\Records
-final class Records_Registry {
-    public static function instance(): self;
-    public function register( string $owner_id, Records_Provider $provider ): void;
-}
+abstract class Marketplace_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
+    /** The plugin's adapter (as carriers supply get_api()). */
+    abstract public function get_marketplace_adapter(): Capabilities\Marketplace_Adapter;
+
+    /** Menu root: id, title, icon, position, capability. */
+    abstract protected function get_marketplace_menu(): array;
+
+    /** Pages after «Настройки», in menu order. */
+    protected function get_marketplace_pages(): array { /* the framework's five pages */ }
+
+    /** Plugin React views for `custom` pages: handle => script handle. None by default. */
+    protected function get_marketplace_views(): array { return []; }
+
+    final public function get_marketplace_page_url( string $page_id, array $query = [] ): string;
+
+    /** Its own «Настройки» page; overrides Woodev_Plugin::get_settings_url(). */
+    public function get_settings_url( $plugin_id = null ): string;
+}
+```
+
+Ozon then declares data only:
+
+```php
+protected function get_marketplace_menu(): array {
+    return [
+        'id'         => 'ozon-seller',
+        'title'      => __( 'OZON Seller', 'woocommerce-ozon-seller' ),
+        'icon'       => $this->get_plugin_url() . '/assets/img/icon_square.svg', // v1 icon, restored from v1.1.7
+        'position'   => '55.63',                                               // v1 position
+        'capability' => 'manage_woocommerce',
+    ];
+}
+```
+
+`get_marketplace_pages()` defaults to the framework's five pages — `products`, `orders`,
+`mappings`, `tools`, `diagnostics` — each a `records` or `custom` descriptor whose providers
+the framework builds from the adapter. A plugin overrides it only to drop a page its
+marketplace cannot support (by capability) or to add one. Descriptor keys: `slug`, `title`,
+`kind` (`records` with table ids, or `custom` with a view handle), optional `capability`,
+optional `legacy_page`, and `analytics => null`.
+
+What the base owns, once per request and in one order for every marketplace:
+
+1. **Root.** `wc_admin_register_page()` with **no `parent`**, the menu's `icon`, `position`,
+   explicit `capability` and a plain `page_title`. Its `path` is the «Товары» page's path, so
+   the root opens Товары (B4). F2 verifies on the rig that PageController resolves the shared
+   path with the root and Товары highlighted; if it does not, the root gets its own path whose
+   route replaces history with Товары. No seventh dashboard page.
+2. **Children**, `parent` = the root's registered id: «Настройки» first (automatic when
+   `get_settings_providers()` is non-empty), then the pages in declared order. Paths are
+   built by the base as `/{menu id}/{slug}`, so PHP and the JS manifest cannot disagree.
+3. **Duplicate root submenu.** WordPress adds the root as its own first submenu entry; the
+   base removes that entry, matching only its own root slug (v1 did the same with
+   `unset( $submenu['ozon-seller'][0] )`).
+4. **Icon sizing.** An image-URL icon needs the 18 px rule v1 printed for
+   `.toplevel_page_…` (v1 `load_menu_styles()`); the base prints it for its own root only.
+5. **Manifest and routing.** PHP emits a capability-filtered page manifest (id, path,
+   breadcrumbs, kind, table ids or view handle, settings flag). One framework bundle reads it
+   and adds the routes through `woocommerce_admin_pages_list`. Plugin views register through
+   an `@wordpress/hooks` filter of that bundle; PHP never sends JS source.
+6. **Assets.** The framework bundle is enqueued on every registered wc-admin screen of the
+   menu (SPA navigation reaches siblings), from the winning framework copy, once even when two
+   marketplace plugins are active — an internal static collector, like
+   `Orders_Registry::instance()`. Plugin view scripts are enqueued alongside, by handle.
+7. **Providers.** Records providers of the declared pages are registered with the records
+   engine under the plugin id when REST routes initialise.
+8. **Legacy URLs.** Only released v1.1.7 URLs: a page descriptor's `legacy_page` (for Ozon
+   `page=ozon-seller` and `page=ozon-seller-products` → Товары, `page=ozon-seller-orders` →
+   Заказы) is matched with the same parsed-argument semantics as
+   `Settings_Page_Registry::maybe_redirect_legacy()`, after the capability check. The v1
+   settings link `wc-settings&tab=ozon-seller` is redirected by the existing settings mechanism
+   (`Settings_Provider::get_legacy_page()`) to the placement-aware tab URL. Unreleased v2 slugs
+   (`woodev-ozon-*`, the Woodev settings tab) get no redirect.
+9. **Missing wc-admin.** If WooCommerce Admin is unavailable the base shows a PHP-owned
+   notice; no classic fallback replaces the React screens.
+
+## Domain layer placement
+
+Move `includes/marketplace/<folder>/` to `woodev/marketplace/<folder>/` under
+`Woodev\Framework\Marketplace\<Folder>\*`; nested catalog rules keep `Catalog\Rules`.
+
+- Class map: [the generator](../../bin/generate-class-map.php) Rule 1 maps the segment after
+  `Woodev\Framework\` to the same-named directory unless aliased; `Marketplace` needs no alias.
+  Example: `Woodev\Framework\Marketplace\Price\Money` → `woodev/marketplace/price/class-money.php`.
+  Add the directories to `composer.json`'s development classmap; extend
+  [ClassMapCompletenessTest](../../tests/unit/ClassMapCompletenessTest.php); verify a vendored
+  boot with Composer disabled and two plugins sharing the winning copy. Runtime stays
+  [the framework autoloader](../../woodev/class-framework-autoloader.php). Marketplace files
+  never join shipping's eager list ([ADR-012](../adr/012-shipping-includes-stays-authoritative.md)).
+- Port the donor `LayerDependencyTest`, its tokenizer scanner and negative fixtures, scoped to
+  the domain folders. Allowed: PHP standard symbols, the `ABSPATH` guard, `WC_Product`,
+  `WC_Order`, `wpdb`, and the same-layer prefix `Woodev\Framework\Marketplace\`. Forbidden:
+  every other `Woodev\Framework\*` import, plugin classes, WordPress functions/constants/
+  classes, any concrete marketplace. Scan every file of those folders.
+- Move the fake second-marketplace contract tests with the layer (grouped orders in all
+  arrival orders, minor-unit money, asynchronous price acceptance/quarantine/duplicates,
+  nullable card task ids, poll-only orders, stock key resolution) with their positive and
+  negative controls.
+- One additive ledger read for the activity projection: open task items for a set of link
+  ids within one account (today `Task_Ledger` offers `items( int $task_id )` only). It is
+  added in F1 with its `Wpdb_Task_Ledger` implementation and tests; nothing else about queues
+  changes in F1.
+- Preserve ciphertext format, claim fencing, money units, task statuses and idempotency.
+
+## Settings placement
+
+Today `Settings_Page_Registry::register_page()` adds Woodev → Настройки,
+`get_tab_url()` always builds `admin.php?page=woodev-settings&tab=…`, and the React app mounts
+in `#woodev-settings-app`, fed by `woodev/v1/settings`. Change placement only:
+
+- `collect_entries()` already tests `$plugin instanceof Woocommerce_Plugin`; it also records
+  `placement` = the plugin's settings page id when `$plugin instanceof Marketplace_Plugin`.
+- The Woodev page (`register_page()`, `has_providers()`, `get_page_capability()`, its tab
+  list) counts only default-placement entries; a site with only marketplace plugins gets no
+  Woodev → Настройки entry from this registry.
+- `get_tab_url()` stays the one builder and becomes placement-aware: a marketplace provider's
+  tab URL is its «Настройки» page with `tab=<id>`. Default-placement URLs are byte-identical
+  to today's, so `Shipping_Plugin::get_settings_url()` and every delivery link are unchanged
+  without touching shipping files. `maybe_redirect_legacy()` targets the same builder and
+  also treats the marketplace settings route as a destination for its loop guard.
+- `GET woodev/v1/settings?placement=<page id>` lists that page's providers; omitted lists
+  the default set. Provider detail/save/tool routes, ids and capability checks are unchanged;
+  placement never grants access.
+- The settings React body becomes embeddable with bootstrap props (`placement`, `restRoot`,
+  `nonce`). Its fixed chrome strings stay where they are (Rule 9 exempts the fixed settings
+  UI; moving them would risk blank labels on the delivery plugins' settings page).
+- Ozon's `is_plugin_settings()` and `Key_Expiry_Notices` link move with the framework
+  settings code; option names, account ids, encrypted keys, masking and Save are unchanged.
+
+## Records engine
+
+Generic, in `Woodev\Framework\Admin\Records\*` and `src/admin-records/`; usable by any
+plugin, registered by the marketplace base for its pages.
+
+```php
+// Woodev\Framework\Admin\Records — the base class is the only caller in this plan.
 interface Records_Provider {
     public function get_id(): string;
-    public function get_definition(): array;
+    public function get_definition( array $context ): array;
     public function authorize( string $operation, array $context, array $ids ): bool;
     public function query( array $context, array $query ): array;
-    public function get_rows( array $context, array $ids ): array;
+    public function get_children( array $context, string $parent_id, array $query ): array;
     public function preview( array $context, string $action, array $ids, array $payload ): array;
     public function apply( array $context, string $action, array $ids, array $payload ): array;
     public function get_activity( array $context, array $ids ): array;
 }
 ```
 
-`owner_id` is the registered plugin id; table ids are unique within that owner. Duplicate
-registration is rejected with a developer diagnostic; a later plugin cannot replace another
-owner's table. The registry stores the actual owner object for capability and asset resolution.
-`authorize()` checks provider-specific context/object relationships; the controller also checks
-registered page/action capabilities and WP REST authentication. Missing authorizers fail closed.
-It returns `bool` so errors remain standard `WP_Error` responses at the controller boundary;
-domain code does not depend on `WP_Error`.
+Owner = plugin id; table ids are unique per owner; a duplicate is a developer diagnostic and
+never replaces another owner's table. `authorize()` returns `bool` so errors stay `WP_Error`
+at the controller; missing authorisation fails closed.
 
-Example composition from the plugin's admin initialization, before `admin_menu`:
+### Definition
 
-```php
-$pages = Marketplace_Page_Registry::instance();
-$pages->register_menu( $this, [
-    'id' => 'ozon-seller',
-    'title' => __( 'OZON Seller', 'woocommerce-ozon-seller' ),
-    'page_title' => __( 'OZON Seller', 'woocommerce-ozon-seller' ),
-    'path' => '/woodev-ozon',
-    'icon' => $this->get_menu_icon(),
-    'capability' => 'manage_woocommerce',
-    'landing_page' => 'ozon-products',
-] );
-Records_Registry::instance()->register( $this->get_id(), $products );
-$pages->register_page( 'ozon-seller', [
-    'id' => 'ozon-products',
-    'title' => __( 'Товары', 'woocommerce-ozon-seller' ),
-    'path' => '/woodev-ozon-products',
-    'kind' => 'records',
-    'tables' => [ 'site-products', 'remote-products' ],
-    'capability' => 'manage_woocommerce',
-    'analytics' => null,
-] );
-```
-
-The root is registered first using `wc_admin_register_page()` with **no `parent` key**.
-Pass its `icon`, optional integer `position`, explicit `capability` and plain `page_title`.
-For children pass `parent => 'ozon-seller'`, the registered id, not its title or a guessed
-WordPress menu slug: PageController resolves that id to `wc-admin&path=/woodev-ozon`.
-The root route delegates to `landing_page`; avoid creating a seventh dashboard. Register
-Настройки / Товары / Заказы / Сопоставление / Инструменты / Диагностика as children.
-Normalize WordPress's automatic duplicate root submenu entry after child registration so
-there are exactly six visible children; match only this registry's own root URL.
-The exact icon artwork, landing page and display ordering are Q1, not decided by this sketch.
-
-PHP emits a capability-filtered `pages` manifest containing id, path, breadcrumbs, owner,
-kind, table ids or settings mount, and actual WP menu identity. Generic JS iterates that
-manifest into `woocommerce_admin_pages_list`; PHP/JS paths must match byte-for-byte.
-Support `kind = records | settings | custom`. A `custom` page names a registered plugin React
-view (mappings editor, diagnostics, tools); this is a controlled component registry, never
-JS source from PHP. Its PHP schema still owns fields, actions, status labels and all copy.
-
-Enqueue on registered wc-admin screens so SPA navigation reaches sibling routes, following
-shipping's existing pattern; loading only when the initial URL matches one child breaks
-navigation. Use framework-owned versioned bundles and the winning framework's asset paths.
-Register client components once even when several plugins share the module. Plugins provide
-their custom-view handles explicitly; no Ozon imports enter the generic bundle. Show a
-PHP-owned unavailable message if WooCommerce Admin/components are missing. No classic-page
-fallback silently replaces the chosen React screens.
-
-## Table definition and row model
-
-`get_definition()` supplies a schema version, label, tab label, context fields, columns,
-filters, sort keys, pagination limits/defaults, row actions, bulk actions, messages, activity
-refresh policy and `analytics: null`. All user-facing strings include empty/error/loading
-states, selection labels, button titles, modal titles, progress accessibility text and
-confirmation text. Framework PHP provides common defaults, plugin PHP overrides domain
-wording. Count-dependent sentences arrive preformatted/pluralized in responses. JS has no
-Ozon/carrier code switches and no hardcoded fallback copy. Vendor controls retain their own
-translated intrinsic accessibility strings; expose their label override props where available.
-
-| Definition member | Shape / rule |
+| Member | Shape / rule |
 |---|---|
-| `context` | Required account selector where relevant; `id`, label, type, allowed options/default. No implicit first account for writes. Options expose only authorized accounts. |
-| `columns` | Ordered `id`, `label`, `cell_type`, optional `sort_key`, `required`, `visible`, alignment. Finite cell types: text, link, badge, number, date, stack, actions, progress. No arbitrary HTML or callable in JSON. |
-| `filters` | Ordered `id`, label, type (`search`, `select`, `multi_select`, `boolean`, `date_range`), options or registered local options source, allowed operators/default. Omitted boolean differs from false. |
-| `sorts` | Whitelisted keys and directions plus default; PHP maps keys to prepared datastore queries and adds a stable id tie-breaker. Client never submits SQL column names. |
-| `pagination` | `default_per_page`, `per_page_options`, `max_per_page`, `max_selection`; reject overflow, never silently truncate. Selection initially covers the visible page only. |
-| `row_actions` | Registered ids with label, icon, tone, capability, optional input-field schema, confirmation requirement, effect (`read` or `mutate`) and interaction (`link`, `submit`, `dialog`, `download`). Per-row availability comes from PHP. |
-| `bulk_actions` | Same identifiers/schema principles, always preview then confirm for mutations, `scope = selection` or `scope = account`, server maximum and scope sentence. An account-wide linking job must say it affects the account, even if launched beside selected rows. |
-| `activity` | Enabled source, `refresh_ms`, `max_refresh_ms`, `stale_after_ms`, authorized id limit. PHP determines policy; JS bounds requests and backs off on failure. |
-| `analytics` | Exactly null in this implementation; no request, visible placeholder or hidden computation. Future non-null format needs a separate design/card. |
+| `context` | Account selector where relevant: id, label, options limited to authorised accounts, default. No implicit first account for writes. |
+| `columns` | Ordered `id`, `label`, `cell_type`, optional `sort_key`, `required`, `visible`, alignment. Finite cell types: text, link, badge, number, date, stack, actions, progress. No HTML or callables. |
+| `filters` | Ordered `id`, label, type (`search`, `select`, `multi_select`, `boolean`, `date_range`), options or a registered local options source, default. Omitted boolean differs from false. |
+| `sorts` | Whitelisted keys and directions plus default; PHP maps keys to prepared queries with a stable id tie-breaker. |
+| `pagination` | `default_per_page`, `per_page_options`, `max_per_page`, `max_selection`; overflow is rejected, never truncated. |
+| `row_actions` / `bulk_actions` | Registered ids with label, tone, capability, optional input-field schema, `effect` (`read`/`mutate`), interaction (`link`, `submit`, `dialog`, `download`), `scope` (`selection`/`account`) and the scope sentence. Mutating bulk actions always preview then confirm. |
+| `children` | Optional: rows may expand into child rows (variations) read through `get_children()`, paged and bounded. |
+| `activity` | `refresh_ms`, `max_refresh_ms`, `stale_after_ms`, id limit. |
+| `messages` | Every application string: empty/error/loading, selection, buttons, modal titles, progress text. Count sentences arrive pluralised from PHP. |
+| `analytics` | Exactly `null`: no request, placeholder or computation. |
 
-Example PHP fragment (labels use the owning domain in the plugin, framework defaults use its domain):
+### Rows
 
-```php
-return [
-    'schema_version' => 1,
-    'label' => __( 'Товары сайта', 'woocommerce-ozon-seller' ),
-    'columns' => [
-        [ 'id' => 'product', 'label' => __( 'Товар', 'woocommerce-ozon-seller' ),
-          'cell_type' => 'link', 'sort_key' => 'title', 'required' => true ],
-        [ 'id' => 'state', 'label' => __( 'Состояние', 'woocommerce-ozon-seller' ),
-          'cell_type' => 'badge' ],
-        [ 'id' => 'activity', 'label' => __( 'Ход работы', 'woocommerce-ozon-seller' ),
-          'cell_type' => 'progress' ],
-    ],
-    'sorts' => [ 'allowed' => [ 'title' => [ 'asc', 'desc' ] ],
-                 'default' => [ 'key' => 'title', 'direction' => 'asc' ] ],
-    'analytics' => null,
-];
-```
+Opaque string ids, stable across sort/page, scoped by owner/table/context; a product-account
+pair is never identified by the WC product id alone. PHP resolves an id back to the canonical
+product/link/account before permission checks. Cells follow the declared type and are
+escaped; URLs are protocol-allowlisted. No credentials, claim tokens, task payloads or
+sensitive remote errors reach a row.
 
-Rows use opaque string ids, stable across sorting/paging and scoped by owner/table/context.
-A product-account pair is not identified by WC product id alone. PHP resolves a row id back
-to the canonical product/link/account before permission checks. Cell data follows the declared
-type: text; text plus safe URL; label plus semantic badge tone; formatted value plus numeric
-sort value; ISO date plus display/title text; or a bounded stack of these. Render text escaped;
-allowlist URL protocols and validate output shape server-side. No raw credentials, claim tokens,
-task payloads or remote errors containing sensitive request details reach this projection.
-
-Interactive cells reference declared actions and input schemas, including a boolean toggle
-or select if needed. Changing one submits the same guarded action path as a row button; it
-does not optimistically persist a new domain value. PHP returns the authoritative replacement
-row or a field error. For variations, use an optional bounded child-row read endpoint with
-the same identity, permission and activity model; the presentation remains Q2.
-
-## REST contract
-
-Use the existing `Woodev_REST_V1_Registrar`. New generic routes live under
-`woodev/v1/admin/records/{owner}/{table}` (`R` below). Registry lookup supplies the provider;
-the request cannot name a PHP class, arbitrary URL or callback. The owner/table namespace
-and schema version are distinct: `schema_version: 1` describes this payload.
-
-| Route | Request | Successful response |
-|---|---|---|
-| `GET R/definition` | Explicit context when the definition needs it | `{schema_version, definition, context}` filtered for the user; no secrets or callbacks |
-| `GET R` | `context[account_id]`, `page`, `per_page`, `search`, `sort`, `direction`, typed `filters` | `{rows, total, page, per_page, total_pages, facets, messages}`; totals/facets computed under the same authorized query |
-| `GET R/{id}/children` | Context, bounded page/per_page; only if declared | Same page envelope, child rows scoped to the resolved parent |
-| `POST R/actions/{action}/preview` | `{context, ids, payload}` | `{action, scope, requested, eligible, skipped, warnings, groups, messages, fields, confirm_label, can_apply, receipt:{id, expires_at}}`; no domain mutation, enqueue or remote call |
-| `POST R/actions/{action}` | `{context, ids, payload, confirmed: true, preview_id}` for previewed actions | `{status, rows, removed_ids, requested, accepted, skipped, failed, groups, messages}`; 200 completed/partial, 202 durably queued |
-| `POST R/activity` | `{context, ids}` of visible/expanded rows | `{rows, removed_ids, observed_at, refresh_after_ms, messages}` from local state; no remote calls |
-| `GET R/actions/{action}/fields/{field}/options` | Context, row id if required, search/cursor | `{options, next_cursor}`; only declared fields and authorized local providers |
-
-The preview may store only its short-lived confirmation receipt; it never changes domain
-records. `preview_id` is that receipt's opaque id. A missing/expired/mismatched receipt on
-a preview-required action is a 409 requesting a fresh preview. A simple non-destructive row
-action may run without a preview only when its PHP definition explicitly allows that.
-The single-row path uses `ids` with one member and the same planner/runner as bulk; the
-definition declares which actions allow one or many. Download actions resolve only registered,
-guarded resources, with fresh authorization at download time. Existing shipping document
-routes remain as described in the extraction section; do not proxy arbitrary URLs.
-
-`groups` hold server-built reason text, count, fix label/URL and bounded example title/URL
-pairs, compatible with Ozon's `Bulk_Validation_Report`/`Products_Bulk` output. `messages`
-can contain success, warning and error together. `accepted` means actually saved/queued,
-not remote completion; the server sentence makes that distinction explicit.
-
-Minimal TypeScript needed across this boundary:
+**Variable products (B4).** A variable product is a parent row with an expander; its
+variations are child rows read lazily through `get_children()`, each with its own state cell,
+actions and activity. Selecting a parent selects its eligible children; the server normalises
+parent/child selection to distinct domain targets so a variation is never processed twice.
 
 ```typescript
 type RowActivity = {
@@ -308,7 +318,7 @@ type RowActivity = {
   reason: string;
   blocked_actions: string[];
   processes: Array<{
-    id: string; // opaque observation identity, never a claim token
+    id: string; // opaque observation id, never a claim token
     state: 'queued' | 'running' | 'waiting' | 'failed' | 'completed';
     label: string;
     completed: number | null;
@@ -321,275 +331,210 @@ type RowActivity = {
 type AdminRecord = {
   id: string;
   revision: string;
-  cells: Record<string, unknown>; // narrowed by the finite cell schema at runtime
+  cells: Record<string, unknown>;
   actions: Array<{ id: string; enabled: boolean; reason: string }>;
   selectable: boolean;
+  has_children: boolean;
   activity: RowActivity;
 };
 ```
 
-Validation and permission rules apply to reads, previews, options, activity and writes:
+### REST
 
-- Authenticate WP REST cookie requests using the `wp_rest` nonce / `X-WP-Nonce`. A nonce is
-  not capability authorization. Require the registered page/action capability and the
-  provider's object/context checks. An authenticated alternative transport must receive
-  the same authorization, not a nonce-based bypass.
-- Validate owner/table/action, positive bounded pagination, sort enums, declared filters,
-  flat distinct id list, input types and length before any planner/query. Unknown fields
-  and unsupported operators fail with 400; invalid action fields use 422 with field ids
-  and PHP messages. Apply the declared maximum on the server; do not slice requests.
-- Resolve each selected id within its declared account/table, check object capabilities
-  (`edit_product`, including variation-parent rules; orders need both `edit_shop_orders`
-  and `edit_shop_order`) and compare stored account identity. Account existence alone is
-  insufficient. An account forged alongside another account's row must fail before writes.
-  Unknown/inaccessible resources use a consistent 404 policy without disclosing existence;
-  a known authorized action refused by current lock/state uses 409.
-- Reuse Ozon `Admin_Guard`'s policy and account lookup; factor a transport-neutral check for
-  REST. Do not call its current `require_ajax()` from REST: it reads the classic page nonce
-  and exits through `wp_send_json_*`. Retain classic nonce adapters for embedded screens.
-- Preview is advisory. Apply replans with the same service and rechecks locks immediately
-  before each write/enqueue. Business skips (already synchronized, now locked, no valid
-  payload) return grouped reasons; authorization/schema failure rejects before processing
-  the batch. Genuine per-item failures are reported separately from intentional skips.
-- Repeated confirms do not duplicate work: provider runners reuse the existing task/hash,
-  intent revision or compare-and-set semantics. JS disables submit while pending, but
-  correctness also holds for duplicate HTTP requests. Do not automatically retry mutations
-  after a network timeout; refresh activity first and present the PHP recovery message.
-- Errors are WP REST `{code, message, data:{status, errors?}}`. Show PHP messages without
-  reconstructing them from codes. SQL/transport details belong in redacted diagnostics.
-  Private authenticated responses are not shared-cacheable.
+Through the existing `Woodev_REST_V1_Registrar`, routes under
+`woodev/v1/admin/records/{owner}/{table}` (`R`). The request never names a class, URL or
+callback.
 
-Changing payload, selection or account invalidates a preview and requires a fresh preview.
-If apply finds changed eligibility, preserve the existing planner's skip semantics; if the
-action would expand its scope or increase an account-wide affected set beyond the confirmed
-plan, return 409 with a fresh preview and ask for confirmation again. The implementation must
-bind confirmed scope/upper bound to the authenticated user and normalized request (short-lived
-server receipt), never trust client-supplied counts. This receipt is not a reservation or lock.
-
-## Row lock and progress source
-
-`get_activity()` is a local, batched read projection for the ids on screen. Ozon's adapter
-joins task items and task state, link state, sync-state revisions/in-flight snapshots and
-account claim state; the table engine knows none of their field names. It must also project
-work started by cron, webhook, another manager or a previous browser session. Reading the
-page or activity must not claim a job, poll the marketplace API or queue new work.
-
-| Source | Projection and enforcement |
-|---|---|
-| Export task/items | Queued/submitted/polling means active even with no current worker lease. Show the server's phase label per record, and measured item counts only where meaningful. Block conflicting mutations through the existing export/link service as well as UI. |
-| Stock/price send | Pending and unresolved `in_flight_rev` identify the affected link/kind/warehouse; show each active process. An HTTP acceptance is not completion for asynchronous receipts. Use the existing account-fenced flusher and pending-revision rules. |
-| Account claim | Unexpired account claim blocks the conflicting action family on affected rows; supply a PHP reason. Do not treat an unrelated read as a mutation or freeze another account. The provider owns the conflict matrix. |
-| Shipping editor | Keep `Order_Edit_Lock` and its heartbeat renewal/release behavior; expose its current disabled-action reason through the shipping adapter. Do not substitute marketplace claims for the existing editor lock. |
-| Browser request | Immediately mark that row/action pending; reconcile from the returned activity. This transient state ends on response/error and does not release a durable lock. |
-
-`locked` with `blocked_actions` disables conflicting action controls and the selection checkbox
-where a selected bulk action cannot operate. Keep read-only details/links available when
-authorized. Explain the lock with visible/accessibly associated PHP text, not color alone.
-Multiple processes can coexist: a single percentage must not hide another unresolved send.
-When no meaningful total exists, `percent`, `completed`, `total` are null and the indicator
-is indeterminate; never manufacture elapsed-time percentages. Failures show server text and
-only server-authorized recovery actions.
-
-Projection does not introduce a second mutex. Every actual mutation uses the domain's existing
-conditional writes/claim fencing; add a common missing eligibility check in that service if
-needed, including callers from embedded screens and jobs. Keep the stock/price domain's
-ability to record newer intents during a send; blocking a conflicting manual UI action must
-not discard product-save changes. A live claim is a temporary execution lease; a task awaiting
-remote settlement remains active after claim expiry. A stale claim never authorizes the
-browser to clear an in-flight snapshot. Recovery uses the existing guarded tool/service.
-
-One bounded refresh loop per mounted table covers visible rows and expanded children, using
-PHP-supplied cadence. Stop when hidden/unmounted, abort obsolete reads on query/context change,
-and refresh on visibility/focus return. After failures back off to the declared maximum;
-mark state stale with PHP copy and keep conflicting controls disabled until refreshed. A
-table without fresh activity on first load cannot offer mutations. No permanent polling
-starts for `analytics: null`.
-
-Use request generation and per-row operation ownership from the shipping application: an
-old request cannot replace rows after account/filter/page navigation, a completed older
-operation cannot clear a newer row's pending state, and a stale activity request cannot
-overwrite a row just returned by apply. Invalidate overlapping reads on mutation; accept
-replacement rows only for the current context, then refresh totals/facets as needed. Selection
-clears on view change; select-all affects eligible visible rows only. Rows removed by a
-changed state/filter are reconciled without retaining hidden selected ids.
-
-## Extraction from shipping without delivery-plugin behavior changes
-
-The shipping table is not PHP-driven end to end today. `app.tsx` builds headers, base bulk
-actions, confirmation fallbacks and status presentation in JS; `filters.ts` names shipping
-query keys. PHP already supplies row actions, action fields, provider identities, flags and
-many result messages. Extract mechanics while giving new marketplace consumers a fully
-PHP-declared contract. Move shipping declarations to a shipping PHP adapter only with parity
-tests; do not claim that re-exporting `OrdersPage` creates the generic component.
-
-| Existing source | Shared extraction | Stays shipping-specific |
+| Route | Request | Response |
 |---|---|---|
-| `app.tsx`: loading, request generations, row operation owners, selection, `ActionsCell`, bulk/dialog plumbing | `src/admin-records/`: data lifecycle, schema cell renderers, action/selection/progress shell | Shipping cells, carrier toolbar, order preview, wizard entry, printing/document flow |
-| `filters.ts`, period picker, table sort/paging callbacks | Schema-based URL codec and control orchestration; retain omission versus false | Shipping URL param names, period semantics, advanced all/any matching, carrier/new-order scope |
-| `rest.ts`, action input/modal helpers | Authenticated transport/error presentation; generic input schema where genuinely neutral | Existing route/envelope types, carrier field options, document and toolbar adapters |
-| `Orders_Registry`, `Orders_Provider`, `Orders_Query`, `Order_Row_Builder`, `Order_Actions` | A shipping `Records_Provider` adapter calls these services and supplies the neutral projection | Provider marker/meta contracts, carrier registration, query scoping, status mapping, export/cancel rules |
-| `Order_Edit_Lock`, `Export_Queue_Notice`, `exports-in-progress.tsx` | Neutral disabled reason/progress presentation where applicable | Existing edit-lock ownership/heartbeat and page-wide export count/notice |
-| `src/components/records-table.tsx`, `record-rows.ts` | No wholesale extraction: separate JSON settings control | Stored JSON format, whole-settings Save, country sorting and main-row invariant |
-| `src/shipping-orders-page/analytics/**`, analytics PHP classes | None needed for marketplace | Existing analytics tab, WooCommerce report registration, queries/cache remain working |
+| `GET R/definition` | context | `{schema_version, definition, context}` filtered for the user |
+| `GET R` | `context[account_id]`, `page`, `per_page`, `search`, `sort`, `direction`, typed `filters` | `{rows, total, page, per_page, total_pages, facets, account_activity, messages}` |
+| `GET R/{id}/children` | context, page, per_page | same envelope, children of the resolved parent |
+| `POST R/actions/{action}/preview` | `{context, ids, payload}` | `{action, scope, requested, eligible, skipped, warnings, groups, messages, fields, confirm_label, can_apply}`; no mutation, enqueue or remote call |
+| `POST R/actions/{action}` | `{context, ids, payload, confirmed: true}` | `{status, rows, removed_ids, requested, accepted, skipped, failed, groups, messages}`; 200 done/partial, 202 queued |
+| `POST R/activity` | `{context, ids}` of visible/expanded rows | `{rows, removed_ids, account_activity, observed_at, refresh_after_ms, messages}` from local state only |
+| `GET R/actions/{action}/fields/{field}/options` | context, row id if needed, search, cursor | `{options, next_cursor}` from declared local sources |
 
-Retain WooCommerce's runtime `TableCard` through the existing `wc-components` handle and
-ambient type bridge. Keep WordPress's bundled React/element and framework modal shell;
-do not add another React or WooCommerce bundle. The upstream `TableCard` row API does not
-offer arbitrary row attributes in the inspected bridge: preserve the current scoped busy-row
-marker/CSS technique until verified, and render progress in an accessible cell. Do not invent
-an unsupported `rowProps` API. Reuse the modal focus/close behavior; never `window.confirm()`.
-These are reuse recommendations, subject to Q3's reference/compatibility gate.
+**Apply replans; there is no preview receipt.** Apply rebuilds the plan from current state
+with the same planner as preview (Ozon's `Products_Bulk::preview()` / `apply()` already
+work this way) and returns the actual counts and groups. Changed eligibility shows up as
+grouped skips in the response. The account-wide «Связать по артикулу» job states its account
+scope in the preview; it is idempotent, so a grown count between preview and apply is
+harmless. A simple non-destructive row action may skip the preview only when its PHP
+definition says so; one row uses the same path with one id.
 
-Staged cutover:
+`groups` carry server-built reason text, count, fix label/URL and bounded examples
+(compatible with `Bulk_Validation_Report`). `accepted` means saved or queued, never remote
+completion; the server sentence says so.
 
-1. Establish characterization cases on the current shipping routes and UI; introduce the
-   neutral primitives and a fixture records provider without altering the shipping entry.
-2. Make the shipping adapter supply PHP definitions/strings and convert existing REST
-   results into neutral rows in its internal data adapter. Existing public routes and
-   JSON envelopes remain byte-compatible; do not route clients to a renamed endpoint.
-3. Adopt the shared interaction primitives inside the shipping shell. Specialized shipping
-   renderers remain an explicit internal slot, not marketplace schema types. Keep existing
-   JS imports/entry registration paths until the bundle migration is verified.
-4. Preserve `/woodev-shipping-orders`, carrier/scope/date/filter query params, legacy page
-   redirects, `woodev/v1/shipping/orders` routes, all `woodev_shipping_*` hooks and current
-   capabilities. Keep `[shipping] includes()` and generated build wiring consistent.
-5. Verify all six live delivery plugins from their current release contracts: carrier counts
-   follow filters; HPOS and CPT lists stay scoped; single/bulk export/update/cancel, edit-lock
-   skips, wizard save, action fields, toolbar dialogs, asynchronous single/bulk documents,
-   export heartbeat and both analytics entry points behave as before. Include third-party
-   extra actions and absent optional sources. No plugin gets a new required method.
+### Validation and permissions
 
-No marketplace analytics module is extracted as a side effect. Shipping's already shipped
-analytics is explicitly preserved. If extraction cannot preserve one shipping interaction,
-keep that interaction in the shipping shell and extract a smaller primitive.
+- WP REST cookie auth with the `wp_rest` nonce; a nonce is not authorisation. Require the
+  page/action capability plus the provider's object/context check.
+- Validate owner/table/action, bounded pagination, sort enums, declared filters, a flat
+  distinct id list and input types before any query or planner. Unknown fields → 400;
+  invalid action fields → 422 with field ids and PHP messages; the declared maximum is
+  enforced on the server.
+- Resolve each id within its declared account/table; check object capabilities
+  (`edit_product` with variation-parent rules; orders need `edit_shop_orders` and
+  `edit_shop_order`); compare stored account identity. A forged account beside another
+  account's row fails before writes. Unknown/inaccessible → consistent 404; a known
+  authorised action refused by current state → 409 with the PHP reason.
+- The framework `Admin_Guard` (moved from Ozon) gets a transport-neutral check for REST; its
+  `require_ajax()` (classic nonce, exits through `wp_send_json_*`) stays for embedded screens.
+- Repeated confirms never duplicate work: runners reuse task hashes, intent revisions and
+  compare-and-set. JS disables submit while pending; mutations are never retried after a
+  timeout — activity is refreshed and the PHP recovery message shown.
+- Errors are WP REST `{code, message, data:{status, errors?}}`; JS shows PHP messages and
+  never rebuilds them from codes. Responses are private and not shared-cacheable.
 
-## Settings mounts under plugin menus
+## Activity, locks and progress
 
-Today `Settings_Page_Registry::register_page()` calls `add_submenu_page( 'woodev', … )`,
-`get_tab_url()` always builds `admin.php?page=woodev-settings&tab=…`, and the React app mounts
-in `#woodev-settings-app`. Schema/values arrive from `woodev/v1/settings`; providers declare
-sections/actions and existing stores own saving. Change placement and hosting, not that model.
+`get_activity()` is a local, batched read for the ids on screen. It also shows work started
+by cron, a push, another manager or an earlier session. Reading never claims a job, calls the
+marketplace or queues work.
 
-```php
-// Woodev\Framework\Settings
-final class Settings_Page_Mount {
-    public static function marketplace( string $menu_id, string $page_id, string $path ): self;
-}
+| Source | Granularity | Projection |
+|---|---|---|
+| Link state (`В очереди` / `Отправлен` / `Создаётся`, Ozon `State_Badge`) | row | Locks the actions that conflict with the pending export; state label from PHP. |
+| Task items (export/import tasks) | row | Queued/submitted/polling is active even with no live lease; measured counts only where meaningful. Read through the additive ledger query (F1). |
+| Stock/price `in_flight_rev` and pending revisions | row (link/kind/warehouse) | One process per active send; HTTP acceptance is not completion for asynchronous receipts. |
+| Account claim (`Claimable::acquire()`, TTL 120 s, renewed while a run is alive) | **account** | `account_activity`: one PHP line on the page («по аккаунту идёт фоновая работа») and the list of account actions that themselves take the claim synchronously (for example «Сбросить зависшие задачи», migration re-run), which are disabled. No row lock and no 409 on apply: product actions only set flags or seed intents and are fenced inside the runners. |
+| Browser request | row | Pending from submit until response; never releases a durable lock. |
 
-// Additive methods on Settings_Page_Registry; existing methods remain valid.
-public function mount_plugin( \Woodev_Plugin $plugin, Settings_Page_Mount $mount ): void;
-public function get_mount_tabs( string $mount_id ): array;
-public function get_provider_url( string $provider_id ): string;
+Locked rows disable only the blocked actions and the checkbox for an action they cannot take;
+read-only details stay available. The reason is visible text, not colour alone. Several
+processes can coexist; one percentage never hides another send. No measurable total → null
+counts and an indeterminate indicator; no elapsed-time percentages. A stale claim never
+authorises the browser to clear an in-flight snapshot; recovery goes through the guarded tool.
 
-Settings_Page_Registry::instance()->mount_plugin(
-    $this,
-    Settings_Page_Mount::marketplace( 'ozon-seller', 'ozon-settings', '/woodev-ozon-settings' )
-);
-```
+One bounded refresh loop per mounted table covers visible rows and expanded children at the
+PHP cadence; it stops when hidden, aborts obsolete reads on context change, backs off on
+failure, and marks state stale with PHP copy (conflicting controls stay disabled). Request
+generations and per-row operation ownership (the technique in the shipping app's
+`app.tsx`) keep an old response from overwriting newer rows.
 
-Call after the base class's existing `register_plugin( $this )`, before menu registration.
-The mount id is the registered page id. One placement per plugin's provider set; absent mount
-means the existing `woodev` default. Providers are still registered once through the base;
-`mount_plugin()` changes their placement metadata, not their identity or persistence. Registry
-collection must be invalidated if a mount is attached after entries were cached. Reject a
-mount owned by another plugin or repeated conflicting mounts. Do not duplicate Ozon tabs in
-Woodev. The marketplace registry adds the settings child once, using the settings mount;
-the default registry registers the classic Woodev wrapper only for default-mount providers.
+## Delivery page: reference, not source
 
-Reuse the existing settings React body as an embeddable component for the wc-admin settings
-route, with explicit bootstrap props (`mount`, `restRoot`, `nonce`, PHP string map) rather than
-another hardcoded DOM id/global. Keep the existing standalone mount for default Woodev users.
-Generic page routing chooses the settings component from the PHP manifest. For the new reusable
-mount, move common UI strings into the PHP string map; preserve current fixed-page behavior
-while eliminating JS-owned marketplace copy.
+The records engine is written new, using the shipping page as a worked example of the
+mechanics it needs. Nothing is imported from or changed in it.
 
-`GET /settings?mount=ozon-settings` returns only authorized providers placed there. Omitted
-mount lists the default Woodev set. Existing provider detail/save/tool routes retain their
-paths, provider identifiers and capability checks; mount cannot grant access. If supplied,
-validate provider membership too. Keep provider/action authorization on every handler even
-when a user knows a hidden tab id. Default mount capabilities still use the existing per-provider
-WooCommerce/neutral resolution; marketplace parent visibility never grants settings writes.
+| Look at (read-only) | For |
+|---|---|
+| `src/shipping-orders-page/app.tsx` | request generations, row operation owners, selection, bulk/dialog plumbing |
+| `src/shipping-orders-page/filters.ts`, `period-picker.tsx` | URL codec and filter orchestration, omission versus false |
+| `src/shipping-orders-page/rest.ts`, `action-input*.ts(x)` | authenticated transport, error display, action input modal |
+| `woodev/shipping-method/admin/orders/class-orders-registry.php` | wc-admin page registration, `title`/`page_title` split, enqueue on wc-admin screens |
+| `exports-in-progress.tsx`, `Order_Edit_Lock` | progress and disabled-reason presentation |
+| [the filter-width gotcha](../gotchas/woocommerce-gives-its-filter-picker-a-fixed-430px.md) | the same scoped vendor correction for the new filter row |
 
-Make `get_tab_url()` delegate to the placement-aware URL resolver; update its callers,
-including `Woodev_Plugin::get_settings_url()`, required-settings notices, plugin action links,
-tools and wizard links. Old default URLs continue to work. An old Ozon
-`woodev-settings&tab=<provider>` deep link redirects to its mount with the tab/section intact,
-only after capability checks; preserve existing unrelated legacy redirects. Option names,
-account ids, encrypted keys, validation, secret masking and Save behavior are unchanged.
+Invariants for every card in this plan:
+
+- No file under `src/shipping-orders-page/` or `woodev/shipping-method/` changes. A card's
+  acceptance includes `git diff --name-only origin/main...HEAD -- src/shipping-orders-page woodev/shipping-method`
+  printing nothing.
+- A shared component the delivery page imports (`src/components/**`) is used as is; if it needs
+  a change, that change is a separate card with its own delivery check.
+- Q3 ruling: keep WooCommerce's runtime `TableCard` through the existing `wc-components`
+  handle and the WordPress modal; no DataViews, no bundled `@woocommerce/components`, no
+  `window.confirm()`. F2 and F5 verify against the declared minimum and the current WC.
 
 ## Ozon Seller migration
 
-1. Complete framework extraction and contract tests, release through the ordinary feature
-   version process. Do not raise `VERSION` in this design PR. Record the first containing
-   release before changing Ozon's bundled framework and loader compatibility floor. Remove
-   Ozon autoloader handling and duplicate files for `Woodev\Marketplace`; classes must come
-   only from the winning framework. Test mixed copies/activation order without Composer.
-2. Replace classic `Admin_Menu` registration for stand-alone pages with the framework
-   marketplace registry. Preserve legacy public admin slugs through guarded redirects to
-   the canonical wc-admin paths. Keep embedded product tab/order metabox handlers and their
-   nonce contracts. Redirects preserve account/tab/filter context where it has an equivalent.
-3. Replace the classic `Products_Page`/`Site_Products_Table` presentation with a PHP records
-   provider and the generic React table. Reuse `Site_Products_Reader` and
-   `Site_Products_Filter` for account-scoped WC queries, variable-product matching, inherited
-   stock and cached remote values. Add sort support in that query service where declared;
-   do not client-sort a single fetched page as if it were the whole dataset.
-4. Reuse `Products_Bulk::preview()` / `apply()`, export validation, `Bulk_Validation_Report`,
-   existing export enqueue/seeder/link scheduler and warehouse validation. Translate their
-   envelopes at the REST boundary; do not implement a JS planner. Add strict REST guards,
-   process projection and confirmed-scope receipt. `link_by_article` remains account-wide
-   and its preview must make that scope explicit; other selection actions keep their scope.
-5. Keep `site` and `ozon` tab ids, default-to-site for unknown tabs, and the
-   `woodev_ozon_seller_products_tabs` extension seam. Evolve tab objects to supply a records
-   provider/schema instead of `render()`; do not keep classic HTML as a React tab body.
-   Update the merged `Ozon_Cards_Tab`, queries/resolver/cache, import/link actions and any
-   consumers of that filter in the same plugin card. A domain refresh is an explicit
-   guarded job/action; a table GET never fetches the remote catalogue.
-6. Keep classic AJAX action names where they are installed-site contracts or still have
-   classic callers, using thin adapters to the same services. Remove the obsolete
-   `products.js`, CSS and HTML rendering only once no caller needs them. This does not
-   authorize deleting installed hook/action names during a UI rewrite.
-7. Build W4-2 orders directly as a React records provider, not another `WP_List_Table`.
-   Reuse the existing order registry/writer, posting store, label jobs/download guard and
-   cancellation reasons; require HPOS/CPT parity. Labels remain a registered download/job
-   interaction, not a generic JS remote call.
-8. Convert mappings/profiles, diagnostics and tools to PHP-driven React custom views using
-   existing PHP input parsers, query services and action runners. Reuse guards for every
-   endpoint; preserve logging-off diagnostic visibility and redacted reports. Mount the
-   existing settings providers beneath OZON Seller and update spec/wiki to match the new UI.
+Ozon v2 has not been released (only `v1.1.7` is tagged), so intermediate states on its `main`
+are fine; the v2 release waits for the last O-card. Each O-card needs a released framework
+version containing the F-cards it consumes; it bumps the bundled framework and the loader
+floor to that version.
 
-The classic products screen is replaced, not retained as an operator-facing alternative.
-No migration step renames persistent option/meta/table keys, REST intake namespaces, cron
-hooks, account/link/task identities or licence instances. New admin REST routes are additive.
+1. **O1 — adopt.** `Plugin extends Marketplace_Plugin`; rewrite `Woodev\Marketplace\` →
+   `Woodev\Framework\Marketplace\` in `includes/` and `tests/` (about 300 files on `5d00c10`)
+   as one mechanical commit; delete `includes/marketplace/` and the autoloader prefix
+   (`class-autoloader.php`); delete `Admin_Menu`/`Admin_Page`; restore
+   `assets/img/icon_square.svg` from `v1.1.7`; declare the menu and v1 legacy pages; start an
+   `Ozon_Adapter` that implements the contract from existing pieces. Settings move under the
+   menu automatically (the old O7). No data migration: no class name is persisted.
+2. **O2 — switch to framework persistence and jobs.** Delete the plugin copies of everything
+   F8/F9a/F9b moved; keep only the adapter halves (client factory, error classification, card
+   builder/lifecycle, link resolver, catalog fetcher/refresher, pushers, readers, posting
+   source/mapper/refresher/catch-up/canceller, label calls, push decoder/types/IP policy/
+   registration). Retarget the v1 migration to the framework stores and supply its write gate.
+3. **O3 — switch settings, diagnostics and embedded screens.** Delete plugin settings
+   sections, diagnostics classes, the product tab and the cancel modal; supply credential
+   fields, push registration specifics and report sections through the adapter.
+4. **O4 — switch the stand-alone pages.** Delete the classic products/mappings/tools/
+   diagnostics pages, their AJAX handlers, views, `products.js`, CSS and the
+   `woodev_ozon_seller_products_tabs` filter (all unreleased v2). Supply only Ozon-specific
+   cells, wording and search sources the framework pages ask the adapter for.
+5. **O5 — specification, wiki and acceptance.** Update the Ozon spec §7–8 and wiki to the new
+   architecture; full v2 acceptance on the rig (two accounts, variations, export/link/stock/
+   price/orders/labels, v1 migration from a `v1.1.7` dataset).
 
-## Verification and open questions
+Nothing renames installed v1 contracts: the v1 webhook route, v1 tables read by the migration,
+v1 option names and the v1 admin URLs above keep working. New admin REST routes are additive.
 
-Implementation evidence includes PHP 7.4 syntax/static analysis, unit/contract tests, Jest
-interaction tests, TypeScript checks, i18n gates, production bundle parity and real WC-admin
-browser passes. Important cases: two accounts with the same product id, another manager's
-claim, queued work after lease expiry, uncertain stock/price sends, duplicate confirms,
-account change during a slow request, missing/failed activity, navigation Back/Forward,
-partial bulk failures, expired preview receipt, no JS-only eligibility and no analytics calls.
-Check keyboard access, disabled-action explanations, modal focus restoration, live progress
-announcements and the filter row at laptop widths; retain the scoped vendor width correction
-described in [the shipping filter gotcha](../gotchas/woocommerce-gives-its-filter-picker-a-fixed-430px.md).
+## Verification
 
-- **OPEN QUESTION Q1 — menu presentation.** The operator has chosen the menu and six child
-  screens, not supplied final artwork or a preferred landing screen/order. Recommendation:
-  root opens Товары, use the order stated in #1675, and review the plugin's existing icon
-  at WP sidebar size. Confirm these presentation choices with the operator; examples above
-  do not settle them. Routing/menu-highlight behavior is mandatory regardless of the choice.
-- **OPEN QUESTION Q2 — variable products in the React table.** Recommendation: preserve the
-  current parent row with expandable variations, lazy bounded child pages and per-child
-  activity. The generic contract supports children, but choose the precise row layout and
-  progress placement with the operator before product UI work. Parent/child selection must
-  normalize to distinct domain targets so a variation is never processed twice.
-- **OPEN QUESTION Q3 — supported component versions.** The local WC donor path and Context7
-  were unavailable, so upstream/installed sources support a reuse recommendation, not a
-  supported-version guarantee. Recommendation: retain shipping's existing TableCard/modal
-  stack, consult Context7 when available and test the declared minimum WP/WC plus current
-  WC for top-level navigation/highlighting, SPA settings mount, intrinsic labels and progress
-  accessibility. Do not raise minimum versions or add DataViews silently; any demonstrated
-  incompatibility needs a separate decision with the measured failing case.
+Implementation evidence: PHP 7.4 syntax/static analysis, unit and contract tests, Jest
+interaction tests, TypeScript checks, i18n gates, production bundle parity, and real wc-admin
+browser passes. Cases: two accounts with the same product id, another manager's claim, queued
+work after lease expiry, uncertain stock/price sends, duplicate confirms, account change during
+a slow request, missing/failed activity, Back/Forward, partial bulk failures, expandable
+variations with independent progress, no JS-only eligibility and no analytics calls. Keyboard
+access, disabled-action explanations, modal focus restoration, live progress announcements
+and the filter row at laptop widths. For every F-card: the delivery-untouched diff above is
+empty, and the Woodev → Настройки page of a delivery plugin renders as before.
+
+Open questions Q1–Q3 of round 1 are settled: Q1 and Q2 by the operator (B4), Q3 as the critic
+ruled (the version gate sits in F2/F5).
+
+## Implementation card plan
+
+Filing briefs for the coordinator, not filed cards. S/M/L are relative size. Model tiers follow
+the project rule (Haiku 5.5 for bounded work with a detailed brief, Sonnet 5.5 for routine
+work against this plan, Fable 5 for the hardest correctness work, one Fable worker at a time).
+Every card gets a critic of another lineage and carries the delivery-untouched invariant. No
+card implements analytics.
+
+### Framework
+
+| Id | Size · tier | Depends on | Scope · files · acceptance |
+|---|---|---|---|
+| F1 — Domain layer transfer | L · Sonnet 5.5 | review of this design; reconcile #1670 | Move the refreshed `includes/marketplace/` inventory to `woodev/marketplace/<folder>/` as `Woodev\Framework\Marketplace\*`, with its tests, scoped scanner and fixtures, class map, Composer classmap; add the one ledger read (open items for link ids, by account). Accept: donor parity tests green, scanner positive/negative controls, no-Composer and two-copy boot, PHP 7.4. |
+| F2 — `Marketplace_Plugin` and pages | L · Sonnet 5.5 | F1 | `woodev/marketplace/class-marketplace-plugin.php`, `woodev/marketplace/admin/` (internal collector, manifest), `src/marketplace-admin/` (routing bundle, view filter). Accept: root without `parent` with icon/position, landing on Товары with correct highlight, six children in the B4 order, duplicate root entry removed, direct and SPA navigation, two marketplace plugins → one bundle and no menu clash, v1 legacy URLs redirect, Q3 routing checks on minimum and current WC. |
+| F3 — Settings placement | M · Sonnet 5.5 | F2 | `woodev/settings-page/class-settings-page-registry.php` and the settings React body. Accept: marketplace providers appear only under their menu; default-placement URLs byte-identical; Woodev page unchanged for delivery plugins; `placement` list scoping; per-provider save/tool guards; legacy redirect lands on the placement-aware URL; no string moves. |
+| F4 — Records PHP schema and REST | L · Sonnet 5.5 | review | `woodev/admin/records/`. Finite descriptors, owner registry, children route, strict query/action/option contracts, no receipt. Accept: two fake independent providers, forged account/id, invalid filters/sorts, oversized lists rejected before work, apply replans. |
+| F5 — Records React shell | L · Fable 5 | F2, F4 | `src/admin-records/`. Render PHP cells/strings/actions, URL round trips, expandable children, stale-read protection, error/empty states, keyboard access; no domain-code switches; Q3 TableCard/label checks. |
+| F6 — Preview and action interactions | M · Sonnet 5.5 | F4, F5 | Input schemas, row actions, bulk report/confirm, guarded downloads, duplicate-submit behaviour. Accept: preview changes nothing; account-wide scope stated; partial results keep server reasons; apply returns replanned counts. |
+| F7 — Activity contract | M · Sonnet 5.5 | F4, F5 | `RowActivity` and `account_activity` with a fixture provider: locked, blocked actions, several processes, indeterminate, stale, back-off, unseen-origin work after reload, read links stay available. No marketplace source in this card. |
+| F8 — Persistence | L · Sonnet 5.5 | F1, F2 | Schema, lifecycle (install/upgrade as a `Woodev_Lifecycle` the base installs), uninstall, `Wpdb_*` stores for accounts, links, mappings, profiles, snapshots, catalog cache, postings, documents, throttle, API errors; neutral column/enum names; credential fields from the adapter. Accept: per-plugin table prefix, encrypted secrets never in `wp_options`, store contract tests moved from Ozon green. |
+| F9a — Run model, intake, stock and price | L · Fable 5 | F8 | Account run, job gate, claim fence, pause, first-remote-write, licence gate; event intake REST route, drain, handler registry; stock intents/flusher/readback/accounting; price intents/flush/recompute/refresh; adapter error classification. Accept: Ozon's claim-fencing, idempotency and concurrency tests moved and green against a fake adapter; no remote call at request time. |
+| F9b — Catalog, export, link, orders, labels flows | L · Sonnet 5.5 | F9a | Export service and batch runner, poll runner, link jobs, catalog refresh, posting jobs, label jobs/store/download, order query/store. Accept: moved tests green against a fake adapter; every marketplace rule found is an adapter method. |
+| F10 — Settings sections and diagnostics | M · Sonnet 5.5 | F3, F8, F9a | Accounts/notifications/advanced sections, account status, key-expiry notices, transport-neutral `Admin_Guard`, diagnostics report builder/queue health/logging; debug-only diagnostics stay behind «Логирование». Accept: settings render from adapter fields; secrets masked; report redacted. |
+| F11 — Embedded classic screens | M · Sonnet 5.5 | F8, F9b | Product tab and variation panel, order cancel metabox, both order stores. Accept: classic, nonce-guarded, adapter-named; HPOS and CPT. |
+| F12a — «Товары сайта» provider | L · Sonnet 5.5 | F5–F7, F9b | Site products reader/filter/bulk planner/state badge as a records provider; variations as children; row locks from link state, task items, in-flight revisions; account line. Accept: B4 variation rows, 12 bulk actions with validation report, warehouse choice, no client-side sort of one page. |
+| F12b — Remote cards tab | M · Sonnet 5.5 | F12a | The marketplace-cards table (snapshot, guarded refresh job, import, «Связать с…» with a WC product search). Accept: a table GET never calls the marketplace; account-wide linking scope stated. Split from F12a because both tabs together exceed one worker's 2–3 rounds (R1 finding 9); it sits in the framework because the products page is generic now. |
+| F13 — Orders provider | L · Sonnet 5.5 | F5–F7, F9b | Orders records page: filters, date/sort/page, per-row activity, label download, cancel with reasons; HPOS and CPT. |
+| F14 — Mappings and profiles view | L · Sonnet 5.5 | F2, F4, F8 | Custom React view over the moved mapping/profile inputs and validators; category search over `Catalog_Schema`; uniqueness/inheritance and guarded writes; embedded product tab unaffected. |
+| F15 — Tools and diagnostics views | M · Haiku 5.5 | F6, F7, F10 | PHP-defined tools (account choice, preview/confirm, result, progress) and the diagnostics view with the report copy; claim-taking tools disabled while the account claim is held. |
+
+Parallelism: F1 and F4 start together; F2 → F3; F5 after F2+F4; F6/F7 after F5; F8 → F9a →
+F9b; the page cards F12a–F15 after their listed foundations. Framework releases are cut at
+natural seams (after F1–F3, after F8–F9b, after F10–F15) so the O-cards can follow.
+
+### Ozon Seller
+
+| Id | Size · tier | Depends on | Scope · acceptance |
+|---|---|---|---|
+| O1 — Adopt base and namespace | M · Sonnet 5.5 | released F1–F3 | Migration step 1. Accept: menu with the v1 icon lands on Товары, settings under the menu, mixed-copy activation works, no persistent contract changed. |
+| O2 — Persistence and jobs on the framework | L · Sonnet 5.5 | released F8–F9b, O1 | Step 2. Accept: plugin keeps only adapter halves; Ozon's job/store tests either moved to the framework or retargeted; v1 migration green from a `v1.1.7` dataset. |
+| O3 — Settings, diagnostics, embedded screens | M · Sonnet 5.5 | released F10–F11, O2 | Step 3. Accept: accounts settings with Ozon credential fields; push section; product tab and cancel metabox through the framework. |
+| O4 — Stand-alone pages | M · Sonnet 5.5 | released F12a–F15, O3 | Step 4. Accept: no classic stand-alone screen left; only Ozon-specific cells/wording/search sources remain in the plugin. |
+| O5 — Spec, wiki, acceptance | M · Haiku 5.5 | O4 | Step 5. Accept: spec/wiki match the code; rig acceptance list passes. |
+
+Changes from round 1: F8 (shipping adoption) removed; O7 folded into O1; O2a/O2b moved into
+the framework as F12a/F12b (the split stays, for size); the old O3–O6 screens became framework
+cards F13–F15 with Ozon-side switch-overs in O3/O4; F8–F11 are new transfer cards required by
+B6.
 
 ## Related
 
@@ -597,37 +542,5 @@ described in [the shipping filter gotcha](../gotchas/woocommerce-gives-its-filte
 - [Architecture](architecture.md) — current module and settings responsibilities
 - [Agent rules](../AGENT-RULES.md) — Rule 9 and preservation rules
 - [ADR-007](../adr/007-react-admin-stack-wordpress-scripts.md) — runtime/build conventions
-- [ADR-012](../adr/012-shipping-includes-stays-authoritative.md) — include wiring during extraction
+- [ADR-012](../adr/012-shipping-includes-stays-authoritative.md) — shipping include list
 - [Schema](../DOCS-SCHEMA.md) — internal documentation conventions
-
-## Implementation card plan
-
-These are filing briefs for the coordinator, not newly filed or authorized implementation
-cards. Check existing framework #1670 and related donor gap cards before creating duplicates;
-reuse/update a settled matching card. S/M/L describe relative delivery size, not elapsed time.
-Every code card carries normal framework/plugin checks, review and relevant author-skill updates.
-No card implements marketplace analytics.
-
-| Order / id | Size | Dependencies | Scope and acceptance |
-|---|---|---|---|
-| 1 · F1 — Transfer marketplace module | L | ADR review; reconcile #1670 | Transfer the full refreshed inventory and portable tests; enforce dependency/naming scanner, Composer and generated runtime maps; donor parity, PHP 7.4 and no-Composer/two-copy boot pass; no table, cipher or queue behavior changes. |
-| 2 · F2 — Marketplace menu/page registry | M | ADR review; Q1 presentation before final UI | PHP manifest and wc-admin root/child registration, owner isolation, generic client routing and custom-view registration; own icon/menu, six children, correct highlight and direct/SPA navigation, explicit capabilities, no duplicate menu/bundle with two marketplace plugins. Resolve Q3's routing reference/version checks here. |
-| 3 · F3 — Scoped settings mounts | M | F2 | Add mount API, embedded settings body and PHP strings; own-menu settings only, default Woodev providers unchanged, list/schema scoping and per-provider save/tool guards; generated and legacy links resolve correctly; secret masking/storage/Save unchanged. |
-| 4 · F4 — Records PHP schema and REST | L | ADR review; F1 only for marketplace fixture | Implement finite descriptors, owner registry, authorization and strict query/action/option contracts; fake independent providers prove no shipping/marketplace coupling; forged account/id, invalid filters/sorts and oversized lists rejected before work. |
-| 5 · F5 — Generic records React shell | L | F2, F4 | Extract mechanical table/filter/sort/page/request/selection primitives; render PHP cells/strings/actions, URL round trips, stale-read protection, error/empty states and keyboard access; no domain-code switches or new table dependency. Resolve Q3's TableCard/label checks. |
-| 6 · F6 — Preview and action interactions | M | F4, F5 | Input schemas, row actions, bulk report/confirm and guarded downloads; confirmed-scope receipt, replan and duplicate-submit behavior; preview changes no domain state, account-wide scope explicit, partial results retain server reasons, changed scope requires new confirmation. |
-| 7 · F7 — Activity/lock/progress projection | M | F4, F5; F1 for marketplace fixture | Batched local activity adapter, bounded refresh and row indicators; export queued/polling, stock/price in flight and account claim tested; unseen-origin work/reload works, stale state disables conflicts, read links remain available, no API polling or fake percentages. |
-| 8 · F8 — Shipping adoption and parity | L | F5–F7 | Shipping PHP/internal REST adapter and primitive adoption; characterize and verify six current delivery-plugin contracts, HPOS/CPT, hooks/URLs, extra actions, fields, documents, wizard, edit locks, heartbeat and existing analytics; no required carrier API changes, map/eager-list/build/i18n gates green. |
-| 9 · O1 — Adopt framework module/menu | M | F1, F2 and released containing framework version | Update bundle/compatibility floor, delete duplicate layer/autoload ownership, register pages and canonical/legacy links; mixed-copy activation works and persistent contracts untouched; coordinate with O2/O3 so root has no dead landing page. |
-| 10 · O2 — React products, both tabs | L | O1, F4–F7, Q2 | Replace classic screen with generic providers; reuse reader/filter, bulk planner/report, export/seeder and remote-card resolver/import/link logic; evolve tab registry and callers, handle variations/locks/progress, prove cached list reads, guarded refresh and account-wide linking scope; remove obsolete presentation only. |
-| 11 · O3 — W4-2 orders in React | L | O1, F4–F7; existing posting/label services | Implement original orders requirements with provider/PHP schema, filters, date/sort/page and per-row activity; label tasks/download, cancel reasons, banner and both order stores pass; no classic stand-alone orders screen. |
-| 12 · O4 — React mappings and profiles | L | O1, F2; F4/F5 for list portions | Keep merged mapping/profile input and validation/query services; PHP fields/options/actions drive custom React editor and validator report, category uniqueness/inheritance and guarded writes remain; embedded product tab unaffected. |
-| 13 · O5 — React diagnostics | M | O1, F2 | PHP operational/report projection and custom React view; logging-off exposes only allowed operational state, logging-on enables existing diagnostic sections, copy/report remains redacted, guard/expiry/licence/migration states covered. |
-| 14 · O6 — React tools | M | O1, F2, F6/F7 interaction primitives | Reuse existing tools and job runners; PHP-defined account choice, preview/confirmation, result and progress; whole-catalogue jobs remain paged/background, overwrite/reset/migration actions guarded; no JS business rules. |
-| 15 · O7 — Settings under OZON Seller | M | O1, F3 | Mount existing providers, update notice/wizard/tool links and spec/wiki; no duplicate Woodev tab, old tab links redirect, accounts/secrets/values and tests preserved; confirm Q1 artwork/ordering without inventing new settings. |
-
-F1 and F2/F4 can start independently after review. F8 is the delivery-regression gate for
-releasing the shipping cutover; O2/O3 can develop against reviewed generic contracts before
-that release, but O1 ships only with a released containing framework. O4–O7 may proceed in
-parallel once their listed foundations exist. Each plugin card must also update the superseded
-spec sections/wiki for its screen and retain classic embedded-screen behavior.
