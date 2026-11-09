@@ -1,4 +1,5 @@
 # Docs Index — Woodev Plugin Framework
+
 > Navigation hub for AI agents — open it when you need to find a document, not at session start.
 > `docs-internal/` — internal technical documentation (not published).
 > Freshness: `git log -1 --format=%ad --date=short -- <file>`.
@@ -185,6 +186,7 @@ read them before starting another (next due: s230), so a fixed contradiction is 
 |------|---------|
 | `adr/README.md` | ADR index |
 | `adr/001` … `adr/012` | Bootstrap loader · plugin-type inheritance (002 partly superseded by 005 — the metadata bridge only; inheritance still holds) · minimal resolver · loader API · **005 clean-break policy** · capability-gated feature seam · React admin stack · conditional-fields operator set · map-provider seam (source, not library) · Yandex Maps JS API 2.1 not 3.0 · vendored IMask + generated phone masks · shipping `includes()` stays authoritative |
+| [ADR-013](adr/013-marketplace-layer-and-react-admin-in-the-framework.md) | Marketplace module (`Woodev\Framework\Marketplace`, `Marketplace_Plugin` base) and PHP-driven React admin; detailed API and ordered implementation plan in [the marketplace design](wiki/marketplace-admin.md) |
 
 ## Migration / Wiki / Autodev
 
