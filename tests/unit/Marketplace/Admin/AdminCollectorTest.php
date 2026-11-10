@@ -14,7 +14,6 @@ namespace Woodev\Tests\Unit\Marketplace\Admin;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Marketplace\Admin\Admin_Collector;
-use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/Test_Marketplace_Plugin.php';
@@ -194,14 +193,14 @@ final class AdminCollectorTest extends TestCase {
 		$this->collector->register_menus();
 	}
 
-	public function test_the_duplicate_root_entry_in_the_global_submenu_is_marked(): void {
+	public function test_the_copy_of_the_root_is_removed_from_the_global_submenu_and_no_entry_is_hidden(): void {
 		$this->collector->register_plugin( $this->plugin( 'ozon-seller' ) );
 		$root = $this->collector->get_menus()['ozon-seller']->get_root_slug();
 
 		$GLOBALS['submenu'] = [
 			$root => [
 				[ 'OZON-SELLER', 'manage_woocommerce', $root, 'OZON-SELLER' ],
-				[ 'T', 'manage_woocommerce', $root, 'T' ],
+				[ 'T', 'manage_woocommerce', 'wc-admin&path=/ozon-seller/products', 'T' ],
 				[ 'Orders', 'manage_woocommerce', 'wc-admin&path=/ozon-seller/orders', 'Orders' ],
 			],
 			'woocommerce' => [ [ 'Home', 'manage_woocommerce', 'wc-admin', 'Home' ] ],
@@ -209,9 +208,38 @@ final class AdminCollectorTest extends TestCase {
 
 		$this->collector->clean_up_submenus();
 
-		$this->assertSame( Menu::ROOT_ENTRY_CLASS, $GLOBALS['submenu'][ $root ][0][4] );
-		$this->assertArrayNotHasKey( 4, $GLOBALS['submenu'][ $root ][1] );
+		$this->assertSame(
+			[ 'wc-admin&path=/ozon-seller/products', 'wc-admin&path=/ozon-seller/orders' ],
+			array_column( $GLOBALS['submenu'][ $root ], 2 ),
+			'no copy of the root: the root links to the first page'
+		);
+
+		foreach ( $GLOBALS['submenu'][ $root ] as $entry ) {
+			$this->assertCount( 4, $entry, 'no entry is marked with a class' );
+		}
+
 		$this->assertCount( 1, $GLOBALS['submenu']['woocommerce'], 'a menu that is not ours is left alone' );
+	}
+
+	public function test_each_root_loses_only_its_own_copy_when_two_plugins_share_the_submenu(): void {
+		$this->collector->register_plugin( $this->plugin( 'ozon-seller' ) );
+		$this->collector->register_plugin( $this->plugin( 'wildberries' ) );
+		$menus = $this->collector->get_menus();
+		$ozon  = $menus['ozon-seller']->get_root_slug();
+		$wb    = $menus['wildberries']->get_root_slug();
+
+		$this->assertNotSame( $ozon, $wb );
+		$this->assertNotSame( $menus['ozon-seller']->get_root_dom_id(), $menus['wildberries']->get_root_dom_id() );
+
+		$GLOBALS['submenu'] = [
+			$ozon => [ [ 'O', 'manage_woocommerce', $ozon, 'O' ], [ 'T', 'manage_woocommerce', 'wc-admin&path=/ozon-seller/products', 'T' ] ],
+			$wb   => [ [ 'W', 'manage_woocommerce', $wb, 'W' ], [ 'T', 'manage_woocommerce', 'wc-admin&path=/wildberries/products', 'T' ] ],
+		];
+
+		$this->collector->clean_up_submenus();
+
+		$this->assertSame( [ 'wc-admin&path=/ozon-seller/products' ], array_column( $GLOBALS['submenu'][ $ozon ], 2 ) );
+		$this->assertSame( [ 'wc-admin&path=/wildberries/products' ], array_column( $GLOBALS['submenu'][ $wb ], 2 ) );
 	}
 
 	public function test_the_menu_styles_are_printed_for_every_root(): void {
@@ -222,8 +250,9 @@ final class AdminCollectorTest extends TestCase {
 		$this->collector->print_menu_styles();
 		$css = (string) ob_get_clean();
 
-		$this->assertStringContainsString( '#toplevel_page_wc-admin-path--ozon-seller-products .wp-menu-image img', $css );
-		$this->assertStringContainsString( '#toplevel_page_wc-admin-path--wildberries-products .wp-menu-image img', $css );
+		$this->assertStringContainsString( '#toplevel_page_wc-admin-path--ozon-seller .wp-menu-image img', $css );
+		$this->assertStringContainsString( '#toplevel_page_wc-admin-path--wildberries .wp-menu-image img', $css );
+		$this->assertStringNotContainsString( 'display:none', $css );
 	}
 
 	/**

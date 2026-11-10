@@ -9,10 +9,14 @@
 
 namespace Woodev\Framework\Marketplace;
 
+use Woodev\Framework\Marketplace\Account\Account_Store;
+use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Admin\Admin_Collector;
 use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Framework\Marketplace\Admin\Page;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
+use Woodev\Framework\Marketplace\Data\Schema;
+use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Settings\Settings_Provider;
 
 defined( 'ABSPATH' ) || exit;
@@ -86,9 +90,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		abstract protected function get_marketplace_menu(): array;
 
 		/**
-		 * The pages after «Настройки», in menu order. The default is the framework's five; a plugin overrides it to drop a page its
+		 * The pages besides «Настройки», in menu order. The default is the framework's five; a plugin overrides it to drop a page its
 		 * marketplace cannot support, to add one, or to attach `legacy_page` URLs to a default (call the parent, then change the
-		 * array). «Настройки» is not listed: it comes first, by itself, when the plugin has settings providers.
+		 * array). «Настройки» is not listed: the framework adds it, by itself, when the plugin has settings providers — first while
+		 * {@see self::is_configured()} is false, last once it is true.
 		 *
 		 * A descriptor has `slug`, `title`, `kind` (`records` with `tables`, `custom` with `view`), optional `capability`, optional
 		 * `legacy_page` (one v1 admin URL or a list; a bare value is the `page` argument) and `analytics => null`, the reserved slot.
@@ -130,6 +135,63 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 					'view'  => 'diagnostics',
 				],
 			];
+		}
+
+		/**
+		 * Whether the plugin has an account it can work with: at least one account of its adapter whose required credentials — the
+		 * identifier and every secret {@see Capabilities\Marketplace_Adapter::credential_fields()} declares — are all filled in.
+		 * The merchant's on/off switch and the last health check are not part of it: a switched-off or failing account is
+		 * configured, just not working, and says so on its own screen.
+		 *
+		 * The menu reads it to decide the order of its pages (see {@see self::build_menu()}), and the base plugin shows its
+		 * "not configured" notice, which links to {@see self::get_settings_url()}, while it is false. It reads the accounts table once
+		 * (a handful of rows, decrypted locally) and makes no remote call, so it is fit to run on every admin page.
+		 * It is not memoised: the base class reads it again on `admin_footer`, after a settings save of the same request.
+		 *
+		 * @since 2.0.29
+		 *
+		 * @return bool
+		 */
+		public function is_configured(): bool {
+			$adapter  = $this->get_marketplace_adapter();
+			$fields   = $adapter->credential_fields();
+			$required = array_merge( [ $fields->identifier() ], $fields->secrets() );
+
+			foreach ( $this->get_account_store()->all( $adapter->id(), false ) as $account ) {
+				$credentials = $account->credentials();
+
+				foreach ( $required as $name ) {
+					if ( '' === trim( (string) ( $credentials[ $name ] ?? '' ) ) ) {
+						continue 2;
+					}
+				}
+
+				return true;
+			}
+
+			return false;
+		}
+
+		/**
+		 * The plugin's account store, the one {@see self::is_configured()} reads. The secrets are opened with the site's
+		 * `secure_auth` salt, the key material {@see Secret_Cipher} names as its example; a plugin whose accounts are
+		 * encrypted with another key overrides this one method.
+		 *
+		 * @since 2.0.29
+		 *
+		 * @return Account_Store
+		 */
+		protected function get_account_store(): Account_Store {
+			global $wpdb;
+
+			$adapter = $this->get_marketplace_adapter();
+
+			return Wpdb_Account_Store::for_adapter(
+				$wpdb,
+				( new Schema( $adapter->id() ) )->table_name( 'accounts', $wpdb->prefix ),
+				new Secret_Cipher( wp_salt( 'secure_auth' ) ),
+				$adapter
+			);
 		}
 
 		/**
@@ -220,14 +282,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 */
 		private function build_menu(): ?Menu {
 			try {
-				$pages = [];
-
-				if ( [] !== $this->get_settings_providers() ) {
-					$pages[] = $this->build_settings_page();
-				}
+				$pages    = [];
+				$settings = [] !== $this->get_settings_providers() ? [ $this->build_settings_page() ] : [];
 
 				foreach ( $this->get_marketplace_pages() as $descriptor ) {
 					$pages[] = Page::from_array( (array) $descriptor );
+				}
+
+				// WordPress links the root to the first page of the menu: «Настройки» (onboarding) until the plugin is configured,
+				// the working pages first once it is. Without a settings page the order cannot change, so the table is not read.
+				if ( [] !== $settings ) {
+					$pages = $this->is_configured() ? array_merge( $pages, $settings ) : array_merge( $settings, $pages );
 				}
 
 				return new Menu( $this->get_id(), $this->get_marketplace_menu(), $pages, $this->get_marketplace_views() );

@@ -172,7 +172,8 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		}
 
 		/**
-		 * Marks the duplicate root entry WordPress put into each submenu, see {@see Menu::mark_root_entry()}.
+		 * Removes the copy of the root WordPress put into each submenu, see {@see Menu::remove_root_entry()}. After every
+		 * registration and before core picks the root's link from the first entry that is left (`wp-admin/includes/menu.php`).
 		 *
 		 * @internal
 		 *
@@ -191,13 +192,13 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 				$slug = $menu->get_root_slug();
 
 				if ( isset( $submenu[ $slug ] ) && is_array( $submenu[ $slug ] ) ) {
-					$submenu[ $slug ] = $menu->mark_root_entry( $submenu[ $slug ] ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the submenu is the menu API's data.
+					$submenu[ $slug ] = $menu->remove_root_entry( $submenu[ $slug ] ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the submenu is the menu API's data.
 				}
 			}
 		}
 
 		/**
-		 * Prints the icon rule and the hidden-entry rule of every menu.
+		 * Prints the icon rule of every menu.
 		 *
 		 * @internal
 		 *

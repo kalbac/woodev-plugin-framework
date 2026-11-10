@@ -7,8 +7,10 @@
 
 namespace Woodev\Tests\Unit\Marketplace\Admin;
 
+use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Account_Store;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin.php';
@@ -36,6 +38,9 @@ final class Test_Marketplace_Plugin extends Marketplace_Plugin {
 	/** @var array<string,string> */
 	private $views;
 
+	/** @var Fake_Account_Store|null */
+	private $account_store;
+
 	/**
 	 * @param string                              $plugin_id       Plugin id.
 	 * @param array<string,mixed>                 $menu_definition The menu definition.
@@ -59,6 +64,24 @@ final class Test_Marketplace_Plugin extends Marketplace_Plugin {
 	 */
 	public function build_lifecycle_handler(): void {
 		$this->init_lifecycle_handler();
+	}
+
+	/**
+	 * The plugin's accounts. Empty until a test saves one, so a fresh double is a plugin that is not configured yet.
+	 *
+	 * @return Fake_Account_Store
+	 */
+	public function accounts(): Fake_Account_Store {
+		if ( null === $this->account_store ) {
+			$this->account_store = new Fake_Account_Store();
+		}
+
+		return $this->account_store;
+	}
+
+	/** @return Account_Store */
+	protected function get_account_store(): Account_Store {
+		return $this->accounts();
 	}
 
 	/** @return Marketplace_Adapter */

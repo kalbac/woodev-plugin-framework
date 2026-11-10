@@ -29,11 +29,6 @@ if ( ! class_exists( Menu::class, false ) ) :
 		public const DEFAULT_CAPABILITY = 'manage_woocommerce';
 
 		/**
-		 * Marks the root's own entry in its submenu so a stylesheet can hide it.
-		 */
-		public const ROOT_ENTRY_CLASS = 'woodev-marketplace-root-entry';
-
-		/**
 		 * WooCommerce turns a registered path into the `page` value of the menu entry: `wc-admin&path=<path>`
 		 * (`PageController::register_page()`). The root entry's slug, its DOM id and its submenu entries all derive from it.
 		 */
@@ -188,14 +183,16 @@ if ( ! class_exists( Menu::class, false ) ) :
 		}
 
 		/**
-		 * The page the root opens: «Товары»; a menu without it opens its first page.
+		 * The page the root opens: the menu's first page. WordPress links a top-level entry to the first entry of its submenu
+		 * (`_wp_menu_output()`), so the order the plugin builds the menu in decides it: «Настройки» while the plugin is not
+		 * configured, «Товары» once it is (`Marketplace_Plugin::build_menu()`).
 		 *
 		 * @since 2.0.29
 		 *
 		 * @return Page
 		 */
 		public function get_landing_page(): Page {
-			return $this->pages[ Page::LANDING_SLUG ] ?? reset( $this->pages );
+			return reset( $this->pages );
 		}
 
 		/**
@@ -211,14 +208,16 @@ if ( ! class_exists( Menu::class, false ) ) :
 		}
 
 		/**
-		 * The root's router path: the landing page's own, so the root opens «Товары».
+		 * The root's router path: `/{menu id}`, a container of its own that no page shares — the way WooCommerce's `woocommerce`
+		 * root is a container, not a page. WordPress copies the root into its submenu as the first entry; that copy is removed
+		 * ({@see self::remove_root_entry()}), and the root then links to the first real page.
 		 *
 		 * @since 2.0.29
 		 *
 		 * @return string
 		 */
 		public function get_root_path(): string {
-			return $this->get_page_path( $this->get_landing_page() );
+			return '/' . $this->id;
 		}
 
 		/**
@@ -308,39 +307,25 @@ if ( ! class_exists( Menu::class, false ) ) :
 		}
 
 		/**
-		 * Marks the root's own submenu entry, so a stylesheet can hide it.
+		 * Removes the copy of the root that WordPress puts into its submenu.
 		 *
-		 * WordPress copies the root into its submenu as the first entry as soon as another entry is added under it. The root's
-		 * path is «Товары»'s path, so that copy is a second «Товары» that carries the menu's title. It is MARKED, not removed:
-		 * the root's link is the first submenu entry's link (`_wp_menu_output()`), and with the copy gone the root would open
-		 * «Настройки», the first visible entry.
-		 *
-		 * When the root's slug appears once there is no copy (nothing sits before «Товары») and nothing is marked.
+		 * `add_submenu_page()` files the root as the first entry of its own submenu as soon as the first child is added. It has
+		 * the root's slug, which no page shares ({@see self::get_root_path()}), so it is a second line carrying the menu's title.
+		 * WooCommerce removes the same copy of its own root with `unset( $submenu['woocommerce'][0] )`
+		 * (`WC_Admin_Menus::menu_order_count()`); this removes the entry by its slug instead of by position, so a menu where
+		 * WordPress made no copy loses nothing. The root then links to the first entry that is left (`_wp_menu_output()`).
 		 *
 		 * @since 2.0.29
 		 *
 		 * @param array<int|string,array<int,string>> $entries The root's entries in `$submenu`.
 		 * @return array<int|string,array<int,string>>
 		 */
-		public function mark_root_entry( array $entries ): array {
-			$slug  = $this->get_root_slug();
-			$count = 0;
-
-			foreach ( $entries as $entry ) {
-				if ( isset( $entry[2] ) && $slug === $entry[2] ) {
-					++$count;
-				}
-			}
-
-			if ( $count < 2 ) {
-				return $entries;
-			}
+		public function remove_root_entry( array $entries ): array {
+			$slug = $this->get_root_slug();
 
 			foreach ( $entries as $key => $entry ) {
 				if ( isset( $entry[2] ) && $slug === $entry[2] ) {
-					$entries[ $key ][4] = self::ROOT_ENTRY_CLASS;
-
-					return $entries;
+					unset( $entries[ $key ] );
 				}
 			}
 
@@ -348,7 +333,7 @@ if ( ! class_exists( Menu::class, false ) ) :
 		}
 
 		/**
-		 * CSS for this root: the icon at the size WordPress gives its own, and the hidden duplicate entry.
+		 * CSS for this root: the icon at the size WordPress gives its own.
 		 *
 		 * An image-URL icon is drawn at its natural size unless the rule is printed (v1 printed the same 18 px rule). It is
 		 * scoped to this root's id, so another marketplace's icon is not touched.
@@ -360,8 +345,7 @@ if ( ! class_exists( Menu::class, false ) ) :
 		public function build_menu_css(): string {
 			$root = '#' . $this->get_root_dom_id();
 
-			return $root . ' .wp-menu-image img{width:18px;height:18px;opacity:.6}'
-				. $root . ' .' . self::ROOT_ENTRY_CLASS . '{display:none}';
+			return $root . ' .wp-menu-image img{width:18px;height:18px;opacity:.6}';
 		}
 
 		/**
