@@ -588,18 +588,20 @@ final class FakeMarketplaceAdapterTest extends TestCase {
 	public function test_the_contract_exposes_the_policy_answers(): void {
 		$contract = new \ReflectionClass( Marketplace_Adapter::class );
 
+		// Method => array( type name, nullable ).
 		foreach ( array(
-			'price_source'   => '?' . \Woodev\Framework\Marketplace\Price\Price_Source::class,
-			'price_cadence'  => Sync_Cadence::class,
-			'stock_cadence'  => Sync_Cadence::class,
-			'article_policy' => Article_Policy::class,
-			'export_rules'   => 'array',
-			'stock_policy'   => Stock_Policy::class,
-		) as $method => $type ) {
+			'price_source'   => array( \Woodev\Framework\Marketplace\Price\Price_Source::class, true ),
+			'price_cadence'  => array( Sync_Cadence::class, false ),
+			'stock_cadence'  => array( Sync_Cadence::class, false ),
+			'article_policy' => array( Article_Policy::class, false ),
+			'export_rules'   => array( 'array', false ),
+			'stock_policy'   => array( Stock_Policy::class, false ),
+		) as $method => $expected ) {
 			$this->assertTrue( $contract->hasMethod( $method ), $method );
 			$return = $contract->getMethod( $method )->getReturnType();
-			$this->assertNotNull( $return, $method );
-			$this->assertSame( $type, ( $return->allowsNull() && 'array' !== $type ? '?' : '' ) . ltrim( (string) preg_replace( '/^\?/', '', (string) $return ), '\\' ), $method );
+			$this->assertInstanceOf( \ReflectionNamedType::class, $return, $method );
+			$this->assertSame( $expected[0], ltrim( $return->getName(), '\\' ), $method );
+			$this->assertSame( $expected[1], $return->allowsNull(), $method . ' nullability' );
 		}
 	}
 
