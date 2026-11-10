@@ -6734,3 +6734,23 @@ msgstr ""
 #: assets/build/settings-page/index.js:5
 msgid "страна не входит в доставку — на оформлении не показывается"
 msgstr ""
+
+#: admin/records/class-records-error.php:34
+msgid "Некорректный параметр запроса."
+msgstr ""
+
+#: admin/records/class-records-error.php:55
+msgid "Выбрано больше записей, чем разрешено для этой таблицы."
+msgstr ""
+
+#: admin/records/class-records-error.php:56
+msgid "Запрошено больше строк, чем разрешено для этой таблицы."
+msgstr ""
+
+#: admin/records/class-records-error.php:74
+msgid "Запись не найдена."
+msgstr ""
+
+#: admin/records/class-records-error.php:89
+msgid "Недостаточно прав для этого действия."
+msgstr ""
