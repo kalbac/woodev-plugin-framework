@@ -223,6 +223,20 @@ final class SchemaTest extends TestCase {
 	}
 
 	/**
+	 * Remote identifiers are compared byte for byte, not under the site's case-insensitive collation: `shop-A` and `shop-a` are two
+	 * identifiers.
+	 *
+	 * @return void
+	 */
+	public function test_remote_identifier_name_and_value_are_binary(): void {
+		$columns = $this->parse( ( new Schema( 'fake' ) )->statements( self::PREFIX, '' )[ self::FAKE . 'link_ids' ] )['columns'];
+
+		foreach ( [ 'id_name', 'id_value' ] as $column ) {
+			$this->assertStringContainsString( 'CHARACTER SET utf8mb4 COLLATE utf8mb4_bin', $columns[ $column ], $column );
+		}
+	}
+
+	/**
 	 * The enum defaults are neutral words, not a marketplace's.
 	 *
 	 * @return void

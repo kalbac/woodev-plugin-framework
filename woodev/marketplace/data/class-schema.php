@@ -244,7 +244,10 @@ final class Schema {
 	/**
 	 * The remote identifiers of a link, one row per name, whatever names the adapter uses (`product_id`, `nmID`, …). `id_value` is
 	 * text and `id_type` (`i` or `s`) says whether the caller gave an integer or a string, so a value comes back as it went in.
-	 * `account_id` repeats the link's account so that the lookup by identifier is one indexed read.
+	 * `account_id` repeats the link's account so that the lookup by identifier is one indexed read. Name and value are compared
+	 * byte for byte (`utf8mb4_bin`, charset spelled out so a site on another charset still accepts it): the site's usual collation
+	 * is case-insensitive and would make `shop-A` and `shop-a` one identifier. `dbDelta` reads only the type and the default, so
+	 * the clause does not make a second run change anything.
 	 *
 	 * @param string $table   Full table name.
 	 * @param string $charset Charset clause.
@@ -254,8 +257,8 @@ final class Schema {
 		return "CREATE TABLE {$table} (
 			link_id bigint(20) unsigned NOT NULL,
 			account_id bigint(20) unsigned NOT NULL,
-			id_name varchar(32) NOT NULL,
-			id_value varchar(191) NOT NULL,
+			id_name varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+			id_value varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
 			id_type char(1) NOT NULL DEFAULT 's',
 			PRIMARY KEY  (link_id,id_name),
 			KEY account_lookup (account_id,id_name,id_value)

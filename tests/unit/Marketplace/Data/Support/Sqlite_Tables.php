@@ -125,6 +125,9 @@ final class Sqlite_Tables {
 			$sqlite = 'TEXT';
 		}
 
+		// MySQL's per-column charset and binary collation: SQLite compares text byte for byte already.
+		$rest = (string) preg_replace( '/ CHARACTER SET \w+| COLLATE \w+/', '', $rest );
+
 		return $name . ' ' . $sqlite . $rest;
 	}
 }

@@ -351,7 +351,7 @@ What the code settled in `woodev/marketplace/data/` (`Woodev\Framework\Marketpla
 - **Neutral names.** Accounts: `external_id` (unique), `secret_enc`, `secret_fingerprint`; stock mode `site` / `marketplace`; price
   direction `to_marketplace` / `from_marketplace` / `off`. Links: the remote-id bag of `Product_Link` is kept
   whole in `link_ids` (link, account, name, value, type `i`/`s`), whatever the adapter names its identifiers (`product_id`, `nmID`, …)
-  and whether a value is an integer or a string; `by_remote_id()` is one indexed read by account, name and value. «Not known yet» is
+  and whether a value is an integer or a string; `by_remote_id()` is one indexed read by account, name and value, compared byte for byte (`utf8mb4_bin` on both columns, so `shop-A` and `shop-a` are two identifiers whatever the site's collation). «Not known yet» is
   no row (null, '', 0 and '0' are skipped), a card with any identifier has a frozen article, and detaching deletes the rows.
   Mappings keep the adapter's category descriptor as one JSON `category` (what `Mapping::remote_category()` returns), so a
   one-id and a two-id marketplace are stored alike. Documents: `external_keys`. `offer_id` is `varchar(191)` (the widest policy an

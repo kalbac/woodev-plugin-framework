@@ -279,6 +279,14 @@ class PersistenceTest extends TestCase {
 		$this->assertSame( 101, $links->by_remote_id( 1, 'nmID', '5000001' )->wc_product_id() );
 		$this->assertNull( $links->by_remote_id( 2, 'nmID', 5000001 ) );
 
+		// The site's collation is case-insensitive; identifiers are not.
+		$upper = $links->save( new Product_Link( 1, 102, 0, 'SKU-2', [ 'externalId' => 'shop-A' ], 'unlinked' ) );
+		$lower = $links->save( new Product_Link( 1, 103, 0, 'SKU-3', [ 'externalId' => 'shop-a' ], 'unlinked' ) );
+		$this->assertSame( $upper, $links->by_remote_id( 1, 'externalId', 'shop-A' )->link_id() );
+		$this->assertSame( $lower, $links->by_remote_id( 1, 'externalId', 'shop-a' )->link_id() );
+		$this->assertNull( $links->by_remote_id( 1, 'externalid', 'shop-A' ), 'the name is case-sensitive too' );
+		$this->assertNull( $links->by_remote_id( 1, 'externalId', 'SHOP-A' ) );
+
 		$this->assertTrue( $links->queue( $link_id, 'RENAMED' ) );
 		$this->assertSame( 'SKU-1', $links->find( 1, 101 )->offer_id(), 'the article of a card the marketplace knows is frozen' );
 
