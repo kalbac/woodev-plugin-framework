@@ -60,12 +60,14 @@ export interface ChildrenState {
 	status: LoadStatus;
 	rows: AdminRecord[];
 	total: number;
-	/** The last page read. */
+	/** The last page read successfully; 0 while a first-page read has not answered. */
 	page: number;
+	/** The page whose read failed, 0 when none did: the Retry button repeats exactly this request. */
+	failedPage: number;
 	message: string;
 }
 
-const NO_CHILDREN: ChildrenState = { status: 'loading', rows: [], total: 0, page: 0, message: '' };
+const NO_CHILDREN: ChildrenState = { status: 'loading', rows: [], total: 0, page: 0, failedPage: 0, message: '' };
 
 function appendDistinct( known: AdminRecord[], incoming: AdminRecord[] ): AdminRecord[] {
 	const knownIds = new Set( known.map( ( row ) => row.id ) );
@@ -76,6 +78,9 @@ function appendDistinct( known: AdminRecord[], incoming: AdminRecord[] ): AdminR
 function patchList( rows: AdminRecord[], fresh: Map< string, AdminRecord >, removed: Set< string > ): AdminRecord[] {
 	return rows.filter( ( row ) => ! removed.has( row.id ) ).map( ( row ) => fresh.get( row.id ) ?? row );
 }
+
+const NO_CHILDREN_BY_ID: Record< string, ChildrenState > = {};
+const NO_EXPANDED: string[] = [];
 
 export interface Records {
 	definition: DefinitionState;
@@ -121,6 +126,8 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 	const childGates = useRef( new Map< string, Gate >() ).current;
 	const expandedRef = useRef< string[] >( [] );
 	const childrenRef = useRef< Record< string, ChildrenState > >( {} );
+	/** The definition envelope the list, the expansion and the cached children were read for (account, owner, table). */
+	const scopeRef = useRef< DefinitionEnvelope | null >( null );
 
 	const envelope = definition.status === 'ready' ? definition.envelope : null;
 	const shownDefinition = definition.envelope?.definition ?? null;
@@ -169,7 +176,12 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 			const isStale = () => ! listGate.isCurrent( listTicket ) || ! gate.isCurrent( ticket );
 			const known = () => childrenRef.current[ parentId ] ?? NO_CHILDREN;
 
-			writeChildren( ( all ) => ( { ...all, [ parentId ]: { ...known(), status: 'loading', message: '' } } ) );
+			// A first-page read starts the paging over: the pages loaded so far belong to the rows it replaces.
+			const paging = page === 1 ? { page: 0 } : {};
+			writeChildren( ( all ) => ( {
+				...all,
+				[ parentId ]: { ...known(), ...paging, status: 'loading', failedPage: 0, message: '' },
+			} ) );
 
 			api.children( envelope.context, parentId, { page, perPage } ).then(
 				( data ) => {
@@ -179,7 +191,7 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 					const rows = page === 1 ? data.rows : appendDistinct( known().rows, data.rows );
 					writeChildren( ( all ) => ( {
 						...all,
-						[ parentId ]: { status: 'ready', rows, total: data.total, page, message: '' },
+						[ parentId ]: { status: 'ready', rows, total: data.total, page, failedPage: 0, message: '' },
 					} ) );
 				},
 				( error ) => {
@@ -188,7 +200,7 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 					}
 					writeChildren( ( all ) => ( {
 						...all,
-						[ parentId ]: { ...known(), status: 'error', message: errorMessage( error ) },
+						[ parentId ]: { ...known(), status: 'error', failedPage: page, message: errorMessage( error ) },
 					} ) );
 				}
 			);
@@ -245,6 +257,17 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 		const ticket = listGate.open();
 		const controller = new AbortController();
 
+		if ( scopeRef.current !== envelope ) {
+			// Another account, owner or table: ids are only unique inside one context, so nothing read for the old
+			// scope may stay on screen under the new one. Same-scope reloads keep their expansion ({@see keepExpanded}).
+			scopeRef.current = envelope;
+			childGates.forEach( ( gate ) => gate.close() );
+			childGates.clear();
+			writeExpanded( [] );
+			writeChildren( () => ( {} ) );
+			setList( ( known ) => ( { ...known, data: null } ) );
+		}
+
 		setEpoch( ticket );
 		setList( ( known ) => ( { ...known, status: 'loading', message: '' } ) );
 
@@ -270,6 +293,9 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ api, envelope, requestKey, listAttempt, listGate ] );
 
+	// Until the effect above has switched the cache to the new scope, none of the old scope's data is exposed.
+	const inScope = envelope === null || scopeRef.current === envelope;
+
 	const toggle = useCallback(
 		( parentId: string ) => {
 			if ( expandedRef.current.includes( parentId ) ) {
@@ -288,7 +314,11 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 	);
 
 	const readMoreChildren = useCallback(
-		( parentId: string ) => readChildren( parentId, ( childrenRef.current[ parentId ]?.page ?? 0 ) + 1 ),
+		( parentId: string ) => {
+			const state = childrenRef.current[ parentId ];
+
+			readChildren( parentId, state?.failedPage ? state.failedPage : ( state?.page ?? 0 ) + 1 );
+		},
 		[ readChildren ]
 	);
 
@@ -317,9 +347,13 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 	return {
 		definition,
 		query,
-		list: envelope ? list : { ...list, status: definition.status === 'error' ? 'error' : 'loading' },
-		children,
-		expanded,
+		list: envelope
+			? inScope
+				? list
+				: { ...list, status: 'loading', data: null }
+			: { ...list, status: definition.status === 'error' ? 'error' : 'loading' },
+		children: inScope ? children : NO_CHILDREN_BY_ID,
+		expanded: inScope ? expanded : NO_EXPANDED,
 		epoch,
 		retryDefinition: useCallback( () => setDefinitionAttempt( ( attempt ) => attempt + 1 ), [] ),
 		reload: useCallback( () => setListAttempt( ( attempt ) => attempt + 1 ), [] ),

@@ -716,6 +716,88 @@ describe( 'expandable children', () => {
 		expect( expander( 'Скрыть вариации: Футболка' ) ).toBeInTheDocument();
 	} );
 
+	test( 'another account never shows the first account\'s children under a parent with the same id', async () => {
+		const pendingB = defer< ListEnvelope >();
+		const accountOf = ( path: string ) => ( path.includes( 'account_id]=a2' ) ? 'a2' : 'a1' );
+		serve( {
+			definition: ( path ) => fixtureDefinitionEnvelope( fixtureDefinition(), accountOf( path ) ),
+			children: ( path ) =>
+				accountOf( path ) === 'a2'
+					? pendingB.promise
+					: fixtureList( [ fixtureRow( 'v1', 'ACCOUNT A CHILD' ) ], { total: 1 } ),
+		} );
+		const { rerender, tableProps } = await renderTable( { query: { account: 'a1' } } );
+
+		fireEvent.click( expander( 'Показать вариации: Футболка' ) );
+		expect( await screen.findByText( 'ACCOUNT A CHILD' ) ).toBeInTheDocument();
+
+		rerender( <RecordsTable { ...tableProps } query={ { account: 'a2' } } /> );
+		await waitFor( () => expect( listRequests().some( ( path ) => path.includes( 'account_id]=a2' ) ) ).toBe( true ) );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		// B's rows are on screen, B's children are still being read: A's must not stand in for them.
+		expect( screen.queryByText( 'ACCOUNT A CHILD' ) ).not.toBeInTheDocument();
+		expect( rowKeys() ).toEqual( [ 'p1', 'p2' ] );
+		expect( expander( 'Показать вариации: Футболка' ) ).toHaveAttribute( 'aria-expanded', 'false' );
+		expect( childRequests() ).toHaveLength( 1 );
+
+		fireEvent.click( expander( 'Показать вариации: Футболка' ) );
+		await act( async () => pendingB.resolve( fixtureList( [ fixtureRow( 'v1', 'ACCOUNT B CHILD' ) ], { total: 1 } ) ) );
+
+		expect( await screen.findByText( 'ACCOUNT B CHILD' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'ACCOUNT A CHILD' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a child read still in flight for the first account is dropped after the switch', async () => {
+		const pendingA = defer< ListEnvelope >();
+		const accountOf = ( path: string ) => ( path.includes( 'account_id]=a2' ) ? 'a2' : 'a1' );
+		serve( {
+			definition: ( path ) => fixtureDefinitionEnvelope( fixtureDefinition(), accountOf( path ) ),
+			children: () => pendingA.promise,
+		} );
+		const { rerender, tableProps } = await renderTable( { query: { account: 'a1' } } );
+
+		fireEvent.click( expander( 'Показать вариации: Футболка' ) );
+		rerender( <RecordsTable { ...tableProps } query={ { account: 'a2' } } /> );
+		await waitFor( () => expect( listRequests().some( ( path ) => path.includes( 'account_id]=a2' ) ) ).toBe( true ) );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+		await act( async () => pendingA.resolve( fixtureList( [ fixtureRow( 'v1', 'ACCOUNT A CHILD' ) ], { total: 1 } ) ) );
+
+		expect( screen.queryByText( 'ACCOUNT A CHILD' ) ).not.toBeInTheDocument();
+		expect( rowKeys() ).toEqual( [ 'p1', 'p2' ] );
+	} );
+
+	test( 'a retry after a failed first-page refresh repeats page one, not the next page', async () => {
+		let handle!: TableHandle;
+		let refresh = false;
+		serve( {
+			children: ( path ) => {
+				if ( isPage( path, 1 ) && refresh ) {
+					return Promise.reject( { code: 'woodev_records_provider_error', message: 'Не удалось прочитать вариации' } );
+				}
+
+				return isPage( path, 2 )
+					? fixtureList( [ large ], { total: 3, page: 2 } )
+					: fixtureList( [ small, medium ], { total: 3 } );
+			},
+		} );
+		await renderTable( { extensions: { renderActivity: ( table ) => ( ( handle = table ), null ) } } );
+
+		fireEvent.click( expander( 'Показать вариации: Футболка' ) );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Показать ещё' } ) );
+		await screen.findByText( 'Футболка L' );
+
+		refresh = true;
+		await act( async () => handle.reload() );
+		const alert = await screen.findByRole( 'alert' );
+		refresh = false;
+		fireEvent.click( within( alert ).getByRole( 'button', { name: 'Повторить' } ) );
+
+		await waitFor( () => expect( childRequests() ).toHaveLength( 4 ) );
+		expect( childRequests().at( -1 ) ).toBe( `${ BASE }/p2/children?context[account_id]=a1&page=1&per_page=2` );
+		await waitFor( () => expect( rowKeys() ).toEqual( [ 'p1', 'p2', 'p2/v1', 'p2/v2', 'p2/_note' ] ) );
+	} );
+
 	test( 'a table without a children contract has no expand column', async () => {
 		serve( {
 			definition: () => fixtureDefinitionEnvelope( fixtureDefinition( { children: null } ) ),
@@ -1088,9 +1170,10 @@ describe( 'Q3: TableCard and labels', () => {
 		const table = screen.getByRole( 'table', { name: 'Товары' } );
 
 		rerender( <RecordsTable { ...tableProps } query={ { account: 'a2' } } /> );
-		await waitFor( () => expect( document.querySelector( 'th[data-key="sku"]' ) ).toBeNull() );
-
-		expect( screen.getByRole( 'table', { name: 'Товары' } ) ).not.toBe( table );
+		await waitFor( () => {
+			expect( screen.getByRole( 'table', { name: 'Товары' } ) ).not.toBe( table );
+			expect( document.querySelector( 'th[data-key="sku"]' ) ).toBeNull();
+		} );
 	} );
 
 	test( 'every header has an accessible name: its label, or a screen-reader label from PHP', async () => {
