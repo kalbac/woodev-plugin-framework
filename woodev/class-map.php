@@ -7,6 +7,16 @@
  */
 
 return [
+	'Woodev\\Framework\\Admin\\Records\\Definition_Parser' => 'woodev/admin/records/class-definition-parser.php',
+	'Woodev\\Framework\\Admin\\Records\\Provides_Field_Options' => 'woodev/admin/records/interface-provides-field-options.php',
+	'Woodev\\Framework\\Admin\\Records\\Query_Validator' => 'woodev/admin/records/class-query-validator.php',
+	'Woodev\\Framework\\Admin\\Records\\Records_Definition' => 'woodev/admin/records/class-records-definition.php',
+	'Woodev\\Framework\\Admin\\Records\\Records_Error' => 'woodev/admin/records/class-records-error.php',
+	'Woodev\\Framework\\Admin\\Records\\Records_Provider' => 'woodev/admin/records/interface-records-provider.php',
+	'Woodev\\Framework\\Admin\\Records\\Records_Registration' => 'woodev/admin/records/class-records-registration.php',
+	'Woodev\\Framework\\Admin\\Records\\Records_Registry' => 'woodev/admin/records/class-records-registry.php',
+	'Woodev\\Framework\\Admin\\Records\\Records_Rest_Controller' => 'woodev/admin/records/class-records-rest-controller.php',
+	'Woodev\\Framework\\Admin\\Records\\Row_Normalizer' => 'woodev/admin/records/class-row-normalizer.php',
 	'Woodev\\Framework\\Admin\\Ui_Kit_Gallery_Page' => 'woodev/admin/class-ui-kit-gallery-page.php',
 	'Woodev\\Framework\\Competitor\\Admin_Notice_Renderer' => 'woodev/competitor/class-admin-notice-renderer.php',
 	'Woodev\\Framework\\Competitor\\Carrier_Catalogue' => 'woodev/competitor/class-carrier-catalogue.php',

@@ -6732,3 +6732,23 @@ msgstr ""
 #: marketplace/admin/class-admin-collector.php:447
 msgid "Страницы плагина «%s» работают в панели WooCommerce Admin, а она сейчас недоступна. Включите WooCommerce Admin или обновите WooCommerce."
 msgstr ""
+
+#: admin/records/class-records-error.php:34
+msgid "Некорректный параметр запроса."
+msgstr ""
+
+#: admin/records/class-records-error.php:55
+msgid "Выбрано больше записей, чем разрешено для этой таблицы."
+msgstr ""
+
+#: admin/records/class-records-error.php:56
+msgid "Запрошено больше строк, чем разрешено для этой таблицы."
+msgstr ""
+
+#: admin/records/class-records-error.php:74
+msgid "Запись не найдена."
+msgstr ""
+
+#: admin/records/class-records-error.php:89
+msgid "Недостаточно прав для этого действия."
+msgstr ""
