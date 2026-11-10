@@ -131,7 +131,7 @@ edostavka#166; #1279; #1415; R3 #24; #1500; yandex#140 п. 2; woodev-russian-pos
 # Что доказано замером
 
 - 10.11.2026 (s225): F3 rig probe — settings REST list, tab links, admin menu byte-identical main vs PR (delivery-плагины).
-- 10.11.2026 (s225): #1667 rig e2e 4 pass / 2 fail (#1306) / 2 skip = main-baseline. Прогон на коммите PR (`git checkout --detach origin/kalbac/fw-1667`, коммит 16219da1) совпал с прогоном на `main`: регрессий нет.
+- 10.11.2026 (s225): #1667 rig e2e на коммите PR = main-baseline (4 pass / 2 fail #1306 / 2 skip).
 
 # Ловушки
 
