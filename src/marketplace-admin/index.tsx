@@ -12,6 +12,7 @@ import { addFilter } from '@wordpress/hooks';
 import { readManifest } from './manifest';
 import { buildAdminPages } from './pages';
 import type { WcAdminPage } from './types';
+import './views/mappings';
 
 addFilter( 'woocommerce_admin_pages_list', 'woodev/marketplace-admin', ( pages: WcAdminPage[] ) => [
 	...pages,

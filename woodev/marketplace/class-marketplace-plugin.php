@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Admin\Admin_Collector;
 use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Framework\Marketplace\Admin\Page;
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Module;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
@@ -55,6 +56,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			parent::__construct( $id, $version, $args );
 
 			Admin_Collector::instance()->register_plugin( $this );
+			Mappings_Module::register( $this );
 		}
 
 		/**
