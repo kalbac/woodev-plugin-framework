@@ -41,6 +41,10 @@ function withDefault( filterId: string, value: unknown ): Definition {
 	} );
 }
 
+function manyValues( count: number ): string {
+	return Array.from( { length: count }, ( _, index ) => `v${ index }` ).join( ',' );
+}
+
 describe( 'readQuery', () => {
 	test( 'an empty URL is the declared defaults', () => {
 		expect( readQuery( definition, {} ) ).toEqual( DEFAULT_QUERY );
@@ -101,9 +105,25 @@ describe( 'readQuery', () => {
 		[ 'a day that does not exist', { filter_updated: '2026-02-30,' }, { filters: {} } ],
 		[ 'a range that ends before it starts', { filter_updated: '2026-11-09,2026-11-01' }, { filters: {} } ],
 		[ 'a filter the table does not declare', { filter_price: '10' }, { filters: {} } ],
+		[ 'a page beyond the server maximum', { paged: '100001' }, { page: 1 } ],
+		[ 'more multi-select values than the server accepts', { filter_brand: manyValues( 51 ) }, { filters: {} } ],
+		[ 'a search with a control character', { search: 'foo\u0000bar' }, { search: '' } ],
+		[ 'a search with a line break', { search: 'foo\nbar' }, { search: '' } ],
+		[ 'a boolean that names an inherited property', { filter_in_stock: 'toString' }, { filters: {} } ],
+		[ 'a boolean that names the prototype', { filter_in_stock: '__proto__' }, { filters: {} } ],
 		[ 'an account that is not an opaque id', { account: 'a 1' }, { account: '' } ],
 	] )( '%s falls back to the default', ( _name, route, expected ) => {
 		expect( readQuery( definition, route ) ).toEqual( { ...DEFAULT_QUERY, ...expected } );
+	} );
+
+	test( 'the largest page, 50 multi-select values and a 200-character search are still accepted', () => {
+		const route: RouteQuery = { paged: '100000', filter_brand: manyValues( 50 ), search: 'я'.repeat( 200 ) };
+		const query = readQuery( definition, route );
+
+		expect( query.page ).toBe( 100000 );
+		expect( query.filters.brand ).toHaveLength( 50 );
+		expect( query.search ).toHaveLength( 200 );
+		expect( readQuery( definition, { search: 'я'.repeat( 201 ) } ).search ).toBe( '' );
 	} );
 
 	test( 'a sort key without a direction sorts ascending, as the server does', () => {
@@ -134,6 +154,20 @@ describe( 'readQuery', () => {
 		expect( readQuery( preset, {} ).filters ).toEqual( { state: 'linked' } );
 		expect( readQuery( preset, { filter_state: 'draft' } ).filters ).toEqual( { state: 'draft' } );
 		expect( readQuery( preset, { filter_state: NO_VALUE } ).filters ).toEqual( {} );
+	} );
+} );
+
+describe( 'controls cannot write a request the server refuses', () => {
+	test( 'a page beyond the maximum is held at the maximum', () => {
+		expect( changeQuery( DEFAULT_QUERY, { page: 100001 } ).page ).toBe( 100000 );
+	} );
+
+	test( 'a 51st multi-select value leaves the query as it was', () => {
+		const fifty = readQuery( definition, { filter_brand: manyValues( 50 ) } );
+		const values = ( fifty.filters.brand as string[] ).concat( 'v50' );
+
+		expect( changeFilter( fifty, 'brand', values ) ).toBe( fifty );
+		expect( changeFilter( fifty, 'brand', values.slice( 0, 50 ) ).filters.brand ).toHaveLength( 50 );
 	} );
 } );
 

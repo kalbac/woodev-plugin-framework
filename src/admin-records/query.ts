@@ -42,6 +42,11 @@ const OPAQUE_VALUE = /^[A-Za-z0-9_.:-]{1,191}$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const WHOLE_NUMBER = /^\d{1,9}$/;
 const MAX_SEARCH_LENGTH = 200;
+const CONTROL_CHARACTER = /[\x00-\x1F\x7F]/;
+
+/** The server's bounds (`Query_Validator::MAX_PAGE` and `::MAX_MULTI_VALUES`): a request beyond them is a 400. */
+export const MAX_PAGE = 100000;
+export const MAX_MULTI_VALUES = 50;
 const LIST_SEPARATOR = ',';
 
 type FilterDecoder = ( filter: Filter, raw: string ) => FilterValue | undefined;
@@ -85,15 +90,20 @@ function decodeSelect( filter: Filter, raw: string ): FilterValue | undefined {
 function decodeMultiSelect( filter: Filter, raw: string ): FilterValue | undefined {
 	const values = raw.split( LIST_SEPARATOR );
 	const distinct = new Set( values );
-	const valid = values.every( ( value ) => isKnownOption( filter, value ) ) && distinct.size === values.length;
+	const valid =
+		values.length <= MAX_MULTI_VALUES &&
+		values.every( ( value ) => isKnownOption( filter, value ) ) &&
+		distinct.size === values.length;
 
 	return valid ? values : undefined;
 }
 
 function decodeBoolean( _filter: Filter, raw: string ): FilterValue | undefined {
-	const flags: Record< string, boolean > = { '1': true, '0': false };
+	if ( raw === '1' ) {
+		return true;
+	}
 
-	return flags[ raw ];
+	return raw === '0' ? false : undefined;
 }
 
 function decodeDateRange( _filter: Filter, raw: string ): FilterValue | undefined {
@@ -176,11 +186,19 @@ function readPerPage( definition: Definition, raw: string | undefined ): number 
 	return requested !== undefined && options.includes( requested ) ? requested : fallback;
 }
 
+/**
+ * Whether the server accepts this search text: at most 200 characters, no control character. The caller trims first.
+ *
+ * @param text The text to search for.
+ */
+export function isSearchText( text: string ): boolean {
+	return [ ...text ].length <= MAX_SEARCH_LENGTH && ! CONTROL_CHARACTER.test( text );
+}
+
 function readSearch( definition: Definition, raw: string | undefined ): string {
 	const text = ( raw ?? '' ).trim();
-	const accepted = searchFilter( definition ) !== undefined && text.length <= MAX_SEARCH_LENGTH;
 
-	return accepted ? text : '';
+	return searchFilter( definition ) !== undefined && isSearchText( text ) ? text : '';
 }
 
 function readSort( definition: Definition, route: RouteQuery ): Pick< RecordsQuery, 'sort' | 'direction' > {
@@ -222,7 +240,7 @@ export function readQuery( definition: Definition, route: RouteQuery ): RecordsQ
 
 	return {
 		account: readAccount( route ),
-		page: page !== undefined && page >= 1 ? page : 1,
+		page: page !== undefined && page >= 1 && page <= MAX_PAGE ? page : 1,
 		perPage: readPerPage( definition, route[ URL_KEYS.perPage ] ),
 		search: readSearch( definition, route[ URL_KEYS.search ] ),
 		...readSort( definition, route ),
@@ -281,7 +299,9 @@ export function writeQuery( definition: Definition, query: RecordsQuery ): Route
 export function changeQuery( query: RecordsQuery, change: Partial< RecordsQuery > ): RecordsQuery {
 	const keepsPage = Object.keys( change ).every( ( key ) => key === 'page' );
 
-	return { ...query, ...change, page: keepsPage ? change.page ?? query.page : 1 };
+	const page = keepsPage ? change.page ?? query.page : 1;
+
+	return { ...query, ...change, page: Math.min( Math.max( page, 1 ), MAX_PAGE ) };
 }
 
 /**
@@ -293,6 +313,11 @@ export function changeQuery( query: RecordsQuery, change: Partial< RecordsQuery 
  */
 export function changeFilter( query: RecordsQuery, filterId: string, value: FilterValue | undefined ): RecordsQuery {
 	const filters = { ...query.filters };
+
+	if ( Array.isArray( value ) && value.length > MAX_MULTI_VALUES ) {
+		// The server refuses more values than this; the control keeps the selection it had.
+		return query;
+	}
 
 	if ( value === undefined ) {
 		delete filters[ filterId ];

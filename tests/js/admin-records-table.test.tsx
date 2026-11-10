@@ -610,6 +610,38 @@ describe( 'URL round trip', () => {
 		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { filter_brand: 'acme,zen' } ) );
 	} );
 
+	test( 'the 51st facet value cannot be selected', async () => {
+		const facets = Array.from( { length: 51 }, ( _, index ) => ( {
+			value: `v${ index }`,
+			label: `Бренд ${ index }`,
+			count: 1,
+		} ) );
+		serve( { rows: () => fixtureList( [ mug ], { facets: { brand: facets } } ) } );
+		const { navigate } = await renderTable();
+		const brands = screen.getByRole( 'listbox', { name: 'Бренд' } );
+		const options = Array.from( brands.querySelectorAll( 'option' ) );
+
+		options.slice( 0, 50 ).forEach( ( option ) => ( option.selected = true ) );
+		fireEvent.change( brands );
+		expect( navigate ).toHaveBeenCalledTimes( 1 );
+
+		options.forEach( ( option ) => ( option.selected = true ) );
+		fireEvent.change( brands );
+		expect( navigate ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'a search the server would refuse is not written', async () => {
+		const { navigate } = await renderTable();
+		const box = screen.getByRole( 'searchbox', { name: 'Поиск по товарам' } );
+
+		fireEvent.change( box, { target: { value: 'foo\u0000bar' } } );
+		fireEvent.submit( box.closest( 'form' ) as HTMLFormElement );
+		fireEvent.change( box, { target: { value: 'я'.repeat( 201 ) } } );
+		fireEvent.submit( box.closest( 'form' ) as HTMLFormElement );
+
+		expect( navigate ).not.toHaveBeenCalled();
+	} );
+
 	test( 'unticking a boolean filter removes it instead of sending false', async () => {
 		const { navigate } = await renderTable( { query: { filter_in_stock: '1' } } );
 

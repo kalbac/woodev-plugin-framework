@@ -11,7 +11,15 @@ import type { ComponentType, FormEvent } from 'react';
 import { Button, CheckboxControl, SearchControl, SelectControl } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import { MESSAGE_KEYS, joinLabel, message } from './messages';
-import { changeFilter, changeQuery, sameFilterValue, searchFilter, valueFilters } from './query';
+import {
+	MAX_MULTI_VALUES,
+	changeFilter,
+	changeQuery,
+	isSearchText,
+	sameFilterValue,
+	searchFilter,
+	valueFilters,
+} from './query';
 import { STYLES } from './styles';
 import type { DateRange, Definition, Facet, Filter, FilterValue, Messages, Option, RecordsQuery } from './types';
 
@@ -78,7 +86,11 @@ function MultiSelectFilter( { filter, value, facets, onChange }: FilterControlPr
 			label={ filter.label }
 			value={ selected }
 			options={ filterOptions( filter, facets, selected ) }
-			onChange={ ( next: string[] ) => onChange( next.length === 0 ? undefined : next ) }
+			onChange={ ( next: string[] ) => {
+				if ( next.length <= MAX_MULTI_VALUES ) {
+					onChange( next.length === 0 ? undefined : next );
+				}
+			} }
 		/>
 	);
 }
@@ -151,7 +163,12 @@ function SearchBox( { filter, value, onSearch }: SearchBoxProps ) {
 
 	const submit = ( event: FormEvent ) => {
 		event.preventDefault();
-		onSearch( text.trim() );
+		const trimmed = text.trim();
+
+		// Text the server would refuse (too long, control characters) is not written.
+		if ( isSearchText( trimmed ) ) {
+			onSearch( trimmed );
+		}
 	};
 
 	const type = ( next: string ) => {
