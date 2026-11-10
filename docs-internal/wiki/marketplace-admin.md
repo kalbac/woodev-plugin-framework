@@ -19,7 +19,7 @@ Binding operator decisions this round implements (PR #1676 comments, 2026-11-10)
 | B1 | `\Woodev\Framework\Marketplace\Marketplace_Plugin extends \Woodev\Framework\Woocommerce_Plugin`, like `Shipping_Plugin` / `Woodev_Payment_Gateway_Plugin`; the base class owns menu, pages and settings registration through `wc_admin_register_page()` without `parent`. |
 | B2 | Namespace `Woodev\Framework\Marketplace\*`. |
 | B3 | Delivery is not touched: «Заказы доставки» stays where and as it is; the records table is a new component that only takes it as a reference. No card changes `src/shipping-orders-page/**` or `woodev/shipping-method/**`. |
-| B4 | Menu icon = the Ozon Seller v1 icon; landing page «Товары»; order Настройки / Товары / Заказы / Сопоставление / Инструменты / Диагностика. Variable products = parent row with expandable variations, each with its own state and progress. Q3 as the R1 critic ruled. |
+| B4 | Menu icon = the Ozon Seller v1 icon; landing page «Товары»; order Настройки / Товары / Заказы / Сопоставление / Инструменты / Диагностика — superseded by #1704: Настройки first only while the plugin is not configured, last once it is. Variable products = parent row with expandable variations, each with its own state and progress. Q3 as the R1 critic ruled. |
 | B5 | Analytics: reserved slot only. Multi-account is not dropped. |
 | B6 | (s225) The module holds **all** logic that is not specific to one marketplace — accounts, sync/queue/governor, links, mappings, records table, menu/pages/settings, diagnostics, lifecycle — built like the Shipping and Payment modules. The plugin keeps only its adapter, API client and marketplace-specific rules. |
 
@@ -208,19 +208,24 @@ optional `legacy_page`, and `analytics => null`.
 What the base owns, once per request and in one order for every marketplace:
 
 1. **Root.** `wc_admin_register_page()` with **no `parent`**, the menu's `icon`, `position`,
-   explicit `capability` and a plain `page_title`. Its `path` is the «Товары» page's path, so
-   the root opens Товары (B4). F2 verifies on the rig that PageController resolves the shared
-   path with the root and Товары highlighted; if it does not, the root gets its own path whose
-   route replaces history with Товары. No seventh dashboard page.
-2. **Children**, `parent` = the root's registered id: «Настройки» first (automatic when
-   `get_settings_providers()` is non-empty), then the pages in declared order. Paths are
-   built by the base as `/{menu id}/{slug}`, so PHP and the JS manifest cannot disagree.
-3. **Duplicate root submenu.** WordPress adds the root as its own first submenu entry; the
-   base hides that entry (matching only its own root slug, and only when the slug appears
-   twice), it does not remove it: the root's link is the first submenu entry's link, so with
-   «Настройки» first, removing the copy would make the root open «Настройки» instead of
-   «Товары» (F2, see "Marketplace_Plugin as built"). v1 could `unset( $submenu['ozon-seller'][0] )`
-   because its first page was the product list.
+   explicit `capability` and a plain `page_title`. Its `path` is `/{menu id}`: a container with
+   its own slug that no page shares, the way WooCommerce's `woocommerce` root is a container
+   (#1704). The root is never a destination; WordPress links it to the first entry of its
+   submenu. No seventh dashboard page.
+2. **Children**, `parent` = the root's registered id, registered in menu order. The order
+   depends on `Marketplace_Plugin::is_configured()`: **not configured** → «Настройки» first (the
+   root opens the settings, an onboarding), then Товары / Заказы / Сопоставление / Инструменты /
+   Диагностика; **configured** → Товары / Заказы / Сопоставление / Инструменты / Диагностика /
+   «Настройки» last, and the root opens «Товары». «Настройки» exists only when
+   `get_settings_providers()` is non-empty. Paths are built by the base as `/{menu id}/{slug}`,
+   so PHP and the JS manifest cannot disagree.
+3. **Duplicate root submenu.** WordPress adds the root as its own first submenu entry as soon as
+   the first child is added. The base **removes** it, the WooCommerce way
+   (`WC_Admin_Menus::menu_order_count()` → `unset( $submenu['woocommerce'][0] )`): on
+   `admin_menu` priority 99, after every registration and before core reads the first entry for
+   the root's link (`wp-admin/includes/menu.php`), `Admin_Collector::clean_up_submenus()` drops
+   the entry that carries the root's slug. Nothing is hidden by CSS and no `$submenu` entry
+   carries a marker class.
 4. **Icon sizing.** An image-URL icon needs the 18 px rule v1 printed for
    `.toplevel_page_…` (v1 `load_menu_styles()`); the base prints it for its own root only.
 5. **Manifest and routing.** PHP emits a capability-filtered page manifest (id, path,
@@ -253,12 +258,22 @@ What the code settled, where the sketch above left it open:
   WooCommerce, so it is unit-testable) and `class-admin-collector.php` (the per-request
   singleton that registers every menu and enqueues the single bundle); client code in
   `src/marketplace-admin/`, built to `woodev/assets/build/marketplace-admin/`.
-- **Duplicate root entry is hidden, not removed.** `_wp_menu_output()` takes the root's link
-  from `$submenu[root][0]`. The copy WordPress inserts carries the root's slug (= «Товары»), so
-  keeping it first makes the root open «Товары»; it gets the class
-  `woodev-marketplace-root-entry` and the root's own stylesheet rule hides it. With no
-  «Настройки» there is no copy, and nothing is marked.
-- **Icon rule** is keyed by the root `<li>` id (`toplevel_page_wc-admin-path--<menu id>-products`),
+- **Duplicate root entry is removed (#1704).** The copy WordPress inserts carries the root's own
+  slug (`wc-admin&path=/{menu id}`, a container no page shares), so `Menu::remove_root_entry()`
+  finds it by slug and drops it (`unset`, keys kept, as WooCommerce does) at `admin_menu`
+  priority 99. The root's link is then the first real page (`_wp_menu_output()`). This replaced
+  the s225 hidden entry (class `woodev-marketplace-root-entry` + a `display:none` rule) and the
+  s224 «Настройки always first» order.
+- **`is_configured()` decides the order.** `Marketplace_Plugin::is_configured()` is true when at
+  least one account of the adapter has the identifier and every secret that
+  `Marketplace_Adapter::credential_fields()` declares (the merchant's switch and the last health
+  check do not count). It reads the F8 accounts table through `get_account_store()` (secrets
+  opened with the `secure_auth` salt; a plugin with another key overrides that one method), makes
+  no remote call and is not memoised, because the base class reads it again on `admin_footer`
+  after a save. The menu is built once per request, and a plugin without a settings page does
+  not read the table at all. The base's "not configured" notice links to `get_settings_url()`,
+  the settings page.
+- **Icon rule** is keyed by the root `<li>` id (`toplevel_page_wc-admin-path--<menu id>`),
   the same id the bundle passes as `wpOpenMenu`, because WordPress puts the raw slug into the
   class attribute and a class selector cannot name it.
 - **Bundle on every wc-admin screen.** wc-admin navigates between its pages without a reload,
@@ -682,7 +697,7 @@ nothing else. Acceptance includes `git diff --name-only` staying inside the card
 | Id | Size · tier | Depends on | Files | Scope · acceptance |
 |---|---|---|---|---|
 | F1 — Domain layer transfer | L · Sonnet 5.5 | review of this design; reconcile #1670 | `woodev/marketplace/{account,capabilities,catalog,diagnostics,governor,ledger,links,orders,price,stock}/**`; `tests/unit/Marketplace/**` (scanner, fixtures, contract tests). Donor: `includes/marketplace/**`, its tests in `tests/unit/Marketplace/`, `tests/unit/Architecture/` (scanner) and the per-folder unit tests that cover layer classes | Move the refreshed inventory as `Woodev\Framework\Marketplace\*`; apply D1–D7 ("Marketplace semantics in the domain layer") with fake-adapter values in tests; add the one ledger read (open items for link ids, by account). Accept: donor parity tests green with the Ozon values passed in, scanner positive/negative controls, no `ozon` literal outside docblock examples, no-Composer and two-copy boot, PHP 7.4. |
-| F2 — `Marketplace_Plugin` and pages | L · Sonnet 5.5 | F1 | `woodev/marketplace/class-marketplace-plugin.php`, `woodev/marketplace/admin/*.php` (top level only), `src/marketplace-admin/**`, `woodev/assets/build/marketplace-admin/` (build output only), `woodev/languages/woodev-plugin-framework.pot` and `woodev/languages/woodev-plugin-framework-ru_RU.po` (the page msgids), this wiki page. Donor: `includes/admin/class-admin-menu.php` (reference for the v1/v2 menu) | Root without `parent` with icon/position, landing on Товары with correct highlight, six children in the B4 order, duplicate root entry hidden (kept as the first submenu record so the root lands on Товары), icon sizing, direct and SPA navigation, two marketplace plugins → one bundle and no menu clash, v1 legacy URLs redirect, Q3 routing checks on minimum and current WC. |
+| F2 — `Marketplace_Plugin` and pages | L · Sonnet 5.5 | F1 | `woodev/marketplace/class-marketplace-plugin.php`, `woodev/marketplace/admin/*.php` (top level only), `src/marketplace-admin/**`, `woodev/assets/build/marketplace-admin/` (build output only), `woodev/languages/woodev-plugin-framework.pot` and `woodev/languages/woodev-plugin-framework-ru_RU.po` (the page msgids), this wiki page. Donor: `includes/admin/class-admin-menu.php` (reference for the v1/v2 menu) | Root without `parent` with icon/position (a container slug), six children in the B4 order by `is_configured()` (Настройки first until configured, last after), the root opens the first child, duplicate root entry removed the WooCommerce way (#1704), correct highlight, icon sizing, direct and SPA navigation, two marketplace plugins → one bundle and no menu clash, v1 legacy URLs redirect, Q3 routing checks on minimum and current WC. |
 | F3 — Settings placement | M · Sonnet 5.5 | F2 | `woodev/settings-page/class-settings-page-registry.php`, `woodev/rest-api/controllers/class-rest-api-settings-page.php` (list scoping), `src/settings-page/**` (embeddable body, bootstrap props), `get_settings_url()` in `woodev/marketplace/class-marketplace-plugin.php`, the built `woodev/assets/build/settings-page/` | Marketplace providers appear only under their menu; default-placement URLs byte-identical; Woodev page unchanged for delivery plugins; `placement` list scoping; per-provider save/tool guards; legacy redirect lands on the placement-aware URL; no string moves. |
 | F4 — Records PHP schema and REST | L · Sonnet 5.5 | review | `woodev/admin/records/*.php` except the action and activity classes of F6/F7 | Finite descriptors, owner registry, children route, strict query/option contracts, no receipt. Accept: two fake independent providers, forged account/id, invalid filters/sorts, oversized lists rejected before work. |
 | F5 — Records React shell | L · Fable 5 | F2, F4 | `src/admin-records/**` except `actions/` and `activity/` | Render PHP cells/strings/actions, URL round trips, expandable children, stale-read protection, error/empty states, keyboard access; no domain-code switches; Q3 TableCard/label checks. |

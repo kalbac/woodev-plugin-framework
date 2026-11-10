@@ -45,12 +45,12 @@ if ( ! class_exists( Page::class, false ) ) :
 		private const KINDS = [ self::KIND_RECORDS, self::KIND_CUSTOM, self::KIND_SETTINGS ];
 
 		/**
-		 * Slug of the always-first «Настройки» page.
+		 * Slug of the «Настройки» page: first while the plugin is not configured, last once it is.
 		 */
 		public const SETTINGS_SLUG = 'settings';
 
 		/**
-		 * Slug of the page the menu root opens: «Товары».
+		 * Slug of «Товары», the first page of a configured plugin's menu — the one its root opens.
 		 */
 		public const LANDING_SLUG = 'products';
 

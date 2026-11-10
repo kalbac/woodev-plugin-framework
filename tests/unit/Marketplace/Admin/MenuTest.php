@@ -70,18 +70,23 @@ final class MenuTest extends TestCase {
 		$this->assertSame( 'OZON Seller', $root['page_title'], 'page_title is passed so the title is not copied into the tab title' );
 	}
 
-	public function test_the_root_opens_products(): void {
+	public function test_the_root_is_a_container_no_page_shares(): void {
 		$menu = $this->menu();
 
-		$this->assertSame( '/ozon-seller/products', $menu->get_root_path() );
-		$this->assertSame( '/ozon-seller/products', $menu->build_root_args()['path'] );
-		$this->assertSame( 'products', $menu->get_landing_page()->get_slug() );
+		$this->assertSame( '/ozon-seller', $menu->get_root_path() );
+		$this->assertSame( '/ozon-seller', $menu->build_root_args()['path'] );
+
+		foreach ( $menu->get_pages() as $page ) {
+			$this->assertNotSame( $menu->get_root_path(), $menu->get_page_path( $page ), 'the root\'s slug is its own, so its copy in the submenu can be told apart' );
+		}
 	}
 
-	public function test_a_menu_without_products_opens_its_first_page(): void {
-		$menu = $this->menu( $this->pages( [ 'orders', 'tools' ] ) );
+	public function test_the_root_opens_the_first_page_of_the_order_it_was_given(): void {
+		$not_configured = $this->menu();
+		$configured     = $this->menu( $this->pages( [ 'products', 'orders', 'mappings', 'tools', 'diagnostics', 'settings' ] ) );
 
-		$this->assertSame( '/ozon-seller/orders', $menu->get_root_path() );
+		$this->assertSame( 'settings', $not_configured->get_landing_page()->get_slug() );
+		$this->assertSame( 'products', $configured->get_landing_page()->get_slug() );
 	}
 
 	public function test_the_six_children_are_registered_in_the_declared_order_under_the_root(): void {
@@ -118,8 +123,8 @@ final class MenuTest extends TestCase {
 	public function test_the_root_slug_and_dom_id_follow_woocommerces_page_formula(): void {
 		$menu = $this->menu();
 
-		$this->assertSame( 'wc-admin&path=/ozon-seller/products', $menu->get_root_slug() );
-		$this->assertSame( 'toplevel_page_wc-admin-path--ozon-seller-products', $menu->get_root_dom_id() );
+		$this->assertSame( 'wc-admin&path=/ozon-seller', $menu->get_root_slug() );
+		$this->assertSame( 'toplevel_page_wc-admin-path--ozon-seller', $menu->get_root_dom_id() );
 	}
 
 	/**
@@ -129,50 +134,54 @@ final class MenuTest extends TestCase {
 		return [ $title, 'manage_woocommerce', $slug, $title ];
 	}
 
-	public function test_the_duplicate_root_entry_is_marked_not_removed(): void {
-		$root = 'wc-admin&path=/ozon-seller/products';
+	public function test_the_copy_of_the_root_is_removed_and_every_page_stays(): void {
+		$root = 'wc-admin&path=/ozon-seller';
 
-		// What WordPress builds when «Настройки» is added first: the copy of the root, «Настройки», then «Товары» under the root's slug.
+		// What WordPress builds when the first child is added: the copy of the root, then the children.
 		$entries = [
 			$this->entry( 'OZON Seller', $root ),
 			$this->entry( 'Настройки', 'wc-admin&path=/ozon-seller/settings' ),
-			$this->entry( 'Товары', $root ),
+			$this->entry( 'Товары', 'wc-admin&path=/ozon-seller/products' ),
 			$this->entry( 'Заказы', 'wc-admin&path=/ozon-seller/orders' ),
 		];
 
-		$marked = $this->menu()->mark_root_entry( $entries );
+		$cleaned = $this->menu()->remove_root_entry( $entries );
 
-		$this->assertCount( 4, $marked, 'nothing is removed: the root links to the first entry, which must stay «Товары»' );
-		$this->assertSame( Menu::ROOT_ENTRY_CLASS, $marked[0][4] );
-		$this->assertSame( $root, $marked[0][2], 'the first entry keeps pointing at products' );
-		$this->assertArrayNotHasKey( 4, $marked[2], 'the real «Товары» entry stays visible' );
-		$this->assertArrayNotHasKey( 4, $marked[1] );
+		$this->assertSame(
+			[ 'wc-admin&path=/ozon-seller/settings', 'wc-admin&path=/ozon-seller/products', 'wc-admin&path=/ozon-seller/orders' ],
+			array_column( $cleaned, 2 ),
+			'the root\'s copy is gone; the root now links to the first real page'
+		);
+		$this->assertSame( [ 1, 2, 3 ], array_keys( $cleaned ), 'WooCommerce\'s unset() keeps the keys too' );
+
+		foreach ( $cleaned as $entry ) {
+			$this->assertCount( 4, $entry, 'no entry carries a hiding class or any extra field' );
+		}
 	}
 
-	public function test_nothing_is_marked_when_there_is_no_copy_of_the_root(): void {
-		$root    = 'wc-admin&path=/ozon-seller/products';
+	public function test_nothing_is_removed_when_there_is_no_copy_of_the_root(): void {
 		$entries = [
-			$this->entry( 'Товары', $root ),
+			$this->entry( 'Товары', 'wc-admin&path=/ozon-seller/products' ),
 			$this->entry( 'Заказы', 'wc-admin&path=/ozon-seller/orders' ),
 		];
 
-		$this->assertSame( $entries, $this->menu()->mark_root_entry( $entries ) );
+		$this->assertSame( $entries, $this->menu()->remove_root_entry( $entries ) );
 	}
 
-	public function test_another_menus_entries_are_never_marked(): void {
+	public function test_another_menus_entries_are_never_removed(): void {
 		$entries = [
-			$this->entry( 'Other', 'wc-admin&path=/wildberries/products' ),
+			$this->entry( 'Other', 'wc-admin&path=/wildberries' ),
 			$this->entry( 'Other', 'wc-admin&path=/wildberries/products' ),
 		];
 
-		$this->assertSame( $entries, $this->menu()->mark_root_entry( $entries ) );
+		$this->assertSame( $entries, $this->menu()->remove_root_entry( $entries ) );
 	}
 
-	public function test_the_css_is_scoped_to_this_roots_id(): void {
+	public function test_the_css_is_only_the_icon_rule_scoped_to_this_roots_id(): void {
 		$css = $this->menu()->build_menu_css();
 
-		$this->assertStringContainsString( '#toplevel_page_wc-admin-path--ozon-seller-products .wp-menu-image img{width:18px;height:18px', $css );
-		$this->assertStringContainsString( '#toplevel_page_wc-admin-path--ozon-seller-products .' . Menu::ROOT_ENTRY_CLASS . '{display:none}', $css );
+		$this->assertSame( '#toplevel_page_wc-admin-path--ozon-seller .wp-menu-image img{width:18px;height:18px;opacity:.6}', $css );
+		$this->assertStringNotContainsString( 'display:none', $css, 'no entry is hidden by a stylesheet' );
 	}
 
 	public function test_the_manifest_lists_what_the_user_may_open_with_finished_titles_and_breadcrumbs(): void {
@@ -183,14 +192,14 @@ final class MenuTest extends TestCase {
 		);
 
 		$this->assertSame( 'ozon-seller', $manifest['id'] );
-		$this->assertSame( 'toplevel_page_wc-admin-path--ozon-seller-products', $manifest['domId'] );
+		$this->assertSame( 'toplevel_page_wc-admin-path--ozon-seller', $manifest['domId'] );
 		$this->assertCount( 6, $manifest['pages'] );
 
 		$products = $manifest['pages'][1];
 		$this->assertSame( 'products', $products['id'] );
 		$this->assertSame( '/ozon-seller/products', $products['path'] );
 		$this->assertSame( 'T products', $products['title'] );
-		$this->assertSame( [ [ '/ozon-seller/products', 'OZON Seller' ], 'T products' ], $products['breadcrumbs'] );
+		$this->assertSame( [ [ '/ozon-seller/settings', 'OZON Seller' ], 'T products' ], $products['breadcrumbs'], 'the first crumb is where the root leads: the first page' );
 		$this->assertNull( $products['analytics'], 'the analytics slot is reserved: null, nothing computed' );
 	}
 
