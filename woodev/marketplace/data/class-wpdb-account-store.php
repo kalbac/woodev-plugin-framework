@@ -9,8 +9,10 @@ namespace Woodev\Framework\Marketplace\Data;
 
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
+use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
+use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Ledger\Claimable;
 
 defined( 'ABSPATH' ) || exit;
@@ -19,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * Reads and writes the accounts table of one marketplace plugin.
  *
  * - **The secrets are encrypted** with {@see Secret_Cipher}: the secret credential fields the adapter declares
- *   ({@see Credential_Fields}) are stored as one encrypted JSON object in `secret_enc`, never in `wp_options` and never in clear.
+ *   ({@see Marketplace_Adapter::credential_fields()}) are stored as one encrypted JSON object in `secret_enc`, never in `wp_options` and never in clear.
  *   A set that cannot be opened (the WordPress salts changed) comes back with every secret '' and `secrets_unreadable` true in the
  *   credentials.
  * - **`is_enabled` is the merchant's switch and no code touches it**: {@see self::save()} writes it only when it inserts a row,
@@ -155,6 +157,22 @@ final class Wpdb_Account_Store implements Account_Store {
 		$this->adapter_id = $adapter_id;
 		$this->fields     = $fields;
 		$this->clock      = $clock ?? 'time';
+	}
+
+	/**
+	 * Builds the store of an adapter: its id and the credential fields it declares decide which values are encrypted.
+	 *
+	 * @since 2.0.29
+	 *
+	 * @param \wpdb               $db      Database.
+	 * @param string              $table   Full table name.
+	 * @param Secret_Cipher       $cipher  Secret cipher.
+	 * @param Marketplace_Adapter $adapter The plugin's adapter.
+	 * @param callable|null       $clock   Returns the Unix time; the system clock when null.
+	 * @return self
+	 */
+	public static function for_adapter( \wpdb $db, string $table, Secret_Cipher $cipher, Marketplace_Adapter $adapter, ?callable $clock = null ): self {
+		return new self( $db, $table, $cipher, $adapter->id(), $adapter->credential_fields(), $clock );
 	}
 
 	/**

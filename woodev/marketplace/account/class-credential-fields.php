@@ -5,7 +5,7 @@
  * @package Woodev\Framework\Marketplace
  */
 
-namespace Woodev\Framework\Marketplace\Data;
+namespace Woodev\Framework\Marketplace\Account;
 
 defined( 'ABSPATH' ) || exit;
 

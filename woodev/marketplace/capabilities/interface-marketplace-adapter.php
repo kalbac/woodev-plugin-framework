@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Capabilities;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Account\Credential_Health;
 use Woodev\Framework\Marketplace\Catalog\Article_Policy;
 use Woodev\Framework\Marketplace\Catalog\Card_Exporter;
@@ -50,6 +51,17 @@ interface Marketplace_Adapter {
 	 * @return bool
 	 */
 	public function supports( string $capability ): bool;
+
+	/**
+	 * Declares which credentials an account of this marketplace holds: one identifier and the secret fields. The account store
+	 * encrypts exactly the secret fields and keeps the identifier readable and unique; the settings section renders the same
+	 * declaration.
+	 *
+	 * @since 2.0.29
+	 *
+	 * @return Credential_Fields
+	 */
+	public function credential_fields(): Credential_Fields;
 
 	/**
 	 * Returns the credential checker.

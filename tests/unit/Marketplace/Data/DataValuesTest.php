@@ -8,8 +8,8 @@
 namespace Woodev\Tests\Unit\Marketplace\Data;
 
 use PHPUnit\Framework\TestCase;
+use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
-use Woodev\Framework\Marketplace\Data\Credential_Fields;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 

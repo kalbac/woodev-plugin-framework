@@ -11,11 +11,12 @@ use Brain\Monkey;
 use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
-use Woodev\Framework\Marketplace\Data\Credential_Fields;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 
 /**
@@ -195,6 +196,40 @@ final class WpdbAccountStoreTest extends TestCase {
 		$this->assertStringNotContainsString( 'rotated-token-0000', (string) $row['settings'] );
 		$this->assertStringNotContainsString( self::TOKEN, (string) $row['settings'] );
 		$this->assertStringNotContainsString( 'rotated-token-0000', implode( "\n", $this->db->statements ) );
+	}
+
+	/**
+	 * The adapter decides which credentials are secret: a store built from an adapter encrypts exactly the fields it declares, keeps
+	 * the identifier readable, and never touches the options table.
+	 *
+	 * @return void
+	 */
+	public function test_the_adapter_declares_which_credentials_are_secret(): void {
+		Functions\expect( 'update_option' )->never();
+		Functions\expect( 'add_option' )->never();
+
+		$adapter = new Fake_Marketplace_Adapter();
+		$store   = Wpdb_Account_Store::for_adapter( $this->db, Sqlite_Tables::table( 'accounts' ), $this->cipher, $adapter );
+		$id      = $store->save(
+			new Account(
+				0,
+				$adapter->id(),
+				'Кабинет',
+				true,
+				[
+					'cabinet' => 'cab-77',
+					'token'   => 'jwt.header.payload.signature',
+				]
+			)
+		);
+
+		$row = $this->raw_row( $id );
+		$this->assertSame( 'cab-77', $row['external_id'], 'the identifier is stored readable, for the unique key' );
+		$this->assertStringNotContainsString( 'jwt.header.payload.signature', implode( '|', array_map( 'strval', $row ) ) );
+		$this->assertSame( [ 'token' => 'jwt.header.payload.signature' ], json_decode( (string) $this->cipher->decrypt( $row['secret_enc'] ), true ) );
+		$this->assertSame( $adapter->id(), $store->get( $id )->adapter_id() );
+		$this->assertSame( 'jwt.header.payload.signature', $store->get( $id )->credentials()['token'] );
+		$this->assertSame( [], $store->all( 'ozon', false ) );
 	}
 
 	/**

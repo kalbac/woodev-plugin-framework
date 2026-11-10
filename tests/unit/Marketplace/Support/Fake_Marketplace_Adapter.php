@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Unit\Marketplace\Support;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Account\Credential_Health;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -277,6 +278,15 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 */
 	public function supports( string $capability ): bool {
 		return in_array( $capability, array( Capability::CANCEL_ORDER, Capability::GET_LABEL, Capability::CONFIRM_SHIPMENT ), true );
+	}
+
+	/**
+	 * Declares the credentials: a cabinet reference and the one JWT token.
+	 *
+	 * @return Credential_Fields
+	 */
+	public function credential_fields(): Credential_Fields {
+		return new Credential_Fields( 'cabinet', array( 'token' ) );
 	}
 
 	/**

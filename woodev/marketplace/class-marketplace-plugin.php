@@ -12,6 +12,7 @@ namespace Woodev\Framework\Marketplace;
 use Woodev\Framework\Marketplace\Admin\Admin_Collector;
 use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Framework\Marketplace\Admin\Page;
+use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Settings\Settings_Provider;
 
 defined( 'ABSPATH' ) || exit;
@@ -50,6 +51,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			parent::__construct( $id, $version, $args );
 
 			Admin_Collector::instance()->register_plugin( $this );
+		}
+
+		/**
+		 * Installs the marketplace lifecycle: the plugin's tables are created on install and re-synced on every upgrade
+		 * ({@see Lifecycle}), the way every marketplace plugin gets the same persistence. A plugin hooks its own data migration to
+		 * the `woodev_{plugin id}_installed` / `_updated` actions, which fire after the tables exist.
+		 *
+		 * @since 2.0.29
+		 *
+		 * @return void
+		 */
+		protected function init_lifecycle_handler() {
+			$this->lifecycle_handler = new Lifecycle( $this );
 		}
 
 		/**
