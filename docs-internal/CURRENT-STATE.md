@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-11-10 (s224, MacBook):** framework **2.0.28**; six delivery plugins on it, live on EDD (unchanged since s222). **Ozon Seller v2 port in progress** (#1574; repo `woocommerce-ozon-seller`, board №8): waves 1–2 and W3-1/W3-2, W4-1/W4-3/W4-4 merged (plugin PRs through #57). **Admin direction changed (operator, 10.11):** every stand-alone plugin page → PHP-driven React under a top-level «OZON Seller» menu via `Marketplace_Plugin`; shared marketplace layer + records table move into the framework now; delivery code untouched — design #1675 / PR #1676 (R1 critic done, revision next). Operator questions ozon-seller #34 #35 #37 #43. Open: #1667, tracking#10, #1654, #1638 #1639 #1640, key rotation after #1554, ozon#90 #92, `tracking#7`, #1532 #1528 #1519 #1552, ozon#82 #84, #1538/yandex#152, russian-post#69 #73, edostavka#166, #1571, #1595 #1596 #1600, PR #1478. Later: range #46. Rig: city mode ON, test orders up to #3697. Detail: `sessions/s224.md`.
+**As of 2026-11-10 (s225, MacBook):** framework **2.0.28** released (tag `v2.0.28`); six delivery plugins on it, live on EDD (unchanged since s222). Framework `main` = `e1f6fe72` carries the marketplace layer F1–F4 and F8, the #1667 SelectWoo fix and design #1675 / ADR-013 (PRs #1696 #1697 #1699 #1700 #1701 #1702 and #1676) — **none of it is released**. **Ozon Seller v2 port in progress** (#1574; repo `woocommerce-ozon-seller`, board №8): `main` = `1b52d6c` (docs PR #60); waves 1–2, W3-1/W3-2 and W4-1/W4-3/W4-4 merged (code PRs through #57); the React admin (O1–O5, #61–#65) waits for a framework release. Framework cards F5–F15 (#1683–#1695) are open on board №6. Operator questions ozon-seller #34 #35 #37 #43. Open: tracking#10, #1654, #1638 #1639 #1640, key rotation after #1554, ozon#90 #92, `tracking#7`, #1532 #1528 #1519 #1552, ozon#82 #84, #1538/yandex#152, russian-post#69 #73, edostavka#166, #1571, #1595 #1596 #1600, #1698 (flaky PHP 7.4 rate-limit test), PR #1478. Later: range #46. Rig: city mode ON, test orders up to #3697. Detail: `sessions/s225.md`.
 **Earlier sessions:** `SESSION-LOG.md` (index) and `sessions/sNN.md` hold the per-session state of every earlier session.
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
@@ -190,7 +190,7 @@ a typed template. **[ADR-011](adr/011-vendored-imask-and-generated-phone-masks.m
 never the raw-served frontend.
 
 **#528 «Города вне списка»** — default OFF, only for «Список с поиском»; ON → select2 `tags`, OFF →
-#517's abandon mechanism gated off.
+Card #517's abandon mechanism gated off.
 
 **`select2:close` fires BEFORE `select2:select`** — any guard shaped as "the pick will cancel the
 close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
@@ -304,6 +304,7 @@ This section retains mutable state and the operating warnings.
   `rig-checkout-url-is-the-block-checkout`.
 - Going to the rig for the pickup layer? The order matters or the button is simply absent:
   [wiki/rig-pickup-walkthrough.md](wiki/rig-pickup-walkthrough.md).
+
 ## Infrastructure Reference
 
 - **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) — the current value is in `woodev/class-plugin.php` (a release gets the matching `vX.Y.Z` tag). **Raising VERSION on `main` publishes a release** — do it deliberately (#285).

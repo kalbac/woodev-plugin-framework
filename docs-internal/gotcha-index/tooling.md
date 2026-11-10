@@ -3,7 +3,6 @@
 > One line per gotcha in this topic; the detail is in the linked file. Map of every topic:
 > [../GOTCHAS.md](../GOTCHAS.md). Format and the write protocol: `DOCS-SCHEMA.md` → "GOTCHAS.md Format".
 
-
 - [tooling/gh] **`gh project item-edit --project-id PVT_…` now fails with `invalid number` — use `item-edit <number> --owner kalbac --url <issue> --field <name> --value <option>`, one field per call, and check the exit code.** → [gh-project-item-edit-takes-the-project-number-and-url-now](../gotchas/gh-project-item-edit-takes-the-project-number-and-url-now.md) (s206)
 - [tooling/phpcs] **The WordPress PHPCS standard has no layout sniffs: `foo(); }`, missing blank lines between members and one-line docblocks all pass `composer phpcs` — the ruleset adds `ScopeClosingBrace`, `FunctionSpacing` and `MemberVarSpacing` explicitly.** → [wordpress-phpcs-has-no-layout-sniffs](../gotchas/wordpress-phpcs-has-no-layout-sniffs.md) (s205)
 - [tooling/worktrees] **A stale gitignored `woodev/` in a plugin checkout fails tests CI passes, and `.worktreeinclude` copies it into every worker worktree — re-sync from the pinned tag after every pin bump.** → [a-stale-local-woodev-copy-in-a-plugin-checkout-fails-tests-that-ci-passes](../gotchas/a-stale-local-woodev-copy-in-a-plugin-checkout-fails-tests-that-ci-passes.md) (s205)
@@ -90,6 +89,7 @@
 - [tooling/gh] **A `gh pr view --jq .body > f` that failed under the GraphQL rate limit leaves `f` empty, and `gh pr edit --body-file f` then wipes the PR description — check `[ -s f ]`.** → [a-pr-body-edit-from-a-failed-fetch-writes-an-empty-body](../gotchas/a-pr-body-edit-from-a-failed-fetch-writes-an-empty-body.md) (s222)
 
 ## Related
+
 - [tooling/github] **A force-pushed commit stays fetchable by SHA on a PUBLIC repo until GitHub GC — no commercial source or keys on any pushed branch, worker branches included.** → [a-force-pushed-commit-stays-fetchable-by-sha-on-a-public-repo](../gotchas/a-force-pushed-commit-stays-fetchable-by-sha-on-a-public-repo.md)
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
@@ -128,3 +128,4 @@
 - [tooling/orca] **A rig worker’s `rm` inside `sh -c` raises an approval prompt: unattended it blocks ~2 min, then auto-denies; the coordinator approves with `orca terminal send --text 1` — design briefs without `rm`.** → [a-rig-workers-rm-inside-sh-c-blocks-an-unattended-run-on-a-prompt](../gotchas/a-rig-workers-rm-inside-sh-c-blocks-an-unattended-run-on-a-prompt.md) (s219)
 - [tooling/orca] **One mailbox delivery can carry several messages; reading it through `tail`/`cut` hides the second — a Codex worker's question waited 1.5 h unanswered. Parse every message of every delivery.** → [a-mailbox-delivery-can-carry-several-messages-and-a-cut-hides-the-second](../gotchas/a-mailbox-delivery-can-carry-several-messages-and-a-cut-hides-the-second.md) (s220)
 - [tooling/orca] **A Codex worker in structured mode (`structworker_…`) asked a question and waited ~1 h — `watch-workers.py` tails only `term_…` handles. Poll `orchestration check --run` yourself while a structured worker runs.** → [a-structured-codex-question-is-invisible-to-the-terminal-watchdog](../gotchas/a-structured-codex-question-is-invisible-to-the-terminal-watchdog.md) (s221)
+- [tooling/git] **`git checkout -b <branch>` on an existing local branch fails and leaves HEAD on main, so a rig run that follows measures main as if it were the PR — detach on `origin/<branch>` and check `HEAD` first.** → [checkout-b-on-an-existing-branch-fails-and-the-rig-measures-main](../gotchas/checkout-b-on-an-existing-branch-fails-and-the-rig-measures-main.md) (s225)
