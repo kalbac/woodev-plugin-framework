@@ -11,7 +11,8 @@
  * @package woodev-plugin-framework
  */
 
-import { useMemo, useState } from '@wordpress/element';
+import { SelectControl } from '@wordpress/components';
+import { useMemo, useRef, useState } from '@wordpress/element';
 import { createRecordsApi } from './api';
 import type { RecordsExtensions, TableHandle } from './extensions';
 import { FiltersBar, isNarrowed } from './filters';
@@ -20,7 +21,7 @@ import { changeQuery, writeQuery } from './query';
 import { RowActions } from './row-actions';
 import { useSelection, type Selection } from './selection';
 import { EmptyState, ErrorState, LoadingState } from './states';
-import { STYLES } from './styles';
+import { HIDE_VENDOR_PAGE_SIZE, STYLES } from './styles';
 import { buildHeaders, buildLines, visibleRowIds, type TableModelInput } from './table-model';
 import type { AdminRecord, Definition, Direction, Messages, RecordsQuery, RouteQuery } from './types';
 import { useRecords, type Records } from './use-records';
@@ -92,6 +93,12 @@ function TableBody( {
 }: TableBodyProps ) {
 	const TableCard = getTableCard();
 	const data = records.list.data;
+	// WooCommerce reports one page-size choice as two callbacks (size, then the page clamped to the new size). Both are
+	// computed from the query that was on screen, so the second would write the old size back: every change starts from
+	// the query the previous callback of the same event produced.
+	const latest = useRef( query );
+	latest.current = query;
+	const dropClampedPage = useRef( false );
 
 	if ( ! TableCard ) {
 		return null;
@@ -132,48 +139,91 @@ function TableBody( {
 	const lines = buildLines( model );
 	const leadColumns = headers.length - definition.columns.length;
 
+	const go = ( change: Partial< RecordsQuery > ) => {
+		const next = changeQuery( latest.current, change );
+
+		latest.current = next;
+		onChange( next );
+	};
+
 	const sortBy = ( columnId: string, direction: string ) => {
 		const sortKey = definition.columns.find( ( column ) => column.id === columnId )?.sort_key;
 		if ( sortKey ) {
-			onChange( changeQuery( query, { sort: sortKey, direction: direction as Direction } ) );
+			go( { sort: sortKey, direction: direction as Direction } );
 		}
 	};
 
-	// WooCommerce's pagination offers its own page sizes; only one PHP declared may reach the URL.
+	// The page-size control below is the only one shown, and lists PHP's sizes. Should WooCommerce's own picker ever
+	// call in (its CSS hook not matching), a size PHP did not declare is dropped together with the page clamp that
+	// WooCommerce computes for it right afterwards.
 	const changePerPage = ( value: string | number ) => {
 		const perPage = Number( value );
 		if ( definition.pagination.per_page_options.includes( perPage ) ) {
-			onChange( changeQuery( query, { perPage } ) );
+			go( { perPage } );
+			return;
+		}
+
+		dropClampedPage.current = true;
+		Promise.resolve().then( () => {
+			dropClampedPage.current = false;
+		} );
+	};
+
+	const changePage = ( page: number ) => {
+		if ( ! dropClampedPage.current ) {
+			go( { page } );
 		}
 	};
 
 	const onQueryChange: TableCardProps[ 'onQueryChange' ] = ( param ) =>
 		param === 'per_page' ? changePerPage : () => {};
 
+	const sizes = definition.pagination.per_page_options;
+	const sizeOptions = ( sizes.includes( query.perPage ) ? sizes : [ ...sizes, query.perPage ] ).map( ( size ) => ( {
+		value: String( size ),
+		label: String( size ),
+	} ) );
+
 	return (
-		<TableCard
-			// Remounted when the columns change: WooCommerce reads the visible-column list once, on mount.
-			key={ headers.map( ( header ) => header.key ).join( ',' ) }
-			className="woodev-records__table"
-			title={ title }
-			headers={ headers }
-			rows={ lines.map( ( line ) => line.cells ) }
-			rowKey={ ( _row, index ) => lines[ index ]?.key ?? String( index ) }
-			rowHeader={ leadColumns }
-			rowsPerPage={ query.perPage }
-			totalRows={ data?.total ?? 0 }
-			query={ {
-				orderby: sortedColumnId( definition, query ),
-				order: query.direction,
-				paged: String( query.page ),
-				per_page: query.perPage,
-			} }
-			isLoading={ records.list.status === 'loading' }
-			showMenu={ definition.columns.some( ( column ) => ! column.required ) }
-			onSort={ sortBy }
-			onPageChange={ ( page ) => onChange( changeQuery( query, { page } ) ) }
-			onQueryChange={ onQueryChange }
-		/>
+		<>
+			<style>{ HIDE_VENDOR_PAGE_SIZE }</style>
+			<TableCard
+				// Remounted when the columns change: WooCommerce reads the visible-column list once, on mount.
+				key={ headers.map( ( header ) => header.key ).join( ',' ) }
+				className="woodev-records__table"
+				title={ title }
+				headers={ headers }
+				rows={ lines.map( ( line ) => line.cells ) }
+				rowKey={ ( _row, index ) => lines[ index ]?.key ?? String( index ) }
+				rowHeader={ leadColumns }
+				rowsPerPage={ query.perPage }
+				totalRows={ data?.total ?? 0 }
+				query={ {
+					orderby: sortedColumnId( definition, query ),
+					order: query.direction,
+					paged: String( query.page ),
+					per_page: query.perPage,
+				} }
+				isLoading={ records.list.status === 'loading' }
+				showMenu={ definition.columns.some( ( column ) => ! column.required ) }
+				onSort={ sortBy }
+				onPageChange={ changePage }
+				onQueryChange={ onQueryChange }
+			/>
+			{ sizes.length > 1 && (
+				<div className="woodev-records__page-size" style={ STYLES.pageSize }>
+					<SelectControl
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+						label={ message( messages, MESSAGE_KEYS.perPage ) || title }
+						labelPosition="side"
+						value={ String( query.perPage ) }
+						options={ sizeOptions }
+						onChange={ ( next: string ) => changePerPage( next ) }
+					/>
+				</div>
+			) }
+		</>
 	);
 }
 
@@ -275,7 +325,10 @@ export function RecordsTable( {
 			{ extensions.renderActivity?.( handle ) }
 			{ hasBulk &&
 				extensions.renderBulkActions?.(
-					{ selectedIds: selection.selectedIds, clear: selection.clear },
+					{
+						selectedIds: selection.selectedIds,
+						clear: selection.clear,
+					},
 					handle
 				) }
 			{ limitNote !== '' && <p role="status">{ limitNote }</p> }

@@ -47,6 +47,8 @@ export const MESSAGE_KEYS = {
 	selectionLimit: 'selection_limit',
 	/** "Any" entry of a select filter. */
 	filterAny: 'filter_any',
+	/** Label of the page-size control. */
+	perPage: 'per_page',
 	/** Start of a date range. */
 	dateFrom: 'date_from',
 	/** End of a date range. */

@@ -152,6 +152,7 @@ export function fixtureDefinition( overrides: Partial< Definition > = {} ): Defi
 			actions_column: 'Действия',
 			select_all: 'Выбрать все на странице',
 			select_row: 'Выбрать строку',
+			per_page: 'Строк на странице',
 			date_from: 'С',
 			date_to: 'По',
 		},

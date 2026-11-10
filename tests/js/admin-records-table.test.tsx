@@ -131,6 +131,21 @@ function FakeTableCard( props: TableCardProps ) {
 			<button type="button" onClick={ () => props.onQueryChange( 'per_page' )( '75' ) }>
 				75 per page
 			</button>
+			{ [ 100, 75 ].map( ( size ) => (
+				<button
+					key={ size }
+					type="button"
+					onClick={ () => {
+						// WooCommerce's Pagination.perPageChange, then TableCard.onPageChange for the clamped page.
+						const clamped = Math.ceil( props.totalRows / size );
+						props.onQueryChange( 'per_page' )( size );
+						props.onPageChange( clamped );
+						props.onQueryChange( 'paged' )( clamped );
+					} }
+				>
+					{ `vendor ${ size } per page` }
+				</button>
+			) ) }
 		</div>
 	);
 }
@@ -483,6 +498,90 @@ describe( 'URL round trip', () => {
 		expect( navigate ).toHaveBeenCalledWith( expect.objectContaining( { per_page: '50', paged: undefined } ) );
 	} );
 
+	describe( 'page size', () => {
+		const pagination = {
+			default_per_page: 20,
+			per_page_options: [ 10, 20, 50 ],
+			max_per_page: 50,
+			max_selection: 3,
+		};
+		const servePhpSizes = () =>
+			serve( {
+				definition: () => fixtureDefinitionEnvelope( fixtureDefinition( { pagination } ) ),
+				rows: () => fixtureList( [ mug, shirt ], { total: 150 } ),
+			} );
+
+		test( "the control offers PHP's sizes only and WooCommerce's own picker is hidden", async () => {
+			servePhpSizes();
+			const { navigate } = await renderTable( { query: { paged: '3' } } );
+
+			const select = screen.getByRole( 'combobox', { name: 'Строк на странице' } );
+			expect(
+				within( select )
+					.getAllByRole( 'option' )
+					.map( ( option ) => option.textContent )
+			).toEqual( [ '10', '20', '50' ] );
+			expect( select ).toHaveValue( '20' );
+			const css = Array.from( document.querySelectorAll( 'style' ) ).map( ( style ) => style.textContent );
+			expect( css.join( '' ) ).toContain( '.woocommerce-pagination__per-page-picker{display:none}' );
+
+			fireEvent.change( select, { target: { value: '10' } } );
+			expect( navigate ).toHaveBeenLastCalledWith(
+				expect.objectContaining( { per_page: '10', paged: undefined } )
+			);
+
+			fireEvent.change( select, { target: { value: '50' } } );
+			expect( navigate ).toHaveBeenLastCalledWith(
+				expect.objectContaining( { per_page: '50', paged: undefined } )
+			);
+		} );
+
+		test( 'the declared default is the size that is left out of the URL', async () => {
+			servePhpSizes();
+			const { navigate } = await renderTable( { query: { per_page: '50' } } );
+
+			fireEvent.change( screen.getByRole( 'combobox', { name: 'Строк на странице' } ), {
+				target: { value: '20' },
+			} );
+
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { per_page: undefined } ) );
+		} );
+
+		test( 'a table with one size has no size control', async () => {
+			serve( {
+				definition: () =>
+					fixtureDefinitionEnvelope(
+						fixtureDefinition( { pagination: { ...pagination, per_page_options: [ 20 ] } } )
+					),
+			} );
+			await renderTable();
+
+			expect( screen.queryByRole( 'combobox', { name: 'Строк на странице' } ) ).not.toBeInTheDocument();
+		} );
+
+		test( "WooCommerce's size-then-page callbacks end on the new size and the clamped page", async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 150 } ) } );
+			const { navigate } = await renderTable( { query: { paged: '4' } } );
+
+			fireEvent.click( screen.getByRole( 'button', { name: 'vendor 100 per page' } ) );
+
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { per_page: '100', paged: '2' } ) );
+		} );
+
+		test( 'a size PHP did not declare is dropped together with the page WooCommerce clamps for it', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 150 } ) } );
+			const { navigate } = await renderTable( { query: { paged: '4' } } );
+
+			fireEvent.click( screen.getByRole( 'button', { name: 'vendor 75 per page' } ) );
+			expect( navigate ).not.toHaveBeenCalled();
+
+			// The guard lasts for that one event only.
+			await act( async () => {} );
+			fireEvent.click( screen.getByRole( 'button', { name: 'next page' } ) );
+			await waitFor( () => expect( navigate ).toHaveBeenCalledTimes( 1 ) );
+		} );
+	} );
+
 	test( 'filters write their own URL keys', async () => {
 		const { navigate } = await renderTable( { query: { paged: '4' } } );
 
@@ -716,7 +815,7 @@ describe( 'expandable children', () => {
 		expect( expander( 'Скрыть вариации: Футболка' ) ).toBeInTheDocument();
 	} );
 
-	test( 'another account never shows the first account\'s children under a parent with the same id', async () => {
+	test( "another account never shows the first account's children under a parent with the same id", async () => {
 		const pendingB = defer< ListEnvelope >();
 		const accountOf = ( path: string ) => ( path.includes( 'account_id]=a2' ) ? 'a2' : 'a1' );
 		serve( {
@@ -732,7 +831,9 @@ describe( 'expandable children', () => {
 		expect( await screen.findByText( 'ACCOUNT A CHILD' ) ).toBeInTheDocument();
 
 		rerender( <RecordsTable { ...tableProps } query={ { account: 'a2' } } /> );
-		await waitFor( () => expect( listRequests().some( ( path ) => path.includes( 'account_id]=a2' ) ) ).toBe( true ) );
+		await waitFor( () =>
+			expect( listRequests().some( ( path ) => path.includes( 'account_id]=a2' ) ) ).toBe( true )
+		);
 		await screen.findByRole( 'table', { name: 'Товары' } );
 
 		// B's rows are on screen, B's children are still being read: A's must not stand in for them.
@@ -742,7 +843,9 @@ describe( 'expandable children', () => {
 		expect( childRequests() ).toHaveLength( 1 );
 
 		fireEvent.click( expander( 'Показать вариации: Футболка' ) );
-		await act( async () => pendingB.resolve( fixtureList( [ fixtureRow( 'v1', 'ACCOUNT B CHILD' ) ], { total: 1 } ) ) );
+		await act( async () =>
+			pendingB.resolve( fixtureList( [ fixtureRow( 'v1', 'ACCOUNT B CHILD' ) ], { total: 1 } ) )
+		);
 
 		expect( await screen.findByText( 'ACCOUNT B CHILD' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'ACCOUNT A CHILD' ) ).not.toBeInTheDocument();
@@ -759,9 +862,13 @@ describe( 'expandable children', () => {
 
 		fireEvent.click( expander( 'Показать вариации: Футболка' ) );
 		rerender( <RecordsTable { ...tableProps } query={ { account: 'a2' } } /> );
-		await waitFor( () => expect( listRequests().some( ( path ) => path.includes( 'account_id]=a2' ) ) ).toBe( true ) );
+		await waitFor( () =>
+			expect( listRequests().some( ( path ) => path.includes( 'account_id]=a2' ) ) ).toBe( true )
+		);
 		await screen.findByRole( 'table', { name: 'Товары' } );
-		await act( async () => pendingA.resolve( fixtureList( [ fixtureRow( 'v1', 'ACCOUNT A CHILD' ) ], { total: 1 } ) ) );
+		await act( async () =>
+			pendingA.resolve( fixtureList( [ fixtureRow( 'v1', 'ACCOUNT A CHILD' ) ], { total: 1 } ) )
+		);
 
 		expect( screen.queryByText( 'ACCOUNT A CHILD' ) ).not.toBeInTheDocument();
 		expect( rowKeys() ).toEqual( [ 'p1', 'p2' ] );
@@ -773,7 +880,10 @@ describe( 'expandable children', () => {
 		serve( {
 			children: ( path ) => {
 				if ( isPage( path, 1 ) && refresh ) {
-					return Promise.reject( { code: 'woodev_records_provider_error', message: 'Не удалось прочитать вариации' } );
+					return Promise.reject( {
+						code: 'woodev_records_provider_error',
+						message: 'Не удалось прочитать вариации',
+					} );
 				}
 
 				return isPage( path, 2 )
