@@ -51,6 +51,16 @@ final class Test_Marketplace_Plugin extends Marketplace_Plugin {
 		$this->views           = $views;
 	}
 
+	/**
+	 * Runs the framework's lifecycle factory, which is protected. Calling it from inside the class works on every PHP version;
+	 * a `ReflectionMethod` would need `setAccessible()` before PHP 8.1.
+	 *
+	 * @return void
+	 */
+	public function build_lifecycle_handler(): void {
+		$this->init_lifecycle_handler();
+	}
+
 	/** @return Marketplace_Adapter */
 	public function get_marketplace_adapter(): Marketplace_Adapter {
 		return new Fake_Marketplace_Adapter();

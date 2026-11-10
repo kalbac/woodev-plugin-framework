@@ -6767,3 +6767,13 @@ msgstr ""
 #: admin/records/class-records-error.php:89
 msgid "Недостаточно прав для этого действия."
 msgstr ""
+
+#. translators: %s: the plugin's name
+#: marketplace/data/class-lifecycle.php:190
+msgid "<strong>%s:</strong> не удалось создать таблицы плагина в базе данных. Чаще всего у пользователя базы данных нет права CREATE — попросите хостинг его выдать. Попытка повторится при следующем открытии админки; если сообщение не исчезает, напишите в поддержку."
+msgstr ""
+
+#. translators: %d: longest length of an article
+#: marketplace/data/class-pinned-offer-id.php:131
+msgid "Артикул на маркетплейсе — не длиннее %d символов и без пробелов. Замените пробелы на «-» или сократите артикул."
+msgstr ""
