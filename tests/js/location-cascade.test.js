@@ -2060,6 +2060,61 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		consoleSpy.mockRestore();
 	} );
 
+	it( 'a region change that clears a failed city drops its unsaved mark, so a later re-render does not re-mark a different city (#1667, round 3)', async () => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		const instances = bootRealAjaxSelect2Settlement( { region: true } );
+		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );
+		const realRenderer = window.WoodevLocationRenderers[ 'ajax-select2' ];
+		const markSpies = [];
+
+		// Spy on every widget the cascade attaches from now on: each one's `markUnsaved` hook.
+		window.WoodevLocationRenderers[ 'ajax-select2' ] = function( el, options ) {
+			const api = realRenderer( el, options );
+
+			if ( api && 'function' === typeof api.markUnsaved ) {
+				api.markUnsaved = jest.fn( api.markUnsaved );
+				markSpies.push( api.markUnsaved );
+			}
+
+			return api;
+		};
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const resultItem = query.success.mock.calls.slice( -1 )[ 0 ][ 0 ].results[ 0 ];
+		instances[ 0 ].pick( resultItem );
+		selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		// The customer changes the region: the failed city is cleared (an ordinary ancestor edit).
+		const region = document.getElementById( 'billing_state' );
+
+		region.value = 'Татарстан';
+		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		// A later checkout re-render hands back a NON-EMPTY city in a fresh node.
+		const fresh = document.createElement( 'input' );
+
+		fresh.type = 'text';
+		fresh.id = 'billing_city';
+		fresh.name = 'billing_city';
+		fresh.value = SETTLEMENT_ITEM.label;
+		document.getElementById( 'billing_city' ).replaceWith( fresh );
+		const attachedBefore = markSpies.length;
+
+		window.jQuery( document.body ).trigger( 'updated_checkout' );
+		await flushMicrotasks();
+
+		// The city widget attached by the re-render must NOT carry the old failed save's mark.
+		expect( markSpies.length ).toBeGreaterThan( attachedBefore );
+		markSpies.slice( attachedBefore ).forEach( ( spy ) => expect( spy ).not.toHaveBeenCalled() );
+
+		window.WoodevLocationRenderers[ 'ajax-select2' ] = realRenderer;
+		consoleSpy.mockRestore();
+	} );
+
 	it( 'does not resend the same city after a successful response', async () => {
 		const instances = bootRealAjaxSelect2Settlement( {} );
 		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );

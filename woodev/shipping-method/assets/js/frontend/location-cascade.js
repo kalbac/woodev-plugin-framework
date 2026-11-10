@@ -2426,9 +2426,6 @@
 
 		if ( previous !== next ) {
 			resetWidgetGuard( entry, fieldId );
-
-			// Issue #1667: a different value replaces the selection the mark described.
-			delete entry.unsavedFields[ fieldId ];
 		}
 	}
 
@@ -2807,12 +2804,18 @@
 	 * A no-op for a level with no widget at all (the baseline typeahead's `<input>` never exposes
 	 * `.reset()` — nothing here to forget) or one a caller has already detached.
 	 *
+	 * Also drops the entry-level not-saved mark (issue #1667): every caller here has just replaced
+	 * the field's selection, so the mark no longer describes what the field shows. Without this a
+	 * later re-render could hand that mark to a different city in the same field.
+	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
 	 * @returns {void}
 	 */
 	function resetWidgetGuard( entry, fieldId ) {
 		var widget = entry.widgets[ fieldId ];
+
+		delete entry.unsavedFields[ fieldId ];
 
 		if ( widget && widget.api && 'function' === typeof widget.api.reset ) {
 			widget.api.reset();
@@ -2859,7 +2862,6 @@
 
 		var el = document.getElementById( node.fieldId );
 
-		delete entry.unsavedFields[ node.fieldId ];
 		entry.records[ level ] = null;
 		entry.store.setValue( node.fieldId, '' );
 		entry.resolved[ node.fieldId ] = '';
@@ -6076,6 +6078,9 @@
 				// {@see onAbandonFor} re-sets this for the NEW text, if and when its own search
 				// completes and again finds nothing.
 				entry.unresolved[ info.level ] = null;
+
+				// Issue #1667: the customer's own text replaces the selection the not-saved mark described.
+				delete entry.unsavedFields[ id ];
 
 				var level = info.level;
 				var section = entry.allNodes[ info.index ].section;
