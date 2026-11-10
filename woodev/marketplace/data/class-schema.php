@@ -49,6 +49,7 @@ final class Schema {
 	private const TABLES = [
 		'accounts',
 		'links',
+		'link_ids',
 		'tasks',
 		'task_items',
 		'events',
@@ -200,9 +201,8 @@ final class Schema {
 
 	/**
 	 * The product link store. The two per-product switches default to off: a link creator turns them on explicitly, so the schema
-	 * never makes a product push to a live marketplace on its own. The remote ids are the three slots of the link value
-	 * (`product_id`, `sku`, `model_id`); an adapter maps its own identifiers onto them. `offer_id` is the seller article, as wide
-	 * as the widest article policy an adapter may declare.
+	 * never makes a product push to a live marketplace on its own. The marketplace's identifiers are in `link_ids`. `offer_id` is
+	 * the seller article, as wide as the widest article policy an adapter may declare.
 	 *
 	 * @param string $table   Full table name.
 	 * @param string $charset Charset clause.
@@ -216,9 +216,6 @@ final class Schema {
 			wc_parent_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			kind varchar(8) NOT NULL DEFAULT 'offer',
 			offer_id varchar(191) NULL DEFAULT NULL,
-			remote_product_id bigint(20) unsigned NOT NULL DEFAULT 0,
-			remote_sku bigint(20) unsigned NOT NULL DEFAULT 0,
-			remote_model_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			card_state varchar(24) NOT NULL DEFAULT 'unlinked',
 			is_created tinyint(1) NOT NULL DEFAULT 0,
 			sync_stock tinyint(1) NOT NULL DEFAULT 0,
@@ -240,9 +237,28 @@ final class Schema {
 			UNIQUE KEY account_product (account_id,wc_product_id),
 			UNIQUE KEY account_offer (account_id,offer_id),
 			KEY account_state (account_id,card_state),
-			KEY account_sku (account_id,remote_sku),
-			KEY account_remote_product (account_id,remote_product_id),
 			KEY wc_parent (wc_parent_id)
+		) {$charset};";
+	}
+
+	/**
+	 * The remote identifiers of a link, one row per name, whatever names the adapter uses (`product_id`, `nmID`, …). `id_value` is
+	 * text and `id_type` (`i` or `s`) says whether the caller gave an integer or a string, so a value comes back as it went in.
+	 * `account_id` repeats the link's account so that the lookup by identifier is one indexed read.
+	 *
+	 * @param string $table   Full table name.
+	 * @param string $charset Charset clause.
+	 * @return string
+	 */
+	private function link_ids( string $table, string $charset ): string {
+		return "CREATE TABLE {$table} (
+			link_id bigint(20) unsigned NOT NULL,
+			account_id bigint(20) unsigned NOT NULL,
+			id_name varchar(32) NOT NULL,
+			id_value varchar(191) NOT NULL,
+			id_type char(1) NOT NULL DEFAULT 's',
+			PRIMARY KEY  (link_id,id_name),
+			KEY account_lookup (account_id,id_name,id_value)
 		) {$charset};";
 	}
 

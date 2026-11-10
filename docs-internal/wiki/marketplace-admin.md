@@ -340,15 +340,19 @@ event ledger's payload caps, `Images_Rule`, `Dimensions_Rule`, `Currency_Rule`,
 What the code settled in `woodev/marketplace/data/` (`Woodev\Framework\Marketplace\Data`), where the plan above left it open:
 
 - **One table set per marketplace.** `Schema( $marketplace_id )` names every table
-  `{$wpdb->prefix}woodev_{marketplace id}_{table}` (14 tables); the id is the adapter's `id()`, a lower-case word of at most 16
+  `{$wpdb->prefix}woodev_{marketplace id}_{table}` (15 tables); the id is the adapter's `id()`, a lower-case word of at most 16
   characters. No column, enum value or code names a marketplace (`NeutralityTest` reads the folder with the tokenizer).
   The plugin's option family stays `woodev_{plugin id}_` (`Uninstaller::option_prefix()`); the option- and transient-backed stores
   (`Link_Progress_Store`, `Link_Report_Store`, `Cards_Snapshot_Store`) take it as a constructor argument, and `Uninstaller::run()`
-  removes the tables, the pinned-article product meta, the option family and its transients. It needs no loaded plugin; the plugin
-  passes its own extra tables (Ozon: the four v1 tables).
+  removes the tables, the pinned-article product meta, the option family and its transients — the ones in `wp_options` by a `LIKE`,
+  and each listed account's snapshot, refresh mark and error through `delete_transient()` (`Cards_Snapshot_Store::clear()`), because a
+  persistent object cache holds a transient nowhere else. It needs no loaded plugin; the plugin passes its own extra tables (Ozon:
+  the four v1 tables).
 - **Neutral names.** Accounts: `external_id` (unique), `secret_enc`, `secret_fingerprint`; stock mode `site` / `marketplace`; price
-  direction `to_marketplace` / `from_marketplace` / `off`. Links: `remote_product_id`, `remote_sku`, `remote_model_id` are the
-  three slots of `Product_Link::remote_ids` (`product_id`, `sku`, `model_id`); an adapter maps its identifiers onto them.
+  direction `to_marketplace` / `from_marketplace` / `off`. Links: the remote-id bag of `Product_Link` is kept
+  whole in `link_ids` (link, account, name, value, type `i`/`s`), whatever the adapter names its identifiers (`product_id`, `nmID`, …)
+  and whether a value is an integer or a string; `by_remote_id()` is one indexed read by account, name and value. «Not known yet» is
+  no row (null, '', 0 and '0' are skipped), a card with any identifier has a frozen article, and detaching deletes the rows.
   Mappings keep the adapter's category descriptor as one JSON `category` (what `Mapping::remote_category()` returns), so a
   one-id and a two-id marketplace are stored alike. Documents: `external_keys`. `offer_id` is `varchar(191)` (the widest policy an
   adapter may declare, D4), not Ozon's 50.

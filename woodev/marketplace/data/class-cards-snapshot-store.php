@@ -91,6 +91,23 @@ final class Cards_Snapshot_Store {
 	}
 
 	/**
+	 * Forgets everything kept for an account: the snapshot, the «refreshing» mark and the last error.
+	 *
+	 * Goes through the transient API, so it reaches the value wherever WordPress keeps it — in the options table, or only in a
+	 * persistent object cache, where no SQL on `wp_options` can find it.
+	 *
+	 * @since 2.0.29
+	 *
+	 * @param int $account_id Account id.
+	 * @return void
+	 */
+	public function clear( int $account_id ): void {
+		foreach ( [ self::SNAPSHOT_KEY, self::REFRESHING_KEY, self::ERROR_KEY ] as $key ) {
+			delete_transient( $this->prefix . $key . $account_id );
+		}
+	}
+
+	/**
 	 * Marks a refresh as queued or running.
 	 *
 	 * @param int $account_id Account id.

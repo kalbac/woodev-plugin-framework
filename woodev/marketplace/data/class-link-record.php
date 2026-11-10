@@ -13,8 +13,8 @@ defined( 'ABSPATH' ) || exit;
  * The whole link row, as the migration, the card builder and the validator read it.
  *
  * The marketplace layer's `Product_Link` carries only what every marketplace shares; this value adds the columns only the store
- * needs (the three remote-id slots, the two per-link overrides, the mapping). The slots are `product_id`, `sku` and `model_id` of
- * the link value; an adapter maps its own identifiers onto them. A row is one of two kinds:
+ * needs (the two per-link overrides, the mapping). The marketplace's own identifiers are the `remote_ids` bag of `Product_Link`,
+ * kept whole: any names (`product_id`, `nmID`, …), integer or string values. A row is one of two kinds:
  *
  * - `offer`: a sellable marketplace card (a simple product or a variation) with an `offer_id` as long as the adapter's article
  *   policy allows;
@@ -148,9 +148,7 @@ final class Link_Record {
 				'wc_parent_id'        => (int) ( $row['wc_parent_id'] ?? 0 ),
 				'kind'                => self::KIND_PARENT === ( $row['kind'] ?? self::KIND_OFFER ) ? self::KIND_PARENT : self::KIND_OFFER,
 				'offer_id'            => null === $offer_id || '' === $offer_id ? null : (string) $offer_id,
-				'remote_product_id'     => (int) ( $row['remote_product_id'] ?? 0 ),
-				'remote_sku'            => (int) ( $row['remote_sku'] ?? 0 ),
-				'remote_model_id'            => (int) ( $row['remote_model_id'] ?? 0 ),
+				'remote_ids'          => self::clean_ids( (array) ( $row['remote_ids'] ?? [] ) ),
 				'card_state'          => (string) ( $row['card_state'] ?? self::STATE_UNLINKED ),
 				'is_created'          => (int) ( $row['is_created'] ?? 0 ),
 				'sync_stock'          => (int) ( $row['sync_stock'] ?? 0 ),
@@ -175,13 +173,14 @@ final class Link_Record {
 	}
 
 	/**
-	 * Returns the columns as the database stores them (JSON columns encoded, NULLs kept), without `link_id`.
+	 * Returns the columns of the `links` table as the database stores them (JSON columns encoded, NULLs kept), without `link_id` and
+	 * without the remote ids, which live in their own table.
 	 *
 	 * @return array<string,mixed>
 	 */
 	public function to_columns(): array {
 		$columns = $this->fields;
-		unset( $columns['link_id'] );
+		unset( $columns['link_id'], $columns['remote_ids'] );
 
 		foreach ( [ 'price_rule_override', 'attribute_overrides' ] as $json ) {
 			$columns[ $json ] = null === $columns[ $json ] ? null : (string) wp_json_encode( $columns[ $json ] );
@@ -251,36 +250,52 @@ final class Link_Record {
 	 * @return string|null
 	 */
 	public function frozen_offer_id(): ?string {
-		$sent = $this->remote_product_id() > 0 || in_array( $this->card_state(), self::SENT_STATES, true );
+		$sent = [] !== $this->remote_ids() || in_array( $this->card_state(), self::SENT_STATES, true );
 
 		return $sent ? $this->offer_id() : null;
 	}
 
 	/**
-	 * Remote product id, 0 until known.
+	 * The marketplace's identifiers of the card: name => integer or string. An identifier that is not known yet is absent.
 	 *
-	 * @return int
+	 * @return array<string,int|string>
 	 */
-	public function remote_product_id(): int {
-		return $this->fields['remote_product_id'];
+	public function remote_ids(): array {
+		return $this->fields['remote_ids'];
 	}
 
 	/**
-	 * Remote SKU, 0 until the card is created.
+	 * One identifier of the card.
 	 *
-	 * @return int
+	 * @param string $name Identifier name.
+	 * @return int|string|null Null when it is not known yet.
 	 */
-	public function remote_sku(): int {
-		return $this->fields['remote_sku'];
+	public function remote_id( string $name ) {
+		return $this->fields['remote_ids'][ $name ] ?? null;
 	}
 
 	/**
-	 * Remote model id, 0 until the card is created.
+	 * Drops the identifiers that mean «not known yet» (null, '', 0, '0') and keeps the others with their names and types.
 	 *
-	 * @return int
+	 * @param array<mixed> $ids Identifiers as a caller or the database gave them.
+	 * @return array<string,int|string>
 	 */
-	public function remote_model_id(): int {
-		return $this->fields['remote_model_id'];
+	public static function clean_ids( array $ids ): array {
+		$clean = [];
+
+		foreach ( $ids as $name => $value ) {
+			if ( ! is_int( $value ) && ! is_string( $value ) ) {
+				continue;
+			}
+
+			if ( '' === (string) $name || '' === (string) $value || '0' === (string) $value ) {
+				continue;
+			}
+
+			$clean[ (string) $name ] = $value;
+		}
+
+		return $clean;
 	}
 
 	/**

@@ -33,6 +33,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
+use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Tests\Integration\TestCase;
 
 class PersistenceTest extends TestCase {
@@ -79,7 +80,7 @@ class PersistenceTest extends TestCase {
 		$this->lifecycle()->create_tables();
 
 		$tables = $this->schema->table_names( $wpdb->prefix );
-		$this->assertCount( 14, $tables );
+		$this->assertCount( 15, $tables );
 
 		foreach ( $tables as $table ) {
 			$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
@@ -89,7 +90,7 @@ class PersistenceTest extends TestCase {
 	}
 
 	/**
-	 * A second install is a no-op: `dbDelta` finds nothing to change in any of the 14 statements, and the rows survive.
+	 * A second install is a no-op: `dbDelta` finds nothing to change in any of the 15 statements, and the rows survive.
 	 */
 	public function test_a_second_install_changes_nothing_and_loses_no_rows(): void {
 		global $wpdb;
@@ -256,6 +257,38 @@ class PersistenceTest extends TestCase {
 	}
 
 	/**
+	 * A marketplace's own identifiers, of any name and type, are stored in `link_ids` and found by an indexed read; a link that has
+	 * one keeps its article when it is queued again, and detaching deletes them.
+	 */
+	public function test_remote_identifiers_of_any_name_round_trip_on_mysql(): void {
+		global $wpdb;
+
+		$links = $this->links();
+		$ids   = [
+			'nmID'   => 5000001,
+			'imtID'  => 7000001,
+			'chrtID' => 'c-9',
+		];
+
+		$link_id = $links->save( new Product_Link( 1, 101, 0, 'SKU-1', $ids, 'unlinked' ) );
+		$found   = $links->by_remote_id( 1, 'chrtID', 'c-9' );
+
+		$this->assertSame( $link_id, $found->link_id() );
+		$this->assertSame( 5000001, $found->remote_id( 'nmID' ) );
+		$this->assertSame( 'c-9', $found->remote_id( 'chrtID' ) );
+		$this->assertSame( 101, $links->by_remote_id( 1, 'nmID', '5000001' )->wc_product_id() );
+		$this->assertNull( $links->by_remote_id( 2, 'nmID', 5000001 ) );
+
+		$this->assertTrue( $links->queue( $link_id, 'RENAMED' ) );
+		$this->assertSame( 'SKU-1', $links->find( 1, 101 )->offer_id(), 'the article of a card the marketplace knows is frozen' );
+
+		$this->assertTrue( $links->detach( 1, $link_id ) );
+		$this->assertSame( '0', (string) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $this->schema->table_name( 'link_ids', $wpdb->prefix ) . ' WHERE link_id = %d', $link_id ) ) );
+		$this->assertTrue( $links->queue( $link_id, 'RENAMED' ) );
+		$this->assertSame( 'RENAMED', $links->find( 1, 101 )->offer_id(), 'with no identifier the article follows again' );
+	}
+
+	/**
 	 * `INSERT … SELECT` fence: a card row is inserted only while the run still holds the account's claim.
 	 */
 	public function test_insert_card_is_fenced_by_the_account_claim_in_one_statement(): void {
@@ -266,10 +299,10 @@ class PersistenceTest extends TestCase {
 		$mine     = new Claim_Fence( $accounts->table(), $token );
 		$theirs   = new Claim_Fence( $accounts->table(), 'not-the-token' );
 
-		$this->assertSame( Wpdb_Link_Store::FENCED_OUT, $links->insert_card( Link_Record::offer( $account, 101, 0, 'A', [ 'remote_product_id' => 5 ] ), '', $theirs ) );
+		$this->assertSame( Wpdb_Link_Store::FENCED_OUT, $links->insert_card( Link_Record::offer( $account, 101, 0, 'A', [ 'remote_ids' => [ 'product_id' => 5 ] ] ), '', $theirs ) );
 		$this->assertNull( $links->find( $account, 101 ) );
 
-		$this->assertSame( Wpdb_Link_Store::INSERTED, $links->insert_card( Link_Record::offer( $account, 101, 0, 'A', [ 'remote_product_id' => 5 ] ), 'Отклонена', $mine ) );
+		$this->assertSame( Wpdb_Link_Store::INSERTED, $links->insert_card( Link_Record::offer( $account, 101, 0, 'A', [ 'remote_ids' => [ 'product_id' => 5 ] ] ), 'Отклонена', $mine ) );
 		$this->assertSame( 'Отклонена', $links->last_error( (int) $links->find( $account, 101 )->link_id() )['text'] );
 		$this->assertSame( Wpdb_Link_Store::EXISTS, $links->insert_card( Link_Record::offer( $account, 101, 0, 'A', [] ), '', $mine ) );
 
@@ -295,14 +328,14 @@ class PersistenceTest extends TestCase {
 		$this->assertCount( 1, $links->claim_for_task( 1, [ $link ], $mine ) );
 		$this->assertSame( [], $links->claim_for_task( 2, [ $link ], $mine ), 'taken once' );
 
-		$this->assertFalse( $links->advance( $link, 1, 'created', [ 'remote_sku' => 9 ], $theirs, 'submitted' ) );
-		$this->assertTrue( $links->advance( $link, 1, 'created', [ 'remote_sku' => 9 ], $mine, 'submitted' ) );
+		$this->assertFalse( $links->advance( $link, 1, 'created', [ 'remote_ids' => [ 'sku' => 9 ] ], $theirs, 'submitted' ) );
+		$this->assertTrue( $links->advance( $link, 1, 'created', [ 'remote_ids' => [ 'sku' => 9 ] ], $mine, 'submitted' ) );
 
-		$this->assertFalse( $links->fill_remote_state( $link, 99, 31, 'created', true, $accounts->table(), 'not-the-token' ) );
-		$this->assertTrue( $links->fill_remote_state( $link, 99, 31, 'created', true, $accounts->table(), $token ) );
+		$this->assertFalse( $links->fill_remote_state( $link, [ 'sku' => 99, 'model_id' => 31 ], 'created', true, $accounts->table(), 'not-the-token' ) );
+		$this->assertTrue( $links->fill_remote_state( $link, [ 'sku' => 99, 'model_id' => 31 ], 'created', true, $accounts->table(), $token ) );
 		$found = $links->find( $account, 101 );
-		$this->assertSame( 9, $found->remote_sku(), 'a known SKU is kept' );
-		$this->assertSame( 31, $found->remote_model_id() );
+		$this->assertSame( 9, $found->remote_id( 'sku' ), 'a known SKU is kept' );
+		$this->assertSame( 31, $found->remote_id( 'model_id' ) );
 
 		$this->assertTrue( $links->mark_archived( $link, 'Архив', $mine ) );
 		$this->assertFalse( $links->mark_archived( $link, 'Архив', $theirs ) );
@@ -368,7 +401,7 @@ class PersistenceTest extends TestCase {
 	private function links(): Wpdb_Link_Store {
 		global $wpdb;
 
-		return new Wpdb_Link_Store( $wpdb, $this->schema->table_name( 'links', $wpdb->prefix ) );
+		return new Wpdb_Link_Store( $wpdb, $this->schema->table_name( 'links', $wpdb->prefix ), $this->schema->table_name( 'link_ids', $wpdb->prefix ) );
 	}
 
 	/**

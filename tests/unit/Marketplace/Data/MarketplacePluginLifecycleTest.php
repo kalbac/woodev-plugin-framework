@@ -8,7 +8,6 @@
 namespace Woodev\Tests\Unit\Marketplace\Data;
 
 use Brain\Monkey\Functions;
-use ReflectionMethod;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
 use Woodev\Tests\Unit\TestCase;
@@ -103,7 +102,7 @@ final class MarketplacePluginLifecycleTest extends TestCase {
 	public function test_the_base_class_builds_the_marketplace_lifecycle(): void {
 		$plugin = new Test_Marketplace_Plugin( 'fake-seller', [ 'id' => 'fake-seller' ] );
 
-		( new ReflectionMethod( $plugin, 'init_lifecycle_handler' ) )->invoke( $plugin );
+		$plugin->build_lifecycle_handler();
 
 		$this->assertInstanceOf( Lifecycle::class, $plugin->get_lifecycle_handler() );
 	}
@@ -115,12 +114,12 @@ final class MarketplacePluginLifecycleTest extends TestCase {
 	 */
 	public function test_the_installed_lifecycle_creates_the_adapters_tables(): void {
 		$plugin = new Test_Marketplace_Plugin( 'fake-seller', [ 'id' => 'fake-seller' ] );
-		( new ReflectionMethod( $plugin, 'init_lifecycle_handler' ) )->invoke( $plugin );
+		$plugin->build_lifecycle_handler();
 
 		$plugin->get_lifecycle_handler()->create_tables();
 
 		$this->assertCount( 1, $this->batches );
-		$this->assertCount( 14, $this->batches[0] );
+		$this->assertCount( 15, $this->batches[0] );
 		$this->assertStringStartsWith( 'CREATE TABLE wp_woodev_fake_wildberries_accounts ', $this->batches[0][0] );
 	}
 }

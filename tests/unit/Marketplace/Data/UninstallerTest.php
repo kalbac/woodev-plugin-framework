@@ -12,6 +12,7 @@ use Brain\Monkey\Functions;
 use Mockery;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
+use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Uninstaller;
@@ -34,6 +35,20 @@ final class UninstallerTest extends TestCase {
 	 * @var array<string,string>
 	 */
 	public $option_cache = [];
+
+	/**
+	 * Ids of the rows the accounts table holds when the uninstaller reads it.
+	 *
+	 * @var int[]
+	 */
+	public $account_ids = [];
+
+	/**
+	 * Transients kept only in a persistent object cache, never in the options table, name => value.
+	 *
+	 * @var array<string,mixed>
+	 */
+	public $cache_only = [];
 
 	/**
 	 * The recording `wpdb`.
@@ -65,6 +80,27 @@ final class UninstallerTest extends TestCase {
 			}
 		);
 
+		// A site with Redis or Memcached: WordPress keeps transients in the object cache and never writes them to `wp_options`.
+		Functions\when( 'set_transient' )->alias(
+			function ( string $name, $value ): bool {
+				$this->cache_only[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'get_transient' )->alias(
+			function ( string $name ) {
+				return $this->cache_only[ $name ] ?? false;
+			}
+		);
+		Functions\when( 'delete_transient' )->alias(
+			function ( string $name ): bool {
+				unset( $this->cache_only[ $name ] );
+
+				return true;
+			}
+		);
+
 		$this->db = $this->recording_db();
 	}
 
@@ -80,7 +116,7 @@ final class UninstallerTest extends TestCase {
 	}
 
 	/**
-	 * Deleting the plugin drops the 14 tables of its marketplace and the tables the plugin names itself, and no other table.
+	 * Deleting the plugin drops the 15 tables of its marketplace and the tables the plugin names itself, and no other table.
 	 *
 	 * @return void
 	 */
@@ -89,7 +125,7 @@ final class UninstallerTest extends TestCase {
 
 		$drops = array_values( array_filter( $this->db->queries, static fn( string $sql ): bool => 0 === strpos( $sql, 'DROP TABLE' ) ) );
 
-		$this->assertCount( 16, $drops );
+		$this->assertCount( 17, $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_woodev_fake_accounts', $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_woodev_fake_catalog_cache', $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_legacy_stores', $drops );
@@ -149,6 +185,56 @@ final class UninstallerTest extends TestCase {
 	}
 
 	/**
+	 * With a persistent object cache the transients exist only there: no `LIKE` on `wp_options` finds them, so the uninstaller
+	 * removes each account's snapshot, refresh mark and error through the transient API — and only this plugin's.
+	 *
+	 * @return void
+	 */
+	public function test_uninstall_clears_transients_a_persistent_cache_holds_alone(): void {
+		$this->account_ids = [ 1, 2 ];
+		$mine              = new Cards_Snapshot_Store( Uninstaller::option_prefix( 'fake-seller' ) );
+		$other             = new Cards_Snapshot_Store( Uninstaller::option_prefix( 'other-seller' ) );
+
+		foreach ( [ 1, 2 ] as $account ) {
+			$mine->put( $account, [ [ 'offer_id' => 'A' ] ], 100 );
+			$mine->mark_refreshing( $account );
+			$mine->fail( $account, 'Маркетплейс не ответил' );
+		}
+		$mine->put( 3, [ [ 'offer_id' => 'C' ] ], 100 );
+		$other->put( 1, [ [ 'offer_id' => 'B' ] ], 100 );
+		$this->assertSame( [], $this->option_rows, 'the transients are not in the options table' );
+
+		Uninstaller::run( $this->db, new Schema( 'fake' ), 'fake-seller' );
+
+		foreach ( [ 1, 2 ] as $account ) {
+			$this->assertNull( $mine->get( $account ), "snapshot of account {$account}" );
+			$this->assertFalse( $mine->is_refreshing( $account ), "refresh mark of account {$account}" );
+			$this->assertSame( '', $mine->last_error( $account ), "last error of account {$account}" );
+		}
+		$this->assertNotNull( $other->get( 1 ), 'another plugin\'s cache entry is left alone' );
+		$this->assertNotNull( $mine->get( 3 ), 'an account the table did not list is not guessed at' );
+	}
+
+	/**
+	 * The accounts are read before their table is dropped, and a missing table is no error.
+	 *
+	 * @return void
+	 */
+	public function test_the_accounts_are_read_before_the_tables_are_dropped(): void {
+		$this->account_ids = [ 1 ];
+
+		Uninstaller::run( $this->db, new Schema( 'fake' ), 'fake-seller' );
+
+		$queries = $this->db->queries;
+		$read    = array_search( 'SELECT account_id FROM wp_woodev_fake_accounts', $this->db->reads, true );
+		$dropped = array_search( 'DROP TABLE IF EXISTS wp_woodev_fake_accounts', $queries, true );
+
+		$this->assertNotFalse( $read, 'the account ids are read' );
+		$this->assertNotFalse( $dropped );
+		$this->assertTrue( $this->db->suppressed, 'a missing table is not printed as an SQL error' );
+	}
+
+	/**
 	 * The family is built from the plugin id, exactly as `Woodev_Plugin` builds its option names.
 	 *
 	 * @return void
@@ -205,6 +291,20 @@ final class UninstallerTest extends TestCase {
 			 * @var string[]
 			 */
 			public $queries = [];
+
+			/**
+			 * Statements read with `get_col()`.
+			 *
+			 * @var string[]
+			 */
+			public $reads = [];
+
+			/**
+			 * Whether errors were suppressed at some point.
+			 *
+			 * @var bool
+			 */
+			public $suppressed = false;
 
 			/**
 			 * Table prefix.
@@ -276,6 +376,12 @@ final class UninstallerTest extends TestCase {
 			 * @return string[]
 			 */
 			public function get_col( string $query ): array {
+				$this->reads[] = $query;
+
+				if ( 0 === strpos( $query, 'SELECT account_id FROM' ) ) {
+					return array_map( 'strval', $this->test->account_ids );
+				}
+
 				preg_match_all( "/LIKE '((?:[^'])*)'/", $query, $matches );
 
 				$regexes = array_map( [ $this, 'like_to_regex' ], $matches[1] );
@@ -294,6 +400,18 @@ final class UninstallerTest extends TestCase {
 						}
 					)
 				);
+			}
+
+			/**
+			 * Accepts the switch and remembers it was used.
+			 *
+			 * @param bool $suppress Whether to suppress.
+			 * @return bool Previous setting.
+			 */
+			public function suppress_errors( bool $suppress = true ): bool {
+				$this->suppressed = $this->suppressed || $suppress;
+
+				return false;
 			}
 
 			/**

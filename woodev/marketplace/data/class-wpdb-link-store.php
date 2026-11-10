@@ -19,24 +19,13 @@ defined( 'ABSPATH' ) || exit;
  * Two audiences share it:
  *
  * - the marketplace layer, through {@see Link_Store} and the shared {@see Product_Link} value (the remote identifiers travel in its
- *   `remote_ids` bag as `product_id`, `sku` and `model_id`, stored in `remote_product_id`, `remote_sku` and `remote_model_id`);
+ *   `remote_ids` bag, whatever its names and values: they are kept whole in the `link_ids` table and found by name and value);
  * - the flows and screens, through {@see Link_Record}, which also carries the overrides, the mapping and the row kind.
  *
  * **The migration writes only through {@see self::insert_if_absent()}**: an existing link is never overwritten, so a re-run cannot
  * undo what the plugin has done since.
  */
 final class Wpdb_Link_Store implements Link_Store {
-	/**
-	 * Remote id name => column, for {@see Link_Store::by_remote_id()}.
-	 *
-	 * @var array<string,string>
-	 */
-	private const REMOTE_ID_COLUMNS = [
-		'product_id' => 'remote_product_id',
-		'sku'        => 'remote_sku',
-		'model_id'   => 'remote_model_id',
-	];
-
 	/**
 	 * Flags of {@see Product_Link} that are columns.
 	 *
@@ -66,6 +55,13 @@ final class Wpdb_Link_Store implements Link_Store {
 	private $table;
 
 	/**
+	 * Full name of the remote identifiers table.
+	 *
+	 * @var string
+	 */
+	private $ids_table;
+
+	/**
 	 * Returns the Unix time.
 	 *
 	 * @var callable
@@ -75,14 +71,16 @@ final class Wpdb_Link_Store implements Link_Store {
 	/**
 	 * Creates the store.
 	 *
-	 * @param \wpdb         $db    Database.
-	 * @param string        $table Full table name.
-	 * @param callable|null $clock Returns the Unix time; the system clock when null.
+	 * @param \wpdb         $db        Database.
+	 * @param string        $table     Full name of the links table.
+	 * @param string        $ids_table Full name of the remote identifiers table (`link_ids`).
+	 * @param callable|null $clock     Returns the Unix time; the system clock when null.
 	 */
-	public function __construct( \wpdb $db, string $table, ?callable $clock = null ) {
-		$this->db    = $db;
-		$this->table = $table;
-		$this->clock = $clock ?? 'time';
+	public function __construct( \wpdb $db, string $table, string $ids_table, ?callable $clock = null ) {
+		$this->db        = $db;
+		$this->table     = $table;
+		$this->ids_table = $ids_table;
+		$this->clock     = $clock ?? 'time';
 	}
 
 	/**
@@ -112,15 +110,15 @@ final class Wpdb_Link_Store implements Link_Store {
 	}
 
 	/**
-	 * Lists what each offer row of an account already says about its card: the article and the remote product id. Linking by article
-	 * reads it to leave every product that already has an identity alone.
+	 * Lists what each offer row of an account already says about its card: the article and whether the marketplace has given it any
+	 * identifier. Linking by article reads it to leave every product that already has an identity alone.
 	 *
 	 * @param int $account_id Account id.
-	 * @return array<int,array{offer_id:?string,remote_product_id:int,card_state:string}> By WooCommerce product id.
+	 * @return array<int,array{offer_id:?string,has_remote_ids:bool,card_state:string}> By WooCommerce product id.
 	 */
 	public function identity_map( int $account_id ): array {
 		$rows = $this->db->get_results(
-			$this->db->prepare( 'SELECT wc_product_id, offer_id, remote_product_id, card_state FROM %i WHERE account_id = %d AND kind = %s ORDER BY wc_product_id ASC', $this->table, $account_id, Link_Record::KIND_OFFER ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+			$this->db->prepare( 'SELECT wc_product_id, offer_id, card_state, EXISTS (SELECT 1 FROM %i AS known WHERE known.link_id = %i.link_id) AS has_remote_ids FROM %i WHERE account_id = %d AND kind = %s ORDER BY wc_product_id ASC', $this->ids_table, $this->table, $this->table, $account_id, Link_Record::KIND_OFFER ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
 			'ARRAY_A'
 		);
 		$map  = [];
@@ -129,9 +127,9 @@ final class Wpdb_Link_Store implements Link_Store {
 			$offer_id = $row['offer_id'];
 
 			$map[ (int) $row['wc_product_id'] ] = [
-				'offer_id'        => null === $offer_id || '' === $offer_id ? null : (string) $offer_id,
-				'remote_product_id' => (int) $row['remote_product_id'],
-				'card_state'      => (string) $row['card_state'],
+				'offer_id'       => null === $offer_id || '' === $offer_id ? null : (string) $offer_id,
+				'has_remote_ids' => 1 === (int) $row['has_remote_ids'],
+				'card_state'     => (string) $row['card_state'],
 			];
 		}
 
@@ -142,11 +140,11 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * Attaches an existing marketplace card to an offer row that has no card yet: the article, the remote ids, the state the
 	 * marketplace reports and, for a failed card, its text.
 	 *
-	 * Only a row that is idle (`unlinked`, no article, no remote product id, no task) is touched, so a row an export has queued or sent
+	 * Only a row that is idle (`unlinked`, no article, no remote identifier, no task) is touched, so a row an export has queued or sent
 	 * is never rewritten; with a fence the write also depends on the account claim.
 	 *
 	 * @param int                 $link_id Link id.
-	 * @param array<string,mixed> $card    `offer_id`, `product_id`, `sku`, `model_id`, `state`, `is_created`, `error_text`.
+	 * @param array<string,mixed> $card    `offer_id`, `remote_ids` (name => id), `state`, `is_created`, `error_text`.
 	 * @param Claim_Fence|null    $fence   The account claim the run holds, or null for a request-time link.
 	 * @return bool True when the row now holds the card.
 	 */
@@ -155,16 +153,26 @@ final class Wpdb_Link_Store implements Link_Store {
 
 		$error = (string) ( $card['error_text'] ?? '' );
 		$sql   = $this->db->prepare(
-			'UPDATE %i SET offer_id = %s, remote_product_id = %d, remote_sku = %d, remote_model_id = %d, card_state = %s, is_created = %d, last_error_code = NULL, last_error_text = ' . ( '' === $error ? 'NULL' : '%s' ) . ', updated_at = %s WHERE link_id = %d AND kind = %s AND card_state = %s AND remote_product_id = 0 AND offer_id IS NULL AND last_task_id IS NULL' . $fence_sql, // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+			'UPDATE %i SET offer_id = %s, card_state = %s, is_created = %d, last_error_code = NULL, last_error_text = ' . ( '' === $error ? 'NULL' : '%s' ) . ', updated_at = %s WHERE link_id = %d AND kind = %s AND card_state = %s AND NOT EXISTS (SELECT 1 FROM %i AS known WHERE known.link_id = %i.link_id) AND offer_id IS NULL AND last_task_id IS NULL' . $fence_sql, // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 			array_merge(
-				[ $this->table, (string) $card['offer_id'], (int) $card['product_id'], (int) $card['sku'], (int) $card['model_id'], (string) $card['state'], ! empty( $card['is_created'] ) ? 1 : 0 ],
+				[ $this->table, (string) $card['offer_id'], (string) $card['state'], ! empty( $card['is_created'] ) ? 1 : 0 ],
 				'' === $error ? [] : [ $error ],
-				[ $this->format_time( $this->now() ), $link_id, Link_Record::KIND_OFFER, Link_Record::STATE_UNLINKED ],
+				[ $this->format_time( $this->now() ), $link_id, Link_Record::KIND_OFFER, Link_Record::STATE_UNLINKED, $this->ids_table, $this->table ],
 				$fence_args
 			)
 		);
 
-		return 1 === $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		return $this->atomically(
+			function () use ( $sql, $link_id, $card ): bool {
+				if ( 1 !== $this->affected( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+					return false;
+				}
+
+				$this->write_ids( $link_id, $this->account_of( $link_id ), (array) ( $card['remote_ids'] ?? [] ), false );
+
+				return true;
+			}
+		);
 	}
 
 	/**
@@ -177,6 +185,31 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @throws Persistence_Exception When the database refuses the insert.
 	 */
 	public function insert_if_absent( Link_Record $record ): bool {
+		if ( [] === $record->remote_ids() ) {
+			return $this->insert_ignore( $record );
+		}
+
+		return $this->atomically(
+			function () use ( $record ): bool {
+				if ( ! $this->insert_ignore( $record ) ) {
+					return false;
+				}
+
+				$this->write_ids( (int) $this->db->insert_id, $record->account_id(), $record->remote_ids(), false );
+
+				return true;
+			}
+		);
+	}
+
+	/**
+	 * Inserts the row of a link without its identifiers.
+	 *
+	 * @param Link_Record $record Row to insert.
+	 * @return bool True when a row was inserted, false when a row already existed.
+	 * @throws Persistence_Exception When the database refuses the insert.
+	 */
+	private function insert_ignore( Link_Record $record ): bool {
 		$columns               = $record->to_columns();
 		$columns['updated_at'] = $this->format_time( $this->now() );
 		$columns['card_state'] = '' === $columns['card_state'] ? Link_Record::STATE_UNLINKED : $columns['card_state'];
@@ -219,6 +252,33 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @throws Persistence_Exception When the database refuses the insert.
 	 */
 	public function insert_card( Link_Record $record, string $error_text = '', ?Claim_Fence $fence = null ): string {
+		if ( [] === $record->remote_ids() ) {
+			return $this->insert_card_row( $record, $error_text, $fence );
+		}
+
+		return $this->atomically(
+			function () use ( $record, $error_text, $fence ): string {
+				$outcome = $this->insert_card_row( $record, $error_text, $fence );
+
+				if ( self::INSERTED === $outcome ) {
+					$this->write_ids( (int) $this->db->insert_id, $record->account_id(), $record->remote_ids(), false );
+				}
+
+				return $outcome;
+			}
+		);
+	}
+
+	/**
+	 * Inserts the row of an existing card without its identifiers.
+	 *
+	 * @param Link_Record      $record     Row to insert.
+	 * @param string           $error_text The marketplace's text for a declined card, '' for none.
+	 * @param Claim_Fence|null $fence      The account claim the run holds, or null.
+	 * @return string {@see self::INSERTED}, {@see self::EXISTS} or {@see self::FENCED_OUT}.
+	 * @throws Persistence_Exception When the database refuses the insert.
+	 */
+	private function insert_card_row( Link_Record $record, string $error_text, ?Claim_Fence $fence ): string {
 		$columns               = $record->to_columns();
 		$columns['updated_at'] = $this->format_time( $this->now() );
 		$columns['card_state'] = '' === $columns['card_state'] ? Link_Record::STATE_UNLINKED : $columns['card_state'];
@@ -294,7 +354,7 @@ final class Wpdb_Link_Store implements Link_Store {
 			'ARRAY_A'
 		);
 
-		return array_map( [ Link_Record::class, 'from_row' ], is_array( $rows ) ? $rows : [] );
+		return $this->with_ids( is_array( $rows ) ? $rows : [] );
 	}
 
 	/**
@@ -315,26 +375,24 @@ final class Wpdb_Link_Store implements Link_Store {
 	/**
 	 * Records what the marketplace says about a card the link did not know yet, without overwriting what is known.
 	 *
-	 * The SKU is written only while it is still 0 (a SKU never changes once the marketplace assigned it), so a stale answer cannot erase a
-	 * newer one. Used by a validation pass that runs under the claim of the link's account row:
-	 * the write carries that claim in its `WHERE`, so a validator whose claim was taken over changes nothing.
+	 * An identifier is written only while the link does not have one of that name (an identifier never changes once the marketplace
+	 * assigned it), so a stale answer cannot erase a newer one. Used by a validation pass that runs under the claim of the link's
+	 * account row: the state write carries that claim in its `WHERE`, and the identifiers are written only while it is still held, so
+	 * a validator whose claim was taken over changes nothing.
 	 *
-	 * @param int    $link_id        Link id.
-	 * @param int    $remote_sku       Remote SKU, 0 when the marketplace has none yet.
-	 * @param int    $remote_model_id Remote model id.
-	 * @param string $card_state     New card state.
-	 * @param bool   $is_created     Whether the marketplace says the card is created.
-	 * @param string $accounts_table Full name of the accounts table.
-	 * @param string $claim_token    Token that must still own the link's account row.
-	 * @return bool True when the row changed; false when it did not, or the claim is no longer held.
+	 * @param int                      $link_id        Link id.
+	 * @param array<string,int|string> $remote_ids     Identifiers the marketplace reported; an empty value is «not known yet».
+	 * @param string                   $card_state     New card state.
+	 * @param bool                     $is_created     Whether the marketplace says the card is created.
+	 * @param string                   $accounts_table Full name of the accounts table.
+	 * @param string                   $claim_token    Token that must still own the link's account row.
+	 * @return bool False when the claim is no longer held (or the link does not exist).
 	 */
-	public function fill_remote_state( int $link_id, int $remote_sku, int $remote_model_id, string $card_state, bool $is_created, string $accounts_table, string $claim_token ): bool {
+	public function fill_remote_state( int $link_id, array $remote_ids, string $card_state, bool $is_created, string $accounts_table, string $claim_token ): bool {
 		$now = $this->format_time( $this->now() );
 		$sql = $this->db->prepare(
-			'UPDATE %i SET remote_sku = CASE WHEN remote_sku = 0 THEN %d ELSE remote_sku END, remote_model_id = CASE WHEN remote_model_id = 0 THEN %d ELSE remote_model_id END, card_state = %s, is_created = %d, updated_at = %s WHERE link_id = %d AND EXISTS (SELECT 1 FROM %i AS claim_owner WHERE claim_owner.account_id = %i.account_id AND claim_owner.claim_token = %s AND claim_owner.claim_until > %s)',
+			'UPDATE %i SET card_state = %s, is_created = %d, updated_at = %s WHERE link_id = %d AND EXISTS (SELECT 1 FROM %i AS claim_owner WHERE claim_owner.account_id = %i.account_id AND claim_owner.claim_token = %s AND claim_owner.claim_until > %s)',
 			$this->table,
-			$remote_sku,
-			$remote_model_id,
 			$card_state,
 			$is_created ? 1 : 0,
 			$now,
@@ -345,7 +403,21 @@ final class Wpdb_Link_Store implements Link_Store {
 			$now
 		);
 
-		return 1 === $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		return $this->atomically(
+			function () use ( $sql, $link_id, $remote_ids, $accounts_table, $claim_token ): bool {
+				$account_id = $this->account_of( $link_id );
+				$changed    = $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+
+				// MySQL counts a row whose new values equal the old ones as unchanged: then the claim must still be visible.
+				if ( 1 !== $changed && ! $this->claim_held( $account_id, new Claim_Fence( $accounts_table, $claim_token ) ) ) {
+					return false;
+				}
+
+				$this->write_ids( $link_id, $account_id, $remote_ids, true );
+
+				return true;
+			}
+		);
 	}
 
 	/**
@@ -375,7 +447,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	}
 
 	/**
-	 * Finds a link by a remote identifier (`product_id`, `sku` or `model_id`).
+	 * Finds a link by one of its remote identifiers, whatever the adapter calls it (`product_id`, `nmID`, …). The value is compared as text.
 	 *
 	 * @param int        $account_id Account id.
 	 * @param string     $key        Identifier name.
@@ -383,21 +455,27 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @return Product_Link|null
 	 */
 	public function by_remote_id( int $account_id, string $key, $value ): ?Product_Link {
-		$column = self::REMOTE_ID_COLUMNS[ $key ] ?? null;
+		$value = (string) $value;
 
-		if ( null === $column || 0 === (int) $value ) {
+		if ( '' === $key || '' === $value || '0' === $value ) {
 			return null;
 		}
 
-		$record = $this->one(
-			$this->db->prepare( 'SELECT * FROM %i WHERE account_id = %d AND kind = %s AND %i = %d LIMIT 1', $this->table, $account_id, Link_Record::KIND_OFFER, $column, (int) $value ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+		$link_id = $this->db->get_var(
+			$this->db->prepare( 'SELECT link_id FROM %i WHERE account_id = %d AND id_name = %s AND id_value = %s ORDER BY link_id ASC LIMIT 1', $this->ids_table, $account_id, $key, $value ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
 		);
 
-		return null === $record ? null : $this->to_product_link( $record );
+		if ( null === $link_id ) {
+			return null;
+		}
+
+		$record = $this->get( (int) $link_id );
+
+		return null !== $record && $record->is_offer() ? $this->to_product_link( $record ) : null;
 	}
 
 	/**
-	 * Inserts or updates the shared part of a link (identifiers, state, switches, warehouse).
+	 * Inserts or updates the shared part of a link (identifiers, state, switches, warehouse). The identifiers it carries are written; one it does not carry is left as it is.
 	 *
 	 * An update leaves the overrides, the mapping and the row kind alone: they belong to the flows that hold a {@see Link_Record}.
 	 *
@@ -411,20 +489,27 @@ final class Wpdb_Link_Store implements Link_Store {
 		$shared   = $this->shared_columns( $link );
 
 		if ( null === $link_id ) {
-			$record = Link_Record::offer( $link->account_id(), $link->wc_product_id(), $link->wc_parent_id(), $link->seller_sku(), $shared );
+			$shared['remote_ids'] = $link->remote_ids();
+			$record               = Link_Record::offer( $link->account_id(), $link->wc_product_id(), $link->wc_parent_id(), $link->seller_sku(), $shared );
 
 			if ( ! $this->insert_if_absent( $record ) ) {
 				throw new \RuntimeException( 'The link could not be saved.' );
 			}
 
-			return (int) $this->db->insert_id;
+			return (int) $this->find( $link->account_id(), $link->wc_product_id() )->link_id();
 		}
 
 		$shared['updated_at'] = $this->format_time( $this->now() );
 
-		if ( false === $this->db->update( $this->table, $shared, [ 'link_id' => $link_id ] ) ) {
-			throw new \RuntimeException( 'The link could not be saved.' );
-		}
+		$this->atomically(
+			function () use ( $shared, $link_id, $link ): void {
+				if ( false === $this->db->update( $this->table, $shared, [ 'link_id' => $link_id ] ) ) {
+					throw new \RuntimeException( 'The link could not be saved.' );
+				}
+
+				$this->write_ids( $link_id, $link->account_id(), $link->remote_ids(), false );
+			}
+		);
 
 		return $link_id;
 	}
@@ -462,9 +547,11 @@ final class Wpdb_Link_Store implements Link_Store {
 	public function queue( int $link_id, string $offer_id ): bool {
 		$now = $this->format_time( $this->now() );
 		$sql = $this->db->prepare(
-			'UPDATE %i SET card_state = %s, offer_id = CASE WHEN remote_product_id = 0 AND card_state IN (%s, %s, %s) THEN %s ELSE offer_id END, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND kind = %s AND card_state NOT IN (%s, %s)',
+			'UPDATE %i SET card_state = %s, offer_id = CASE WHEN NOT EXISTS (SELECT 1 FROM %i AS known WHERE known.link_id = %i.link_id) AND card_state IN (%s, %s, %s) THEN %s ELSE offer_id END, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND kind = %s AND card_state NOT IN (%s, %s)',
 			$this->table,
 			Link_Record::STATE_QUEUED,
+			$this->ids_table,
+			$this->table,
 			Link_Record::STATE_UNLINKED,
 			Link_Record::STATE_QUEUED,
 			Link_Record::STATE_FAILED,
@@ -583,7 +670,7 @@ final class Wpdb_Link_Store implements Link_Store {
 
 		$rows = $this->db->get_results( $sql . ' ORDER BY link_id ASC', 'ARRAY_A' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
 
-		return array_map( [ Link_Record::class, 'from_row' ], is_array( $rows ) ? $rows : [] );
+		return $this->with_ids( is_array( $rows ) ? $rows : [] );
 	}
 
 	/**
@@ -598,7 +685,7 @@ final class Wpdb_Link_Store implements Link_Store {
 			'ARRAY_A'
 		);
 
-		return array_map( [ Link_Record::class, 'from_row' ], is_array( $rows ) ? $rows : [] );
+		return $this->with_ids( is_array( $rows ) ? $rows : [] );
 	}
 
 	/**
@@ -697,12 +784,15 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @param int                 $link_id    Link id.
 	 * @param int                 $task_id    Task that must own the row.
 	 * @param string              $state      New card state.
-	 * @param array<string,mixed> $columns    Other columns to write (`remote_product_id`, `remote_sku`, `remote_model_id`, `is_created`, `last_error_code`, `last_error_text`, `last_task_id`).
+	 * @param array<string,mixed> $columns    Other columns to write (`is_created`, `last_error_code`, `last_error_text`, `last_task_id`) and, under `remote_ids`, identifiers to set (name => id).
 	 * @param Claim_Fence|null    $fence      The account claim the run must still hold, or null.
 	 * @param string|null         $from_state The state the run read; the write happens only if the row still has it.
 	 * @return bool False when another task owns the row now, a reset took it back, the claim was lost or the state moved on.
 	 */
 	public function advance( int $link_id, int $task_id, string $state, array $columns = [], ?Claim_Fence $fence = null, ?string $from_state = null ): bool {
+		$remote_ids = (array) ( $columns['remote_ids'] ?? [] );
+		unset( $columns['remote_ids'] );
+
 		$columns['card_state'] = $state;
 		$columns['updated_at'] = $this->format_time( $this->now() );
 		$set                   = [];
@@ -731,7 +821,17 @@ final class Wpdb_Link_Store implements Link_Store {
 
 		$sql = $this->db->prepare( 'UPDATE %i SET ' . implode( ', ', $set ) . ' WHERE ' . $where . $fence_sql, array_merge( $values, $fence_args ) ); // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 
-		return 1 === $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		return $this->atomically(
+			function () use ( $sql, $link_id, $remote_ids ): bool {
+				if ( 1 !== $this->affected( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+					return false;
+				}
+
+				$this->write_ids( $link_id, $this->account_of( $link_id ), $remote_ids, false );
+
+				return true;
+			}
+		);
 	}
 
 	/**
@@ -798,7 +898,7 @@ final class Wpdb_Link_Store implements Link_Store {
 			'ARRAY_A'
 		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
 
-		return array_map( [ Link_Record::class, 'from_row' ], is_array( $rows ) ? $rows : [] );
+		return $this->with_ids( is_array( $rows ) ? $rows : [] );
 	}
 
 	/**
@@ -887,7 +987,7 @@ final class Wpdb_Link_Store implements Link_Store {
 
 	/**
 	 * «Снять связь» on the product tab: forgets the marketplace card of one offer row, locally. The row goes back to `unlinked` with no
-	 * remote identifiers and no article, so the product can be exported afresh or linked to another card; its switches, warehouse,
+	 * remote identifiers (their rows are deleted) and no article, so the product can be exported afresh or linked to another card; its switches, warehouse,
 	 * price override and mapping stay. Nothing is sent to the marketplace and the card there is untouched.
 	 *
 	 * A row an export is submitting right now is left alone (the request carries its article).
@@ -898,7 +998,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 */
 	public function detach( int $account_id, int $link_id ): bool {
 		$sql = $this->db->prepare(
-			'UPDATE %i SET card_state = %s, offer_id = NULL, remote_product_id = 0, remote_sku = 0, remote_model_id = 0, is_created = 0, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND card_state <> %s',
+			'UPDATE %i SET card_state = %s, offer_id = NULL, is_created = 0, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND card_state <> %s',
 			$this->table,
 			Link_Record::STATE_UNLINKED,
 			$this->format_time( $this->now() ),
@@ -908,7 +1008,17 @@ final class Wpdb_Link_Store implements Link_Store {
 			Link_Record::STATE_SUBMITTED
 		);
 
-		return 1 === $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		return $this->atomically(
+			function () use ( $sql, $link_id ): bool {
+				if ( 1 !== $this->affected( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+					return false;
+				}
+
+				$this->db->query( $this->db->prepare( 'DELETE FROM %i WHERE link_id = %d', $this->ids_table, $link_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared here.
+
+				return true;
+			}
+		);
 	}
 
 	/**
@@ -1005,9 +1115,6 @@ final class Wpdb_Link_Store implements Link_Store {
 		$columns = [
 			'offer_id'        => $link->seller_sku(),
 			'wc_parent_id'    => $link->wc_parent_id(),
-			'remote_product_id' => (int) $link->remote_id( 'product_id' ),
-			'remote_sku'        => (int) $link->remote_id( 'sku' ),
-			'remote_model_id' => (int) $link->remote_id( 'model_id' ),
 			'card_state'      => $link->state(),
 			'is_created'      => $link->is_created() ? 1 : 0,
 			'warehouse_id'    => $link->warehouse_id(),
@@ -1032,11 +1139,7 @@ final class Wpdb_Link_Store implements Link_Store {
 			$record->wc_product_id(),
 			$record->wc_parent_id(),
 			(string) $record->offer_id(),
-			[
-				'product_id' => $record->remote_product_id(),
-				'sku'        => $record->remote_sku(),
-				'model_id'   => $record->remote_model_id(),
-			],
+			$record->remote_ids(),
 			$record->card_state(),
 			[
 				'sync_stock'  => $record->sync_stock(),
@@ -1049,6 +1152,126 @@ final class Wpdb_Link_Store implements Link_Store {
 	}
 
 	/**
+	 * Longest identifier name and value the `link_ids` columns hold.
+	 *
+	 * @var int
+	 */
+	private const ID_NAME_LENGTH  = 32;
+	private const ID_VALUE_LENGTH = 191;
+
+	/**
+	 * Runs a write that touches the link and its identifiers as one unit: both land or neither does.
+	 *
+	 * @param callable $work The writes; whatever it returns is returned. An exception rolls back and goes up.
+	 * @return mixed
+	 * @throws Persistence_Exception When the commit fails.
+	 */
+	private function atomically( callable $work ) {
+		$this->db->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
+
+		try {
+			$result = $work();
+		} catch ( \Throwable $exception ) {
+			$this->db->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
+
+			throw $exception;
+		}
+
+		if ( false === $this->db->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
+			throw Persistence_Exception::database( 'the identifiers of a link', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Writes the identifiers of a link.
+	 *
+	 * @param int                      $link_id    Link id.
+	 * @param int                      $account_id Account id of the link.
+	 * @param array<string,int|string> $ids        Name => identifier; an empty one is «not known yet» and is skipped.
+	 * @param bool                     $keep_known True keeps an identifier the link already has; false sets it.
+	 * @return void
+	 * @throws \InvalidArgumentException When a name or value does not fit its column.
+	 * @throws Persistence_Exception     When the database refuses a write.
+	 */
+	private function write_ids( int $link_id, int $account_id, array $ids, bool $keep_known ): void {
+		foreach ( Link_Record::clean_ids( $ids ) as $name => $value ) {
+			if ( strlen( (string) $name ) > self::ID_NAME_LENGTH || strlen( (string) $value ) > self::ID_VALUE_LENGTH ) {
+				throw new \InvalidArgumentException( 'A remote identifier does not fit its column.' );
+			}
+
+			$type = is_int( $value ) ? 'i' : 's';
+
+			if ( $keep_known ) {
+				$done = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+					$this->db->prepare( 'INSERT IGNORE INTO %i (link_id, account_id, id_name, id_value, id_type) VALUES (%d, %d, %s, %s, %s)', $this->ids_table, $link_id, $account_id, (string) $name, (string) $value, $type )
+				);
+			} else {
+				$done = $this->db->replace(
+					$this->ids_table,
+					[
+						'link_id'    => $link_id,
+						'account_id' => $account_id,
+						'id_name'    => (string) $name,
+						'id_value'   => (string) $value,
+						'id_type'    => $type,
+					]
+				);
+			}
+
+			if ( false === $done ) {
+				throw Persistence_Exception::database( 'the identifier ' . $name . ' of link ' . $link_id, (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+			}
+		}
+	}
+
+	/**
+	 * Reads the account of a link.
+	 *
+	 * @param int $link_id Link id.
+	 * @return int 0 when the link does not exist.
+	 */
+	private function account_of( int $link_id ): int {
+		return (int) $this->db->get_var( $this->db->prepare( 'SELECT account_id FROM %i WHERE link_id = %d', $this->table, $link_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared here.
+	}
+
+	/**
+	 * Builds the records of rows of the links table, with their identifiers read in one query.
+	 *
+	 * @param array<int,array<string,mixed>> $rows Rows of the links table (with `link_id`).
+	 * @return Link_Record[] The identifiers of a record are in the order of their names.
+	 */
+	private function with_ids( array $rows ): array {
+		if ( [] === $rows ) {
+			return [];
+		}
+
+		$link_ids = array_map( 'intval', array_column( $rows, 'link_id' ) );
+		$found    = $this->db->get_results(
+			$this->db->prepare(
+				'SELECT link_id, id_name, id_value, id_type FROM %i WHERE link_id IN (' . implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) ) . ') ORDER BY link_id ASC, id_name ASC', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge( [ $this->ids_table ], $link_ids )
+			),
+			'ARRAY_A'
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		$by_link  = [];
+
+		foreach ( is_array( $found ) ? $found : [] as $id ) {
+			$by_link[ (int) $id['link_id'] ][ (string) $id['id_name'] ] = 'i' === $id['id_type'] ? (int) $id['id_value'] : (string) $id['id_value'];
+		}
+
+		return array_map(
+			static function ( array $row ) use ( $by_link ): Link_Record {
+				$row['remote_ids'] = $by_link[ (int) $row['link_id'] ] ?? [];
+
+				return Link_Record::from_row( $row );
+			},
+			$rows
+		);
+	}
+
+	/**
 	 * Reads one row.
 	 *
 	 * @param string $sql Prepared statement.
@@ -1057,7 +1280,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	private function one( string $sql ): ?Link_Record {
 		$row = $this->db->get_row( $sql, 'ARRAY_A' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared by the caller.
 
-		return is_array( $row ) ? Link_Record::from_row( $row ) : null;
+		return is_array( $row ) ? $this->with_ids( [ $row ] )[0] : null;
 	}
 
 	/**

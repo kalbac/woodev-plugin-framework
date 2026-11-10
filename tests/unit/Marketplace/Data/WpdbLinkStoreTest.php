@@ -17,6 +17,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Links\Link_Store;
 use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Link_Store;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 
 /**
@@ -55,6 +56,7 @@ final class WpdbLinkStoreTest extends TestCase {
 		$this->store = new Wpdb_Link_Store(
 			$this->db,
 			Sqlite_Tables::table( 'links' ),
+			Sqlite_Tables::table( 'link_ids' ),
 			static function (): int {
 				return self::NOW;
 			}
@@ -92,8 +94,10 @@ final class WpdbLinkStoreTest extends TestCase {
 			0,
 			'SKU-1',
 			[
-				'remote_product_id'   => 555,
-				'remote_sku'          => 777,
+				'remote_ids'          => [
+					'product_id' => 555,
+					'sku'        => 777,
+				],
 				'card_state'          => 'created',
 				'sync_price'          => 1,
 				'warehouse_id'        => 22,
@@ -121,7 +125,7 @@ final class WpdbLinkStoreTest extends TestCase {
 
 		$this->assertNotNull( $found );
 		$this->assertSame( 'SKU-1', $found->offer_id() );
-		$this->assertSame( 555, $found->remote_product_id() );
+		$this->assertSame( 555, $found->remote_id( 'product_id' ) );
 		$this->assertSame( 22, $found->warehouse_id() );
 		$this->assertTrue( $found->sync_price() );
 		$this->assertFalse( $found->sync_stock() );
@@ -217,9 +221,11 @@ final class WpdbLinkStoreTest extends TestCase {
 				0,
 				'SKU-1',
 				[
-					'remote_product_id' => 555,
-					'remote_sku'        => 777,
-					'remote_model_id'   => 31,
+					'remote_ids'        => [
+						'product_id' => 555,
+						'sku'        => 777,
+						'model_id'   => 31,
+					],
 					'sync_stock'        => 1,
 				]
 			)
@@ -237,7 +243,107 @@ final class WpdbLinkStoreTest extends TestCase {
 		$this->assertSame( 101, $this->store->by_remote_id( 7, 'sku', 777 )->wc_product_id() );
 		$this->assertSame( 101, $this->store->by_remote_id( 7, 'model_id', 31 )->wc_product_id() );
 		$this->assertNull( $this->store->by_remote_id( 7, 'sku', 0 ), 'a zero identifier means «not known yet»' );
-		$this->assertNull( $this->store->by_remote_id( 7, 'nmID', 5 ), 'a name the slots do not know finds nothing' );
+		$this->assertNull( $this->store->by_remote_id( 7, 'nmID', 5 ), 'a name no link has finds nothing' );
+		$this->assertNull( $this->store->by_remote_id( 8, 'sku', 777 ), 'another account' );
+	}
+
+	/**
+	 * The identifiers a marketplace uses are kept whole, under its own names: a Wildberries-shaped link (`nmID`, `imtID`, `chrtID`)
+	 * comes back as it went in and is found by any of them. The store may not impose three fixed integer slots.
+	 *
+	 * @return void
+	 */
+	public function test_a_marketplaces_own_identifiers_round_trip_and_are_found_by_name(): void {
+		$ids = [
+			'nmID'   => 5000001,
+			'imtID'  => 7000001,
+			'chrtID' => 9000001,
+		];
+
+		$id   = $this->store->save( new Product_Link( 1, 101, 0, 'SKU-1', $ids, 'created' ) );
+		$link = $this->store->by_product( 1, 101 );
+
+		$this->assertSame( $this->sorted( $ids ), $link->remote_ids() );
+		$this->assertSame( $id, $link->link_id() );
+		$this->assertSame( 101, $this->store->by_remote_id( 1, 'nmID', '5000001' )->wc_product_id(), 'a text value finds an integer identifier' );
+		$this->assertSame( 101, $this->store->by_remote_id( 1, 'chrtID', 9000001 )->wc_product_id() );
+		$this->assertNull( $this->store->by_remote_id( 1, 'chrtID', 5000001 ), 'the name counts' );
+		$this->assertNull( $this->store->by_remote_id( 2, 'nmID', 5000001 ), 'the account counts' );
+	}
+
+	/**
+	 * A string identifier is not turned into zero, and a number that is a string stays a string.
+	 *
+	 * @return void
+	 */
+	public function test_string_identifiers_keep_their_value_and_type(): void {
+		$ids = [
+			'product_id' => 'card-A42',
+			'sku'        => '0042',
+			'model_id'   => '7000001',
+			'extra'      => 12,
+		];
+
+		$this->store->save( new Product_Link( 1, 101, 0, 'SKU-1', $ids ) );
+
+		$this->assertSame( $this->sorted( $ids ), $this->store->by_product( 1, 101 )->remote_ids() );
+		$this->assertSame( 101, $this->store->by_remote_id( 1, 'product_id', 'card-A42' )->wc_product_id() );
+		$this->assertSame( 101, $this->store->by_remote_id( 1, 'sku', '0042' )->wc_product_id() );
+	}
+
+	/**
+	 * «Not known yet» is no row: empty and zero values are skipped, and a later save adds or changes only what it carries.
+	 *
+	 * @return void
+	 */
+	public function test_unknown_identifiers_are_not_stored_and_a_save_changes_only_what_it_carries(): void {
+		$this->store->save( new Product_Link( 1, 101, 0, 'SKU-1', [ 'nmID' => 5000001, 'imtID' => 0, 'chrtID' => '' ], 'pending_remote_ids' ) );
+		$this->assertSame( [ 'nmID' => 5000001 ], $this->store->by_product( 1, 101 )->remote_ids() );
+
+		$this->store->save( $this->store->by_product( 1, 101 )->with_remote_ids( [ 'chrtID' => 9000001 ] ) );
+		$this->assertSame( [ 'chrtID' => 9000001, 'nmID' => 5000001 ], $this->store->by_product( 1, 101 )->remote_ids() );
+
+		$this->store->save( $this->store->by_product( 1, 101 )->with_remote_ids( [ 'nmID' => 5000002 ] ) );
+		$this->assertSame( 5000002, $this->store->by_product( 1, 101 )->remote_id( 'nmID' ) );
+		$this->assertNull( $this->store->by_remote_id( 1, 'nmID', 5000001 ), 'the old value no longer finds it' );
+
+		$this->assertNull( $this->store->by_remote_id( 1, 'nmID', 0 ) );
+		$this->assertNull( $this->store->by_remote_id( 1, 'nmID', '' ) );
+		$this->assertNull( $this->store->by_remote_id( 1, '', 5000002 ) );
+	}
+
+	/**
+	 * A name or value too long for its column is refused before any row changes, and the link is not half-written.
+	 *
+	 * @return void
+	 */
+	public function test_an_identifier_that_does_not_fit_is_refused_and_nothing_is_kept(): void {
+		try {
+			$this->store->save( new Product_Link( 1, 101, 0, 'SKU-1', [ 'nmID' => 5, 'long' => str_repeat( 'x', 192 ) ] ) );
+			$this->fail( 'An identifier that does not fit must be refused.' );
+		} catch ( \InvalidArgumentException $exception ) {
+			$this->assertNull( $this->store->find( 1, 101 ), 'the link row was rolled back with its identifiers' );
+			$this->assertSame( [], $this->db->rows( 'SELECT * FROM ' . Sqlite_Tables::table( 'link_ids' ) ) );
+		}
+	}
+
+	/**
+	 * The real store answers the layer's contract the way the in-memory fake the second-marketplace tests use does.
+	 *
+	 * @return void
+	 */
+	public function test_it_can_stand_in_for_the_fake_link_store(): void {
+		$link = new Product_Link( 1, 101, 0, 'SKU-1', [ 'nmID' => 5000001, 'chrtID' => 'c-9' ], 'created', [ 'sync_stock' => true ] );
+
+		foreach ( [ new Fake_Link_Store(), $this->store ] as $store ) {
+			$store->save( $link );
+
+			$this->assertSame( 'SKU-1', $store->by_seller_sku( 1, 'SKU-1' )->seller_sku(), get_class( $store ) );
+			$this->assertSame( 5000001, $store->by_product( 1, 101 )->remote_id( 'nmID' ), get_class( $store ) );
+			$this->assertSame( 101, $store->by_remote_id( 1, 'chrtID', 'c-9' )->wc_product_id(), get_class( $store ) );
+			$this->assertSame( 'c-9', $store->by_remote_id( 1, 'nmID', 5000001 )->remote_id( 'chrtID' ), get_class( $store ) );
+			$this->assertNull( $store->by_remote_id( 1, 'nmID', 1 ), get_class( $store ) );
+		}
 	}
 
 	/**
@@ -272,7 +378,7 @@ final class WpdbLinkStoreTest extends TestCase {
 		$this->assertSame( (int) $existing->link_id(), $id );
 		$found = $this->store->find( 7, 101 );
 		$this->assertSame( 'created', $found->card_state() );
-		$this->assertSame( 900, $found->remote_sku() );
+		$this->assertSame( 900, $found->remote_id( 'sku' ) );
 		$this->assertSame( 3, $found->mapping_id(), 'the mapping is not part of the shared value and survives' );
 		$this->assertSame( 'X', $found->attribute_overrides()['85'][0]['value'] );
 
@@ -303,19 +409,40 @@ final class WpdbLinkStoreTest extends TestCase {
 	 * @return void
 	 */
 	public function test_fill_remote_state_never_overwrites_a_known_sku(): void {
-		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'remote_product_id' => 5 ] ) );
-		$this->store->insert_if_absent( Link_Record::offer( 7, 102, 0, 'B', [ 'remote_sku' => 42 ] ) );
+		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'remote_ids' => [ 'product_id' => 5 ] ] ) );
+		$this->store->insert_if_absent( Link_Record::offer( 7, 102, 0, 'B', [ 'remote_ids' => [ 'sku' => 42 ] ] ) );
 		$first  = (int) $this->store->find( 7, 101 )->link_id();
 		$second = (int) $this->store->find( 7, 102 )->link_id();
 
 		$this->claim_account( 7, 'held' );
 
-		$this->store->fill_remote_state( $first, 900, 31, 'created', true, $this->accounts(), 'held' );
-		$this->store->fill_remote_state( $second, 999, 32, 'created', true, $this->accounts(), 'held' );
+		$this->store->fill_remote_state(
+			$first,
+			[
+				'sku'      => 900,
+				'model_id' => 31,
+			],
+			'created',
+			true,
+			$this->accounts(),
+			'held'
+		);
+		$this->store->fill_remote_state(
+			$second,
+			[
+				'sku'      => 999,
+				'model_id' => 32,
+			],
+			'created',
+			true,
+			$this->accounts(),
+			'held'
+		);
 
-		$this->assertSame( 900, $this->store->find( 7, 101 )->remote_sku(), 'an unknown SKU is filled' );
-		$this->assertSame( 31, $this->store->find( 7, 101 )->remote_model_id() );
-		$this->assertSame( 42, $this->store->find( 7, 102 )->remote_sku(), 'a known SKU is kept' );
+		$this->assertSame( 900, $this->store->find( 7, 101 )->remote_id( 'sku' ), 'an unknown SKU is filled' );
+		$this->assertSame( 31, $this->store->find( 7, 101 )->remote_id( 'model_id' ) );
+		$this->assertSame( 42, $this->store->find( 7, 102 )->remote_id( 'sku' ), 'a known SKU is kept' );
+		$this->assertSame( 32, $this->store->find( 7, 102 )->remote_id( 'model_id' ), 'an unknown one beside it is filled' );
 		$this->assertSame( 'created', $this->store->find( 7, 102 )->card_state() );
 	}
 
@@ -325,19 +452,23 @@ final class WpdbLinkStoreTest extends TestCase {
 	 * @return void
 	 */
 	public function test_fill_remote_state_is_fenced_by_the_account_claim(): void {
-		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'remote_product_id' => 5 ] ) );
+		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'remote_ids' => [ 'product_id' => 5 ] ] ) );
 		$link = (int) $this->store->find( 7, 101 )->link_id();
+		$ids  = [
+			'sku'      => 900,
+			'model_id' => 31,
+		];
 
 		$this->claim_account( 7, 'theirs' );
-		$this->assertFalse( $this->store->fill_remote_state( $link, 900, 31, 'created', true, $this->accounts(), 'mine' ) );
+		$this->assertFalse( $this->store->fill_remote_state( $link, $ids, 'created', true, $this->accounts(), 'mine' ) );
 
 		$this->claim_account( 7, 'mine', -1 );
-		$this->assertFalse( $this->store->fill_remote_state( $link, 900, 31, 'created', true, $this->accounts(), 'mine' ), 'an expired claim' );
-		$this->assertSame( 0, $this->store->find( 7, 101 )->remote_model_id() );
+		$this->assertFalse( $this->store->fill_remote_state( $link, $ids, 'created', true, $this->accounts(), 'mine' ), 'an expired claim' );
+		$this->assertNull( $this->store->find( 7, 101 )->remote_id( 'model_id' ), 'a lost claim writes no identifier' );
 
 		$this->claim_account( 7, 'mine' );
-		$this->assertTrue( $this->store->fill_remote_state( $link, 900, 31, 'created', true, $this->accounts(), 'mine' ) );
-		$this->assertSame( 31, $this->store->find( 7, 101 )->remote_model_id() );
+		$this->assertTrue( $this->store->fill_remote_state( $link, $ids, 'created', true, $this->accounts(), 'mine' ) );
+		$this->assertSame( 31, $this->store->find( 7, 101 )->remote_id( 'model_id' ) );
 	}
 
 	/**
@@ -365,7 +496,7 @@ final class WpdbLinkStoreTest extends TestCase {
 	 */
 	public function test_queue_respects_the_frozen_article_and_the_states_it_must_not_touch(): void {
 		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'OLD', [] ) );
-		$this->store->insert_if_absent( Link_Record::offer( 7, 102, 0, 'KEEP', [ 'remote_product_id' => 9 ] ) );
+		$this->store->insert_if_absent( Link_Record::offer( 7, 102, 0, 'KEEP', [ 'remote_ids' => [ 'product_id' => 9 ] ] ) );
 		$this->store->insert_if_absent( Link_Record::offer( 7, 103, 0, 'SENT', [ 'card_state' => 'submitted' ] ) );
 		$this->store->insert_if_absent( Link_Record::offer( 7, 104, 0, 'GONE', [ 'card_state' => 'archived' ] ) );
 
@@ -423,10 +554,10 @@ final class WpdbLinkStoreTest extends TestCase {
 		$this->assertFalse( $this->store->advance( $link, 5, 'created', [], null, 'queued' ), 'the row is not in the state the run read' );
 		$this->assertFalse( $this->store->advance( $link, 5, 'created', [], new Claim_Fence( $this->accounts(), 'theirs' ) ), 'the claim is lost' );
 
-		$this->assertTrue( $this->store->advance( $link, 5, 'created', [ 'remote_product_id' => 88, 'last_error_text' => null ], $fence, 'submitted' ) );
+		$this->assertTrue( $this->store->advance( $link, 5, 'created', [ 'remote_ids' => [ 'product_id' => 88 ], 'last_error_text' => null ], $fence, 'submitted' ) );
 		$found = $this->store->find( 7, 101 );
 		$this->assertSame( 'created', $found->card_state() );
-		$this->assertSame( 88, $found->remote_product_id() );
+		$this->assertSame( 88, $found->remote_id( 'product_id' ) );
 		$this->assertSame( [ 'code' => '', 'text' => '' ], $this->store->last_error( $link ) );
 		$this->assertSame( [ 'created' => 1 ], $this->store->state_counts( 7, [ $link ] ) );
 	}
@@ -437,7 +568,7 @@ final class WpdbLinkStoreTest extends TestCase {
 	 * @return void
 	 */
 	public function test_reset_state_keeps_the_identifiers_and_drops_the_task_fence(): void {
-		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'card_state' => 'queued', 'remote_product_id' => 9 ] ) );
+		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'card_state' => 'queued', 'remote_ids' => [ 'product_id' => 9 ] ] ) );
 		$link = $this->link_id( 101 );
 		$this->store->claim_for_task( 5, [ $link ] );
 
@@ -446,7 +577,7 @@ final class WpdbLinkStoreTest extends TestCase {
 
 		$found = $this->store->find( 7, 101 );
 		$this->assertSame( 'unlinked', $found->card_state() );
-		$this->assertSame( 9, $found->remote_product_id() );
+		$this->assertSame( 9, $found->remote_id( 'product_id' ) );
 		$this->assertFalse( $this->store->advance( $link, 5, 'created' ), 'the old task no longer owns the row' );
 	}
 
@@ -456,7 +587,7 @@ final class WpdbLinkStoreTest extends TestCase {
 	 * @return void
 	 */
 	public function test_detach_forgets_the_card_but_not_the_settings(): void {
-		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'card_state' => 'created', 'remote_product_id' => 9, 'remote_sku' => 8, 'sync_stock' => 1, 'mapping_id' => 3 ] ) );
+		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'card_state' => 'created', 'remote_ids' => [ 'product_id' => 9, 'sku' => 8 ], 'sync_stock' => 1, 'mapping_id' => 3 ] ) );
 		$this->store->insert_if_absent( Link_Record::offer( 7, 102, 0, 'B', [ 'card_state' => 'submitted' ] ) );
 
 		$this->assertTrue( $this->store->detach( 7, $this->link_id( 101 ) ) );
@@ -466,8 +597,8 @@ final class WpdbLinkStoreTest extends TestCase {
 		$found = $this->store->find( 7, 101 );
 		$this->assertSame( 'unlinked', $found->card_state() );
 		$this->assertNull( $found->offer_id() );
-		$this->assertSame( 0, $found->remote_product_id() );
-		$this->assertSame( 0, $found->remote_sku() );
+		$this->assertSame( [], $found->remote_ids() );
+		$this->assertSame( [], $this->db->rows( 'SELECT * FROM ' . Sqlite_Tables::table( 'link_ids' ) . ' WHERE link_id = ' . $this->link_id( 101 ) ), 'the identifier rows are gone' );
 		$this->assertTrue( $found->sync_stock() );
 		$this->assertSame( 3, $found->mapping_id() );
 	}
@@ -482,9 +613,10 @@ final class WpdbLinkStoreTest extends TestCase {
 		$this->store->insert_if_absent( Link_Record::offer( 7, 102, 0, '', [ 'card_state' => 'queued' ] ) );
 		$card = [
 			'offer_id'   => 'A',
-			'product_id' => 5,
-			'sku'        => 6,
-			'model_id'   => 7,
+			'remote_ids' => [
+				'product_id' => 5,
+				'sku'        => 6,
+			],
 			'state'      => 'created',
 			'is_created' => true,
 		];
@@ -495,8 +627,8 @@ final class WpdbLinkStoreTest extends TestCase {
 		$this->assertFalse( $this->store->adopt_card( $this->link_id( 101 ), $card ), 'now it has an identity' );
 		$this->assertFalse( $this->store->adopt_card( $this->link_id( 102 ), $card ), 'an export queued it' );
 
-		$this->assertSame( 5, $this->store->find( 7, 101 )->remote_product_id() );
-		$this->assertSame( [ 101 => [ 'offer_id' => 'A', 'remote_product_id' => 5, 'card_state' => 'created' ] ], $this->identity_of( 101 ) );
+		$this->assertSame( [ 'product_id' => 5, 'sku' => 6 ], $this->store->find( 7, 101 )->remote_ids() );
+		$this->assertSame( [ 101 => [ 'offer_id' => 'A', 'has_remote_ids' => true, 'card_state' => 'created' ] ], $this->identity_of( 101 ) );
 	}
 
 	/**
@@ -508,7 +640,7 @@ final class WpdbLinkStoreTest extends TestCase {
 		$this->claim_account( 7, 'mine' );
 		$mine   = new Claim_Fence( $this->accounts(), 'mine' );
 		$theirs = new Claim_Fence( $this->accounts(), 'theirs' );
-		$record = Link_Record::offer( 7, 101, 0, 'A', [ 'remote_product_id' => 5 ] );
+		$record = Link_Record::offer( 7, 101, 0, 'A', [ 'remote_ids' => [ 'product_id' => 5 ] ] );
 
 		$this->assertSame( Wpdb_Link_Store::FENCED_OUT, $this->store->insert_card( $record, '', $theirs ) );
 		$this->assertNull( $this->store->find( 7, 101 ) );
@@ -600,7 +732,7 @@ final class WpdbLinkStoreTest extends TestCase {
 		$this->assertSame( [ 201, 202, 300 ], $this->product_ids( $this->store->offers_of( 7, [ 200, 300 ] ) ) );
 		$this->assertSame( [], $this->store->offers_of( 7, [] ) );
 		$this->assertCount( 2, $this->store->offers_of_product( 201 ), 'in every account' );
-		$this->assertSame( [ 300 => [ 'offer_id' => 'S', 'remote_product_id' => 0, 'card_state' => 'unlinked' ] ], array_intersect_key( $this->store->identity_map( 7 ), [ 300 => 1 ] ) );
+		$this->assertSame( [ 300 => [ 'offer_id' => 'S', 'has_remote_ids' => false, 'card_state' => 'unlinked' ] ], array_intersect_key( $this->store->identity_map( 7 ), [ 300 => 1 ] ) );
 	}
 
 	/**
@@ -609,11 +741,23 @@ final class WpdbLinkStoreTest extends TestCase {
 	 * @return void
 	 */
 	public function test_to_product_link_carries_the_remote_id_slots(): void {
-		$link = $this->store->to_product_link( Link_Record::offer( 7, 101, 100, 'A', [ 'remote_product_id' => 1, 'remote_sku' => 2, 'remote_model_id' => 3, 'warehouse_id' => 4 ] ) );
+		$link = $this->store->to_product_link( Link_Record::offer( 7, 101, 100, 'A', [ 'remote_ids' => [ 'product_id' => 1, 'sku' => 2, 'model_id' => 3 ], 'warehouse_id' => 4 ] ) );
 
 		$this->assertSame( [ 1, 2, 3 ], [ $link->remote_id( 'product_id' ), $link->remote_id( 'sku' ), $link->remote_id( 'model_id' ) ] );
 		$this->assertSame( 4, $link->warehouse_id() );
 		$this->assertSame( 100, $link->wc_parent_id() );
+	}
+
+	/**
+	 * Sorts an identifier bag by name, the order the store returns it in.
+	 *
+	 * @param array<string,int|string> $ids Identifiers.
+	 * @return array<string,int|string>
+	 */
+	private function sorted( array $ids ): array {
+		ksort( $ids );
+
+		return $ids;
 	}
 
 	/**
@@ -638,7 +782,7 @@ final class WpdbLinkStoreTest extends TestCase {
 		return [
 			$product_id => [
 				'offer_id'          => $entry['offer_id'],
-				'remote_product_id' => $entry['remote_product_id'],
+				'has_remote_ids'    => $entry['has_remote_ids'],
 				'card_state'        => $entry['card_state'],
 			],
 		];

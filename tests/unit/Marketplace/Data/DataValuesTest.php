@@ -124,7 +124,7 @@ final class DataValuesTest extends TestCase {
 		$this->assertNull( Link_Record::offer( 7, 1, 0, 'A', [] )->frozen_offer_id() );
 		$this->assertNull( Link_Record::offer( 7, 1, 0, 'A', [ 'card_state' => 'queued' ] )->frozen_offer_id() );
 		$this->assertSame( 'A', Link_Record::offer( 7, 1, 0, 'A', [ 'card_state' => 'submitted' ] )->frozen_offer_id() );
-		$this->assertSame( 'A', Link_Record::offer( 7, 1, 0, 'A', [ 'remote_product_id' => 5 ] )->frozen_offer_id() );
+		$this->assertSame( 'A', Link_Record::offer( 7, 1, 0, 'A', [ 'remote_ids' => [ 'product_id' => 5 ] ] )->frozen_offer_id() );
 	}
 
 	/**
@@ -144,7 +144,42 @@ final class DataValuesTest extends TestCase {
 		$this->assertSame( 1, $columns['sync_stock'] );
 		$this->assertSame( '{"price":{"kind":"fixed","value":"9"}}', $columns['price_rule_override'] );
 		$this->assertNull( $columns['attribute_overrides'] );
-		$this->assertSame( [ 'remote_product_id', 'remote_sku', 'remote_model_id' ], array_values( array_intersect( [ 'remote_product_id', 'remote_sku', 'remote_model_id' ], array_keys( $columns ) ) ) );
+		$this->assertArrayNotHasKey( 'remote_ids', $columns, 'the identifiers have their own table' );
+	}
+
+	/**
+	 * The identifier bag keeps names and types, and drops what means «not known yet».
+	 *
+	 * @return void
+	 */
+	public function test_remote_ids_keep_their_names_and_types(): void {
+		$record = Link_Record::offer(
+			7,
+			1,
+			0,
+			'A',
+			[
+				'remote_ids' => [
+					'nmID'  => 5000001,
+					'code'  => '0042',
+					'none'  => 0,
+					'blank' => '',
+					'nope'  => null,
+					'float' => 1.5,
+					'zero'  => '0',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'nmID' => 5000001,
+				'code' => '0042',
+			],
+			$record->remote_ids()
+		);
+		$this->assertSame( 5000001, $record->remote_id( 'nmID' ) );
+		$this->assertNull( $record->remote_id( 'missing' ) );
 	}
 
 	/**
