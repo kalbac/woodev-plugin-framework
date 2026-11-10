@@ -1,6 +1,78 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.29] — 2026-11-10
+### Bug Fixes
+- **records**: Reject malformed date filters before DateTime; cover children isolation
+
+- **marketplace**: F1 critic round 1 — refuse unsupported price shapes, expose policies on the adapter
+
+- **location**: Retry the same city after a failed save (#1667)
+
+- **location**: Keep the unsaved-retry mark across a checkout re-render (#1667)
+
+- **location**: Drop the unsaved mark when the field's selection is replaced (#1667)
+
+- **marketplace**: F8 critic round 1 — remote ids, PHP 7.4 tests, cache-only transients
+
+- **marketplace**: F8 critic round 2 — remote identifiers compare byte for byte
+
+- **marketplace**: Register the menu the WooCommerce way (#1704)
+
+
+### Documentation
+- **s222**: Tails, framework 2.0.27/2.0.28, six plugin releases live on EDD
+
+- **s223**: Ozon Seller v2 port waves 1, 2 and 4; handoff for Monday
+
+- **s224**: Ozon Seller waves 2-3 merged; React admin and marketplace-layer decisions; overnight handoff
+
+- **marketplace**: Design shared layer and React admin
+
+- **marketplace**: Round 2 design — Marketplace_Plugin base and full module scope
+
+- **marketplace**: Keep Ozon policy out of the domain layer; card file sets
+
+- **marketplace**: R3 fixes - Currency_Rule in D1, release gate, shared reason text
+
+- **marketplace**: F2 card row matches what shipped
+
+- **s225**: Marketplace F1–F4, F8 and #1667 merged; design #1676 merged; handoff
+
+- **s225**: The #1667 rig run was on the PR commit
+
+- **s225**: Trim the handoff under its size cap
+
+- **s225**: Record #1704 (menu the WooCommerce way) in the session file and handoff
+
+- **s225**: Add #1706 to the number registry
+
+- **s225**: CURRENT-STATE names #1704
+
+
+### Features
+- **records**: F4 records PHP schema and REST
+
+- **marketplace**: F1 domain layer transfer
+
+- **marketplace**: F2 Marketplace_Plugin and pages
+
+- **marketplace**: F8 persistence
+
+- **settings**: F3 marketplace settings placement
+
+- **marketplace**: F8 wire the lifecycle, adapter credential fields, MySQL integration tests
+
+
+### Tests
+- **marketplace**: Read adapter return types via ReflectionNamedType
+
+
+### Build
+- **deps**: Bump taiki-e/install-action from 2.88.1 to 2.90.2 (#1678)
+
+
+
 ## [2.0.28] — 2026-11-07
 ### Bug Fixes
 - **shipping**: Leave the city field alone for a cart with nothing to ship (#1664)
