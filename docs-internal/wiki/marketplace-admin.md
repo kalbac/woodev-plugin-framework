@@ -347,6 +347,13 @@ Owner = plugin id; table ids are unique per owner; a duplicate is a developer di
 never replaces another owner's table. `authorize()` returns `bool` so errors stay `WP_Error`
 at the controller; missing authorisation fails closed.
 
+F4 adds one thing the sketch did not carry: the options route needs a provider answer, so a
+provider that declares an action field with `options_source` also implements the optional
+`Provides_Field_Options::get_field_options()`; a field without that contract answers 404.
+`Records_Definition` rejects every key outside this page's vocabularies, and the F4 controller
+serves definition, list, children and options only — `preview`/`apply` (F6), `activity` and
+`account_activity` (F7) arrive with their cards through the same registry.
+
 ### Definition
 
 | Member | Shape / rule |
