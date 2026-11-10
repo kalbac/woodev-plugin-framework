@@ -1375,10 +1375,25 @@
 		var seededOption = null;
 
 		/**
-		 * @type {string|null} the real value of {@see seededOption} while {@see parkUnresolvedSeed}
-		 * has blanked it for the open dropdown, `null` otherwise.
+		 * @type {HTMLOptionElement|null} the `<option>` {@see parkUnresolvedSeed} has blanked for the
+		 * open dropdown — the seed (#1663) or the unsaved pick (#1667) — `null` otherwise.
+		 */
+		var parkedOption = null;
+
+		/**
+		 * @type {string|null} the real value of {@see parkedOption} while it is parked, `null`
+		 * otherwise.
 		 */
 		var parkedSeedValue = null;
+
+		/**
+		 * Issue #1667: the selection on this widget was NOT saved by the server (a failed or
+		 * unpersisted `/select`). Set by {@see markSelectionUnsaved}, cleared by a fresh pick and
+		 * by {@see forgetLastHandled}.
+		 *
+		 * @type {boolean}
+		 */
+		var unsavedSelection = false;
 
 		/**
 		 * @type {function(): void|null} cancels the MOST RECENTLY started `ajax-select2` request,
@@ -1527,6 +1542,10 @@
 		 */
 		function forgetLastHandled() {
 			lastHandledKey = null;
+
+			// Issue #1667: the field was rewritten or cleared, so the selection that was unsaved is
+			// gone with it. A caller that marks a failed save does so AFTER this reset.
+			unsavedSelection = false;
 		}
 
 		/**
@@ -1569,6 +1588,9 @@
 		 */
 		function handleSelect2Select( event ) {
 			var data = event && event.params ? event.params.data : null;
+
+			// Issue #1667: a fresh pick is a new `/select` attempt, which settles the unsaved state.
+			unsavedSelection = false;
 
 			// Issue #528: a tag has no locality key — it is NOT a record pick.
 			// `createTag()`'s own `newTag` stamp (see `selectConfigFor()`'s ajax
@@ -1708,14 +1730,15 @@
 		}
 
 		/**
-		 * Writes `value` to {@see seededOption} AND drops select2's cached data for it — see the
-		 * body for why the DOM value alone is not enough.
+		 * Writes `value` to `option` AND drops select2's cached data for it — see the body for why
+		 * the DOM value alone is not enough.
 		 *
-		 * @param {string} value
+		 * @param {HTMLOptionElement} option
+		 * @param {string}            value
 		 * @returns {void}
 		 */
-		function setSeedValue( value ) {
-			seededOption.value = value;
+		function writeParkedValue( option, value ) {
+			option.value = value;
 
 			// select2/selectWoo caches an option's data (id included) with `$.data( option, 'data' )`
 			// the first time it reads it, and `Results.setClasses()` judges "already selected" on
@@ -1723,13 +1746,26 @@
 			// Without this the id stays "Москва", the result stays `data-selected="true"` and a
 			// click on it still only closes the list (Codex critic C3, PR #1666).
 			if ( window.jQuery ) {
-				window.jQuery( seededOption ).removeData( 'data' );
+				window.jQuery( option ).removeData( 'data' );
 			}
 		}
 
 		/**
+		 * Issue #1667: the server did not save the selection this widget shows (a failed or
+		 * unpersisted `/select`, see `location-cascade.js`'s `settleSelect()`). The customer's
+		 * retry of the SAME result must be a real pick, which {@see parkUnresolvedSeed} arranges
+		 * from the next open on. Cleared by {@see handleSelect2Select} and {@see forgetLastHandled}.
+		 *
+		 * @returns {void}
+		 */
+		function markSelectionUnsaved() {
+			unsavedSelection = true;
+		}
+
+		/**
 		 * Issue #1663: lets the customer re-pick the settlement the page already shows when
-		 * the cascade holds no record of it.
+		 * the cascade holds no record of it. Issue #1667 extends it to a pick the server did not
+		 * save: the same select2 rule applies to the failed city the field still shows.
 		 *
 		 * The seeded `<option>` (issue #447) is the text WooCommerce rendered from the saved
 		 * customer data — a value, not a pick: no `dataset.woodevKey`, no record behind it. After
@@ -1740,32 +1776,47 @@
 		 * `select2:select`, so no `/select`, and the order is refused for a settlement "not in
 		 * the list" for good.
 		 *
-		 * While the list is open the seed is therefore blanked, so no result counts as already
-		 * selected and a click on the one naming the same place is a real pick;
-		 * {@see restoreParkedSeed} undoes it on close. Only for an unresolved seed: with a
-		 * customer pick standing, the server already has the record and a re-pick has nothing to
-		 * add. `options.pickedSettlement` exists for the settlement level only.
+		 * While the list is open the selected option is therefore blanked, so no result counts as
+		 * already selected and a click on the one naming the same place is a real pick;
+		 * {@see restoreParkedSeed} undoes it on close. Two cases park: an unresolved seed (only
+		 * when no customer pick stands — with one, the server already has the record and a re-pick
+		 * has nothing to add; `options.pickedSettlement` exists for the settlement level only), and
+		 * an unsaved selection (#1667), where the server has no record to keep.
 		 *
 		 * @returns {void}
 		 */
 		function parkUnresolvedSeed() {
-			if (
-				null !== parkedSeedValue || ! seededOption || ! seededOption.parentNode || ! seededOption.selected
-				|| seededOption.dataset.woodevKey || 'function' !== typeof options.pickedSettlement || options.pickedSettlement()
-			) {
+			if ( null !== parkedSeedValue ) {
 				return;
 			}
 
-			parkedSeedValue = seededOption.value;
-			setSeedValue( '' );
+			var target = null;
+
+			if ( unsavedSelection ) {
+				target = -1 < select.selectedIndex ? select.options[ select.selectedIndex ] : null;
+			} else if (
+				seededOption && seededOption.parentNode && seededOption.selected
+				&& ! seededOption.dataset.woodevKey && 'function' === typeof options.pickedSettlement && ! options.pickedSettlement()
+			) {
+				target = seededOption;
+			}
+
+			// An empty option is a placeholder, not a pick: parking it would let a later pick remove it.
+			if ( ! target || ! target.parentNode || '' === target.value ) {
+				return;
+			}
+
+			parkedOption = target;
+			parkedSeedValue = target.value;
+			writeParkedValue( target, '' );
 		}
 
 		/**
 		 * Undoes {@see parkUnresolvedSeed} when the list closes. Nothing picked (Escape, click
-		 * away, a result that was already selected): the field still holds the blanked seed, so its
-		 * value goes back. A pick: select2 has already appended and selected its own `<option>`
+		 * away, a result that was already selected): the field still holds the blanked option, so
+		 * its value goes back. A pick: select2 has already appended and selected its own `<option>`
 		 * (`change` precedes `select2:close`, see {@see handleSelect2Close}), which supersedes the
-		 * seed — it is removed rather than restored, so two options never share one value.
+		 * parked one — it is removed rather than restored, so two options never share one value.
 		 *
 		 * @returns {void}
 		 */
@@ -1775,11 +1826,12 @@
 			}
 
 			if ( '' === select.value ) {
-				setSeedValue( parkedSeedValue );
-			} else if ( seededOption.parentNode ) {
-				seededOption.parentNode.removeChild( seededOption );
+				writeParkedValue( parkedOption, parkedSeedValue );
+			} else if ( parkedOption.parentNode ) {
+				parkedOption.parentNode.removeChild( parkedOption );
 			}
 
+			parkedOption = null;
 			parkedSeedValue = null;
 		}
 
@@ -2079,6 +2131,8 @@
 			// hook `location-cascade.js`'s D7 cancel path uses to make a same-entry re-pick live
 			// again after it clears this field's value out from under the widget.
 			reset: forgetLastHandled,
+			// Issue #1667: the server did not save the shown selection — see {@see markSelectionUnsaved}.
+			markUnsaved: markSelectionUnsaved,
 			detach: function() {
 				// issue #449 (teardown gap, round 2): cancels whatever `ajax-select2` request is
 				// still in flight FIRST — before anything below touches select2's own instance data

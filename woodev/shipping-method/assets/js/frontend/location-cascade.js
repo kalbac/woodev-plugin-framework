@@ -1518,6 +1518,10 @@
 			// fieldId -> the {@see createAddressTimerGuard} guard armed on that CLASSIC checkout
 			// address input, released by {@see detachOne}.
 			addressGuards: {},
+			// fieldId -> true while the server has NOT saved the selection shown on that field (a failed
+			// or unpersisted `/select`). Kept here, not in the renderer, so a widget re-attached by a
+			// checkout re-render gets it back — {@see attachOne} re-applies it (issue #1667).
+			unsavedFields: {},
 			// Single-flight /select queue state (Finding 2) — see enqueueSelect()/sendNextSelect().
 			pendingRecord: null,
 			selectInFlight: false,
@@ -2698,6 +2702,10 @@
 		// happened before it hands a record over. See {@see nextPickSeq}.
 		nextPickSeq( entry );
 
+		// Issue #1667: a new pick replaces the unsaved selection on its level; its own /select
+		// settles the mark again.
+		clearFieldUnsaved( entry, record.level );
+
 		entry.pendingRecord = record;
 
 		// Issue #541: the busy state belongs to the customer's ACTION, not to the request. It
@@ -2796,12 +2804,18 @@
 	 * A no-op for a level with no widget at all (the baseline typeahead's `<input>` never exposes
 	 * `.reset()` — nothing here to forget) or one a caller has already detached.
 	 *
+	 * Also drops the entry-level not-saved mark (issue #1667): every caller here has just replaced
+	 * the field's selection, so the mark no longer describes what the field shows. Without this a
+	 * later re-render could hand that mark to a different city in the same field.
+	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
 	 * @returns {void}
 	 */
 	function resetWidgetGuard( entry, fieldId ) {
 		var widget = entry.widgets[ fieldId ];
+
+		delete entry.unsavedFields[ fieldId ];
 
 		if ( widget && widget.api && 'function' === typeof widget.api.reset ) {
 			widget.api.reset();
@@ -3130,8 +3144,10 @@
 				// widget already wrote it before onSelect ran).
 				//
 				// A transport failure (`fetch` rejects with an Error: offline, DNS) is a DIFFERENT
-				// mode — no server answer, nothing to explain — and stays silent as before.
-				settleSelect( entry, false, !! error && ! ( error instanceof Error ), record );
+				// mode — no server answer, nothing to explain — and stays silent as before (no
+				// notice). Issue #1667: it still marks the pick unsaved, so the shopper can retry the
+				// same city ({@see settleSelect}).
+				settleSelect( entry, false, !! error && ! ( error instanceof Error ), record, true );
 			}
 		);
 	}
@@ -3258,9 +3274,13 @@
 	 * @param {Object}  record        The record THIS response answered for — see
 	 *                                {@see sendNextSelect}, which is this function's only
 	 *                                caller.
+	 * @param {boolean} [transportFailed] Whether the request itself failed (no server answer).
+	 *                                Issue #1667: a not-saved outcome — honest or transport —
+	 *                                marks the widget's selection unsaved so the same city can be
+	 *                                re-picked ({@see markWidgetUnsaved}).
 	 * @returns {void}
 	 */
-	function settleSelect( entry, shouldTrigger, notPersisted, record ) {
+	function settleSelect( entry, shouldTrigger, notPersisted, record, transportFailed ) {
 		entry.selectInFlight = false;
 
 		// Before the possible forward below, never after: a queued record is about to make its
@@ -3274,6 +3294,7 @@
 
 		if ( shouldTrigger ) {
 			clearNotPersistedNotice( entry );
+			clearFieldUnsaved( entry, record.level );
 
 			// Issue #309: a persisted `/select` is ALWAYS an explicit customer choice
 			// (`Location_Controller::handle_select_request()` never writes implicit — spec
@@ -3293,6 +3314,15 @@
 
 		if ( failedNode ) {
 			resetWidgetGuard( entry, failedNode.fieldId );
+
+			// Issue #1667: the guard reset alone does not let the shopper retry. SelectWoo still
+			// shows the failed city as selected, so a click on it only closes the list — no
+			// `select2:select`, no `/select`. The widget parks that selection while the list is
+			// open instead, so the click is a real pick (the widget's `markUnsaved` hook). Not for the
+			// My Account form, which settles with both flags false and keeps its pick on purpose.
+			if ( notPersisted || transportFailed ) {
+				markFieldUnsaved( entry, failedNode.fieldId );
+			}
 		}
 
 		if ( notPersisted ) {
@@ -3300,6 +3330,54 @@
 			// Nothing was persisted, so there is no record to flag as a default guess —
 			// `false`, same as every other "the record is now unknown" fire below.
 			fireLocationApplied( entry, null, false );
+		}
+	}
+
+	/**
+	 * Tells a select2/selectWoo widget that the selection it still shows was not saved, so the
+	 * next open of its list parks it and a click on that same result is a real pick (issue #1667).
+	 * A no-op for a widget without the hook (the typeahead `<input>`, a related-list widget).
+	 *
+	 * @param {Object} entry
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function markWidgetUnsaved( entry, fieldId ) {
+		var widget = entry.widgets[ fieldId ];
+
+		if ( widget && widget.api && 'function' === typeof widget.api.markUnsaved ) {
+			widget.api.markUnsaved();
+		}
+	}
+
+	/**
+	 * Records that the selection on `fieldId` was not saved, and tells its CURRENT widget
+	 * (issue #1667). The entry-level record is what survives a re-render: the widget can be
+	 * replaced by `updated_checkout` at any time, and {@see attachOne} re-applies the mark to the
+	 * fresh one.
+	 *
+	 * @param {Object} entry
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function markFieldUnsaved( entry, fieldId ) {
+		entry.unsavedFields[ fieldId ] = true;
+		markWidgetUnsaved( entry, fieldId );
+	}
+
+	/**
+	 * Drops the not-saved mark for the field that holds `level` — the selection there was saved,
+	 * or it is being replaced by a new pick (issue #1667).
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {void}
+	 */
+	function clearFieldUnsaved( entry, level ) {
+		var node = level ? chainNodeForLevel( entry, level ) : null;
+
+		if ( node ) {
+			delete entry.unsavedFields[ node.fieldId ];
 		}
 	}
 
@@ -4854,6 +4932,12 @@
 					el: api.el || el, api: api, renderer: renderer, closedCountry: closedCountry,
 				};
 
+				// Issue #1667: a checkout re-render hands this node a FRESH widget that knows nothing of
+				// the failed save. Re-apply the cascade's own mark, so the city shown here is retryable.
+				if ( entry.unsavedFields[ node.fieldId ] ) {
+					markWidgetUnsaved( entry, node.fieldId );
+				}
+
 				if ( addressGuard && ( ! api.el || api.el === el ) ) {
 					addressGuard.arm( entry );
 				}
@@ -5994,6 +6078,9 @@
 				// {@see onAbandonFor} re-sets this for the NEW text, if and when its own search
 				// completes and again finds nothing.
 				entry.unresolved[ info.level ] = null;
+
+				// Issue #1667: the customer's own text replaces the selection the not-saved mark described.
+				delete entry.unsavedFields[ id ];
 
 				var level = info.level;
 				var section = entry.allNodes[ info.index ].section;
