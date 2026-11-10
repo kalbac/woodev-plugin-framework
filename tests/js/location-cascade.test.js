@@ -1982,8 +1982,37 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		}
 		await flushMicrotasks();
 
-		instances[ 0 ].pick( resultItem );
+		// The retry is a CLICK on an open list, not a pick(): real SelectWoo only closes the list
+		// on a click for a result whose id is still selected (clickResult models that rule).
+		// Before the fix the failed city stayed selected, so this click sent no request.
+		instances[ 0 ].open();
+		instances[ 0 ].clickResult( resultItem );
 		expect( selectRequests().length ).toBe( 2 );
+		consoleSpy.mockRestore();
+	} );
+
+	it( 'a failed save keeps the city visible while the list is closed without a pick (#1667)', async () => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		const instances = bootRealAjaxSelect2Settlement( {} );
+		const select = document.getElementById( 'billing_city' );
+		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const resultItem = query.success.mock.calls.slice( -1 )[ 0 ][ 0 ].results[ 0 ];
+		instances[ 0 ].pick( resultItem );
+		selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		const shown = select.value;
+
+		// Open the list and leave it without picking (Escape / click away).
+		instances[ 0 ].open();
+		instances[ 0 ].close();
+
+		expect( select.value ).toBe( shown );
+		expect( shown ).not.toBe( '' );
 		consoleSpy.mockRestore();
 	} );
 

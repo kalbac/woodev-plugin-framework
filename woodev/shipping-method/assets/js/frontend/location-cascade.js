@@ -3130,8 +3130,10 @@
 				// widget already wrote it before onSelect ran).
 				//
 				// A transport failure (`fetch` rejects with an Error: offline, DNS) is a DIFFERENT
-				// mode — no server answer, nothing to explain — and stays silent as before.
-				settleSelect( entry, false, !! error && ! ( error instanceof Error ), record );
+				// mode — no server answer, nothing to explain — and stays silent as before (no
+				// notice). Issue #1667: it still marks the pick unsaved, so the shopper can retry the
+				// same city ({@see settleSelect}).
+				settleSelect( entry, false, !! error && ! ( error instanceof Error ), record, true );
 			}
 		);
 	}
@@ -3258,9 +3260,13 @@
 	 * @param {Object}  record        The record THIS response answered for — see
 	 *                                {@see sendNextSelect}, which is this function's only
 	 *                                caller.
+	 * @param {boolean} [transportFailed] Whether the request itself failed (no server answer).
+	 *                                Issue #1667: a not-saved outcome — honest or transport —
+	 *                                marks the widget's selection unsaved so the same city can be
+	 *                                re-picked ({@see markWidgetUnsaved}).
 	 * @returns {void}
 	 */
-	function settleSelect( entry, shouldTrigger, notPersisted, record ) {
+	function settleSelect( entry, shouldTrigger, notPersisted, record, transportFailed ) {
 		entry.selectInFlight = false;
 
 		// Before the possible forward below, never after: a queued record is about to make its
@@ -3293,6 +3299,15 @@
 
 		if ( failedNode ) {
 			resetWidgetGuard( entry, failedNode.fieldId );
+
+			// Issue #1667: the guard reset alone does not let the shopper retry. SelectWoo still
+			// shows the failed city as selected, so a click on it only closes the list — no
+			// `select2:select`, no `/select`. The widget parks that selection while the list is
+			// open instead, so the click is a real pick (the widget's `markUnsaved` hook). Not for the
+			// My Account form, which settles with both flags false and keeps its pick on purpose.
+			if ( notPersisted || transportFailed ) {
+				markWidgetUnsaved( entry, failedNode.fieldId );
+			}
 		}
 
 		if ( notPersisted ) {
@@ -3300,6 +3315,23 @@
 			// Nothing was persisted, so there is no record to flag as a default guess —
 			// `false`, same as every other "the record is now unknown" fire below.
 			fireLocationApplied( entry, null, false );
+		}
+	}
+
+	/**
+	 * Tells a select2/selectWoo widget that the selection it still shows was not saved, so the
+	 * next open of its list parks it and a click on that same result is a real pick (issue #1667).
+	 * A no-op for a widget without the hook (the typeahead `<input>`, a related-list widget).
+	 *
+	 * @param {Object} entry
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function markWidgetUnsaved( entry, fieldId ) {
+		var widget = entry.widgets[ fieldId ];
+
+		if ( widget && widget.api && 'function' === typeof widget.api.markUnsaved ) {
+			widget.api.markUnsaved();
 		}
 	}
 
