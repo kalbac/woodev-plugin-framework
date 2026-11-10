@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
+use Woodev\Framework\Marketplace\Price\Price_Rule;
 use Woodev\Framework\Marketplace\Price\Price_Source;
 
 defined( 'ABSPATH' ) || exit;
@@ -263,22 +264,17 @@ final class Profile_Editor {
 		) : $values;
 	}
 
-	/**
-	 * Splits a stored price rule into the fields of the form.
-	 *
-	 * @param mixed $rule Stored `price_rule`.
-	 * @return array<string,mixed>
-	 */
 	private static function price_values( $rule ): array {
 		$rule = is_array( $rule ) ? $rule : [];
 
+		// A profile without a rule still shows valid choices: switching the override on must not post empty enums.
 		return [
 			'price_override'       => [] !== $rule,
-			'price_base'           => (string) ( $rule['base'] ?? '' ),
-			'price_markup_kind'    => (string) ( $rule['markup_kind'] ?? '' ),
-			'price_markup'         => (string) ( $rule['markup'] ?? '' ),
-			'price_rounding'       => (string) ( $rule['rounding'] ?? '' ),
-			'price_old_price_rule' => (string) ( $rule['old_price_rule'] ?? '' ),
+			'price_base'           => (string) ( $rule['base'] ?? Price_Rule::BASE_ACTIVE ),
+			'price_markup_kind'    => (string) ( $rule['markup_kind'] ?? Price_Rule::MARKUP_NONE ),
+			'price_markup'         => (string) ( $rule['markup'] ?? '0' ),
+			'price_rounding'       => (string) ( $rule['rounding'] ?? Price_Rule::ROUND_NONE ),
+			'price_old_price_rule' => (string) ( $rule['old_price_rule'] ?? Price_Rule::OLD_PRICE_ON_SALE ),
 			'price_min_percent'    => (string) ( $rule['min_percent'] ?? '' ),
 		];
 	}

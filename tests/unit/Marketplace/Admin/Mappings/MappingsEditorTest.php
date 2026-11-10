@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Mappings;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mapping_Messages;
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/Mappings_Harness.php';
@@ -139,13 +140,14 @@ final class MappingsEditorTest extends TestCase {
 	private function body( array $extra = [] ): array {
 		return array_merge(
 			[
-				'name'       => 'Платья',
-				'terms'      => [ 5 ],
-				'category'   => $this->h->dress_key(),
-				'profile_id' => null,
-				'attributes' => [
+				'name'                => 'Платья',
+				'terms'               => [ 5 ],
+				'category'            => $this->h->dress_key(),
+				'profile_id'          => null,
+				'attributes'          => [
 					'1' => [ 'source' => 'fixed', 'value' => 'Zara' ],
 				],
+				'attributes_category' => $this->h->dress_key(),
 			],
 			$extra
 		);
@@ -344,6 +346,44 @@ final class MappingsEditorTest extends TestCase {
 		$blocked = $this->h->profile_editor->delete( $saved['id'] );
 		$this->assertSame( 'in_use', $blocked['status'] );
 		$this->assertNotNull( $this->h->profiles->get( $saved['id'] ) );
+	}
+
+	/**
+	 * A profile saved without a price rule offers valid choices, so switching the override on and saving as the form
+	 * shows it succeeds.
+	 *
+	 * @return void
+	 */
+	public function test_enabling_a_price_override_on_a_profile_without_a_rule_saves(): void {
+		$saved  = $this->h->profile_editor->save( null, [ 'name' => 'Основной' ] );
+		$values = $this->h->profile_editor->detail( $saved['id'] )['values'];
+
+		$this->assertFalse( $values['price_override'] );
+		$this->assertSame( 'active', $values['price_base'] );
+		$this->assertSame( 'none', $values['price_rounding'] );
+		$this->assertSame( 'on_sale', $values['price_old_price_rule'] );
+
+		$again = $this->h->profile_editor->save(
+			$saved['id'],
+			array_merge( $values, [ 'name' => 'Основной', 'price_override' => true, 'price_markup_kind' => 'percent', 'price_markup' => '10' ] )
+		);
+
+		$this->assertSame( 'saved', $again['status'] );
+		$this->assertSame( '10', $this->h->profile_editor->detail( $saved['id'] )['values']['price_markup'] );
+		$this->assertTrue( $this->h->profile_editor->detail( $saved['id'] )['values']['price_override'] );
+	}
+
+	/**
+	 * A table loaded for another category is refused by the save, and nothing is written.
+	 *
+	 * @return void
+	 */
+	public function test_a_table_of_another_category_is_refused_on_save(): void {
+		$result = $this->h->editor->save( null, $this->body( [ 'attributes_category' => 'deadbeefdeadbeef' ] ) );
+
+		$this->assertSame( 'invalid', $result['status'] );
+		$this->assertSame( [ Mapping_Messages::attributes_of_other_category() ], $result['errors'] );
+		$this->assertCount( 0, $this->h->mappings->all_term_bound() );
 	}
 
 	/**

@@ -4,7 +4,7 @@
  * @package woodev-plugin-framework
  */
 
-import { useEffect, useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { Button, CheckboxControl, SelectControl, Spinner, TextControl } from '@wordpress/components';
 import { errorLines, type MappingsApi } from './api';
 import { AttributeTable } from './attribute-table';
@@ -32,6 +32,9 @@ interface Draft {
 	attributes: AttributeRow[] | null;
 }
 
+/** How the read of an existing mapping went: only a loaded record may be edited and saved. */
+type LoadState = 'loading' | 'loaded' | 'failed';
+
 const EMPTY: Draft = { name: '', terms: [], profileId: '', category: null, attributes: [] };
 
 /** The body the server reads; rows with no source are left out. */
@@ -49,6 +52,8 @@ function toBody( draft: Draft ): Record< string, unknown > {
 				.filter( ( row ) => row.source.source !== '' )
 				.map( ( row ) => [ row.id, row.source ] )
 		);
+		// The table travels with the category it was loaded for; the server refuses it for any other.
+		body.attributes_category = draft.category?.key ?? '';
 	}
 
 	return body;
@@ -57,7 +62,10 @@ function toBody( draft: Draft ): Record< string, unknown > {
 export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDeleted }: Props ) {
 	const { messages } = state;
 	const [ draft, setDraft ] = useState< Draft >( EMPTY );
-	const [ loading, setLoading ] = useState( mappingId !== null );
+	const [ loadState, setLoadState ] = useState< LoadState >( mappingId === null ? 'loaded' : 'loading' );
+	const [ reload, setReload ] = useState( 0 );
+	/** Counts category choices; a field response of an earlier choice is ignored. */
+	const fieldsRun = useRef( 0 );
 	const [ loadingTable, setLoadingTable ] = useState( false );
 	const [ busy, setBusy ] = useState( false );
 	const [ confirming, setConfirming ] = useState( false );
@@ -68,14 +76,17 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 		setNotice( null );
 		setConfirming( false );
 
+		fieldsRun.current += 1;
+		setLoadingTable( false );
+
 		if ( mappingId === null ) {
 			setDraft( EMPTY );
-			setLoading( false );
+			setLoadState( 'loaded' );
 			return undefined;
 		}
 
 		let current = true;
-		setLoading( true );
+		setLoadState( 'loading' );
 		api.mapping( mappingId )
 			.then( ( detail ) => {
 				if ( ! current ) {
@@ -88,32 +99,53 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 					category: detail.category,
 					attributes: detail.attributes,
 				} );
-				setLoading( false );
+				setLoadState( 'loaded' );
 			} )
 			.catch( ( error ) => {
 				if ( current ) {
 					setNotice( { status: 'error', lines: errorLines( error, messages.requestFailed ) } );
-					setLoading( false );
+					setLoadState( 'failed' );
 				}
 			} );
 
 		return () => {
 			current = false;
 		};
-	}, [ api, mappingId, messages.requestFailed ] );
+	}, [ api, mappingId, messages.requestFailed, reload ] );
+
+	// A response that arrives after the editor is gone must not touch it.
+	useEffect( () => () => {
+		fieldsRun.current += 1;
+	}, [] );
 
 	const chooseCategory = ( category: MappingCategory | null ) => {
+		fieldsRun.current += 1;
+		const run = fieldsRun.current;
+		const isLatest = () => run === fieldsRun.current;
+
 		setDraft( ( previous ) => ( { ...previous, category, attributes: category ? null : [] } ) );
+		setLoadingTable( category !== null );
 
 		if ( ! category ) {
 			return;
 		}
 
-		setLoadingTable( true );
 		api.fields( category.key, mappingId )
-			.then( ( response ) => setDraft( ( previous ) => ( { ...previous, attributes: response.attributes } ) ) )
-			.catch( ( error ) => setNotice( { status: 'error', lines: errorLines( error, messages.requestFailed ) } ) )
-			.finally( () => setLoadingTable( false ) );
+			.then( ( response ) => {
+				if ( isLatest() ) {
+					setDraft( ( previous ) => ( { ...previous, attributes: response.attributes } ) );
+				}
+			} )
+			.catch( ( error ) => {
+				if ( isLatest() ) {
+					setNotice( { status: 'error', lines: errorLines( error, messages.requestFailed ) } );
+				}
+			} )
+			.finally( () => {
+				if ( isLatest() ) {
+					setLoadingTable( false );
+				}
+			} );
 	};
 
 	const toggleTerm = ( id: number, on: boolean ) =>
@@ -151,9 +183,24 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 			onCopied( result.id );
 		} );
 
-	if ( loading ) {
+	if ( loadState === 'loading' ) {
 		return <Spinner />;
 	}
+
+	// An existing mapping that could not be read is not edited: a blank form saved over it would erase it.
+	if ( loadState === 'failed' ) {
+		return (
+			<div className="woodev-mapping-editor">
+				<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
+				<Button variant="secondary" onClick={ () => setReload( reload + 1 ) }>
+					{ messages.retry }
+				</Button>
+			</div>
+		);
+	}
+
+	// Saving waits for the table of the category chosen now.
+	const tableReady = draft.category === null || draft.attributes !== null;
 
 	const needle = filter.trim().toLowerCase();
 	const categories = state.shop_categories.filter(
@@ -235,7 +282,7 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 			) }
 
 			<p style={ { display: 'flex', gap: 8, alignItems: 'center' } }>
-				<Button variant="primary" onClick={ save } disabled={ busy || loadingTable } isBusy={ busy }>
+				<Button variant="primary" onClick={ save } disabled={ busy || loadingTable || ! tableReady } isBusy={ busy }>
 					{ busy ? messages.saving : messages.save }
 				</Button>
 				{ mappingId !== null && (

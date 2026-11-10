@@ -159,6 +159,7 @@ final class View_Config {
 			'delete'          => __( 'Удалить', 'woodev-plugin-framework' ),
 			'confirmDelete'   => __( 'Да, удалить', 'woodev-plugin-framework' ),
 			'cancel'          => __( 'Отмена', 'woodev-plugin-framework' ),
+			'retry'           => __( 'Повторить', 'woodev-plugin-framework' ),
 			'savedMapping'    => __( 'Сопоставление сохранено.', 'woodev-plugin-framework' ),
 			'savedProfile'    => __( 'Профиль сохранён.', 'woodev-plugin-framework' ),
 			'deletedMapping'  => __( 'Сопоставление удалено.', 'woodev-plugin-framework' ),

@@ -96,6 +96,17 @@ final class Mapping_Messages {
 	}
 
 	/**
+	 * The attribute table that came with the form belongs to another category than the one chosen.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return string
+	 */
+	public static function attributes_of_other_category(): string {
+		return __( 'Таблица характеристик относится к другой категории маркетплейса. Дождитесь, пока загрузится таблица выбранной категории, и сохраните снова.', 'woodev-plugin-framework' );
+	}
+
+	/**
 	 * A source row names no usable origin.
 	 *
 	 * @since 2.0.30

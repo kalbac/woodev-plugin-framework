@@ -4614,6 +4614,7 @@ msgid "Считаем тарифы…"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
+#: marketplace/admin/pages/mappings/class-view-config.php:162
 msgid "Повторить"
 msgstr ""
 
@@ -6792,114 +6793,118 @@ msgstr ""
 msgid "Характеристики выбранной категории маркетплейса ещё не загрузились. Подождите, пока появится таблица, и сохраните снова."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:108
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:106
+msgid "Таблица характеристик относится к другой категории маркетплейса. Дождитесь, пока загрузится таблица выбранной категории, и сохраните снова."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:119
 #, php-format
 msgid "Атрибут «%s»: выберите, откуда брать значение."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:121
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:132
 #, php-format
 msgid "Атрибут «%s»: найдите значение в списке маркетплейса и выберите его."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:134
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:145
 #, php-format
 msgid "Атрибут «%s»: введите значение."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:145
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:156
 msgid "Сопоставление не найдено. Обновите страницу."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:156
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:167
 msgid "Профиль не найден. Обновите страницу."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:167
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:178
 msgid "Выбранный профиль не найден. Выберите другой."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:182
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:193
 #, php-format
 msgid "Категория «%1$s» уже входит в сопоставление «%2$s» — уберите её там или здесь."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:196
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:207
 msgid "Сопоставление сохранено, но часть категорий уже занята другим сопоставлением и не добавлена. Проверьте список категорий."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:207
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:218
 msgid "Не удалось сохранить. Повторите позже."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:220
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:231
 #, php-format
 msgid "Нельзя удалить: сопоставление выбрано вручную у товаров (%d)."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:233
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:244
 #, php-format
 msgid "Нельзя удалить: профиль выбран в сопоставлениях (%d). Сначала выберите другой профиль там."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:246
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:257
 #, php-format
 msgid "Не удалось получить данные маркетплейса: %s"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:257
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:268
 msgid "У этой характеристики нет словаря маркетплейса."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:268
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:279
 msgid "(копия)"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:282
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:293
 #, php-format
 msgid "Товаров: %1$d — %2$s"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:296
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:307
 #, php-format
 msgid "Проверено %1$d из %2$d…"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:310
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:321
 msgid "В этом сопоставлении нет товаров: выберите для него категории магазина."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:314
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:325
 msgid "Замечаний нет: все товары готовы к выгрузке."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:318
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:329
 #, php-format
 msgid "Проверено товаров: %1$d, без замечаний: %2$d."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:331
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:342
 #, php-format
 msgid "Запасное значение «%s»: введите число больше нуля или оставьте поле пустым."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:342
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:353
 msgid "Укажите название произвольного поля там, где выбран источник «Произвольное поле»."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:353
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:364
 msgid "Выберите ставку НДС из списка."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:364
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:375
 msgid "Курс: введите число больше нуля, например 12.5."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:375
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:386
 msgid "Укажите название произвольного поля товара, из которого брать цену для маркетплейса."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-messages.php:386
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:397
 msgid "Правило цены заполнено неверно: наценка и минимальная цена — числа (минимальная цена — от 1 до 100 процентов)."
 msgstr ""
 
@@ -7131,207 +7136,207 @@ msgstr ""
 msgid "Сопоставление сохранено."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:162
+#: marketplace/admin/pages/mappings/class-view-config.php:163
 msgid "Профиль сохранён."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:163
+#: marketplace/admin/pages/mappings/class-view-config.php:164
 msgid "Сопоставление удалено."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:164
+#: marketplace/admin/pages/mappings/class-view-config.php:165
 msgid "Профиль удалён."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:165
+#: marketplace/admin/pages/mappings/class-view-config.php:166
 msgid "Копия создана. Выберите для неё категории магазина — одна категория не может быть в двух сопоставлениях."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:176
+#: marketplace/admin/pages/mappings/class-view-config.php:177
 msgid "Название сопоставления"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:177
+#: marketplace/admin/pages/mappings/class-view-config.php:178
 msgid "Категории вашего магазина"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:178
+#: marketplace/admin/pages/mappings/class-view-config.php:179
 msgid "Сопоставление действует и на вложенные категории, если у них нет своего. Одна категория может входить только в одно сопоставление."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:179
+#: marketplace/admin/pages/mappings/class-view-config.php:180
 msgid "Уже входит в сопоставление"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:181
+#: marketplace/admin/pages/mappings/class-view-config.php:182
 msgid "Начните вводить название категории"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:182
+#: marketplace/admin/pages/mappings/class-view-config.php:183
 msgid "Выбрать другую"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:183
+#: marketplace/admin/pages/mappings/class-view-config.php:184
 msgid "Этой категории больше нет в каталоге маркетплейса. Выберите другую."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:186
+#: marketplace/admin/pages/mappings/class-view-config.php:187
 msgid "Профиль выгрузки"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:187
+#: marketplace/admin/pages/mappings/class-view-config.php:188
 msgid "— не выбран —"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:188
+#: marketplace/admin/pages/mappings/class-view-config.php:189
 msgid "Характеристики"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:189
+#: marketplace/admin/pages/mappings/class-view-config.php:190
 msgid "Загружаем характеристики…"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:190
+#: marketplace/admin/pages/mappings/class-view-config.php:191
 msgid "Выберите категорию маркетплейса — здесь появятся её характеристики."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:191
+#: marketplace/admin/pages/mappings/class-view-config.php:192
 msgid "Характеристика"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:192
+#: marketplace/admin/pages/mappings/class-view-config.php:193
 msgid "Откуда брать"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:193
+#: marketplace/admin/pages/mappings/class-view-config.php:194
 msgid "Значение"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:194
+#: marketplace/admin/pages/mappings/class-view-config.php:195
 msgid "обязательная"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:195
+#: marketplace/admin/pages/mappings/class-view-config.php:196
 msgid "Не заполнять"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:196
+#: marketplace/admin/pages/mappings/class-view-config.php:197
 msgid "Одно значение для всех"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:197
+#: marketplace/admin/pages/mappings/class-view-config.php:198
 msgid "Атрибут товара"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:199
+#: marketplace/admin/pages/mappings/class-view-config.php:200
 msgid "Поле карточки товара"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:200
+#: marketplace/admin/pages/mappings/class-view-config.php:201
 msgid "Код атрибута, например pa_color"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:201
+#: marketplace/admin/pages/mappings/class-view-config.php:202
 msgid "Название поля"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:203
+#: marketplace/admin/pages/mappings/class-view-config.php:204
 msgid "Введите не меньше двух букв и выберите значение"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:204
+#: marketplace/admin/pages/mappings/class-view-config.php:205
 msgid "Сделать копию"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:205
+#: marketplace/admin/pages/mappings/class-view-config.php:206
 msgid "Проверить товары этой категории"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:206
+#: marketplace/admin/pages/mappings/class-view-config.php:207
 msgid "Проверяем товары…"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:207
+#: marketplace/admin/pages/mappings/class-view-config.php:208
 msgid "Проверка сохранённого сопоставления: что помешает выгрузке его товаров."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:218
+#: marketplace/admin/pages/mappings/class-view-config.php:219
 msgid "Название профиля"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:219
+#: marketplace/admin/pages/mappings/class-view-config.php:220
 msgid "Откуда брать данные"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:221
+#: marketplace/admin/pages/mappings/class-view-config.php:222
 msgid "Запасные размеры и вес"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:222
+#: marketplace/admin/pages/mappings/class-view-config.php:223
 msgid "Применяются к товарам, у которых размеры или вес не заполнены. Оставьте пустым, если запасного значения не нужно."
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:227
+#: marketplace/admin/pages/mappings/class-view-config.php:228
 msgid "Единица веса"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:228
+#: marketplace/admin/pages/mappings/class-view-config.php:229
 msgid "Единица размеров"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:229
+#: marketplace/admin/pages/mappings/class-view-config.php:230
 msgid "— как в магазине —"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:230
+#: marketplace/admin/pages/mappings/class-view-config.php:231
 msgid "Ставка НДС"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:231
+#: marketplace/admin/pages/mappings/class-view-config.php:232
 msgid "Валюта цены"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:232
+#: marketplace/admin/pages/mappings/class-view-config.php:233
 msgid "Как в личном кабинете"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:233
+#: marketplace/admin/pages/mappings/class-view-config.php:234
 msgid "Пересчитать по курсу"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:234
+#: marketplace/admin/pages/mappings/class-view-config.php:235
 msgid "Курс"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:235
+#: marketplace/admin/pages/mappings/class-view-config.php:236
 msgid "Фиксированная валюта (сохранена раньше, форма её не меняет)"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:236
+#: marketplace/admin/pages/mappings/class-view-config.php:237
 msgid "Название поля товара"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:237
+#: marketplace/admin/pages/mappings/class-view-config.php:238
 msgid "Своё правило цены для этого профиля"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:238
+#: marketplace/admin/pages/mappings/class-view-config.php:239
 msgid "Какую цену брать"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:240
+#: marketplace/admin/pages/mappings/class-view-config.php:241
 msgid "Размер наценки"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:241
+#: marketplace/admin/pages/mappings/class-view-config.php:242
 msgid "Округление"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:242
+#: marketplace/admin/pages/mappings/class-view-config.php:243
 msgid "Старая цена"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-view-config.php:243
+#: marketplace/admin/pages/mappings/class-view-config.php:244
 msgid "Минимальная цена, % от обычной"
 msgstr ""
 

@@ -37,7 +37,7 @@ final class Mapping_Input {
 	 *
 	 * @var string[]
 	 */
-	public const BODY_KEYS = [ 'name', 'terms', 'category', 'profile_id', 'attributes' ];
+	public const BODY_KEYS = [ 'name', 'terms', 'category', 'profile_id', 'attributes', 'attributes_category' ];
 
 	/**
 	 * Merchant label.
@@ -200,7 +200,9 @@ final class Mapping_Input {
 	 *
 	 * An absent table is not an instruction to clear the sources: the view sends `attributes` only with a table it
 	 * has loaded, so a save made before the table arrived (a slow connection, a failed load) cannot erase what the
-	 * mapping holds. Clearing a source stays possible through its row, set to «no source».
+	 * mapping holds. Clearing a source stays possible through its row, set to «no source». A table arrives together
+	 * with the key of the category it was loaded for (`attributes_category`) and is refused for any other category, so
+	 * a late response for a previous choice cannot be saved under the current one.
 	 *
 	 * @param array<string,mixed>                        $body           Request body.
 	 * @param array<string,array{name:string,dict:bool}> $fields         Fields of the category.
@@ -211,8 +213,18 @@ final class Mapping_Input {
 	private function read_table( array $body, array $fields, array $product_fields, ?array $stored ): void {
 		$stored_sources = null === $stored ? [] : (array) ( $stored['attributes'] ?? [] );
 
-		if ( [] === $this->category || array_key_exists( 'attributes', $body ) ) {
+		if ( [] === $this->category ) {
 			$this->attributes = $this->read_attributes( $body, $fields, $product_fields, $stored_sources );
+
+			return;
+		}
+
+		if ( array_key_exists( 'attributes', $body ) ) {
+			if ( $this->is_table_of_category( $body ) ) {
+				$this->attributes = $this->read_attributes( $body, $fields, $product_fields, $stored_sources );
+			} else {
+				$this->errors[] = Mapping_Messages::attributes_of_other_category();
+			}
 
 			return;
 		}
@@ -224,6 +236,18 @@ final class Mapping_Input {
 		}
 
 		$this->errors[] = Mapping_Messages::attributes_not_loaded();
+	}
+
+	/**
+	 * Tells whether the table in a body was loaded for the category chosen now.
+	 *
+	 * @param array<string,mixed> $body Request body.
+	 * @return bool
+	 */
+	private function is_table_of_category( array $body ): bool {
+		$loaded_for = $body['attributes_category'] ?? null;
+
+		return is_string( $loaded_for ) && Category_Finder::key_of( $this->category ) === $loaded_for;
 	}
 
 	/**

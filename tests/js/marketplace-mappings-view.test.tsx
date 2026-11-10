@@ -79,6 +79,7 @@ const MESSAGES: Record< string, string > = {
 	delete: 'Удалить',
 	confirmDelete: 'Да, удалить',
 	cancel: 'Отмена',
+	retry: 'Повторить',
 	copy: 'Сделать копию',
 	check: 'Проверить товары',
 	checking: 'Проверяем…',
@@ -153,6 +154,16 @@ const ROWS = [
 const PAGE = { id: 'mappings', title: 'Сопоставление', path: '/ozon/mappings', kind: 'custom', tables: [], view: 'mappings', breadcrumbs: [], analytics: null } as ManifestPage;
 const MENU = { id: 'ozon', pluginId: 'ozon', title: 'Ozon', domId: 'x', pages: [ PAGE ] } as ManifestMenu;
 
+/** A promise the test settles by hand, to answer requests out of order. */
+function deferred< T >() {
+	let resolve!: ( value: T ) => void;
+	const promise = new Promise< T >( ( done ) => {
+		resolve = done;
+	} );
+
+	return { promise, resolve };
+}
+
 type Call = { path: string; method?: string; data?: Record< string, unknown > };
 
 const mocked = apiFetch as unknown as jest.Mock;
@@ -170,7 +181,7 @@ function serve( answers: Record< string, unknown > ): Call[] {
 			return Promise.reject( new Error( `unexpected ${ key }` ) );
 		}
 
-		return typeof answer === 'function' ? Promise.resolve( ( answer as () => unknown )() ) : answer instanceof Error ? Promise.reject( answer ) : Promise.resolve( answer );
+		return typeof answer === 'function' ? new Promise( ( resolve ) => resolve( ( answer as () => unknown )() ) ) : answer instanceof Error ? Promise.reject( answer ) : Promise.resolve( answer );
 	} );
 
 	return calls;
@@ -261,7 +272,8 @@ describe( 'mapping editor', () => {
 			category: 'k1',
 			profile_id: null,
 			attributes: { 1: { source: 'fixed', value: 'Zara', key: '', dictionary_value_id: '' } },
-		} );
+				attributes_category: 'k1',
+			} );
 	} );
 
 	test( 'a dictionary row stores the chosen value id, not the typed text', async () => {
@@ -334,6 +346,134 @@ describe( 'mapping editor', () => {
 		expect( calls.some( ( call ) => call.method === 'POST' ) ).toBe( false );
 	} );
 
+	test( 'a mapping that could not be read offers only a retry, never a blank form to save over it', async () => {
+		let attempts = 0;
+		const calls = serve( {
+			'GET ': STATE,
+			'GET /mappings/1': () => {
+				attempts += 1;
+
+				if ( attempts === 1 ) {
+					throw Object.assign( new Error( 'x' ), { data: { errors: [ 'Маркетплейс не отвечает' ] } } );
+				}
+
+				return { id: 1, name: 'Платья', terms: [ 5 ], profile_id: null, category: null, attributes: [] };
+			},
+		} );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Платья' } ) );
+
+		expect( ( await screen.findAllByText( 'Маркетплейс не отвечает' ) ).length ).toBeGreaterThan( 0 );
+		expect( screen.queryByRole( 'button', { name: 'Сохранить' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByLabelText( 'Название сопоставления' ) ).not.toBeInTheDocument();
+
+		await userEvent.click( screen.getByRole( 'button', { name: 'Повторить' } ) );
+
+		expect( await screen.findByLabelText( 'Название сопоставления' ) ).toHaveValue( 'Платья' );
+		expect( screen.getByRole( 'button', { name: 'Сохранить' } ) ).toBeEnabled();
+		expect( calls.some( ( call ) => call.method === 'POST' ) ).toBe( false );
+	} );
+
+	test( 'a late field response of an earlier category never replaces the table of the current one', async () => {
+		const first = deferred< { attributes: typeof ROWS } >();
+		const second = deferred< { attributes: typeof ROWS } >();
+		const calls = serve( {
+			'GET ': STATE,
+			'GET /categories?search=%D0%BF%D0%BB': { results: [ { key: 'kA', label: 'Одежда › Платья' } ] },
+			'GET /categories?search=%D0%BE%D0%B1': { results: [ { key: 'kB', label: 'Обувь › Ботинки' } ] },
+			'GET /fields?category=kA': () => first.promise,
+			'GET /fields?category=kB': () => second.promise,
+			'POST /mappings': { id: 9, notices: [] },
+		} );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Добавить сопоставление' } ) );
+		await userEvent.type( screen.getByLabelText( 'Название сопоставления' ), 'Новое' );
+		await userEvent.type( screen.getByLabelText( 'Категория маркетплейса' ), 'пл' );
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Одежда › Платья' } ) );
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Выбрать другую' } ) );
+		await userEvent.type( screen.getByLabelText( 'Категория маркетплейса' ), 'об' );
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Обувь › Ботинки' } ) );
+
+		await act( async () => {
+			second.resolve( { attributes: [ ROWS[ 0 ] ] } );
+		} );
+		await act( async () => {
+			first.resolve( { attributes: [ { ...ROWS[ 1 ], id: '9', name: 'Чужая' } ] } );
+		} );
+
+		const table = await screen.findByRole( 'table' );
+		expect( within( table ).getAllByText( /Бренд/ ).length ).toBeGreaterThan( 0 );
+		expect( within( table ).queryByText( /Чужая/ ) ).not.toBeInTheDocument();
+
+		await userEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+		await waitFor( () => expect( calls.some( ( call ) => call.method === 'POST' ) ).toBe( true ) );
+		expect( calls.find( ( call ) => call.method === 'POST' )?.data ).toMatchObject( { category: 'kB', attributes_category: 'kB' } );
+	} );
+
+	test( 'a failed field load leaves the save disabled until a table of the category arrives', async () => {
+		const calls = serve( {
+			'GET ': STATE,
+			'GET /categories?search=%D0%BF%D0%BB': { results: [ { key: 'kA', label: 'Одежда › Платья' } ] },
+			'GET /fields?category=kA': Object.assign( new Error( 'x' ), { data: { errors: [ 'Характеристики недоступны' ] } } ),
+		} );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Добавить сопоставление' } ) );
+		await userEvent.type( screen.getByLabelText( 'Категория маркетплейса' ), 'пл' );
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Одежда › Платья' } ) );
+
+		expect( ( await screen.findAllByText( 'Характеристики недоступны' ) ).length ).toBeGreaterThan( 0 );
+		expect( screen.getByRole( 'button', { name: 'Сохранить' } ) ).toBeDisabled();
+		expect( calls.some( ( call ) => call.method === 'POST' ) ).toBe( false );
+	} );
+
+	test( 'a failed category search shows its reason, not the empty-results sentence, and a new search clears it', async () => {
+		serve( {
+			'GET ': STATE,
+			'GET /categories?search=%D0%BF%D0%BB': Object.assign( new Error( 'x' ), { data: { errors: [ 'Ключ API отклонён' ] } } ),
+			'GET /categories?search=%D0%BF%D0%BB%D0%B0': { results: [] },
+		} );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Добавить сопоставление' } ) );
+		await userEvent.type( screen.getByLabelText( 'Категория маркетплейса' ), 'пл' );
+
+		expect( ( await screen.findAllByText( 'Ключ API отклонён' ) ).length ).toBeGreaterThan( 0 );
+		expect( screen.queryByText( 'Ничего не найдено' ) ).not.toBeInTheDocument();
+
+		await userEvent.type( screen.getByLabelText( 'Категория маркетплейса' ), 'а' );
+
+		expect( await screen.findByText( 'Ничего не найдено' ) ).toBeInTheDocument();
+		// The screen-reader announcement keeps the old sentence; the visible notice is what must be gone.
+		expect( document.querySelector( '.components-notice' ) ).toBeNull();
+	} );
+
+	test( 'a failed dictionary search shows its reason, not the empty-results sentence', async () => {
+		serve( {
+			'GET ': STATE,
+			'GET /mappings/1': {
+				id: 1,
+				name: 'Платья',
+				terms: [ 5 ],
+				profile_id: null,
+				category: { key: 'k1', label: 'Одежда › Платья', available: true },
+				attributes: ROWS,
+			},
+			'GET /dictionary?category=k1&field=2&search=%D0%BA%D1%80': Object.assign( new Error( 'x' ), { data: { errors: [ 'Словарь недоступен' ] } } ),
+		} );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Платья' } ) );
+		const table = await screen.findByRole( 'table' );
+		await userEvent.selectOptions( within( table ).getByLabelText( 'Цвет: Откуда брать' ), 'fixed' );
+		await userEvent.type( within( table ).getByLabelText( 'Цвет: Значение' ), 'кр' );
+
+		expect( ( await screen.findAllByText( 'Словарь недоступен' ) ).length ).toBeGreaterThan( 0 );
+		expect( screen.queryByText( 'Ничего не найдено' ) ).not.toBeInTheDocument();
+	} );
+
 	test( 'deleting asks twice and only the second click deletes', async () => {
 		const calls = serve( {
 			'GET ': STATE,
@@ -376,6 +516,35 @@ describe( 'mapping editor', () => {
 } );
 
 describe( 'profile editor', () => {
+	test( 'a profile that could not be read offers only a retry, never a blank form to save over it', async () => {
+		let attempts = 0;
+		const calls = serve( {
+			'GET ': STATE,
+			'GET /profiles/3': () => {
+				attempts += 1;
+
+				if ( attempts === 1 ) {
+					throw Object.assign( new Error( 'x' ), { data: { errors: [ 'Профиль недоступен' ] } } );
+				}
+
+				return { id: 3, name: 'Основной', values: { offer_id_source: 'sku', currency_kind: 'account', price_override: false } };
+			},
+		} );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'tab', { name: 'Профили' } ) );
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Основной' } ) );
+
+		expect( ( await screen.findAllByText( 'Профиль недоступен' ) ).length ).toBeGreaterThan( 0 );
+		expect( screen.queryByRole( 'button', { name: 'Сохранить' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByLabelText( 'Название профиля' ) ).not.toBeInTheDocument();
+
+		await userEvent.click( screen.getByRole( 'button', { name: 'Повторить' } ) );
+
+		expect( await screen.findByLabelText( 'Название профиля' ) ).toHaveValue( 'Основной' );
+		expect( calls.some( ( call ) => call.method === 'POST' ) ).toBe( false );
+	} );
+
 	test( 'saves an existing profile without the read-only currency code', async () => {
 		const calls = serve( {
 			'GET ': STATE,

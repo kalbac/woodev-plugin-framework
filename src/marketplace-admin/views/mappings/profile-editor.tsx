@@ -60,7 +60,8 @@ function toBody( values: ProfileValues ): Record< string, unknown > {
 export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Props ) {
 	const { messages, profile_form: form } = state;
 	const [ values, setValues ] = useState< ProfileValues >( () => emptyValues( state ) );
-	const [ loading, setLoading ] = useState( profileId !== null );
+	const [ loadState, setLoadState ] = useState< 'loading' | 'loaded' | 'failed' >( profileId === null ? 'loaded' : 'loading' );
+	const [ reload, setReload ] = useState( 0 );
 	const [ busy, setBusy ] = useState( false );
 	const [ confirming, setConfirming ] = useState( false );
 	const [ notice, setNotice ] = useState< NoticeState | null >( null );
@@ -71,23 +72,23 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 
 		if ( profileId === null ) {
 			setValues( emptyValues( state ) );
-			setLoading( false );
+			setLoadState( 'loaded' );
 			return undefined;
 		}
 
 		let current = true;
-		setLoading( true );
+		setLoadState( 'loading' );
 		api.profile( profileId )
 			.then( ( detail ) => {
 				if ( current ) {
 					setValues( { ...detail.values, name: detail.name } );
-					setLoading( false );
+					setLoadState( 'loaded' );
 				}
 			} )
 			.catch( ( error ) => {
 				if ( current ) {
 					setNotice( { status: 'error', lines: errorLines( error, messages.requestFailed ) } );
-					setLoading( false );
+					setLoadState( 'failed' );
 				}
 			} );
 
@@ -96,7 +97,7 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 		};
 		// The state object is rebuilt on every reload; only the profile being opened should restart this.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ api, profileId ] );
+	}, [ api, profileId, reload ] );
 
 	const set = ( key: string, value: string | boolean ) =>
 		setValues( ( previous ) => ( { ...previous, [ key ]: value } ) );
@@ -125,8 +126,20 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 			onDeleted();
 		} );
 
-	if ( loading ) {
+	if ( loadState === 'loading' ) {
 		return <Spinner />;
+	}
+
+	// An existing profile that could not be read is not edited: a blank form saved over it would reset its settings.
+	if ( loadState === 'failed' ) {
+		return (
+			<div className="woodev-profile-editor">
+				<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
+				<Button variant="secondary" onClick={ () => setReload( reload + 1 ) }>
+					{ messages.retry }
+				</Button>
+			</div>
+		);
 	}
 
 	const field = ( key: string, label: string ) => (

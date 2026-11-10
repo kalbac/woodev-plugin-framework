@@ -6,7 +6,8 @@
 
 import { useEffect, useState } from '@wordpress/element';
 import { Button, SelectControl, TextControl } from '@wordpress/components';
-import type { MappingsApi } from './api';
+import { errorLines, type MappingsApi } from './api';
+import { Notices } from './notices';
 import type { AttributeRow, AttributeSource, DictionaryValue, Messages, Option } from './types';
 
 const SEARCH_DELAY_MS = 250;
@@ -161,8 +162,11 @@ interface DictionaryProps {
 function DictionaryInput( { api, messages, categoryKey, row, onChange }: DictionaryProps ) {
 	const [ term, setTerm ] = useState( '' );
 	const [ results, setResults ] = useState< DictionaryValue[] | null >( null );
+	const [ failure, setFailure ] = useState< string[] | null >( null );
 
 	useEffect( () => {
+		setFailure( null );
+
 		if ( term.trim().length < MIN_SEARCH ) {
 			setResults( null );
 			return undefined;
@@ -172,14 +176,19 @@ function DictionaryInput( { api, messages, categoryKey, row, onChange }: Diction
 		const timer = setTimeout( () => {
 			api.dictionary( categoryKey, row.id, term )
 				.then( ( response ) => current && setResults( response.results ) )
-				.catch( () => current && setResults( [] ) );
+				.catch( ( error ) => {
+					if ( current ) {
+						setResults( null );
+						setFailure( errorLines( error, messages.requestFailed ) );
+					}
+				} );
 		}, SEARCH_DELAY_MS );
 
 		return () => {
 			current = false;
 			clearTimeout( timer );
 		};
-	}, [ api, categoryKey, row.id, term ] );
+	}, [ api, categoryKey, row.id, term, messages.requestFailed ] );
 
 	const pick = ( value: DictionaryValue ) => {
 		setTerm( '' );
@@ -196,6 +205,10 @@ function DictionaryInput( { api, messages, categoryKey, row, onChange }: Diction
 				placeholder={ messages.dictionarySearch }
 				value={ term }
 				onChange={ setTerm }
+			/>
+			<Notices
+				notice={ failure ? { status: 'error', lines: failure } : null }
+				onDismiss={ () => setFailure( null ) }
 			/>
 			{ results !== null && results.length === 0 && <p className="description">{ messages.noResults }</p> }
 			<ul style={ { margin: 0 } }>

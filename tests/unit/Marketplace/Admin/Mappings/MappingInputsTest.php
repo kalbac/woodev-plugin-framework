@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Mappings;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Category_Finder;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mapping_Input;
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mapping_Messages;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Profile_Choices;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Profile_Input;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Field_Price_Source;
@@ -121,6 +122,11 @@ final class MappingInputsTest extends TestCase {
 	 * @return Mapping_Input
 	 */
 	private function read( array $body, ?array $category = [ 'category_id' => 10 ], ?array $stored = null ): Mapping_Input {
+		// A table travels with the key of the category it was loaded for, as the view sends it.
+		if ( isset( $body['attributes'] ) && null !== $category && ! array_key_exists( 'attributes_category', $body ) ) {
+			$body['attributes_category'] = Category_Finder::key_of( $category );
+		}
+
 		return Mapping_Input::from_request(
 			$body,
 			$category,
@@ -228,6 +234,29 @@ final class MappingInputsTest extends TestCase {
 		$input = $this->read( [ 'name' => 'A', 'attributes' => [ '1' => [ 'source' => 'meta', 'key' => '_brand' ] ] ], [ 'category_id' => 10 ], $stored );
 
 		$this->assertSame( $stored['attributes'], $input->attributes() );
+	}
+
+	/**
+	 * A table loaded for another category (a late response) is refused, not saved under the current one.
+	 *
+	 * @return void
+	 */
+	public function test_a_table_loaded_for_another_category_is_refused(): void {
+		$table = [ '1' => [ 'source' => 'fixed', 'value' => 'Zara' ] ];
+
+		$stale = $this->read( [ 'name' => 'A', 'attributes' => $table, 'attributes_category' => Category_Finder::key_of( [ 'category_id' => 11 ] ) ] );
+		$this->assertFalse( $stale->is_valid() );
+		$this->assertSame( [ Mapping_Messages::attributes_of_other_category() ], $stale->errors() );
+		$this->assertSame( [], $stale->attributes() );
+
+		$unbound = Mapping_Input::from_request( [ 'name' => 'A', 'attributes' => $table ], [ 'category_id' => 10 ], $this->fields(), static function (): bool {
+			return true;
+		}, [ 'sku' => 'Артикул' ] );
+		$this->assertFalse( $unbound->is_valid(), 'a table that names no category is refused too' );
+
+		$fresh = $this->read( [ 'name' => 'A', 'attributes' => $table ] );
+		$this->assertTrue( $fresh->is_valid() );
+		$this->assertSame( 'Zara', $fresh->attributes()['1']['value'] );
 	}
 
 	// -- Profile_Input --------------------------------------------------------------------------
