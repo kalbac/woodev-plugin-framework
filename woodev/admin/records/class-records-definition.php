@@ -66,10 +66,10 @@ final class Records_Definition {
 	const MAX_STRING_LENGTH      = 500;
 
 	/** Slugs: ids of columns, filters, sorts, actions and fields. */
-	const SLUG_PATTERN = '/^[a-z0-9][a-z0-9_-]{0,63}$/';
+	const SLUG_PATTERN = '/^[a-z0-9][a-z0-9_-]{0,63}$/D';
 
 	/** Opaque values: option values, row ids, cursors. */
-	const VALUE_PATTERN = '/^[A-Za-z0-9_.:-]{1,191}$/';
+	const VALUE_PATTERN = '/^[A-Za-z0-9_.:-]{1,191}$/D';
 
 	/**
 	 * @var array<string,mixed>

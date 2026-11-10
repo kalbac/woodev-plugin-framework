@@ -311,7 +311,7 @@ final class Definition_Parser {
 		$out = [];
 
 		foreach ( $raw as $key => $message ) {
-			if ( ! is_string( $key ) || 1 !== preg_match( '/^[a-z0-9_.-]{1,64}$/', $key ) || ! is_string( $message ) ) {
+			if ( ! is_string( $key ) || 1 !== preg_match( '/^[a-z0-9_.-]{1,64}$/D', $key ) || ! is_string( $message ) ) {
 				throw new \InvalidArgumentException( 'definition.messages must map short keys to strings.' );
 			}
 			$out[ $key ] = self::clean( $message, 'definition.messages.' . $key );

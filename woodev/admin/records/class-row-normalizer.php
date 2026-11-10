@@ -176,7 +176,7 @@ final class Row_Normalizer {
 
 		$out = [];
 		foreach ( $messages as $key => $message ) {
-			if ( ! is_string( $key ) || 1 !== preg_match( '/^[a-z0-9_.-]{1,64}$/', $key ) || ! is_string( $message ) ) {
+			if ( ! is_string( $key ) || 1 !== preg_match( '/^[a-z0-9_.-]{1,64}$/D', $key ) || ! is_string( $message ) ) {
 				throw new \UnexpectedValueException( 'messages must map short keys to strings.' );
 			}
 			$out[ $key ] = self::plain( $message, Records_Definition::MAX_STRING_LENGTH );
@@ -294,7 +294,7 @@ final class Row_Normalizer {
 	 * @return string
 	 */
 	private static function date_cell( $value ): string {
-		$pattern = '/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:?\d{2})?)?$/';
+		$pattern = '/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:?\d{2})?)?$/D';
 
 		if ( ! is_string( $value ) || 1 !== preg_match( $pattern, $value ) ) {
 			throw new \UnexpectedValueException( 'a date cell is an ISO 8601 string.' );

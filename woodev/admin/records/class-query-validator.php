@@ -358,7 +358,7 @@ final class Query_Validator {
 			return $raw;
 		}
 
-		return is_string( $raw ) && 1 === preg_match( '/^\d{1,9}$/', $raw ) ? (int) $raw : null;
+		return is_string( $raw ) && 1 === preg_match( '/^\d{1,9}$/D', $raw ) ? (int) $raw : null;
 	}
 
 	/**
@@ -429,7 +429,9 @@ final class Query_Validator {
 		}
 
 		foreach ( $raw as $date ) {
-			$parsed = is_string( $date ) ? \DateTime::createFromFormat( '!Y-m-d', $date ) : false;
+			// Shape first: DateTime throws (PHP 8) on a NUL byte and is lenient about trailing data.
+			$shaped = is_string( $date ) && 1 === preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $date );
+			$parsed = $shaped ? \DateTime::createFromFormat( '!Y-m-d', $date ) : false;
 			if ( false === $parsed || $parsed->format( 'Y-m-d' ) !== $date ) {
 				return null;
 			}

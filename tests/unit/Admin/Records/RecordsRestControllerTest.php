@@ -187,6 +187,11 @@ class RecordsRestControllerTest extends TestCase {
 			'unknown context key'       => [ [ 'context' => [ 'account_id' => 'a1', 'user_id' => '1' ] ] ],
 			'account id with an quote'  => [ [ 'context' => [ 'account_id' => "a1'" ] ] ],
 			'page zero'                 => [ [ 'page' => '0' ] ],
+			'date with a NUL byte'      => [ [ 'filters' => [ 'created' => [ 'from' => "2026-01-01\0" ] ] ] ],
+			'date with a newline'       => [ [ 'filters' => [ 'created' => [ 'to' => "2026-01-01\n" ] ] ] ],
+			'date in the wrong shape'   => [ [ 'filters' => [ 'created' => [ 'from' => '2026-1-1' ] ] ] ],
+			'date that is an array'     => [ [ 'filters' => [ 'created' => [ 'from' => [ '2026-01-01' ] ] ] ] ],
+			'select value with newline' => [ [ 'filters' => [ 'state' => "ok\n" ] ] ],
 		];
 	}
 
@@ -216,6 +221,47 @@ class RecordsRestControllerTest extends TestCase {
 		$this->assertSame( [ 2, 1, 10 ], [ $data['total'], $data['page'], $data['per_page'] ] );
 		$this->assertSame( [ [ 'account_id' => 'a2' ], 'p:1:a2', [ 'page' => 1, 'per_page' => 10 ] ], $this->ozon->last['children'] );
 		$this->assertSame( [ 'children', [ 'account_id' => 'a2' ], [ 'p:1:a2' ] ], $this->ozon->last['authorize'][0] );
+	}
+
+	public function test_each_providers_children_route_reads_only_its_own_provider(): void {
+		$this->ozon->child_rows = [ Records_Definitions::row( 'v:ozon-1' ) ];
+		$this->wb->child_rows   = [ Records_Definitions::row( 'v:wb-1' ), Records_Definitions::row( 'v:wb-2' ) ];
+		$this->ozon->authorizer = static function ( string $operation, array $context, array $ids ): bool {
+			return 'p:1:a1' === ( $ids[0] ?? '' ) && 'a1' === $context['account_id'];
+		};
+		$this->wb->authorizer   = static function ( string $operation, array $context, array $ids ): bool {
+			return 'wb:9' === ( $ids[0] ?? '' ) && '' === $context['account_id'];
+		};
+
+		$ozon = $this->controller->get_children( $this->request( [], 'ozon-seller', 'products', [ 'id' => 'p:1:a1' ] ) )->get_data();
+		$this->assertSame( [ 'v:ozon-1' ], array_column( $ozon['rows'], 'id' ) );
+		$this->assertNotContains( 'get_children', $this->wb->calls );
+		$this->assertSame( [], $this->wb->calls, 'the other provider was not touched at all' );
+
+		$this->ozon->calls = [];
+		$wb                = $this->controller->get_children( $this->request( [], 'wildberries', 'products', [ 'id' => 'wb:9' ] ) )->get_data();
+		$this->assertSame( [ 'v:wb-1', 'v:wb-2' ], array_column( $wb['rows'], 'id' ) );
+		$this->assertSame( [], $this->ozon->calls );
+		$this->assertSame( [ [ 'account_id' => '' ], 'wb:9', [ 'page' => 1, 'per_page' => 10 ] ], $this->wb->last['children'] );
+	}
+
+	public function test_a_parent_id_sent_through_the_other_providers_route_is_not_found_before_any_child_read(): void {
+		$this->ozon->child_rows = [ Records_Definitions::row( 'v:ozon-1' ) ];
+		$this->wb->child_rows   = [ Records_Definitions::row( 'v:wb-1' ) ];
+		$this->ozon->authorizer = static function ( string $operation, array $context, array $ids ): bool {
+			return 'p:1:a1' === ( $ids[0] ?? '' );
+		};
+		$this->wb->authorizer   = static function ( string $operation, array $context, array $ids ): bool {
+			return 'wb:9' === ( $ids[0] ?? '' );
+		};
+
+		$ozon_parent_on_wb = $this->controller->get_children( $this->request( [], 'wildberries', 'products', [ 'id' => 'p:1:a1' ] ) );
+		$wb_parent_on_ozon = $this->controller->get_children( $this->request( [], 'ozon-seller', 'products', [ 'id' => 'wb:9' ] ) );
+
+		$this->assertError( $ozon_parent_on_wb, 'woodev_records_not_found', 404 );
+		$this->assertError( $wb_parent_on_ozon, 'woodev_records_not_found', 404 );
+		$this->assertNotContains( 'get_children', $this->wb->calls );
+		$this->assertNotContains( 'get_children', $this->ozon->calls );
 	}
 
 	public function test_a_forged_parent_id_is_not_found_and_reads_nothing(): void {
