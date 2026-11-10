@@ -1,13 +1,14 @@
-> Составлено по итогам s225 (10–11.11.2026, МакБук). Формат: `DOCS-SCHEMA.md` → Handoff Format. Ветка фреймворка — `kalbac/s225-save`
-> (PR сохранения, docs-only), `main` = `e1f6fe72`. Открытые PR: framework #1478, PR сохранения. Ozon Seller `main` = `1b52d6c`, PR нет.
+> Составлено по итогам s226 (10.11.2026, МакБук). Формат: `DOCS-SCHEMA.md` → Handoff Format. Ветка — `kalbac/s226-save`
+> (PR сохранения, docs-only), framework `main` = `f83a6a7f`. Открытые PR: framework #1478, PR сохранения. Ozon Seller `main` = `5c1c1a5`, PR нет.
 
 # Режим следующей сессии
 
-**s226 — интерактивно**, если оператор не скажет иначе. Claude ≤ 3 воркеров; Codex — только критик, бережно.
+**s227 — интерактивно**, если оператор не скажет иначе. Claude ≤ 2 воркера (слово оператора s226); Codex — только критик, бережно.
 
 # Решения оператора — читать до любой работы
 
-- **s225, 10.11.2026:** «the Marketplace module holds ALL non-domain logic, modelled on Shipping and Payment» (`sessions/s225.md`).
+- **s226, 10.11.2026:** при 96 % недели — сначала сохранить сессию, F6/F7 после сброса (Wed 11.11.2026 08:00).
+- **s225 (в силе):** «the Marketplace module holds ALL non-domain logic, modelled on Shipping and Payment» (`sessions/s225.md`).
 - **s224 (в силе):** React PHP-driven под меню «OZON Seller» через `Marketplace_Plugin`; доставку не трогать; UI-PR — после критика и CI; клик-риг, не скриншоты.
 
 # Ждёт кнопки оператора
@@ -17,17 +18,17 @@
 
 # Обязательства (перенос)
 
-1. **#1683 (F5), #1687 (F9a) — Fable 5** (s225). Не начаты: лимит Claude ~90 %, сброс Wed 11.11.2026 08:00. Один Fable-воркер; старт после сброса или по слову оператора. В силе.
-2. **#1684 (F6), #1685 (F7)** после F5; **#1688 (F9b), #1689–#1695 (F10–F15)** — заведены s225, не начаты. В силе.
-3. **Выпуск фреймворка 2.0.29** (F1–F4, F8, #1667, #1704; s225) — координатор, перед **#61 (O1)**; EDD — по слову оператора. Не сделан. В силе.
-4. **#61 (O1) … #65 (O5)** Ozon Seller, заведены s225 (доска №8); O1 ждёт п. 3. В силе.
-5. **Ozon Seller:** #58 полировка, #59 массовые (вероятно, в O2), #55 — `fixed_in` после выпуска (s224); #49 #50 #45 после релиза (s223).
-6. **Отслеживание #10** — СберЛогистика, сертификат; **#1654** — Бэклог; #1663/#1664 не проверены (s222).
-7. **#1574** — `setup-php` не качает composer под local-ci; Dockerfile — только с его слова (s224).
+1. **#1684 (F6), #1685 (F7)** — Sonnet 5.5, разблокированы F5 (s226). Файлы не пересекаются → два воркера параллельно. В силе.
+2. **#1687 (F9a)** — Fable 5.2, один воркер (s225). Затем #1688 (F9b), #1689 (F10) → #1690 (F11); #1691–#1693, #1695 по зависимостям на карточках. В силе.
+3. **Ozon Seller #62 (O2)** ждёт F9a/F9b + выпуск; #63–#65 — по зависимостям; выпуск не раньше O4, #61 открыт (s226). В силе.
+4. **Ozon Seller:** #58 полировка, #59 массовые (вероятно, в O2), #55 — `fixed_in` после выпуска (s224); #49 #50 #45 после релиза (s223).
+5. **Отслеживание #10** — СберЛогистика, сертификат; **#1654** — Бэклог; #1663/#1664 не проверены (s222).
+6. **#1574** — `setup-php` не качает composer под local-ci; Dockerfile — только с его слова (s224).
 
-**Закрыто в s225** (не переносится): PR #1676 (`a4a1aea3`), #1667 (PR #1699, `29a14218`), #1574 — CURRENT-STATE плагина (ozon PR #60, `1b52d6c`). **#1675** открыт как трекер: дизайн смержен, карточки заведены.
+**Закрыто в s226** (не переносится): выпуск 2.0.29 (#1708); #1694 F14 (#1709); #1683 F5 (#1710); ozon-seller O1 PR #66.
+Отложено (комментарии на картах): многотабличные страницы → F12b #1692; паритет проверки сопоставлений → O4 ozon-seller#64.
 
-**Потом:** range #46 (доска №14); range #47; #1698 (s225, tech-debt: flaky `RestRateLimitTraitTest`, PHP 7.4).
+**Потом:** range #46 (доска №14); range #47; #1698 (tech-debt: flaky `RestRateLimitTraitTest`, PHP 7.4).
 
 **Перенесено (в силе):** ozon#84 #92, #1571, woodev-russian-post#73; #1532 #1528 #1519 #1552; ozon#82; #1538 + yandex#152; woodev-russian-post#69;
 edostavka#166; #1279; #1415; R3 #24; #1500; yandex#140 п. 2; woodev-russian-post#66; WC #69896 / #1332, WC #69559 (#1381, #1524), edostavka#145; #1314 #780 #1438 #886 #878 #809; #1638 #1640.
@@ -120,33 +121,32 @@ edostavka#166; #1279; #1415; R3 #24; #1500; yandex#140 п. 2; woodev-russian-pos
 Плюс s224: #1675 #1676; `woocommerce-ozon-seller#51`…`#59`.
 
 Плюс s225: #1679 #1680 #1681 #1682 #1683 #1684 #1685 #1686 #1687 #1688 #1689 #1690 #1691 #1692 #1693 #1694 #1695 #1696 #1697 #1698 #1699 #1700 #1701 #1702 #1703 #1704 #1705 #1706; `woocommerce-ozon-seller#60` `#61` `#62` `#63` `#64` `#65`.
+
+Плюс s226: #1708 #1709 #1710; `woocommerce-ozon-seller#66`.
+
 <!-- markdownlint-enable MD018 -->
 
 # С чего начать
 
-0. `orchestration` + `orca-team`; CLI `/Applications/Orca.app/Contents/Resources/bin/orca`; перед запуском `orca account list` (смотреть `updatedAt`).
-1. Сброс прошёл → F5 (#1683), один Fable-воркер, критик Codex (sol). До сброса — только не-Fable работа.
-2. Выпуск 2.0.29 — координатор; EDD — по слову оператора.
+0. `orchestration` + `orca-team`; CLI `/Applications/Orca.app/Contents/Resources/bin/orca`; `orca account list --json` (смотреть `updatedAt`).
+1. После сброса: F6 (#1684) и F7 (#1685) — два Sonnet-воркера, критик Codex sol R1 / luna R2; бандл пересобирает координатор в primary checkout.
+2. Затем F9a (#1687) — один Fable 5.2.
 
 # Что доказано замером
 
-- 10.11.2026 (s225): F3 rig probe — settings REST list, tab links, admin menu byte-identical main vs PR (delivery-плагины).
-- 10.11.2026 (s225): #1667 rig e2e на коммите PR = main-baseline (4 pass / 2 fail #1306 / 2 skip).
+- 10.11.2026 (s226): Fable 5.2 high на L-карточке F5 + раунд правок Sonnet ≈ 3 pp недельного лимита Claude (93 → 96 %).
 
 # Ловушки
 
-- `git checkout -b` на существующую ветку молча оставляет HEAD на main. → `checkout-b-on-an-existing-branch-fails-and-the-rig-measures-main` (s225).
-- `.pot`/`.po` конфликт параллельных PR — hand-union. → `parallel-prs-that-both-touch-the-po-catalogue-resolve-by-hand-union` (s225).
-- Codex-критик со stale classmap → `composer dump-autoload`. → `a-stale-composer-classmap-only-breaks-isolated-test-runs`.
-- `gh pr merge` на конфликтном PR печатает только подсказку — проверять `state`.
+- local-ci на этом Маке: нет `/var/run/docker.sock` → `export LOCAL_CI_DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock`. → `local-ci-on-orbstack-needs-local-ci-docker-host-not-docker-host`.
+- Воркеры пушат с `--no-verify` (pre-push отвергает бандлы из worktree) — координатор пересобирает бандлы в primary checkout.
 
 # Состояние на входе
 
 | | |
 |---|---|
-| Дерево | `kalbac/s225-save` (docs-only); framework `main` = `e1f6fe72` |
-| Выпуски | framework **2.0.28** (`v2.0.28`); маркетплейс не выпущен |
-| Открытые PR | framework #1478; PR сохранения s225 |
-| Гочи | 511, измерено 10.11.2026 |
-| Гейты | `npm run lint:docs` exit 0; `npx markdownlint-cli2` exit 0, 10.11.2026 |
-| Лимиты | Claude weekly ~90 % (сброс Wed 11.11.2026); Codex ~76 % (10.11.2026) |
+| Дерево | `kalbac/s226-save` (docs-only); framework `main` = `f83a6a7f` |
+| Выпуски | framework **2.0.29** (`v2.0.29`); маркетплейс не выпущен в плагинах; доставка на 2.0.28 |
+| Открытые PR | framework #1478; PR сохранения s226 |
+| Гочи | 511, без новых (s226) |
+| Лимиты | Claude weekly 96 % (сброс Wed 11.11.2026 08:00); Codex 87 % (сброс Sun 15.11.2026) |
