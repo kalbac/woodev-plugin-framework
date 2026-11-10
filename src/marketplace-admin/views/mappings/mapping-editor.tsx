@@ -156,7 +156,9 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 	}
 
 	const needle = filter.trim().toLowerCase();
-	const categories = state.shop_categories.filter( ( category ) => needle === '' || category.label.toLowerCase().includes( needle ) );
+	const categories = state.shop_categories.filter(
+		( category ) => needle === '' || category.label.toLowerCase().includes( needle )
+	);
 
 	return (
 		<div className="woodev-mapping-editor">
@@ -181,7 +183,8 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 				<div style={ { maxHeight: 220, overflowY: 'auto' } }>
 					{ categories.map( ( category ) => {
 						const heldByOther = category.mapping_id !== null && category.mapping_id !== mappingId;
-						const label = heldByOther ? `${ category.label } — ${ messages.shopCategoryTaken }: ${ category.mapping_name }` : category.label;
+						const taken = `${ messages.shopCategoryTaken }: ${ category.mapping_name }`;
+						const label = heldByOther ? `${ category.label } — ${ taken }` : category.label;
 
 						return (
 							<CheckboxControl
@@ -199,7 +202,12 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 
 			<fieldset>
 				<legend>{ messages.marketplaceCategory }</legend>
-				<CategoryPicker api={ api } messages={ messages } value={ draft.category } onChange={ chooseCategory } />
+				<CategoryPicker
+					api={ api }
+					messages={ messages }
+					value={ draft.category }
+					onChange={ chooseCategory }
+				/>
 			</fieldset>
 
 			<SelectControl __next40pxDefaultSize

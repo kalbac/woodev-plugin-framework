@@ -10,8 +10,8 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Lists the `product_cat` terms with their path from the top («Clothing › Shoes › Boots»), so two categories of the same name stay
- * distinguishable, and answers whether a posted term id is a product category at all.
+ * Lists the `product_cat` terms with their path from the top («Clothing › Shoes › Boots»), so two categories of the
+ * same name stay distinguishable, and answers whether a posted term id is a product category at all.
  *
  * @since 2.0.30
  */
@@ -103,12 +103,26 @@ final class Shop_Categories {
 		$seen  = [ (int) $term->term_id => true ];
 		$step  = $term;
 
-		while ( (int) $step->parent > 0 && isset( $by_id[ (int) $step->parent ] ) && ! isset( $seen[ (int) $step->parent ] ) ) {
+		while ( self::has_unseen_parent( $step, $by_id, $seen ) ) {
 			$step                     = $by_id[ (int) $step->parent ];
 			$seen[ (int) $step->term_id ] = true;
 			array_unshift( $names, (string) $step->name );
 		}
 
 		return implode( self::SEPARATOR, $names );
+	}
+
+	/**
+	 * Tells whether the term has a parent in the list that the walk up has not been through yet.
+	 *
+	 * @param \WP_Term            $term  Term being walked from.
+	 * @param array<int,\WP_Term> $by_id Every term by id.
+	 * @param array<int,bool>     $seen  Term ids already on the path (a loop guard).
+	 * @return bool
+	 */
+	private static function has_unseen_parent( \WP_Term $term, array $by_id, array $seen ): bool {
+		$parent = (int) $term->parent;
+
+		return $parent > 0 && isset( $by_id[ $parent ] ) && ! isset( $seen[ $parent ] );
 	}
 }

@@ -16,12 +16,14 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Runs the export validator over the products of one mapping and groups the first error of each product («12 products: no weight;
- * 3 products: no category mapped»). It only calls the validator; the rules live there and the rule list is the adapter's.
+ * Runs the export validator over the products of one mapping and groups the first error of each product («12
+ * products: no weight; 3 products: no category mapped»). It only calls the validator; the rules live there and the
+ * rule list is the adapter's.
  *
- * The validator needs facts it cannot read from the product; the caller supplies a context builder, which keeps this class free
- * of any marketplace. The check is about the mapping, not about an account, so it carries no account-specific facts (the cabinet
- * currency, the article already held by another product): those are checked where a product is sent.
+ * The validator needs facts it cannot read from the product; the caller supplies a context builder, which keeps this
+ * class free of any marketplace. The check is about the mapping, not about an account, so it carries no
+ * account-specific facts (the cabinet currency, the article already held by another product): those are checked where
+ * a product is sent.
  *
  * @since 2.0.30
  */
@@ -67,7 +69,8 @@ final class Mapping_Check {
 	private $products;
 
 	/**
-	 * Builds the validator context of a product: `function ( \WC_Product $product, Mapping $mapping, Profile $profile, array $base ): array`.
+	 * Builds the validator context of a product: `function ( \WC_Product $product, Mapping $mapping, Profile
+	 * $profile, array $base ): array`.
 	 *
 	 * @var callable
 	 */
@@ -83,7 +86,8 @@ final class Mapping_Check {
 	 * @param Export_Validator   $validator  Validator with the marketplace's rule list.
 	 * @param Category_Finder    $categories Marketplace categories.
 	 * @param Mapping_Products   $products   The products a mapping covers.
-	 * @param callable           $context    Builds the validator context: `function ( \WC_Product, Mapping, Profile, array $base ): array`.
+	 * @param callable           $context    Builds the validator context: `function ( \WC_Product, Mapping, Profile,
+	 *   array $base ): array`.
 	 */
 	public function __construct(
 		Wpdb_Mapping_Store $mappings,
@@ -106,11 +110,11 @@ final class Mapping_Check {
 	 *
 	 * @since 2.0.30
 	 *
-	 * @param int                                                                              $mapping_id Mapping id.
-	 * @param int                                                                              $offset     Products already visited, in id order.
-	 * @param array{checked:int,ok:int,groups:array<int,array{message:string,count:int}>}|null $carry      The result of the earlier batches.
-	 * @return array{checked:int,ok:int,groups:array<int,array{message:string,count:int}>,total:int,next_offset:int}|null
-	 *         Null when the mapping does not exist; `next_offset` is 0 once every product has been visited.
+	 * @param int                      $mapping_id Mapping id.
+	 * @param int                      $offset     Products already visited, in id order.
+	 * @param array<string,mixed>|null $carry      The result of the earlier batches (`checked`, `ok`, `groups`).
+	 * @return array<string,mixed>|null `checked`, `ok`, `groups` (`message`, `count`), `total` and `next_offset` (0 once
+	 *                                  every product has been visited); null when the mapping does not exist.
 	 * @throws \Throwable When the adapter cannot give the fields of the category.
 	 */
 	public function run( int $mapping_id, int $offset = 0, ?array $carry = null ): ?array {

@@ -19,16 +19,17 @@ defined( 'ABSPATH' ) || exit;
  * |---|---|
  * | `GET R` | the first paint: sentences, lists, shop categories, form options |
  * | `GET R/categories?search=` | searches the marketplace categories |
- * | `GET R/fields?category=&mapping_id=` | the attribute table of a category, filled from a mapping that has that category |
+ * | `GET R/fields?category=&mapping_id=` | the attribute table of a category, filled from that mapping's sources |
  * | `GET R/dictionary?category=&field=&search=` | searches the values of a dictionary attribute |
- * | `GET/POST/DELETE R/mappings[/{id}]`, `POST R/mappings/{id}/copy`, `POST R/mappings/{id}/check` | mapping CRUD and the product check |
+ * | `GET/POST/DELETE R/mappings[/{id}]` | mapping CRUD |
+ * | `POST R/mappings/{id}/copy`, `POST R/mappings/{id}/check` | copy; one batch of the product check |
  * | `GET/POST/DELETE R/profiles[/{id}]` | profile CRUD |
  *
- * Every route runs the same order: the capability (and, from WordPress core, the cookie nonce) before anything is read; the body
- * checked against a declared key list (unknown keys → 400); the editor's own validation (→ 422 with the PHP sentences); only then
- * a write. The marketplace is asked only when the merchant acts (opening a category, searching, checking), never on the first
- * paint, and an adapter failure is a 502 with the adapter's sentence rather than a blank screen. A mapping is account-agnostic,
- * so no route takes an account.
+ * Every route runs the same order: the capability (and, from WordPress core, the cookie nonce) before anything is
+ * read; the body checked against a declared key list (unknown keys → 400); the editor's own validation (→ 422 with
+ * the PHP sentences); only then a write. The marketplace is asked only when the merchant acts (opening a category,
+ * searching, checking), never on the first paint, and an adapter failure is a 502 with the adapter's sentence rather
+ * than a blank screen. A mapping is account-agnostic, so no route takes an account.
  *
  * @since 2.0.30
  */
@@ -193,8 +194,8 @@ final class Mappings_Controller {
 	}
 
 	/**
-	 * Gate for every route. The cookie nonce is checked by WordPress core before this runs; a valid nonce proves the request is the
-	 * user's own, not that the user may manage mappings.
+	 * Gate for every route. The cookie nonce is checked by WordPress core before this runs; a valid nonce proves the
+	 * request is the user's own, not that the user may manage mappings.
 	 *
 	 * @since 2.0.30
 	 *
@@ -205,8 +206,9 @@ final class Mappings_Controller {
 	}
 
 	/**
-	 * `GET R`: everything the first paint needs. It reads the adapter's category list (a cache read) for the labels of saved
-	 * mappings and asks the marketplace for nothing else; a category list that cannot be read is a 502 with the adapter's sentence.
+	 * `GET R`: everything the first paint needs. It reads the adapter's category list (a cache read) for the labels of
+	 * saved mappings and asks the marketplace for nothing else; a category list that cannot be read is a 502 with the
+	 * adapter's sentence.
 	 *
 	 * @since 2.0.30
 	 *
@@ -254,7 +256,9 @@ final class Mappings_Controller {
 
 		return $this->remote(
 			function () use ( $request ): \WP_REST_Response {
-				return $this->respond( [ 'results' => $this->categories->search( $this->query_text( $request, 'search' ) ) ] );
+				$results = $this->categories->search( $this->query_text( $request, 'search' ) );
+
+				return $this->respond( [ 'results' => $results ] );
 			}
 		);
 	}
@@ -279,12 +283,14 @@ final class Mappings_Controller {
 				$entry = $this->categories->find( $this->query_text( $request, 'category' ) );
 
 				if ( null === $entry ) {
-					return $this->error( 'woodev_mappings_unknown_category', Mapping_Messages::unknown_category(), 400 );
+					return $this->unknown_category();
 				}
 
 				$sources = $this->sources_for( $this->query_int( $request, 'mapping_id' ), $entry );
 
-				return $this->respond( [ 'attributes' => $this->mappings->attribute_rows( $entry['identity'], $sources ) ] );
+				$rows    = $this->mappings->attribute_rows( $entry['identity'], $sources );
+
+				return $this->respond( [ 'attributes' => $rows ] );
 			}
 		);
 	}
@@ -309,7 +315,7 @@ final class Mappings_Controller {
 				$entry = $this->categories->find( $this->query_text( $request, 'category' ) );
 
 				if ( null === $entry ) {
-					return $this->error( 'woodev_mappings_unknown_category', Mapping_Messages::unknown_category(), 400 );
+					return $this->unknown_category();
 				}
 
 				$field  = $this->query_text( $request, 'field' );
@@ -437,7 +443,11 @@ final class Mappings_Controller {
 			return $unknown;
 		}
 
-		return null === $detail ? $this->error( 'woodev_mappings_not_found', Mapping_Messages::profile_not_found(), 404 ) : $this->respond( $detail );
+		if ( null === $detail ) {
+			return $this->error( 'woodev_mappings_not_found', Mapping_Messages::profile_not_found(), 404 );
+		}
+
+		return $this->respond( $detail );
 	}
 
 	/**
@@ -512,11 +522,13 @@ final class Mappings_Controller {
 	 */
 	private function run_check( int $mapping_id, array $body ) {
 		$offset = isset( $body['offset'] ) && is_scalar( $body['offset'] ) ? max( 0, (int) $body['offset'] ) : 0;
-		$run    = isset( $body['run'] ) && is_scalar( $body['run'] ) ? substr( sanitize_key( (string) $body['run'] ), 0, 40 ) : '';
+		$run    = isset( $body['run'] ) && is_scalar( $body['run'] ) ? sanitize_key( (string) $body['run'] ) : '';
+		$run    = substr( $run, 0, 40 );
 		// Each click has its own run, so two overlapping checks never share a partial result.
 		$key    = 'woodev_' . md5( $this->owner . '|' . get_current_user_id() . '|' . $mapping_id . '|' . $run );
 		$carry  = $offset > 0 ? get_transient( $key ) : null;
-		$report = $this->check->run( $mapping_id, is_array( $carry ) ? $offset : 0, is_array( $carry ) ? $carry : null );
+		$resumed = is_array( $carry );
+		$report  = $this->check->run( $mapping_id, $resumed ? $offset : 0, $resumed ? $carry : null );
 
 		if ( null === $report ) {
 			return $this->error( 'woodev_mappings_not_found', Mapping_Messages::mapping_not_found(), 404 );
@@ -534,7 +546,7 @@ final class Mappings_Controller {
 	/**
 	 * Turns a check report into the sentences the view prints.
 	 *
-	 * @param array{checked:int,ok:int,groups:array<int,array{message:string,count:int}>,total:int,next_offset:int} $report Report.
+	 * @param array<string,mixed> $report Check report: `checked`, `ok`, `groups`, `total`, `next_offset`.
 	 * @return array<string,mixed>
 	 */
 	private static function check_view( array $report ): array {
@@ -615,7 +627,9 @@ final class Mappings_Controller {
 		try {
 			return $read();
 		} catch ( \Throwable $e ) {
-			return $this->error( 'woodev_mappings_unavailable', Mapping_Messages::marketplace_failure( $e->getMessage() ), 502 );
+			$message = Mapping_Messages::marketplace_failure( $e->getMessage() );
+
+			return $this->error( 'woodev_mappings_unavailable', $message, 502 );
 		}
 	}
 
@@ -650,7 +664,11 @@ final class Mappings_Controller {
 	private function reject_unknown_query( \WP_REST_Request $request, array $allowed ): ?\WP_Error {
 		$unknown = array_diff( array_keys( $request->get_query_params() ), $allowed );
 
-		return [] === $unknown ? null : $this->error( 'woodev_mappings_unknown_field', Mapping_Messages::malformed(), 400 );
+		if ( [] === $unknown ) {
+			return null;
+		}
+
+		return $this->error( 'woodev_mappings_unknown_field', Mapping_Messages::malformed(), 400 );
 	}
 
 	/**
@@ -663,7 +681,11 @@ final class Mappings_Controller {
 	private function query_text( \WP_REST_Request $request, string $name ): string {
 		$params = $request->get_query_params();
 
-		return isset( $params[ $name ] ) && is_scalar( $params[ $name ] ) ? trim( sanitize_text_field( (string) $params[ $name ] ) ) : '';
+		if ( ! isset( $params[ $name ] ) || ! is_scalar( $params[ $name ] ) ) {
+			return '';
+		}
+
+		return trim( sanitize_text_field( (string) $params[ $name ] ) );
 	}
 
 	/**
@@ -689,6 +711,15 @@ final class Mappings_Controller {
 		$params = $request->get_url_params();
 
 		return isset( $params['id'] ) && is_scalar( $params['id'] ) ? (int) $params['id'] : 0;
+	}
+
+	/**
+	 * The answer to a category key the schema does not offer.
+	 *
+	 * @return \WP_Error
+	 */
+	private function unknown_category(): \WP_Error {
+		return $this->error( 'woodev_mappings_unknown_category', Mapping_Messages::unknown_category(), 400 );
 	}
 
 	/**

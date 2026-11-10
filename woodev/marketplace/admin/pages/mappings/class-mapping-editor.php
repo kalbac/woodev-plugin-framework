@@ -15,12 +15,13 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Everything the mapping editor does to the data, with no HTTP in it: the summaries of the list, one mapping with its attribute
- * table, the dictionary search, and the guarded writes (save, copy, delete).
+ * Everything the mapping editor does to the data, with no HTTP in it: the summaries of the list, one mapping with its
+ * attribute table, the dictionary search, and the guarded writes (save, copy, delete).
  *
- * The rules a write keeps: a shop category belongs to at most one mapping (checked before the write, and again by the store
- * when two saves race), the chosen marketplace category and profile must exist, and a sent attribute outside the category's
- * fields is dropped. A write result is an array `{status, id, errors, notices}`; the controller maps the status to HTTP.
+ * The rules a write keeps: a shop category belongs to at most one mapping (checked before the write, and again by the
+ * store when two saves race), the chosen marketplace category and profile must exist, and a sent attribute outside
+ * the category's fields is dropped. A write result is an array `{status, id, errors, notices}`; the controller maps
+ * the status to HTTP.
  *
  * @since 2.0.30
  */
@@ -133,7 +134,8 @@ final class Mapping_Editor {
 	 * @since 2.0.30
 	 *
 	 * @param int $mapping_id Mapping id.
-	 * @return array{mapping_id:int,name:string,wc_product_id:int|null,category:array<string,mixed>,profile_id:int|null,attributes:array<string,mixed>}|null
+	 * @return array<string,mixed>|null The stored row (`mapping_id`, `name`, `wc_product_id`, `category`, `profile_id`,
+	 *                                  `attributes`).
 	 */
 	public function stored( int $mapping_id ): ?array {
 		$stored = $this->mappings->find( $mapping_id );
@@ -175,7 +177,8 @@ final class Mapping_Editor {
 	 * @since 2.0.30
 	 *
 	 * @param array<string,mixed> $identity Category identity.
-	 * @param array<string,mixed> $stored   Stored sources by attribute id; empty for a mapping that has none for this category.
+	 * @param array<string,mixed> $stored   Stored sources by attribute id; empty for a mapping that has none for this
+	 *   category.
 	 * @return array<int,array<string,mixed>>
 	 * @throws \Throwable When the adapter cannot give the fields.
 	 */
@@ -183,7 +186,8 @@ final class Mapping_Editor {
 		$rows = [];
 
 		foreach ( $this->categories->fields( $identity ) as $field ) {
-			$source = isset( $stored[ $field->id() ] ) && is_array( $stored[ $field->id() ] ) ? $stored[ $field->id() ] : null;
+			$known  = $stored[ $field->id() ] ?? null;
+			$source = is_array( $known ) ? $known : null;
 			$rows[] = [
 				'id'         => $field->id(),
 				'name'       => $field->name(),
@@ -242,7 +246,8 @@ final class Mapping_Editor {
 	 *
 	 * @param int|null            $mapping_id Mapping id, null for a new one.
 	 * @param array<string,mixed> $body       Decoded request body.
-	 * @return array{status:string,id:int,errors:string[],notices:string[]} Status `saved`, `invalid`, `missing`, `unavailable` or `failed`.
+	 * @return array{status:string,id:int,errors:string[],notices:string[]} Status `saved`, `invalid`, `missing`,
+	 *   `unavailable` or `failed`.
 	 */
 	public function save( ?int $mapping_id, array $body ): array {
 		$stored = null === $mapping_id ? null : $this->mappings->find( $mapping_id );
@@ -263,7 +268,8 @@ final class Mapping_Editor {
 		}
 
 		$identity = null === $chosen['entry'] ? null : $chosen['entry']['identity'];
-		$input    = Mapping_Input::from_request( $body, $identity, $fields, [ Shop_Categories::class, 'exists' ], $this->product_fields, $stored );
+		$exists   = [ Shop_Categories::class, 'exists' ];
+		$input    = Mapping_Input::from_request( $body, $identity, $fields, $exists, $this->product_fields, $stored );
 		$errors   = array_merge( $input->errors(), $this->reference_errors( $input, $mapping_id ) );
 
 		return [] === $errors ? $this->persist( $mapping_id, $input ) : self::result( 'invalid', 0, $errors );
@@ -287,7 +293,13 @@ final class Mapping_Editor {
 		$name = mb_substr( $source['name'], 0, Mapping_Input::MAX_NAME - 10 ) . ' ' . Mapping_Messages::copy_suffix();
 
 		try {
-			$id = $this->mappings->create( $name, null, $source['category'], $source['profile_id'], $source['attributes'] );
+			$id = $this->mappings->create(
+				$name,
+				null,
+				$source['category'],
+				$source['profile_id'],
+				$source['attributes']
+			);
 		} catch ( \RuntimeException $e ) {
 			return self::result( 'failed', 0, [ Mapping_Messages::save_failed() ] );
 		}
@@ -301,7 +313,8 @@ final class Mapping_Editor {
 	 * @since 2.0.30
 	 *
 	 * @param int $mapping_id Mapping id.
-	 * @return array{status:string,id:int,errors:string[],notices:string[]} Status `saved` (deleted), `missing` or `in_use`.
+	 * @return array{status:string,id:int,errors:string[],notices:string[]} Status `saved` (deleted), `missing` or
+	 *   `in_use`.
 	 */
 	public function delete( int $mapping_id ): array {
 		$linked = $this->mappings->count_linked( $this->links_table, $mapping_id );
@@ -396,7 +409,8 @@ final class Mapping_Editor {
 		$taken = $this->taken_terms( $mapping_id );
 		foreach ( $input->term_ids() as $term_id ) {
 			if ( isset( $taken[ $term_id ] ) ) {
-				$errors[] = Mapping_Messages::category_taken( Shop_Categories::name_of( $term_id ), $taken[ $term_id ]['name'] );
+				$category = Shop_Categories::name_of( $term_id );
+				$errors[] = Mapping_Messages::category_taken( $category, $taken[ $term_id ]['name'] );
 			}
 		}
 
@@ -404,7 +418,8 @@ final class Mapping_Editor {
 	}
 
 	/**
-	 * Lists the shop categories with the mapping that holds each, so the editor can show the one-mapping-per-category rule.
+	 * Lists the shop categories with the mapping that holds each, so the editor can show the one-mapping-per-category
+	 * rule.
 	 *
 	 * @since 2.0.30
 	 *
@@ -463,11 +478,25 @@ final class Mapping_Editor {
 	private function persist( ?int $mapping_id, Mapping_Input $input ): array {
 		try {
 			if ( null === $mapping_id ) {
-				$id = $this->mappings->create( $input->name(), null, $input->category(), $input->profile_id(), $input->attributes() );
+				$id = $this->mappings->create(
+					$input->name(),
+					null,
+					$input->category(),
+					$input->profile_id(),
+					$input->attributes()
+				);
 			} else {
 				$id = $mapping_id;
 
-				if ( ! $this->mappings->update( $id, $input->name(), $input->category(), $input->profile_id(), $input->attributes() ) ) {
+				$updated = $this->mappings->update(
+					$id,
+					$input->name(),
+					$input->category(),
+					$input->profile_id(),
+					$input->attributes()
+				);
+
+				if ( ! $updated ) {
 					return self::result( 'failed', 0, [ Mapping_Messages::save_failed() ] );
 				}
 			}
@@ -486,7 +515,8 @@ final class Mapping_Editor {
 	 * The category as the editor shows it.
 	 *
 	 * @param array<string,mixed>                                              $stored Stored category descriptor.
-	 * @param array{key:string,label:string,identity:array<string,mixed>}|null $entry  The entry the schema offers for it.
+	 * @param array{key:string,label:string,identity:array<string,mixed>}|null $entry  The entry the schema offers for
+	 *   it.
 	 * @return array{key:string,label:string,available:bool}|null Null when the mapping has no category.
 	 */
 	private function category_view( array $stored, ?array $entry ): ?array {
@@ -505,7 +535,8 @@ final class Mapping_Editor {
 	 * The category name for a list row.
 	 *
 	 * @param array<string,mixed>                                              $stored Stored category descriptor.
-	 * @param array{key:string,label:string,identity:array<string,mixed>}|null $entry  The entry the schema offers for it.
+	 * @param array{key:string,label:string,identity:array<string,mixed>}|null $entry  The entry the schema offers for
+	 *   it.
 	 * @return string Empty when the mapping has no category; the stored path when the schema no longer offers it.
 	 */
 	private function category_label( array $stored, ?array $entry ): string {
@@ -513,7 +544,9 @@ final class Mapping_Editor {
 			return $entry['label'];
 		}
 
-		return isset( $stored['path'] ) && is_array( $stored['path'] ) ? implode( ' › ', array_map( 'strval', $stored['path'] ) ) : '';
+		$path = isset( $stored['path'] ) && is_array( $stored['path'] ) ? $stored['path'] : [];
+
+		return implode( ' › ', array_map( 'strval', $path ) );
 	}
 
 	/**

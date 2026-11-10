@@ -8,24 +8,25 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 
 use Woodev\Framework\Marketplace\Catalog\Catalog_Schema;
+use Woodev\Framework\Marketplace\Catalog\Field_Definition;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
  * Searches {@see Catalog_Schema::categories()} for the mapping editor.
  *
- * The schema returns **adapter-defined descriptors**; the finder needs to tell two things apart in them. A descriptor may carry
- * two reserved display keys, and everything else is the category's *identity* (Ozon: category and type ids; Wildberries: the
- * subject id) which is what a mapping stores and what {@see Catalog_Schema::fields()} receives:
+ * The schema returns **adapter-defined descriptors**; the finder needs to tell two things apart in them. A descriptor
+ * may carry two reserved display keys, and everything else is the category's *identity* (Ozon: category and type ids;
+ * Wildberries: the subject id) which is what a mapping stores and what {@see Catalog_Schema::fields()} receives:
  *
  * - `path` — `string[]`, the names from the root to the category; the last one is the category itself. It is what the
  *   merchant searches and sees. A descriptor without a path is shown by its key.
  * - `disabled` — `true` for a node that exists in the tree but cannot hold a card; it is never offered.
  *
- * The browser never builds an identity: it gets an opaque `key` per category and sends the key back, and the server resolves
- * it here. A key (or a stored identity) the schema no longer offers resolves to nothing, so a forged or stale category cannot
- * be saved. The finder reads the schema once per request and never asks the marketplace itself; whether `categories()` reads a
- * cache is the adapter's business.
+ * The browser never builds an identity: it gets an opaque `key` per category and sends the key back, and the server
+ * resolves it here. A key (or a stored identity) the schema no longer offers resolves to nothing, so a forged or
+ * stale category cannot be saved. The finder reads the schema once per request and never asks the marketplace itself;
+ * whether `categories()` reads a cache is the adapter's business.
  *
  * @since 2.0.30
  */
@@ -144,7 +145,8 @@ final class Category_Finder {
 	 * @since 2.0.30
 	 *
 	 * @param array<string,mixed> $identity Stored category descriptor.
-	 * @return array{key:string,label:string,identity:array<string,mixed>}|null Null when the schema no longer offers it.
+	 * @return array{key:string,label:string,identity:array<string,mixed>}|null Null when the schema no longer offers
+	 *   it.
 	 */
 	public function find_by_identity( array $identity ): ?array {
 		return [] === $identity ? null : $this->find( self::key_of( $identity ) );
@@ -156,7 +158,7 @@ final class Category_Finder {
 	 * @since 2.0.30
 	 *
 	 * @param array<string,mixed> $identity Category identity from {@see self::find()}.
-	 * @return \Woodev\Framework\Marketplace\Catalog\Field_Definition[]
+	 * @return Field_Definition[]
 	 */
 	public function fields( array $identity ): array {
 		return $this->schema->fields( $identity );
@@ -167,11 +169,11 @@ final class Category_Finder {
 	 *
 	 * @since 2.0.30
 	 *
-	 * @param \Woodev\Framework\Marketplace\Catalog\Field_Definition $field Dictionary field.
-	 * @param string                                                 $term  Search text.
+	 * @param Field_Definition $field Dictionary field.
+	 * @param string           $term  Search text.
 	 * @return array<int,array<string,mixed>> Values with at least `id` and `value`.
 	 */
-	public function search_dictionary( \Woodev\Framework\Marketplace\Catalog\Field_Definition $field, string $term ): array {
+	public function search_dictionary( Field_Definition $field, string $term ): array {
 		return $this->schema->search_dictionary( $field, $term );
 	}
 
@@ -209,7 +211,8 @@ final class Category_Finder {
 	 * Turns one descriptor into an entry.
 	 *
 	 * @param array<string,mixed> $descriptor Descriptor from the schema.
-	 * @return array{key:string,label:string,identity:array<string,mixed>}|null Null for a disabled node or one with no identity.
+	 * @return array{key:string,label:string,identity:array<string,mixed>}|null Null for a disabled node or one with
+	 *   no identity.
 	 */
 	private static function entry( array $descriptor ): ?array {
 		if ( ! empty( $descriptor['disabled'] ) ) {
@@ -240,7 +243,8 @@ final class Category_Finder {
 	 * @return string
 	 */
 	private static function label( array $descriptor, string $fallback ): string {
-		$names = isset( $descriptor['path'] ) && is_array( $descriptor['path'] ) ? array_filter( array_map( 'strval', $descriptor['path'] ) ) : [];
+		$path  = isset( $descriptor['path'] ) && is_array( $descriptor['path'] ) ? $descriptor['path'] : [];
+		$names = array_filter( array_map( 'strval', $path ) );
 
 		return [] === $names ? $fallback : implode( self::SEPARATOR, $names );
 	}

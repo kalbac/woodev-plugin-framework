@@ -1,8 +1,9 @@
 /**
  * Registers the mappings view for the framework's `mappings` page.
  *
- * The routing bundle owns the route; the page body is whatever answers the `woodev.marketplace.page_view` filter. The view
- * answers for a `custom` page whose `view` handle is `mappings` and leaves every other page to whoever else is listening.
+ * The routing bundle owns the route; the page body is whatever answers the `woodev.marketplace.page_view` filter. The
+ * view answers for a `custom` page whose `view` handle is `mappings` and leaves every other page to whoever else is
+ * listening.
  *
  * @package woodev-plugin-framework
  */

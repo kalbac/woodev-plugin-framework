@@ -13,8 +13,8 @@ use Woodev\Framework\Marketplace\Price\Price_Source;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * The view reads every word and every option from here (Rule 9): it holds no copy and no domain list of its own, so a missing
- * key renders blank instead of falling back to a hidden default.
+ * The view reads every word and every option from here (Rule 9): it holds no copy and no domain list of its own, so a
+ * missing key renders blank instead of falling back to a hidden default.
  *
  * @since 2.0.30
  */
@@ -36,7 +36,8 @@ final class View_Config {
 	 * @since 2.0.30
 	 *
 	 * @param Profile_Choices   $choices      What the form offers.
-	 * @param Price_Source|null $price_source Price source of the marketplace, whose own currency rule the form may offer.
+	 * @param Price_Source|null $price_source Price source of the marketplace, whose own currency rule the form may
+	 *   offer.
 	 * @return array<string,mixed>
 	 */
 	public static function profile_form( Profile_Choices $choices, ?Price_Source $price_source ): array {

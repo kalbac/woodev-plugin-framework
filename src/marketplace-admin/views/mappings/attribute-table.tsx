@@ -60,7 +60,9 @@ export function AttributeTable( { api, messages, categoryKey, productFields, row
 								hideLabelFromVision
 								value={ row.source.source }
 								options={ sourceOptions( messages ) }
-								onChange={ ( kind ) => update( row.id, { source: kind, value: '', key: '', dictionary_value_id: '' } ) }
+								onChange={ ( kind ) =>
+									update( row.id, { source: kind, value: '', key: '', dictionary_value_id: '' } )
+								}
 							/>
 						</td>
 						<td>
@@ -94,7 +96,15 @@ function ValueCell( { api, messages, categoryKey, productFields, row, onChange }
 	const label = `${ row.name }: ${ messages.columnValue }`;
 
 	if ( source.source === 'fixed' && row.dictionary ) {
-		return <DictionaryInput api={ api } messages={ messages } categoryKey={ categoryKey } row={ row } onChange={ onChange } />;
+		return (
+			<DictionaryInput
+				api={ api }
+				messages={ messages }
+				categoryKey={ categoryKey }
+				row={ row }
+				onChange={ onChange }
+			/>
+		);
 	}
 
 	if ( source.source === 'fixed' ) {

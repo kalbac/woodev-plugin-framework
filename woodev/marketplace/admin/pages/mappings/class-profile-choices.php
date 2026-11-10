@@ -10,9 +10,10 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * The choice lists of the profile form: where each card value comes from, and which VAT rates exist. They are a value handed to
- * {@see Profile_Input} and to the view, so a marketplace with other choices passes its own (`woodev_{marketplace id}_profile_choices`
- * filter in {@see Mappings_Module}) and nothing else in the editor changes.
+ * The choice lists of the profile form: where each card value comes from, and which VAT rates exist. They are a value
+ * handed to {@see Profile_Input} and to the view, so a marketplace with other choices passes its own
+ * (`woodev_{marketplace id}_profile_choices` filter in {@see Mappings_Module}) and nothing else in the editor
+ * changes.
  *
  * A source value is a `kind` or, for the custom-field kind, `meta:{key}`.
  *

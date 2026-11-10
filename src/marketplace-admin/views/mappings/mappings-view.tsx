@@ -122,11 +122,16 @@ function MappingsTab( { api, state, selection, onSelect, onSaved, onCopied, onDe
 				<ul>
 					{ mappings.map( ( item ) => (
 						<li key={ item.id }>
-							<Button variant="link" aria-current={ selection === item.id } onClick={ () => onSelect( item.id ) }>
+							<Button
+								variant="link"
+								aria-current={ selection === item.id }
+								onClick={ () => onSelect( item.id ) }
+							>
 								{ item.name }
 							</Button>
 							<div className="description">
-								{ `${ item.category_label || messages.noCategory } · ${ messages.columnProducts }: ${ item.products }` }
+								{ `${ item.category_label || messages.noCategory } · ` +
+									`${ messages.columnProducts }: ${ item.products }` }
 							</div>
 						</li>
 					) ) }
@@ -173,7 +178,11 @@ function ProfilesTab( { api, state, selection, onSelect, onSaved, onDeleted }: P
 				<ul>
 					{ profiles.map( ( item ) => (
 						<li key={ item.id }>
-							<Button variant="link" aria-current={ selection === item.id } onClick={ () => onSelect( item.id ) }>
+							<Button
+								variant="link"
+								aria-current={ selection === item.id }
+								onClick={ () => onSelect( item.id ) }
+							>
 								{ item.name }
 							</Button>
 							<div className="description">{ `${ messages.columnMappings }: ${ item.mappings }` }</div>

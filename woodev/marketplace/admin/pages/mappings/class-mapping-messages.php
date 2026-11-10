@@ -10,8 +10,8 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Every error and notice the editors raise, in one place, so the input classes, the editors and the controller word a case
- * the same way and the view never has to compose a sentence (Rule 9: PHP owns the strings).
+ * Every error and notice the editors raise, in one place, so the input classes, the editors and the controller word a
+ * case the same way and the view never has to compose a sentence (Rule 9: PHP owns the strings).
  *
  * @since 2.0.30
  */

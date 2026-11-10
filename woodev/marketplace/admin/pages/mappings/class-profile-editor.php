@@ -15,8 +15,8 @@ use Woodev\Framework\Marketplace\Price\Price_Source;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * The profile half of the editor, with no HTTP in it: the list, one profile as form values, and the guarded writes. A write
- * result is `{status, id, errors}`; the controller maps the status to HTTP.
+ * The profile half of the editor, with no HTTP in it: the list, one profile as form values, and the guarded writes. A
+ * write result is `{status, id, errors}`; the controller maps the status to HTTP.
  *
  * @since 2.0.30
  */
@@ -59,7 +59,12 @@ final class Profile_Editor {
 	 * @param Profile_Choices    $choices      What the form offers.
 	 * @param Price_Source|null  $price_source Price source of the marketplace.
 	 */
-	public function __construct( Wpdb_Profile_Store $profiles, Wpdb_Mapping_Store $mappings, Profile_Choices $choices, ?Price_Source $price_source ) {
+	public function __construct(
+		Wpdb_Profile_Store $profiles,
+		Wpdb_Mapping_Store $mappings,
+		Profile_Choices $choices,
+		?Price_Source $price_source
+	) {
 		$this->profiles     = $profiles;
 		$this->mappings     = $mappings;
 		$this->choices      = $choices;
@@ -126,7 +131,8 @@ final class Profile_Editor {
 			return self::result( 'missing', 0, [ Mapping_Messages::profile_not_found() ] );
 		}
 
-		$input = Profile_Input::from_request( $body, $this->choices, $this->price_source, null === $stored ? [] : $stored->settings() );
+		$previous = null === $stored ? [] : $stored->settings();
+		$input    = Profile_Input::from_request( $body, $this->choices, $this->price_source, $previous );
 
 		if ( ! $input->is_valid() ) {
 			return self::result( 'invalid', 0, $input->errors() );
@@ -180,7 +186,8 @@ final class Profile_Editor {
 			$values[ $key ] = isset( $settings[ $key ] ) ? (string) $settings[ $key ] : '';
 		}
 
-		$units                    = isset( $settings['units'] ) && is_array( $settings['units'] ) ? $settings['units'] : [];
+		$known                    = $settings['units'] ?? null;
+		$units                    = is_array( $known ) ? $known : [];
 		$values['unit_weight']    = (string) ( $units['weight'] ?? '' );
 		$values['unit_dimension'] = (string) ( $units['dimension'] ?? '' );
 		$values['vat_rate']       = (string) ( $settings['vat_rate'] ?? '' );

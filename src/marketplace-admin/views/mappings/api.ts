@@ -1,8 +1,9 @@
 /**
  * REST client of the mappings view: `woodev/v1/admin/marketplace/{plugin id}/mappings`.
  *
- * Cookie auth and the `wp_rest` nonce are added by `@wordpress/api-fetch`; the server checks the capability. A failure is
- * the server's `{ code, message, data: { errors } }`, and {@see errorLines} turns it into the sentences to show.
+ * Cookie auth and the `wp_rest` nonce are added by `@wordpress/api-fetch`; the server checks the capability. A
+ * failure is the server's `{ code, message, data: { errors } }`, and {@see errorLines} turns it into the sentences to
+ * show.
  *
  * @package woodev-plugin-framework
  */
@@ -59,7 +60,8 @@ export type MappingsApi = ReturnType< typeof createApi >;
  */
 export function createApi( pluginId: string ) {
 	const base = `/woodev/v1/admin/marketplace/${ encodeURIComponent( pluginId ) }/mappings`;
-	const send = < T >( method: string, path: string, data?: unknown ) => apiFetch< T >( { path: base + path, method, data } );
+	const send = < T >( method: string, path: string, data?: unknown ) =>
+		apiFetch< T >( { path: base + path, method, data } );
 
 	return {
 		state: () => apiFetch< MappingsState >( { path: base } ),
@@ -70,13 +72,16 @@ export function createApi( pluginId: string ) {
 				path: withQuery( `${ base }/fields`, { category, mapping_id: mappingId } ),
 			} ),
 		dictionary: ( category: string, field: string, search: string ) =>
-			apiFetch< { results: DictionaryValue[] } >( { path: withQuery( `${ base }/dictionary`, { category, field, search } ) } ),
+			apiFetch< { results: DictionaryValue[] } >( {
+				path: withQuery( `${ base }/dictionary`, { category, field, search } ),
+			} ),
 		mapping: ( id: number ) => apiFetch< MappingDetail >( { path: `${ base }/mappings/${ id }` } ),
 		saveMapping: ( id: number | null, body: Record< string, unknown > ) =>
 			send< SaveResult >( 'POST', id === null ? '/mappings' : `/mappings/${ id }`, body ),
 		copyMapping: ( id: number ) => send< SaveResult >( 'POST', `/mappings/${ id }/copy`, {} ),
 		deleteMapping: ( id: number ) => send< SaveResult >( 'DELETE', `/mappings/${ id }` ),
-		check: ( id: number, offset: number, run: string ) => send< CheckStep >( 'POST', `/mappings/${ id }/check`, { offset, run } ),
+		check: ( id: number, offset: number, run: string ) =>
+			send< CheckStep >( 'POST', `/mappings/${ id }/check`, { offset, run } ),
 		profile: ( id: number ) => apiFetch< ProfileDetail >( { path: `${ base }/profiles/${ id }` } ),
 		saveProfile: ( id: number | null, body: Record< string, unknown > ) =>
 			send< SaveResult >( 'POST', id === null ? '/profiles' : `/profiles/${ id }`, body ),

@@ -19,15 +19,15 @@ use Woodev\Framework\Marketplace\Marketplace_Plugin;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Builds the stores and editors of the mappings page from the plugin's adapter and registers the controller. Nothing here names
- * a marketplace: every marketplace fact comes from the {@see Marketplace_Adapter}, and the two lists the adapter contract has no
- * method for yet are filters named for the marketplace id:
+ * Builds the stores and editors of the mappings page from the plugin's adapter and registers the controller. Nothing
+ * here names a marketplace: every marketplace fact comes from the {@see Marketplace_Adapter}, and the two lists the
+ * adapter contract has no method for yet are filters named for the marketplace id:
  *
  * - `woodev_{id}_profile_choices` — the {@see Profile_Choices} the profile form offers;
  * - `woodev_{id}_mapping_check_context` — the validator context of one product in the mapping check.
  *
- * The page is registered by the base class, which calls {@see self::register()} once; a plugin that dropped the `mappings` page
- * from `get_marketplace_pages()` gets no routes.
+ * The page is registered by the base class, which calls {@see self::register()} once; a plugin that dropped the
+ * `mappings` page from `get_marketplace_pages()` gets no routes.
  *
  * @since 2.0.30
  */
@@ -72,24 +72,36 @@ final class Mappings_Module {
 		$menu = $plugin->get_marketplace_admin_menu();
 		$page = null === $menu ? null : $menu->get_page( self::PAGE );
 
-		if ( null === $menu || null === $page || 1 !== preg_match( Mappings_Controller::OWNER_PATTERN, $plugin->get_id() ) ) {
+		$owner_ok = 1 === preg_match( Mappings_Controller::OWNER_PATTERN, $plugin->get_id() );
+
+		if ( null === $menu || null === $page || ! $owner_ok ) {
 			return null;
 		}
 
 		$adapter  = $plugin->get_marketplace_adapter();
 		$schema   = new Schema( $adapter->id() );
 		$prefix   = $wpdb->prefix;
-		$mappings = new Wpdb_Mapping_Store( $wpdb, $schema->table_name( 'mappings', $prefix ), $schema->table_name( 'mapping_terms', $prefix ) );
-		$profiles = new Wpdb_Profile_Store( $wpdb, $schema->table_name( 'profiles', $prefix ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) );
+		$mappings = new Wpdb_Mapping_Store(
+			$wpdb,
+			$schema->table_name( 'mappings', $prefix ),
+			$schema->table_name( 'mapping_terms', $prefix )
+		);
+		$profiles = new Wpdb_Profile_Store(
+			$wpdb,
+			$schema->table_name( 'profiles', $prefix ),
+			Wpdb_Profile_Store::price_changed_action( $adapter->id() )
+		);
 		$choices  = apply_filters( 'woodev_' . $adapter->id() . '_profile_choices', Profile_Choices::standard() );
 		$choices  = $choices instanceof Profile_Choices ? $choices : Profile_Choices::standard();
 
 		$categories = new Category_Finder( $adapter->catalog_schema() );
 		$products   = new Mapping_Products( [ $mappings, 'terms_by_mapping' ] );
 		$fields     = self::product_fields( $adapter );
-		$editor     = new Mapping_Editor( $mappings, $profiles, $categories, $products, $fields, $schema->table_name( 'links', $prefix ) );
+		$links      = $schema->table_name( 'links', $prefix );
+		$editor     = new Mapping_Editor( $mappings, $profiles, $categories, $products, $fields, $links );
 		$validator  = new Export_Validator( $adapter->export_rules() );
-		$check      = new Mapping_Check( $mappings, $profiles, $validator, $categories, $products, self::context_builder( $adapter ) );
+		$context    = self::context_builder( $adapter );
+		$check      = new Mapping_Check( $mappings, $profiles, $validator, $categories, $products, $context );
 
 		return new Mappings_Controller(
 			$plugin->get_id(),
@@ -105,7 +117,8 @@ final class Mappings_Module {
 	}
 
 	/**
-	 * Built-in product fields a `field` source may name. A subset of what the source resolver reads, with the merchant's names.
+	 * Built-in product fields a `field` source may name. A subset of what the source resolver reads, with the
+	 * merchant's names.
 	 *
 	 * @param Marketplace_Adapter $adapter The adapter.
 	 * @return array<string,string>
@@ -136,7 +149,17 @@ final class Mappings_Module {
 	 * @return callable
 	 */
 	private static function context_builder( Marketplace_Adapter $adapter ): callable {
-		return static function ( \WC_Product $product, Mapping $mapping, Profile $profile, array $base ) use ( $adapter ): array {
+		$filter = 'woodev_' . $adapter->id() . '_mapping_check_context';
+
+		return static function (
+			\WC_Product $product,
+			Mapping $mapping,
+			Profile $profile,
+			array $base
+		) use (
+			$adapter,
+			$filter
+): array {
 			$parent  = $product->get_parent_id() > 0 ? wc_get_product( $product->get_parent_id() ) : null;
 			$context = array_merge(
 				$base,
@@ -148,7 +171,7 @@ final class Mappings_Module {
 				]
 			);
 
-			$filtered = apply_filters( 'woodev_' . $adapter->id() . '_mapping_check_context', $context, $product, $mapping, $profile );
+			$filtered = apply_filters( $filter, $context, $product, $mapping, $profile );
 
 			return is_array( $filtered ) ? $filtered : $context;
 		};

@@ -10,9 +10,10 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * A mapping covers the products in its categories and in their children («a parent mapping covers children»), except the ones a
- * nearer mapping on a child category takes. The lookup is one tax query on the product categories; a product in the categories of
- * two unrelated mappings is counted for both, which only matters to the count shown in the list.
+ * A mapping covers the products in its categories and in their children («a parent mapping covers children»), except
+ * the ones a nearer mapping on a child category takes. The lookup is one tax query on the product categories; a
+ * product in the categories of two unrelated mappings is counted for both, which only matters to the count shown in
+ * the list.
  *
  * @since 2.0.30
  */
@@ -20,7 +21,8 @@ final class Mapping_Products {
 	private const STATUSES = [ 'publish', 'draft', 'pending', 'private' ];
 
 	/**
-	 * Gives the shop categories of every mapping: `function (): array<int,int[]>` (`Wpdb_Mapping_Store::terms_by_mapping()`).
+	 * Gives the shop categories of every mapping: `function (): array<int,int[]>`
+	 * (`Wpdb_Mapping_Store::terms_by_mapping()`).
 	 *
 	 * @var callable
 	 */
@@ -100,7 +102,8 @@ final class Mapping_Products {
 			$branches[] = self::branch( $term_id, $others );
 		}
 
-		// One branch per owned category: a nearer mapping inside one branch must not take away what another owned category holds.
+		// One branch per owned category: a nearer mapping inside one branch must not take away
+		// what another owned category holds.
 		$tax_query = 1 === count( $branches ) ? $branches[0] : array_merge( [ 'relation' => 'OR' ], $branches );
 
 		return [
@@ -113,14 +116,16 @@ final class Mapping_Products {
 			'no_found_rows'          => true,
 			'update_post_meta_cache' => false,
 			'update_post_term_cache' => false,
-			'tax_query'              => $tax_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- The only way to ask for a category set.
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- The only way to ask for a category set.
+			'tax_query'              => $tax_query,
 		];
 	}
 
 	/**
-	 * Builds the clause of one owned category: its subtree, minus the subtrees of other mappings' categories inside it. A product in
-	 * such a category is nearer to the other mapping, because a category's own mapping comes before an ancestor's.
-	 * Categories of an unrelated mapping are left alone: a product in both is resolved to either one, so it stays in both counts.
+	 * Builds the clause of one owned category: its subtree, minus the subtrees of other mappings' categories inside
+	 * it. A product in such a category is nearer to the other mapping, because a category's own mapping comes before
+	 * an ancestor's. Categories of an unrelated mapping are left alone: a product in both is resolved to either one,
+	 * so it stays in both counts.
 	 *
 	 * @param int   $term_id Owned category.
 	 * @param int[] $others  Categories of the other mappings.
@@ -138,7 +143,8 @@ final class Mapping_Products {
 			],
 		];
 
-		$nearer = array_values( array_intersect( $others, array_map( 'intval', (array) get_term_children( $term_id, 'product_cat' ) ) ) );
+		$children = array_map( 'intval', (array) get_term_children( $term_id, 'product_cat' ) );
+		$nearer   = array_values( array_intersect( $others, $children ) );
 
 		if ( [] !== $nearer ) {
 			$clause[] = [

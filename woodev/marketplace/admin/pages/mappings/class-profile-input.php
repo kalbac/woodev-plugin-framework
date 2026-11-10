@@ -13,10 +13,10 @@ use Woodev\Framework\Marketplace\Price\Price_Source;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Turns the JSON body of a profile save into the profile `settings`: sources, fallback dimensions and weight, units, VAT, the
- * currency rule and an optional price rule that overrides the account's. Pure apart from the WordPress sanitizers. A value the
- * profile already stores but the form no longer offers (one a migration copied) is kept for as long as the merchant leaves it
- * alone.
+ * Turns the JSON body of a profile save into the profile `settings`: sources, fallback dimensions and weight, units,
+ * VAT, the currency rule and an optional price rule that overrides the account's. Pure apart from the WordPress
+ * sanitizers. A value the profile already stores but the form no longer offers (one a migration copied) is kept for
+ * as long as the merchant leaves it alone.
  *
  * @since 2.0.30
  */
@@ -136,7 +136,12 @@ final class Profile_Input {
 	 * @param array<string,mixed> $stored       Settings the profile has now; empty for a new one.
 	 * @return self
 	 */
-	public static function from_request( array $body, Profile_Choices $choices, ?Price_Source $price_source, array $stored = [] ): self {
+	public static function from_request(
+		array $body,
+		Profile_Choices $choices,
+		?Price_Source $price_source,
+		array $stored = []
+	): self {
 		$input = new self( $choices, $price_source );
 		$input->read_name( $body );
 		$input->read_sources( $body, $stored );
@@ -200,7 +205,7 @@ final class Profile_Input {
 	 * @return void
 	 */
 	private function read_name( array $body ): void {
-		$this->name = isset( $body['name'] ) && is_scalar( $body['name'] ) ? trim( sanitize_text_field( (string) $body['name'] ) ) : '';
+		$this->name = self::text( $body, 'name' );
 
 		if ( '' === $this->name ) {
 			$this->errors[] = Mapping_Messages::profile_name_required();
@@ -228,8 +233,11 @@ final class Profile_Input {
 				continue;
 			}
 
-			$names_a_custom_field = Profile_Choices::KIND_META === $kind && isset( $this->choices->sources()[ $setting ][ $kind ] );
-			$this->errors[]       = $names_a_custom_field ? Mapping_Messages::custom_field_missing() : Mapping_Messages::malformed();
+			$offered              = isset( $this->choices->sources()[ $setting ][ $kind ] );
+			$names_a_custom_field = Profile_Choices::KIND_META === $kind && $offered;
+			$this->errors[]       = $names_a_custom_field
+				? Mapping_Messages::custom_field_missing()
+				: Mapping_Messages::malformed();
 		}
 	}
 
@@ -291,7 +299,8 @@ final class Profile_Input {
 			$kept  = '' !== $value && isset( $legacy[ $measure ] ) && (string) $legacy[ $measure ] === $value;
 
 			if ( in_array( $value, $allowed, true ) || $kept ) {
-				$units[ $measure ] = $value; // A unit the form no longer offers survives while the merchant leaves it alone.
+				// A unit the form no longer offers survives while the merchant leaves it alone.
+				$units[ $measure ] = $value;
 			}
 		}
 
@@ -314,7 +323,9 @@ final class Profile_Input {
 			return;
 		}
 
-		if ( isset( $this->choices->vat_rates()[ $vat ] ) || ( isset( $stored['vat_rate'] ) && (string) $stored['vat_rate'] === $vat ) ) {
+		$kept = isset( $stored['vat_rate'] ) && (string) $stored['vat_rate'] === $vat;
+
+		if ( isset( $this->choices->vat_rates()[ $vat ] ) || $kept ) {
 			$this->settings['vat_rate'] = $vat;
 
 			return;
@@ -324,7 +335,8 @@ final class Profile_Input {
 	}
 
 	/**
-	 * Reads the currency rule: `account`, `rate:{multiplier}`, the marketplace's own `field:{key}` or the stored `fixed:{code}`.
+	 * Reads the currency rule: `account`, `rate:{multiplier}`, the marketplace's own `field:{key}` or the stored
+	 * `fixed:{code}`.
 	 *
 	 * @param array<string,mixed> $body   Request body.
 	 * @param array<string,mixed> $stored Stored settings.
@@ -337,8 +349,10 @@ final class Profile_Input {
 			return;
 		}
 
-		if ( 'fixed' === $kind && isset( $stored['currency_rule'] ) && 0 === strpos( (string) $stored['currency_rule'], 'fixed:' ) ) {
-			$this->settings['currency_rule'] = (string) $stored['currency_rule'];
+		$stored_rule = (string) ( $stored['currency_rule'] ?? '' );
+
+		if ( 'fixed' === $kind && 0 === strpos( $stored_rule, 'fixed:' ) ) {
+			$this->settings['currency_rule'] = $stored_rule;
 
 			return;
 		}
@@ -453,7 +467,11 @@ final class Profile_Input {
 	 * @return string
 	 */
 	private static function text( array $body, string $key ): string {
-		return isset( $body[ $key ] ) && is_scalar( $body[ $key ] ) ? trim( sanitize_text_field( (string) $body[ $key ] ) ) : '';
+		if ( ! isset( $body[ $key ] ) || ! is_scalar( $body[ $key ] ) ) {
+			return '';
+		}
+
+		return trim( sanitize_text_field( (string) $body[ $key ] ) );
 	}
 
 	/**

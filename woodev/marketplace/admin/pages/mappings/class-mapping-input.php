@@ -12,13 +12,13 @@ use Woodev\Framework\Marketplace\Catalog\Source;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Turns the JSON body of a mapping save into checked values: a request body is validated against a declared shape before use.
- * Pure apart from the WordPress sanitizers; the checks that need the shop (does the product category exist, is the category in
- * the marketplace tree) are passed in or done by the caller.
+ * Turns the JSON body of a mapping save into checked values: a request body is validated against a declared shape
+ * before use. Pure apart from the WordPress sanitizers; the checks that need the shop (does the product category
+ * exist, is the category in the marketplace tree) are passed in or done by the caller.
  *
  * Body shape: `name`, `terms[]` (shop category ids), `category` (resolved by the caller, see {@see Category_Finder}),
- * `profile_id`, and `attributes{attribute id: {source, value, dictionary_value_id, key}}` where `source` is the kind and `key`
- * is the attribute taxonomy, meta key or product field for every kind but a fixed value.
+ * `profile_id`, and `attributes{attribute id: {source, value, dictionary_value_id, key}}` where `source` is the kind
+ * and `key` is the attribute taxonomy, meta key or product field for every kind but a fixed value.
  *
  * @since 2.0.30
  */
@@ -87,11 +87,16 @@ final class Mapping_Input {
 	 * @since 2.0.30
 	 *
 	 * @param array<string,mixed>                        $body           Decoded request body.
-	 * @param array<string,mixed>|null                   $category       Identity of the category the caller resolved from `category`, null for none.
-	 * @param array<string,array{name:string,dict:bool}> $fields        Fields of that category by id; a sent id outside it is dropped.
-	 * @param callable                                   $term_exists    `function ( int $term_id ): bool`, true for a product category.
-	 * @param array<string,string>                       $product_fields Built-in product fields a `field` source may name (key => label).
-	 * @param array<string,mixed>|null                   $stored         The mapping as stored (`category`, `attributes`); null for a new one.
+	 * @param array<string,mixed>|null                   $category       Identity of the category the caller resolved
+	 *   from `category`, null for none.
+	 * @param array<string,array{name:string,dict:bool}> $fields        Fields of that category by id; a sent id
+	 *   outside it is dropped.
+	 * @param callable                                   $term_exists    `function ( int $term_id ): bool`, true for a
+	 *   product category.
+	 * @param array<string,string>                       $product_fields Built-in product fields a `field` source may
+	 *   name (key => label).
+	 * @param array<string,mixed>|null                   $stored         The mapping as stored (`category`,
+	 *   `attributes`); null for a new one.
 	 * @return self
 	 */
 	public static function from_request(
@@ -190,11 +195,12 @@ final class Mapping_Input {
 	}
 
 	/**
-	 * Reads the attribute table, or keeps the stored sources when no table came with a save that left the category as it was.
+	 * Reads the attribute table, or keeps the stored sources when no table came with a save that left the category as
+	 * it was.
 	 *
-	 * An absent table is not an instruction to clear the sources: the view sends `attributes` only with a table it has loaded, so
-	 * a save made before the table arrived (a slow connection, a failed load) cannot erase what the mapping holds. Clearing a
-	 * source stays possible through its row, set to «no source».
+	 * An absent table is not an instruction to clear the sources: the view sends `attributes` only with a table it
+	 * has loaded, so a save made before the table arrived (a slow connection, a failed load) cannot erase what the
+	 * mapping holds. Clearing a source stays possible through its row, set to «no source».
 	 *
 	 * @param array<string,mixed>                        $body           Request body.
 	 * @param array<string,array{name:string,dict:bool}> $fields         Fields of the category.
@@ -237,7 +243,7 @@ final class Mapping_Input {
 	 * @return string
 	 */
 	private function read_name( array $body ): string {
-		$name = isset( $body['name'] ) && is_scalar( $body['name'] ) ? trim( sanitize_text_field( (string) $body['name'] ) ) : '';
+		$name = self::text( $body, 'name' );
 
 		if ( '' === $name ) {
 			$this->errors[] = Mapping_Messages::mapping_name_required();
@@ -313,7 +319,8 @@ final class Mapping_Input {
 				continue;
 			}
 
-			$previous = isset( $stored[ $attribute_id ] ) && is_array( $stored[ $attribute_id ] ) ? $stored[ $attribute_id ] : null;
+			$known    = $stored[ $attribute_id ] ?? null;
+			$previous = is_array( $known ) ? $known : null;
 			$clean    = $this->read_entry( $entry, $fields[ $attribute_id ], $product_fields, $previous );
 
 			if ( null !== $clean ) {
@@ -348,10 +355,11 @@ final class Mapping_Input {
 
 		$value = self::text( $entry, 'value' );
 		$key   = self::text( $entry, 'key' );
-		$dict  = isset( $entry['dictionary_value_id'] ) && is_scalar( $entry['dictionary_value_id'] ) ? (int) $entry['dictionary_value_id'] : 0;
+		$dict  = self::positive_int( $entry, 'dictionary_value_id' ) ?? 0;
 
 		if ( null !== $stored && self::is_unchanged( $stored, $kind, $value, $key, $dict ) ) {
-			return $stored; // What the form cannot show (a fallback value, further dictionary values from v1) stays with it.
+			// What the form cannot show (a fallback value, further dictionary values from v1) stays with it.
+			return $stored;
 		}
 
 		if ( Source::FIXED === $kind ) {
@@ -391,7 +399,11 @@ final class Mapping_Input {
 	 * @return string
 	 */
 	private static function text( array $entry, string $name ): string {
-		return isset( $entry[ $name ] ) && is_scalar( $entry[ $name ] ) ? trim( sanitize_text_field( (string) $entry[ $name ] ) ) : '';
+		if ( ! isset( $entry[ $name ] ) || ! is_scalar( $entry[ $name ] ) ) {
+			return '';
+		}
+
+		return trim( sanitize_text_field( (string) $entry[ $name ] ) );
 	}
 
 	/**
@@ -413,7 +425,9 @@ final class Mapping_Input {
 			return (string) ( $stored['wc_key'] ?? '' ) === $key;
 		}
 
-		return (string) ( $stored['value'] ?? '' ) === $value && (int) ( $stored['dictionary_value_id'] ?? 0 ) === $dict;
+		$same_value = (string) ( $stored['value'] ?? '' ) === $value;
+
+		return $same_value && (int) ( $stored['dictionary_value_id'] ?? 0 ) === $dict;
 	}
 
 	/**

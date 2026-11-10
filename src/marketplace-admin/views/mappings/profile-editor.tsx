@@ -98,7 +98,8 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ api, profileId ] );
 
-	const set = ( key: string, value: string | boolean ) => setValues( ( previous ) => ( { ...previous, [ key ]: value } ) );
+	const set = ( key: string, value: string | boolean ) =>
+		setValues( ( previous ) => ( { ...previous, [ key ]: value } ) );
 	const text = ( key: string ) => String( values[ key ] ?? '' );
 
 	const act = async ( work: () => Promise< void > ) => {
@@ -129,7 +130,13 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 	}
 
 	const field = ( key: string, label: string ) => (
-		<TextControl __next40pxDefaultSize key={ key } label={ label } value={ text( key ) } onChange={ ( value ) => set( key, value ) } />
+		<TextControl
+			__next40pxDefaultSize
+			key={ key }
+			label={ label }
+			value={ text( key ) }
+			onChange={ ( value ) => set( key, value ) }
+		/>
 	);
 	const select = ( key: string, label: string, options: Option[], blank?: string ) => (
 		<SelectControl __next40pxDefaultSize
@@ -141,11 +148,12 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 		/>
 	);
 
+	const fixedLabel = `${ messages.currencyFixed }: ${ text( 'currency_code' ) }`;
 	const currencyOptions: Option[] = [
 		{ value: 'account', label: messages.currencyAccount },
 		{ value: 'rate', label: messages.currencyRate },
 		...( form.currency_field === null ? [] : [ { value: 'field', label: form.currency_field } ] ),
-		...( text( 'currency_kind' ) === 'fixed' ? [ { value: 'fixed', label: `${ messages.currencyFixed }: ${ text( 'currency_code' ) }` } ] : [] ),
+		...( text( 'currency_kind' ) === 'fixed' ? [ { value: 'fixed', label: fixedLabel } ] : [] ),
 	];
 
 	return (
@@ -158,7 +166,8 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 				{ form.sources.map( ( source ) => (
 					<div key={ source.setting }>
 						{ select( source.setting, source.title, source.kinds ) }
-						{ text( source.setting ) === source.custom && field( `${ source.setting }_key`, messages.customFieldKey ) }
+						{ text( source.setting ) === source.custom &&
+							field( `${ source.setting }_key`, messages.customFieldKey ) }
 					</div>
 				) ) }
 			</fieldset>
