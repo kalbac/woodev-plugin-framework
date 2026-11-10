@@ -1518,6 +1518,10 @@
 			// fieldId -> the {@see createAddressTimerGuard} guard armed on that CLASSIC checkout
 			// address input, released by {@see detachOne}.
 			addressGuards: {},
+			// fieldId -> true while the server has NOT saved the selection shown on that field (a failed
+			// or unpersisted `/select`). Kept here, not in the renderer, so a widget re-attached by a
+			// checkout re-render gets it back — {@see attachOne} re-applies it (issue #1667).
+			unsavedFields: {},
 			// Single-flight /select queue state (Finding 2) — see enqueueSelect()/sendNextSelect().
 			pendingRecord: null,
 			selectInFlight: false,
@@ -2422,6 +2426,9 @@
 
 		if ( previous !== next ) {
 			resetWidgetGuard( entry, fieldId );
+
+			// Issue #1667: a different value replaces the selection the mark described.
+			delete entry.unsavedFields[ fieldId ];
 		}
 	}
 
@@ -2698,6 +2705,10 @@
 		// happened before it hands a record over. See {@see nextPickSeq}.
 		nextPickSeq( entry );
 
+		// Issue #1667: a new pick replaces the unsaved selection on its level; its own /select
+		// settles the mark again.
+		clearFieldUnsaved( entry, record.level );
+
 		entry.pendingRecord = record;
 
 		// Issue #541: the busy state belongs to the customer's ACTION, not to the request. It
@@ -2848,6 +2859,7 @@
 
 		var el = document.getElementById( node.fieldId );
 
+		delete entry.unsavedFields[ node.fieldId ];
 		entry.records[ level ] = null;
 		entry.store.setValue( node.fieldId, '' );
 		entry.resolved[ node.fieldId ] = '';
@@ -3280,6 +3292,7 @@
 
 		if ( shouldTrigger ) {
 			clearNotPersistedNotice( entry );
+			clearFieldUnsaved( entry, record.level );
 
 			// Issue #309: a persisted `/select` is ALWAYS an explicit customer choice
 			// (`Location_Controller::handle_select_request()` never writes implicit — spec
@@ -3306,7 +3319,7 @@
 			// open instead, so the click is a real pick (the widget's `markUnsaved` hook). Not for the
 			// My Account form, which settles with both flags false and keeps its pick on purpose.
 			if ( notPersisted || transportFailed ) {
-				markWidgetUnsaved( entry, failedNode.fieldId );
+				markFieldUnsaved( entry, failedNode.fieldId );
 			}
 		}
 
@@ -3332,6 +3345,37 @@
 
 		if ( widget && widget.api && 'function' === typeof widget.api.markUnsaved ) {
 			widget.api.markUnsaved();
+		}
+	}
+
+	/**
+	 * Records that the selection on `fieldId` was not saved, and tells its CURRENT widget
+	 * (issue #1667). The entry-level record is what survives a re-render: the widget can be
+	 * replaced by `updated_checkout` at any time, and {@see attachOne} re-applies the mark to the
+	 * fresh one.
+	 *
+	 * @param {Object} entry
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function markFieldUnsaved( entry, fieldId ) {
+		entry.unsavedFields[ fieldId ] = true;
+		markWidgetUnsaved( entry, fieldId );
+	}
+
+	/**
+	 * Drops the not-saved mark for the field that holds `level` — the selection there was saved,
+	 * or it is being replaced by a new pick (issue #1667).
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {void}
+	 */
+	function clearFieldUnsaved( entry, level ) {
+		var node = level ? chainNodeForLevel( entry, level ) : null;
+
+		if ( node ) {
+			delete entry.unsavedFields[ node.fieldId ];
 		}
 	}
 
@@ -4885,6 +4929,12 @@
 				entry.widgets[ node.fieldId ] = {
 					el: api.el || el, api: api, renderer: renderer, closedCountry: closedCountry,
 				};
+
+				// Issue #1667: a checkout re-render hands this node a FRESH widget that knows nothing of
+				// the failed save. Re-apply the cascade's own mark, so the city shown here is retryable.
+				if ( entry.unsavedFields[ node.fieldId ] ) {
+					markWidgetUnsaved( entry, node.fieldId );
+				}
 
 				if ( addressGuard && ( ! api.el || api.el === el ) ) {
 					addressGuard.arm( entry );

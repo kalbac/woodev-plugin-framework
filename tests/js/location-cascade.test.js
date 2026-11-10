@@ -2016,6 +2016,50 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		consoleSpy.mockRestore();
 	} );
 
+	it( 'a checkout re-render after a transport failure keeps the same city retryable (#1667, round 2)', async () => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		const instances = bootRealAjaxSelect2Settlement( {} );
+		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const resultItem = query.success.mock.calls.slice( -1 )[ 0 ][ 0 ].results[ 0 ];
+		instances[ 0 ].pick( resultItem );
+		selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		// WooCommerce re-renders the checkout: the city node is replaced by a fresh, plain input.
+		// The cascade re-attaches its renderer to it, which seeds the select from the restored value.
+		const fresh = document.createElement( 'input' );
+
+		fresh.type = 'text';
+		fresh.id = 'billing_city';
+		fresh.name = 'billing_city';
+		document.getElementById( 'billing_city' ).replaceWith( fresh );
+		window.jQuery( document.body ).trigger( 'updated_checkout' );
+		await flushMicrotasks();
+
+		// The newest select2 instance belongs to the re-attached widget.
+		const reattached = instances[ instances.length - 1 ];
+
+		expect( reattached ).not.toBe( instances[ 0 ] );
+		expect( selectRequests().length ).toBe( 1 );
+
+		// The shopper types the city again, so the new widget's own search lists it.
+		const search = reattached.query( SETTLEMENT_ITEM.label );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const listed = search.success.mock.calls.slice( -1 )[ 0 ][ 0 ].results[ 0 ];
+
+		reattached.clickResult( listed );
+
+		expect( selectRequests().length ).toBe( 2 );
+		consoleSpy.mockRestore();
+	} );
+
 	it( 'does not resend the same city after a successful response', async () => {
 		const instances = bootRealAjaxSelect2Settlement( {} );
 		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );
