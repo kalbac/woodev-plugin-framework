@@ -104,7 +104,11 @@ export interface Records {
 export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 	const account = readAccount( route );
 
-	const [ definition, setDefinition ] = useState< DefinitionState >( { status: 'loading', envelope: null, message: '' } );
+	const [ definition, setDefinition ] = useState< DefinitionState >( {
+		status: 'loading',
+		envelope: null,
+		message: '',
+	} );
 	const [ list, setList ] = useState< ListState >( { status: 'loading', data: null, message: '' } );
 	const [ children, setChildren ] = useState< Record< string, ChildrenState > >( {} );
 	const [ expanded, setExpanded ] = useState< string[] >( [] );
@@ -120,7 +124,10 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 
 	const envelope = definition.status === 'ready' ? definition.envelope : null;
 	const shownDefinition = definition.envelope?.definition ?? null;
-	const query = useMemo( () => ( shownDefinition ? readQuery( shownDefinition, route ) : null ), [ shownDefinition, route ] );
+	const query = useMemo(
+		() => ( shownDefinition ? readQuery( shownDefinition, route ) : null ),
+		[ shownDefinition, route ]
+	);
 	const requestKey = envelope && query ? JSON.stringify( listParams( envelope.context, query ) ) : '';
 	const queryRef = useRef( query );
 	queryRef.current = query;
@@ -130,10 +137,13 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 		setExpanded( next );
 	}, [] );
 
-	const writeChildren = useCallback( ( update: ( known: Record< string, ChildrenState > ) => Record< string, ChildrenState > ) => {
-		childrenRef.current = update( childrenRef.current );
-		setChildren( childrenRef.current );
-	}, [] );
+	const writeChildren = useCallback(
+		( update: ( known: Record< string, ChildrenState > ) => Record< string, ChildrenState > ) => {
+			childrenRef.current = update( childrenRef.current );
+			setChildren( childrenRef.current );
+		},
+		[]
+	);
 
 	const childGate = useCallback(
 		( parentId: string ): Gate => {
@@ -167,13 +177,19 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 						return;
 					}
 					const rows = page === 1 ? data.rows : appendDistinct( known().rows, data.rows );
-					writeChildren( ( all ) => ( { ...all, [ parentId ]: { status: 'ready', rows, total: data.total, page, message: '' } } ) );
+					writeChildren( ( all ) => ( {
+						...all,
+						[ parentId ]: { status: 'ready', rows, total: data.total, page, message: '' },
+					} ) );
 				},
 				( error ) => {
 					if ( isStale() ) {
 						return;
 					}
-					writeChildren( ( all ) => ( { ...all, [ parentId ]: { ...known(), status: 'error', message: errorMessage( error ) } } ) );
+					writeChildren( ( all ) => ( {
+						...all,
+						[ parentId ]: { ...known(), status: 'error', message: errorMessage( error ) },
+					} ) );
 				}
 			);
 		},
@@ -187,7 +203,9 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 			const kept = expandedRef.current.filter( ( id ) => expandable.has( id ) );
 
 			writeExpanded( kept );
-			writeChildren( ( all ) => Object.fromEntries( kept.filter( ( id ) => all[ id ] ).map( ( id ) => [ id, all[ id ] ] ) ) );
+			writeChildren( ( all ) =>
+				Object.fromEntries( kept.filter( ( id ) => all[ id ] ).map( ( id ) => [ id, all[ id ] ] ) )
+			);
 			kept.forEach( ( id ) => readChildren( id, 1 ) );
 		},
 		[ readChildren, writeChildren, writeExpanded ]
@@ -257,7 +275,9 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 			if ( expandedRef.current.includes( parentId ) ) {
 				childGate( parentId ).close();
 				writeExpanded( expandedRef.current.filter( ( id ) => id !== parentId ) );
-				writeChildren( ( all ) => Object.fromEntries( Object.entries( all ).filter( ( [ id ] ) => id !== parentId ) ) );
+				writeChildren( ( all ) =>
+					Object.fromEntries( Object.entries( all ).filter( ( [ id ] ) => id !== parentId ) )
+				);
 				return;
 			}
 
@@ -277,9 +297,18 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 			const fresh = new Map( rows.map( ( row ) => [ row.id, row ] ) );
 			const removed = new Set( removedIds );
 
-			setList( ( known ) => ( known.data ? { ...known, data: { ...known.data, rows: patchList( known.data.rows, fresh, removed ) } } : known ) );
+			setList( ( known ) =>
+				known.data
+					? { ...known, data: { ...known.data, rows: patchList( known.data.rows, fresh, removed ) } }
+					: known
+			);
 			writeChildren( ( all ) =>
-				Object.fromEntries( Object.entries( all ).map( ( [ id, state ] ) => [ id, { ...state, rows: patchList( state.rows, fresh, removed ) } ] ) )
+				Object.fromEntries(
+					Object.entries( all ).map( ( [ id, state ] ) => [
+						id,
+						{ ...state, rows: patchList( state.rows, fresh, removed ) },
+					] )
+				)
 			);
 		},
 		[ writeChildren ]

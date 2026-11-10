@@ -79,7 +79,17 @@ function sortedColumnId( definition: Definition, query: RecordsQuery ): string |
 }
 
 /** The card: WooCommerce's table, sort headers and pagination around the shell's lines. */
-function TableBody( { title, definition, messages, query, records, selection, handle, extensions, onChange }: TableBodyProps ) {
+function TableBody( {
+	title,
+	definition,
+	messages,
+	query,
+	records,
+	selection,
+	handle,
+	extensions,
+	onChange,
+}: TableBodyProps ) {
 	const TableCard = getTableCard();
 	const data = records.list.data;
 
@@ -92,8 +102,16 @@ function TableBody( { title, definition, messages, query, records, selection, ha
 			row={ row }
 			rowKey={ rowKey }
 			descriptors={ definition.row_actions }
-			onAction={ extensions.onRowAction ? ( action, target ) => extensions.onRowAction?.( action, target, handle ) : undefined }
-			blockedReason={ extensions.blockedReason ? ( action, target ) => extensions.blockedReason?.( action, target, handle ) ?? '' : undefined }
+			onAction={
+				extensions.onRowAction
+					? ( action, target ) => extensions.onRowAction?.( action, target, handle )
+					: undefined
+			}
+			blockedReason={
+				extensions.blockedReason
+					? ( action, target ) => extensions.blockedReason?.( action, target, handle ) ?? ''
+					: undefined
+			}
 		>
 			{ extensions.renderRowActivity?.( row, handle ) }
 		</RowActions>
@@ -129,7 +147,8 @@ function TableBody( { title, definition, messages, query, records, selection, ha
 		}
 	};
 
-	const onQueryChange: TableCardProps[ 'onQueryChange' ] = ( param ) => ( param === 'per_page' ? changePerPage : () => {} );
+	const onQueryChange: TableCardProps[ 'onQueryChange' ] = ( param ) =>
+		param === 'per_page' ? changePerPage : () => {};
 
 	return (
 		<TableCard
@@ -143,7 +162,12 @@ function TableBody( { title, definition, messages, query, records, selection, ha
 			rowHeader={ leadColumns }
 			rowsPerPage={ query.perPage }
 			totalRows={ data?.total ?? 0 }
-			query={ { orderby: sortedColumnId( definition, query ), order: query.direction, paged: String( query.page ), per_page: query.perPage } }
+			query={ {
+				orderby: sortedColumnId( definition, query ),
+				order: query.direction,
+				paged: String( query.page ),
+				per_page: query.perPage,
+			} }
 			isLoading={ records.list.status === 'loading' }
 			showMenu={ definition.columns.some( ( column ) => ! column.required ) }
 			onSort={ sortBy }
@@ -163,11 +187,19 @@ function Result( props: ResultProps ) {
 	const { list } = records;
 
 	if ( list.status === 'error' ) {
-		return <ErrorState text={ list.message || message( messages, MESSAGE_KEYS.error ) } retryLabel={ message( messages, MESSAGE_KEYS.retry ) } onRetry={ onRetry } />;
+		return (
+			<ErrorState
+				text={ list.message || message( messages, MESSAGE_KEYS.error ) }
+				retryLabel={ message( messages, MESSAGE_KEYS.retry ) }
+				onRetry={ onRetry }
+			/>
+		);
 	}
 
 	if ( list.status === 'ready' && list.data?.total === 0 ) {
-		const keys = isNarrowed( definition, query ) ? [ MESSAGE_KEYS.emptyFiltered, MESSAGE_KEYS.empty ] : [ MESSAGE_KEYS.empty ];
+		const keys = isNarrowed( definition, query )
+			? [ MESSAGE_KEYS.emptyFiltered, MESSAGE_KEYS.empty ]
+			: [ MESSAGE_KEYS.empty ];
 
 		return <EmptyState text={ firstMessage( messages, keys ) } />;
 	}
@@ -175,13 +207,22 @@ function Result( props: ResultProps ) {
 	return <TableBody { ...props } />;
 }
 
-export function RecordsTable( { owner, table, title, query: pageQuery, navigate, fallbackMessages = {}, extensions = {} }: RecordsTableProps ) {
+export function RecordsTable( {
+	owner,
+	table,
+	title,
+	query: pageQuery,
+	navigate,
+	fallbackMessages = {},
+	extensions = {},
+}: RecordsTableProps ) {
 	const api = useMemo( () => createRecordsApi( owner, table ), [ owner, table ] );
 	const [ route, go ] = useRoute( pageQuery, navigate );
 	const records = useRecords( api, route );
 	const envelope = records.definition.envelope;
 	const definition = envelope?.definition ?? null;
-	const hasBulk = definition !== null && definition.bulk_actions.length > 0 && extensions.renderBulkActions !== undefined;
+	const hasBulk =
+		definition !== null && definition.bulk_actions.length > 0 && extensions.renderBulkActions !== undefined;
 	const selection = useSelection( definition?.pagination.max_selection ?? 0, records.epoch );
 
 	if ( ! envelope || ! definition || ! records.query ) {
@@ -199,7 +240,11 @@ export function RecordsTable( { owner, table, title, query: pageQuery, navigate,
 	}
 
 	const query = records.query;
-	const messages: Messages = { ...fallbackMessages, ...definition.messages, ...( records.list.data?.messages ?? {} ) };
+	const messages: Messages = {
+		...fallbackMessages,
+		...definition.messages,
+		...( records.list.data?.messages ?? {} ),
+	};
 	const rows = records.list.data?.rows ?? [];
 	const change = ( next: RecordsQuery ) => go( writeQuery( definition, next ) );
 	const handle: TableHandle = {
@@ -228,7 +273,11 @@ export function RecordsTable( { owner, table, title, query: pageQuery, navigate,
 				onChange={ change }
 			/>
 			{ extensions.renderActivity?.( handle ) }
-			{ hasBulk && extensions.renderBulkActions?.( { selectedIds: selection.selectedIds, clear: selection.clear }, handle ) }
+			{ hasBulk &&
+				extensions.renderBulkActions?.(
+					{ selectedIds: selection.selectedIds, clear: selection.clear },
+					handle
+				) }
 			{ limitNote !== '' && <p role="status">{ limitNote }</p> }
 			{ summary !== '' && records.list.status === 'ready' && (
 				<p className="woodev-records__summary" style={ STYLES.summary }>

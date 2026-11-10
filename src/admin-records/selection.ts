@@ -45,7 +45,9 @@ export function useSelection( limit: number, epoch: number ): Selection {
 	const set = useCallback(
 		( ids: string[], selected: boolean ) =>
 			setState( ( known ) =>
-				selected ? add( known.ids, ids, limit ) : { ids: known.ids.filter( ( id ) => ! ids.includes( id ) ), limitReached: false }
+				selected
+					? add( known.ids, ids, limit )
+					: { ids: known.ids.filter( ( id ) => ! ids.includes( id ) ), limitReached: false }
 			),
 		[ limit ]
 	);

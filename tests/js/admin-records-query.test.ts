@@ -35,7 +35,9 @@ function asUrl( route: RouteQuery ): RouteQuery {
 
 function withDefault( filterId: string, value: unknown ): Definition {
 	return fixtureDefinition( {
-		filters: definition.filters.map( ( filter ) => ( filter.id === filterId ? { ...filter, default: value as never } : filter ) ),
+		filters: definition.filters.map( ( filter ) =>
+			filter.id === filterId ? { ...filter, default: value as never } : filter
+		),
 	} );
 }
 
@@ -80,8 +82,12 @@ describe( 'readQuery', () => {
 	} );
 
 	test( 'a date range may have one end only', () => {
-		expect( readQuery( definition, { filter_updated: ',2026-11-09' } ).filters ).toEqual( { updated: { to: '2026-11-09' } } );
-		expect( readQuery( definition, { filter_updated: '2026-11-01,' } ).filters ).toEqual( { updated: { from: '2026-11-01' } } );
+		expect( readQuery( definition, { filter_updated: ',2026-11-09' } ).filters ).toEqual( {
+			updated: { to: '2026-11-09' },
+		} );
+		expect( readQuery( definition, { filter_updated: '2026-11-01,' } ).filters ).toEqual( {
+			updated: { from: '2026-11-01' },
+		} );
 	} );
 
 	test.each( [
@@ -105,7 +111,9 @@ describe( 'readQuery', () => {
 	} );
 
 	test( 'search is ignored by a table without a search filter', () => {
-		const noSearch = fixtureDefinition( { filters: definition.filters.filter( ( filter ) => filter.type !== 'search' ) } );
+		const noSearch = fixtureDefinition( {
+			filters: definition.filters.filter( ( filter ) => filter.type !== 'search' ),
+		} );
 
 		expect( readQuery( noSearch, { search: 'кружка' } ).search ).toBe( '' );
 	} );
@@ -138,7 +146,16 @@ describe( 'writeQuery', () => {
 		const route = writeQuery( definition, DEFAULT_QUERY );
 
 		expect( Object.keys( route ) ).toEqual(
-			expect.arrayContaining( [ 'account', 'paged', 'per_page', 'search', 'orderby', 'order', 'filter_state', 'filter_in_stock' ] )
+			expect.arrayContaining( [
+				'account',
+				'paged',
+				'per_page',
+				'search',
+				'orderby',
+				'order',
+				'filter_state',
+				'filter_in_stock',
+			] )
 		);
 		expect( Object.values( route ).every( ( value ) => value === undefined ) ).toBe( true );
 	} );
@@ -146,9 +163,13 @@ describe( 'writeQuery', () => {
 	test( 'a cleared filter with a PHP default is written explicitly', () => {
 		const preset = withDefault( 'in_stock', true );
 
-		expect( asUrl( writeQuery( preset, { ...DEFAULT_QUERY, filters: {} } ) ) ).toEqual( { filter_in_stock: NO_VALUE } );
+		expect( asUrl( writeQuery( preset, { ...DEFAULT_QUERY, filters: {} } ) ) ).toEqual( {
+			filter_in_stock: NO_VALUE,
+		} );
 		expect( asUrl( writeQuery( preset, { ...DEFAULT_QUERY, filters: { in_stock: true } } ) ) ).toEqual( {} );
-		expect( asUrl( writeQuery( preset, { ...DEFAULT_QUERY, filters: { in_stock: false } } ) ) ).toEqual( { filter_in_stock: '0' } );
+		expect( asUrl( writeQuery( preset, { ...DEFAULT_QUERY, filters: { in_stock: false } } ) ) ).toEqual( {
+			filter_in_stock: '0',
+		} );
 	} );
 
 	test.each( [
@@ -156,7 +177,10 @@ describe( 'writeQuery', () => {
 		[ 'paging and sort', { paged: '4', per_page: '100', orderby: 'title', order: 'desc' } ],
 		[ 'the default key in the other direction', { orderby: 'updated', order: 'asc' } ],
 		[ 'search and account', { account: 'a2', search: 'синяя кружка' } ],
-		[ 'every filter type', { filter_state: 'linked', filter_brand: 'zen,acme', filter_in_stock: '1', filter_updated: '2026-11-01,' } ],
+		[
+			'every filter type',
+			{ filter_state: 'linked', filter_brand: 'zen,acme', filter_in_stock: '1', filter_updated: '2026-11-01,' },
+		],
 		[ 'false and an open-ended range', { filter_in_stock: '0', filter_updated: ',2026-11-09' } ],
 	] )( 'URL → query → URL keeps %s', ( _name, route ) => {
 		expect( asUrl( writeQuery( definition, readQuery( definition, route ) ) ) ).toEqual( route );
@@ -197,7 +221,10 @@ describe( 'changing the query', () => {
 		const filtered = changeFilter( onPageThree, 'state', 'draft' );
 
 		expect( filtered ).toMatchObject( { page: 1, filters: { state: 'draft' } } );
-		expect( changeFilter( { ...filtered, page: 2 }, 'state', undefined ) ).toMatchObject( { page: 1, filters: {} } );
+		expect( changeFilter( { ...filtered, page: 2 }, 'state', undefined ) ).toMatchObject( {
+			page: 1,
+			filters: {},
+		} );
 	} );
 } );
 

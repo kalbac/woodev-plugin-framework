@@ -55,7 +55,9 @@ function rowName( definition: Definition, row: AdminRecord ): string {
 
 /** Rows a checkbox can select: the row itself and, for an expanded parent, its loaded children. */
 function selectableFamily( row: AdminRecord, children: ChildrenState | undefined ): string[] {
-	return [ row, ...( children?.rows ?? [] ) ].filter( ( member ) => member.selectable ).map( ( member ) => member.id );
+	return [ row, ...( children?.rows ?? [] ) ]
+		.filter( ( member ) => member.selectable )
+		.map( ( member ) => member.id );
 }
 
 /**
@@ -80,7 +82,13 @@ interface ExpandButtonProps {
 
 function ExpandButton( { isOpen, label, onClick }: ExpandButtonProps ) {
 	return (
-		<button type="button" className="button-link woodev-records__expand" aria-expanded={ isOpen } aria-label={ label } onClick={ onClick }>
+		<button
+			type="button"
+			className="button-link woodev-records__expand"
+			aria-expanded={ isOpen }
+			aria-label={ label }
+			onClick={ onClick }
+		>
 			<span aria-hidden="true">{ isOpen ? '▾' : '▸' }</span>
 		</button>
 	);
@@ -121,7 +129,13 @@ function expandCell( input: TableModelInput, row: AdminRecord ): TableCell {
 	const isOpen = input.expanded.includes( row.id );
 	const verb = message( input.messages, isOpen ? MESSAGE_KEYS.collapse : MESSAGE_KEYS.expand );
 
-	return cell( <ExpandButton isOpen={ isOpen } label={ joinLabel( verb, rowName( input.definition, row ) ) } onClick={ () => input.onToggle( row.id ) } /> );
+	return cell(
+		<ExpandButton
+			isOpen={ isOpen }
+			label={ joinLabel( verb, rowName( input.definition, row ) ) }
+			onClick={ () => input.onToggle( row.id ) }
+		/>
+	);
 }
 
 function selectCell( input: TableModelInput, row: AdminRecord, family: string[] ): TableCell {
@@ -140,7 +154,10 @@ function selectCell( input: TableModelInput, row: AdminRecord, family: string[] 
 
 function dataCells( input: TableModelInput, row: AdminRecord, key: string, isChild: boolean ): TableCell[] {
 	return input.definition.columns.map( ( column, index ) => {
-		const content = column.cell_type === 'actions' ? input.renderActions( row, key ) : renderCell( column.cell_type, row.cells[ column.id ] );
+		const content =
+			column.cell_type === 'actions'
+				? input.renderActions( row, key )
+				: renderCell( column.cell_type, row.cells[ column.id ] );
 		const indent = isChild && index === 0;
 
 		return cell( indent ? <span style={ STYLES.childCell }>{ content }</span> : content );
@@ -164,7 +181,10 @@ function parentLine( input: TableModelInput, row: AdminRecord ): TableLine {
 	const family = selectableFamily( row, input.children[ row.id ] );
 	const select = input.selection ? selectCell( input, row, family ) : EMPTY_CELL;
 
-	return { key: row.id, cells: [ ...leadCells( input, expandCell( input, row ), select ), ...dataCells( input, row, row.id, false ) ] };
+	return {
+		key: row.id,
+		cells: [ ...leadCells( input, expandCell( input, row ), select ), ...dataCells( input, row, row.id, false ) ],
+	};
 }
 
 function childLine( input: TableModelInput, parent: AdminRecord, child: AdminRecord ): TableLine {
@@ -176,7 +196,9 @@ function childLine( input: TableModelInput, parent: AdminRecord, child: AdminRec
 
 /** A line that spans no data: its first declared column holds a status or a button, the rest stay empty. */
 function noteLine( input: TableModelInput, key: string, content: ReactNode ): TableLine {
-	const data = input.definition.columns.map( ( _column, index ) => ( index === 0 ? cell( <span style={ STYLES.childCell }>{ content }</span> ) : EMPTY_CELL ) );
+	const data = input.definition.columns.map( ( _column, index ) =>
+		index === 0 ? cell( <span style={ STYLES.childCell }>{ content }</span> ) : EMPTY_CELL
+	);
 
 	return { key, cells: [ ...leadCells( input, EMPTY_CELL, EMPTY_CELL ), ...data ] };
 }

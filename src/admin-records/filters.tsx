@@ -43,7 +43,9 @@ function withCount( option: Option, facets: Facet[] ): Option {
 function filterOptions( filter: Filter, facets: Facet[], selected: string[] ): Option[] {
 	const declared: Option[] = filter.options_source ? facets : filter.options;
 	const known = new Set( declared.map( ( option ) => option.value ) );
-	const orphans = selected.filter( ( value ) => ! known.has( value ) ).map( ( value ) => ( { value, label: value } ) );
+	const orphans = selected
+		.filter( ( value ) => ! known.has( value ) )
+		.map( ( value ) => ( { value, label: value } ) );
 
 	return [ ...declared.map( ( option ) => withCount( option, facets ) ), ...orphans ];
 }
@@ -161,7 +163,13 @@ function SearchBox( { filter, value, onSearch }: SearchBoxProps ) {
 
 	return (
 		<form role="search" onSubmit={ submit }>
-			<SearchControl __nextHasNoMarginBottom label={ filter.label } placeholder={ filter.label } value={ text } onChange={ type } />
+			<SearchControl
+				__nextHasNoMarginBottom
+				label={ filter.label }
+				placeholder={ filter.label }
+				value={ text }
+				onChange={ type }
+			/>
 		</form>
 	);
 }
@@ -205,7 +213,9 @@ function defaultFilters( definition: Definition ): Record< string, FilterValue >
  * @param query      The query on screen.
  */
 export function isNarrowed( definition: Definition, query: RecordsQuery ): boolean {
-	const filtersChanged = valueFilters( definition ).some( ( filter ) => ! sameFilterValue( query.filters[ filter.id ], filter.default ) );
+	const filtersChanged = valueFilters( definition ).some(
+		( filter ) => ! sameFilterValue( query.filters[ filter.id ], filter.default )
+	);
 
 	return query.search !== '' || filtersChanged;
 }
@@ -228,8 +238,18 @@ export function FiltersBar( { definition, account, query, facets, messages, onCh
 
 	return (
 		<div className="woodev-records__toolbar" style={ STYLES.toolbar }>
-			<AccountSelect definition={ definition } account={ account } onChange={ ( next ) => onChange( changeQuery( query, { account: next } ) ) } />
-			{ search && <SearchBox filter={ search } value={ query.search } onSearch={ ( text ) => onChange( changeQuery( query, { search: text } ) ) } /> }
+			<AccountSelect
+				definition={ definition }
+				account={ account }
+				onChange={ ( next ) => onChange( changeQuery( query, { account: next } ) ) }
+			/>
+			{ search && (
+				<SearchBox
+					filter={ search }
+					value={ query.search }
+					onSearch={ ( text ) => onChange( changeQuery( query, { search: text } ) ) }
+				/>
+			) }
 			{ valueFilters( definition ).map( ( filter ) => {
 				const Control = FILTER_CONTROLS[ filter.type ];
 

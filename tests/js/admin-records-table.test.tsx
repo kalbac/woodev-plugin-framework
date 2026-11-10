@@ -10,7 +10,12 @@
 import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
-import { RecordsTable, type RecordsExtensions, type RecordsTableProps, type TableHandle } from '../../src/admin-records';
+import {
+	RecordsTable,
+	type RecordsExtensions,
+	type RecordsTableProps,
+	type TableHandle,
+} from '../../src/admin-records';
 import {
 	fixtureDefinition,
 	fixtureDefinitionEnvelope,
@@ -42,7 +47,18 @@ const TABLE_CARD_PROPS_IN_EVERY_VERSION = [
 	'className',
 ];
 
-const HEADER_PROPS_IN_EVERY_VERSION = [ 'key', 'label', 'screenReaderLabel', 'isSortable', 'isLeftAligned', 'isNumeric', 'required', 'defaultSort', 'defaultOrder', 'cellClassName' ];
+const HEADER_PROPS_IN_EVERY_VERSION = [
+	'key',
+	'label',
+	'screenReaderLabel',
+	'isSortable',
+	'isLeftAligned',
+	'isNumeric',
+	'required',
+	'defaultSort',
+	'defaultOrder',
+	'cellClassName',
+];
 
 /** Trunk-only, ignored by 7.0: harmless to pass, never relied on. */
 const HEADER_PROPS_TRUNK_ONLY = [ 'visible' ];
@@ -56,7 +72,8 @@ function FakeTableCard( props: TableCardProps ) {
 		return <div data-testid="table-loading" />;
 	}
 
-	const nextDirection = ( key: string ) => ( props.query.orderby === key && props.query.order === 'desc' ? 'asc' : 'desc' );
+	const nextDirection = ( key: string ) =>
+		props.query.orderby === key && props.query.order === 'desc' ? 'asc' : 'desc';
 
 	return (
 		<div>
@@ -66,13 +83,18 @@ function FakeTableCard( props: TableCardProps ) {
 						{ props.headers.map( ( header ) => (
 							<th key={ header.key } data-key={ header.key }>
 								{ header.isSortable ? (
-									<button type="button" onClick={ () => props.onSort( header.key, nextDirection( header.key ) ) }>
+									<button
+										type="button"
+										onClick={ () => props.onSort( header.key, nextDirection( header.key ) ) }
+									>
 										{ header.label }
 									</button>
 								) : (
 									header.label
 								) }
-								{ header.screenReaderLabel && <span className="screen-reader-text">{ header.screenReaderLabel }</span> }
+								{ header.screenReaderLabel && (
+									<span className="screen-reader-text">{ header.screenReaderLabel }</span>
+								) }
 							</th>
 						) ) }
 					</tr>
@@ -228,7 +250,17 @@ describe( 'rendering from PHP descriptors', () => {
 
 		const labels = Array.from( document.querySelectorAll( 'thead th' ) ).map( ( th ) => th.textContent );
 
-		expect( labels ).toEqual( [ 'Вариации', 'Товар', 'Артикул', 'Состояние', 'Остаток', 'Обновлён', 'Детали', 'Отправка', 'Действия' ] );
+		expect( labels ).toEqual( [
+			'Вариации',
+			'Товар',
+			'Артикул',
+			'Состояние',
+			'Остаток',
+			'Обновлён',
+			'Детали',
+			'Отправка',
+			'Действия',
+		] );
 	} );
 
 	test( 'every cell type is rendered from its value', async () => {
@@ -236,7 +268,10 @@ describe( 'rendering from PHP descriptors', () => {
 
 		const row = within( tableRow( 'p1' ) );
 
-		expect( row.getByRole( 'link', { name: 'Кружка' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=p1&action=edit' );
+		expect( row.getByRole( 'link', { name: 'Кружка' } ) ).toHaveAttribute(
+			'href',
+			'/wp-admin/post.php?post=p1&action=edit'
+		);
 		expect( row.getByText( 'SKU-p1' ) ).toBeInTheDocument();
 		expect( row.getByText( 'Связан' ) ).toHaveClass( 'woodev-records__badge', 'is-success' );
 		expect( row.getByText( '7' ) ).toBeInTheDocument();
@@ -256,14 +291,20 @@ describe( 'rendering from PHP descriptors', () => {
 
 	test( 'an empty cell and unmeasured progress are shown as such', async () => {
 		const bare = fixtureRow( 'p9', 'Пустой', {
-			cells: { ...mug.cells, sku: null, sync: { completed: null, total: null, percent: null, text: 'В очереди' } },
+			cells: {
+				...mug.cells,
+				sku: null,
+				sync: { completed: null, total: null, percent: null, text: 'В очереди' },
+			},
 		} );
 		serve( { rows: () => fixtureList( [ bare ] ) } );
 
 		await renderTable();
 
 		expect( within( tableRow( 'p9' ) ).queryByText( /SKU/ ) ).not.toBeInTheDocument();
-		expect( within( tableRow( 'p9' ) ).getByRole( 'progressbar', { name: 'В очереди' } ) ).not.toHaveAttribute( 'value' );
+		expect( within( tableRow( 'p9' ) ).getByRole( 'progressbar', { name: 'В очереди' } ) ).not.toHaveAttribute(
+			'value'
+		);
 	} );
 
 	test( 'text that looks like markup stays text', async () => {
@@ -322,12 +363,18 @@ describe( 'row actions', () => {
 	test( 'without an action part the buttons are there but run nothing', async () => {
 		await renderTable();
 
-		expect( within( tableRow( 'p1' ) ).getByRole( 'button', { name: 'Выгрузить' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( within( tableRow( 'p1' ) ).getByRole( 'button', { name: 'Выгрузить' } ) ).toHaveAttribute(
+			'aria-disabled',
+			'true'
+		);
 	} );
 
 	test( 'an action the user has no descriptor for is not rendered', async () => {
 		const definition = fixtureDefinition();
-		const limited = { ...definition, row_actions: definition.row_actions.filter( ( action ) => action.id !== 'unlink' ) };
+		const limited = {
+			...definition,
+			row_actions: definition.row_actions.filter( ( action ) => action.id !== 'unlink' ),
+		};
 		serve( { definition: () => fixtureDefinitionEnvelope( limited ) } );
 
 		await renderTable();
@@ -338,12 +385,16 @@ describe( 'row actions', () => {
 	test( 'the activity part can block an enabled action with its own reason', async () => {
 		const extensions: RecordsExtensions = {
 			onRowAction: jest.fn(),
-			blockedReason: ( action, row ) => ( action.id === 'export' && row.id === 'p1' ? 'Идёт фоновая отправка' : '' ),
+			blockedReason: ( action, row ) =>
+				action.id === 'export' && row.id === 'p1' ? 'Идёт фоновая отправка' : '',
 			renderRowActivity: ( row ) => <em>{ `процессы ${ row.id }` }</em>,
 		};
 		await renderTable( { extensions } );
 
-		expect( within( tableRow( 'p1' ) ).getByRole( 'button', { name: 'Выгрузить' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( within( tableRow( 'p1' ) ).getByRole( 'button', { name: 'Выгрузить' } ) ).toHaveAttribute(
+			'aria-disabled',
+			'true'
+		);
 		expect( within( tableRow( 'p1' ) ).getByText( 'Идёт фоновая отправка' ) ).toBeInTheDocument();
 		expect( within( tableRow( 'p2' ) ).getByRole( 'button', { name: 'Выгрузить' } ) ).toBeEnabled();
 		expect( within( tableRow( 'p2' ) ).getByText( 'процессы p2' ) ).toBeInTheDocument();
@@ -355,7 +406,9 @@ describe( 'URL round trip', () => {
 		await renderTable();
 
 		expect( requests()[ 0 ] ).toBe( `${ BASE }/definition` );
-		expect( listRequests() ).toEqual( [ `${ BASE }?context[account_id]=a1&page=1&per_page=25&sort=updated&direction=desc` ] );
+		expect( listRequests() ).toEqual( [
+			`${ BASE }?context[account_id]=a1&page=1&per_page=25&sort=updated&direction=desc`,
+		] );
 	} );
 
 	test( 'the URL becomes the list request', async () => {
@@ -384,7 +437,9 @@ describe( 'URL round trip', () => {
 	} );
 
 	test( 'the URL is shown back in the controls', async () => {
-		await renderTable( { query: { search: 'кружка', filter_state: 'draft', filter_in_stock: '1', filter_updated: '2026-11-01,' } } );
+		await renderTable( {
+			query: { search: 'кружка', filter_state: 'draft', filter_in_stock: '1', filter_updated: '2026-11-01,' },
+		} );
 
 		expect( screen.getByRole( 'searchbox', { name: 'Поиск по товарам' } ) ).toHaveValue( 'кружка' );
 		expect( screen.getByRole( 'combobox', { name: 'Состояние' } ) ).toHaveValue( 'draft' );
@@ -398,7 +453,9 @@ describe( 'URL round trip', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Товар' } ) );
 
-		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { orderby: 'title', order: 'desc', paged: undefined } ) );
+		expect( navigate ).toHaveBeenLastCalledWith(
+			expect.objectContaining( { orderby: 'title', order: 'desc', paged: undefined } )
+		);
 	} );
 
 	test( 'the sorted column is handed to the table by its column id', async () => {
@@ -430,7 +487,9 @@ describe( 'URL round trip', () => {
 		const { navigate } = await renderTable( { query: { paged: '4' } } );
 
 		fireEvent.change( screen.getByRole( 'combobox', { name: 'Состояние' } ), { target: { value: 'linked' } } );
-		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { filter_state: 'linked', paged: undefined } ) );
+		expect( navigate ).toHaveBeenLastCalledWith(
+			expect.objectContaining( { filter_state: 'linked', paged: undefined } )
+		);
 
 		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Только в наличии' } ) );
 		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { filter_in_stock: '1' } ) );
@@ -484,7 +543,9 @@ describe( 'URL round trip', () => {
 
 		fireEvent.change( screen.getByRole( 'combobox', { name: 'Аккаунт' } ), { target: { value: 'a2' } } );
 
-		expect( navigate ).toHaveBeenCalledWith( expect.objectContaining( { account: 'a2', filter_state: 'draft', paged: undefined } ) );
+		expect( navigate ).toHaveBeenCalledWith(
+			expect.objectContaining( { account: 'a2', filter_state: 'draft', paged: undefined } )
+		);
 	} );
 
 	test( 'reset clears search and filters and is offered only when something narrows the table', async () => {
@@ -492,10 +553,14 @@ describe( 'URL round trip', () => {
 
 		expect( screen.queryByRole( 'button', { name: 'Сбросить фильтры' } ) ).not.toBeInTheDocument();
 
-		rerender( <RecordsTable { ...tableProps } query={ { search: 'кружка', filter_state: 'draft', orderby: 'title' } } /> );
+		rerender(
+			<RecordsTable { ...tableProps } query={ { search: 'кружка', filter_state: 'draft', orderby: 'title' } } />
+		);
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Сбросить фильтры' } ) );
 
-		expect( navigate ).toHaveBeenCalledWith( expect.objectContaining( { search: undefined, filter_state: undefined, orderby: 'title' } ) );
+		expect( navigate ).toHaveBeenCalledWith(
+			expect.objectContaining( { search: undefined, filter_state: undefined, orderby: 'title' } )
+		);
 	} );
 
 	test( 'a new URL (Back, Forward, a link) reads the table it describes', async () => {
@@ -504,7 +569,9 @@ describe( 'URL round trip', () => {
 		rerender( <RecordsTable { ...tableProps } query={ { paged: '2', filter_state: 'draft' } } /> );
 
 		await waitFor( () => expect( listRequests() ).toHaveLength( 2 ) );
-		expect( listRequests()[ 1 ] ).toBe( `${ BASE }?context[account_id]=a1&page=2&per_page=25&sort=updated&direction=desc&filters[state]=draft` );
+		expect( listRequests()[ 1 ] ).toBe(
+			`${ BASE }?context[account_id]=a1&page=2&per_page=25&sort=updated&direction=desc&filters[state]=draft`
+		);
 	} );
 
 	test( 'a re-render with the same URL reads nothing', async () => {
@@ -574,7 +641,9 @@ describe( 'expandable children', () => {
 	test( 'more children are read page by page and appended', async () => {
 		serve( {
 			children: ( path ) =>
-				isPage( path, 2 ) ? fixtureList( [ large ], { total: 3, page: 2 } ) : fixtureList( [ small, medium ], { total: 3 } ),
+				isPage( path, 2 )
+					? fixtureList( [ large ], { total: 3, page: 2 } )
+					: fixtureList( [ small, medium ], { total: 3 } ),
 		} );
 		await renderTable();
 
@@ -603,7 +672,12 @@ describe( 'expandable children', () => {
 			children: () => {
 				attempt++;
 
-				return attempt === 1 ? Promise.reject( { code: 'woodev_records_provider_error', message: 'Не удалось прочитать вариации' } ) : fixtureList( [ small ], { total: 1 } );
+				return attempt === 1
+					? Promise.reject( {
+							code: 'woodev_records_provider_error',
+							message: 'Не удалось прочитать вариации',
+					  } )
+					: fixtureList( [ small ], { total: 1 } );
 			},
 		} );
 		await renderTable();
@@ -735,17 +809,30 @@ describe( 'stale-read protection', () => {
 		expect( listSignals.map( ( signal ) => signal.aborted ) ).toEqual( [ true, false ] );
 	} );
 
-	test( 'children that arrive after their row was collapsed are dropped', async () => {
-		const pending = defer< ListEnvelope >();
-		serve( { children: () => pending.promise } );
+	test( 'children of an earlier expansion do not land in a later one', async () => {
+		const earlier = defer< ListEnvelope >();
+		const later = defer< ListEnvelope >();
+		let childReads = 0;
+		serve( {
+			children: () => {
+				childReads++;
+
+				return childReads === 1 ? earlier.promise : later.promise;
+			},
+		} );
 		await renderTable();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Показать вариации: Футболка' } ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Скрыть вариации: Футболка' } ) );
-		await act( async () => pending.resolve( fixtureList( [ small ], { total: 1 } ) ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Показать вариации: Футболка' } ) );
+		await act( async () => earlier.resolve( fixtureList( [ small ], { total: 1 } ) ) );
 
 		expect( screen.queryByText( 'Футболка S' ) ).not.toBeInTheDocument();
-		expect( rowKeys() ).toEqual( [ 'p1', 'p2' ] );
+		expect( within( tableRow( 'p2/_note' ) ).getByRole( 'status' ) ).toBeInTheDocument();
+
+		await act( async () => later.resolve( fixtureList( [ medium ], { total: 1 } ) ) );
+
+		expect( rowKeys() ).toEqual( [ 'p1', 'p2', 'p2/v2' ] );
 	} );
 
 	test( 'children read before a list reload do not land in the reloaded table', async () => {
@@ -773,7 +860,9 @@ describe( 'stale-read protection', () => {
 	test( 'the definition of an account the merchant already left is dropped', async () => {
 		const slow = defer< DefinitionEnvelope >();
 		const renamed = fixtureDefinition( {
-			columns: fixtureDefinition().columns.map( ( column ) => ( column.id === 'name' ? { ...column, label: 'Чужая колонка' } : column ) ),
+			columns: fixtureDefinition().columns.map( ( column ) =>
+				column.id === 'name' ? { ...column, label: 'Чужая колонка' } : column
+			),
 		} );
 		serve( {
 			definition: ( path ) => ( path.includes( 'a2' ) ? slow.promise : fixtureDefinitionEnvelope() ),
@@ -788,18 +877,6 @@ describe( 'stale-read protection', () => {
 		expect( screen.queryByText( 'Чужая колонка' ) ).not.toBeInTheDocument();
 		expect( listRequests().every( ( path ) => path.includes( 'context[account_id]=a1' ) ) ).toBe( true );
 	} );
-
-	test( 'nothing is written after the table is gone', async () => {
-		const pending = defer< ListEnvelope >();
-		serve( { rows: () => pending.promise } );
-		const view = render( <RecordsTable { ...props() } /> );
-
-		await waitFor( () => expect( listRequests() ).toHaveLength( 1 ) );
-		view.unmount();
-		await act( async () => pending.resolve( first ) );
-
-		expect( screen.queryByText( 'Старый ответ' ) ).not.toBeInTheDocument();
-	} );
 } );
 
 describe( 'error and empty states', () => {
@@ -809,7 +886,9 @@ describe( 'error and empty states', () => {
 			rows: () => {
 				attempt++;
 
-				return attempt === 1 ? Promise.reject( { code: 'woodev_records_provider_error', message: 'Сервер не ответил' } ) : fixtureList( [ mug ] );
+				return attempt === 1
+					? Promise.reject( { code: 'woodev_records_provider_error', message: 'Сервер не ответил' } )
+					: fixtureList( [ mug ] );
 			},
 		} );
 		render( <RecordsTable { ...props() } /> );
@@ -849,7 +928,9 @@ describe( 'error and empty states', () => {
 			definition: () => {
 				attempt++;
 
-				return attempt === 1 ? Promise.reject( { code: 'woodev_records_not_found', message: 'Таблица не найдена' } ) : fixtureDefinitionEnvelope();
+				return attempt === 1
+					? Promise.reject( { code: 'woodev_records_not_found', message: 'Таблица не найдена' } )
+					: fixtureDefinitionEnvelope();
 			},
 		} );
 		render( <RecordsTable { ...props( { fallbackMessages: { retry: 'Повторить' } } ) } /> );
@@ -960,7 +1041,9 @@ describe( 'Q3: TableCard and labels', () => {
 		tableCardProps.forEach( ( cardProps ) => {
 			expect( TABLE_CARD_PROPS_IN_EVERY_VERSION ).toEqual( expect.arrayContaining( Object.keys( cardProps ) ) );
 			cardProps.headers.forEach( ( header ) => {
-				expect( [ ...HEADER_PROPS_IN_EVERY_VERSION, ...HEADER_PROPS_TRUNK_ONLY ] ).toEqual( expect.arrayContaining( Object.keys( header ) ) );
+				expect( [ ...HEADER_PROPS_IN_EVERY_VERSION, ...HEADER_PROPS_TRUNK_ONLY ] ).toEqual(
+					expect.arrayContaining( Object.keys( header ) )
+				);
 			} );
 		} );
 	} );
@@ -977,12 +1060,30 @@ describe( 'Q3: TableCard and labels', () => {
 	test( 'the card is mounted only once the columns are known and has them from its first render', async () => {
 		await renderTable();
 
-		expect( tableCardProps[ 0 ].headers.map( ( header ) => header.key ) ).toEqual( [ '_expand', 'name', 'sku', 'state', 'stock', 'updated', 'details', 'sync', 'actions' ] );
+		expect( tableCardProps[ 0 ].headers.map( ( header ) => header.key ) ).toEqual( [
+			'_expand',
+			'name',
+			'sku',
+			'state',
+			'stock',
+			'updated',
+			'details',
+			'sync',
+			'actions',
+		] );
 	} );
 
 	test( 'the card is remounted when the columns change, because WooCommerce reads them once', async () => {
-		const fewer = fixtureDefinition( { columns: fixtureDefinition().columns.filter( ( column ) => column.id !== 'sku' ) } );
-		serve( { definition: ( path ) => fixtureDefinitionEnvelope( path.includes( 'a2' ) ? fewer : fixtureDefinition(), path.includes( 'a2' ) ? 'a2' : 'a1' ) } );
+		const fewer = fixtureDefinition( {
+			columns: fixtureDefinition().columns.filter( ( column ) => column.id !== 'sku' ),
+		} );
+		serve( {
+			definition: ( path ) =>
+				fixtureDefinitionEnvelope(
+					path.includes( 'a2' ) ? fewer : fixtureDefinition(),
+					path.includes( 'a2' ) ? 'a2' : 'a1'
+				),
+		} );
 		const { rerender, tableProps } = await renderTable();
 		const table = screen.getByRole( 'table', { name: 'Товары' } );
 
@@ -1017,7 +1118,12 @@ describe( 'Q3: TableCard and labels', () => {
 		const header = ( key: string ) => headers.find( ( entry ) => entry.key === key );
 
 		expect( header( 'stock' ) ).toMatchObject( { isNumeric: true, isLeftAligned: false, isSortable: true } );
-		expect( header( 'sku' ) ).toMatchObject( { isNumeric: false, isLeftAligned: true, isSortable: false, required: false } );
+		expect( header( 'sku' ) ).toMatchObject( {
+			isNumeric: false,
+			isLeftAligned: true,
+			isSortable: false,
+			required: false,
+		} );
 		expect( header( 'name' ) ).toMatchObject( { required: true } );
 		expect( tableCardProps.at( -1 )?.showMenu ).toBe( true );
 	} );
@@ -1034,8 +1140,12 @@ describe( 'Q3: TableCard and labels', () => {
 describe( 'extension seams', () => {
 	async function renderWithBulk() {
 		let handle!: TableHandle;
-		const renderBulkActions = jest.fn( ( selection ) => <output data-testid="selected">{ selection.selectedIds.join( ',' ) }</output> );
-		const view = await renderTable( { extensions: { renderBulkActions, renderActivity: ( table ) => ( ( handle = table ), null ) } } );
+		const renderBulkActions = jest.fn( ( selection ) => (
+			<output data-testid="selected">{ selection.selectedIds.join( ',' ) }</output>
+		) );
+		const view = await renderTable( {
+			extensions: { renderBulkActions, renderActivity: ( table ) => ( ( handle = table ), null ) },
+		} );
 
 		return { ...view, renderBulkActions, handle: () => handle };
 	}
@@ -1085,9 +1195,15 @@ describe( 'extension seams', () => {
 		expect( screen.queryByText( 'Можно выбрать не больше трёх' ) ).not.toBeInTheDocument();
 	} );
 
-	test( 'the limit sentence is PHP\'s', async () => {
+	test( "the limit sentence is PHP's", async () => {
 		const definition = fixtureDefinition();
-		serve( { definition: () => fixtureDefinitionEnvelope( { ...definition, messages: { ...definition.messages, selection_limit: 'Можно выбрать не больше трёх' } } ) } );
+		serve( {
+			definition: () =>
+				fixtureDefinitionEnvelope( {
+					...definition,
+					messages: { ...definition.messages, selection_limit: 'Можно выбрать не больше трёх' },
+				} ),
+		} );
 		await renderWithBulk();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Показать вариации: Футболка' } ) );

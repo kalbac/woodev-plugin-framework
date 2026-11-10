@@ -36,14 +36,78 @@ export function fixtureDefinition( overrides: Partial< Definition > = {} ): Defi
 			default: 'a1',
 		},
 		columns: [
-			{ id: 'name', label: 'Товар', cell_type: 'link', sort_key: 'title', required: true, visible: true, align: 'left' },
-			{ id: 'sku', label: 'Артикул', cell_type: 'text', sort_key: null, required: false, visible: true, align: 'left' },
-			{ id: 'state', label: 'Состояние', cell_type: 'badge', sort_key: null, required: false, visible: true, align: 'left' },
-			{ id: 'stock', label: 'Остаток', cell_type: 'number', sort_key: 'stock', required: false, visible: true, align: 'right' },
-			{ id: 'updated', label: 'Обновлён', cell_type: 'date', sort_key: 'updated', required: false, visible: true, align: 'left' },
-			{ id: 'details', label: 'Детали', cell_type: 'stack', sort_key: null, required: false, visible: true, align: 'left' },
-			{ id: 'sync', label: 'Отправка', cell_type: 'progress', sort_key: null, required: false, visible: true, align: 'left' },
-			{ id: 'actions', label: '', cell_type: 'actions', sort_key: null, required: true, visible: true, align: 'right' },
+			{
+				id: 'name',
+				label: 'Товар',
+				cell_type: 'link',
+				sort_key: 'title',
+				required: true,
+				visible: true,
+				align: 'left',
+			},
+			{
+				id: 'sku',
+				label: 'Артикул',
+				cell_type: 'text',
+				sort_key: null,
+				required: false,
+				visible: true,
+				align: 'left',
+			},
+			{
+				id: 'state',
+				label: 'Состояние',
+				cell_type: 'badge',
+				sort_key: null,
+				required: false,
+				visible: true,
+				align: 'left',
+			},
+			{
+				id: 'stock',
+				label: 'Остаток',
+				cell_type: 'number',
+				sort_key: 'stock',
+				required: false,
+				visible: true,
+				align: 'right',
+			},
+			{
+				id: 'updated',
+				label: 'Обновлён',
+				cell_type: 'date',
+				sort_key: 'updated',
+				required: false,
+				visible: true,
+				align: 'left',
+			},
+			{
+				id: 'details',
+				label: 'Детали',
+				cell_type: 'stack',
+				sort_key: null,
+				required: false,
+				visible: true,
+				align: 'left',
+			},
+			{
+				id: 'sync',
+				label: 'Отправка',
+				cell_type: 'progress',
+				sort_key: null,
+				required: false,
+				visible: true,
+				align: 'left',
+			},
+			{
+				id: 'actions',
+				label: '',
+				cell_type: 'actions',
+				sort_key: null,
+				required: true,
+				visible: true,
+				align: 'right',
+			},
 		],
 		filters: [
 			{ id: 'q', label: 'Поиск по товарам', type: 'search', options: [], options_source: false },
@@ -61,9 +125,16 @@ export function fixtureDefinition( overrides: Partial< Definition > = {} ): Defi
 			{ id: 'in_stock', label: 'Только в наличии', type: 'boolean', options: [], options_source: false },
 			{ id: 'updated', label: 'Период обновления', type: 'date_range', options: [], options_source: false },
 		],
-		sorts: { keys: [ 'title', 'stock', 'updated' ], directions: [ 'asc', 'desc' ], default: { key: 'updated', direction: 'desc' } },
+		sorts: {
+			keys: [ 'title', 'stock', 'updated' ],
+			directions: [ 'asc', 'desc' ],
+			default: { key: 'updated', direction: 'desc' },
+		},
 		pagination: { default_per_page: 25, per_page_options: [ 25, 50, 100 ], max_per_page: 100, max_selection: 3 },
-		row_actions: [ action( 'export', 'Выгрузить', { tone: 'primary' } ), action( 'unlink', 'Отвязать', { tone: 'danger' } ) ],
+		row_actions: [
+			action( 'export', 'Выгрузить', { tone: 'primary' } ),
+			action( 'unlink', 'Отвязать', { tone: 'danger' } ),
+		],
 		bulk_actions: [ action( 'bulk_export', 'Выгрузить выбранные' ) ],
 		children: { default_per_page: 2, max_per_page: 50 },
 		activity: null,
@@ -83,7 +154,6 @@ export function fixtureDefinition( overrides: Partial< Definition > = {} ): Defi
 			select_row: 'Выбрать строку',
 			date_from: 'С',
 			date_to: 'По',
-			search_submit: 'Найти',
 		},
 		analytics: null,
 		...overrides,
@@ -117,7 +187,10 @@ export function fixtureRow( id: string, name: string, overrides: Partial< AdminR
 	};
 }
 
-export function fixtureDefinitionEnvelope( definition: Definition = fixtureDefinition(), account = 'a1' ): DefinitionEnvelope {
+export function fixtureDefinitionEnvelope(
+	definition: Definition = fixtureDefinition(),
+	account = 'a1'
+): DefinitionEnvelope {
 	return { schema_version: 1, definition, context: { account_id: account } };
 }
 

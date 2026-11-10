@@ -12,7 +12,16 @@
  * @package woodev-plugin-framework
  */
 
-import type { DateRange, Definition, Direction, Filter, FilterValue, RecordsContext, RecordsQuery, RouteQuery } from './types';
+import type {
+	DateRange,
+	Definition,
+	Direction,
+	Filter,
+	FilterValue,
+	RecordsContext,
+	RecordsQuery,
+	RouteQuery,
+} from './types';
 
 /** URL value of a filter the merchant cleared although PHP declares a default for it. */
 export const NO_VALUE = '~';
@@ -249,7 +258,8 @@ export function writeQuery( definition: Definition, query: RecordsQuery ): Route
 	const route: RouteQuery = {
 		[ URL_KEYS.account ]: query.account === '' ? undefined : query.account,
 		[ URL_KEYS.page ]: query.page > 1 ? String( query.page ) : undefined,
-		[ URL_KEYS.perPage ]: query.perPage === definition.pagination.default_per_page ? undefined : String( query.perPage ),
+		[ URL_KEYS.perPage ]:
+			query.perPage === definition.pagination.default_per_page ? undefined : String( query.perPage ),
 		[ URL_KEYS.search ]: query.search === '' ? undefined : query.search,
 		...writeSort( definition, query ),
 	};
@@ -338,7 +348,9 @@ export function listParams( context: RecordsContext, query: RecordsQuery ): Rest
 		params.push( [ 'sort', query.sort ], [ 'direction', query.direction ] );
 	}
 
-	Object.entries( query.filters ).forEach( ( [ filterId, value ] ) => params.push( ...filterParams( filterId, value ) ) );
+	Object.entries( query.filters ).forEach( ( [ filterId, value ] ) =>
+		params.push( ...filterParams( filterId, value ) )
+	);
 
 	return params;
 }
