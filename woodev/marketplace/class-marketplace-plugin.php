@@ -12,6 +12,7 @@ namespace Woodev\Framework\Marketplace;
 use Woodev\Framework\Marketplace\Admin\Admin_Collector;
 use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Framework\Marketplace\Admin\Page;
+use Woodev\Framework\Settings\Settings_Provider;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -150,7 +151,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		}
 
 		/**
-		 * The plugin's own «Настройки» page.
+		 * The plugin's own «Настройки» page, opened on its first tab — the same URL
+		 * {@see \Woodev\Framework\Settings\Settings_Page_Registry::get_tab_url()} gives that tab, so a plugin-list link, a
+		 * "not configured" notice and the legacy redirect all land in one place.
 		 *
 		 * @since 2.0.29
 		 *
@@ -158,7 +161,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 * @return string '' when the plugin has no settings page.
 		 */
 		public function get_settings_url( $plugin_id = null ): string {
+			foreach ( (array) $this->get_settings_providers() as $provider ) {
+				if ( $provider instanceof Settings_Provider ) {
+					return $this->get_settings_tab_url( $provider->get_id() );
+				}
+			}
+
 			return $this->get_marketplace_page_url( Page::SETTINGS_SLUG );
+		}
+
+		/**
+		 * The URL of one tab of the plugin's «Настройки» page.
+		 *
+		 * @internal Read by {@see \Woodev\Framework\Settings\Settings_Page_Registry::get_tab_url()}, the one builder of tab URLs.
+		 *
+		 * @since 2.0.29
+		 *
+		 * @param string $tab_id The tab id (= the settings provider id).
+		 * @return string '' when the plugin has no settings page.
+		 */
+		public function get_settings_tab_url( string $tab_id ): string {
+			return $this->get_marketplace_page_url( Page::SETTINGS_SLUG, [ 'tab' => $tab_id ] );
 		}
 
 		/**

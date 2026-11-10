@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Settings;
 
+use Woodev\Framework\Marketplace\Marketplace_Plugin;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -25,6 +27,11 @@ final class Settings_Page_Registry {
 	 * @var string admin page slug.
 	 */
 	const PAGE_SLUG = 'woodev-settings';
+
+	/**
+	 * @var string the `page` value of every WooCommerce Admin screen — where a marketplace plugin's own «Настройки» lives.
+	 */
+	const WC_ADMIN_PAGE = 'wc-admin';
 
 	/**
 	 * @var self|null singleton.
@@ -47,9 +54,9 @@ final class Settings_Page_Registry {
 	private bool $hooked = false;
 
 	/**
-	 * @var array<int,array<string,mixed>>|null memoized tabs for this request.
+	 * @var array<string,array<int,array<string,mixed>>> memoized tabs for this request, keyed by placement ('' = the Woodev page).
 	 */
-	private $tabs_cache = null;
+	private $tabs_cache = [];
 
 	/**
 	 * @var array<int,array<string,mixed>>|null memoized provider entries for this request.
@@ -75,13 +82,49 @@ final class Settings_Page_Registry {
 	 * The URL of a tab of the settings page — the one builder every link to a tab goes through
 	 * (plugin-list «Настройки» link, "not configured" notices, the legacy redirect).
 	 *
+	 * A provider of a {@see Marketplace_Plugin} lives on that plugin's own «Настройки» page, so its tab URL is that page
+	 * with `tab=<id>` ('' when the plugin has no such page). Every other tab keeps the Woodev page URL, byte for byte.
+	 *
 	 * @since 2.0.27
 	 *
 	 * @param string $tab_id the tab id (= the provider id).
 	 * @return string
 	 */
 	public static function get_tab_url( string $tab_id ): string {
+		$marketplace_plugin = self::instance()->find_marketplace_plugin( $tab_id );
+
+		if ( null !== $marketplace_plugin ) {
+			return $marketplace_plugin->get_settings_tab_url( $tab_id );
+		}
+
 		return admin_url( 'admin.php?page=' . self::PAGE_SLUG . '&tab=' . rawurlencode( $tab_id ) );
+	}
+
+	/**
+	 * The registered marketplace plugin that owns a tab, if any.
+	 *
+	 * Asks marketplace plugins only: a delivery plugin's providers are never built to answer a link, so the
+	 * Woodev page's URLs cost nothing new and cannot start a provider-builds-a-link-builds-a-provider loop.
+	 *
+	 * @since 2.0.29
+	 *
+	 * @param string $tab_id the tab id (= the provider id).
+	 * @return Marketplace_Plugin|null
+	 */
+	private function find_marketplace_plugin( string $tab_id ): ?Marketplace_Plugin {
+		foreach ( $this->plugins as $plugin ) {
+			if ( ! $plugin instanceof Marketplace_Plugin ) {
+				continue;
+			}
+
+			foreach ( (array) $plugin->get_settings_providers() as $provider ) {
+				if ( $provider instanceof Settings_Provider && $provider->get_id() === $tab_id ) {
+					return $plugin;
+				}
+			}
+		}
+
+		return null;
 	}
 
 	/**
@@ -468,7 +511,7 @@ final class Settings_Page_Registry {
 	 */
 	public function register_plugin( $plugin ): void {
 		$this->plugins[ $plugin->get_id() ] = $plugin;
-		$this->tabs_cache                    = null;
+		$this->tabs_cache                    = [];
 		$this->entries_cache                 = null;
 		$this->add_hooks();
 	}
@@ -483,7 +526,7 @@ final class Settings_Page_Registry {
 	 */
 	public function register_service( Settings_Provider $provider ): void {
 		$this->services[ $provider->get_id() ] = $provider;
-		$this->tabs_cache                       = null;
+		$this->tabs_cache                       = [];
 		$this->entries_cache                    = null;
 		$this->add_hooks();
 	}
@@ -502,6 +545,7 @@ final class Settings_Page_Registry {
 		$this->hooked = true;
 
 		add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_embedded_assets' ] );
 		add_action( 'admin_init', [ $this, 'maybe_redirect_legacy' ] );
 		add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 	}
@@ -511,7 +555,8 @@ final class Settings_Page_Registry {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @return array<int,array<string,mixed>> entries [ provider, is_woocommerce ].
+	 * @return array<int,array<string,mixed>> entries [ provider, is_woocommerce, placement ]. `placement` is the id of the
+	 *                                        marketplace plugin whose own «Настройки» page shows the provider, null for the Woodev page.
 	 */
 	public function collect_entries(): array {
 		if ( null !== $this->entries_cache ) {
@@ -521,13 +566,15 @@ final class Settings_Page_Registry {
 		$entries = [];
 
 		foreach ( $this->plugins as $plugin ) {
-			$is_wc = $plugin instanceof \Woodev\Framework\Woocommerce_Plugin;
+			$is_wc     = $plugin instanceof \Woodev\Framework\Woocommerce_Plugin;
+			$placement = $plugin instanceof Marketplace_Plugin ? $plugin->get_id() : null;
 
 			foreach ( (array) $plugin->get_settings_providers() as $provider ) {
 				if ( $provider instanceof Settings_Provider ) {
 					$entries[] = [
 						'provider'       => $provider,
 						'is_woocommerce' => $is_wc,
+						'placement'      => $placement,
 					];
 				}
 			}
@@ -537,6 +584,7 @@ final class Settings_Page_Registry {
 			$entries[] = [
 				'provider'       => $provider,
 				'is_woocommerce' => false,
+				'placement'      => null,
 			];
 		}
 
@@ -546,50 +594,81 @@ final class Settings_Page_Registry {
 	}
 
 	/**
-	 * Builds the request's tab list for the current user (memoized).
+	 * The entries one settings page shows: the Woodev page's (placement null) or a marketplace plugin's own.
 	 *
-	 * @since 2.0.2
+	 * Placement only chooses WHERE a tab is listed. Reaching a provider by id (save, tools, the legacy redirect)
+	 * goes through {@see self::collect_entries()} and its own capability, so a placement never grants access.
 	 *
+	 * @since 2.0.29
+	 *
+	 * @param string|null $placement Marketplace plugin id; null or '' for the Woodev page.
 	 * @return array<int,array<string,mixed>>
 	 */
-	public function get_tabs(): array {
-		if ( null === $this->tabs_cache ) {
-			$this->tabs_cache = $this->build_tabs(
+	private function get_entries_for( ?string $placement ): array {
+		$placement = '' === (string) $placement ? null : $placement;
+
+		return array_values(
+			array_filter(
 				$this->collect_entries(),
+				static function ( array $entry ) use ( $placement ): bool {
+					return ( $entry['placement'] ?? null ) === $placement;
+				}
+			)
+		);
+	}
+
+	/**
+	 * Builds the request's tab list for the current user (memoized per placement).
+	 *
+	 * @since 2.0.2
+	 * @since 2.0.29 Takes the placement; omitted, it lists the Woodev page's tabs only.
+	 *
+	 * @param string|null $placement Marketplace plugin id; null or '' for the Woodev page.
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function get_tabs( ?string $placement = null ): array {
+		$key = (string) $placement;
+
+		if ( ! isset( $this->tabs_cache[ $key ] ) ) {
+			$this->tabs_cache[ $key ] = $this->build_tabs(
+				$this->get_entries_for( $placement ),
 				static function ( string $cap ): bool {
 					return current_user_can( $cap );
 				}
 			);
 		}
 
-		return $this->tabs_cache;
+		return $this->tabs_cache[ $key ];
 	}
 
 	/**
-	 * Whether at least one tab is registered (regardless of current user).
+	 * Whether the Woodev page has at least one tab (regardless of current user). A marketplace plugin's
+	 * providers do not count: they are listed on its own page, never here.
 	 *
 	 * @since 2.0.2
 	 *
 	 * @return bool
 	 */
 	public function has_providers(): bool {
-		return ! empty( $this->collect_entries() );
+		return ! empty( $this->get_entries_for( null ) );
 	}
 
 	/**
-	 * Returns the page (submenu) capability: broadest reach among ALL tabs.
+	 * Returns the page (submenu) capability: broadest reach among ALL tabs of the page.
 	 *
 	 * Uses the full provider set (not the current user's visible subset) so the
 	 * submenu cap is stable across users.
 	 *
 	 * @since 2.0.2
+	 * @since 2.0.29 Takes the placement; omitted, it is the Woodev page's.
 	 *
+	 * @param string|null $placement Marketplace plugin id; null or '' for the Woodev page.
 	 * @return string
 	 */
-	public function get_page_capability(): string {
+	public function get_page_capability( ?string $placement = null ): string {
 		$caps = [];
 
-		foreach ( $this->collect_entries() as $entry ) {
+		foreach ( $this->get_entries_for( $placement ) as $entry ) {
 			$caps[] = self::resolve_capability(
 				$entry['provider']->get_declared_capability(),
 				! empty( $entry['is_woocommerce'] )
@@ -698,6 +777,57 @@ final class Settings_Page_Registry {
 	 * @return void
 	 */
 	public function enqueue_assets(): void {
+		$this->enqueue_bundle( [] );
+	}
+
+	/**
+	 * Enqueues the same bundle on the WooCommerce Admin screens when a marketplace plugin shows its settings there.
+	 *
+	 * The page is a wc-admin route, and wc-admin moves between its routes without a reload, so the bundle is loaded on every
+	 * wc-admin screen (as the marketplace routing bundle is). It mounts nothing itself: the routing bundle asks it for
+	 * the body of a `settings` page through the `woodev.marketplace.page_view` filter.
+	 *
+	 * @internal
+	 *
+	 * @since 2.0.29
+	 *
+	 * @return void
+	 */
+	public function enqueue_embedded_assets(): void {
+		if ( ! $this->has_marketplace_placement() || ! function_exists( 'wc_admin_is_registered_page' ) || ! wc_admin_is_registered_page() ) {
+			return;
+		}
+
+		// After the wc-admin shell, like the routing bundle, so the filter is registered before a page renders.
+		$this->enqueue_bundle( [ 'wc-admin-app' ] );
+	}
+
+	/**
+	 * Whether any provider is shown on a marketplace plugin's own page.
+	 *
+	 * @since 2.0.29
+	 *
+	 * @return bool
+	 */
+	private function has_marketplace_placement(): bool {
+		foreach ( $this->collect_entries() as $entry ) {
+			if ( null !== ( $entry['placement'] ?? null ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Enqueues the bundle and its bootstrap global, for the Woodev page and for the marketplace pages alike.
+	 *
+	 * @since 2.0.29
+	 *
+	 * @param string[] $extra_dependencies Script handles to load before the bundle, besides its own.
+	 * @return void
+	 */
+	private function enqueue_bundle( array $extra_dependencies ): void {
 		$plugin = $this->get_asset_plugin();
 
 		if ( ! $plugin ) {
@@ -722,7 +852,7 @@ final class Settings_Page_Registry {
 
 		wp_enqueue_style( 'wp-components' );
 		wp_enqueue_style( 'woodev-settings-page', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
-		wp_enqueue_script( 'woodev-settings-page', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
+		wp_enqueue_script( 'woodev-settings-page', $build_url . '/index.js', array_merge( $asset['dependencies'], $extra_dependencies ), $asset['version'], true );
 		\Woodev\Framework\Handlers\Script_Translations::register( $plugin, 'woodev-settings-page' );
 
 		wp_add_inline_script(
@@ -799,8 +929,9 @@ final class Settings_Page_Registry {
 
 		$request_args = self::parse_admin_query( (string) wp_parse_url( $request_uri, PHP_URL_QUERY ) );
 
-		// Never redirect away from the destination — see the docblock's second guard.
-		if ( isset( $request_args['page'] ) && self::PAGE_SLUG === $request_args['page'] ) {
+		// Never redirect away from the destination — see the docblock's second guard. A marketplace plugin's tab
+		// lands on a wc-admin route, so that is a destination too.
+		if ( isset( $request_args['page'] ) && in_array( $request_args['page'], [ self::PAGE_SLUG, self::WC_ADMIN_PAGE ], true ) ) {
 			return;
 		}
 
@@ -828,7 +959,14 @@ final class Settings_Page_Registry {
 				continue;
 			}
 
-			wp_safe_redirect( self::get_tab_url( $provider->get_id() ) );
+			$target = self::get_tab_url( $provider->get_id() );
+
+			// A marketplace plugin whose menu was refused has no page to land on: leave the request alone.
+			if ( '' === $target ) {
+				continue;
+			}
+
+			wp_safe_redirect( $target );
 			exit;
 		}
 	}
@@ -950,12 +1088,13 @@ final class Settings_Page_Registry {
 		// Remove the hooks add_hooks() registered so a fresh register_plugin()
 		// does not double-bind register_page() (which would duplicate the submenu).
 		remove_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+		remove_action( 'admin_enqueue_scripts', [ $this, 'enqueue_embedded_assets' ] );
 		remove_action( 'admin_init', [ $this, 'maybe_redirect_legacy' ] );
 		remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 
 		$this->plugins       = [];
 		$this->services      = [];
-		$this->tabs_cache    = null;
+		$this->tabs_cache    = [];
 		$this->entries_cache = null;
 		$this->hooked        = false;
 	}
