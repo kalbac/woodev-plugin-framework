@@ -9,14 +9,18 @@
  *
  * - `emptyMessage` and `tablePreface` are missing in 7.0, so the shell draws its own empty state and notices and
  *   never passes either.
- * - A header's `visible` is trunk-only. It is passed, and 7.0 ignores it: a column PHP hides by default shows there.
+ * - A header's `visible` exists in both: 7.0's `getShowCols( headers )` keeps a column only when `visible` is
+ *   undefined or truthy, so a column PHP hides by default is hidden there too (checked against the 7.0.0 tag).
  * - Trunk keeps the visible-column list in `useState( initial )`, so headers that change after the first render
  *   would stay hidden. The shell mounts the card only once the definition is known and remounts it when the column
  *   set changes ({@see ./records-table}).
  * - Both versions call `onPageChange( page )` AND `onQueryChange( 'paged' )( page )` for one click; the shell
  *   handles the page in `onPageChange` only. `onQueryChange( 'per_page' )` is the only source of a page-size change.
- * - The page-size picker inside WooCommerce's `Pagination` offers its own fixed list (25/50/75/100), not PHP's
- *   `per_page_options`; a choice PHP did not declare is ignored instead of being sent and refused.
+ * - The page-size picker inside WooCommerce's `Pagination` offers its own fixed list (25/50/75/100) and 7.0's
+ *   `TableCard` has no prop to switch it off. The shell hides it with CSS and draws a control from PHP's
+ *   `per_page_options`; should the vendor picker still call in, a size PHP did not declare is dropped. One choice is
+ *   two callbacks (`onQueryChange( 'per_page' )`, then `onPageChange` with the page clamped for the new size): they
+ *   are applied as one navigation ({@see ./records-table}).
  *
  * The types are the shell's own, cast from `window`, so nothing is imported from the delivery page.
  *

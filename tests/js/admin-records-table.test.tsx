@@ -57,11 +57,17 @@ const HEADER_PROPS_IN_EVERY_VERSION = [
 	'required',
 	'defaultSort',
 	'defaultOrder',
+	// 7.0's `TableCard.getShowCols()` reads it too (table/index.js, checked against the 7.0.0 tag).
+	'visible',
 	'cellClassName',
 ];
 
-/** Trunk-only, ignored by 7.0: harmless to pass, never relied on. */
-const HEADER_PROPS_TRUNK_ONLY = [ 'visible' ];
+/** 7.0.0 `TableCard.getShowCols( headers )`, copied: the columns it shows on mount. */
+function showColsOf70( headers: Array< { key: string; visible?: boolean } > ): string[] {
+	return headers
+		.map( ( { key, visible } ) => ( typeof visible === 'undefined' || visible ? key : false ) )
+		.filter( Boolean ) as string[];
+}
 
 let tableCardProps: TableCardProps[] = [];
 
@@ -1265,11 +1271,23 @@ describe( 'Q3: TableCard and labels', () => {
 		tableCardProps.forEach( ( cardProps ) => {
 			expect( TABLE_CARD_PROPS_IN_EVERY_VERSION ).toEqual( expect.arrayContaining( Object.keys( cardProps ) ) );
 			cardProps.headers.forEach( ( header ) => {
-				expect( [ ...HEADER_PROPS_IN_EVERY_VERSION, ...HEADER_PROPS_TRUNK_ONLY ] ).toEqual(
-					expect.arrayContaining( Object.keys( header ) )
-				);
+				expect( HEADER_PROPS_IN_EVERY_VERSION ).toEqual( expect.arrayContaining( Object.keys( header ) ) );
 			} );
 		} );
+	} );
+
+	test( 'a column PHP hides by default is hidden on 7.0 as well: its visible flag reaches getShowCols', async () => {
+		const columns = fixtureDefinition().columns.map( ( column ) =>
+			column.id === 'sku' ? { ...column, visible: false } : column
+		);
+		serve( { definition: () => fixtureDefinitionEnvelope( fixtureDefinition( { columns } ) ) } );
+		await renderTable();
+
+		const shown = showColsOf70( tableCardProps.at( -1 )?.headers ?? [] );
+
+		expect( shown ).not.toContain( 'sku' );
+		expect( shown ).toContain( 'name' );
+		expect( shown ).toContain( 'stock' );
 	} );
 
 	test( 'the empty message and the preface, missing in 7.0, are never used', async () => {
