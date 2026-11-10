@@ -6720,6 +6720,19 @@ msgstr ""
 msgid "страна не входит в доставку — на оформлении не показывается"
 msgstr ""
 
+#: marketplace/class-marketplace-plugin.php:101
+msgid "Сопоставление"
+msgstr ""
+
+#: marketplace/class-marketplace-plugin.php:113
+msgid "Диагностика"
+msgstr ""
+
+#. translators: %s: plugin name
+#: marketplace/admin/class-admin-collector.php:447
+msgid "Страницы плагина «%s» работают в панели WooCommerce Admin, а она сейчас недоступна. Включите WooCommerce Admin или обновите WooCommerce."
+msgstr ""
+
 #: admin/records/class-records-error.php:34
 msgid "Некорректный параметр запроса."
 msgstr ""
