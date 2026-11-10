@@ -14,6 +14,7 @@ import { dispatch, useSelect } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { Button, Notice, Spinner, Card, CardBody, SnackbarList } from '@wordpress/components';
 import { fetchSchema, saveTab } from './rest';
+import { setBootstrap } from './bootstrap';
 import { validateFields, isFieldVisible, isFieldDisabled } from '../components/validate';
 import { getProviderMismatchError } from '../components/location-picker-field';
 import { ACTIVE_PROVIDER_SETTING_ID } from '../components/control-field';
@@ -137,7 +138,17 @@ export function sectionHasSaveButton( section ) {
 	return !! section.is_connection || Object.keys( section.fields || {} ).length > 0;
 }
 
-export default function App() {
+/**
+ * The settings body.
+ *
+ * Mounted by `index.js` on Woodev → Настройки with no props. Embedded in a marketplace plugin's own page it receives
+ * `bootstrap` ({@see ./embedded-view.js}): the `placement` (the plugin whose providers it lists), the REST root and the
+ * nonce.
+ *
+ * @param {Object}  props
+ * @param {?Object} props.bootstrap `{ placement, restRoot, nonce }` of the embedding page; null on the Woodev page.
+ */
+export default function App( { bootstrap = null } ) {
 	const [ tabs, setTabs ] = useState( null );
 	const [ loadError, setLoadError ] = useState( '' );
 	const [ edits, setEdits ] = useState( {} ); // { providerId: { settingId: value } }
@@ -155,12 +166,17 @@ export default function App() {
 	);
 
 	useEffect( () => {
+		// The REST client reads its root, nonce and placement from one place; register the embedding page's before the
+		// first request, and forget them when the body goes away.
+		setBootstrap( bootstrap );
 		fetchSchema()
 			.then( ( res ) => setTabs( ( res && res.tabs ) || [] ) )
 			.catch( () =>
 				setLoadError( __( 'Не удалось загрузить настройки.', 'woodev-plugin-framework' ) )
 			);
-	}, [] );
+
+		return () => setBootstrap( null );
+	}, [] ); // eslint-disable-line react-hooks/exhaustive-deps -- the embedding view remounts the body (key) when the bootstrap changes.
 
 	useEffect( () => {
 		if ( ! errorRevealGen ) {

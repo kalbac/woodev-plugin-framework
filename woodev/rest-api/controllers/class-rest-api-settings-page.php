@@ -61,6 +61,12 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => [ $this, 'get_schema' ],
 					'permission_callback' => [ $this, 'read_permissions_check' ],
+					'args'                => [
+						'placement' => [
+							'type'     => 'string',
+							'required' => false,
+						],
+					],
 				]
 			);
 
@@ -113,14 +119,17 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 		}
 
 		/**
-		 * Read gate: the page-level (broadest-reach) capability.
+		 * Read gate: the page-level (broadest-reach) capability of the page being listed — the Woodev page, or the
+		 * marketplace plugin's own page when `placement` names one.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.29 Gates the requested placement's page.
 		 *
+		 * @param \WP_REST_Request|null $request request.
 		 * @return bool
 		 */
-		public function read_permissions_check(): bool {
-			return current_user_can( $this->registry->get_page_capability() );
+		public function read_permissions_check( $request = null ): bool {
+			return current_user_can( $this->registry->get_page_capability( $this->get_placement( $request ) ) );
 		}
 
 		/**
@@ -187,15 +196,32 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 		}
 
 		/**
-		 * Returns the cap-filtered tab schema for the current user.
+		 * Returns the cap-filtered tab schema for the current user: the Woodev page's tabs, or — when `placement`
+		 * names a marketplace plugin — that plugin's own. A placement chooses the list, it never grants access:
+		 * every tab is still filtered by its own capability, and a provider is saved or run by id through its own gate.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.29 Accepts `placement`.
 		 *
 		 * @param \WP_REST_Request $request request.
 		 * @return \WP_REST_Response|array<string,mixed>
 		 */
 		public function get_schema( $request ) {
-			return rest_ensure_response( [ 'tabs' => $this->registry->get_tabs() ] );
+			return rest_ensure_response( [ 'tabs' => $this->registry->get_tabs( $this->get_placement( $request ) ) ] );
+		}
+
+		/**
+		 * The placement a request asks for.
+		 *
+		 * @since 2.0.29
+		 *
+		 * @param \WP_REST_Request|null $request request.
+		 * @return string|null Null for the Woodev page (omitted or empty).
+		 */
+		private function get_placement( $request ): ?string {
+			$placement = null === $request ? null : $request->get_param( 'placement' );
+
+			return is_string( $placement ) && '' !== $placement ? $placement : null;
 		}
 
 		/**
