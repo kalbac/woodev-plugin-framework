@@ -40,6 +40,7 @@
             "woodev/handlers",
             "woodev/http",
             "woodev/licensing",
+            "woodev/marketplace",
             "woodev/payment-gateway",
             "woodev/licensing/updater",
             "woodev/rest-api",
