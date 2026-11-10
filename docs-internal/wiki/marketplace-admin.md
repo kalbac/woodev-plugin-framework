@@ -360,6 +360,30 @@ in `#woodev-settings-app`, fed by `woodev/v1/settings`. Change placement only:
 - Ozon's `is_plugin_settings()` and `Key_Expiry_Notices` link move with the framework
   settings code; option names, account ids, encrypted keys, masking and Save are unchanged.
 
+### Settings placement as built (F3, #1681)
+
+What the code settled, where the text above left it open:
+
+- **The placement is the owning plugin's id**, not a separate "settings page id": the registry already holds plugins by id,
+  the manifest already carries it as `pluginId`, and a marketplace plugin has exactly one «Настройки» page. `collect_entries()`
+  adds `placement` (plugin id, or `null`) to every entry; `GET woodev/v1/settings?placement=<plugin id>` lists that plugin's
+  tabs, an unknown placement lists nothing and never falls back to the Woodev page. The route's controller is
+  `woodev/rest-api/controllers/class-rest-api-settings-page.php` (there is no `settings-page/rest-api/` folder).
+- **`get_tab_url()` asks marketplace plugins only** whether they own a tab, so a delivery link costs nothing new and cannot
+  start a provider-builds-a-link loop. The marketplace answer is `Marketplace_Plugin::get_settings_tab_url()`, the settings
+  page URL with `tab=<id>` (`''` when the plugin's menu was refused — never the Woodev URL). `Marketplace_Plugin::get_settings_url()`
+  opens that page on the first tab, the same URL the builder gives it.
+- **Guards.** `GET` is gated by the requested page's capability (`get_page_capability( $placement )`); save, connection test,
+  search and tool routes keep gating by the targeted provider's own capability. A placement names a list, never a provider.
+- **Legacy redirect.** `maybe_redirect_legacy()` targets the builder, treats `page=wc-admin` as a destination (second loop
+  guard) and leaves a request alone when the plugin has no page to land on.
+- **Client.** `src/settings-page/` gains `bootstrap.ts` (the REST client reads `placement`, `restRoot`, `nonce` from the embedding
+  props, else from `window.woodevSettings`) and `embedded-view.ts`, which answers the `woodev.marketplace.page_view` filter for
+  `settings` pages. The registry enqueues the same bundle on every wc-admin screen when a marketplace plugin places a provider,
+  after `wc-admin-app`. The Woodev page mounts with no props and requests the bare REST root as before.
+- **Bundle.** `src/settings-page/` changed, so `woodev/assets/build/settings-page/` is rebuilt (the bundle now depends on
+  `wp-hooks` and registers a filter).
+
 ## Records engine
 
 Generic, in `Woodev\Framework\Admin\Records\*` and `src/admin-records/`; usable by any
@@ -616,7 +640,7 @@ nothing else. Acceptance includes `git diff --name-only` staying inside the card
 |---|---|---|---|---|
 | F1 — Domain layer transfer | L · Sonnet 5.5 | review of this design; reconcile #1670 | `woodev/marketplace/{account,capabilities,catalog,diagnostics,governor,ledger,links,orders,price,stock}/**`; `tests/unit/Marketplace/**` (scanner, fixtures, contract tests). Donor: `includes/marketplace/**`, its tests in `tests/unit/Marketplace/`, `tests/unit/Architecture/` (scanner) and the per-folder unit tests that cover layer classes | Move the refreshed inventory as `Woodev\Framework\Marketplace\*`; apply D1–D7 ("Marketplace semantics in the domain layer") with fake-adapter values in tests; add the one ledger read (open items for link ids, by account). Accept: donor parity tests green with the Ozon values passed in, scanner positive/negative controls, no `ozon` literal outside docblock examples, no-Composer and two-copy boot, PHP 7.4. |
 | F2 — `Marketplace_Plugin` and pages | L · Sonnet 5.5 | F1 | `woodev/marketplace/class-marketplace-plugin.php`, `woodev/marketplace/admin/*.php` (top level only), `src/marketplace-admin/**`, `woodev/assets/build/marketplace-admin/` (build output only), `woodev/languages/woodev-plugin-framework.pot` and `woodev/languages/woodev-plugin-framework-ru_RU.po` (the page msgids), this wiki page. Donor: `includes/admin/class-admin-menu.php` (reference for the v1/v2 menu) | Root without `parent` with icon/position, landing on Товары with correct highlight, six children in the B4 order, duplicate root entry hidden (kept as the first submenu record so the root lands on Товары), icon sizing, direct and SPA navigation, two marketplace plugins → one bundle and no menu clash, v1 legacy URLs redirect, Q3 routing checks on minimum and current WC. |
-| F3 — Settings placement | M · Sonnet 5.5 | F2 | `woodev/settings-page/class-settings-page-registry.php`, `woodev/settings-page/rest-api/**` (list scoping), `src/settings-page/**` (embeddable body, bootstrap props), `get_settings_url()` in `woodev/marketplace/class-marketplace-plugin.php` | Marketplace providers appear only under their menu; default-placement URLs byte-identical; Woodev page unchanged for delivery plugins; `placement` list scoping; per-provider save/tool guards; legacy redirect lands on the placement-aware URL; no string moves. |
+| F3 — Settings placement | M · Sonnet 5.5 | F2 | `woodev/settings-page/class-settings-page-registry.php`, `woodev/rest-api/controllers/class-rest-api-settings-page.php` (list scoping), `src/settings-page/**` (embeddable body, bootstrap props), `get_settings_url()` in `woodev/marketplace/class-marketplace-plugin.php`, the built `woodev/assets/build/settings-page/` | Marketplace providers appear only under their menu; default-placement URLs byte-identical; Woodev page unchanged for delivery plugins; `placement` list scoping; per-provider save/tool guards; legacy redirect lands on the placement-aware URL; no string moves. |
 | F4 — Records PHP schema and REST | L · Sonnet 5.5 | review | `woodev/admin/records/*.php` except the action and activity classes of F6/F7 | Finite descriptors, owner registry, children route, strict query/option contracts, no receipt. Accept: two fake independent providers, forged account/id, invalid filters/sorts, oversized lists rejected before work. |
 | F5 — Records React shell | L · Fable 5 | F2, F4 | `src/admin-records/**` except `actions/` and `activity/` | Render PHP cells/strings/actions, URL round trips, expandable children, stale-read protection, error/empty states, keyboard access; no domain-code switches; Q3 TableCard/label checks. |
 | F6 — Preview and action interactions | M · Sonnet 5.5 | F4, F5 | `src/admin-records/actions/**`, `woodev/admin/records/class-action-*.php` | Input schemas, row actions, bulk report/confirm, guarded downloads, duplicate-submit behaviour. Accept: preview changes nothing; account-wide scope stated; partial results keep server reasons; apply returns replanned counts. |

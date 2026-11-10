@@ -5,20 +5,23 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-
-function bootstrap() {
-	return window.woodevSettings || {};
-}
+import { getBootstrap } from './bootstrap';
 
 /**
- * Fetches the aggregated, cap-filtered tab schema.
+ * Fetches the aggregated, cap-filtered tab schema — the Woodev page's tabs, or, in a body embedded in a marketplace
+ * plugin's page, the tabs of that plugin (`?placement=`).
  *
  * @return {Promise<Object>} { tabs: [...] }
  */
 export function fetchSchema() {
-	const { restRoot, nonce } = bootstrap();
+	const { restRoot, nonce, placement } = getBootstrap();
+	const separator = restRoot && restRoot.includes( '?' ) ? '&' : '?';
 	return apiFetch( {
-		url: restRoot,
+		url: placement
+			? `${ restRoot }${ separator }placement=${ encodeURIComponent(
+					placement
+			  ) }`
+			: restRoot,
 		method: 'GET',
 		headers: { 'X-WP-Nonce': nonce },
 	} );
@@ -32,7 +35,7 @@ export function fetchSchema() {
  * @return {Promise<Object>} { saved: true, provider }
  */
 export function saveTab( providerId, values ) {
-	const { restRoot, nonce } = bootstrap();
+	const { restRoot, nonce } = getBootstrap();
 	return apiFetch( {
 		url: `${ restRoot }/${ providerId }`,
 		method: 'POST',
@@ -50,7 +53,7 @@ export function saveTab( providerId, values ) {
  * @return {Promise<Object>} { success, message }
  */
 export function testConnection( providerId, connectionId, values ) {
-	const { restRoot, nonce } = bootstrap();
+	const { restRoot, nonce } = getBootstrap();
 	return apiFetch( {
 		url: `${ restRoot }/${ providerId }/connection/${ connectionId }/test`,
 		method: 'POST',
@@ -68,7 +71,7 @@ export function testConnection( providerId, connectionId, values ) {
  * @return {Promise<Object>} { success, message }
  */
 export function runTool( providerId, toolId, args ) {
-	const { restRoot, nonce } = bootstrap();
+	const { restRoot, nonce } = getBootstrap();
 	return apiFetch( {
 		url: `${ restRoot }/${ providerId }/tool/${ toolId }/run`,
 		method: 'POST',
