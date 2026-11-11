@@ -111,7 +111,7 @@ final class KeyExpiryNoticesTest extends TestCase {
 				true,
 				[ 'cabinet_id' => '555', 'api_token' => 'tok-a' ],
 				new \DateTimeImmutable( '@' . ( self::NOW + 5 * 86400 ) ),
-				[ 'secret_fingerprint' => 'abcdef1234567890' ]
+				[ 'secret_fingerprint' => 'abcd1234-dummy-token-for-tests' ]
 			)
 		);
 
@@ -123,7 +123,7 @@ final class KeyExpiryNoticesTest extends TestCase {
 				true,
 				[ 'cabinet_id' => 'CAB-777', 'api_token' => 'tok-b' ],
 				new \DateTimeImmutable( '@' . ( self::NOW - 60 ) ),
-				[ 'secret_fingerprint' => '98765432fedcba00' ]
+				[ 'secret_fingerprint' => '9876fedc-dummy-token-for-tests' ]
 			)
 		);
 
@@ -153,8 +153,8 @@ final class KeyExpiryNoticesTest extends TestCase {
 
 		$registrar->add();
 
-		$warn_key = "fake-mp-key-expiry-{$id_warn}-abcdef12-7";
-		$exp_key  = "fake-mp-key-expiry-{$id_exp}-98765432-expired";
+		$warn_key = "fake-mp-key-expiry-{$id_warn}-abcd1234-7";
+		$exp_key  = "fake-mp-key-expiry-{$id_exp}-9876fedc-expired";
 
 		$this->assertArrayHasKey( $warn_key, $captured );
 		$this->assertSame( 'notice-warning', $captured[ $warn_key ]['params']['notice_class'] );

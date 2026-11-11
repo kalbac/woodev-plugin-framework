@@ -37,8 +37,8 @@ use Woodev\Tests\Unit\TestCase;
 
 final class ReportBuilderTest extends TestCase {
 	private const NOW              = 1794139200;
-	private const LIVE_API_SECRET  = 'live-secret-val-99887766';
-	private const LIVE_SIGN_SECRET = 'sign-secret-val-11223344';
+	private const LIVE_API_SECRET  = 'live-secret-val-dummy-token-for-tests';
+	private const LIVE_SIGN_SECRET = 'sign-secret-val-dummy-token-for-tests';
 
 	/** @var Sqlite_Wpdb */
 	private $db;
