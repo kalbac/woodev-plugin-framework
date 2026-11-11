@@ -41,6 +41,11 @@ final class Settings_Provider {
 	private array $sections;
 
 	/**
+	 * @var callable|null builds the sections on the first {@see self::get_sections()}; null once built or when they were given.
+	 */
+	private $sections_resolver = null;
+
+	/**
 	 * @var string|null explicit capability override (null = resolve by rule).
 	 */
 	private ?string $capability;
@@ -145,6 +150,31 @@ final class Settings_Provider {
 	}
 
 	/**
+	 * Builds a provider descriptor whose sections are built on the first {@see self::get_sections()} (#1727).
+	 *
+	 * Building a section may read the database (a card per saved account), but a plugin hands its providers out on every
+	 * request that only needs to know a tab exists (the menu is built on `rest_api_init`). Here the sections are a callable
+	 * that runs when a settings page or a settings REST route really reads them, once; its result is kept. A callable that
+	 * throws leaves the provider unresolved, so the next read tries again.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @param string                    $id       tab id; blank falls back to the handler id.
+	 * @param string                    $label    tab label.
+	 * @param \Woodev_Abstract_Settings $handler  settings handler.
+	 * @param callable                  $sections returns the section grouping; like {@see self::create()}, a non-`Settings_Section`
+	 *                                            entry is dropped by {@see self::get_sections()}.
+	 * @param array<string,mixed>       $args     optional: capability, legacy_option_key, legacy_page, supports.
+	 * @return self
+	 */
+	public static function create_lazy( string $id, string $label, $handler, callable $sections, array $args = [] ): self {
+		$provider                    = new self( $id, $label, $handler, [], $args );
+		$provider->sections_resolver = $sections;
+
+		return $provider;
+	}
+
+	/**
 	 * Returns the provider/tab id.
 	 *
 	 * @since 2.0.2
@@ -220,6 +250,11 @@ final class Settings_Provider {
 	 * @return Settings_Section[]
 	 */
 	public function get_sections(): array {
+		if ( null !== $this->sections_resolver ) {
+			$this->sections          = array_values( (array) call_user_func( $this->sections_resolver ) );
+			$this->sections_resolver = null;
+		}
+
 		return array_values(
 			array_filter(
 				$this->sections,
