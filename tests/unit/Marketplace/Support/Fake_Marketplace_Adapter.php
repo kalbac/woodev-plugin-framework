@@ -301,7 +301,7 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 * @return bool
 	 */
 	public function supports( string $capability ): bool {
-		return in_array( $capability, array( Capability::CANCEL_ORDER, Capability::GET_LABEL, Capability::CONFIRM_SHIPMENT ), true );
+		return in_array( $capability, $this->policies['capabilities'] ?? array( Capability::CANCEL_ORDER, Capability::GET_LABEL, Capability::CONFIRM_SHIPMENT ), true );
 	}
 
 	/**
@@ -373,7 +373,7 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 * @return Inbound_Decoder|null
 	 */
 	public function inbound_decoder(): ?Inbound_Decoder {
-		return null;
+		return $this->policies['inbound_decoder'] ?? null;
 	}
 
 	/**

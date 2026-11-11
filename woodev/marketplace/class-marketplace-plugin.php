@@ -18,6 +18,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Module;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Settings\Settings_Provider;
 
 defined( 'ABSPATH' ) || exit;
@@ -43,20 +44,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 */
 		private $menu = false;
 
-		/**
-		 * Initializes the marketplace plugin.
-		 *
-		 * @since 2.0.29
-		 *
-		 * @param string $id      Plugin id.
-		 * @param string $version Plugin version.
-		 * @param array  $args    Plugin configuration arguments, see {@see \Woodev\Framework\Woocommerce_Plugin::__construct()}.
-		 */
 		public function __construct( string $id, string $version, array $args = [] ) {
 			parent::__construct( $id, $version, $args );
 
 			Admin_Collector::instance()->register_plugin( $this );
 			Mappings_Module::register( $this );
+
+			// Priority 0: the runners must be hooked before Action Scheduler starts at `init` priority 1, and the plugin's adapter
+			// is ready by then (the plugin's own constructor has finished).
+			add_action( 'init', [ $this, 'register_marketplace_flows' ], 0 );
 		}
 
 		/**
@@ -70,6 +66,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 */
 		protected function init_lifecycle_handler() {
 			$this->lifecycle_handler = new Lifecycle( $this );
+		}
+
+		/**
+		 * Registers every flow the framework runs for the plugin: event intake and drain, stock and price sync, export, links,
+		 * catalogue refresh, postings and labels — the hooks, the Action Scheduler runners and schedules, and the intake REST
+		 * route, all built from {@see self::get_marketplace_adapter()} ({@see Flow_Wiring}).
+		 *
+		 * Runs by itself on `init`. It is safe to call again: a plugin id is wired once, so a second call, or a second
+		 * marketplace plugin on the same framework copy, adds no hook, no schedule and no route twice. It makes no remote call;
+		 * every runner asks the licence gate and the account's state before it does. A plugin whose account store is not the
+		 * framework's table store (see {@see self::get_account_store()}) has no claim to take and runs no flow.
+		 *
+		 * @since 2.0.30
+		 *
+		 * @return void
+		 */
+		public function register_marketplace_flows(): void {
+			global $wpdb;
+
+			$accounts = $this->get_account_store();
+
+			if ( ! $accounts instanceof Wpdb_Account_Store ) {
+				return;
+			}
+
+			( new Flow_Wiring(
+				$this->get_id(),
+				$this->get_marketplace_adapter(),
+				$accounts,
+				$wpdb,
+				$wpdb->prefix,
+				License_Gate::for_plugin( $this ),
+				function ( string $line ): void {
+					$this->log( $line );
+				}
+			) )->register();
 		}
 
 		/**

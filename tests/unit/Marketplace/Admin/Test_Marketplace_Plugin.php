@@ -21,7 +21,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/marketplace/class-marketplace-plug
  * The constructor is bypassed (it would register the plugin with the collector and wire WooCommerce); the plugin's data comes
  * from the arguments instead.
  */
-final class Test_Marketplace_Plugin extends Marketplace_Plugin {
+class Test_Marketplace_Plugin extends Marketplace_Plugin {
 
 	/** @var string */
 	private $plugin_id;
