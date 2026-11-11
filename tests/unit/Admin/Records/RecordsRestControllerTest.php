@@ -75,7 +75,7 @@ class RecordsRestControllerTest extends TestCase {
 		$response = $this->controller->get_rows( $this->request( [ 'per_page' => '10' ] ) );
 		$data     = $response->get_data();
 
-		$this->assertSame( [ 'rows', 'total', 'page', 'per_page', 'total_pages', 'facets', 'messages' ], array_keys( $data ) );
+		$this->assertSame( [ 'rows', 'total', 'page', 'per_page', 'total_pages', 'facets', 'account_activity', 'messages' ], array_keys( $data ) );
 		$this->assertSame( [ 2, 1, 10, 1 ], [ $data['total'], $data['page'], $data['per_page'], $data['total_pages'] ] );
 		$this->assertEquals( new \stdClass(), $data['facets'] );
 		$this->assertSame( 'private, no-store', $response->get_headers()['Cache-Control'] );
@@ -406,6 +406,14 @@ class RecordsRestControllerTest extends TestCase {
 		);
 
 		$this->controller->register_routes();
+
+		// The read routes; the POST routes (activity, actions) are covered by their own tests.
+		$registered = array_filter(
+			$registered,
+			static function ( array $entry ): bool {
+				return 'GET' === $entry[1]['methods'];
+			}
+		);
 
 		$this->assertCount( 4, $registered );
 		foreach ( $registered as $route => [ $namespace, $args ] ) {

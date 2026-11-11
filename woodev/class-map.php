@@ -7,6 +7,8 @@
  */
 
 return [
+	'Woodev\\Framework\\Admin\\Records\\Activity_Normalizer' => 'woodev/admin/records/class-activity-normalizer.php',
+	'Woodev\\Framework\\Admin\\Records\\Activity_Reader' => 'woodev/admin/records/class-activity-reader.php',
 	'Woodev\\Framework\\Admin\\Records\\Definition_Parser' => 'woodev/admin/records/class-definition-parser.php',
 	'Woodev\\Framework\\Admin\\Records\\Provides_Field_Options' => 'woodev/admin/records/interface-provides-field-options.php',
 	'Woodev\\Framework\\Admin\\Records\\Query_Validator' => 'woodev/admin/records/class-query-validator.php',

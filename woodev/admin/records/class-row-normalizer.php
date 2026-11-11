@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * provider cannot leak a credential by adding it to a row. A provider that breaks the contract
  * is a developer error: the whole page becomes a generic 500 rather than a half-trusted table.
  *
- * Row `activity` belongs to the activity card and is not produced here.
+ * Row `activity` and the page's `account_activity` are rebuilt by {@see Activity_Normalizer}.
  *
  * @since 2.0.29
  */
@@ -47,7 +47,7 @@ final class Row_Normalizer {
 	 * @param Records_Definition  $definition Definition the request was validated against.
 	 * @param array<string,mixed> $result     Provider result (`rows`, `total`, optional `facets`, `messages`).
 	 * @param int                 $per_page   Validated page size: the provider may not return more.
-	 * @return array{rows:array<int,array<string,mixed>>,total:int,facets:array<string,mixed>,messages:array<string,string>}|\WP_Error
+	 * @return array{rows:array<int,array<string,mixed>>,total:int,facets:array<string,mixed>,account_activity:array<string,mixed>,messages:array<string,string>}|\WP_Error
 	 */
 	public static function page( Records_Definition $definition, array $result, int $per_page ) {
 		try {
@@ -57,10 +57,11 @@ final class Row_Normalizer {
 			}
 
 			return [
-				'rows'     => self::rows( $definition, $result['rows'] ?? null, $per_page ),
-				'total'    => $total,
-				'facets'   => self::facets( $definition, $result['facets'] ?? [] ),
-				'messages' => self::messages( $result['messages'] ?? [] ),
+				'rows'             => self::rows( $definition, $result['rows'] ?? null, $per_page ),
+				'total'            => $total,
+				'facets'           => self::facets( $definition, $result['facets'] ?? [] ),
+				'account_activity' => Activity_Normalizer::account( $definition, $result['account_activity'] ?? null ),
+				'messages'         => self::messages( $result['messages'] ?? [] ),
 			];
 		} catch ( \UnexpectedValueException $e ) {
 			return Records_Error::internal( 'woodev_records_invalid_provider_response' );
@@ -75,10 +76,10 @@ final class Row_Normalizer {
 	 * @param Records_Definition  $definition Definition.
 	 * @param array<string,mixed> $result     Provider result (`rows`, `total`, optional `messages`).
 	 * @param int                 $per_page   Validated page size.
-	 * @return array{rows:array<int,array<string,mixed>>,total:int,facets:array<string,mixed>,messages:array<string,string>}|\WP_Error
+	 * @return array{rows:array<int,array<string,mixed>>,total:int,facets:array<string,mixed>,account_activity:array<string,mixed>,messages:array<string,string>}|\WP_Error
 	 */
 	public static function children_page( Records_Definition $definition, array $result, int $per_page ) {
-		unset( $result['facets'] );
+		unset( $result['facets'], $result['account_activity'] );
 
 		$page = self::page( $definition, $result, $per_page );
 		if ( $page instanceof \WP_Error || [] === array_filter( array_column( $page['rows'], 'has_children' ) ) ) {
@@ -211,6 +212,7 @@ final class Row_Normalizer {
 			'actions'      => self::row_actions( $definition, $row['actions'] ?? [] ),
 			'selectable'   => self::flag( $row['selectable'] ?? false ),
 			'has_children' => $has_children,
+			'activity'     => Activity_Normalizer::row( $definition, $row['activity'] ?? null ),
 		];
 	}
 
