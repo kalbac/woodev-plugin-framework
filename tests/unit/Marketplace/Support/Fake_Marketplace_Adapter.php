@@ -291,7 +291,7 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 * @return string
 	 */
 	public function id(): string {
-		return 'fake_wildberries';
+		return $this->policies['id'] ?? 'fake_wildberries';
 	}
 
 	/**
@@ -305,12 +305,12 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	}
 
 	/**
-	 * Declares the credentials: a cabinet reference and the one JWT token.
+	 * Declares the credentials: a cabinet reference and the one JWT token, unless overridden in policies.
 	 *
 	 * @return Credential_Fields
 	 */
 	public function credential_fields(): Credential_Fields {
-		return new Credential_Fields( 'cabinet', array( 'token' ) );
+		return $this->policies['credential_fields'] ?? new Credential_Fields( 'cabinet', array( 'token' ) );
 	}
 
 	/**
@@ -319,7 +319,7 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 * @return Credential_Health
 	 */
 	public function credential_health(): Credential_Health {
-		return $this->health;
+		return $this->policies['credential_health'] ?? $this->health;
 	}
 
 	/**
@@ -337,7 +337,7 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 * @return Price_Pusher|null
 	 */
 	public function price_pusher(): ?Price_Pusher {
-		return $this->price;
+		return array_key_exists( 'price_pusher', $this->policies ) ? $this->policies['price_pusher'] : $this->price;
 	}
 
 	/**
@@ -450,6 +450,10 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 * @return Report_Section[]
 	 */
 	public function support_sections( Account $account ): array {
+		if ( isset( $this->policies['support_sections'] ) && is_array( $this->policies['support_sections'] ) ) {
+			return $this->policies['support_sections'];
+		}
+
 		return array(
 			new Report_Section(
 				'Fake Wildberries',
@@ -504,6 +508,22 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 */
 	public function push_protocol(): ?Push_Protocol {
 		return $this->policies['push_protocol'];
+	}
+
+	/**
+	 * Returns the push administration of an account: the `push_admin` policy is a `function ( int $account_id ): ?Push_Admin`, none by default.
+	 *
+	 * @param int $account_id Account id.
+	 * @return \Woodev\Framework\Marketplace\Settings\Push_Admin|null
+	 */
+	public function push_admin( int $account_id ): ?\Woodev\Framework\Marketplace\Settings\Push_Admin {
+		if ( ! isset( $this->policies['push_admin'] ) ) {
+			return null;
+		}
+
+		$admin = call_user_func( $this->policies['push_admin'], $account_id );
+
+		return $admin instanceof \Woodev\Framework\Marketplace\Settings\Push_Admin ? $admin : null;
 	}
 
 	/**
@@ -584,5 +604,18 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 		}
 
 		return $this->policies['catalog_refresher'];
+	}
+
+	/**
+	 * Returns the settings descriptor (`settings_descriptor` in the policies, else a fake descriptor built from the adapter's fields).
+	 *
+	 * @return \Woodev\Framework\Marketplace\Settings\Settings_Descriptor
+	 */
+	public function settings_descriptor(): \Woodev\Framework\Marketplace\Settings\Settings_Descriptor {
+		if ( ! isset( $this->policies['settings_descriptor'] ) ) {
+			$this->policies['settings_descriptor'] = new Fake_Marketplace\Fake_Settings_Descriptor( $this->credential_fields() );
+		}
+
+		return $this->policies['settings_descriptor'];
 	}
 }

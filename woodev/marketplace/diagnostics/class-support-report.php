@@ -22,9 +22,9 @@ final class Support_Report {
 	private const HIDDEN = '[скрыто]';
 
 	/**
-	 * Pattern of labels that name a secret.
+	 * Pattern of labels that name a secret (also what the admin-side `Report_Redactor` matches section labels against).
 	 */
-	private const SECRET_LABEL = '/api[\s_-]?key|api[\s_-]?ключ|ключ[\s_-]?api|token|токен|secret|секрет|password|парол|authorization/iu';
+	public const SECRET_LABEL = '/api[\s_-]?key|api[\s_-]?ключ|ключ[\s_-]?api|token|токен|secret|секрет|password|парол|authorization/iu';
 
 	/**
 	 * Characters left visible by `mask_identifier()`.

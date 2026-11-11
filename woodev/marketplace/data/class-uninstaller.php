@@ -16,12 +16,22 @@ defined( 'ABSPATH' ) || exit;
  * Called only by the plugin's `uninstall.php`, which WordPress runs when the plugin is deleted from the Plugins screen.
  * Deactivation never reaches this class. It needs no loaded plugin: the caller gives the marketplace id and the plugin id.
  *
+ * It removes nothing unless the merchant switched «Удалять данные при удалении плагина» on (the Advanced settings section,
+ * off by default): like every WooCommerce extension, a deleted plugin keeps its data until the merchant asks otherwise.
+ *
  * The options go with the tables: `woodev_{plugin id}_version` would otherwise survive and make a later reinstall look like an
  * installed plugin, so the tables would not be created again.
  *
  * @since 2.0.29
  */
 final class Uninstaller {
+	/**
+	 * Setting id of the «delete the data on uninstall» toggle; the Advanced section registers it under this id.
+	 *
+	 * @since 2.1.2
+	 */
+	public const DELETE_DATA_SETTING = 'advanced_delete_data_on_uninstall';
+
 	/**
 	 * Names the option family of a plugin: `woodev_` plus the plugin id, which is also what `Woodev_Plugin` uses.
 	 *
@@ -35,7 +45,19 @@ final class Uninstaller {
 	}
 
 	/**
-	 * Drops the tables and deletes the product meta and the options.
+	 * Whether the merchant asked for the plugin's data to go with the plugin (stored as `yes`, absent means no).
+	 *
+	 * @since 2.1.2
+	 *
+	 * @param string $plugin_id Plugin id (the option family).
+	 * @return bool
+	 */
+	public static function deletes_data( string $plugin_id ): bool {
+		return 'yes' === get_option( self::option_prefix( $plugin_id ) . self::DELETE_DATA_SETTING, 'no' );
+	}
+
+	/**
+	 * Drops the tables and deletes the product meta and the options — when the merchant switched the data deletion on.
 	 *
 	 * Options go through `delete_option()`, not a direct `DELETE`: with a persistent object cache the cached `…_version` would
 	 * survive the row, a reinstall would read it as "already installed" and never recreate the tables.
@@ -49,6 +71,10 @@ final class Uninstaller {
 	 * @return void
 	 */
 	public static function run( $wpdb, Schema $schema, string $plugin_id, array $extra_tables = [] ): void {
+		if ( ! self::deletes_data( $plugin_id ) ) {
+			return;
+		}
+
 		self::clear_transients( $wpdb, $schema, $plugin_id );
 
 		foreach ( array_merge( $schema->table_names( $wpdb->prefix ), $extra_tables ) as $table ) {

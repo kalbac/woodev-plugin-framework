@@ -7663,3 +7663,875 @@ msgstr ""
 #: marketplace/jobs/class-link-jobs.php:558
 msgid "Список карточек получен, но сохранить его не удалось: в нём слишком много товаров для просмотра на этой странице."
 msgstr ""
+
+#: marketplace/admin/diagnostics/class-diagnostics-reader.php:296
+msgid "только что"
+msgstr ""
+
+#. translators: %s: human-readable elapsed time from human_time_diff().
+#: marketplace/admin/diagnostics/class-diagnostics-reader.php:300
+#, php-format
+msgid "%s назад"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:179
+msgid "Лицензия"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:181
+#: marketplace/admin/diagnostics/class-report-builder.php:193
+msgid "Состояние"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:182
+msgid "действует"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:183
+msgid "недействительна — фоновые задачи остановлены"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/diagnostics/class-report-builder.php:191
+#, php-format
+msgid "Аккаунты %s"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:193
+msgid "ни один аккаунт ещё не добавлен"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:376
+msgid "Аккаунт"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:377
+#: marketplace/admin/diagnostics/class-site-facts.php:102
+#: marketplace/admin/diagnostics/class-site-facts.php:109
+msgid "включён"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:378
+#: marketplace/admin/diagnostics/class-site-facts.php:103
+msgid "выключен"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:379
+msgid "Состояние подключения"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/diagnostics/class-report-builder.php:388
+#, php-format
+msgid "Сообщение %s"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:396
+msgid "Что делать"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:402
+msgid "Ключ действует до"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:407
+msgid "Валюта кабинета"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:414
+#: marketplace/settings/class-accounts-sections.php:598
+msgid "Склад по умолчанию"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/diagnostics/class-report-builder.php:419
+#, php-format
+msgid "Уведомления %s"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:424
+msgid "Адрес уведомлений"
+msgstr ""
+
+#. translators: %s: account display label.
+#: marketplace/admin/diagnostics/class-report-builder.php:434
+#, php-format
+msgid "Аккаунт «%s»"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:451
+msgid "Последний запуск очереди"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:452
+msgid "нет данных"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:454
+msgid "Просроченных задач плагина"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:455
+msgid "Входящие события (ожидают / в работе / с ошибкой)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:461
+msgid "Открытых фоновых заданий / позиций с ошибкой"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:468
+msgid "Фоновые задачи"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:520
+msgid "Снимок обновлён"
+msgstr ""
+
+#. translators: 1: marketplace name, 2: account display label.
+#: marketplace/admin/diagnostics/class-report-builder.php:527
+#, php-format
+msgid "Лимиты %1$s — «%2$s»"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:544
+msgid "Уведомления"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:544
+msgid "записей пока нет"
+msgstr ""
+
+#. translators: %s: account display label.
+#: marketplace/admin/diagnostics/class-report-builder.php:561
+#, php-format
+msgid "Последние уведомления — «%s»"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:574
+#: marketplace/admin/diagnostics/class-site-facts.php:106
+#: marketplace/admin/diagnostics/class-site-facts.php:112
+msgid "нет"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:578
+msgid "не связаны"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:579
+msgid "в очереди"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:580
+msgid "отправлены"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:581
+msgid "импортированы с ошибками"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:582
+msgid "проверены маркетплейсом"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:583
+msgid "фото загружены"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:584
+msgid "артикул создан"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:585
+msgid "цена отправлена"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:586
+msgid "готовы"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:587
+msgid "ошибка"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:588
+msgid "в архиве"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:612
+msgid "Карточки"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:613
+msgid "Очередь остатков (ожидают / ошибки)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:618
+msgid "Очередь цен (ожидают / ошибки)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:623
+msgid "Задания импорта (открыты / позиций с ошибкой)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:631
+msgid "Ограничение частоты до"
+msgstr ""
+
+#. translators: %s: account display label.
+#: marketplace/admin/diagnostics/class-report-builder.php:636
+#, php-format
+msgid "Товары и очередь — «%s»"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:653
+msgid "Ошибки API"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:653
+msgid "ошибок не зафиксировано"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/diagnostics/class-report-builder.php:675
+#, php-format
+msgid "Последние ошибки %s"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:690
+msgid "подключено"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:692
+msgid "ключ неверный или не читается"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:694
+msgid "у ключа нет нужных прав"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:696
+msgid "ключ истёк"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/diagnostics/class-report-builder.php:699
+#, php-format
+msgid "%s не отвечает"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:702
+#: marketplace/settings/class-notifications-section.php:242
+msgid "ещё не проверялось"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:718
+msgid "не проверялось"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:722
+msgid "отключены"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:724
+msgid "включены"
+msgstr ""
+
+#. translators: 1: registration state, 2: event type, 3: relative time.
+#: marketplace/admin/diagnostics/class-report-builder.php:734
+#, php-format
+msgid "%1$s; последнее: %2$s (%3$s)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:104
+msgid "Кэш объектов"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:105
+msgid "внешний"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:108
+msgid "отключён в wp-config.php (ожидается системный cron)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:111
+msgid "да"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/diagnostics/class-site-facts.php:117
+#, php-format
+msgid "Дерево категорий %s"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:121
+msgid "Сайт"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:137
+msgid "Версии"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:144
+msgid "Активные плагины"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:182
+msgid "не загружалось"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-site-facts.php:186
+msgid "обновлено сегодня"
+msgstr ""
+
+#. translators: %d: age of the cached category tree in whole days.
+#: marketplace/admin/diagnostics/class-site-facts.php:190
+#, php-format
+msgid "обновлено %d дн. назад"
+msgstr ""
+
+#. translators: 1: marketplace name, 2: account name or identifier.
+#: marketplace/admin/notices/class-key-expiry-notices.php:200
+#, php-format
+msgid "%1$s, аккаунт «%2$s»:"
+msgstr ""
+
+#. translators: %s: expiry date in d.m.Y format.
+#. translators: %s: key expiry date in d.m.Y format.
+#: marketplace/admin/notices/class-key-expiry-notices.php:208
+#: marketplace/settings/class-account-status.php:155
+#, php-format
+msgid "Срок действия ключа истёк %s."
+msgstr ""
+
+#. translators: %s: expiry date in d.m.Y format.
+#: marketplace/admin/notices/class-key-expiry-notices.php:211
+#, php-format
+msgid "Ключ истекает сегодня (%s)."
+msgstr ""
+
+#. translators: 1: expiry date in d.m.Y format, 2: whole days remaining.
+#. translators: 1: key expiry date in d.m.Y format, 2: whole days remaining.
+#: marketplace/admin/notices/class-key-expiry-notices.php:214
+#: marketplace/settings/class-account-status.php:165
+#, php-format
+msgid "Ключ истекает %1$s (осталось дней: %2$d)."
+msgstr ""
+
+#: marketplace/admin/notices/class-key-expiry-notices.php:228
+msgid "Открыть настройки"
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:37
+#: marketplace/settings/class-notifications-section.php:391
+msgid "Лицензия не действует — продлите её на странице лицензии Woodev."
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:39
+msgid "Аккаунт выключен — включите его в настройках."
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:41
+msgid "У ключа нет нужных прав — создайте ключ с полным доступом и введите его в настройках."
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:43
+msgid "Ключ недействителен или истёк — введите новый ключ в настройках аккаунта."
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:45
+msgid "Товар не связан с карточкой маркетплейса — выгрузите товар или свяжите его с существующей карточкой."
+msgstr ""
+
+#. translators: %s: marketplace card state code.
+#: marketplace/admin/shared/class-sync-reason-text.php:48
+#, php-format
+msgid "Карточка ещё создаётся (статус: %s) — остатки и цены отправятся, когда она будет готова."
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:50
+msgid "Синхронизация остатков выключена для товара — включите её на вкладке товара."
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:52
+msgid "Не выбран склад — выберите склад в настройках аккаунта."
+msgstr ""
+
+#. translators: %d: seconds until the next retry.
+#: marketplace/admin/shared/class-sync-reason-text.php:55
+#, php-format
+msgid "Маркетплейс ограничил частоту запросов — следующая попытка через %d с."
+msgstr ""
+
+#. translators: %s: error text returned by the marketplace.
+#: marketplace/admin/shared/class-sync-reason-text.php:58
+#, php-format
+msgid "Последняя ошибка маркетплейса: %s"
+msgstr ""
+
+#. translators: %s: key expiry date in d.m.Y format.
+#: marketplace/settings/class-account-status.php:161
+#, php-format
+msgid "Ключ перестанет действовать меньше чем через сутки (%s)."
+msgstr ""
+
+#: marketplace/settings/class-account-status.php:222
+msgid "Подключено"
+msgstr ""
+
+#. translators: %s: ISO currency code of the seller cabinet.
+#: marketplace/settings/class-account-status.php:227
+#, php-format
+msgid "валюта %s"
+msgstr ""
+
+#. translators: 1: expiry date in d.m.Y format, 2: whole days remaining.
+#: marketplace/settings/class-account-status.php:235
+#, php-format
+msgid "ключ до %1$s (дней: %2$d)"
+msgstr ""
+
+#: marketplace/settings/class-account-status.php:242
+msgid "аккаунт выключен"
+msgstr ""
+
+#: marketplace/settings/class-account-status.php:258
+msgid "У ключа недостаточно прав для работы с API."
+msgstr ""
+
+#: marketplace/settings/class-account-status.php:260
+msgid "Срок действия ключа истёк."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-account-status.php:263
+#, php-format
+msgid "%s сейчас не отвечает. Повторите проверку позже."
+msgstr ""
+
+#: marketplace/settings/class-account-status.php:266
+msgid "Ключ отклонён маркетплейсом. Проверьте учётные данные."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:224
+#, php-format
+msgid "Подключение к %s"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:225
+msgid "Добавить ещё один аккаунт"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:358
+msgid "Неизвестный блок аккаунта."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:389
+msgid "Заполните все учётные данные аккаунта."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:433
+msgid "Проверка подключения не прошла."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:530
+msgid "Произвольная подпись кабинета в админке, чтобы различать несколько аккаунтов."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:531
+msgid "Основной магазин"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:578
+msgid "Аккаунт включён"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:580
+msgid "Выключенный аккаунт не отправляет изменения и не принимает новые заказы."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:602
+#, php-format
+msgid "Склад кабинета %s, на который уходят остатки с сайта. Список складов подгружается после проверки подключения."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:611
+msgid "Остатки"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:616
+#, php-format
+msgid "Главный — сайт: остатки уходят с сайта на %s"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:621
+#, php-format
+msgid "Главный — %1$s: остатки приходят с %2$s на сайт"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:624
+msgid "Где ведётся учёт остатков."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:633
+msgid "Цены"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:635
+msgid "В какую сторону передаются цены."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:645
+#, php-format
+msgid "Заказы %s → WooCommerce"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:648
+#, php-format
+msgid "Заказы с %s появляются в WooCommerce как обычные заказы."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:656
+msgid "Импортировать новые карточки автоматически"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:659
+#, php-format
+msgid "Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:676
+msgid "От какой цены считать"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:678
+msgid "От цены на сайте (со скидкой, если она есть)"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:679
+msgid "От обычной цены (скидки сайта не учитывать)"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:682
+#, php-format
+msgid "Какую цену сайта брать за основу. Со скидкой — %s получит цену со скидкой и зачёркнутую обычную цену."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:692
+msgid "Процент от цены"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:695
+#, php-format
+msgid "Насколько цена на %s отличается от цены на сайте (например, на величину комиссии)."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:708
+msgid "Сумма в валюте кабинета или процент — как выбрано выше. Например, 150 или 15."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:723
+msgid "До целой единицы валюты"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:725
+msgid "Чтобы цена заканчивалась на 99"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:727
+msgid "Как округлять цену после наценки."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:735
+msgid "Показывать зачёркнутую цену, пока на сайте скидка"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:736
+msgid "Не отправлять старую цену"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:739
+#, php-format
+msgid "Нужна ли на %s зачёркнутая цена, когда на сайте действует скидка."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:747
+msgid "Минимальная цена, %"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:753
+#, php-format
+msgid "Процент от цены, ниже которого %s не опустит цену в акциях. Пусто — минимальная цена не отправляется."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:807
+msgid "Остатки и склад"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:828
+msgid "Цены и наценка"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:840
+msgid "Заказы и карточки"
+msgstr ""
+
+#. translators: %s: account display label.
+#: marketplace/settings/class-accounts-sections.php:848
+#, php-format
+msgid "Параметры обмена — «%s»"
+msgstr ""
+
+#. translators: 1: Calculated marketplace price, 2: Currency code.
+#: marketplace/settings/class-accounts-sections.php:878
+#, php-format
+msgid "цена %1$s %2$s"
+msgstr ""
+
+#. translators: 1: Calculated old price, 2: Currency code.
+#: marketplace/settings/class-accounts-sections.php:887
+#, php-format
+msgid "зачёркнутая %1$s %2$s"
+msgstr ""
+
+#. translators: 1: Calculated minimum price, 2: Currency code.
+#: marketplace/settings/class-accounts-sections.php:896
+#, php-format
+msgid "минимальная %1$s %2$s"
+msgstr ""
+
+#. translators: 1: Currency code, 2: Comma-separated calculated prices.
+#: marketplace/settings/class-accounts-sections.php:904
+#, php-format
+msgid "Пример по текущему правилу (товар на сайте за 1000 %1$s со скидкой от 1200 %1$s): %2$s."
+msgstr ""
+
+#. translators: %s: credential field label.
+#: marketplace/settings/class-accounts-sections.php:1166
+#, php-format
+msgid "Заполните поле «%s» для нового аккаунта."
+msgstr ""
+
+#. translators: %s: identifier field label.
+#: marketplace/settings/class-accounts-sections.php:1194
+#, php-format
+msgid "Поле «%s» не может быть пустым."
+msgstr ""
+
+#. translators: %s: identifier field label.
+#: marketplace/settings/class-accounts-sections.php:1203
+#: marketplace/settings/class-accounts-sections.php:1216
+#, php-format
+msgid "Аккаунт с таким «%s» уже добавлен."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:1259
+msgid "Укажите процент больше 0 и не больше 100 (например, 80) или оставьте поле пустым."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:1260
+msgid "Укажите корректное число для наценки (например, 150 или 15.5; скидка в процентах должна быть строго больше -100)."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:1274
+msgid "— Выберите склад —"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:1309
+#, php-format
+msgid "С сайта на %1$s: цены на %2$s считаются от цен сайта"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:1316
+#, php-format
+msgid "С %1$s на сайт: цены сайта берутся с %2$s"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:1321
+msgid "Не синхронизировать цены"
+msgstr ""
+
+#: marketplace/settings/class-advanced-section.php:51
+msgid "Записывать отладочные события обмена и показывать расширенную диагностику и отчёт для поддержки."
+msgstr ""
+
+#: marketplace/settings/class-advanced-section.php:59
+#: marketplace/settings/class-advanced-section.php:67
+msgid "Удалять данные при удалении плагина"
+msgstr ""
+
+#: marketplace/settings/class-advanced-section.php:68
+msgid "Если включено, при удалении плагина со страницы «Плагины» будут удалены его таблицы, связки товаров и настройки. Деактивация плагина данные не трогает."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:150
+msgid "Укажите корректные IP-адреса или подсети CIDR (по одному в строке, например 198.51.100.0/24)."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:157
+#: marketplace/settings/class-notifications-section.php:168
+#, php-format
+msgid "Разрешённые адреса %s"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:170
+#, php-format
+msgid "IP-адреса и подсети CIDR, с которых %s присылает уведомления (по одному на строку). Пустое поле отключает фильтрацию по IP."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:178
+#: marketplace/settings/class-notifications-section.php:188
+msgid "Доверенные обратные прокси"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:189
+msgid "Адреса ваших балансировщиков (nginx, Cloudflare), от которых можно доверять заголовку X-Forwarded-For."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:217
+#, php-format
+msgid "Безопасность уведомлений %s"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:247
+msgid "уведомления включены"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:248
+msgid "уведомления отключены"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:253
+msgid "пока не поступало"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:257
+msgid "по текущим настройкам аккаунта push-события не требуются"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:262
+msgid "Адрес для приёма уведомлений (токен скрыт)"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:264
+msgid "Нужные события"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:266
+msgid "Состояние регистрации"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:268
+msgid "Последнее уведомление"
+msgstr ""
+
+#. translators: 1: marketplace name, 2: account identifier.
+#: marketplace/settings/class-notifications-section.php:277
+#, php-format
+msgid "Уведомления %1$s — «%2$s»"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:293
+msgid "Регистрация адреса"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:294
+msgid "Передать адрес приёма уведомлений в кабинет маркетплейса"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:295
+msgid "Зарегистрировать URL"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:302
+msgid "Маркетплейс отключил отправку уведомлений на этот адрес. Нажмите «Включить уведомления»."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:304
+msgid "Адрес уведомлений зарегистрирован."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:311
+msgid "Типы событий"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:312
+msgid "Привести список типов событий в соответствие с настройками аккаунта"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:313
+msgid "Обновить типы"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:320
+#: marketplace/settings/class-notifications-section.php:337
+msgid "Адрес ещё не зарегистрирован — сначала нажмите «Зарегистрировать URL»."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:322
+msgid "Список типов уведомлений актуален."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:329
+msgid "Доставка уведомлений"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:330
+msgid "Возобновить доставку уведомлений после автоматического отключения"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:331
+msgid "Включить уведомления"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:339
+msgid "Доставка уведомлений включена."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:346
+msgid "Проверка связи"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:347
+msgid "Попросить маркетплейс отправить проверочный запрос на адрес сайта"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:358
+msgid "Проверка уведомлений не прошла."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:361
+msgid "Проверка прошла успешно — маркетплейс достучался до сайта."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:396
+msgid "Аккаунт не найден."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:401
+msgid "Push-уведомления недоступны для этого аккаунта."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:418
+msgid "Не удалось выполнить запрос к маркетплейсу."
+msgstr ""
+
+#: marketplace/settings/class-settings-handler.php:61
+msgid "Основные"
+msgstr ""

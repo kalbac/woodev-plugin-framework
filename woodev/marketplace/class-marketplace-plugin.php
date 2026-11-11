@@ -12,13 +12,19 @@ namespace Woodev\Framework\Marketplace;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Admin\Admin_Collector;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Builder;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Admin\Menu;
+use Woodev\Framework\Marketplace\Admin\Notices\Key_Expiry_Notices;
 use Woodev\Framework\Marketplace\Admin\Page;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Module;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
+use Woodev\Framework\Marketplace\Settings\Settings_Handler;
+use Woodev\Framework\Marketplace\Settings\Settings_Module;
 use Woodev\Framework\Settings\Settings_Provider;
 
 defined( 'ABSPATH' ) || exit;
@@ -43,6 +49,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 * @var Menu|null|false The built menu; null when the definition was refused, false before it is built.
 		 */
 		private $menu = false;
+
+		/**
+		 * @var Settings_Handler|null|false Default settings handler; false before first build.
+		 */
+		private $settings_handler = false;
 
 		public function __construct( string $id, string $version, array $args = [] ) {
 			parent::__construct( $id, $version, $args );
@@ -101,7 +112,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				$wpdb->prefix,
 				License_Gate::for_plugin( $this ),
 				function ( string $line ): void {
-					$this->log( $line );
+					$this->log_error( $line );
 				},
 				$this->account_write_gate()
 			) )->register();
@@ -309,6 +320,159 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 */
 		public function get_settings_tab_url( string $tab_id ): string {
 			return $this->get_marketplace_page_url( Page::SETTINGS_SLUG, [ 'tab' => $tab_id ] );
+		}
+
+		/**
+		 * Returns the default settings tab (`accounts`, optional `notifications`, `advanced`) placed on this plugin's own menu.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @return Settings_Provider[]
+		 */
+		public function get_settings_providers(): array {
+			$handler = $this->get_marketplace_settings_handler();
+
+			return null === $handler ? [] : [ $handler->get_settings_provider() ];
+		}
+
+		/**
+		 * Returns the default {@see Settings_Handler} built from the plugin's adapter and account store, or null when the
+		 * account store is not {@see Wpdb_Account_Store}.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @return Settings_Handler|null
+		 */
+		protected function get_marketplace_settings_handler(): ?Settings_Handler {
+			if ( false === $this->settings_handler ) {
+				$this->settings_handler = Settings_Module::handler_for( $this, $this->get_account_store() );
+			}
+
+			return $this->settings_handler;
+		}
+
+		/**
+		 * Tells whether the current admin screen is this plugin's «Настройки» page under its own menu.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @return bool
+		 */
+		public function is_plugin_settings() {
+			if ( ! isset( $_GET['page'], $_GET['path'] ) || 'wc-admin' !== $_GET['page'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads current screen slug only.
+				return false;
+			}
+
+			$menu = $this->get_marketplace_admin_menu();
+			$page = null === $menu ? null : $menu->get_page( Page::SETTINGS_SLUG );
+
+			return null !== $page && $menu->get_page_path( $page ) === $_GET['path']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+
+		/**
+		 * Adds tiered credential-expiry notices alongside base plugin notices for shop managers.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @return void
+		 */
+		public function add_admin_notices() {
+			parent::add_admin_notices();
+
+			if ( ! current_user_can( 'manage_woocommerce' ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- WooCommerce capability.
+				return;
+			}
+
+			Key_Expiry_Notices::for_plugin( $this, $this->get_account_store(), $this->get_marketplace_adapter() )->add();
+		}
+
+		/**
+		 * Returns the reader for this plugin's «Логирование» toggle (`woodev_{plugin_id}_advanced_logging`).
+		 *
+		 * @since 2.1.2
+		 *
+		 * @return Logging
+		 */
+		public function logging(): Logging {
+			return Logging::for_plugin( $this );
+		}
+
+		/**
+		 * Builds the diagnostics {@see Report_Builder} for this plugin.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @return Report_Builder
+		 */
+		public function diagnostics_report_builder(): Report_Builder {
+			return Settings_Module::report_builder_for( $this, $this->get_account_store() );
+		}
+
+		/**
+		 * Writes a failure at the ERROR level, whatever «Логирование» says, with credentials scrubbed out of the text.
+		 *
+		 * The inherited {@see self::log()} writes at WooCommerce's default NOTICE severity, which a shop that raised the logging
+		 * threshold to «Error» silently drops — so a failure belongs here, as in {@see \Woodev\Framework\Shipping\Shipping_Plugin}.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @param string      $message What failed.
+		 * @param string|null $log_id  Optional log source, defaults to the plugin id.
+		 * @return void
+		 */
+		public function log_error( $message, $log_id = null ): void {
+			$this->log_at_level( 'error', (string) $message, $log_id );
+		}
+
+		/**
+		 * Writes a debug line, scrubbed, ONLY while «Логирование» is on.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @param string      $message Debug line.
+		 * @param string|null $log_id  Optional log source, defaults to the plugin id.
+		 * @return void
+		 */
+		public function log_debug( $message, $log_id = null ): void {
+			if ( $this->logging()->is_enabled() ) {
+				$this->log_at_level( 'debug', (string) $message, $log_id );
+			}
+		}
+
+		/**
+		 * Logs an API request and its response at the DEBUG level, only while «Логирование» is on.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @param array<string,mixed> $request  Request data.
+		 * @param array<string,mixed> $response Response data.
+		 * @param string|null         $log_id   Optional log source.
+		 * @return void
+		 */
+		public function log_api_request( $request, $response, $log_id = null ) {
+			if ( ! $this->logging()->is_enabled() ) {
+				return;
+			}
+
+			$this->log_debug( "Запрос\n" . $this->get_api_log_message( $request ), $log_id );
+
+			if ( ! empty( $response ) ) {
+				$this->log_debug( "Ответ\n" . $this->get_api_log_message( $response ), $log_id );
+			}
+		}
+
+		/**
+		 * Writes a line to the WooCommerce log at an explicit severity, keeping the log source id and scrubbing credentials.
+		 *
+		 * @param string      $level   A `WC_Log_Levels` level: `error`, `debug`.
+		 * @param string      $message The line.
+		 * @param string|null $log_id  Log source id, defaults to the plugin id.
+		 * @return void
+		 */
+		private function log_at_level( string $level, string $message, $log_id ): void {
+			$safe = Report_Redactor::redact_text( $message, $this->get_marketplace_adapter()->credential_fields()->secrets() );
+
+			$this->logger()->log( $level, $safe, [ 'source' => is_string( $log_id ) && '' !== $log_id ? $log_id : $this->get_id() ] );
 		}
 
 		/**

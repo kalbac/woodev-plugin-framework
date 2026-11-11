@@ -198,7 +198,31 @@ final class FlowWiringTest extends TestCase {
 		Actions\expectAdded( 'action_scheduler_init' )->times( 5 );
 		// A changed price rule is named after the adapter, not the plugin.
 		Actions\expectAdded( 'woodev_fake_wildberries_profile_price_changed' )->once();
+		// The settings screen fires this one after saving an account's markup or price direction.
+		Actions\expectAdded( sprintf( 'woodev_%s_account_price_rules_changed', $plugin_id ) )->once();
 		Filters\expectAdded( 'rest_pre_dispatch' )->once();
+	}
+
+	public function test_a_changed_account_price_rule_queues_a_recompute_for_that_account(): void {
+		$listener = null;
+
+		Actions\expectAdded( 'woodev_fake_seller_account_price_rules_changed' )->once()->whenHappen(
+			static function ( $callback ) use ( &$listener ): void {
+				$listener = $callback;
+			}
+		);
+
+		$this->wiring( self::PLUGIN )->register();
+
+		$this->assertIsCallable( $listener );
+		$this->assertSame( [], $this->scheduler->of( 'woodev_fake_seller_recompute_prices' ), 'nothing is queued before the rule changes' );
+
+		$listener( 7 );
+
+		$queued = $this->scheduler->of( 'woodev_fake_seller_recompute_prices' );
+
+		$this->assertCount( 1, $queued, 'the account price rule change queues one recompute job' );
+		$this->assertSame( [ 7, 0 ], $queued[0]['args'] ?? null, 'it works the changed account from the first link' );
 	}
 
 	public function test_every_flow_is_hooked_exactly_once(): void {

@@ -155,12 +155,13 @@ class PersistenceTest extends TestCase {
 	}
 
 	/**
-	 * Uninstall drops the tables, deletes the plugin's option family, its transients and its product meta, and nothing of another
-	 * plugin: the `LIKE` patterns run on the server with their escaped underscores.
+	 * With «Удалять данные при удалении плагина» on, uninstall drops the tables, deletes the plugin's option family, its transients
+	 * and its product meta, and nothing of another plugin: the `LIKE` patterns run on the server with their escaped underscores.
 	 */
 	public function test_uninstall_removes_the_plugins_data_and_only_that(): void {
 		global $wpdb;
 
+		update_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING, 'yes' );
 		update_option( 'woodev_itest-plugin_version', '2.0.0' );
 		update_option( 'woodev_other-plugin_version', '1.0.0' );
 		( new Cards_Snapshot_Store( Uninstaller::option_prefix( 'itest-plugin' ) ) )->put( 3, [ [ 'offer_id' => 'A' ] ], 100 );
@@ -187,6 +188,42 @@ class PersistenceTest extends TestCase {
 			// The DROP TABLE above committed these rows; the rollback at the end of the test cannot take them back.
 			delete_option( 'woodev_other-plugin_version' );
 			delete_transient( 'woodev_other-plugin_cards_3' );
+			// The toggle must not leak into the next test: DDL commits the test transaction, so the rollback may not remove it.
+			delete_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING );
+			wp_delete_post( $post, true );
+		}
+	}
+
+	/**
+	 * Default off (the toggle was never saved): deleting the plugin keeps every table, option and product meta, as a WooCommerce
+	 * extension does.
+	 */
+	public function test_uninstall_keeps_the_data_while_the_delete_data_toggle_is_off(): void {
+		global $wpdb;
+
+		// Another test may have committed the toggle (DDL commits the test transaction): start from «never saved».
+		delete_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING );
+		update_option( 'woodev_itest-plugin_version', '2.0.0' );
+		$post = self::factory()->post->create();
+		update_post_meta( $post, Pinned_Offer_Id::meta_prefix( 'itest' ) . '7', 'MINE' );
+
+		try {
+			$this->assertFalse( Uninstaller::deletes_data( 'itest-plugin' ), 'the toggle was never saved' );
+
+			Uninstaller::run( $wpdb, $this->schema, 'itest-plugin' );
+
+			foreach ( $this->schema->table_names( $wpdb->prefix ) as $table ) {
+				$this->assertSame( $table, $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ), $table );
+			}
+			$this->assertSame( '2.0.0', get_option( 'woodev_itest-plugin_version' ) );
+			$this->assertSame( 'MINE', get_post_meta( $post, Pinned_Offer_Id::meta_prefix( 'itest' ) . '7', true ) );
+
+			update_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING, 'no' );
+			Uninstaller::run( $wpdb, $this->schema, 'itest-plugin' );
+
+			$this->assertSame( '2.0.0', get_option( 'woodev_itest-plugin_version' ), 'an explicit «no» keeps the data too' );
+		} finally {
+			delete_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING );
 			wp_delete_post( $post, true );
 		}
 	}

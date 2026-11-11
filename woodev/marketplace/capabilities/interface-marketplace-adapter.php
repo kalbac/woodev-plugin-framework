@@ -328,4 +328,24 @@ interface Marketplace_Adapter {
 	 * @return \Woodev\Framework\Marketplace\Flows\Catalog_Refresher
 	 */
 	public function catalog_refresher(): \Woodev\Framework\Marketplace\Flows\Catalog_Refresher;
+
+	/**
+	 * Returns the push administration service for an account: registering the notification address, the event types, enabling
+	 * delivery and the connection check, all remote calls.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @param int $account_id Account id.
+	 * @return \Woodev\Framework\Marketplace\Settings\Push_Admin|null Null when the marketplace has no push notifications, or the account does not exist.
+	 */
+	public function push_admin( int $account_id ): ?\Woodev\Framework\Marketplace\Settings\Push_Admin;
+
+	/**
+	 * Returns the UI descriptor for settings sections, key-expiry notices and diagnostics.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @return \Woodev\Framework\Marketplace\Settings\Settings_Descriptor
+	 */
+	public function settings_descriptor(): \Woodev\Framework\Marketplace\Settings\Settings_Descriptor;
 }
