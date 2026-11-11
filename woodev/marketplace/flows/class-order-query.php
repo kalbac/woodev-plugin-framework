@@ -45,13 +45,19 @@ final class Order_Query {
 		$args = [
 			'return'     => 'ids',
 			'type'       => 'shop_order',
-			'status'     => $statuses,
 			'limit'      => $limit,
 			'paged'      => max( 1, $page ),
 			'orderby'    => 'ID',
 			'order'      => 'ASC',
 			'meta_query' => $clauses, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- The caller's own narrow order query.
 		];
+
+		// «Every status» is the absence of the argument: WooCommerce then queries all of its order statuses on both stores. The
+		// literal `[ 'any' ]` is understood by the posts store and by the newest HPOS query only; WooCommerce 8.5 and 9.3 look for an
+		// order whose status is the word "any" and find nothing.
+		if ( [ 'any' ] !== $statuses ) {
+			$args['status'] = $statuses;
+		}
 
 		$token     = wp_generate_uuid4();
 		$filter    = static function ( $wp_query_args, $query_vars ) use ( $clauses, $token ) {
