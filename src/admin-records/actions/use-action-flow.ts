@@ -19,6 +19,7 @@
 
 import { useCallback, useRef, useState } from '@wordpress/element';
 import { isAbort } from '../api';
+import type { Ownership } from '../activity';
 import type { TableHandle } from '../extensions';
 import type { ActionDescriptor } from '../types';
 import { createActionsApi } from './api';
@@ -85,7 +86,12 @@ function sendable( payload: Payload ): Payload {
 	);
 }
 
-export function useActionFlow(): ActionFlow {
+/**
+ * @param ownership The activity part's row ownership, when the page has one. The rows of an apply are claimed while
+ *                  it is in flight and released once its answer has landed, so a refresh that was already on its
+ *                  way never overwrites what the apply wrote.
+ */
+export function useActionFlow( ownership?: Ownership ): ActionFlow {
 	const [ state, setState ] = useState< FlowState | null >( null );
 	const current = useRef< FlowState | null >( null );
 	const busy = useRef( false );
@@ -189,6 +195,7 @@ export function useActionFlow(): ActionFlow {
 
 			busy.current = true;
 			const mine = ++ticket.current;
+			const claim = ownership?.claim( flow.ids );
 			patch( { stage: 'applying', failure: null, fieldErrors: {} } );
 
 			try {
@@ -208,12 +215,15 @@ export function useActionFlow(): ActionFlow {
 					fail( error, 'apply', table );
 				}
 			} finally {
+				if ( claim ) {
+					ownership?.release( flow.ids, claim );
+				}
 				if ( mine === ticket.current ) {
 					busy.current = false;
 				}
 			}
 		},
-		[ fail, patch, showResult ]
+		[ fail, ownership, patch, showResult ]
 	);
 
 	const begin = useCallback(

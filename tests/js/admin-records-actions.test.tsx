@@ -13,6 +13,7 @@ import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import { RecordsTable, useActionExtensions } from '../../src/admin-records';
+import { createActivityExtensions, type ActivityExtensions } from '../../src/admin-records/activity';
 import {
 	fixtureDefinition,
 	fixtureDefinitionEnvelope,
@@ -268,8 +269,9 @@ function FakeTableCard( props: TableCardProps ) {
 	);
 }
 
-function Page( { query = {} }: { query?: Record< string, string > } ) {
-	const extensions = useActionExtensions();
+function Page( { query = {}, activity }: { query?: Record< string, string >; activity?: ActivityExtensions } ) {
+	const actions = useActionExtensions( activity );
+	const extensions = activity ? { ...actions, ...activity.extensions } : actions;
 
 	return (
 		<RecordsTable
@@ -835,5 +837,94 @@ describe( 'guarded downloads', () => {
 
 		await within( dialog ).findByText( 'Адрес файла не прошёл проверку' );
 		expect( within( dialog ).queryByRole( 'link', { name: 'Скачать файл' } ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'with the activity part', () => {
+	const LOCK = {
+		locked: true,
+		reason: 'Идёт выгрузка этого товара',
+		blocked_actions: [ 'export', 'bulk_export' ],
+		processes: [],
+		observed_at: '2026-11-11T10:00:00+03:00',
+	};
+
+	async function renderWithActivity( activity: ActivityExtensions ) {
+		render( <Page activity={ activity } /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+	}
+
+	test( 'the rows of an apply are claimed while it is in flight, so an earlier refresh cannot overwrite them', async () => {
+		const activity = createActivityExtensions();
+		const pending = defer< ApplyResponse >();
+		serve( { apply: () => pending.promise } );
+		await renderWithActivity( activity );
+		const refreshStartedBefore = activity.ownership.snapshot( [ 'p1' ] );
+
+		const dialog = await openRowAction( 'p1', 'Выгрузить' );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Выгрузить товар' } ) );
+		await within( dialog ).findByText( 'Выполняем…' );
+
+		expect( activity.ownership.isClaimed( 'p1' ) ).toBe( true );
+		expect( activity.ownership.mayWrite( 'p1', refreshStartedBefore ) ).toBe( false );
+
+		await act( async () => pending.resolve( outcome() ) );
+		await within( dialog ).findByText( 'Готово.' );
+
+		expect( activity.ownership.isClaimed( 'p1' ) ).toBe( false );
+		expect( activity.ownership.mayWrite( 'p1', refreshStartedBefore ) ).toBe( false ); // The apply's write is newer.
+		expect( activity.ownership.mayWrite( 'p1', activity.ownership.snapshot( [ 'p1' ] ) ) ).toBe( true );
+	} );
+
+	test( 'a failed apply releases its claim too', async () => {
+		const activity = createActivityExtensions();
+		serve( { apply: () => Promise.reject( { code: 'fetch_error', message: 'Failed to fetch' } ) } );
+		await renderWithActivity( activity );
+
+		const dialog = await openRowAction( 'p1', 'Выгрузить' );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Выгрузить товар' } ) );
+
+		await within( dialog ).findByText( ACTION_COPY.action_recovery );
+		expect( activity.ownership.isClaimed( 'p1' ) ).toBe( false );
+	} );
+
+	test( 'a row locked by activity does not offer the blocked row action or the blocked bulk action', async () => {
+		const activity = createActivityExtensions();
+		serve( { rows: () => fixtureList( [ { ...shopRow( 'p1', 'Кружка' ), activity: LOCK }, shopRow( 'p2', 'Футболка' ) ] ) } );
+		await renderWithActivity( activity );
+
+		const exportButton = within( row( 'p1' ) ).getByRole( 'button', { name: 'Выгрузить' } );
+		expect( exportButton ).toHaveAttribute( 'aria-disabled', 'true' );
+		fireEvent.click( exportButton );
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
+		expect( previews() ).toHaveLength( 0 );
+		expect( within( row( 'p2' ) ).getByRole( 'button', { name: 'Выгрузить' } ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Футболка/ } ) );
+		expect( toolbarButton( 'Выгрузить выбранные' ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
+		expect( toolbarButton( 'Выгрузить выбранные' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( toolbarButton( 'Выгрузить выбранные' ) ).toHaveAccessibleDescription( 'Идёт выгрузка этого товара' );
+	} );
+
+	test( 'an account action the account line blocks is off, with the line’s sentence beside it', async () => {
+		const activity = createActivityExtensions();
+		await renderWithActivity( activity );
+		expect( toolbarButton( 'Связать по артикулу' ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+
+		act( () =>
+			activity.state.set( {
+				account: {
+					active: true,
+					text: 'По аккаунту идёт фоновая работа',
+					blocked_actions: [ 'link_all' ],
+					observed_at: '2026-11-11T10:00:00+03:00',
+				},
+			} )
+		);
+
+		expect( toolbarButton( 'Связать по артикулу' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( toolbarButton( 'Связать по артикулу' ) ).toHaveAccessibleDescription( 'По аккаунту идёт фоновая работа' );
+		expect( document.querySelectorAll( '.woodev-records__reason' ) ).toHaveLength( 1 ); // Beside the action it blocks only.
 	} );
 } );
