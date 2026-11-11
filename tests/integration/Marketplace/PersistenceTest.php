@@ -188,6 +188,8 @@ class PersistenceTest extends TestCase {
 			// The DROP TABLE above committed these rows; the rollback at the end of the test cannot take them back.
 			delete_option( 'woodev_other-plugin_version' );
 			delete_transient( 'woodev_other-plugin_cards_3' );
+			// The toggle must not leak into the next test: DDL commits the test transaction, so the rollback may not remove it.
+			delete_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING );
 			wp_delete_post( $post, true );
 		}
 	}
@@ -199,6 +201,8 @@ class PersistenceTest extends TestCase {
 	public function test_uninstall_keeps_the_data_while_the_delete_data_toggle_is_off(): void {
 		global $wpdb;
 
+		// Another test may have committed the toggle (DDL commits the test transaction): start from «never saved».
+		delete_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING );
 		update_option( 'woodev_itest-plugin_version', '2.0.0' );
 		$post = self::factory()->post->create();
 		update_post_meta( $post, Pinned_Offer_Id::meta_prefix( 'itest' ) . '7', 'MINE' );
@@ -219,6 +223,7 @@ class PersistenceTest extends TestCase {
 
 			$this->assertSame( '2.0.0', get_option( 'woodev_itest-plugin_version' ), 'an explicit «no» keeps the data too' );
 		} finally {
+			delete_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING );
 			wp_delete_post( $post, true );
 		}
 	}
