@@ -50,6 +50,8 @@ export interface RecordsExtensions {
 	onRowAction?: ( action: ActionDescriptor, row: AdminRecord, table: TableHandle ) => void;
 	/** F6 — the bulk toolbar. The selection column exists only when this is set and PHP declares bulk actions. */
 	renderBulkActions?: ( selection: SelectionHandle, table: TableHandle ) => ReactNode;
+	/** F6 — always mounted, bulk actions or not: the host of the action dialog that a row action opens. */
+	renderActions?: ( table: TableHandle ) => ReactNode;
 	/** F7 — why an action PHP enabled is blocked right now (a lock, a running process); empty when it is not. */
 	blockedReason?: ( action: ActionDescriptor, row: AdminRecord, table: TableHandle ) => string;
 	/** F7 — a row's processes and lock reason, shown in its actions cell. */

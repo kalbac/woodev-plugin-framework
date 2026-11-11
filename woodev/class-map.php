@@ -7,6 +7,13 @@
  */
 
 return [
+	'Woodev\\Framework\\Admin\\Records\\Action_Error' => 'woodev/admin/records/class-action-error.php',
+	'Woodev\\Framework\\Admin\\Records\\Action_Input' => 'woodev/admin/records/class-action-input.php',
+	'Woodev\\Framework\\Admin\\Records\\Action_Input_Exception' => 'woodev/admin/records/class-action-input-exception.php',
+	'Woodev\\Framework\\Admin\\Records\\Action_Request' => 'woodev/admin/records/class-action-request.php',
+	'Woodev\\Framework\\Admin\\Records\\Action_Response' => 'woodev/admin/records/class-action-response.php',
+	'Woodev\\Framework\\Admin\\Records\\Action_Rest_Handler' => 'woodev/admin/records/class-action-rest-handler.php',
+	'Woodev\\Framework\\Admin\\Records\\Action_State_Exception' => 'woodev/admin/records/class-action-state-exception.php',
 	'Woodev\\Framework\\Admin\\Records\\Activity_Normalizer' => 'woodev/admin/records/class-activity-normalizer.php',
 	'Woodev\\Framework\\Admin\\Records\\Activity_Reader' => 'woodev/admin/records/class-activity-reader.php',
 	'Woodev\\Framework\\Admin\\Records\\Definition_Parser' => 'woodev/admin/records/class-definition-parser.php',
