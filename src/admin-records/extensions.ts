@@ -30,6 +30,8 @@ export interface TableHandle {
 	 * epoch has moved on: those rows are no longer the ones on screen.
 	 */
 	epoch: number;
+	/** A list read is in flight. `epoch` has already moved on, but the rows on screen are still the old ones. */
+	loading: boolean;
 	/** The account-wide activity the last list read carried; the activity part keeps it fresh after that. */
 	accountActivity: AccountActivity | null;
 	/** Reads the current page again. */

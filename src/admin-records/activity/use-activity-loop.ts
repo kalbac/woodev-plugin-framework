@@ -32,7 +32,7 @@ function isHidden(): boolean {
 	return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
-/** Answers of one tick, merged: rows and removals concatenated, the last account line and hint win. */
+/** Answers of one tick, merged: rows and removals concatenated, the last account line wins. */
 function merge( answers: ActivityResponse[] ): ActivityResponse {
 	const last = answers[ answers.length - 1 ];
 
@@ -58,6 +58,7 @@ export function useActivityLoop( table: TableHandle, state: ActivityState, owner
 	const maxRefreshMs = limits?.max_refresh_ms ?? 0;
 	const staleAfterMs = limits?.stale_after_ms ?? 0;
 	const idLimit = limits?.id_limit ?? 0;
+	const { loading } = table;
 	const accountId = table.context.account_id;
 	const apiPath = table.api.path;
 	const { epoch } = table;
@@ -67,11 +68,17 @@ export function useActivityLoop( table: TableHandle, state: ActivityState, owner
 	useEffect( () => {
 		if ( enabled ) {
 			state.set( { account: listAccount ?? idleAccount() } );
+			return;
 		}
+
+		// Another table or account that declares no activity: nothing of the previous one may stay on screen.
+		state.set( { account: null, stale: false, failing: false } );
 	}, [ enabled, listAccount, state ] );
 
 	useEffect( () => {
-		if ( ! enabled ) {
+		// While a list read is in flight the rows on screen are about to be replaced: no read may start from them, and
+		// the loop that was running is already stopped. It starts again when the list has answered.
+		if ( ! enabled || loading ) {
 			return undefined;
 		}
 
@@ -149,13 +156,15 @@ export function useActivityLoop( table: TableHandle, state: ActivityState, owner
 				}
 
 				const answer = merge( answers );
+				// One part may hold work the others do not: the next read comes when the soonest part asked for it.
+				const delay = Math.min( ...answers.map( ( part ) => delayAfterSuccess( declared, part.refresh_after_ms ) ) );
 
 				reading = false;
 				apply( answer, ids, versions );
 				failures = 0;
 				state.set( { stale: false, failing: false } );
 				armStaleTimer();
-				schedule( delayAfterSuccess( declared, answer.refresh_after_ms ) );
+				schedule( delay );
 			} catch ( error ) {
 				if ( ! current() || isAbort( error ) ) {
 					return;
@@ -192,7 +201,7 @@ export function useActivityLoop( table: TableHandle, state: ActivityState, owner
 			clearTimeout( staleTimer );
 			stopReading();
 		};
-		// The loop restarts for a new list read, another account or table — not for the ids on screen, which are
+		// The loop restarts when a list read ends, for another account or table — not for the ids on screen, which are
 		// read fresh at every tick, and not for new objects that describe the same limits.
-	}, [ enabled, epoch, accountId, apiPath, refreshMs, maxRefreshMs, staleAfterMs, idLimit, state, ownership ] );
+	}, [ enabled, loading, epoch, accountId, apiPath, refreshMs, maxRefreshMs, staleAfterMs, idLimit, state, ownership ] );
 }

@@ -128,11 +128,13 @@ let onActivity: Read;
 interface Setup {
 	rows?: AdminRecord[];
 	list?: Partial< ListEnvelope >;
-	definition?: Partial< Definition >;
+	/** Per list request: a promise holds the answer back (a slow list read). */
+	listAnswer?: ( path: string ) => ListEnvelope | Promise< ListEnvelope > | undefined;
+	definition?: Partial< Definition > | ( ( path: string ) => Partial< Definition > );
 	activity?: Read;
 }
 
-function serve( { rows, list, definition, activity }: Setup = {} ): void {
+function serve( { rows, list, listAnswer, definition, activity }: Setup = {} ): void {
 	const items = rows ?? [ row( 'p1', 'Кружка' ), row( 'p2', 'Футболка' ) ];
 	onActivity = activity ?? ( () => answer( [] ) );
 
@@ -142,19 +144,21 @@ function serve( { rows, list, definition, activity }: Setup = {} ): void {
 			reads.push( { path, data: options.data as never, signal: options.signal } );
 			return Promise.resolve( onActivity( options ) );
 		}
-		if ( path.endsWith( '/definition' ) ) {
+		if ( path.split( '?' )[ 0 ].endsWith( '/definition' ) ) {
 			return Promise.resolve(
 				fixtureDefinitionEnvelope(
 					fixtureDefinition( {
 						activity: LIMITS,
 						messages: { ...fixtureDefinition().messages, ...MESSAGES },
-						...definition,
+						...( typeof definition === 'function' ? definition( path ) : definition ),
 					} )
 				)
 			);
 		}
 
-		return Promise.resolve( fixtureList( items, { account_activity: account(), ...list } ) );
+		return Promise.resolve(
+			listAnswer?.( path ) ?? fixtureList( items, { account_activity: account(), ...list } )
+		);
 	} );
 }
 
@@ -429,6 +433,24 @@ describe( 'the refresh loop', () => {
 		expect( reads.map( ( read ) => read.data.ids ) ).toEqual( [ [ 'p1', 'p2' ], [ 'p3' ] ] );
 	} );
 
+	test( 'the next read comes when the soonest part asked for it, wherever that part is', async () => {
+		let call = 0;
+		serve( {
+			rows: [ row( 'p1', 'A' ), row( 'p2', 'B' ), row( 'p3', 'C' ) ],
+			// The first part holds a running process (fast cadence); the last part is idle (slow).
+			activity: () => answer( [], { refresh_after_ms: ++call % 2 === 1 ? 2000 : 16000 } ),
+		} );
+		await renderTable();
+
+		await wait( LIMITS.refresh_ms );
+		expect( reads ).toHaveLength( 2 );
+
+		await wait( LIMITS.refresh_ms - 1 );
+		expect( reads ).toHaveLength( 2 );
+		await wait( 1 );
+		expect( reads ).toHaveLength( 4 );
+	} );
+
 	test( 'an empty table still reads once for its account line', async () => {
 		serve( {
 			rows: [],
@@ -453,6 +475,30 @@ describe( 'the refresh loop', () => {
 
 		expect( document.querySelector( 'tr[data-key="p2"]' ) ).toBeNull();
 		expect( tableRow( 'p1' ) ).toBeInTheDocument();
+	} );
+
+	test( 'a table that declares no activity shows nothing left over from the previous one', async () => {
+		serve( {
+			list: { account_activity: account( { active: true, text: 'Аккаунт A занят.', blocked_actions: [ 'bulk_export' ] } ) },
+			definition: ( path ) => ( path.includes( 'a2' ) ? { activity: null } : {} ),
+			activity: () => Promise.reject( new Error( 'down' ) ),
+		} );
+		const view = await renderTable();
+
+		expect( screen.getByText( 'Аккаунт A занят.' ) ).toBeVisible();
+		await wait( LIMITS.stale_after_ms );
+		expect( screen.getByText( MESSAGES.activity_stale ) ).toBeVisible();
+
+		view.rerender( <RecordsTable { ...tableProps( { query: { account: 'a2' } } ) } /> );
+		// The old table stays on screen until account a2's definition and list have answered.
+		await wait( 10 );
+
+		expect( screen.queryByText( 'Аккаунт A занят.' ) ).toBeNull();
+		expect( screen.queryByText( MESSAGES.activity_stale ) ).toBeNull();
+		expect( activity.state.get() ).toEqual( { account: null, stale: false, failing: false } );
+
+		await wait( 600_000 );
+		expect( reads.filter( ( read ) => read.data.context.account_id === 'a2' ) ).toHaveLength( 0 );
 	} );
 
 	test( 'unmounting stops the loop and aborts the read in flight', async () => {
@@ -670,6 +716,62 @@ describe( 'old answers never overwrite newer rows', () => {
 		} );
 
 		expect( tableRow( 'p1' ) ).not.toHaveTextContent( 'Товар уже отправляется на маркетплейс.' );
+	} );
+
+	test( 'no read starts while a list read is in flight, and the completed list keeps its locks', async () => {
+		const slow = defer< ListEnvelope >();
+		const view = await renderTable();
+
+		serve( { listAnswer: ( path ) => ( path.includes( 'page=2' ) ? slow.promise : undefined ) } );
+		view.rerender( <RecordsTable { ...tableProps( { query: { paged: '2' } } ) } /> );
+		await flush();
+
+		// Far longer than the cadence: the old rows are about to be replaced, so nothing is asked about them.
+		await wait( LIMITS.refresh_ms * 5 );
+		expect( reads ).toHaveLength( 0 );
+
+		await act( async () => {
+			slow.resolve( fixtureList( [ row( 'p1', 'Кружка', locked( [ process( 'cron-1' ) ] ) ) ] ) );
+			await Promise.resolve();
+		} );
+		expect( tableRow( 'p1' ) ).toHaveTextContent( 'Товар уже отправляется на маркетплейс.' );
+
+		// The loop starts again from the completed list, one full interval later.
+		await wait( LIMITS.refresh_ms - 1 );
+		expect( reads ).toHaveLength( 0 );
+		await wait( 1 );
+		expect( reads ).toHaveLength( 1 );
+		expect( reads[ 0 ].data.ids ).toEqual( [ 'p1' ] );
+	} );
+
+	test( 'a read sent before a slow list read cannot overwrite the list when it answers after it', async () => {
+		const pending = defer< ActivityResponse >();
+		const slow = defer< ListEnvelope >();
+		serve( { activity: () => pending.promise } );
+		const view = await renderTable();
+
+		await wait( LIMITS.refresh_ms );
+		expect( reads ).toHaveLength( 1 );
+
+		serve( {
+			activity: () => pending.promise,
+			listAnswer: ( path ) => ( path.includes( 'page=2' ) ? slow.promise : undefined ),
+		} );
+		view.rerender( <RecordsTable { ...tableProps( { query: { paged: '2' } } ) } /> );
+		await flush();
+		await wait( LIMITS.refresh_ms * 3 );
+
+		await act( async () => {
+			slow.resolve( fixtureList( [ row( 'p1', 'Кружка', locked( [ process( 'cron-1' ) ] ) ) ] ) );
+			await Promise.resolve();
+		} );
+		await act( async () => {
+			pending.resolve( answer( [ row( 'p1', 'Кружка' ) ] ) );
+			await Promise.resolve();
+		} );
+
+		expect( tableRow( 'p1' ) ).toHaveTextContent( 'Товар уже отправляется на маркетплейс.' );
+		expect( exportButton( 'p1' ) ).toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 
 	test( 'rows that left the screen while the read was in flight are not brought back', async () => {
