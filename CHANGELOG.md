@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.1] — 2026-11-11
+### Bug Fixes
+- **marketplace**: Pass the plugin write gate to the framework jobs (#1724)
+
+
+
 ## [2.1.0] — 2026-11-11
 ### Bug Fixes
 - **marketplace**: F14 critic round 1
