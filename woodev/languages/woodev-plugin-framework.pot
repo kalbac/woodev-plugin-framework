@@ -8424,6 +8424,18 @@ msgstr ""
 msgid "Безопасность уведомлений %s"
 msgstr ""
 
+#: marketplace/settings/class-notifications-section.php:308
+msgid "Адрес для приёма уведомлений"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:242
+msgid "Адрес сайта для уведомлений показан в карточках аккаунтов ниже; кнопка «Зарегистрировать URL» сама передаёт его в личный кабинет, вписывать его вручную не нужно."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:243
+msgid "Скопируйте адрес сайта для уведомлений из карточки аккаунта ниже и впишите его в личном кабинете там, где это указано выше."
+msgstr ""
+
 #. translators: %s: marketplace name.
 #: marketplace/settings/class-notifications-section.php:178
 #, php-format

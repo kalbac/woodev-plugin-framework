@@ -126,7 +126,7 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertNull( $handler->get_setting( 'webhook_order_created' ) );
 	}
 
-	public function test_notifications_section_masks_token_and_runs_four_actions_gated_on_license(): void {
+	public function test_notifications_section_shows_the_full_url_and_runs_four_actions_gated_on_license(): void {
 		$fields = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
 		$store  = new Wpdb_Account_Store(
 			$this->db,
@@ -217,8 +217,9 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertCount( 2, $sections, 'the switches card and one account card' );
 		$this->assertSame( 'notifications_webhooks', $sections[0]->get_id() );
 		$desc = $sections[1]->get_description();
-		$this->assertStringNotContainsString( $raw_token, $desc );
-		$this->assertStringContainsString( '[скрыто]', $desc );
+		$this->assertStringContainsString( '<code>https://shop.example/wp-json/woodev/v1/marketplace/' . Sqlite_Tables::MARKETPLACE_ID . '/notifications/' . $acc_id . '/' . $raw_token . '</code>', $desc, 'the merchant copies the full address into the cabinet' );
+		$this->assertStringNotContainsString( '[скрыто]', $desc );
+		$this->assertStringContainsString( 'вписывать его вручную не нужно', $sections[0]->get_description(), 'this adapter registers the address itself' );
 		$this->assertStringContainsString( 'Новые заказы, Остатки', $desc );
 
 		// Execute all 4 tools when licence is valid; state is refreshed in DB.
@@ -262,6 +263,24 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$handler->save();
 
 		$this->assertSame( 'yes', $this->options['woodev_fake_mp_webhook_stocks'] ?? null, 'the row the intake reads' );
+	}
+
+	public function test_an_adapter_that_does_not_register_remotely_tells_the_merchant_to_copy_the_address(): void {
+		$notif = $this->push_section( new Fake_Push_Protocol() );
+		$store = new Wpdb_Account_Store(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt' ),
+			Sqlite_Tables::MARKETPLACE_ID,
+			new Credential_Fields( 'cabinet_id', [ 'api_token' ] )
+		);
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', true, [ 'cabinet_id' => 'CAB-1', 'api_token' => 'sec-1' ] ) );
+
+		$sections = $notif->sections();
+
+		$this->assertStringContainsString( 'Скопируйте адрес сайта для уведомлений', $sections[0]->get_description() );
+		$this->assertStringNotContainsString( 'Зарегистрировать URL', $sections[0]->get_description() );
+		$this->assertStringContainsString( '/notifications/', $sections[1]->get_description(), 'the address to copy is in the account card' );
 	}
 
 	public function test_an_adapter_without_notification_types_gets_no_switches_card(): void {

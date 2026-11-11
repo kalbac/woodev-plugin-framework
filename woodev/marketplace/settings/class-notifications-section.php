@@ -33,7 +33,7 @@ defined( 'ABSPATH' ) || exit;
  * - Completely omitted (`sections() === []` and zero settings registered) when push notifications are unsupported (D2).
  * - A switches card: one on/off switch for every {@see Webhook_Type} the adapter declares, each explained (what it is for, where
  *   in the marketplace cabinet the address goes). The sender addresses and proxies are no merchant's setting ({@see Sender_Network}).
- * - Per-account card shows the masked webhook URL (`/notifications/{id}/[скрыто]`), wanted push event descriptions,
+ * - Per-account card shows the full webhook URL to enter in the marketplace cabinet, wanted push event descriptions,
  *   stored registration status and latest received event, plus the four remote registration actions gated on
  *   {@see License_Gate}.
  *
@@ -170,6 +170,11 @@ final class Notifications_Section implements Settings_Section_Provider {
 		$now         = (int) call_user_func( $this->clock );
 		$types       = $this->webhook_types();
 		$notice      = $this->proxy_notice();
+		$registers   = false;
+
+		foreach ( $this->accounts->all() as $account ) {
+			$registers = $registers || null !== $this->adapter->push_admin( $account->id() );
+		}
 
 		if ( [] !== $types || '' !== $notice ) {
 			$sections[] = Settings_Section::create(
@@ -182,7 +187,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 					},
 					$types
 				),
-				$this->webhooks_html( $types, $marketplace ) . $notice
+				$this->webhooks_html( $types, $marketplace, $registers ) . $notice
 			);
 		}
 
@@ -209,9 +214,10 @@ final class Notifications_Section implements Settings_Section_Provider {
 	 *
 	 * @param Webhook_Type[] $types       Types.
 	 * @param string         $marketplace Marketplace name.
+	 * @param bool           $registers   Whether the adapter registers the address in the cabinet by itself.
 	 * @return string
 	 */
-	private function webhooks_html( array $types, string $marketplace ): string {
+	private function webhooks_html( array $types, string $marketplace, bool $registers ): string {
 		if ( [] === $types ) {
 			return '';
 		}
@@ -232,7 +238,9 @@ final class Notifications_Section implements Settings_Section_Provider {
 			/* translators: %s: marketplace name. */
 			esc_html( sprintf( __( 'Включите уведомления, которые вам нужны: %s сообщит о них сайту сразу, а выключенные сайт не станет принимать.', 'woodev-plugin-framework' ), $marketplace ) ),
 			$items,
-			esc_html__( 'Адрес сайта для уведомлений показан в карточках аккаунтов ниже, а кнопка «Зарегистрировать URL» сама передаёт его в личный кабинет.', 'woodev-plugin-framework' )
+			$registers
+				? esc_html__( 'Адрес сайта для уведомлений показан в карточках аккаунтов ниже; кнопка «Зарегистрировать URL» сама передаёт его в личный кабинет, вписывать его вручную не нужно.', 'woodev-plugin-framework' )
+				: esc_html__( 'Скопируйте адрес сайта для уведомлений из карточки аккаунта ниже и впишите его в личном кабинете там, где это указано выше.', 'woodev-plugin-framework' )
 		);
 	}
 
@@ -268,9 +276,10 @@ final class Notifications_Section implements Settings_Section_Provider {
 	 */
 	private function account_section( Notification_Account $account, string $marketplace, int $now ): Settings_Section {
 		$id         = $account->id();
-		$raw_url    = Notification_Url::for_account( $this->adapter->id(), $account );
-		$masked_url = Report_Redactor::redact_text( $raw_url, [], [ $account->token() ] );
-		$admin      = $this->adapter->push_admin( $id );
+		// The full address, token included: the merchant copies it into the marketplace cabinet (v1 showed it too). The settings
+		// screen is for administrators; logs and the support report still redact the token.
+		$url   = Notification_Url::for_account( $this->adapter->id(), $account );
+		$admin = $this->adapter->push_admin( $id );
 
 		$wanted = null !== $admin ? $admin->wanted_descriptions( $account ) : [];
 		$state  = $account->state();
@@ -296,8 +305,8 @@ final class Notifications_Section implements Settings_Section_Provider {
 
 		$html = sprintf(
 			'<p><strong>%1$s:</strong> <code>%2$s</code></p><p><strong>%3$s:</strong> %4$s</p><p><strong>%5$s:</strong> %6$s</p><p><strong>%7$s:</strong> %8$s</p>',
-			esc_html__( 'Адрес для приёма уведомлений (токен скрыт)', 'woodev-plugin-framework' ),
-			esc_html( $masked_url ),
+			esc_html__( 'Адрес для приёма уведомлений', 'woodev-plugin-framework' ),
+			esc_html( $url ),
 			esc_html__( 'Нужные события', 'woodev-plugin-framework' ),
 			esc_html( $wanted_text ),
 			esc_html__( 'Состояние регистрации', 'woodev-plugin-framework' ),
