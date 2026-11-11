@@ -200,6 +200,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 - Install vs upgrade is a version comparison on `woodev_{id}_version`; delete or hand-edit that option and
   the install routine re-runs (or every upgrade does). →
   `docs-internal/gotchas/lifecycle-install-upgrade-detection.md`
+- Never read plugin tables while building menus or settings sections on `rest_api_init` or other early hooks: the
+  lifecycle creates the tables later (`wp_loaded` in admin), so a fresh install fatals before it ever gets there. Tests whose
+  tables pre-exist never see it — add an install-from-an-empty-database boot test. →
+  `docs-internal/gotchas/a-menu-or-settings-builder-that-reads-plugin-tables-on-rest-api-init-fatals-on-a-fresh-install.md`
 
 ## Licensing (topic `licensing`)
 

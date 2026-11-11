@@ -1,34 +1,36 @@
-> Составлено по итогам s226 (10.11.2026, МакБук). Формат: `DOCS-SCHEMA.md` → Handoff Format. Ветка — `kalbac/s226-save`
-> (PR сохранения, docs-only), framework `main` = `f83a6a7f`. Открытые PR: framework #1478, PR сохранения. Ozon Seller `main` = `5c1c1a5`, PR нет.
+> Составлено по итогам s227 (12.11.2026, МакБук). Формат: `DOCS-SCHEMA.md` → Handoff Format. Ветка `kalbac/s227-save` (docs-only),
+> framework `main` = `d66493c0`, Ozon Seller `main` = `ec5fc97`. Открытый PR: framework #1478.
 
 # Режим следующей сессии
 
-**s227 — интерактивно**, если оператор не скажет иначе. Claude ≤ 2 воркера (слово оператора s226); Codex — только критик, бережно.
+**s228 — интерактивно.** Claude ≤ 2 воркера; Codex — только критик, бережно. Прочесть: `CLAUDE.md`, `AGENTS.md`, `CURRENT-STATE.md`, `sessions/s227.md`, отчёт критика на #1689.
 
 # Решения оператора — читать до любой работы
 
-- **s226, 10.11.2026:** при 96 % недели — сначала сохранить сессию, F6/F7 после сброса (Wed 11.11.2026 08:00).
-- **s225 (в силе):** «the Marketplace module holds ALL non-domain logic, modelled on Shipping and Payment» (`sessions/s225.md`).
-- **s224 (в силе):** React PHP-driven под меню «OZON Seller» через `Marketplace_Plugin`; доставку не трогать; UI-PR — после критика и CI; клик-риг, не скриншоты.
+- **s227, 12.11.2026:** Gemini 4 Carbon (Kilo) не используем.
+- **s225/s224 (в силе):** весь недоменный код — в модуле Marketplace фреймворка; React PHP-driven под меню «OZON Seller»; доставку не трогать; UI-PR — после критика и CI; клик-риг, не скриншоты.
 
 # Ждёт кнопки оператора
 
 1. Без изменений с s223: Инбокс доски №8 (#37 #34 #35 #43); DSN `woodev_error_reporting_dsn`; ключ 1909; #1639 #1474 #1428 #1550;
    ротация после #1554; #1509 #1475 #1476; ozon#90.
+2. Взгляд на риг (Ozon Seller на ядре 2.1.1, классические экраны) — после починки #68.
+
+# Очередь (по порядку)
+
+1. **ozon-seller #68** (fresh-install fatal) — Sonnet 5.5; затем оператор смотрит риг и даёт замечания. Проверить и фреймворковую половину; нужен тест установки с пустой БД.
+2. **F10 #1689** — раунд правок на ветке `kalbac/f10-settings-diagnostics` (worktree `f10-settings-diagnostics` оставлен намеренно) — Sonnet, бриф = отчёт критика на #1689: Must #1 и #3, тумблер «Удалять данные при удалении» ДОЛЖЕН работать (оператор 12.11; `Data\Uninstaller` + `uninstall.php`, по умолч. выкл., тест обоих; коммент. 6807570028), Should #4–#10; затем критик другой линейки (Codex после сброса Sun 16.11 06:04, иначе Opus).
+3. Затем **F11 #1690** → O3; **F12a #1691**, **F12b #1692**, **F13 #1693**, **F15 #1695** → O4; O5.
 
 # Обязательства (перенос)
 
-1. **#1684 (F6), #1685 (F7)** — Sonnet 5.5, разблокированы F5 (s226). Файлы не пересекаются → два воркера параллельно. В силе.
-2. **#1687 (F9a)** — Fable 5.2, один воркер (s225). Затем #1688 (F9b), #1689 (F10) → #1690 (F11); #1691–#1693, #1695 по зависимостям на карточках. В силе.
-3. **Ozon Seller #62 (O2)** ждёт F9a/F9b + выпуск; #63–#65 — по зависимостям; выпуск не раньше O4, #61 открыт (s226). В силе.
-4. **Ozon Seller:** #58 полировка, #59 массовые (вероятно, в O2), #55 — `fixed_in` после выпуска (s224); #49 #50 #45 после релиза (s223).
-5. **Отслеживание #10** — СберЛогистика, сертификат; **#1654** — Бэклог; #1663/#1664 не проверены (s222).
-6. **#1574** — `setup-php` не качает composer под local-ci; Dockerfile — только с его слова (s224).
+1. **Ozon Seller:** #62 открыт до выпуска (`Refs`); #63–#65 по зависимостям; выпуск не раньше O4. #58 полировка, #59 массовые, #55 — `fixed_in` после выпуска; #49 #50 #45 после релиза (s224).
+2. **Отслеживание #10** — СберЛогистика, сертификат; **#1654** — Бэклог; #1663/#1664 не проверены (s222).
+3. **#1574** — `setup-php` не качает composer под local-ci; Dockerfile — только с его слова (s224).
 
-**Закрыто в s226** (не переносится): выпуск 2.0.29 (#1708); #1694 F14 (#1709); #1683 F5 (#1710); ozon-seller O1 PR #66.
-Отложено (комментарии на картах): многотабличные страницы → F12b #1692; паритет проверки сопоставлений → O4 ozon-seller#64.
+Отложено (на картах): R3 F6 → #1691; многотабличные страницы → #1692; паритет сопоставлений → ozon-seller#64.
 
-**Потом:** range #46 (доска №14); range #47; #1698 (tech-debt: flaky `RestRateLimitTraitTest`, PHP 7.4).
+**Потом:** range #46 (доска №14); range #47; #1698 (flaky PHP 7.4 тест).
 
 **Перенесено (в силе):** ozon#84 #92, #1571, woodev-russian-post#73; #1532 #1528 #1519 #1552; ozon#82; #1538 + yandex#152; woodev-russian-post#69;
 edostavka#166; #1279; #1415; R3 #24; #1500; yandex#140 п. 2; woodev-russian-post#66; WC #69896 / #1332, WC #69559 (#1381, #1524), edostavka#145; #1314 #780 #1438 #886 #878 #809; #1638 #1640.
@@ -124,29 +126,31 @@ edostavka#166; #1279; #1415; R3 #24; #1500; yandex#140 п. 2; woodev-russian-pos
 
 Плюс s226: #1708 #1709 #1710; `woocommerce-ozon-seller#66`.
 
+Плюс s227: #1715 #1716 #1717 #1721 #1723 #1724 #1725; `woocommerce-ozon-seller#67` `#68`.
+
 <!-- markdownlint-enable MD018 -->
 
 # С чего начать
 
-0. `orchestration` + `orca-team`; CLI `/Applications/Orca.app/Contents/Resources/bin/orca`; `orca account list --json` (смотреть `updatedAt`).
-1. После сброса: F6 (#1684) и F7 (#1685) — два Sonnet-воркера, критик Codex sol R1 / luna R2; бандл пересобирает координатор в primary checkout.
-2. Затем F9a (#1687) — один Fable 5.2.
+0. `orchestration` + `orca-team`; CLI `/Applications/Orca.app/Contents/Resources/bin/orca`; `orca account list --json`.
+1. #68 и F10-раунд (два Sonnet) параллельно; бандлы — координатор, primary checkout. Бриф и отчёт критика — разные файлы.
 
-# Что доказано замером
+# Доказано замером
 
-- 10.11.2026 (s226): Fable 5.2 high на L-карточке F5 + раунд правок Sonnet ≈ 3 pp недельного лимита Claude (93 → 96 %).
+- 12.11.2026: Gemini 4 Carbon (Kilo) на F10 — $27.63, 680 строк дубликатов.
 
 # Ловушки
 
-- local-ci на этом Маке: нет `/var/run/docker.sock` → `export LOCAL_CI_DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock`. → `local-ci-on-orbstack-needs-local-ci-docker-host-not-docker-host`.
-- Воркеры пушат с `--no-verify` (pre-push отвергает бандлы из worktree) — координатор пересобирает бандлы в primary checkout.
+- local-ci на этом Маке: `export LOCAL_CI_DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock`; запуск только `npx --yes run-local-ci run …` (без `--yes` молча ждёт «Ok to proceed?», ~2 ч потеряно).
+- `gh pr merge --delete-branch` удаляет worktree воркера в Orca: follow-up воркеру — ДО мержа.
 
 # Состояние на входе
 
 | | |
 |---|---|
-| Дерево | `kalbac/s226-save` (docs-only); framework `main` = `f83a6a7f` |
-| Выпуски | framework **2.0.29** (`v2.0.29`); маркетплейс не выпущен в плагинах; доставка на 2.0.28 |
-| Открытые PR | framework #1478; PR сохранения s226 |
-| Гочи | 511, без новых (s226) |
-| Лимиты | Claude weekly 96 % (сброс Wed 11.11.2026 08:00); Codex 87 % (сброс Sun 15.11.2026) |
+| Дерево | `kalbac/s227-save` (docs-only); framework `main` = `d66493c0` |
+| Выпуски | framework **2.1.1**; доставка на 2.0.28; Ozon Seller не выпущен |
+| Риг | Ozon Seller примонтирован, ДЕАКТИВИРОВАН до починки #68 |
+| Worktree | `f10-settings-diagnostics` — намеренно оставлен |
+| Гочи | 517 (+6 в s227) |
+| Лимиты | Claude weekly 14 % (сброс Wed 18.11); Codex 98 % (сброс Sun 16.11 06:04) |

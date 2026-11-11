@@ -402,6 +402,15 @@ consumed, and a "the brief's baseline is stale" that turned out to be the skippe
 > `kilo run --auto` critic from the coordinator's shell is refused by the auto-mode classifier («Create Unsafe Agents») —
 > go through Orca. Kilo critics report `activity: unknown` in `worker-list`; the terminal watchdog still works.
 
+> **s227 (11-12.11.2026): Gemini 4 Carbon through Kilo was measured as a WORKER on F10 #1689 and is NOT used for our cards.** Launch:
+> `worker-start --agent kilo` after pinning the model with `kilo run -m kilo/google/gemini-4-carbon "Reply PONG"` (Kilo Gateway, effort
+> medium, kilo 7.8.27). Cost **$27.63** for about 2 h: 22.8 M tokens (10.9 M uncached input, 34.4 M cache read, 175 K output) at a 50 %
+> launch discount ($2/$10 per M). For scale, a Fable 5.2 L card is about 3 pp of the $100 Claude weekly (roughly $1 equivalent) and a
+> Codex $20 subscription does the same inside one 5 h window. Quality: gate green (9,719 tests) and acceptance met, but the critic
+> (Opus 5.5) found 3 Must and 7 Should and about 680 lines (11-14 %) duplicate or dead code; the model said Serena is Claude-only, did
+> not use it, and re-implemented framework helpers. Verdict (operator + coordinator): 25-30x the cost of the subscriptions, Sonnet-level
+> quality, does not search for existing code. The branch `kalbac/f10-settings-diagnostics` is kept for one fix round (see #1689).
+
 > **Status, 28.08.2026 (s102): Codex is back, the subscription was renewed, and it is the default
 > critic again — smoke-tested through Orca, not assumed.** Everything below stays as the FALLBACK
 > recipe: it is what you need the day Codex is unreachable again, and every measurement in it was

@@ -34,6 +34,10 @@ from the log, not only the exit code. Under zsh, `${PIPESTATUS[0]}` is empty —
 
 > **Token (s205):** `--commit-status` needs a GitHub token; export `LOCAL_CI_GITHUB_TOKEN` in the shell and never pass `--github-token` — the flag puts the token on argv: [local-ci-github-token-flag-puts-the-token-on-argv](local-ci-github-token-flag-puts-the-token-on-argv.md).
 
+## Seen again (s227)
+
+A coordinator-side `local-ci` helper script that still ran plain `npx run-local-ci` sat silently on the prompt for about two hours in s227. Every script and recipe that launches it must say `npx --yes run-local-ci run …` (`--yes` and `-y` are the same flag).
+
 ## Related
 
 - [run-local-ci-requires-run-subcommand](run-local-ci-requires-run-subcommand.md) — the sibling trap (the `run` subcommand); the `npx -y` rule is summarised there and owned here

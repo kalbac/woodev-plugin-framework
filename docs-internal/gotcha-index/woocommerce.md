@@ -5,6 +5,7 @@
 
 ## [woocommerce/*] — WooCommerce-specific
 
+- [woocommerce/hpos] **`Order_Query` `status => ['any']` is read literally by HPOS on WC 8.5/9.3 and returns nothing — omit the argument when the caller means «any».** → [order-query-status-any-is-read-literally-by-hpos-on-wc-8-5-and-9-3](../gotchas/order-query-status-any-is-read-literally-by-hpos-on-wc-8-5-and-9-3.md) (s227)
 - [woocommerce/shipping] **WooCommerce resets the chosen method to the default (often Free shipping) when ONE rate id appears or disappears; only its local pickup is exempt — filter `woocommerce_shipping_chosen_method` (#1268).** → [woocommerce-resets-the-chosen-shipping-method-on-any-rate-set-change](../gotchas/woocommerce-resets-the-chosen-shipping-method-on-any-rate-set-change.md) (s176)
 - [woocommerce/shipping-api-broken-contract] **Shipping_API interface references types that don't exist in the framework.** RESOLVED 2026-06-02 (interface narrowed). → [shipping-api-broken-contract](../gotchas/shipping-api-broken-contract.md)
 - [woocommerce/shipping] **`add_rate()` discards `description`/`delivery_time` silently, though `WC_Shipping_Rate` has had both since WC 9.2.0 — set them on the object AFTERWARDS.** → [wc-add-rate-ignores-the-rate-description-and-delivery-time](../gotchas/wc-add-rate-ignores-the-rate-description-and-delivery-time.md) (s117)
