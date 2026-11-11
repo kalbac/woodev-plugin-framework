@@ -723,6 +723,30 @@ final class LinkJobsTest extends Export_Test_Case {
 	}
 
 	/**
+	 * A card replaced between the list and the detail by another one that reuses the article is not linked, not marked archived and
+	 * not reported as a near match: the framework compares the stable identifiers even when the adapter confirms the article only.
+	 *
+	 * @return void
+	 */
+	public function test_a_replacement_card_with_the_same_article_is_neither_linked_nor_reported(): void {
+		$this->shop                           = [ $this->shop_product( 101, 'OW-TEST-1' ), $this->shop_product( 102, 'ow-test-2' ) ];
+		$this->resolver->cards[0]['archived'] = true;
+		// Same article, another remote card: the list showed card 11 and card 12, the details now answer for 911 and 912.
+		$this->resolver->details['OW-TEST-1'] = $this->detail( 911, 'OW-TEST-1' );
+		$this->resolver->details['OW-TEST-2'] = $this->detail( 912, 'OW-TEST-2' );
+
+		$this->jobs()->link_cards( $this->account_id, 0, 0 );
+
+		$this->assertSame( 0, $this->links()->count( $this->account_id ), 'the replacement is not linked, archived or otherwise' );
+		$this->assertSame( [], $this->reports()->near_matches( $this->account_id ) );
+
+		$run = $this->reports()->last_run( $this->account_id );
+
+		$this->assertSame( 0, $run['linked'] );
+		$this->assertSame( 1, $run['busy'], 'the exact pair is left for the next run' );
+	}
+
+	/**
 	 * Two products that normalise to the same article are not linked and are counted.
 	 *
 	 * @return void

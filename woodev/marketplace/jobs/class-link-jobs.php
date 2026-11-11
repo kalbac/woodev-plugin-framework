@@ -16,6 +16,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Flows\Card_Identity;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Card_Matcher;
 use Woodev\Framework\Marketplace\Flows\Link_Resolve_Exception;
@@ -467,7 +468,7 @@ final class Link_Jobs {
 	 * @throws Claim_Lost When the write finds the claim taken over.
 	 */
 	private function link_pair( int $account_id, array $pair, array $details, Claim_Fence $fence, array &$tally ): void {
-		$card = $this->resolver->confirmed( $pair['card'], $details[ (string) $pair['card']['offer_id'] ] ?? null );
+		$card = $this->confirm( $pair['card'], $details );
 
 		// The marketplace did not return the card's detail, or returned another article for it: the next run tries again.
 		if ( null === $card ) {
@@ -495,6 +496,21 @@ final class Link_Jobs {
 	}
 
 	/**
+	 * Confirms a summary card with its detail: the adapter's answer, and the framework's own check that it is still the same remote
+	 * card. A card replaced between the list and the detail by another one with the same article is refused here, whatever the
+	 * adapter's {@see Link_Resolver::confirmed()} made of the article.
+	 *
+	 * @param array<string,mixed>               $summary Summary card.
+	 * @param array<string,array<string,mixed>> $details Card details by `offer_id`.
+	 * @return array<string,mixed>|null Null when there is no detail, it names another article, or it is another remote card.
+	 */
+	private function confirm( array $summary, array $details ): ?array {
+		$card = $this->resolver->confirmed( $summary, $details[ (string) $summary['offer_id'] ] ?? null );
+
+		return null !== $card && Card_Identity::same( $summary, $card ) ? $card : null;
+	}
+
+	/**
 	 * Builds the entries of the near-match report.
 	 *
 	 * @param array<int,array<string,mixed>>    $near    Near pairs of the matcher.
@@ -505,7 +521,7 @@ final class Link_Jobs {
 		$entries = [];
 
 		foreach ( $near as $pair ) {
-			$card = $this->resolver->confirmed( $pair['card'], $details[ (string) $pair['card']['offer_id'] ] ?? null );
+			$card = $this->confirm( $pair['card'], $details );
 
 			if ( null === $card ) {
 				continue; // No detail, or a detail that names another article: the pair would store a card that is not one.

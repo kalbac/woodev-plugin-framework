@@ -78,6 +78,9 @@ interface Link_Resolver {
 	 * @param array<string,mixed>      $card   Summary card.
 	 * @param array<string,mixed>|null $detail Its detail, null when the marketplace did not answer for it.
 	 * @return array<string,mixed>|null Null when there is no detail, or the detail names another article: such a pair must not be linked.
+	 *                                  The framework also requires the returned card's `remote_ids` to agree with the summary's on
+	 *                                  every identifier both carry ({@see Card_Identity}), so a card replaced between the two reads by
+	 *                                  another one with the same article is refused even if this method compares the article only.
 	 */
 	public function confirmed( array $card, ?array $detail ): ?array;
 
