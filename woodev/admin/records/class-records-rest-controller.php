@@ -25,8 +25,8 @@ defined( 'ABSPATH' ) || exit;
  * 6. the provider's own object check ({@see Records_Provider::authorize()}) → else 404;
  * 7. only then the provider reads rows, and its answer is rebuilt by {@see Row_Normalizer}.
  *
- * The action routes (preview, apply) and the activity route are added by their own cards
- * through the same registry; they are not registered here.
+ * The action routes (preview, apply) are added by their own card through the same registry; the
+ * read-only `POST R/activity` route (activity card) is registered here.
  *
  * @since 2.0.29
  */
@@ -79,6 +79,16 @@ final class Records_Rest_Controller {
 				]
 			);
 		}
+
+		register_rest_route(
+			$namespace,
+			self::ROUTE_BASE . '/activity',
+			[
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ $this, 'post_activity' ],
+				'permission_callback' => [ $this, 'check_permission' ],
+			]
+		);
 	}
 
 	/**
@@ -251,6 +261,74 @@ final class Records_Rest_Controller {
 	}
 
 	/**
+	 * `POST R/activity` — the current state of the rows on screen, from local state only.
+	 *
+	 * A POST because the id list does not fit a URL; it still only reads. The body is
+	 * `{ context, ids }` and nothing else.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function post_activity( \WP_REST_Request $request ) {
+		$body = $this->activity_body( $request );
+		if ( $body instanceof \WP_Error ) {
+			return $body;
+		}
+
+		// `open()` reads the context from the query; this route carries it in the body.
+		$request->set_query_params( [ 'context' => $body['context'] ?? null ] );
+
+		$call = $this->open( $request, [ 'context' ] );
+		if ( $call instanceof \WP_Error ) {
+			return $call;
+		}
+
+		$ids = Activity_Reader::ids( $call['definition'], $body['ids'] ?? [] );
+		if ( $ids instanceof \WP_Error ) {
+			return $ids;
+		}
+
+		$denied = $this->authorize( $call, 'activity', $ids );
+		if ( null !== $denied ) {
+			return $denied;
+		}
+
+		try {
+			$result = Activity_Reader::read( $call['definition'], $call['registration']->get_provider(), $call['context'], $ids );
+		} catch ( \Throwable $e ) {
+			return $this->fail( $call, 'activity', $e );
+		}
+		if ( $result instanceof \WP_Error ) {
+			return $result;
+		}
+
+		$result['messages'] = $this->json_map( $result['messages'] );
+
+		return $this->respond( $result );
+	}
+
+	/**
+	 * The JSON body of the activity route; anything but `context` and `ids` is refused.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return array<string,mixed>|\WP_Error
+	 */
+	private function activity_body( \WP_REST_Request $request ) {
+		$body = $request->get_json_params();
+		$body = null === $body ? [] : $body;
+
+		if ( ! is_array( $body ) ) {
+			return Records_Error::invalid( 'body' );
+		}
+
+		$unknown = Query_Validator::reject_unknown( $request->get_query_params(), [] ) ?? Query_Validator::reject_unknown( $body, [ 'context', 'ids' ] );
+
+		return $unknown ?? $body;
+	}
+
+	/**
 	 * Steps 1, 3 and 4 shared by every route: parameters, definition, account.
 	 *
 	 * @param \WP_REST_Request $request Request.
@@ -333,17 +411,20 @@ final class Records_Rest_Controller {
 			return $page;
 		}
 
-		return $this->respond(
-			[
-				'rows'        => $page['rows'],
-				'total'       => $page['total'],
-				'page'        => $query['page'],
-				'per_page'    => $query['per_page'],
-				'total_pages' => (int) ceil( $page['total'] / $query['per_page'] ),
-				'facets'      => $this->json_map( $page['facets'] ),
-				'messages'    => $this->json_map( $page['messages'] ),
-			]
-		);
+		$body = [
+			'rows'        => $page['rows'],
+			'total'       => $page['total'],
+			'page'        => $query['page'],
+			'per_page'    => $query['per_page'],
+			'total_pages' => (int) ceil( $page['total'] / $query['per_page'] ),
+			'facets'      => $this->json_map( $page['facets'] ),
+		];
+		if ( ! $children ) {
+			$body['account_activity'] = $page['account_activity'];
+		}
+		$body['messages'] = $this->json_map( $page['messages'] );
+
+		return $this->respond( $body );
 	}
 
 	/**

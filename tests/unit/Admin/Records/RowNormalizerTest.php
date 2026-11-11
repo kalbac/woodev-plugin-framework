@@ -44,7 +44,7 @@ class RowNormalizerTest extends TestCase {
 
 		$out = $this->page( [ $row ] )['rows'][0];
 
-		$this->assertSame( [ 'id', 'revision', 'cells', 'actions', 'selectable', 'has_children' ], array_keys( $out ) );
+		$this->assertSame( [ 'id', 'revision', 'cells', 'actions', 'selectable', 'has_children', 'activity' ], array_keys( $out ) );
 		$this->assertStringNotContainsString( 'secret-token', json_encode( $out ) );
 	}
 

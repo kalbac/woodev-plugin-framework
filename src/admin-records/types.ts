@@ -8,6 +8,8 @@
  * @package woodev-plugin-framework
  */
 
+import type { AccountActivity, RowActivity } from './activity/types';
+
 export type CellType = 'text' | 'link' | 'badge' | 'number' | 'date' | 'stack' | 'actions' | 'progress';
 export type FilterType = 'search' | 'select' | 'multi_select' | 'boolean' | 'date_range';
 export type Alignment = 'left' | 'center' | 'right';
@@ -156,6 +158,8 @@ export interface AdminRecord {
 	actions: RowActionState[];
 	selectable: boolean;
 	has_children: boolean;
+	/** Locks, blocked actions and processes (the activity part); PHP always sends it, an old fixture may not. */
+	activity?: RowActivity;
 }
 
 export interface Facet {
@@ -171,6 +175,8 @@ export interface ListEnvelope {
 	per_page: number;
 	total_pages: number;
 	facets: Record< string, Facet[] >;
+	/** Work that belongs to the whole account; absent from a children page. */
+	account_activity?: AccountActivity;
 	messages: Messages;
 }
 
