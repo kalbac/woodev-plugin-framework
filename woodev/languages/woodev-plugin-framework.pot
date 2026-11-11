@@ -7375,3 +7375,136 @@ msgstr ""
 msgid "Минимальная цена, % от обычной"
 msgstr ""
 
+#: marketplace/jobs/class-price-flush-runner.php:167
+msgid "Цены пока не отправляются: аккаунт ещё не готов к записи на маркетплейс."
+msgstr ""
+
+#: marketplace/jobs/class-price-flush-runner.php:257
+msgid "Товар или его связь с карточкой маркетплейса больше не существуют."
+msgstr ""
+
+#: marketplace/jobs/class-price-flush-runner.php:379
+msgid "Маркетплейс не вернул ответ по этому товару."
+msgstr ""
+
+#: marketplace/sync/class-price-refresh-result.php:136
+msgid "В настройках аккаунта цены не берутся с маркетплейса."
+msgstr ""
+
+#: marketplace/sync/class-price-refresh-result.php:140
+msgid "Нечего обновлять (цены совпадают)"
+msgstr ""
+
+#. translators: %d: number of products whose shop prices were updated
+#: marketplace/sync/class-price-refresh-result.php:142
+#, php-format
+msgid "Цены на сайте обновлены: %d"
+msgstr ""
+
+#. translators: 1: the summary so far, 2: number of skipped products, 3: the reason of the first skipped one
+#: marketplace/sync/class-price-refresh-result.php:149
+#, php-format
+msgid "%1$s; пропущено: %2$d (%3$s)"
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:97
+msgid "Маркетплейс не вернул цену этого товара."
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:122
+msgid "Товар не связан с карточкой маркетплейса."
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:124
+msgid "Для товара выключена синхронизация цен."
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:126
+msgid "Карточка на маркетплейсе ещё не создана."
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:149
+msgid "Товар удалён с сайта."
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:185
+msgid "Валюта магазина и валюта кабинета разные, а правила валюты в профиле нет."
+msgstr ""
+
+#. translators: 1: currency the marketplace keeps the price in, 2: currency of the cabinet
+#: marketplace/sync/class-price-refresher.php:192
+#, php-format
+msgid "Маркетплейс хранит цену в другой валюте (%1$s), чем кабинет (%2$s)."
+msgstr ""
+
+#. translators: %s: technical reason
+#: marketplace/sync/class-price-refresher.php:200
+#, php-format
+msgid "Правило цены, курс или своя цена не читаются: %s"
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:206
+msgid "Цена для маркетплейса у товара задана отдельно (своя цена или поле товара) — обратный расчёт невозможен."
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:213
+msgid "Цена маркетплейса меньше наценки — цена сайта получилась бы нулевой."
+msgstr ""
+
+#. translators: 1: marketplace order number, 2: error text
+#: marketplace/sync/class-registry-stock-accounting.php:347
+#, php-format
+msgid "Остатки по заказу маркетплейса %1$s учтены не полностью, повтор через 2 минуты: %2$s"
+msgstr ""
+
+#. translators: %d: number of products whose stock the marketplace accepted
+#: marketplace/sync/class-stock-flush-result.php:101
+#, php-format
+msgid "Отправлено: %d"
+msgstr ""
+
+#. translators: %s: the marketplace's error texts
+#: marketplace/sync/class-stock-flush-result.php:106
+#, php-format
+msgid "Ошибка: %s"
+msgstr ""
+
+#: marketplace/sync/class-stock-flush-result.php:114
+msgid "Нечего отправлять (значения совпадают)"
+msgstr ""
+
+#: marketplace/sync/class-stock-flush-result.php:115
+msgid "Ожидает отправки: маркетплейс просит подождать"
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:286
+msgid "Не выбран склад."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:287
+msgid "Склад товара изменился."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:304
+msgid "Связь с карточкой маркетплейса удалена."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:308
+msgid "Карточка в архиве маркетплейса."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:312
+msgid "Остатки ведёт маркетплейс: магазин их не отправляет."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:316
+msgid "Синхронизация остатков товара выключена."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:427
+msgid "Маркетплейс не ответил по этому товару."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:521
+msgid "Маркетплейс не подтвердил отправку карточки в архив."
+msgstr ""
