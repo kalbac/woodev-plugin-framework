@@ -309,4 +309,23 @@ interface Marketplace_Adapter {
 	 * @return \Woodev\Framework\Marketplace\Flows\Label_Provider|null Null when the marketplace has no labels.
 	 */
 	public function label_provider(): ?\Woodev\Framework\Marketplace\Flows\Label_Provider;
+
+	/**
+	 * Returns the reader of the cabinet's existing cards, for linking them to shop products and for the tab that lists them.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return \Woodev\Framework\Marketplace\Flows\Link_Resolver
+	 */
+	public function link_resolver(): \Woodev\Framework\Marketplace\Flows\Link_Resolver;
+
+	/**
+	 * Returns the part of the catalogue refresh that talks to the marketplace: its category tree and the attributes of the
+	 * categories that mappings use.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return \Woodev\Framework\Marketplace\Flows\Catalog_Refresher
+	 */
+	public function catalog_refresher(): \Woodev\Framework\Marketplace\Flows\Catalog_Refresher;
 }
