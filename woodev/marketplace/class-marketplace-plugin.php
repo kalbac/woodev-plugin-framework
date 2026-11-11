@@ -352,6 +352,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		}
 
 		/**
+		 * Whether the menu gets a «Настройки» page.
+		 *
+		 * The default {@see self::get_settings_providers()} builds a handler that loads every account, so the menu, which is built
+		 * on each `rest_api_init`, must not call it just to learn that there is a tab (#1727). For the default implementation the
+		 * answer is whether the account store is the {@see Wpdb_Account_Store} that implementation needs. A plugin that overrides
+		 * `get_settings_providers()` has its own providers to count, and they are asked.
+		 *
+		 * @since 2.1.2
+		 *
+		 * @return bool
+		 */
+		protected function has_settings_page(): bool {
+			$declaring = ( new \ReflectionMethod( $this, 'get_settings_providers' ) )->getDeclaringClass()->getName();
+
+			if ( self::class === $declaring ) {
+				return $this->get_account_store() instanceof Wpdb_Account_Store;
+			}
+
+			return [] !== $this->get_settings_providers();
+		}
+
+		/**
+		 * Whether the lifecycle has created the tables at least once. A plugin without the marketplace lifecycle counts as installed.
+		 *
+		 * @return bool
+		 */
+		private function is_schema_installed(): bool {
+			$lifecycle = $this->get_lifecycle_handler();
+
+			return ! $lifecycle instanceof Lifecycle || $lifecycle->is_installed();
+		}
+
+		/**
 		 * Tells whether the current admin screen is this plugin's «Настройки» page under its own menu.
 		 *
 		 * @since 2.1.2
@@ -498,7 +531,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		private function build_menu(): ?Menu {
 			try {
 				$pages    = [];
-				$settings = [] !== $this->get_settings_providers() ? [ $this->build_settings_page() ] : [];
+				$settings = $this->has_settings_page() ? [ $this->build_settings_page() ] : [];
 
 				foreach ( $this->get_marketplace_pages() as $descriptor ) {
 					$pages[] = Page::from_array( (array) $descriptor );
@@ -507,7 +540,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				// WordPress links the root to the first page of the menu: «Настройки» (onboarding) until the plugin is configured,
 				// the working pages first once it is. Without a settings page the order cannot change, so the table is not read.
 				if ( [] !== $settings ) {
-					$pages = $this->is_configured() ? array_merge( $pages, $settings ) : array_merge( $settings, $pages );
+					// A site whose tables were not created yet (a fresh activation, or a refused CREATE) is not configured, and the
+					// accounts table is not read to find out (#1727).
+					$configured = $this->is_schema_installed() && $this->is_configured();
+					$pages      = $configured ? array_merge( $pages, $settings ) : array_merge( $settings, $pages );
 				}
 
 				return new Menu( $this->get_id(), $this->get_marketplace_menu(), $pages, $this->get_marketplace_views() );

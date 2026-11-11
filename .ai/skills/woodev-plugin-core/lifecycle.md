@@ -36,7 +36,9 @@ What it does (all verified in `woodev/class-lifecycle.php`):
   upgrade that a front-end request depends on having already run, and do not assume WP-CLI triggers it.
   **Exception — a marketplace plugin** (`Marketplace_Plugin`): its `Marketplace\Data\Lifecycle` ALSO installs on an
   early `init` of a REST / WP-CLI / cron request while no version is stored (#1727), because those plugins read their
-  tables from such requests. Upgrades stay admin-only; a failed install is retried at most every 5 minutes there.
+  tables from such requests. Upgrades stay admin-only; a failed install is retried at most every 5 minutes there. The first install runs under a
+  per-plugin `options` lock (`woodev_{id}_install_lock`, 60 s): a request that does not get it skips the install.
+  The menu treats a site with no stored version as not configured without reading the accounts table.
 - **Detects install vs upgrade by comparing versions.** `get_installed_version()` reads the option
   `woodev_{plugin id}_version` (`Woodev_Plugin::get_plugin_version_name()`); empty → `install()`
   then store an `install` event and fire `woodev_{plugin id}_installed`; lower than the plugin version →

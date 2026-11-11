@@ -34,6 +34,20 @@ final class Lifecycle extends \Woodev_Lifecycle {
 	public const NOTICE_SCHEMA_FAILED = 'schema_failed';
 
 	/**
+	 * Seconds after which a first-install lock counts as left by a crashed request.
+	 *
+	 * @var int
+	 */
+	private const INSTALL_LOCK_TTL = 60;
+
+	/**
+	 * Whether the last {@see self::run_lifecycle()} ended in a refused CREATE.
+	 *
+	 * @var bool
+	 */
+	private $install_failed = false;
+
+	/**
 	 * Schema; resolved from the plugin's adapter on first use when none was given.
 	 *
 	 * @var Schema|null
@@ -62,15 +76,34 @@ final class Lifecycle extends \Woodev_Lifecycle {
 	 * upgrade is tried again on the next admin page load and no `…_installed` action runs against missing tables. The merchant
 	 * gets an error notice. Any other exception is not ours and goes up.
 	 *
+	 * The FIRST install runs under a per-plugin lock: two requests arriving right after activation (a REST call and a cron
+	 * event, or two admin tabs) would otherwise both run `dbDelta` and the `…_installed` callbacks. The request that does not get
+	 * the lock skips the install (readers of the tables already tolerate their absence) and the winner stores the version.
+	 *
 	 * @since 2.0.29
 	 *
 	 * @return void
 	 */
 	public function init() {
+		if ( $this->is_installed() ) {
+			$this->run_lifecycle();
+
+			return;
+		}
+
+		$token = $this->acquire_install_lock();
+
+		if ( null === $token ) {
+			return;
+		}
+
 		try {
-			parent::init();
-		} catch ( Schema_Exception $exception ) {
-			$this->report_schema_failure( $exception );
+			// Another request may have finished between the check above and the lock.
+			if ( ! $this->is_installed() ) {
+				$this->run_lifecycle();
+			}
+		} finally {
+			$this->release_install_lock( $token );
 		}
 	}
 
@@ -116,11 +149,99 @@ final class Lifecycle extends \Woodev_Lifecycle {
 			return;
 		}
 
+		$this->install_failed = false;
+
 		$this->init();
 
-		if ( '' === (string) $this->get_installed_version() ) {
+		// Only a failed CREATE is marked: a request that lost the install lock to another one is not a failure.
+		if ( $this->install_failed ) {
 			set_transient( $mark, 1, 5 * MINUTE_IN_SECONDS );
 		}
+	}
+
+	/**
+	 * Whether the lifecycle has stored a version, that is, the tables were created at least once.
+	 *
+	 * Cheap (one option read): the menu uses it to leave the tables alone on a site that is not installed yet.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @return bool
+	 */
+	public function is_installed(): bool {
+		return '' !== (string) $this->get_installed_version();
+	}
+
+	/**
+	 * The parent lifecycle with a refused CREATE turned into a log line and a notice.
+	 *
+	 * @return void
+	 */
+	private function run_lifecycle(): void {
+		try {
+			parent::init();
+		} catch ( Schema_Exception $exception ) {
+			$this->install_failed = true;
+			$this->report_schema_failure( $exception );
+		}
+	}
+
+	/**
+	 * Takes the first-install lock: an `options` row that `INSERT IGNORE` can create for one request only, the way core's
+	 * `WP_Upgrader::create_lock()` does it. A row older than the TTL is a crashed request's; of two requests finding it, the
+	 * compare-and-set lets one take it over.
+	 *
+	 * @return string|null The token to release it with, or null when another request holds it.
+	 */
+	private function acquire_install_lock(): ?string {
+		global $wpdb;
+
+		$name  = $this->install_lock_name();
+		$now   = time();
+		$token = $now . '|' . bin2hex( random_bytes( 8 ) );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- An atomic lock cannot go through the options API.
+		$inserted = $wpdb->query(
+			$wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` ( `option_name`, `option_value`, `autoload` ) VALUES ( %s, %s, 'no' )", $name, $token )
+		);
+
+		if ( $inserted ) {
+			return $token;
+		}
+
+		$held = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM `{$wpdb->options}` WHERE option_name = %s", $name ) );
+
+		if ( '' === $held || (int) $held > $now - self::INSTALL_LOCK_TTL ) {
+			return null;
+		}
+
+		$taken = $wpdb->query(
+			$wpdb->prepare( "UPDATE `{$wpdb->options}` SET option_value = %s WHERE option_name = %s AND option_value = %s", $token, $name, $held )
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return $taken ? $token : null;
+	}
+
+	/**
+	 * Releases the first-install lock, only when this request still owns it.
+	 *
+	 * @param string $token What {@see self::acquire_install_lock()} returned.
+	 * @return void
+	 */
+	private function release_install_lock( string $token ): void {
+		global $wpdb;
+
+		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE option_name = %s AND option_value = %s", $this->install_lock_name(), $token ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		);
+	}
+
+	/**
+	 * @return string The `options` row that holds the lock of this plugin.
+	 */
+	private function install_lock_name(): string {
+		return 'woodev_' . $this->get_plugin()->get_id() . '_install_lock';
 	}
 
 	/**

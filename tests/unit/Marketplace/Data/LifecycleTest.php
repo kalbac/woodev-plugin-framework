@@ -66,6 +66,13 @@ final class LifecycleTest extends TestCase {
 	private $options = [];
 
 	/**
+	 * Runs once inside the next `dbDelta` call: the other request that arrives while the first one installs.
+	 *
+	 * @var callable|null
+	 */
+	private $during_delta;
+
+	/**
 	 * Transient store behind the `get_transient()` / `set_transient()` doubles.
 	 *
 	 * @var array<string,mixed>
@@ -89,6 +96,12 @@ final class LifecycleTest extends TestCase {
 		Functions\when( 'dbDelta' )->alias(
 			function ( $statements ) {
 				$this->delta_batches[] = $statements;
+
+				if ( null !== $this->during_delta ) {
+					$hook               = $this->during_delta;
+					$this->during_delta = null;
+					$hook();
+				}
 
 				if ( $this->creation_works ) {
 					foreach ( $statements as $statement ) {
@@ -248,6 +261,78 @@ final class LifecycleTest extends TestCase {
 
 		$this->assertSame( [], $this->delta_batches );
 		$this->assertArrayNotHasKey( 'woodev_fake-seller_version', $this->options );
+	}
+
+	/**
+	 * A second request that reaches the first install while the first one is inside `dbDelta` does not install: the tables are
+	 * created once and the `…_installed` callbacks run once, whichever entry point (admin `init()` or the early hook) each took.
+	 *
+	 * @return void
+	 */
+	public function test_a_second_entry_during_the_first_install_does_not_install_again(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_is_active' => 'yes' ] );
+		$this->use_transient_store();
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Actions\expectDone( 'woodev_fake-seller_installed' )->once();
+
+		$this->during_delta = function (): void {
+			$this->lifecycle->init(); // The admin entry point of a second request.
+			$this->lifecycle->install_outside_admin(); // And its non-admin one.
+		};
+
+		$this->lifecycle->install_outside_admin();
+
+		$this->assertCount( 1, $this->delta_batches, 'one dbDelta run' );
+		$this->assertSame( '2.0.0', $this->options['woodev_fake-seller_version'] );
+		$this->assertSame( [], $GLOBALS['wpdb']->locks, 'the lock is released' );
+		$this->assertSame( [], $this->transients, 'losing the lock is not a failed install' );
+	}
+
+	/**
+	 * A lock row that is held and fresh keeps a request from installing; one left by a crashed request is taken over.
+	 *
+	 * @return void
+	 */
+	public function test_a_held_lock_blocks_the_install_until_it_is_stale(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_is_active' => 'yes' ] );
+
+		$GLOBALS['wpdb']->locks['woodev_fake-seller_install_lock'] = time() . '|other-request';
+		$this->lifecycle->init();
+
+		$this->assertSame( [], $this->delta_batches, 'held: skipped' );
+		$this->assertArrayNotHasKey( 'woodev_fake-seller_version', $this->options );
+
+		$GLOBALS['wpdb']->locks['woodev_fake-seller_install_lock'] = ( time() - 3600 ) . '|crashed-request';
+		$this->lifecycle->init();
+
+		$this->assertCount( 1, $this->delta_batches, 'stale: taken over' );
+		$this->assertSame( '2.0.0', $this->options['woodev_fake-seller_version'] );
+		$this->assertSame( [], $GLOBALS['wpdb']->locks );
+	}
+
+	/**
+	 * A request that finds the version stored once it holds the lock installs nothing.
+	 *
+	 * @return void
+	 */
+	public function test_the_version_is_read_again_under_the_lock(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_is_active' => 'yes' ] );
+
+		$reads = 0;
+		Functions\when( 'get_option' )->alias(
+			function ( string $name, $fallback = false ) use ( &$reads ) {
+				if ( 'woodev_fake-seller_version' === $name && 2 === ++$reads ) {
+					return '2.0.0'; // The winner of the previous round stored it after our first look.
+				}
+
+				return $this->options[ $name ] ?? $fallback;
+			}
+		);
+
+		$this->lifecycle->init();
+
+		$this->assertSame( [], $this->delta_batches );
+		$this->assertSame( [], $GLOBALS['wpdb']->locks, 'the lock is released' );
 	}
 
 	/**
@@ -438,6 +523,13 @@ final class LifecycleTest extends TestCase {
 			public $tables = [];
 
 			/**
+			 * Lock rows of the `options` table, by option name.
+			 *
+			 * @var array<string,string>
+			 */
+			public $locks = [];
+
+			/**
 			 * Charset clause.
 			 *
 			 * @return string
@@ -454,7 +546,11 @@ final class LifecycleTest extends TestCase {
 			 * @return string
 			 */
 			public function prepare( string $query, ...$args ): string {
-				return str_replace( '%s', "'" . (string) ( $args[0] ?? '' ) . "'", $query );
+				foreach ( $args as $arg ) {
+					$query = (string) preg_replace( '/%s/', "'" . str_replace( '\\', '\\\\', (string) $arg ) . "'", $query, 1 );
+				}
+
+				return $query;
 			}
 
 			/**
@@ -492,8 +588,48 @@ final class LifecycleTest extends TestCase {
 			 *
 			 * @return null
 			 */
-			public function get_var() {
+			public function get_var( string $query = '' ) {
+				if ( preg_match( "/SELECT option_value FROM \S+ WHERE option_name = '([^']+)'/", $query, $matches ) && isset( $this->locks[ $matches[1] ] ) ) {
+					return $this->locks[ $matches[1] ];
+				}
+
 				return null;
+			}
+
+			/**
+			 * Plays the first-install lock rows: `INSERT IGNORE` (one winner), the compare-and-set `UPDATE` and the owner's `DELETE`.
+			 *
+			 * @param string $query SQL with the values filled in.
+			 * @return int Rows affected.
+			 */
+			public function query( string $query ): int {
+				if ( preg_match( "/^INSERT IGNORE INTO \S+ .* VALUES \( '([^']+)', '([^']+)'/", $query, $matches ) ) {
+					if ( isset( $this->locks[ $matches[1] ] ) ) {
+						return 0;
+					}
+
+					$this->locks[ $matches[1] ] = $matches[2];
+
+					return 1;
+				}
+
+				if ( preg_match( "/^UPDATE \S+ SET option_value = '([^']+)' WHERE option_name = '([^']+)' AND option_value = '([^']+)'/", $query, $matches ) ) {
+					if ( ( $this->locks[ $matches[2] ] ?? null ) !== $matches[3] ) {
+						return 0;
+					}
+
+					$this->locks[ $matches[2] ] = $matches[1];
+
+					return 1;
+				}
+
+				if ( preg_match( "/^DELETE FROM \S+ WHERE option_name = '([^']+)' AND option_value = '([^']+)'/", $query, $matches ) && ( $this->locks[ $matches[1] ] ?? null ) === $matches[2] ) {
+					unset( $this->locks[ $matches[1] ] );
+
+					return 1;
+				}
+
+				return 0;
 			}
 
 			/**
