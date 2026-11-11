@@ -34,6 +34,9 @@ What it does (all verified in `woodev/class-lifecycle.php`):
   `is_admin() && ! wp_doing_ajax()`. So install/upgrade routines execute on the first wp-admin page load
   after the plugin files change — never on a storefront request, never in WP-Cron. Do not write an
   upgrade that a front-end request depends on having already run, and do not assume WP-CLI triggers it.
+  **Exception — a marketplace plugin** (`Marketplace_Plugin`): its `Marketplace\Data\Lifecycle` ALSO installs on an
+  early `init` of a REST / WP-CLI / cron request while no version is stored (#1727), because those plugins read their
+  tables from such requests. Upgrades stay admin-only; a failed install is retried at most every 5 minutes there.
 - **Detects install vs upgrade by comparing versions.** `get_installed_version()` reads the option
   `woodev_{plugin id}_version` (`Woodev_Plugin::get_plugin_version_name()`); empty → `install()`
   then store an `install` event and fire `woodev_{plugin id}_installed`; lower than the plugin version →

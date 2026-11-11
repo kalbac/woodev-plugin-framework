@@ -197,17 +197,21 @@ final class Settings_Handler extends \Woodev_Abstract_Settings implements \Woode
 	 * @return Settings_Provider
 	 */
 	public function get_settings_provider(): Settings_Provider {
-		$sections = [];
-
-		foreach ( $this->providers as $provider ) {
-			$sections = array_merge( $sections, $provider->sections() );
-		}
-
-		return Settings_Provider::create(
+		// Lazy (#1727): a section reads the accounts table, and the plugin hands this descriptor out on every request that
+		// only asks whether the tab exists. The sections are built when a settings page or route reads them.
+		return Settings_Provider::create_lazy(
 			$this->get_id(),
 			$this->tab_title,
 			$this,
-			$sections,
+			function (): array {
+				$sections = [];
+
+				foreach ( $this->providers as $provider ) {
+					$sections = array_merge( $sections, $provider->sections() );
+				}
+
+				return $sections;
+			},
 			$this->provider_args
 		);
 	}

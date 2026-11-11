@@ -66,6 +66,13 @@ final class LifecycleTest extends TestCase {
 	private $options = [];
 
 	/**
+	 * Transient store behind the `get_transient()` / `set_transient()` doubles.
+	 *
+	 * @var array<string,mixed>
+	 */
+	private $transients = [];
+
+	/**
 	 * Builds the handler over a mocked plugin and a recording `wpdb`.
 	 *
 	 * @return void
@@ -180,6 +187,87 @@ final class LifecycleTest extends TestCase {
 		$this->lifecycle->init();
 
 		$this->assertSame( [], $this->delta_batches );
+	}
+
+	/**
+	 * A request that is not an admin page load (REST, WP-CLI, cron) installs the tables on an early `init` when no version is
+	 * stored, and a second such request does nothing (#1727).
+	 *
+	 * @return void
+	 */
+	public function test_a_request_outside_admin_installs_once_when_no_version_is_stored(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_is_active' => 'yes' ] );
+		$this->use_transient_store();
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Actions\expectDone( 'woodev_fake-seller_installed' )->once();
+
+		$this->assertSame( 1, has_action( 'init', [ $this->lifecycle, 'install_outside_admin' ] ), 'hooked early on init' );
+
+		$this->lifecycle->install_outside_admin();
+		$this->lifecycle->install_outside_admin();
+
+		$this->assertCount( 1, $this->delta_batches, 'the tables are created once' );
+		$this->assertSame( '2.0.0', $this->options['woodev_fake-seller_version'] );
+		$this->assertSame( [], $this->transients, 'a successful install leaves no retry mark' );
+	}
+
+	/**
+	 * With a stored version the early hook is one option read: nothing is created and nothing is marked.
+	 *
+	 * @return void
+	 */
+	public function test_a_request_outside_admin_does_nothing_once_a_version_is_stored(): void {
+		$this->use_option_store(
+			[
+				'woodev_fake-seller_is_active' => 'yes',
+				'woodev_fake-seller_version'   => '1.1.7',
+			]
+		);
+		$this->use_transient_store();
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+
+		$this->lifecycle->install_outside_admin();
+
+		$this->assertSame( [], $this->delta_batches );
+		$this->assertSame( '1.1.7', $this->options['woodev_fake-seller_version'], 'an upgrade stays the admin lifecycle\'s job' );
+		$this->assertSame( [], $this->transients );
+	}
+
+	/**
+	 * An admin page load is the parent's: the early hook leaves it alone, so the install does not run twice there.
+	 *
+	 * @return void
+	 */
+	public function test_an_admin_page_load_is_left_to_the_parent_hook(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_is_active' => 'yes' ] );
+		$this->use_transient_store();
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+
+		$this->lifecycle->install_outside_admin();
+
+		$this->assertSame( [], $this->delta_batches );
+		$this->assertArrayNotHasKey( 'woodev_fake-seller_version', $this->options );
+	}
+
+	/**
+	 * A refused CREATE stores no version, so the early hook would try again on every request: it marks the failure and waits.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_install_outside_admin_is_not_retried_on_every_request(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_is_active' => 'yes' ] );
+		$this->use_transient_store();
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		$this->creation_works = false;
+		$this->expect_failure_notice();
+
+		$this->lifecycle->install_outside_admin();
+		$this->lifecycle->install_outside_admin();
+
+		$this->assertCount( 1, $this->delta_batches, 'the second request waits for the mark to expire' );
+		$this->assertArrayNotHasKey( 'woodev_fake-seller_version', $this->options );
+		$this->assertArrayHasKey( 'woodev_fake-seller_schema_retry', $this->transients );
 	}
 
 	/**
@@ -443,6 +531,28 @@ final class LifecycleTest extends TestCase {
 		Functions\when( 'current_time' )->justReturn( 1 );
 		Functions\when( 'sanitize_text_field' )->returnArg();
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+	}
+
+	/**
+	 * Backs `get_transient()` / `set_transient()` with {@see self::$transients}.
+	 *
+	 * @return void
+	 */
+	private function use_transient_store(): void {
+		$this->transients = [];
+
+		Functions\when( 'get_transient' )->alias(
+			function ( string $name ) {
+				return $this->transients[ $name ] ?? false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			function ( string $name, $value ): bool {
+				$this->transients[ $name ] = $value;
+
+				return true;
+			}
+		);
 	}
 
 	/**

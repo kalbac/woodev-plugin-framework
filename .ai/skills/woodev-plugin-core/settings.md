@@ -45,6 +45,10 @@ public function get_settings_providers(): array {
 - Prefer `create_with_sections()` over `create()`: a non-`Settings_Section` argument is a `TypeError`
   at your call site; `create()` stores the array verbatim and `get_sections()` DROPS a wrong-typed entry
   silently — you see a missing section, not an error.
+- A tab whose sections read the database (a card per saved row) uses `Settings_Provider::create_lazy( $id, $label,
+  $handler, callable $sections, $args )`: the callable runs on the first `get_sections()` (settings page / settings REST
+  route), not when the provider is handed out. `get_settings_providers()` runs on every request that builds the menu
+  (`rest_api_init`), so building sections there breaks on a fresh install (#1727). `Marketplace_Plugin` does this for you.
 - Optional `$args`: `capability`, `legacy_option_key` (a migration source, carried on the provider),
   `legacy_page` (admin query string redirected to the new tab), `supports` (flags).
 - **Capability:** `Settings_Page_Registry::resolve_capability()` — your explicit `capability`, else

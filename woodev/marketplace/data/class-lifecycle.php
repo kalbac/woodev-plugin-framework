@@ -75,6 +75,55 @@ final class Lifecycle extends \Woodev_Lifecycle {
 	}
 
 	/**
+	 * Also installs from a request that never reaches wp-admin.
+	 *
+	 * The parent runs the lifecycle only on an admin page load, but a marketplace plugin reads its tables from a REST
+	 * request, a WP-CLI command or a cron event, and the first of those after a fresh activation arrives before any admin
+	 * page: without tables every read fails, and with `WP_DEBUG_DISPLAY` the database error is printed into the REST
+	 * response. So when no version is stored yet, the install runs on an early `init`. Once a version is stored this is
+	 * one `get_option()` and nothing else; an admin page load is left to the parent's own hook.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @return void
+	 */
+	protected function add_hooks() {
+		parent::add_hooks();
+
+		add_action( 'init', [ $this, 'install_outside_admin' ], 1 );
+	}
+
+	/**
+	 * Runs {@see self::init()} on a request that is not an admin page load, until a version is stored.
+	 *
+	 * A failed install (a database user without CREATE) stores no version, so every such request would try `dbDelta` again;
+	 * a short mark keeps that to once in a few minutes. An admin page load is not held back by the mark.
+	 *
+	 * @internal Hook callback.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @return void
+	 */
+	public function install_outside_admin(): void {
+		if ( ( is_admin() && ! wp_doing_ajax() ) || '' !== (string) $this->get_installed_version() ) {
+			return;
+		}
+
+		$mark = 'woodev_' . $this->get_plugin()->get_id() . '_schema_retry';
+
+		if ( get_transient( $mark ) ) {
+			return;
+		}
+
+		$this->init();
+
+		if ( '' === (string) $this->get_installed_version() ) {
+			set_transient( $mark, 1, 5 * MINUTE_IN_SECONDS );
+		}
+	}
+
+	/**
 	 * First install: creates the tables.
 	 *
 	 * @since 2.0.29
