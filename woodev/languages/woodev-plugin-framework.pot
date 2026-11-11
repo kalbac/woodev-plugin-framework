@@ -7508,3 +7508,67 @@ msgstr ""
 #: marketplace/sync/class-stock-flusher.php:521
 msgid "Маркетплейс не подтвердил отправку карточки в архив."
 msgstr ""
+
+#: marketplace/flows/class-export-context-builder.php:336
+msgid "Правило цены в профиле или в настройках аккаунта не распознано — откройте и сохраните его заново."
+msgstr ""
+
+#: marketplace/flows/class-export-context-builder.php:346
+msgid "Курс валюты или цена для маркетплейса не заданы либо записаны неверно — проверьте правило валюты в профиле и поле у товара."
+msgstr ""
+
+#: marketplace/flows/class-export-context-builder.php:352
+msgid "Цена товара для маркетплейса (своя цена, старая или минимальная) не распознана — проверьте её в карточке товара."
+msgstr ""
+
+#. translators: %s: reason.
+#: marketplace/jobs/class-export-batch-runner.php:179 marketplace/jobs/class-export-batch-runner.php:468
+msgid "Не удалось подготовить выгрузку: %s"
+msgstr ""
+
+#: marketplace/jobs/class-export-batch-runner.php:303
+msgid "Товар удалён с сайта или недоступен."
+msgstr ""
+
+#. translators: %s: reason.
+#: marketplace/jobs/class-export-batch-runner.php:319
+msgid "Карточку не удалось собрать: %s"
+msgstr ""
+
+#: marketplace/jobs/class-export-batch-runner.php:394
+msgid "Маркетплейс принял выгрузку, но не вернул номер задачи."
+msgstr ""
+
+#. translators: 1: number of attempts, 2: reason.
+#: marketplace/jobs/class-export-batch-runner.php:436
+msgid "Маркетплейс не принял выгрузку после %1$d попыток: %2$s"
+msgstr ""
+
+#. translators: %s: reason.
+#: marketplace/jobs/class-export-batch-runner.php:440
+msgid "Маркетплейс отклонил выгрузку: %s"
+msgstr ""
+
+#: marketplace/jobs/class-poll-task-runner.php:300
+msgid "Маркетплейс не вернул результат за сутки."
+msgstr ""
+
+#. translators: %s: the marketplace's status of the card.
+#: marketplace/jobs/class-poll-task-runner.php:417
+msgid "Карточка не создана за 3 часа; статус маркетплейса: %s."
+msgstr ""
+
+#. translators: %s: the marketplace's status of the card.
+#: marketplace/jobs/class-poll-task-runner.php:456
+msgid "Маркетплейс отклонил карточку: %s"
+msgstr ""
+
+#. translators: 1: number of attempts, 2: reason.
+#: marketplace/jobs/class-poll-task-runner.php:626
+msgid "Не удалось узнать у маркетплейса результат выгрузки после %1$d попыток: %2$s"
+msgstr ""
+
+#. translators: 1: number of attempts, 2: reason.
+#: marketplace/jobs/class-poll-task-runner.php:654
+msgid "Не удалось обработать ответ маркетплейса после %1$d попыток: %2$s"
+msgstr ""

@@ -31,6 +31,9 @@ use Woodev\Framework\Marketplace\Diagnostics\Support_Report;
 use Woodev\Framework\Marketplace\Governor\Bucket_Spec;
 use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Intake\Push_Protocol;
+use Woodev\Framework\Marketplace\Flows\Card_Lifecycle;
+use Woodev\Framework\Marketplace\Flows\Export_Facts;
+use Woodev\Framework\Marketplace\Flows\Export_Gateway;
 use Woodev\Framework\Marketplace\Jobs\Error_Classifier;
 use Woodev\Framework\Marketplace\Ledger\Inbound_Decoder;
 use Woodev\Framework\Marketplace\Orders\Order_DTO;
@@ -51,6 +54,9 @@ use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Catalog_Schema;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Clock;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Credential_Health;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Error_Classifier;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Export_Facts;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Card_Lifecycle;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Export_Gateway;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Field_Price_Source;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Source;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Price_Pusher;
@@ -137,7 +143,8 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 * @param Fake_Clock|null     $clock    Clock; a new one when null.
 	 * @param array<string,mixed> $policies Answers that replace the defaults: `price_source`, `price_cadence`, `stock_cadence`,
 	 *                                      `article_policy`, `export_rules`, `stock_policy`, and the answers of the sync flows:
-	 *                                      `error_classifier`, `sync_limits`, `stock_rules`, `price_reader`, `push_protocol`.
+	 *                                      `error_classifier`, `sync_limits`, `stock_rules`, `price_reader`, `push_protocol`, and of the export flows: `export_facts`,
+	 *                                      `export_gateway`, `card_lifecycle`.
 	 */
 	public function __construct( ?Fake_Clock $clock = null, array $policies = [] ) {
 		$this->policies = array_merge(
@@ -154,6 +161,9 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 				'stock_rules'      => new Scripted_Stock_Pusher(),
 				'price_reader'     => null,
 				'push_protocol'    => null,
+				'export_facts'     => new Fake_Export_Facts(),
+				'export_gateway'   => new Scripted_Export_Gateway(),
+				'card_lifecycle'   => new Scripted_Card_Lifecycle(),
 			],
 			$policies
 		);
@@ -494,5 +504,32 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 */
 	public function push_protocol(): ?Push_Protocol {
 		return $this->policies['push_protocol'];
+	}
+
+	/**
+	 * Returns the local export facts.
+	 *
+	 * @return Export_Facts
+	 */
+	public function export_facts(): Export_Facts {
+		return $this->policies['export_facts'];
+	}
+
+	/**
+	 * Returns the card builder and import request.
+	 *
+	 * @return Export_Gateway
+	 */
+	public function export_gateway(): Export_Gateway {
+		return $this->policies['export_gateway'];
+	}
+
+	/**
+	 * Returns the reader of the import result and card state.
+	 *
+	 * @return Card_Lifecycle
+	 */
+	public function card_lifecycle(): Card_Lifecycle {
+		return $this->policies['card_lifecycle'];
 	}
 }
