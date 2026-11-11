@@ -18,6 +18,9 @@ use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
 use Woodev\Framework\Marketplace\Governor\Bucket_Spec;
 use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Intake\Push_Protocol;
+use Woodev\Framework\Marketplace\Flows\Card_Lifecycle;
+use Woodev\Framework\Marketplace\Flows\Export_Facts;
+use Woodev\Framework\Marketplace\Flows\Export_Gateway;
 use Woodev\Framework\Marketplace\Jobs\Error_Classifier;
 use Woodev\Framework\Marketplace\Ledger\Inbound_Decoder;
 use Woodev\Framework\Marketplace\Orders\Order_Source;
@@ -249,4 +252,32 @@ interface Marketplace_Adapter {
 	 * @return Push_Protocol|null Null when the marketplace has no push, like {@see self::inbound_decoder()}.
 	 */
 	public function push_protocol(): ?Push_Protocol;
+
+	/**
+	 * Returns the marketplace's local export facts: what its catalogue cache and media rules say about a product, the seller's
+	 * article, which products become cards. It makes no remote call.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return Export_Facts
+	 */
+	public function export_facts(): Export_Facts;
+
+	/**
+	 * Returns the marketplace's card builder and import request.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return Export_Gateway
+	 */
+	public function export_gateway(): Export_Gateway;
+
+	/**
+	 * Returns the reader of the import result and of the state of the cards that were sent.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return Card_Lifecycle
+	 */
+	public function card_lifecycle(): Card_Lifecycle;
 }
