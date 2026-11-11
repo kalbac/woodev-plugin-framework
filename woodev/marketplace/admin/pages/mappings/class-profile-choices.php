@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * A source value is a `kind` or, for the custom-field kind, `meta:{key}`.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Profile_Choices {
 	/**
@@ -56,7 +56,7 @@ final class Profile_Choices {
 	/**
 	 * Creates the choices.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,array<string,string>> $sources   Labels of the source kinds by setting.
 	 * @param array<string,string>               $defaults  Default kind per setting; every key of `$sources` needs one.
@@ -73,7 +73,7 @@ final class Profile_Choices {
 	/**
 	 * Returns the titles of the source settings.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,string>
 	 */
@@ -84,7 +84,7 @@ final class Profile_Choices {
 	/**
 	 * The choices every WooCommerce-fed card uses.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return self
 	 */
@@ -147,7 +147,7 @@ final class Profile_Choices {
 	/**
 	 * Returns the source settings of the profile, in form order.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string[]
 	 */
@@ -158,7 +158,7 @@ final class Profile_Choices {
 	/**
 	 * Returns the labels of the source kinds by setting.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,array<string,string>>
 	 */
@@ -169,7 +169,7 @@ final class Profile_Choices {
 	/**
 	 * Returns the default value of a source setting.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $setting Setting key.
 	 * @return string
@@ -181,7 +181,7 @@ final class Profile_Choices {
 	/**
 	 * Returns the VAT rates.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,string>
 	 */
@@ -192,7 +192,7 @@ final class Profile_Choices {
 	/**
 	 * Splits a stored source value into its kind and key.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $value `kind` or `meta:{key}`.
 	 * @return array{0:string,1:string}
@@ -206,7 +206,7 @@ final class Profile_Choices {
 	/**
 	 * Tells whether a value is one the form builds: a listed kind, and a key exactly when the kind is the custom field.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $setting Setting key.
 	 * @param string $value   `kind` or `meta:{key}`.

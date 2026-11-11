@@ -25,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  * - `account_activity` — the account-wide state ({@see Activity_Normalizer::account()});
  * - `messages` — the same optional message map as the other reads.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Activity_Reader {
 	/**
@@ -33,7 +33,7 @@ final class Activity_Reader {
 	 *
 	 * An empty list is allowed — an empty table still has an account line.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Records_Definition $definition Definition (must declare `activity`).
 	 * @param mixed              $ids        Raw `ids`.
@@ -64,7 +64,7 @@ final class Activity_Reader {
 	/**
 	 * Reads the activity of the asked rows and builds the response body.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Records_Definition   $definition Definition (must declare `activity`).
 	 * @param Records_Provider     $provider   Provider.

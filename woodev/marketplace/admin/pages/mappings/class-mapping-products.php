@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * product in the categories of two unrelated mappings is counted for both, which only matters to the count shown in
  * the list.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mapping_Products {
 	private const STATUSES = [ 'publish', 'draft', 'pending', 'private' ];
@@ -31,7 +31,7 @@ final class Mapping_Products {
 	/**
 	 * Creates the lookup.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param callable $terms_by_mapping Gives the shop categories of every mapping: `function (): array<int,int[]>`.
 	 */
@@ -42,7 +42,7 @@ final class Mapping_Products {
 	/**
 	 * Counts the products of a mapping.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $mapping_id Mapping id.
 	 * @return int
@@ -62,7 +62,7 @@ final class Mapping_Products {
 	/**
 	 * Lists product ids of a mapping.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $mapping_id Mapping id.
 	 * @param int $limit      Most ids to return.

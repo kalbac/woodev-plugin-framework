@@ -43,7 +43,7 @@ defined( 'ABSPATH' ) || exit;
  * server error retries on the {@see Backoff} ladder up to {@see self::MAX_ATTEMPTS}; any other refusal ends the run with its text
  * shown to the merchant. Nothing is thrown out of the job.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Link_Jobs {
 	public const MAX_ATTEMPTS = 3;
@@ -153,7 +153,7 @@ final class Link_Jobs {
 	/**
 	 * Creates the jobs.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Gate             $gate       Job gate.
 	 * @param Wpdb_Link_Store      $links      Links.
@@ -190,7 +190,7 @@ final class Link_Jobs {
 	/**
 	 * Hooks both jobs.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -202,7 +202,7 @@ final class Link_Jobs {
 	/**
 	 * Runs `link_cards`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $account_id  Account id.
 	 * @param mixed $category_id Product category, 0 for the whole shop.
@@ -240,7 +240,7 @@ final class Link_Jobs {
 	/**
 	 * Runs `refresh_cards`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $account_id Account id.
 	 * @param mixed $attempt    Failed attempts so far.

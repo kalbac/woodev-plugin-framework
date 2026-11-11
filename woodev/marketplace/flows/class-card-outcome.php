@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * exists (and may take stock and price), whether the marketplace declined it, its status in the marketplace's words and the
  * identifiers it carries now.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Card_Outcome {
 	/**
@@ -55,7 +55,7 @@ final class Card_Outcome {
 	/**
 	 * Creates the outcome.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string                   $state       Link state the card maps to.
 	 * @param bool                     $created     Whether the card exists.
@@ -74,7 +74,7 @@ final class Card_Outcome {
 	/**
 	 * Returns the link state the card maps to.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -85,7 +85,7 @@ final class Card_Outcome {
 	/**
 	 * Tells whether the card exists.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -96,7 +96,7 @@ final class Card_Outcome {
 	/**
 	 * Tells whether the marketplace declined the card.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -107,7 +107,7 @@ final class Card_Outcome {
 	/**
 	 * Returns the status in the marketplace's words.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -118,7 +118,7 @@ final class Card_Outcome {
 	/**
 	 * Returns the identifiers the card carries.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,int|string>
 	 */

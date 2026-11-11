@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  *     ( new Job_Names( 'ozon-seller' ) )->hook( 'flush_sync' ); // woodev_ozon_seller_flush_sync
  *     ( new Job_Names( 'ozon-seller' ) )->group();              // woodev-ozon-seller
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Job_Names {
 	/**
@@ -29,7 +29,7 @@ final class Job_Names {
 	/**
 	 * Creates the names of a plugin.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $plugin_id Plugin id, as `Woodev_Plugin::get_id()` gives it (dashes or underscores).
 	 * @throws \InvalidArgumentException When the id is not lower-case words joined by dashes or underscores.
@@ -45,7 +45,7 @@ final class Job_Names {
 	/**
 	 * Returns the name of a job's hook; filters and transients of a job are named the same way.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $job Job name in snake case (`flush_sync`, `drain_events`).
 	 * @return string
@@ -57,7 +57,7 @@ final class Job_Names {
 	/**
 	 * Returns the Action Scheduler group of the plugin's jobs.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */

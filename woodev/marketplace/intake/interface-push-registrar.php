@@ -13,13 +13,13 @@ defined( 'ABSPATH' ) || exit;
  * The marketplace's registry of notification URLs, for one account. The framework stores what it answers on the account row,
  * so every screen reads the registration state without a remote call.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Push_Registrar {
 	/**
 	 * Asks the marketplace about one URL.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $url The account's notification URL.
 	 * @return array<string,mixed>|null What the marketplace holds for the URL (its id, the subscribed types, its health — the

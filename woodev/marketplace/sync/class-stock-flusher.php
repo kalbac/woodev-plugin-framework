@@ -52,7 +52,7 @@ defined( 'ABSPATH' ) || exit;
  * allows, else the next) settles it and marks the link `archived`. A pair without a warehouse is archived without the zero. A
  * refused archive is retried, without sending the zero again, and counts as a failure.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Stock_Flusher {
 	public const MAX_REQUESTS   = 10;
@@ -132,7 +132,7 @@ final class Stock_Flusher {
 	/**
 	 * Creates the flusher.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Sync_State_Queue $queue      Flusher side of `sync_state`.
 	 * @param Sync_State_Store $intents    Pending side of `sync_state`.
@@ -157,7 +157,7 @@ final class Stock_Flusher {
 	/**
 	 * Sends what is due, within the run's budget.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account_Run $run The account's run under its claim.
 	 * @return Stock_Flush_Result `requests` counts every marketplace request of this half, archive calls included.

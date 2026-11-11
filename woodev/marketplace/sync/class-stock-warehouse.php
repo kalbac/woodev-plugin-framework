@@ -17,13 +17,13 @@ defined( 'ABSPATH' ) || exit;
  * sent. An oversize product takes only a warehouse chosen on its link: falling back to the default warehouse is guesswork that
  * sends oversize goods to the wrong place.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Stock_Warehouse {
 	/**
 	 * Resolves the warehouse of a link.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account     $account Account.
 	 * @param Link_Record $link    Link.

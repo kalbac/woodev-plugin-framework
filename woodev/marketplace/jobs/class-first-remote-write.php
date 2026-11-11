@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
  * one that asked for it. The boundary is `accounts.settings.first_remote_write_at`, written once, **before** that request
  * leaves, so a write with an uncertain outcome counts.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class First_Remote_Write {
 	public const SETTING = 'first_remote_write_at';
@@ -26,7 +26,7 @@ final class First_Remote_Write {
 	 * Builds the callback an API client calls before its first write: it records the moment, and refuses the write when the
 	 * moment cannot be recorded.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Account_Store $accounts Accounts.
 	 * @param callable|null      $clock    `function (): int`; the system clock when null.
@@ -60,7 +60,7 @@ final class First_Remote_Write {
 	/**
 	 * Returns when the account first wrote to the marketplace, or null.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @return string|null ISO 8601 time.

@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Status, JSON body and headers of the HTTP answer. The intake returns one; the REST route (and a plugin's own legacy route)
  * turns it into output, so the logic is testable without a web server.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Intake_Response {
 	/**
@@ -57,7 +57,7 @@ final class Intake_Response {
 	/**
 	 * Creates a response.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int                  $status  HTTP status.
 	 * @param array<string,mixed>  $body    Body.
@@ -72,7 +72,7 @@ final class Intake_Response {
 	/**
 	 * The success answer: HTTP 200 and the body the marketplace expects.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $body Success body.
 	 * @return self
@@ -84,7 +84,7 @@ final class Intake_Response {
 	/**
 	 * Returns the HTTP status.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int
 	 */
@@ -95,7 +95,7 @@ final class Intake_Response {
 	/**
 	 * Returns the body.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,mixed>
 	 */
@@ -106,7 +106,7 @@ final class Intake_Response {
 	/**
 	 * Returns the extra headers.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,string>
 	 */

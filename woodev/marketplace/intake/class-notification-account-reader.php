@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  * Every read throws {@see Account_Read_Exception} when the database reports an error, so «no such account» (null) always means
  * the database answered.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Notification_Account_Reader {
 	private const COLUMNS = 'account_id, external_id, is_enabled, seller_id, stock_mode, price_direction, orders_enabled, import_enabled, notification_token, notification_state';
@@ -38,7 +38,7 @@ final class Notification_Account_Reader {
 	/**
 	 * Creates the reader.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \wpdb  $db    Database.
 	 * @param string $table Full name of the accounts table.
@@ -51,7 +51,7 @@ final class Notification_Account_Reader {
 	/**
 	 * Finds an account by id.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @return Notification_Account|null
@@ -66,7 +66,7 @@ final class Notification_Account_Reader {
 	/**
 	 * Finds the account a notification URL names: the id must exist and the token must match.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int    $account_id Account id from the URL.
 	 * @param string $token      Token from the URL.
@@ -85,7 +85,7 @@ final class Notification_Account_Reader {
 	 * The cabinet identifier is unique and is tried first. A seller id that several accounts share is ambiguous and matches
 	 * none, so an event is never filed under the wrong cabinet.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $owner The cabinet identifier or the seller id the body names.
 	 * @return Notification_Account|null
@@ -116,7 +116,7 @@ final class Notification_Account_Reader {
 	/**
 	 * Lists every account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Notification_Account[]
 	 * @throws Account_Read_Exception When the database refused the read.
@@ -139,7 +139,7 @@ final class Notification_Account_Reader {
 	/**
 	 * Stores the registration state of the account's URL (what the marketplace last said about it, and when it was asked).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int                 $account_id Account id.
 	 * @param array<string,mixed> $state      State.

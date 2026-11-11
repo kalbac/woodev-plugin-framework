@@ -32,7 +32,7 @@ defined( 'ABSPATH' ) || exit;
  * its card is `created`. A write of the payload a row already holds as pending changes nothing, so recomputing everything after
  * a rule edit does not inflate revisions.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Price_Intents {
 	public const RECORDED    = 'recorded';
@@ -100,7 +100,7 @@ final class Price_Intents {
 	/**
 	 * Creates the recorder.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Account_Store $accounts       Accounts.
 	 * @param string             $marketplace_id The adapter's id.
@@ -121,7 +121,7 @@ final class Price_Intents {
 	/**
 	 * Hooks the recorder to WooCommerce's product save.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -132,7 +132,7 @@ final class Price_Intents {
 	/**
 	 * Tells whether an account pushes its prices to the marketplace.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @return bool
@@ -146,7 +146,7 @@ final class Price_Intents {
 	 * pushes prices. Ignored while a `from_marketplace` write of this same marketplace is saving the product
 	 * ({@see Price_Refresh_Guard}); a save made by another marketplace's refresh is a price change like any other.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $product       The saved product.
 	 * @param mixed $updated_props Names of the properties that changed.
@@ -173,7 +173,7 @@ final class Price_Intents {
 	/**
 	 * Works out one link's price and writes it as the pending payload.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account          $account Account.
 	 * @param Link_Record      $link    Offer row.
@@ -218,7 +218,7 @@ final class Price_Intents {
 	/**
 	 * Re-works one page of an account's links after a rule changed.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account       Account.
 	 * @param int     $after_link_id Last link id already re-worked; 0 starts at the beginning.
@@ -245,7 +245,7 @@ final class Price_Intents {
 	/**
 	 * Stores a link's price override and re-works its price (the product screen and the tools call this).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account                  $account  Account.
 	 * @param Link_Record              $link     Offer row.

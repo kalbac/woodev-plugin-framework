@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  *   the pending async action from the recurring one under a single name, and a recurring action pending forever would then
  *   stop every async one from being queued.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Drain_Scheduler {
 	public const JOB       = 'drain_events';
@@ -42,7 +42,7 @@ final class Drain_Scheduler {
 	/**
 	 * Creates the scheduler.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Names $names Job names of the plugin.
 	 */
@@ -53,7 +53,7 @@ final class Drain_Scheduler {
 	/**
 	 * Returns the hook of the drain.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -64,7 +64,7 @@ final class Drain_Scheduler {
 	/**
 	 * Returns the hook of the recurring sweep.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -80,7 +80,7 @@ final class Drain_Scheduler {
 	 * event within five minutes. Only when the sweep itself cannot be established does this throw, and the caller must then not
 	 * acknowledge the notification.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @return bool True when the immediate drain is queued (or one was already pending); false when only the sweep will
@@ -98,7 +98,7 @@ final class Drain_Scheduler {
 	 *
 	 * The running action is not a successor: only a pending drain stops this from queueing another.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @param int $delay      Seconds from now.
@@ -113,7 +113,7 @@ final class Drain_Scheduler {
 	/**
 	 * Creates the recurring sweep of an account if it does not exist (pending or running).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @return void

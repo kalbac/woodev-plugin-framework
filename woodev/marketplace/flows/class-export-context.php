@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
  * One product's export inputs, built by {@see Export_Context_Builder}: request time validates with them and the
  * `export_batch` job validates and builds with the same ones.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Export_Context {
 	/**
@@ -58,7 +58,7 @@ final class Export_Context {
 	/**
 	 * Creates the value.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Product                                  $product   Product or variation.
 	 * @param Mapping                                      $mapping   Effective mapping.
@@ -77,7 +77,7 @@ final class Export_Context {
 	/**
 	 * Returns the product.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return \WC_Product
 	 */
@@ -88,7 +88,7 @@ final class Export_Context {
 	/**
 	 * Returns the effective mapping.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Mapping
 	 */
@@ -99,7 +99,7 @@ final class Export_Context {
 	/**
 	 * Returns the override values.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,array<int,array<string,mixed>>>
 	 */
@@ -110,7 +110,7 @@ final class Export_Context {
 	/**
 	 * Returns the profile.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Profile
 	 */
@@ -121,7 +121,7 @@ final class Export_Context {
 	/**
 	 * Returns the raw context for `Export_Validator::validate()`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,mixed>
 	 */
@@ -132,7 +132,7 @@ final class Export_Context {
 	/**
 	 * Returns the typed context for the builder.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Validation_Context
 	 */

@@ -31,7 +31,7 @@ defined( 'ABSPATH' ) || exit;
  * Accounts in `marketplace` mode get nothing: the marketplace's stock is the truth there, and the plugin's own mirror write
  * must not echo back.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Stock_Intents {
 	public const ARCHIVE_FLAG = 'archive';
@@ -74,7 +74,7 @@ final class Stock_Intents {
 	/**
 	 * Creates the recorder.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param callable         $accounts `function ( int $account_id ): ?Account`.
 	 * @param Wpdb_Link_Store  $links    Links.
@@ -93,7 +93,7 @@ final class Stock_Intents {
 	/**
 	 * Hooks the recorder.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -108,7 +108,7 @@ final class Stock_Intents {
 	/**
 	 * Records the new stock of a product for every pair it feeds.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $product The product whose stock changed.
 	 * @return void
@@ -128,7 +128,7 @@ final class Stock_Intents {
 	/**
 	 * Records the archive intent of a trashed or deleted product's created cards.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $post_id Post id.
 	 * @return void
@@ -147,7 +147,7 @@ final class Stock_Intents {
 	 * Records the archive intent of one link: stock zero, then the card goes to the marketplace's archive. Only a `created`
 	 * card is archived. The product screen's archive action calls this, and so does the trash hook.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Link_Record $link Link.
 	 * @return bool True when the intent was recorded.
@@ -174,7 +174,7 @@ final class Stock_Intents {
 	/**
 	 * Records the stock of a product taken out of the trash again.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $post_id Post id.
 	 * @return void
@@ -194,7 +194,7 @@ final class Stock_Intents {
 	/**
 	 * Records the current stock of one link when its account pushes stock.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Link_Record $link Link.
 	 * @return bool True when an intent was recorded.

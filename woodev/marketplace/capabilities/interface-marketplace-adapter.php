@@ -211,7 +211,7 @@ interface Marketplace_Adapter {
 	 * Returns the classifier of the marketplace's errors: what a failed call means for the job that made it (pause the account,
 	 * wait, retry, give the items up).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Error_Classifier
 	 */
@@ -220,7 +220,7 @@ interface Marketplace_Adapter {
 	/**
 	 * Returns the per-request limits of the stock and price calls: how many lines one request takes and how long it may run.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Sync_Limits
 	 */
@@ -229,7 +229,7 @@ interface Marketplace_Adapter {
 	/**
 	 * Returns the rules of a stock send: what a refused line means and how a card is archived.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Stock_Rules
 	 */
@@ -238,7 +238,7 @@ interface Marketplace_Adapter {
 	/**
 	 * Returns the reader of the prices the marketplace holds (the `from_marketplace` direction).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Price_Reader|null Null when prices cannot be read back from this marketplace.
 	 */
@@ -247,7 +247,7 @@ interface Marketplace_Adapter {
 	/**
 	 * Returns the rules of the notification endpoint: the sender's address, the marketplace's allow-list and its error format.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Push_Protocol|null Null when the marketplace has no push, like {@see self::inbound_decoder()}.
 	 */
@@ -257,7 +257,7 @@ interface Marketplace_Adapter {
 	 * Returns the marketplace's local export facts: what its catalogue cache and media rules say about a product, the seller's
 	 * article, which products become cards. It makes no remote call.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Export_Facts
 	 */
@@ -266,7 +266,7 @@ interface Marketplace_Adapter {
 	/**
 	 * Returns the marketplace's card builder and import request.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Export_Gateway
 	 */
@@ -275,7 +275,7 @@ interface Marketplace_Adapter {
 	/**
 	 * Returns the reader of the import result and of the state of the cards that were sent.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Card_Lifecycle
 	 */
@@ -285,7 +285,7 @@ interface Marketplace_Adapter {
 	 * Returns the marketplace's order meta contract: the meta that identifies its order and the meta it writes, the product of a
 	 * line, what an order is created via, and which account owns an order (F9b-3).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return \Woodev\Framework\Marketplace\Flows\Order_Meta_Contract
 	 */
@@ -295,7 +295,7 @@ interface Marketplace_Adapter {
 	 * Returns the marketplace's own half of the order flow: reading one remote order and writing it, and catching up on the orders
 	 * changed since the last run (F9b-3).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return \Woodev\Framework\Marketplace\Jobs\Posting_Handler|null Null when the marketplace has no orders.
 	 */
@@ -304,7 +304,7 @@ interface Marketplace_Adapter {
 	/**
 	 * Returns the marketplace's label calls (`Capability::GET_LABEL`, F9b-3).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return \Woodev\Framework\Marketplace\Flows\Label_Provider|null Null when the marketplace has no labels.
 	 */
@@ -313,7 +313,7 @@ interface Marketplace_Adapter {
 	/**
 	 * Returns the reader of the cabinet's existing cards, for linking them to shop products and for the tab that lists them.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return \Woodev\Framework\Marketplace\Flows\Link_Resolver
 	 */
@@ -323,7 +323,7 @@ interface Marketplace_Adapter {
 	 * Returns the part of the catalogue refresh that talks to the marketplace: its category tree and the attributes of the
 	 * categories that mappings use.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return \Woodev\Framework\Marketplace\Flows\Catalog_Refresher
 	 */

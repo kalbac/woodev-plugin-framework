@@ -25,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  * Everything the marketplace decides — the meta that identifies its order, the product of a line, what an order is created
  * via — is the {@see Order_Meta_Contract} the adapter supplies.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Wc_Order_Store implements Order_Store {
 	/**
@@ -73,7 +73,7 @@ final class Wc_Order_Store implements Order_Store {
 	/**
 	 * Creates the store.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Order_Meta_Contract $contract The marketplace's meta contract.
 	 */
@@ -84,7 +84,7 @@ final class Wc_Order_Store implements Order_Store {
 	/**
 	 * Finds the live order of a group by its identity meta.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Order_DTO $order Whole order.
 	 * @return \WC_Order|null
@@ -98,7 +98,7 @@ final class Wc_Order_Store implements Order_Store {
 	/**
 	 * Loads an order that is not trashed.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $order_id Order id.
 	 * @return \WC_Order|null
@@ -112,7 +112,7 @@ final class Wc_Order_Store implements Order_Store {
 	/**
 	 * Saves a new order that takes no stock yet.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Order_DTO $order Whole order.
 	 * @return \WC_Order
@@ -147,7 +147,7 @@ final class Wc_Order_Store implements Order_Store {
 	/**
 	 * Tells whether the order still waits for its first real status.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Order $wc_order The order.
 	 * @return bool
@@ -159,7 +159,7 @@ final class Wc_Order_Store implements Order_Store {
 	/**
 	 * Brings the order in line with the DTO and saves it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Order                                                 $wc_order  The order.
 	 * @param Order_DTO                                                 $order     Whole order.
@@ -195,7 +195,7 @@ final class Wc_Order_Store implements Order_Store {
 	/**
 	 * Moves an order that lost its registration to the trash.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Order $wc_order The order.
 	 * @return void

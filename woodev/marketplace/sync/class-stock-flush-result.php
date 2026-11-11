@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Counts of one run and the merchant line: «Отправлено: 12», «Нечего отправлять (значения совпадают)» or «Ошибка: …» — never
  * «готово» whatever happened.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Stock_Flush_Result {
 	/**
@@ -75,7 +75,7 @@ final class Stock_Flush_Result {
 	/**
 	 * Records an error text once.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $text Text.
 	 * @return void
@@ -89,7 +89,7 @@ final class Stock_Flush_Result {
 	/**
 	 * Returns the merchant line.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */

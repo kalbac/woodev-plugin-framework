@@ -13,13 +13,13 @@ defined( 'ABSPATH' ) || exit;
  * Every error and notice the editors raise, in one place, so the input classes, the editors and the controller word a
  * case the same way and the view never has to compose a sentence (Rule 9: PHP owns the strings).
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mapping_Messages {
 	/**
 	 * A request body that does not have the declared shape.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -30,7 +30,7 @@ final class Mapping_Messages {
 	/**
 	 * The mapping label is empty.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -41,7 +41,7 @@ final class Mapping_Messages {
 	/**
 	 * The profile label is empty.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -52,7 +52,7 @@ final class Mapping_Messages {
 	/**
 	 * A label longer than the limit.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $limit Longest label.
 	 * @return string
@@ -65,7 +65,7 @@ final class Mapping_Messages {
 	/**
 	 * The chosen marketplace category is not one the marketplace offers.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -76,7 +76,7 @@ final class Mapping_Messages {
 	/**
 	 * The category list has not been loaded, so no category can be saved.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -87,7 +87,7 @@ final class Mapping_Messages {
 	/**
 	 * The attribute table of a newly chosen category did not come with the form.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -98,7 +98,7 @@ final class Mapping_Messages {
 	/**
 	 * The attribute table that came with the form belongs to another category than the one chosen.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -109,7 +109,7 @@ final class Mapping_Messages {
 	/**
 	 * A source row names no usable origin.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $attribute Attribute name.
 	 * @return string
@@ -122,7 +122,7 @@ final class Mapping_Messages {
 	/**
 	 * A dictionary attribute has a fixed source without a chosen value.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $attribute Attribute name.
 	 * @return string
@@ -135,7 +135,7 @@ final class Mapping_Messages {
 	/**
 	 * A free-text attribute has a fixed source without a value.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $attribute Attribute name.
 	 * @return string
@@ -148,7 +148,7 @@ final class Mapping_Messages {
 	/**
 	 * The mapping to change or delete does not exist.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -159,7 +159,7 @@ final class Mapping_Messages {
 	/**
 	 * The profile to change or delete does not exist.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -170,7 +170,7 @@ final class Mapping_Messages {
 	/**
 	 * The profile chosen in a mapping does not exist.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -181,7 +181,7 @@ final class Mapping_Messages {
 	/**
 	 * A shop category already belongs to another mapping.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $category Shop category name.
 	 * @param string $mapping  Name of the mapping that holds it.
@@ -199,7 +199,7 @@ final class Mapping_Messages {
 	/**
 	 * The mapping was saved but another save took some of its categories first.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -210,7 +210,7 @@ final class Mapping_Messages {
 	/**
 	 * The database refused a write.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -221,7 +221,7 @@ final class Mapping_Messages {
 	/**
 	 * A mapping cannot be deleted while products name it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $products Products that chose the mapping by hand.
 	 * @return string
@@ -234,7 +234,7 @@ final class Mapping_Messages {
 	/**
 	 * A profile cannot be deleted while mappings use it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $mappings Mappings that name the profile.
 	 * @return string
@@ -247,7 +247,7 @@ final class Mapping_Messages {
 	/**
 	 * The marketplace could not be asked.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $reason What the adapter reported.
 	 * @return string
@@ -260,7 +260,7 @@ final class Mapping_Messages {
 	/**
 	 * The attribute has no dictionary to search.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -271,7 +271,7 @@ final class Mapping_Messages {
 	/**
 	 * Suffix of the name given to a copied mapping.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -282,7 +282,7 @@ final class Mapping_Messages {
 	/**
 	 * One line of the product check: how many products fail for the same first reason.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int    $count   Products.
 	 * @param string $message The reason.
@@ -296,7 +296,7 @@ final class Mapping_Messages {
 	/**
 	 * The progress line while a long check runs.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $checked Products checked so far.
 	 * @param int $total   Products the mapping covers.
@@ -310,7 +310,7 @@ final class Mapping_Messages {
 	/**
 	 * The result line of a finished check.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $checked Products checked.
 	 * @param int $ok      Products with no problem.
@@ -332,7 +332,7 @@ final class Mapping_Messages {
 	/**
 	 * A profile fallback is not a positive number.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $field Field label (width, height, depth, weight).
 	 * @return string
@@ -345,7 +345,7 @@ final class Mapping_Messages {
 	/**
 	 * A source set to a custom field names no field.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -356,7 +356,7 @@ final class Mapping_Messages {
 	/**
 	 * The VAT rate is not on the list.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -367,7 +367,7 @@ final class Mapping_Messages {
 	/**
 	 * The exchange rate is not a positive number.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -378,7 +378,7 @@ final class Mapping_Messages {
 	/**
 	 * The price-from-a-field rule names no field, or one the marketplace cannot read.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -389,7 +389,7 @@ final class Mapping_Messages {
 	/**
 	 * The profile price rule does not parse.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */

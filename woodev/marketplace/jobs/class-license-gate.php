@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * a merchant reads the same thing whichever Woodev plugin refused; the marketplace layer does not load the shipping layer, so it
  * is written here again.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class License_Gate {
 	/**
@@ -39,7 +39,7 @@ final class License_Gate {
 	/**
 	 * Creates the gate.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param callable $in_force Answers whether the licence is in force: `function (): bool`.
 	 */
@@ -53,7 +53,7 @@ final class License_Gate {
 	 * A plugin with no store product has nothing to license and is never gated. An engine that throws means «not in force»: a
 	 * broken licence check must not let a remote action through.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \Woodev_Plugin $plugin Plugin.
 	 * @return self
@@ -77,7 +77,7 @@ final class License_Gate {
 	/**
 	 * Tells whether the licence is in force.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -88,7 +88,7 @@ final class License_Gate {
 	/**
 	 * Returns the refusal for a new remote action, or null when the action may go on.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $action What cannot be done, as an infinitive phrase («отправить остатки»).
 	 * @return string|null
@@ -100,7 +100,7 @@ final class License_Gate {
 	/**
 	 * The sentence a merchant reads when a new remote action is not allowed. Plain text with the address written out.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $action What cannot be done, as an infinitive phrase.
 	 * @return string
@@ -117,7 +117,7 @@ final class License_Gate {
 	/**
 	 * The licence page address. Built with `admin_url()`, not `menu_page_url()`, which answers '' in a REST or cron request.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */

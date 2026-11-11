@@ -34,7 +34,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * {@see self::invert()} is the same path backwards, for the `from_marketplace` direction.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Export_Price_Policy {
 	public const KIND_FIXED   = Price_Override::KIND_FIXED;
@@ -43,7 +43,7 @@ final class Export_Price_Policy {
 	/**
 	 * Resolves the stored rule of a profile or, without one, of the account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @param Profile $profile Profile.
@@ -61,7 +61,7 @@ final class Export_Price_Policy {
 	 * Applies the link's override to the rule: `price.percent` replaces the markup, `price.none` removes it, `old_price.none`
 	 * switches the old price off, `min_price.percent` replaces the minimum price percentage.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Price_Rule     $rule     Rule of the profile or account.
 	 * @param Price_Override $override Override of the link.
@@ -95,7 +95,7 @@ final class Export_Price_Policy {
 	/**
 	 * Calculates the price triple of a product, in the cabinet currency.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Product              $product  Product or variation.
 	 * @param Price_Rule               $rule     Rule in force.
@@ -132,7 +132,7 @@ final class Export_Price_Policy {
 	 * regular = old price inverted, sale = price inverted. An old price of 0 or not above the price ends the sale: regular = price
 	 * inverted, sale cleared, whatever the rule's base.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Money                    $price     Selling price on the marketplace, in the cabinet currency.
 	 * @param Money|null               $old_price Old price on the marketplace; null or zero = none.
@@ -170,7 +170,7 @@ final class Export_Price_Policy {
 	 * Renders a price pair as the payload kept in `sync_state(kind = price)` and sent to the marketplace: strings, `old_price` '0'
 	 * to clear it, `min_price` null when absent.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Price_Pair $pair Pair in the cabinet currency.
 	 * @return array{price:string,old_price:string,min_price:string|null,currency_code:string}
@@ -190,7 +190,7 @@ final class Export_Price_Policy {
 	/**
 	 * Converts the migrated `markup: { kind, value }` shape into the `Price_Rule::from_array()` keys.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $stored Stored rule.
 	 * @return array<string,mixed>

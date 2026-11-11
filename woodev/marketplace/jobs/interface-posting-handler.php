@@ -16,13 +16,13 @@ defined( 'ABSPATH' ) || exit;
  * knows how far back its listing reaches — behind the two calls {@see Posting_Jobs} makes. The adapter answers it through
  * `posting_handler()`.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Posting_Handler {
 	/**
 	 * Reads one remote order and writes it into WooCommerce.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int    $account_id  Account id.
 	 * @param string $external_id The remote order's number.
@@ -34,7 +34,7 @@ interface Posting_Handler {
 	/**
 	 * Reads the remote orders changed since the last run and writes them, keeping its own watermark.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @return void

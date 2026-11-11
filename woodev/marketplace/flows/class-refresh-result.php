@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * What a pass of {@see Catalog_Refresher} did: how many cache rows it wrote, which categories it could not refresh and why, and
  * whether it reached the end or stopped on its time budget.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Refresh_Result {
 	/**
@@ -40,7 +40,7 @@ final class Refresh_Result {
 	/**
 	 * Creates the result.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int                  $refreshed Rows written.
 	 * @param array<string,string> $failures  Failure text by category key (the cache key of its descriptor).
@@ -55,7 +55,7 @@ final class Refresh_Result {
 	/**
 	 * Returns the number of cache rows written.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int
 	 */
@@ -66,7 +66,7 @@ final class Refresh_Result {
 	/**
 	 * Returns the categories that could not be refreshed.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,string> Failure text by category key.
 	 */
@@ -77,7 +77,7 @@ final class Refresh_Result {
 	/**
 	 * Tells whether the pass reached the end; false means the time budget ran out and another pass must follow.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */

@@ -19,13 +19,13 @@ defined( 'ABSPATH' ) || exit;
  * A provider throws {@see Label_Exception} for a refusal whose sentence the merchant can read (an order not ready, a list the
  * marketplace rejects) and lets any other failure of the call out: the adapter's error classifier decides what that means.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Label_Provider {
 	/**
 	 * Returns how many orders one set of labels may cover.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int
 	 */
@@ -34,7 +34,7 @@ interface Label_Provider {
 	/**
 	 * Asks the marketplace for the labels of remote orders.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account  $account       Account the orders belong to.
 	 * @param string[] $external_keys Remote-order keys, cleaned and within {@see self::max_keys()}.
@@ -46,7 +46,7 @@ interface Label_Provider {
 	/**
 	 * Polls a label task once.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account        Account of the task.
 	 * @param string  $remote_task_id The marketplace's task id.

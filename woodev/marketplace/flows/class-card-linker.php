@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * The link starts with both synchronisation switches off: linking a card must not make the shop push stock or price to it by itself.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Card_Linker {
 	public const LINKED         = 'linked';
@@ -49,7 +49,7 @@ final class Card_Linker {
 	/**
 	 * Creates the linker.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Link_Store $links Links.
 	 */
@@ -60,7 +60,7 @@ final class Card_Linker {
 	/**
 	 * Links a card to a product or variation.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int                 $account_id    Account id.
 	 * @param int                 $wc_product_id Product or variation id.
@@ -110,7 +110,7 @@ final class Card_Linker {
 	/**
 	 * Tells the merchant what an outcome means.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $outcome One of the class constants.
 	 * @return string Russian sentence.

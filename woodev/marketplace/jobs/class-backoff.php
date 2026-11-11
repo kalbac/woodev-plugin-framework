@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * How long a job waits after a failed attempt: 1, 3, 7, 15, then 30 minutes. One ladder for every job, so a merchant (and
  * support) can predict when a failed send is tried again whatever it was.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Backoff {
 	/**
@@ -26,7 +26,7 @@ final class Backoff {
 	/**
 	 * Returns the wait after a failed attempt.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $failures Failed attempts so far, counting the one that just failed; anything past the ladder waits its last step.
 	 * @return int Seconds.

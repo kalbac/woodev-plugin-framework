@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * The marketplace's verdict on one item of an import task, already translated into the framework's vocabulary by the adapter:
  * whether it is final, the link state and the ledger status it leads to, the error to keep and the identifiers it brought.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Import_Outcome {
 	/**
@@ -68,7 +68,7 @@ final class Import_Outcome {
 	/**
 	 * Creates the outcome.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param bool                            $is_final    Whether the verdict is final.
 	 * @param string                          $link_state  Link state the item leads to.
@@ -91,7 +91,7 @@ final class Import_Outcome {
 	/**
 	 * Tells whether the verdict is final.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -102,7 +102,7 @@ final class Import_Outcome {
 	/**
 	 * Returns the link state the item leads to.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -113,7 +113,7 @@ final class Import_Outcome {
 	/**
 	 * Returns the ledger status of the item.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -124,7 +124,7 @@ final class Import_Outcome {
 	/**
 	 * Returns the error code, '' for none.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -135,7 +135,7 @@ final class Import_Outcome {
 	/**
 	 * Returns the error text, '' for none.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -146,7 +146,7 @@ final class Import_Outcome {
 	/**
 	 * Returns the errors of the ledger item.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<int,array<string,string>>
 	 */
@@ -157,7 +157,7 @@ final class Import_Outcome {
 	/**
 	 * Returns the identifiers the item brought.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,int|string>
 	 */

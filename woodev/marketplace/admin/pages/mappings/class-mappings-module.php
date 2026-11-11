@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  * The page is registered by the base class, which calls {@see self::register()} once; a plugin that dropped the
  * `mappings` page from `get_marketplace_pages()` gets no routes.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mappings_Module {
 	/**
@@ -40,7 +40,7 @@ final class Mappings_Module {
 	/**
 	 * Hooks the route registration for a plugin.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Marketplace_Plugin $plugin The marketplace plugin.
 	 * @return void
@@ -61,7 +61,7 @@ final class Mappings_Module {
 	/**
 	 * Builds the controller of a plugin.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Marketplace_Plugin $plugin The marketplace plugin.
 	 * @return Mappings_Controller|null Null when the plugin has no mappings page or its id cannot be a route segment.

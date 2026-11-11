@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * {@see Link_Context_Resolver} takes this list as its `$term_ids`.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Category_Ancestry {
 	/**
@@ -27,7 +27,7 @@ final class Category_Ancestry {
 	/**
 	 * Expands direct categories with their ancestors, closest first, each id once.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int[]    $direct_ids Direct category term ids of a product.
 	 * @param callable $parent_of  `function ( int $term_id ): int`; the parent term id, 0 for a top-level category.
@@ -62,7 +62,7 @@ final class Category_Ancestry {
 	/**
 	 * Returns the ordered category list of a WooCommerce product; a variation uses its parent's categories.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Product $product Product or variation.
 	 * @return int[]

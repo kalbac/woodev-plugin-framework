@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * {@see self::BATCH_SIZE} links) and `woodev_{plugin id}_poll_task` (args `[ task_id, attempt ]`), plus the recurring recovery sweep
  * `poll_task( 0, 0 )`. Action Scheduler's own retry is not used: the runners reschedule themselves with an attempt counter.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Export_Scheduler {
 	public const EXPORT_JOB = 'export_batch';
@@ -40,7 +40,7 @@ final class Export_Scheduler {
 	/**
 	 * Creates the scheduler.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Names $names Job names of the plugin.
 	 */
@@ -51,7 +51,7 @@ final class Export_Scheduler {
 	/**
 	 * Returns the hook of the export batch.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -62,7 +62,7 @@ final class Export_Scheduler {
 	/**
 	 * Returns the hook of the task poll.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -73,7 +73,7 @@ final class Export_Scheduler {
 	/**
 	 * Makes sure the recurring recovery sweep exists.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 * @throws \RuntimeException When Action Scheduler did not create it.
@@ -94,7 +94,7 @@ final class Export_Scheduler {
 	 * Queues the export of links, in batches of {@see self::BATCH_SIZE}. Every batch is tried even when an earlier one was refused,
 	 * so one bad moment of Action Scheduler strands as few links as possible.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int   $account_id Account id.
 	 * @param int[] $link_ids   Link ids.
@@ -136,7 +136,7 @@ final class Export_Scheduler {
 	/**
 	 * Schedules an export batch again.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int   $account_id Account id.
 	 * @param int[] $link_ids   Link ids.
@@ -152,7 +152,7 @@ final class Export_Scheduler {
 	/**
 	 * Schedules the next poll of a task.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $task_id Task id.
 	 * @param int $attempt Failed polls in a row.

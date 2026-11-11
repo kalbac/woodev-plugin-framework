@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * A page that fails (a database error while writing an intent) is retried with the same cursor on the ladder of {@see Backoff}
  * and given up after five attempts with a log line — never dropped silently; the completed prefix is re-worked idempotently.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Price_Recompute_Runner {
 	public const MAX_ATTEMPTS = 5;
@@ -56,7 +56,7 @@ final class Price_Recompute_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Gate        $gate      Job gate.
 	 * @param Price_Intents   $intents   Intents.
@@ -73,7 +73,7 @@ final class Price_Recompute_Runner {
 	/**
 	 * Hooks the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -84,7 +84,7 @@ final class Price_Recompute_Runner {
 	/**
 	 * Runs the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $account_id    Account id.
 	 * @param mixed $after_link_id Last link id already re-worked.

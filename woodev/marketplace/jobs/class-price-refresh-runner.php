@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  * wait is not a failed attempt, a server or transport failure retries on the ladder of {@see Backoff} and gives up after five
  * attempts with a log line.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Price_Refresh_Runner {
 	public const MAX_ATTEMPTS = 5;
@@ -67,7 +67,7 @@ final class Price_Refresh_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Gate         $gate       Job gate.
 	 * @param Price_Refresher  $refresher  Refresher.
@@ -86,7 +86,7 @@ final class Price_Refresh_Runner {
 	/**
 	 * Hooks the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -97,7 +97,7 @@ final class Price_Refresh_Runner {
 	/**
 	 * Runs the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $account_id Account id.
 	 * @param mixed $offer_ids  Articles.

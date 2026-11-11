@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  * The feature flags are here because the notification types an account should be subscribed to follow from them; which types
  * those are is the marketplace's knowledge, so the plugin derives the list from these getters.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Notification_Account {
 	/**
@@ -92,7 +92,7 @@ final class Notification_Account {
 	/**
 	 * Creates the account view.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $row Row of the accounts table.
 	 */
@@ -114,7 +114,7 @@ final class Notification_Account {
 	/**
 	 * Returns the account id.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int
 	 */
@@ -125,7 +125,7 @@ final class Notification_Account {
 	/**
 	 * Returns the cabinet's identifier.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -136,7 +136,7 @@ final class Notification_Account {
 	/**
 	 * Returns the seller id, '' when unknown.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -147,7 +147,7 @@ final class Notification_Account {
 	/**
 	 * Tells whether the merchant switched the account on.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -158,7 +158,7 @@ final class Notification_Account {
 	/**
 	 * Returns the secret part of the notification URL.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -169,7 +169,7 @@ final class Notification_Account {
 	/**
 	 * Tells whether marketplace orders become WooCommerce orders.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -180,7 +180,7 @@ final class Notification_Account {
 	/**
 	 * Returns the stock mode: `site` or `marketplace`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -191,7 +191,7 @@ final class Notification_Account {
 	/**
 	 * Returns the price direction: `to_marketplace`, `from_marketplace` or `off`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -202,7 +202,7 @@ final class Notification_Account {
 	/**
 	 * Tells whether new cards are imported automatically.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -213,7 +213,7 @@ final class Notification_Account {
 	/**
 	 * Returns the stored registration state of the URL.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,mixed>
 	 */

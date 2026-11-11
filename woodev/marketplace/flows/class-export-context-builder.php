@@ -35,7 +35,7 @@ defined( 'ABSPATH' ) || exit;
  * the validator and the card builder both read that pair. The same answers serve the price sync, which asks for them through
  * {@see Price_Context}.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Export_Context_Builder implements Price_Context {
 	/**
@@ -111,7 +111,7 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Creates the builder.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Link_Context_Resolver $resolver       Mapping resolution.
 	 * @param Wpdb_Profile_Store    $profiles       Profiles.
@@ -144,7 +144,7 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Builds the inputs of a product.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account          $account Account.
 	 * @param \WC_Product      $product Product or variation.
@@ -179,7 +179,7 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Returns the article a link would be sent with now: the frozen one, else the profile's source for the current product.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account     $account Account.
 	 * @param \WC_Product $product Product or variation.
@@ -194,7 +194,7 @@ final class Export_Context_Builder implements Price_Context {
 	 * Works out what a product costs on the marketplace right now, in the cabinet currency: the rule of its profile (else the
 	 * account), the profile's currency rule and the link's override. The one answer the price intents and the creation seeding read.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account     $account Account.
 	 * @param \WC_Product $product Product or variation.
@@ -222,7 +222,7 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Renders a price pair as the payload kept in the sync state.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Price_Pair $pair Prices.
 	 * @return array<string,string|null>
@@ -234,7 +234,7 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Reads the rule and the currency terms of a product, for the inverse direction (`from_marketplace`).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account     $account Account.
 	 * @param \WC_Product $product Product or variation.
@@ -253,7 +253,7 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Undoes the rule on a marketplace price.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Money                    $price     The marketplace's selling price.
 	 * @param Money|null               $old_price The marketplace's crossed-out price, if any.
@@ -270,7 +270,7 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Loads a product.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $product_id Product id.
 	 * @return \WC_Product|null

@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Thrown by a {@see Link_Resolver} when the marketplace answers a restricted question with cards nobody asked about, or pages in a way
  * that never ends. The message is for the merchant (Russian); linking stops, nothing is written.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Link_Resolve_Exception extends \RuntimeException {
 	/**
@@ -36,7 +36,7 @@ final class Link_Resolve_Exception extends \RuntimeException {
 	/**
 	 * Creates the exception.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $reason  One of the class constants.
 	 * @param string $message Text for the merchant.
@@ -50,7 +50,7 @@ final class Link_Resolve_Exception extends \RuntimeException {
 	/**
 	 * Builds the refusal for a restricted query that came back with foreign cards.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return self
 	 */
@@ -61,7 +61,7 @@ final class Link_Resolve_Exception extends \RuntimeException {
 	/**
 	 * Builds the refusal for a cursor that does not advance.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return self
 	 */
@@ -72,7 +72,7 @@ final class Link_Resolve_Exception extends \RuntimeException {
 	/**
 	 * Returns the reason code.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */

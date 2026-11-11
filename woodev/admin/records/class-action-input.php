@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * {@see Action_Input_Exception}. Nothing is coerced into something the caller did not send, and
  * a field that was not sent is not in the result (an omitted boolean is not `false`).
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Action_Input {
 
@@ -36,7 +36,7 @@ final class Action_Input {
 	/**
 	 * Validates a payload.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $action  Normalised action descriptor.
 	 * @param mixed               $payload Raw `payload` from the request body.

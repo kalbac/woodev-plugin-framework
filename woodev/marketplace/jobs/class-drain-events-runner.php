@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  *   keeps storing them) and the drain asks to run again in an hour, so a renewed licence resumes the work without the merchant
  *   touching anything.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Drain_Events_Runner {
 	public const BATCH_SIZE            = 50;
@@ -81,7 +81,7 @@ final class Drain_Events_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Event_Ledger                $ledger    Event ledger.
 	 * @param Notification_Account_Reader $accounts  Accounts.
@@ -104,7 +104,7 @@ final class Drain_Events_Runner {
 	/**
 	 * Hooks the drain and the sweep.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -116,7 +116,7 @@ final class Drain_Events_Runner {
 	/**
 	 * Drains one account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int|string $account_id Account id (Action Scheduler passes the stored argument).
 	 * @return void
@@ -147,7 +147,7 @@ final class Drain_Events_Runner {
 	/**
 	 * Returns the wait after a failed attempt.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $attempts Attempts made, counting the failed one.
 	 * @return int Seconds.

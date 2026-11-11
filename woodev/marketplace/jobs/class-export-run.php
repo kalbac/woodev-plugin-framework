@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Lets the runner recover from an unexpected exception at any step: which task it opened, which links it claimed, whether the
  * request was sent and whether its outcome is already recorded.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Export_Run {
 	/**

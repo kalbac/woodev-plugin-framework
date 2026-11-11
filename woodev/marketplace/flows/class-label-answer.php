@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * (a file), refused (a sentence), or an answer of a shape the provider does not know, which the service keeps as it came so
  * nothing is lost.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Label_Answer {
 	public const PENDING = 'pending';
@@ -77,7 +77,7 @@ final class Label_Answer {
 	/**
 	 * The marketplace is still making the label.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return self
 	 */
@@ -88,7 +88,7 @@ final class Label_Answer {
 	/**
 	 * The label is ready.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string       $body         File.
 	 * @param string       $content_type Content type, for example `application/pdf`.
@@ -102,7 +102,7 @@ final class Label_Answer {
 	/**
 	 * The marketplace could not make the label.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string       $message Sentence for the merchant; empty to let the service say it.
 	 * @param array<mixed> $raw     The answer, for the task row.
@@ -115,7 +115,7 @@ final class Label_Answer {
 	/**
 	 * An answer of an unknown shape: the service stores it as JSON.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<mixed> $raw The decoded answer without any file.
 	 * @return self
@@ -127,7 +127,7 @@ final class Label_Answer {
 	/**
 	 * Returns the kind.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -138,7 +138,7 @@ final class Label_Answer {
 	/**
 	 * Returns the sentence of a refusal.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -149,7 +149,7 @@ final class Label_Answer {
 	/**
 	 * Returns the file.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -160,7 +160,7 @@ final class Label_Answer {
 	/**
 	 * Returns the content type of the file.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -171,7 +171,7 @@ final class Label_Answer {
 	/**
 	 * Returns the answer without the file.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<mixed>
 	 */

@@ -36,7 +36,7 @@ defined( 'ABSPATH' ) || exit;
  * The engine, not the provider, decides the `status` of an apply from the counts, so a
  * partial result can never be reported as done.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Action_Response {
 
@@ -60,7 +60,7 @@ final class Action_Response {
 	/**
 	 * Builds the body of the preview route.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $action Normalised action descriptor.
 	 * @param array<string,mixed> $result Provider result.
@@ -94,7 +94,7 @@ final class Action_Response {
 	/**
 	 * Builds the body of the apply route.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Records_Definition  $definition Definition the request was validated against.
 	 * @param array<string,mixed> $action     Normalised action descriptor.
@@ -134,7 +134,7 @@ final class Action_Response {
 	 * applies it to what a provider returns and sends the origins along, so the browser checks
 	 * the same list before it offers the link.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $url Candidate URL.
 	 * @return bool
@@ -152,7 +152,7 @@ final class Action_Response {
 	/**
 	 * The origins this site is served from: the front end and the admin may sit on different hosts.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string[] `scheme://host[:port]`, lower-case, distinct.
 	 */

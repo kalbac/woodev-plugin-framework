@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * so it asks here what a refused line means and how a card is archived
  * ({@see \Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter::stock_rules()}).
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Stock_Rules {
 	/**
@@ -44,7 +44,7 @@ interface Stock_Rules {
 	/**
 	 * Tells what a refused line means.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Item_Result $answer The marketplace's answer for one line, not accepted.
 	 * @return string One of the constants above.
@@ -56,7 +56,7 @@ interface Stock_Rules {
 	 *
 	 * A marketplace that has no archive answers true: the zero stock is all it can do, and the links are retired.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account        $account Account.
 	 * @param Product_Link[] $links   Links whose cards go to the archive.

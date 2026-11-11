@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  * Where the stamp is kept and how an order names its account is the plugin's order meta, so both are asked through callables.
  * An order without a stamp is not ours and is left to WooCommerce.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Order_Stock_Filters {
 	public const STAMP_SITE        = 'site';
@@ -59,7 +59,7 @@ final class Order_Stock_Filters {
 	/**
 	 * Creates the filters.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param callable $stamp_of   `function ( \WC_Order $order ): string`, a `STAMP_*` value or ''.
 	 * @param callable $account_of `function ( \WC_Order $order ): ?Account`.
@@ -72,7 +72,7 @@ final class Order_Stock_Filters {
 	/**
 	 * Hooks both filters.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -84,7 +84,7 @@ final class Order_Stock_Filters {
 	/**
 	 * Decides whether WooCommerce may take an order's stock.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $allowed WooCommerce's answer so far.
 	 * @param mixed $order   The order.
@@ -108,7 +108,7 @@ final class Order_Stock_Filters {
 	/**
 	 * Decides whether WooCommerce may give an order's stock back.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $allowed WooCommerce's answer so far.
 	 * @param mixed $order   The order.

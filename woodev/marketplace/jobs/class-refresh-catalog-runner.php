@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * No account claim: the catalogue cache belongs to the marketplace, not to an account, and the job writes nothing a claim guards.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Refresh_Catalog_Runner {
 	public const BUDGET_SECONDS = 60;
@@ -103,7 +103,7 @@ final class Refresh_Catalog_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Account_Store        $accounts       Accounts.
 	 * @param string                    $marketplace_id The adapter's {@see \Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter::id()}.
@@ -130,7 +130,7 @@ final class Refresh_Catalog_Runner {
 	/**
 	 * Hooks the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -141,7 +141,7 @@ final class Refresh_Catalog_Runner {
 	/**
 	 * Runs the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $account_id Account id, 0 for the first enabled account.
 	 * @param mixed $since      Freshness limit of a pass being continued, 0 for a new pass.

@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * It is scoped to the marketplace on purpose. The class is shared by every marketplace plugin on the site, and a shop may take
  * its prices from one marketplace and push them to another: that other plugin must see the save.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Price_Refresh_Guard {
 	/**
@@ -31,7 +31,7 @@ final class Price_Refresh_Guard {
 	/**
 	 * Runs work with the guard of a marketplace raised; the guard drops when the work ends, however it ends.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string   $marketplace_id The adapter's id of the marketplace the price comes from.
 	 * @param callable $work           `function (): mixed`.
@@ -50,7 +50,7 @@ final class Price_Refresh_Guard {
 	/**
 	 * Tells whether a guarded write of a marketplace is running in this request.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $marketplace_id The adapter's id.
 	 * @return bool

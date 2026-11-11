@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * Scoped to a product category and its children when one is given (the optional category of the linking tool); a variation belongs
  * to the categories of its parent.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Shop_Sku_Source {
 	private const STATUSES = [ 'publish', 'draft', 'pending', 'private' ];
@@ -33,7 +33,7 @@ final class Shop_Sku_Source {
 	/**
 	 * Creates the source.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \wpdb $db Database.
 	 */
@@ -44,7 +44,7 @@ final class Shop_Sku_Source {
 	/**
 	 * Lists products with a SKU.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int|null $category_id Product category (`product_cat` term id) whose subtree to read, or null for the whole shop.
 	 * @return array<int,array{id:int,parent_id:int,sku:string}> In product id order.

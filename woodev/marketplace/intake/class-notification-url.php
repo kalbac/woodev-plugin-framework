@@ -13,13 +13,13 @@ defined( 'ABSPATH' ) || exit;
  * The address the marketplace is asked to POST to:
  * `…/wp-json/woodev/v1/marketplace/{marketplace id}/notifications/{account_id}/{token}`.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Notification_Url {
 	/**
 	 * Builds the URL of an account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string               $marketplace_id The adapter's id.
 	 * @param Notification_Account $account        Account.

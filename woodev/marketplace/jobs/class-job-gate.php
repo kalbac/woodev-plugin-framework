@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  * - **One run per account.** A run takes the account row's claim through the account store — the claim the per-account sender
  *   and every other writer of the account take — and carries it as a {@see Claim_Fence} into every fenced write.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Job_Gate {
 	public const LICENCE_DELAY = 3600;
@@ -67,7 +67,7 @@ final class Job_Gate {
 	/**
 	 * Creates the gate.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Account_Store $accounts   Accounts.
 	 * @param License_Gate       $license    Licence gate.
@@ -85,7 +85,7 @@ final class Job_Gate {
 	/**
 	 * Checks an account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @return array{0:Account|null,1:int} The account (null: stop silently) and the seconds to wait first (0: go).
@@ -110,7 +110,7 @@ final class Job_Gate {
 	 * Tells whether the account may write to the marketplace: the plugin's write gate lets it, or there is none. Only an
 	 * explicit `true` of the gate allows a write, so a gate that fails to answer holds the account back.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @return bool
@@ -122,7 +122,7 @@ final class Job_Gate {
 	/**
 	 * Takes the account row's claim for a run.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @return Claim_Fence|null Null when another run holds it.
@@ -136,7 +136,7 @@ final class Job_Gate {
 	/**
 	 * Tells whether a run still holds its claim, and extends it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int         $account_id Account id.
 	 * @param Claim_Fence $fence      The run's claim.
@@ -149,7 +149,7 @@ final class Job_Gate {
 	/**
 	 * Releases a run's claim; a run that lost it changes nothing.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int         $account_id Account id.
 	 * @param Claim_Fence $fence      The run's claim.
@@ -162,7 +162,7 @@ final class Job_Gate {
 	/**
 	 * Returns the account pause, for a runner that must apply one.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Account_Pause
 	 */

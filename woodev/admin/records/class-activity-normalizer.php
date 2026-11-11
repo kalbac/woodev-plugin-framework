@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  * A provider that breaks the contract is a developer error: the whole response becomes a generic 500,
  * like any other broken provider answer ({@see Row_Normalizer}).
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Activity_Normalizer {
 
@@ -51,7 +51,7 @@ final class Activity_Normalizer {
 	/**
 	 * The activity of a row with nothing going on.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $observed_at Time of the observation; now when empty.
 	 * @return array{locked:bool,reason:string,blocked_actions:string[],processes:array<int,array<string,mixed>>,observed_at:string}
@@ -69,7 +69,7 @@ final class Activity_Normalizer {
 	/**
 	 * The current time as `observed_at` is written.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -80,7 +80,7 @@ final class Activity_Normalizer {
 	/**
 	 * Normalises the `activity` a provider attached to a row.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Records_Definition $definition Definition the action ids are checked against.
 	 * @param mixed              $raw        Provider value; null or absent = nothing going on.
@@ -118,7 +118,7 @@ final class Activity_Normalizer {
 	 * `active` is the line «по аккаунту идёт фоновая работа»; `blocked_actions` are the account actions
 	 * that take the account's claim themselves and so cannot run meanwhile.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Records_Definition $definition Definition the action ids are checked against.
 	 * @param mixed              $raw        Provider value; null or absent = nothing going on.
@@ -152,7 +152,7 @@ final class Activity_Normalizer {
 	/**
 	 * Account activity with nothing going on.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array{active:bool,text:string,blocked_actions:string[],observed_at:string}
 	 */
@@ -168,7 +168,7 @@ final class Activity_Normalizer {
 	/**
 	 * Whether any of the given row activities, or the account, still has work going on.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<int,array<string,mixed>> $rows    Normalised rows (each with its `activity`).
 	 * @param array<string,mixed>            $account Normalised account activity.

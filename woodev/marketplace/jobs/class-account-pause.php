@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Which answers are a refusal is the adapter's knowledge ({@see Error_Classifier}); this class only keeps the time.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Account_Pause {
 	public const SECONDS = 21600;
@@ -59,7 +59,7 @@ final class Account_Pause {
 	/**
 	 * Creates the pause.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Error_Classifier $classifier Maps a refusal to a health result.
 	 * @param callable         $read       `function ( int $account_id ): ?Health_Result`.
@@ -77,7 +77,7 @@ final class Account_Pause {
 	 * Builds the pause over the account store: the health is read from the account row and written only while the row still
 	 * holds the credentials the refused call used, so a key the merchant replaced meanwhile is not marked refused.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Account_Store $accounts   Accounts.
 	 * @param Error_Classifier   $classifier Maps a refusal to a health result.
@@ -98,7 +98,7 @@ final class Account_Pause {
 	/**
 	 * Records that the marketplace refused the account's credentials.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account      $account Account.
 	 * @param Remote_Error $error   The refusal.
@@ -111,7 +111,7 @@ final class Account_Pause {
 	/**
 	 * Tells how many seconds the account's jobs still wait.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @return int 0 when the account is not paused.

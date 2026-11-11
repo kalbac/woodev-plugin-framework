@@ -31,7 +31,7 @@ defined( 'ABSPATH' ) || exit;
  * readback that was taken over during its read writes nothing. A trashed product, or a pair whose archive is still pending, is
  * left to the archive flow: its retained WC stock is not drift.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Stock_Readback {
 	/**
@@ -79,7 +79,7 @@ final class Stock_Readback {
 	/**
 	 * Creates the readback.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Link_Store     $links   Links.
 	 * @param Stock_Pusher        $pusher  The marketplace's stock calls.
@@ -100,7 +100,7 @@ final class Stock_Readback {
 	/**
 	 * Reads and compares the stock of some links of an account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account_Run   $run   The run under the account claim; each read counts against its budget.
 	 * @param Link_Record[] $links Links to check; links that are not created cards with stock sync on are skipped.

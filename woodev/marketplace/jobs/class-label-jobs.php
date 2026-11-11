@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * which the import flow answers on the same hook. While the licence is not in force, or the account is paused, the poll waits
  * without calling the marketplace.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Label_Jobs {
 	public const JOB_POLL  = 'poll_task';
@@ -69,7 +69,7 @@ final class Label_Jobs {
 	/**
 	 * Creates the jobs.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Gate         $gate       Gate of licence, account and pause.
 	 * @param Label_Service    $service    Service.
@@ -88,7 +88,7 @@ final class Label_Jobs {
 	/**
 	 * Hooks the jobs.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -101,7 +101,7 @@ final class Label_Jobs {
 	/**
 	 * Returns the hook of the poll job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -112,7 +112,7 @@ final class Label_Jobs {
 	/**
 	 * Returns the hook of the daily prune.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -123,7 +123,7 @@ final class Label_Jobs {
 	/**
 	 * Queues the next poll of a task unless the same one is already pending.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $task_id Local task id.
 	 * @param int $delay   Seconds from now.
@@ -151,7 +151,7 @@ final class Label_Jobs {
 	 * Asks the marketplace for the labels of remote orders and queues the first poll. The entry point of the orders screen, after it
 	 * has authorised the user for every order (spec 8.5).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account  $account       Account the orders belong to.
 	 * @param string[] $external_keys Remote-order keys.
@@ -173,7 +173,7 @@ final class Label_Jobs {
 	 * Runs `poll_task` for a label task. It never throws out (spec 4.1): a failure either reschedules the poll, following the error
 	 * consequence of spec 4.3 and the back-off ladder, or ends the task visibly; no outcome leaves an open task without a next action.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int|string $task_id Local task id (Action Scheduler passes the stored argument).
 	 * @param int|string $failed  Consecutive failures so far.
@@ -332,7 +332,7 @@ final class Label_Jobs {
 	/**
 	 * Deletes the documents older than seven days.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -343,7 +343,7 @@ final class Label_Jobs {
 	/**
 	 * Creates the daily prune once.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */

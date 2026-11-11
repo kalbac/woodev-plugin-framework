@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Not final: a test replaces the counter and the clock, the two seams the trait leaves protected.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 class Push_Rate_Limiter {
 	use \Woodev\Framework\Http\Rest_Rate_Limit_Trait;
@@ -28,7 +28,7 @@ class Push_Rate_Limiter {
 	/**
 	 * Spends one request of a token's budget.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $token Token from the URL.
 	 * @return bool True when the token has already used up this minute.
