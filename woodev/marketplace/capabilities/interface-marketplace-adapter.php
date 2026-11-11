@@ -328,4 +328,13 @@ interface Marketplace_Adapter {
 	 * @return \Woodev\Framework\Marketplace\Flows\Catalog_Refresher
 	 */
 	public function catalog_refresher(): \Woodev\Framework\Marketplace\Flows\Catalog_Refresher;
+
+	/**
+	 * Returns the UI descriptor for settings sections, key-expiry notices and diagnostics.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @return \Woodev\Framework\Marketplace\Settings\Settings_Descriptor
+	 */
+	public function settings_descriptor(): \Woodev\Framework\Marketplace\Settings\Settings_Descriptor;
 }
