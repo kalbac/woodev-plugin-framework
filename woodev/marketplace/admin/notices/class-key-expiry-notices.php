@@ -163,9 +163,6 @@ final class Key_Expiry_Notices {
 	 */
 	private function notice_id( Account $account, string $tier_slug ): string {
 		$fingerprint = (string) $account->setting( 'secret_fingerprint', '' );
-		if ( '' === $fingerprint ) {
-			$fingerprint = (string) $account->setting( 'key_fingerprint', '' );
-		}
 
 		$key = substr( $fingerprint, 0, 8 );
 		$key = '' === $key ? 'current' : $key;

@@ -1,6 +1,6 @@
 <?php
 /**
- * Unit tests for Logging, Error_Log, Queue_Health and Marketplace_Plugin logging gating.
+ * Unit tests for Logging, Queue_Health and Marketplace_Plugin logging gating.
  *
  * @package Woodev\Tests\Unit\Marketplace
  */
@@ -8,11 +8,10 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Diagnostics;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Marketplace\Admin\Diagnostics\Error_Log;
+use Mockery;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Queue_Health;
 use Woodev\Framework\Marketplace\Data\Schema;
-use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
@@ -47,24 +46,16 @@ final class LoggingAndQueueHealthTest extends TestCase {
 
 	public function test_marketplace_plugin_gates_debug_and_api_logs_behind_logging_option_and_redacts(): void {
 		$entries = [];
-		$logger  = new class( $entries ) {
-			/** @var array<int,array{level:string,message:string,context:array<string,mixed>}> */
-			public $entries;
-
-			/** @param array<int,array{level:string,message:string,context:array<string,mixed>}> $entries */
-			public function __construct( array &$entries ) {
-				$this->entries = &$entries;
-			}
-
-			/** @param array<string,mixed> $context */
-			public function log( string $level, string $message, array $context = [] ): void {
-				$this->entries[] = [
+		$logger  = Mockery::mock( '\WC_Logger_Interface' );
+		$logger->shouldReceive( 'log' )->andReturnUsing(
+			static function ( string $level, string $message, array $context = [] ) use ( &$entries ): void {
+				$entries[] = [
 					'level'   => $level,
 					'message' => $message,
 					'context' => $context,
 				];
 			}
-		};
+		);
 
 		$logging_option = 'no';
 		Functions\when( 'get_option' )->alias(
@@ -111,56 +102,18 @@ final class LoggingAndQueueHealthTest extends TestCase {
 			]
 		);
 
-		$this->assertCount( 3, $entries );
+		// One debug line for the debug call, one for the request, one for the response.
+		$this->assertCount( 4, $entries );
 		$this->assertSame( 'debug', $entries[1]['level'] );
 		$this->assertStringNotContainsString( 'my-live-key', $entries[1]['message'] );
 		$this->assertSame( 'debug', $entries[2]['level'] );
 		$this->assertStringNotContainsString( 'my-live-key', $entries[2]['message'] );
 		$this->assertStringNotContainsString( 'abcdef0123456789abcdef0123456789', $entries[2]['message'] );
-		$this->assertStringNotContainsString( 'hidden-tok', $entries[2]['message'] );
 		$this->assertStringContainsString( 'Запрос', $entries[2]['message'] );
-		$this->assertStringContainsString( 'Ответ', $entries[2]['message'] );
-	}
-
-	public function test_error_log_records_redacted_entry_in_ring_and_invokes_sink(): void {
-		$db = new Sqlite_Wpdb();
-		Sqlite_Tables::install( $db );
-		$schema = Sqlite_Tables::schema();
-		$ring   = new Api_Error_Ring(
-			$db,
-			$schema->table_name( 'api_errors', Sqlite_Tables::PREFIX ),
-			static function (): int {
-				return self::NOW;
-			}
-		);
-
-		$logged = [];
-		$err    = new Error_Log(
-			$ring,
-			static function ( string $line ) use ( &$logged ): void {
-				$logged[] = $line;
-			},
-			[ 'vendor_secret_key' ]
-		);
-
-		$err->record_failure(
-			3,
-			'/v1/push/notifications/3/0123456789abcdef0123456789abcdef',
-			401,
-			'AUTH',
-			'Rejected header vendor-secret-key: ultra-secret-999',
-			'trace-42'
-		);
-
-		$this->assertCount( 1, $logged );
-		$this->assertStringNotContainsString( 'ultra-secret-999', $logged[0] );
-		$this->assertStringNotContainsString( '0123456789abcdef0123456789abcdef', $logged[0] );
-
-		$rows = $db->get_results( 'SELECT path, message FROM wp_woodev_fake_api_errors', 'ARRAY_A' );
-		$this->assertCount( 1, $rows );
-		$this->assertStringNotContainsString( 'ultra-secret-999', (string) $rows[0]['message'] );
-		$this->assertStringContainsString( '[скрыто]', (string) $rows[0]['message'] );
-		$this->assertStringContainsString( '/notifications/3/[скрыто]', (string) $rows[0]['path'] );
+		$this->assertSame( 'debug', $entries[3]['level'] );
+		$this->assertStringNotContainsString( 'hidden-tok', $entries[3]['message'] );
+		$this->assertStringContainsString( 'Ответ', $entries[3]['message'] );
+		$this->assertSame( 'fake_mp', $entries[3]['context']['source'], 'the log source is the plugin id, as the base class writes it' );
 	}
 
 	public function test_queue_health_reads_action_scheduler_and_ledger_tables_and_tolerates_missing_as_tables(): void {
@@ -230,50 +183,50 @@ final class LoggingAndQueueHealthTest extends TestCase {
 		$this->assertSame( 1, $summary['open_tasks'] );
 		$this->assertSame( 1, $summary['failed_task_items'] );
 
-		// Now install Action Scheduler tables and verify group-scoped overdue count and last_run_at.
-		$db->query( 'CREATE TABLE wp_actionscheduler_groups (group_id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT)' );
-		$db->query( 'CREATE TABLE wp_actionscheduler_claims (claim_id INTEGER PRIMARY KEY AUTOINCREMENT, date_created_gmt TEXT)' );
-		$db->query( 'CREATE TABLE wp_actionscheduler_actions (action_id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER, status TEXT, scheduled_date_gmt TEXT, last_attempt_gmt TEXT)' );
+		// Action Scheduler answers through its public API, scoped to this plugin's group.
+		$queries = [];
+		Functions\when( 'as_get_scheduled_actions' )->alias(
+			static function ( array $query, string $return ) use ( &$queries ): array {
+				$queries[] = $query;
 
-		$db->insert( 'wp_actionscheduler_groups', [ 'slug' => $names->group() ] );
-		$own_group = (int) $db->insert_id;
-		$db->insert( 'wp_actionscheduler_groups', [ 'slug' => 'other_plugin' ] );
-		$other_group = (int) $db->insert_id;
+				return [ '41' ];
+			}
+		);
+		$store = new class() {
+			/** @var array<int,array<string,mixed>> */
+			public $counted = [];
 
-		$db->insert( 'wp_actionscheduler_claims', [ 'date_created_gmt' => gmdate( 'Y-m-d H:i:s', self::NOW - 45 ) ] );
-		// Overdue action in our group (10 min ago).
-		$db->insert(
-			'wp_actionscheduler_actions',
-			[
-				'group_id'           => $own_group,
-				'status'             => 'pending',
-				'scheduled_date_gmt' => gmdate( 'Y-m-d H:i:s', self::NOW - 600 ),
-				'last_attempt_gmt'   => '0000-00-00 00:00:00',
-			]
-		);
-		// Within grace window (60s ago) -> not overdue.
-		$db->insert(
-			'wp_actionscheduler_actions',
-			[
-				'group_id'           => $own_group,
-				'status'             => 'pending',
-				'scheduled_date_gmt' => gmdate( 'Y-m-d H:i:s', self::NOW - 60 ),
-				'last_attempt_gmt'   => '0000-00-00 00:00:00',
-			]
-		);
-		// Overdue in another plugin's group -> ignored.
-		$db->insert(
-			'wp_actionscheduler_actions',
-			[
-				'group_id'           => $other_group,
-				'status'             => 'pending',
-				'scheduled_date_gmt' => gmdate( 'Y-m-d H:i:s', self::NOW - 3600 ),
-				'last_attempt_gmt'   => '0000-00-00 00:00:00',
-			]
-		);
+			/** @var string[] */
+			public $dated = [];
+
+			public function get_date( string $id ): \DateTimeImmutable {
+				$this->dated[] = $id;
+
+				return new \DateTimeImmutable( '@' . ( 1794139200 - 45 ) );
+			}
+
+			/** @param array<string,mixed> $query */
+			public function query_actions( array $query, string $return ): int {
+				$this->counted[] = $query;
+
+				return 3;
+			}
+		};
+		$queue = new Queue_Health( $db, $names, $schema, static function (): int { return self::NOW; }, $store );
 
 		$this->assertSame( self::NOW - 45, $queue->last_run_at() );
-		$this->assertSame( 1, $queue->overdue_count() );
-		$this->assertSame( 2, $queue->pending_actions_count() );
+		$this->assertSame( 'woodev-fake-mp', $queries[0]['group'], 'only this plugin\'s group, not every claim on the site' );
+		$this->assertSame( 'complete', $queries[0]['status'] );
+		$this->assertSame( [ '41' ], $store->dated );
+
+		$this->assertSame( 3, $queue->overdue_count() );
+		$this->assertSame( 'woodev-fake-mp', $store->counted[0]['group'] );
+		$this->assertSame( 'pending', $store->counted[0]['status'] );
+		$this->assertSame( gmdate( 'Y-m-d H:i:s', self::NOW - Queue_Health::OVERDUE_GRACE_SECONDS ), $store->counted[0]['date'] );
+		$this->assertSame( '<=', $store->counted[0]['date_compare'] );
+
+		// Nothing finished yet.
+		Functions\when( 'as_get_scheduled_actions' )->justReturn( [] );
+		$this->assertNull( $queue->last_run_at() );
 	}
 }

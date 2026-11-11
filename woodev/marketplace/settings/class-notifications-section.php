@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Admin\Diagnostics\Diagnostics_Reader;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
@@ -30,14 +31,33 @@ defined( 'ABSPATH' ) || exit;
  * - Per-account card shows the masked webhook URL (`/notifications/{id}/[скрыто]`), wanted push event descriptions,
  *   stored registration status and latest received event, plus the four remote registration actions gated on
  *   {@see License_Gate}.
- * - Global security card validates `notifications_ip_allowlist` and `notifications_trusted_proxies` via
+ * - Global security card validates `ip_allowlist` and `trusted_proxies` via
  *   {@see Ip_List_Validator}.
  *
  * @since 2.1.2
  */
 final class Notifications_Section implements Settings_Section_Provider {
-	public const ALLOWLIST_ID       = 'notifications_ip_allowlist';
-	public const TRUSTED_PROXIES_ID = 'notifications_trusted_proxies';
+	// The ids the donor plugin saved under (`woodev_{plugin id}_ip_allowlist`): installed shops keep their lists.
+	public const ALLOWLIST_ID       = 'ip_allowlist';
+	public const TRUSTED_PROXIES_ID = 'trusted_proxies';
+
+	/**
+	 * Names the options the saved lists live in, for the adapter's {@see \Woodev\Framework\Marketplace\Intake\Push_Protocol}
+	 * to read (`get_option( $names['allowlist'], … )`) when it decides where a request came from and whether that is the marketplace.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @param string $plugin_id Plugin id, e.g. `ozon-seller`.
+	 * @return array{allowlist:string,trusted_proxies:string}
+	 */
+	public static function option_names( string $plugin_id ): array {
+		$family = Uninstaller::option_prefix( $plugin_id );
+
+		return [
+			'allowlist'       => $family . self::ALLOWLIST_ID,
+			'trusted_proxies' => $family . self::TRUSTED_PROXIES_ID,
+		];
+	}
 
 	/**
 	 * Marketplace adapter.
@@ -122,8 +142,8 @@ final class Notifications_Section implements Settings_Section_Provider {
 			return;
 		}
 
-		$descriptor  = $this->adapter->settings_descriptor();
-		$marketplace = $descriptor->marketplace_name();
+		$marketplace = $this->adapter->settings_descriptor()->marketplace_name();
+		$protocol    = $this->adapter->push_protocol();
 		$ip_check    = static function ( $value ): bool {
 			return [] === Ip_List_Validator::invalid_entries( (string) $value );
 		};
@@ -135,7 +155,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 			[
 				/* translators: %s: marketplace name. */
 				'name'             => sprintf( __( 'Разрешённые адреса %s', 'woodev-plugin-framework' ), $marketplace ),
-				'default'          => $descriptor->default_ip_allowlist(),
+				'default'          => null !== $protocol ? $protocol->default_ip_allowlist() : '',
 				'validate'         => $ip_check,
 				'validate_message' => $ip_message,
 			]
@@ -213,7 +233,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 		$id         = $account->id();
 		$raw_url    = Notification_Url::for_account( $this->adapter->id(), $account );
 		$masked_url = Report_Redactor::redact_text( $raw_url, [], [ $account->token() ] );
-		$admin      = $this->adapter->settings_descriptor()->push_admin( $id );
+		$admin      = $this->adapter->push_admin( $id );
 
 		$wanted = null !== $admin ? $admin->wanted_descriptions( $account ) : [];
 		$state  = $account->state();
@@ -376,7 +396,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 			return Tool_Result::failure( __( 'Аккаунт не найден.', 'woodev-plugin-framework' ) );
 		}
 
-		$admin = $this->adapter->settings_descriptor()->push_admin( $account_id );
+		$admin = $this->adapter->push_admin( $account_id );
 		if ( null === $admin ) {
 			return Tool_Result::failure( __( 'Push-уведомления недоступны для этого аккаунта.', 'woodev-plugin-framework' ) );
 		}

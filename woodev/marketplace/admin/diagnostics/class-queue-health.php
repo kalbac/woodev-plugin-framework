@@ -15,11 +15,11 @@ use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Reads the state of Action Scheduler for one marketplace plugin's group (`woodev_{plugin_id}`), alongside the plugin's
+ * Reads the state of Action Scheduler for one marketplace plugin's group (`woodev_{plugin_id}`) through its public API
+ * (`as_get_scheduled_actions()`, the store's `query_actions()`), whatever data store it uses, alongside the plugin's own
  * inbound `events` and async `tasks` tables.
  *
- * Queries run with `$wpdb->suppress_errors( true )` so a shop where Action Scheduler tables are not installed yet (or
- * an in-memory unit-test database without them) degrades cleanly to `null` / `0`.
+ * Without Action Scheduler the answers are `null` / `0`; the table queries run with `$wpdb->suppress_errors( true )`.
  *
  * @since 2.1.2
  */
@@ -58,6 +58,13 @@ final class Queue_Health {
 	private $clock;
 
 	/**
+	 * Action Scheduler store override (tests); null reads `ActionScheduler::store()`.
+	 *
+	 * @var object|null
+	 */
+	private $store;
+
+	/**
 	 * Creates the queue health reader.
 	 *
 	 * @since 2.1.2
@@ -66,102 +73,90 @@ final class Queue_Health {
 	 * @param Job_Names     $names  Plugin job names (supplies the Action Scheduler group).
 	 * @param Schema|null   $schema Optional marketplace schema for `events` and `tasks` counts.
 	 * @param callable|null $clock  `function (): int`, defaults to `time`.
+	 * @param object|null   $store  Action Scheduler store with `get_date( $id )` and `query_actions( $query, 'count' )`; `ActionScheduler::store()` when null.
 	 */
-	public function __construct( \wpdb $db, Job_Names $names, ?Schema $schema = null, ?callable $clock = null ) {
+	public function __construct( \wpdb $db, Job_Names $names, ?Schema $schema = null, ?callable $clock = null, ?object $store = null ) {
 		$this->db     = $db;
 		$this->group  = $names->group();
 		$this->schema = $schema;
 		$this->clock  = $clock ?? 'time';
+		$this->store  = $store;
 	}
 
 	/**
-	 * Unix timestamp of the most recent Action Scheduler claim or completed plugin action, or null when unknown.
+	 * Unix timestamp of the last finished action of this plugin's group, or null when none finished or the queue cannot be read.
+	 *
+	 * «Last run» is the moment the newest action FINISHED, not the date it was scheduled for, so the query orders by `modified`
+	 * and the date is read through the store's `get_date()`, which answers the execution date of a completed action.
 	 *
 	 * @since 2.1.2
 	 *
 	 * @return int|null
 	 */
 	public function last_run_at(): ?int {
-		$claims  = $this->db->prefix . 'actionscheduler_claims';
-		$actions = $this->db->prefix . 'actionscheduler_actions';
-		$groups  = $this->db->prefix . 'actionscheduler_groups';
+		if ( ! function_exists( 'as_get_scheduled_actions' ) ) {
+			return null;
+		}
 
-		$prev = $this->db->suppress_errors( true );
-
-		$claim_gmt = $this->db->get_var( "SELECT MAX(date_created_gmt) FROM {$claims}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Prefix-derived table name.
-
-		$completed_gmt = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-			$this->db->prepare(
-				"SELECT MAX(a.last_attempt_gmt) FROM {$actions} a INNER JOIN {$groups} g ON a.group_id = g.group_id WHERE g.slug = %s AND a.status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Prefix-derived table names.
-				$this->group,
-				'complete'
-			)
+		$ids = as_get_scheduled_actions(
+			[
+				'status'   => 'complete',
+				'group'    => $this->group,
+				'orderby'  => 'modified',
+				'order'    => 'DESC',
+				'per_page' => 1,
+			],
+			'ids'
 		);
 
-		$this->db->suppress_errors( $prev );
-
-		$claim_ts     = self::gmt_to_timestamp( $claim_gmt );
-		$completed_ts = self::gmt_to_timestamp( $completed_gmt );
-
-		if ( null === $claim_ts ) {
-			return $completed_ts;
-		}
-		if ( null === $completed_ts ) {
-			return $claim_ts;
+		$store = $this->store();
+		if ( ! is_array( $ids ) || [] === $ids || null === $store ) {
+			return null;
 		}
 
-		return max( $claim_ts, $completed_ts );
+		$date = $store->get_date( (string) reset( $ids ) );
+
+		return $date instanceof \DateTimeInterface ? $date->getTimestamp() : null;
 	}
 
 	/**
-	 * Counts pending actions in this plugin's Action Scheduler group whose scheduled time is older than the grace window.
+	 * Counts this plugin's pending actions that are past their time by more than the grace window.
 	 *
 	 * @since 2.1.2
 	 *
 	 * @return int
 	 */
 	public function overdue_count(): int {
-		$actions   = $this->db->prefix . 'actionscheduler_actions';
-		$groups    = $this->db->prefix . 'actionscheduler_groups';
-		$threshold = gmdate( 'Y-m-d H:i:s', (int) call_user_func( $this->clock ) - self::OVERDUE_GRACE_SECONDS );
+		$store = $this->store();
+		if ( null === $store || ! function_exists( 'as_get_scheduled_actions' ) ) {
+			return 0;
+		}
 
-		$prev  = $this->db->suppress_errors( true );
-		$count = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-			$this->db->prepare(
-				"SELECT COUNT(*) FROM {$actions} a INNER JOIN {$groups} g ON a.group_id = g.group_id WHERE g.slug = %s AND a.status = %s AND a.scheduled_date_gmt > %s AND a.scheduled_date_gmt < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Prefix-derived table names.
-				$this->group,
-				'pending',
-				'0000-00-00 00:00:00',
-				$threshold
+		return max(
+			0,
+			(int) $store->query_actions(
+				[
+					'status'       => 'pending',
+					'group'        => $this->group,
+					'date'         => gmdate( 'Y-m-d H:i:s', (int) call_user_func( $this->clock ) - self::OVERDUE_GRACE_SECONDS ),
+					'date_compare' => '<=',
+				],
+				'count'
 			)
 		);
-		$this->db->suppress_errors( $prev );
-
-		return max( 0, (int) $count );
 	}
 
 	/**
-	 * Counts pending actions in this plugin's Action Scheduler group (due or future).
+	 * The Action Scheduler store, or null when Action Scheduler is not loaded.
 	 *
-	 * @since 2.1.2
-	 *
-	 * @return int
+	 * @return object|null
 	 */
-	public function pending_actions_count(): int {
-		$actions = $this->db->prefix . 'actionscheduler_actions';
-		$groups  = $this->db->prefix . 'actionscheduler_groups';
+	private function store(): ?object {
+		if ( null !== $this->store ) {
+			return $this->store;
+		}
 
-		$prev  = $this->db->suppress_errors( true );
-		$count = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-			$this->db->prepare(
-				"SELECT COUNT(*) FROM {$actions} a INNER JOIN {$groups} g ON a.group_id = g.group_id WHERE g.slug = %s AND a.status = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Prefix-derived table names.
-				$this->group,
-				'pending'
-			)
-		);
-		$this->db->suppress_errors( $prev );
-
-		return max( 0, (int) $count );
+		return class_exists( '\\ActionScheduler' ) ? \ActionScheduler::store() : null;
 	}
 
 	/**

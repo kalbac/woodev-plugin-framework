@@ -32,7 +32,7 @@ defined( 'ABSPATH' ) || exit;
  * - Optional capabilities (`INBOUND_STOCK`, `IMPORT_PRODUCTS`, `price_pusher()`, `price_reader()`, `posting_handler()`)
  *   are gated by D2: unsupported features are omitted from the UI rather than greyed out.
  * - Price-rule changes run inside `Wpdb_Account_Store::update_settings()` compare-and-swap and fire
- *   `woodev_{plugin_id}_account_price_rules_changed` (`Flow_Wiring::price_rules_changed_hook()`).
+ *   `woodev_{plugin_id}_account_price_rules_changed`, which `Flow_Wiring` listens to and queues a recompute for.
  *
  * @since 2.1.2
  */

@@ -511,6 +511,22 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	}
 
 	/**
+	 * Returns the push administration of an account: the `push_admin` policy is a `function ( int $account_id ): ?Push_Admin`, none by default.
+	 *
+	 * @param int $account_id Account id.
+	 * @return \Woodev\Framework\Marketplace\Settings\Push_Admin|null
+	 */
+	public function push_admin( int $account_id ): ?\Woodev\Framework\Marketplace\Settings\Push_Admin {
+		if ( ! isset( $this->policies['push_admin'] ) ) {
+			return null;
+		}
+
+		$admin = call_user_func( $this->policies['push_admin'], $account_id );
+
+		return $admin instanceof \Woodev\Framework\Marketplace\Settings\Push_Admin ? $admin : null;
+	}
+
+	/**
 	 * Returns the local export facts.
 	 *
 	 * @return Export_Facts

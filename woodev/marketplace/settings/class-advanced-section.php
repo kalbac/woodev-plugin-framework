@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Settings;
 
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
+use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Settings\Settings_Section;
 
 defined( 'ABSPATH' ) || exit;
@@ -16,14 +17,14 @@ defined( 'ABSPATH' ) || exit;
  * Contributes the «Дополнительно» card with two merchant toggles:
  * - `advanced_logging` («Логирование») — gates debug API logs, troubleshooting hints, diagnostic cards and the
  *   copyable support report.
- * - `advanced_delete_data_on_uninstall` («Удалять данные при удалении плагина») — gates full table/option removal in
- *   the plugin's `uninstall.php`.
+ * - `advanced_delete_data_on_uninstall` («Удалять данные при удалении плагина») — gates {@see Uninstaller::run()}: tables, links and
+ *   options are removed on plugin deletion only when it is on (off by default).
  *
  * @since 2.1.2
  */
 final class Advanced_Section implements Settings_Section_Provider {
 	public const LOGGING_ID     = Logging::SETTING_ID;
-	public const DELETE_DATA_ID = 'advanced_delete_data_on_uninstall';
+	public const DELETE_DATA_ID = Uninstaller::DELETE_DATA_SETTING;
 
 	/**
 	 * Registers `advanced_logging` and `advanced_delete_data_on_uninstall` on the handler.

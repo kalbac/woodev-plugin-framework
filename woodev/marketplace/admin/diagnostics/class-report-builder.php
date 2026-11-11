@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
 use Woodev\Framework\Marketplace\Diagnostics\Support_Report;
@@ -563,6 +564,41 @@ final class Report_Builder {
 	}
 
 	/**
+	 * Renders the offer counts as «state: count» pairs in lifecycle order, naming only the states that occur.
+	 *
+	 * @param array<string,int> $counts State => offers, from {@see Diagnostics_Reader::link_counts()}.
+	 * @return string
+	 */
+	private function card_states_text( array $counts ): string {
+		if ( [] === $counts ) {
+			return __( 'нет', 'woodev-plugin-framework' );
+		}
+
+		$labels = [
+			Link_Record::STATE_UNLINKED             => __( 'не связаны', 'woodev-plugin-framework' ),
+			Link_Record::STATE_QUEUED               => __( 'в очереди', 'woodev-plugin-framework' ),
+			Link_Record::STATE_SUBMITTED            => __( 'отправлены', 'woodev-plugin-framework' ),
+			Link_Record::STATE_IMPORTED_WITH_ERRORS => __( 'импортированы с ошибками', 'woodev-plugin-framework' ),
+			Link_Record::STATE_OFFER_VALIDATED      => __( 'проверены маркетплейсом', 'woodev-plugin-framework' ),
+			Link_Record::STATE_PICS_DELIVERED       => __( 'фото загружены', 'woodev-plugin-framework' ),
+			Link_Record::STATE_SKU_CREATED          => __( 'артикул создан', 'woodev-plugin-framework' ),
+			Link_Record::STATE_PRICE_SENT           => __( 'цена отправлена', 'woodev-plugin-framework' ),
+			Link_Record::STATE_CREATED              => __( 'готовы', 'woodev-plugin-framework' ),
+			Link_Record::STATE_FAILED               => __( 'ошибка', 'woodev-plugin-framework' ),
+			Link_Record::STATE_ARCHIVED             => __( 'в архиве', 'woodev-plugin-framework' ),
+		];
+
+		$parts = [];
+		foreach ( array_merge( array_keys( $labels ), array_diff( array_keys( $counts ), array_keys( $labels ) ) ) as $state ) {
+			if ( isset( $counts[ $state ] ) ) {
+				$parts[] = sprintf( '%s: %d', $labels[ $state ] ?? $state, $counts[ $state ] );
+			}
+		}
+
+		return implode( ', ', $parts );
+	}
+
+	/**
 	 * Builds the product links and sync backlog section of an account.
 	 *
 	 * @param Account $account Account.
@@ -573,13 +609,7 @@ final class Report_Builder {
 		$backlog = $this->reader->sync_backlog( $account->id() );
 
 		$lines = [
-			__( 'Карточки (готовы / в обработке / ошибка / архив)', 'woodev-plugin-framework' ) => sprintf(
-				'%d / %d / %d / %d',
-				$counts['ready'],
-				$counts['pending'],
-				$counts['failed'],
-				$counts['archived']
-			),
+			__( 'Карточки', 'woodev-plugin-framework' )                                         => $this->card_states_text( $counts ),
 			__( 'Очередь остатков (ожидают / ошибки)', 'woodev-plugin-framework' )              => sprintf(
 				'%d / %d',
 				$backlog['stock_pending'],
@@ -682,7 +712,7 @@ final class Report_Builder {
 	 */
 	private function push_summary( int $account_id, ?Notification_Account $notification_account, int $now ): string {
 		$state = null !== $notification_account ? $notification_account->state() : [];
-		$admin = $this->adapter->settings_descriptor()->push_admin( $account_id );
+		$admin = $this->adapter->push_admin( $account_id );
 
 		if ( [] === $state ) {
 			$head = __( 'не проверялось', 'woodev-plugin-framework' );

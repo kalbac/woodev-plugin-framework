@@ -63,8 +63,6 @@ return [
 	'Woodev\\Framework\\Marketplace\\Account\\Secret_Cipher' => 'woodev/marketplace/account/class-secret-cipher.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Admin_Collector' => 'woodev/marketplace/admin/class-admin-collector.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Diagnostics_Reader' => 'woodev/marketplace/admin/diagnostics/class-diagnostics-reader.php',
-	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Error_Log' => 'woodev/marketplace/admin/diagnostics/class-error-log.php',
-	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Failure_Logger' => 'woodev/marketplace/admin/diagnostics/interface-failure-logger.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Logging' => 'woodev/marketplace/admin/diagnostics/class-logging.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Queue_Health' => 'woodev/marketplace/admin/diagnostics/class-queue-health.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Report_Builder' => 'woodev/marketplace/admin/diagnostics/class-report-builder.php',

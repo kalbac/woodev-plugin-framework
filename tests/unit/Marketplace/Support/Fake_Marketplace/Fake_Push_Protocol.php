@@ -18,6 +18,31 @@ final class Fake_Push_Protocol implements Push_Protocol {
 	public const FOREIGN_IP = '198.51.100.9';
 
 	/**
+	 * The list the settings screen offers by default.
+	 *
+	 * @var string
+	 */
+	private $allowlist;
+
+	/**
+	 * Creates the protocol.
+	 *
+	 * @param string $allowlist Default IP allowlist the settings screen offers.
+	 */
+	public function __construct( string $allowlist = '' ) {
+		$this->allowlist = $allowlist;
+	}
+
+	/**
+	 * Returns the default allowlist.
+	 *
+	 * @return string
+	 */
+	public function default_ip_allowlist(): string {
+		return $this->allowlist;
+	}
+
+	/**
 	 * Returns the sender's address.
 	 *
 	 * @param array<string,mixed> $server Server variables.

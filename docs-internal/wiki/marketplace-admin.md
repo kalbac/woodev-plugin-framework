@@ -442,6 +442,35 @@ What the code settled, where the text above left it open:
 - **Bundle.** `src/settings-page/` changed, so `woodev/assets/build/settings-page/` is rebuilt (the bundle now depends on
   `wp-hooks` and registers a filter).
 
+### Settings sections and diagnostics as built (F10, #1689)
+
+What the code settled, where the text above left it open:
+
+- **Option names are the donor's.** The notification IP lists are saved as `woodev_{plugin id}_ip_allowlist` and
+  `woodev_{plugin id}_trusted_proxies`; `Notifications_Section::option_names( $plugin_id )` names them for the adapter's
+  `Push_Protocol` (the source-address policy stays in the plugin), and `Push_Protocol::default_ip_allowlist()` supplies the
+  list the screen offers first.
+- **One seam per kind of answer.** `Settings_Descriptor` holds copy and field specs only. Remote push actions are
+  `Marketplace_Adapter::push_admin( $account_id ): ?Push_Admin` (the `price_pusher()` pattern), so F11 and F15 reach them
+  without a UI-copy object in between.
+- **«Удалять данные при удалении плагина»** (`advanced_delete_data_on_uninstall`, off by default, operator 12.11.2026):
+  `Data\Uninstaller::run()` returns without touching anything unless that option is `yes`, so a plugin's `uninstall.php`
+  keeps calling it unconditionally. A plugin that drops tables of its own outside `run()` gates them with
+  `Uninstaller::deletes_data( $plugin_id )`.
+- **Price rules.** An account's markup or price direction saved on the settings screen fires
+  `woodev_{plugin id}_account_price_rules_changed`; `Flow_Wiring` listens and queues the recompute of that account.
+- **Logging.** `Marketplace_Plugin` follows `Shipping_Plugin`: `log_error()` writes at ERROR whatever «Логирование» says,
+  `log_debug()` and `log_api_request()` only while it is on. The text goes through `Report_Redactor::redact_text()`, which
+  hands `name=value` pairs to `Woodev_API_Base::redact_secret_log_text()` and adds the shapes that scan does not read (JSON
+  pairs, `Bearer` schemes, header lines, `print_r()` dumps, the webhook token path).
+- **Queue health** asks Action Scheduler through its public API (`as_get_scheduled_actions()`, the store's
+  `query_actions()`), scoped to the plugin's group; the report counts offers (`kind = offer`) by their real card states.
+- **Two ways to compose a settings tab.** Shipping composes its tab from `Woodev_Abstract_Settings` children with
+  `Composite_Settings_Handler`; marketplace has its own `Settings_Handler` with `Settings_Section_Provider` and
+  `Table_Backed_Settings` (the donor's shape, allowed by «`settings/**` → framework»). Option-backed values use the base
+  class's type conversion in both. A later card may unify the two.
+- **Left for F15:** the donor's `Logging::REFUSAL`, `hint()` and `set_enabled()` were not ported; the diagnostics page needs them.
+
 ## Records engine
 
 Generic, in `Woodev\Framework\Admin\Records\*` and `src/admin-records/`; usable by any

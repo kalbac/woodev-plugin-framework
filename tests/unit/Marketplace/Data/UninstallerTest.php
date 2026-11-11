@@ -51,6 +51,13 @@ final class UninstallerTest extends TestCase {
 	public $cache_only = [];
 
 	/**
+	 * What the merchant chose for «Удалять данные при удалении плагина»: the stored option value, or null when never saved.
+	 *
+	 * @var string|null
+	 */
+	public $delete_data_choice = 'yes';
+
+	/**
 	 * The recording `wpdb`.
 	 *
 	 * @var object
@@ -76,6 +83,10 @@ final class UninstallerTest extends TestCase {
 		);
 		Functions\when( 'get_option' )->alias(
 			function ( string $name, $fallback = false ) {
+				if ( 'woodev_fake-seller_advanced_delete_data_on_uninstall' === $name && null !== $this->delete_data_choice ) {
+					return $this->delete_data_choice;
+				}
+
 				return $this->option_cache[ $name ] ?? $fallback;
 			}
 		);
@@ -130,6 +141,43 @@ final class UninstallerTest extends TestCase {
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_woodev_fake_catalog_cache', $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_legacy_stores', $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_legacy_profiles', $drops );
+	}
+
+	/**
+	 * Default off: a merchant who never touched the toggle (or left it off) keeps every table, link and option.
+	 *
+	 * @return void
+	 */
+	public function test_uninstall_keeps_everything_while_the_delete_data_toggle_is_off(): void {
+		$this->option_rows  = [ 'woodev_fake-seller_version' => '2.0.0' ];
+		$this->option_cache = $this->option_rows;
+		$this->account_ids  = [ 1 ];
+
+		foreach ( [ 'no', null ] as $choice ) {
+			$this->delete_data_choice = $choice;
+
+			Uninstaller::run( $this->db, new Schema( 'fake' ), 'fake-seller', [ 'wp_legacy_stores' ] );
+
+			$this->assertSame( [], $this->db->queries, 'no DROP and no DELETE when the toggle is ' . ( $choice ?? 'never saved' ) );
+			$this->assertSame( [], $this->db->reads, 'not even the accounts are read' );
+			$this->assertSame( [ 'woodev_fake-seller_version' => '2.0.0' ], $this->option_rows, 'the options stay' );
+		}
+	}
+
+	/**
+	 * On: the tables, the meta and the options go, as before.
+	 *
+	 * @return void
+	 */
+	public function test_uninstall_deletes_the_data_once_the_delete_data_toggle_is_on(): void {
+		$this->option_rows  = [ 'woodev_fake-seller_version' => '2.0.0' ];
+		$this->option_cache = $this->option_rows;
+		$this->delete_data_choice = 'yes';
+
+		Uninstaller::run( $this->db, new Schema( 'fake' ), 'fake-seller' );
+
+		$this->assertNotSame( [], $this->db->queries );
+		$this->assertSame( [], $this->option_rows );
 	}
 
 	/**

@@ -88,12 +88,9 @@ final class Settings_Handler extends \Woodev_Abstract_Settings implements \Woode
 		foreach ( $this->settings as $setting_id => $setting ) {
 			$table_provider = $this->table_provider_for( (string) $setting_id );
 
-			if ( null !== $table_provider ) {
-				$value = $table_provider->read( (string) $setting_id );
-			} else {
-				$value = get_option( $this->option_name( (string) $setting_id ), null );
-				$value = $this->adapt_from_db( $setting, $value );
-			}
+			$value = null !== $table_provider
+				? $table_provider->read( (string) $setting_id )
+				: $this->get_value_from_database( get_option( $this->option_name( (string) $setting_id ), null ), $setting );
 
 			$setting->set_value( $value );
 		}
@@ -121,13 +118,10 @@ final class Settings_Handler extends \Woodev_Abstract_Settings implements \Woode
 				continue;
 			}
 
-			$option_name  = $this->option_name( $id );
-			$option_value = $this->adapt_for_db( $setting );
-
-			if ( null === $option_value ) {
-				delete_option( $option_name );
+			if ( null === $setting->get_value() ) {
+				delete_option( $this->option_name( $id ) );
 			} else {
-				update_option( $option_name, $option_value );
+				update_option( $this->option_name( $id ), $this->get_value_for_database( $setting ) );
 			}
 		}
 	}
@@ -219,7 +213,8 @@ final class Settings_Handler extends \Woodev_Abstract_Settings implements \Woode
 	}
 
 	/**
-	 * Builds the `wp_options` key for an option-backed setting id, matching {@see Uninstaller::option_prefix()}.
+	 * Builds the `wp_options` key for an option-backed setting id: `woodev_{plugin id}_{setting id}`, the base class's name
+	 * and the family {@see Uninstaller::option_prefix()} removes.
 	 *
 	 * @since 2.1.2
 	 *
@@ -227,7 +222,7 @@ final class Settings_Handler extends \Woodev_Abstract_Settings implements \Woode
 	 * @return string
 	 */
 	public function option_name( string $setting_id ): string {
-		return Uninstaller::option_prefix( $this->get_id() ) . $setting_id;
+		return $this->get_option_name_prefix() . '_' . $setting_id;
 	}
 
 	/**
@@ -260,40 +255,5 @@ final class Settings_Handler extends \Woodev_Abstract_Settings implements \Woode
 		}
 
 		return null;
-	}
-
-	/**
-	 * Adapts a stored `wp_options` value to `Woodev_Setting`'s expected runtime type.
-	 *
-	 * @param \Woodev_Setting $setting Setting definition.
-	 * @param mixed           $value   Raw option value (`null` when absent).
-	 * @return mixed
-	 */
-	private function adapt_from_db( \Woodev_Setting $setting, $value ) {
-		if ( null === $value ) {
-			return null;
-		}
-
-		if ( \Woodev_Setting::TYPE_BOOLEAN === $setting->get_type() ) {
-			return wc_string_to_bool( (string) $value );
-		}
-
-		return $value;
-	}
-
-	/**
-	 * Adapts a `Woodev_Setting` value for `update_option()`.
-	 *
-	 * @param \Woodev_Setting $setting Setting definition.
-	 * @return mixed
-	 */
-	private function adapt_for_db( \Woodev_Setting $setting ) {
-		$value = $setting->get_value();
-
-		if ( null !== $value && \Woodev_Setting::TYPE_BOOLEAN === $setting->get_type() ) {
-			return wc_bool_to_string( (bool) $value );
-		}
-
-		return $value;
 	}
 }

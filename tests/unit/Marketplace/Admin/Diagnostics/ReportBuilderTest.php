@@ -52,6 +52,8 @@ final class ReportBuilderTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+		// Action Scheduler has run nothing: the queue line reads «no run yet».
+		Functions\when( 'as_get_scheduled_actions' )->justReturn( [] );
 		Functions\when( 'wp_date' )->alias(
 			static function ( string $format, ?int $ts = null ): string {
 				return gmdate( $format, $ts ?? self::NOW );
@@ -59,6 +61,14 @@ final class ReportBuilderTest extends TestCase {
 		);
 		Functions\when( 'human_time_diff' )->justReturn( '5 мин' );
 		Functions\when( 'get_bloginfo' )->justReturn( '6.7.1' );
+		Functions\when( 'wp_using_ext_object_cache' )->justReturn( true );
+		Functions\when( 'wp_get_theme' )->justReturn(
+			new class() {
+				public function get( string $header ): string {
+					return 'Name' === $header ? 'Storefront' : '4.6.0';
+				}
+			}
+		);
 		Functions\when( 'home_url' )->justReturn( 'https://shop.example' );
 		Functions\when( 'rest_url' )->alias(
 			static function ( string $path = '' ): string {
@@ -245,6 +255,8 @@ final class ReportBuilderTest extends TestCase {
 		$this->assertStringContainsString( '15 / 100 (00:00 UTC)', $report );
 		$this->assertStringContainsString( 'обновлено сегодня', $report );
 		$this->assertStringContainsString( '***3210', $report );
+		$this->assertStringContainsString( 'Кэш объектов: внешний', $report, 'a persistent object cache explains stale transients' );
+		$this->assertStringContainsString( 'Storefront: 4.6.0', $report, 'the active theme is a fact support asks for' );
 
 		// Every secret, token, header value and custom secret field value must be redacted!
 		$forbidden = [
@@ -264,6 +276,44 @@ final class ReportBuilderTest extends TestCase {
 			$this->assertNotSame( '', $secret );
 			$this->assertStringNotContainsString( $secret, $report, "Secret leaked into support report: {$secret}" );
 		}
+	}
+
+	public function test_link_counts_use_the_real_card_states_and_count_offers_only(): void {
+		$rows = [
+			[ 1, 'offer', 'queued' ],
+			[ 1, 'offer', 'queued' ],
+			[ 1, 'offer', 'submitted' ],
+			[ 1, 'offer', 'price_sent' ],
+			[ 1, 'offer', 'created' ],
+			[ 1, 'offer', 'failed' ],
+			[ 1, 'parent', 'queued' ],
+			[ 2, 'offer', 'queued' ],
+		];
+		foreach ( $rows as $index => $row ) {
+			$this->db->insert(
+				'wp_woodev_fake_links',
+				[
+					'account_id'    => $row[0],
+					'wc_product_id' => 100 + $index,
+					'kind'          => $row[1],
+					'card_state'    => $row[2],
+				]
+			);
+		}
+
+		$counts = ( new Diagnostics_Reader( $this->db, $this->schema ) )->link_counts( 1 );
+
+		$this->assertSame(
+			[
+				'created'    => 1,
+				'failed'     => 1,
+				'price_sent' => 1,
+				'queued'     => 2,
+				'submitted'  => 1,
+			],
+			$counts,
+			'products waiting for export are counted, the parent row and another account are not'
+		);
 	}
 
 	public function test_quota_snapshot_is_ignored_after_identifier_rotation_and_push_sections_respect_capability(): void {

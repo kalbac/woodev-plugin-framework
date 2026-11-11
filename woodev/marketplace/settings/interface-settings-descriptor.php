@@ -12,8 +12,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Everything the framework's settings sections, key-expiry notices and diagnostics report ask of one marketplace
  * beyond its domain policies: the marketplace's display name, the labels/validators of its credential fields, its
- * cabinet instructions, its health hints, and — when push notifications are supported — its default IP allowlist and
- * per-account {@see Push_Admin}.
+ * cabinet instructions and its health hints. Copy and field specs only: what the marketplace is asked to do remotely
+ * ({@see \Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter::push_admin()}) and its source-address policy
+ * ({@see \Woodev\Framework\Marketplace\Intake\Push_Protocol}) are adapter answers of their own.
  *
  * @since 2.1.2
  */
@@ -76,24 +77,4 @@ interface Settings_Descriptor {
 	 * @return string
 	 */
 	public function health_hint( string $status ): string;
-
-	/**
-	 * Default newline-separated IP/CIDR allowlist for push notifications, or '' when none applies.
-	 *
-	 * @since 2.1.2
-	 *
-	 * @return string
-	 */
-	public function default_ip_allowlist(): string;
-
-	/**
-	 * Returns the push administration service for an account, or null when push notifications are unsupported or the
-	 * account does not exist.
-	 *
-	 * @since 2.1.2
-	 *
-	 * @param int $account_id Account id.
-	 * @return Push_Admin|null
-	 */
-	public function push_admin( int $account_id ): ?Push_Admin;
 }

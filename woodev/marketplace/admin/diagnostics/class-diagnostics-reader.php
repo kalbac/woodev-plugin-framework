@@ -7,9 +7,9 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Diagnostics;
 
+use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
-use Woodev\Framework\Marketplace\Links\Product_Link;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -101,46 +101,33 @@ final class Diagnostics_Reader {
 	}
 
 	/**
-	 * Counts product links of an account grouped by `card_state`.
+	 * Counts the product offers of an account by card state (`Link_Record::STATE_*`), the states that occur only.
+	 *
+	 * Offers only: a `parent` row groups variations and is no card of its own.
 	 *
 	 * @since 2.1.2
 	 *
 	 * @param int $account_id Account id.
-	 * @return array{ready:int,pending:int,failed:int,archived:int}
+	 * @return array<string,int> State => number of offers.
 	 */
 	public function link_counts( int $account_id ): array {
-		$table  = $this->schema->table_name( 'links', $this->db->prefix );
-		$counts = [
-			'ready'    => 0,
-			'pending'  => 0,
-			'failed'   => 0,
-			'archived' => 0,
-		];
+		$table = $this->schema->table_name( 'links', $this->db->prefix );
 
 		$prev = $this->db->suppress_errors( true );
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			$this->db->prepare(
-				'SELECT card_state, COUNT(*) AS cnt FROM %i WHERE account_id = %d GROUP BY card_state',
+				'SELECT card_state, COUNT(*) AS cnt FROM %i WHERE account_id = %d AND kind = %s GROUP BY card_state ORDER BY card_state',
 				$table,
-				$account_id
+				$account_id,
+				Link_Record::KIND_OFFER
 			),
 			'ARRAY_A'
 		);
 		$this->db->suppress_errors( $prev );
 
+		$counts = [];
 		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
-			$state = (string) ( $row['card_state'] ?? '' );
-			$count = (int) $row['cnt'];
-
-			if ( Product_Link::STATE_CREATED === $state || 'ready' === $state ) {
-				$counts['ready'] += $count;
-			} elseif ( Product_Link::STATE_PENDING_REMOTE_IDS === $state || 'pending' === $state || 'moderating' === $state ) {
-				$counts['pending'] += $count;
-			} elseif ( 'failed' === $state ) {
-				$counts['failed'] += $count;
-			} elseif ( 'archived' === $state ) {
-				$counts['archived'] += $count;
-			}
+			$counts[ (string) $row['card_state'] ] = (int) $row['cnt'];
 		}
 
 		return $counts;

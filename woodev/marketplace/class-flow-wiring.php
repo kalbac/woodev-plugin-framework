@@ -315,7 +315,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		}
 
 		/**
-		 * A changed price or currency rule of a profile recomputes the prices of every enabled account.
+		 * A changed price rule recomputes prices: a profile's rule re-works every enabled account, an account's own
+		 * rule (markup, price direction — saved by the settings screen) re-works that account.
 		 *
 		 * @param Price_Scheduler $scheduler Price scheduler.
 		 * @return void
@@ -330,6 +331,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 					foreach ( $accounts->all( $adapter_id, true ) as $account ) {
 						$scheduler->queue_recompute( $account->id() );
 					}
+				}
+			);
+
+			add_action(
+				$this->names->hook( 'account_price_rules_changed' ),
+				static function ( $account_id ) use ( $scheduler ): void {
+					$scheduler->queue_recompute( (int) $account_id );
 				}
 			);
 		}

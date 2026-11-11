@@ -7,7 +7,6 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Diagnostics;
 
-use Automattic\WooCommerce\Utilities\OrderUtil;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
@@ -95,13 +94,16 @@ final class Site_Facts {
 		$lines = [
 			'WordPress / WooCommerce / PHP' => sprintf(
 				'%s / %s / %s',
-				$this->wp_version(),
-				$this->wc_version(),
+				(string) get_bloginfo( 'version' ),
+				\Woodev_Plugin_Compatibility::get_wc_version() ?? 'unknown',
 				PHP_VERSION
 			),
-			'HPOS'                          => $this->is_hpos_enabled()
+			'HPOS'                          => \Woodev_Plugin_Compatibility::is_hpos_enabled()
 				? __( 'включён', 'woodev-plugin-framework' )
 				: __( 'выключен', 'woodev-plugin-framework' ),
+			__( 'Кэш объектов', 'woodev-plugin-framework' ) => wp_using_ext_object_cache()
+				? __( 'внешний', 'woodev-plugin-framework' )
+				: __( 'нет', 'woodev-plugin-framework' ),
 			'WP-Cron'                       => ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON )
 				? __( 'отключён в wp-config.php (ожидается системный cron)', 'woodev-plugin-framework' )
 				: __( 'включён', 'woodev-plugin-framework' ),
@@ -120,7 +122,7 @@ final class Site_Facts {
 	}
 
 	/**
-	 * Builds the «Версии» and «Активные плагины» sections appended to the copyable support report.
+	 * Builds the «Версии», «Активные плагины» and «Тема» sections appended to the copyable support report.
 	 *
 	 * @since 2.1.2
 	 *
@@ -128,6 +130,7 @@ final class Site_Facts {
 	 */
 	public function environment_sections(): array {
 		$framework_version = class_exists( '\\Woodev_Plugin' ) ? \Woodev_Plugin::VERSION : '';
+		$theme             = wp_get_theme();
 
 		return [
 			new Report_Section(
@@ -140,6 +143,10 @@ final class Site_Facts {
 			new Report_Section(
 				__( 'Активные плагины', 'woodev-plugin-framework' ),
 				$this->active_plugins()
+			),
+			new Report_Section(
+				__( 'Тема', 'woodev-plugin-framework' ),
+				[ (string) $theme->get( 'Name' ) => (string) $theme->get( 'Version' ) ]
 			),
 		];
 	}
@@ -184,35 +191,6 @@ final class Site_Facts {
 	}
 
 	/**
-	 * Returns the WordPress version string.
-	 *
-	 * @return string
-	 */
-	private function wp_version(): string {
-		$version = get_bloginfo( 'version' );
-
-		return is_string( $version ) && '' !== $version ? $version : 'unknown';
-	}
-
-	/**
-	 * Returns the WooCommerce version string.
-	 *
-	 * @return string
-	 */
-	private function wc_version(): string {
-		return defined( 'WC_VERSION' ) ? (string) WC_VERSION : 'unknown';
-	}
-
-	/**
-	 * Tells whether WooCommerce High-Performance Order Storage is active.
-	 *
-	 * @return bool
-	 */
-	private function is_hpos_enabled(): bool {
-		return class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
-	}
-
-	/**
 	 * Tells whether the site's home URL uses HTTPS.
 	 *
 	 * @return bool
@@ -224,37 +202,24 @@ final class Site_Facts {
 	}
 
 	/**
-	 * Lists active plugins (`Name => Version`), falling back to plugin basename when plugin headers are unavailable.
+	 * Lists the active plugins as `name => version`.
 	 *
 	 * @return array<string,string>
 	 */
 	private function active_plugins(): array {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			return [];
+		}
+
 		$active = (array) get_option( 'active_plugins', [] );
+		$lines  = [];
 
-		if ( is_multisite() ) {
-			$network = array_keys( (array) get_site_option( 'active_sitewide_plugins', [] ) );
-			$active  = array_values( array_unique( array_merge( $active, $network ) ) );
-		}
-
-		$all    = function_exists( 'get_plugins' ) ? (array) get_plugins() : [];
-		$result = [];
-
-		foreach ( $active as $plugin_file ) {
-			if ( ! is_string( $plugin_file ) || '' === $plugin_file ) {
-				continue;
+		foreach ( get_plugins() as $file => $data ) {
+			if ( in_array( $file, $active, true ) ) {
+				$lines[ (string) $data['Name'] ] = (string) $data['Version'];
 			}
-
-			$meta  = isset( $all[ $plugin_file ] ) && is_array( $all[ $plugin_file ] ) ? $all[ $plugin_file ] : [];
-			$name  = isset( $meta['Name'] ) && '' !== trim( (string) $meta['Name'] ) ? trim( (string) $meta['Name'] ) : $plugin_file;
-			$ver   = isset( $meta['Version'] ) && '' !== trim( (string) $meta['Version'] ) ? trim( (string) $meta['Version'] ) : '—';
-
-			$result[ $name ] = $ver;
 		}
 
-		if ( [] === $result ) {
-			return [ __( 'Список плагинов', 'woodev-plugin-framework' ) => '—' ];
-		}
-
-		return $result;
+		return $lines;
 	}
 }

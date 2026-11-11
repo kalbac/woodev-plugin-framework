@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Data\Schema;
+use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account;
@@ -23,7 +24,9 @@ use Woodev\Framework\Marketplace\Settings\Ip_List_Validator;
 use Woodev\Framework\Marketplace\Settings\Notifications_Section;
 use Woodev\Framework\Marketplace\Settings\Push_Admin;
 use Woodev\Framework\Marketplace\Settings\Settings_Handler;
+use Woodev\Framework\Marketplace\Settings\Settings_Section_Provider;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Push_Protocol;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Settings_Descriptor;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
@@ -173,15 +176,7 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 			}
 		};
 
-		$descriptor = new Fake_Settings_Descriptor(
-			$fields,
-			'PushMarket',
-			[],
-			static function () use ( $push_admin ): Push_Admin {
-				return $push_admin;
-			},
-			"198.51.100.0/24\n2001:db8::/32"
-		);
+		$descriptor = new Fake_Settings_Descriptor( $fields, 'PushMarket' );
 
 		$adapter = new Fake_Marketplace_Adapter(
 			null,
@@ -190,6 +185,10 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 				'capabilities'        => [ Capability::PUSH_NOTIFICATIONS ],
 				'credential_fields'   => $fields,
 				'settings_descriptor' => $descriptor,
+				'push_protocol'       => new Fake_Push_Protocol( "198.51.100.0/24\n2001:db8::/32" ),
+				'push_admin'          => static function () use ( $push_admin ): Push_Admin {
+					return $push_admin;
+				},
 			]
 		);
 
@@ -255,6 +254,70 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertArrayHasKey( Notifications_Section::ALLOWLIST_ID, $bad_errs );
 	}
 
+	public function test_the_lists_are_saved_under_the_option_names_the_adapter_reads(): void {
+		$fields  = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
+		$adapter = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'      => [ Capability::PUSH_NOTIFICATIONS ],
+				'credential_fields' => $fields,
+				'push_protocol'     => new Fake_Push_Protocol( '198.51.100.0/24' ),
+			]
+		);
+		$notif   = new Notifications_Section(
+			$adapter,
+			new Notification_Account_Reader( $this->db, $this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ) ),
+			new Last_Notification_Reader( $this->db, $this->schema->table_name( 'events', Sqlite_Tables::PREFIX ) ),
+			new License_Gate(
+				static function (): bool {
+					return true;
+				}
+			),
+			'fake_mp'
+		);
+		$handler = new Settings_Handler( 'fake_mp', [ $notif ] );
+		$names   = Notifications_Section::option_names( 'fake_mp' );
+
+		$this->assertSame(
+			[
+				'allowlist'       => 'woodev_fake_mp_ip_allowlist',
+				'trusted_proxies' => 'woodev_fake_mp_trusted_proxies',
+			],
+			$names,
+			'the donor plugin\'s option names: an installed shop keeps its lists'
+		);
+		$this->assertSame( '198.51.100.0/24', $handler->get_value( Notifications_Section::ALLOWLIST_ID ), 'the protocol supplies the default list' );
+
+		$handler->get_setting( Notifications_Section::ALLOWLIST_ID )->set_value( "203.0.113.0/24\n10.0.0.5" );
+		$handler->get_setting( Notifications_Section::TRUSTED_PROXIES_ID )->set_value( '127.0.0.1' );
+		$handler->save();
+
+		$this->assertSame( "203.0.113.0/24\n10.0.0.5", $this->options[ $names['allowlist'] ] ?? null );
+		$this->assertSame( '127.0.0.1', $this->options[ $names['trusted_proxies'] ] ?? null );
+	}
+
+	public function test_option_backed_settings_use_the_base_class_type_conversion(): void {
+		$provider = new class() implements Settings_Section_Provider {
+			public function register_settings( Settings_Handler $handler ): void {
+				$handler->register_setting( 'sync_hour', \Woodev_Setting::TYPE_INTEGER, [ 'name' => 'Hour' ] );
+				$handler->register_setting( 'ratio', \Woodev_Setting::TYPE_FLOAT, [ 'name' => 'Ratio' ] );
+			}
+
+			public function sections(): array {
+				return [];
+			}
+		};
+
+		$this->options['woodev_fake_mp_sync_hour'] = '3';
+		$this->options['woodev_fake_mp_ratio']     = '1.5';
+
+		$handler = new Settings_Handler( 'fake_mp', [ $provider ] );
+
+		$this->assertSame( 3, $handler->get_value( 'sync_hour' ), 'an integer setting loads as an integer, not as the stored string' );
+		$this->assertSame( 1.5, $handler->get_value( 'ratio' ) );
+	}
+
 	public function test_advanced_section_persists_logging_and_delete_data_toggles(): void {
 		$advanced = new Advanced_Section();
 		$handler  = new Settings_Handler( 'fake_mp', [ $advanced ] );
@@ -269,5 +332,6 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 
 		$this->assertSame( 'yes', $this->options['woodev_fake_mp_advanced_logging'] ?? null );
 		$this->assertSame( 'yes', $this->options['woodev_fake_mp_advanced_delete_data_on_uninstall'] ?? null );
+		$this->assertSame( 'woodev_fake_mp_' . Uninstaller::DELETE_DATA_SETTING, 'woodev_fake_mp_advanced_delete_data_on_uninstall', 'the id the Uninstaller reads' );
 	}
 }

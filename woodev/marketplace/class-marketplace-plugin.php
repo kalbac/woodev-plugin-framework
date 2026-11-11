@@ -112,7 +112,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				$wpdb->prefix,
 				License_Gate::for_plugin( $this ),
 				function ( string $line ): void {
-					$this->log( $line );
+					$this->log_error( $line );
 				},
 				$this->account_write_gate()
 			) )->register();
@@ -409,58 +409,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		}
 
 		/**
-		 * Writes a notice-level entry to the WooCommerce logger.
+		 * Writes a failure at the ERROR level, whatever «Логирование» says, with credentials scrubbed out of the text.
+		 *
+		 * The inherited {@see self::log()} writes at WooCommerce's default NOTICE severity, which a shop that raised the logging
+		 * threshold to «Error» silently drops — so a failure belongs here, as in {@see \Woodev\Framework\Shipping\Shipping_Plugin}.
 		 *
 		 * @since 2.1.2
 		 *
-		 * @param string      $message Log message.
-		 * @param string|null $log_id  Optional log source override.
+		 * @param string      $message What failed.
+		 * @param string|null $log_id  Optional log source, defaults to the plugin id.
 		 * @return void
 		 */
-		public function log( $message, $log_id = null ) {
-			$this->write_wc_log( 'notice', (string) $message, $log_id );
+		public function log_error( $message, $log_id = null ): void {
+			$this->log_at_level( 'error', (string) $message, $log_id );
 		}
 
 		/**
-		 * Writes an error-level entry to the WooCommerce logger regardless of the «Логирование» toggle, redacting secrets.
+		 * Writes a debug line, scrubbed, ONLY while «Логирование» is on.
 		 *
 		 * @since 2.1.2
 		 *
-		 * @param string      $message Error message.
-		 * @param string|null $log_id  Optional log source override.
+		 * @param string      $message Debug line.
+		 * @param string|null $log_id  Optional log source, defaults to the plugin id.
 		 * @return void
 		 */
-		public function log_error( string $message, ?string $log_id = null ): void {
-			$secrets = $this->get_marketplace_adapter()->credential_fields()->secrets();
-			$this->write_wc_log( 'error', Report_Redactor::redact_text( $message, $secrets ), $log_id );
-		}
-
-		/**
-		 * Writes a debug-level entry to the WooCommerce logger ONLY when «Логирование» is enabled, redacting secrets.
-		 *
-		 * @since 2.1.2
-		 *
-		 * @param string      $message Debug message.
-		 * @param string|null $log_id  Optional log source override.
-		 * @return void
-		 */
-		public function log_debug( $message, $log_id = null ) {
-			if ( ! $this->logging()->is_enabled() ) {
-				return;
+		public function log_debug( $message, $log_id = null ): void {
+			if ( $this->logging()->is_enabled() ) {
+				$this->log_at_level( 'debug', (string) $message, $log_id );
 			}
-
-			$secrets = $this->get_marketplace_adapter()->credential_fields()->secrets();
-			$this->write_wc_log( 'debug', Report_Redactor::redact_text( (string) $message, $secrets ), null === $log_id ? null : (string) $log_id );
 		}
 
 		/**
-		 * Logs API request/response details ONLY when «Логирование» is enabled, scrubbing credentials and tokens.
+		 * Logs an API request and its response at the DEBUG level, only while «Логирование» is on.
 		 *
 		 * @since 2.1.2
 		 *
 		 * @param array<string,mixed> $request  Request data.
 		 * @param array<string,mixed> $response Response data.
-		 * @param string|null         $log_id   Optional log source override.
+		 * @param string|null         $log_id   Optional log source.
 		 * @return void
 		 */
 		public function log_api_request( $request, $response, $log_id = null ) {
@@ -468,38 +454,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				return;
 			}
 
-			$secrets = $this->get_marketplace_adapter()->credential_fields()->secrets();
-			$req_msg = Report_Redactor::redact_text( $this->get_api_log_message( (array) $request ), $secrets );
+			$this->log_debug( "Запрос\n" . $this->get_api_log_message( $request ), $log_id );
 
 			if ( ! empty( $response ) ) {
-				$res_msg = Report_Redactor::redact_text( $this->get_api_log_message( (array) $response ), $secrets );
-				$this->write_wc_log( 'debug', "Запрос\n{$req_msg}\nОтвет\n{$res_msg}", $log_id );
-				return;
+				$this->log_debug( "Ответ\n" . $this->get_api_log_message( $response ), $log_id );
 			}
-
-			$this->write_wc_log( 'debug', "Запрос\n{$req_msg}", $log_id );
 		}
 
 		/**
-		 * Sends one line to `wc_get_logger()` when available.
+		 * Writes a line to the WooCommerce log at an explicit severity, keeping the log source id and scrubbing credentials.
 		 *
-		 * @param string      $level   PSR/WC log level (`debug`, `notice`, `error`).
-		 * @param string      $message Log text.
-		 * @param string|null $log_id  Optional log source override.
+		 * @param string      $level   A `WC_Log_Levels` level: `error`, `debug`.
+		 * @param string      $message The line.
+		 * @param string|null $log_id  Log source id, defaults to the plugin id.
 		 * @return void
 		 */
-		private function write_wc_log( string $level, string $message, ?string $log_id = null ): void {
-			if ( ! function_exists( 'wc_get_logger' ) ) {
-				return;
-			}
+		private function log_at_level( string $level, string $message, $log_id ): void {
+			$safe = Report_Redactor::redact_text( $message, $this->get_marketplace_adapter()->credential_fields()->secrets() );
 
-			$logger = wc_get_logger();
-			if ( ! is_object( $logger ) || ! method_exists( $logger, 'log' ) ) {
-				return;
-			}
-
-			$source = null !== $log_id && '' !== $log_id ? $log_id : $this->get_id_dasherized();
-			$logger->log( $level, $message, [ 'source' => $source ] );
+			$this->logger()->log( $level, $safe, [ 'source' => is_string( $log_id ) && '' !== $log_id ? $log_id : $this->get_id() ] );
 		}
 
 		/**

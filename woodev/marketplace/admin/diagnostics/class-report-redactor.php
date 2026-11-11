@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Diagnostics;
 
 use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
+use Woodev\Framework\Marketplace\Diagnostics\Support_Report;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -15,9 +16,11 @@ defined( 'ABSPATH' ) || exit;
  * Scrubs secret credentials, auth headers, webhook tokens, adapter-declared secret field names and known plaintext
  * secret values out of diagnostics sections and free-form log/report text.
  *
- * Complements {@see \Woodev\Framework\Marketplace\Diagnostics\Support_Report}: `Support_Report` masks secret-labelled
- * lines in the pure domain layer, while `Report_Redactor` additionally scrubs inline headers, URL tokens, JSON/query
- * pairs, custom adapter secret keys and live account secrets before anything reaches the screen or clipboard.
+ * Complements {@see Support_Report}: `Support_Report` masks secret-labelled lines in the pure domain layer, while
+ * `Report_Redactor` additionally scrubs live account secrets, webhook URL tokens and the credential shapes
+ * {@see \Woodev_API_Base::redact_secret_log_text()} does not read (JSON pairs, `Bearer` schemes, header lines, `print_r()`
+ * dumps). `name=value` pairs and `<name>…</name>` go through that framework redactor, so its secret-name list (and the
+ * `woodev_api_log_text_secret_param_names` filter) is the single one.
  *
  * @since 2.1.2
  */
@@ -40,8 +43,6 @@ final class Report_Redactor {
 		'password',
 		'authorization',
 	];
-
-	private const SECRET_LABEL_PATTERN = '/api[\s_-]?key|api[\s_-]?ключ|ключ[\s_-]?api|token|токен|secret|секрет|password|парол|authorization/iu';
 
 	/**
 	 * Redacts secrets inside free-form text (error messages, URLs, HTTP dumps, support report text).
@@ -88,11 +89,11 @@ final class Report_Redactor {
 			$text
 		);
 
-		// 5. Query-string / key=value pairs: `api_key=abc123&` or `custom_secret=xyz`.
-		$text = (string) preg_replace(
-			'/(?<![\p{L}\p{N}_-])(' . $keys . ')(=)([^\s&"\'<>]+)/iu',
-			'$1$2' . self::MASK,
-			$text
+		// 5. Query-string / key=value pairs and `<name>value</name>`: the framework's redactor, one list of secret names.
+		$text = str_replace(
+			\Woodev_API_Base::mask_secret( '' ),
+			self::MASK,
+			\Woodev_API_Base::redact_secret_log_text( $text, $secret_field_names )
 		);
 
 		// 6. PHP print_r / var_export array entries (`[Api-Key] => value`, `['api_key'] => 'value'`).
@@ -169,7 +170,7 @@ final class Report_Redactor {
 			return true;
 		}
 
-		return 1 === preg_match( self::SECRET_LABEL_PATTERN, $label );
+		return 1 === preg_match( Support_Report::SECRET_LABEL, $label );
 	}
 
 	/**

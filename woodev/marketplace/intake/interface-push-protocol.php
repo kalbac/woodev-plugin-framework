@@ -41,6 +41,16 @@ interface Push_Protocol {
 	public function is_allowed( string $ip ): bool;
 
 	/**
+	 * Returns the newline-separated IP/CIDR list the settings screen offers as the allowlist until the merchant edits it, or ''
+	 * when the marketplace publishes no addresses. The saved list is read back under {@see \Woodev\Framework\Marketplace\Settings\Notifications_Section::option_names()}.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @return string
+	 */
+	public function default_ip_allowlist(): string;
+
+	/**
 	 * Returns the body of an error answer in the marketplace's documented format.
 	 *
 	 * @since 2.1.0
