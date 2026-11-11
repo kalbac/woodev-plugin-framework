@@ -532,4 +532,31 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	public function card_lifecycle(): Card_Lifecycle {
 		return $this->policies['card_lifecycle'];
 	}
+
+	/**
+	 * Returns the order meta: the fake's own, in `_fake_*` keys.
+	 *
+	 * @return \Woodev\Framework\Marketplace\Flows\Order_Meta_Contract
+	 */
+	public function order_meta(): \Woodev\Framework\Marketplace\Flows\Order_Meta_Contract {
+		return $this->policies['order_meta'] ?? new Fake_Marketplace\Fake_Order_Meta();
+	}
+
+	/**
+	 * Returns the posting handler: a recording one.
+	 *
+	 * @return \Woodev\Framework\Marketplace\Jobs\Posting_Handler|null
+	 */
+	public function posting_handler(): ?\Woodev\Framework\Marketplace\Jobs\Posting_Handler {
+		return array_key_exists( 'posting_handler', $this->policies ) ? $this->policies['posting_handler'] : new Fake_Marketplace\Fake_Posting_Handler();
+	}
+
+	/**
+	 * Returns the label provider: a scripted one.
+	 *
+	 * @return \Woodev\Framework\Marketplace\Flows\Label_Provider|null
+	 */
+	public function label_provider(): ?\Woodev\Framework\Marketplace\Flows\Label_Provider {
+		return array_key_exists( 'label_provider', $this->policies ) ? $this->policies['label_provider'] : new Fake_Marketplace\Fake_Label_Provider();
+	}
 }

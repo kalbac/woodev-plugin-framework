@@ -7575,4 +7575,65 @@ msgstr ""
 
 #: marketplace/flows/class-export-service.php:183
 msgid "Не удалось поставить товар в очередь выгрузки: планировщик задач не принял задание. Попробуйте ещё раз."
+
+#: marketplace/flows/class-label-download.php:232
+msgid "Этикетки не найдены: возможно, прошло больше 7 дней. Создайте их заново."
+msgstr ""
+
+#: marketplace/flows/class-label-download.php:241
+msgid "скачать этикетки"
+msgstr ""
+
+#: marketplace/flows/class-label-download.php:294
+msgid "У вас нет прав скачать эти этикетки."
+msgstr ""
+
+#. translators: %d: the largest number of orders for one set of labels.
+#: marketplace/flows/class-label-service.php:153
+#, php-format
+msgid "За один раз можно распечатать этикетки не более чем для %d заказов."
+msgstr ""
+
+#: marketplace/flows/class-label-service.php:161
+msgid "Маркетплейс не принял задание на печать этикеток. Попробуйте ещё раз через минуту."
+msgstr ""
+
+#: marketplace/flows/class-label-service.php:185
+msgid "Маркетплейс не вернул этикетки за 15 минут. Нажмите «Этикетка» ещё раз."
+msgstr ""
+
+#. translators: %s: the marketplace's message.
+#: marketplace/flows/class-label-service.php:199
+#, php-format
+msgid "Маркетплейс не нашёл задание на печать этикеток: %s"
+msgstr ""
+
+#: marketplace/flows/class-label-service.php:243
+msgid "Маркетплейс не смог подготовить этикетки."
+msgstr ""
+
+#: marketplace/flows/class-label-service.php:315
+msgid "печатать этикетки"
+msgstr ""
+
+#. translators: %s: product name from the marketplace.
+#: marketplace/flows/class-wc-order-store.php:354
+#, php-format
+msgid "Товар не связан: «%s». Свяжите его с товаром магазина, чтобы остатки учитывались."
+msgstr ""
+
+#: marketplace/jobs/class-label-jobs.php:246
+msgid "Маркетплейс не принял ключ доступа. Проверьте подключение на странице настроек и нажмите «Этикетка» ещё раз."
+msgstr ""
+
+#: marketplace/jobs/class-label-jobs.php:249
+msgid "Маркетплейс изменил или отключил метод печати этикеток. Сообщите в поддержку плагина."
+msgstr ""
+
+#: marketplace/jobs/class-label-jobs.php:289
+msgid "Не удалось получить этикетки: маркетплейс или сайт несколько раз не ответили. Нажмите «Этикетка» ещё раз позже."
+msgstr ""
+
+#: marketplace/jobs/class-label-jobs.php:308
+msgid "Не удалось поставить опрос маркетплейса в очередь. Нажмите «Этикетка» ещё раз."
 msgstr ""
