@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Diagnostics_Reader;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Queue_Health;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Builder;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Site_Facts;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -276,6 +277,27 @@ final class ReportBuilderTest extends TestCase {
 			$this->assertNotSame( '', $secret );
 			$this->assertStringNotContainsString( $secret, $report, "Secret leaked into support report: {$secret}" );
 		}
+	}
+
+	public function test_key_value_pairs_of_every_builtin_secret_name_are_masked(): void {
+		$value = 'dummy-token-for-tests';
+		$text  = implode(
+			"\n",
+			[
+				"x-api-key={$value}-1",
+				"notification_token={$value}-2",
+				"signing_secret={$value}-3",
+				"authorization={$value}-4",
+				"api_key={$value}-5",
+				"GET /v1?x_api_key={$value}-6&a=1",
+			]
+		);
+
+		$redacted = Report_Redactor::redact_text( $text );
+
+		$this->assertStringNotContainsString( $value, $redacted, 'no built-in secret name leaks in name=value form' );
+		$this->assertStringContainsString( 'x_api_key=[скрыто]&a=1', $redacted, 'the rest of the URL stays readable' );
+		$this->assertSame( 6, substr_count( $redacted, '[скрыто]' ) );
 	}
 
 	public function test_link_counts_use_the_real_card_states_and_count_offers_only(): void {

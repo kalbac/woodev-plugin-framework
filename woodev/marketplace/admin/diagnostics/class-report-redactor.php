@@ -89,11 +89,11 @@ final class Report_Redactor {
 			$text
 		);
 
-		// 5. Query-string / key=value pairs and `<name>value</name>`: the framework's redactor, one list of secret names.
+		// 5. Query-string / key=value pairs and `<name>value</name>`: the framework's redactor, with this class's built-in names added to its list.
 		$text = str_replace(
 			\Woodev_API_Base::mask_secret( '' ),
 			self::MASK,
-			\Woodev_API_Base::redact_secret_log_text( $text, $secret_field_names )
+			\Woodev_API_Base::redact_secret_log_text( $text, array_merge( self::BUILTIN_SECRET_KEYS, $secret_field_names ) )
 		);
 
 		// 6. PHP print_r / var_export array entries (`[Api-Key] => value`, `['api_key'] => 'value'`).
