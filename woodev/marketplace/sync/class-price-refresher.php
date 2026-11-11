@@ -160,7 +160,7 @@ final class Price_Refresher {
 			return;
 		}
 
-		if ( $this->write( $product, $restored ) ) {
+		if ( $this->write( $account->adapter_id(), $product, $restored ) ) {
 			$result->add_updated( $offer_id );
 		} else {
 			$result->add_unchanged( $offer_id );
@@ -220,17 +220,19 @@ final class Price_Refresher {
 	}
 
 	/**
-	 * Saves the prices into the product when they differ, under the loop guard.
+	 * Saves the prices into the product when they differ, under the loop guard of the marketplace the prices came from: its
+	 * own price recorder ignores the save, another marketplace's recorder sees it and pushes the new price on.
 	 *
 	 * The marketplace is the master: its sale replaces the shop's. A sale on the marketplace is only mirrored when the product
 	 * also has no sale schedule — a future start date would keep selling at the regular price, an end date would later end the
 	 * mirrored sale — so a schedule counts as a difference even when the amounts match, and is cleared with the write.
 	 *
-	 * @param \WC_Product                               $product  Product or variation.
-	 * @param array{regular:Money|null,sale:Money|null} $restored Inverted prices; a null regular price is left alone.
+	 * @param string                                    $marketplace_id The adapter's id of the account the prices came from.
+	 * @param \WC_Product                               $product        Product or variation.
+	 * @param array{regular:Money|null,sale:Money|null} $restored       Inverted prices; a null regular price is left alone.
 	 * @return bool True when the product was saved.
 	 */
-	private function write( \WC_Product $product, array $restored ): bool {
+	private function write( string $marketplace_id, \WC_Product $product, array $restored ): bool {
 		$known = $restored['regular'] ?? $restored['sale'];
 
 		if ( null === $known ) {
@@ -249,6 +251,7 @@ final class Price_Refresher {
 		}
 
 		Price_Refresh_Guard::run(
+			$marketplace_id,
 			static function () use ( $product, $regular, $sale ): void {
 				if ( null !== $regular ) {
 					$product->set_regular_price( $regular );

@@ -8,11 +8,17 @@
 namespace Woodev\Tests\Unit\Marketplace\Sync;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Account\Credential_Fields;
+use Woodev\Framework\Marketplace\Account\Secret_Cipher;
+use Woodev\Framework\Marketplace\Data\Schema;
+use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
 use Woodev\Framework\Marketplace\Jobs\Price_Recompute_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Refresh_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
+use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Framework\Marketplace\Price\Money;
 use Woodev\Framework\Marketplace\Price\Price_Currency;
 use Woodev\Framework\Marketplace\Price\Price_Pair;
@@ -56,6 +62,13 @@ final class PriceSyncTest extends Sync_Test_Case {
 	private $shop = [];
 
 	/**
+	 * What WooCommerce's product-saved hook calls inside a product double's `save()`: `function ( \WC_Product ): void`.
+	 *
+	 * @var callable|null
+	 */
+	private $on_save;
+
+	/**
 	 * Builds the doubles.
 	 *
 	 * @return void
@@ -66,6 +79,7 @@ final class PriceSyncTest extends Sync_Test_Case {
 		$this->contexts = new Fake_Price_Context();
 		$this->reader   = new Fake_Price_Reader();
 		$this->shop     = [];
+		$this->on_save  = null;
 	}
 
 	/**
@@ -187,19 +201,21 @@ final class PriceSyncTest extends Sync_Test_Case {
 		$product = $this->priced( 'a', '100.00' );
 
 		$inside = Price_Refresh_Guard::run(
+			Sqlite_Tables::MARKETPLACE_ID,
 			function () use ( $product ): bool {
 				$this->recorder()->on_product_updated( $this->products[ $product ], [ 'price' ] );
 
-				return Price_Refresh_Guard::is_active();
+				return Price_Refresh_Guard::is_active( Sqlite_Tables::MARKETPLACE_ID );
 			}
 		);
 
 		$this->assertTrue( $inside );
-		$this->assertFalse( Price_Refresh_Guard::is_active() );
+		$this->assertFalse( Price_Refresh_Guard::is_active( Sqlite_Tables::MARKETPLACE_ID ) );
 		$this->assertNull( $this->price_row( $product ) );
 
 		try {
 			Price_Refresh_Guard::run(
+				Sqlite_Tables::MARKETPLACE_ID,
 				static function (): void {
 					throw new \RuntimeException( 'save failed' );
 				}
@@ -208,10 +224,78 @@ final class PriceSyncTest extends Sync_Test_Case {
 			unset( $e );
 		}
 
-		$this->assertFalse( Price_Refresh_Guard::is_active() );
+		$this->assertFalse( Price_Refresh_Guard::is_active( Sqlite_Tables::MARKETPLACE_ID ) );
 
 		$this->recorder()->on_product_updated( $this->products[ $product ], [ 'price' ] );
 		$this->assertNotNull( $this->price_row( $product ) );
+	}
+
+	/**
+	 * Two marketplace plugins share one framework copy, and a shop may take its prices from one marketplace and push them to
+	 * another. The refresh of the source marketplace raises the source's guard only: the other marketplace's recorder sees the
+	 * save and wants the new price. With one guard for the whole site the destination kept its old price for good.
+	 *
+	 * @return void
+	 */
+	public function test_a_refresh_from_one_marketplace_is_pushed_to_another(): void {
+		// The destination: the harness's marketplace, which pushes prices (the default direction).
+		$product     = $this->priced( 'dest-article', '100.00' );
+		$destination = $this->recorder();
+
+		// The source: a second marketplace with its own table set, account store and link store.
+		$schema = new Schema( 'source' );
+
+		foreach ( $schema->statements( Sqlite_Tables::PREFIX, '' ) as $statement ) {
+			$this->db->define( Sqlite_Tables::to_sqlite( $statement ) );
+		}
+
+		$source_accounts = new Wpdb_Account_Store(
+			$this->db,
+			$schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'test-salt-secure-auth' ),
+			'source',
+			new Credential_Fields( 'shop_ref', [ 'key' ] ),
+			$this->clock()
+		);
+		$source_links    = new Wpdb_Link_Store( $this->db, $schema->table_name( 'links', Sqlite_Tables::PREFIX ), $schema->table_name( 'link_ids', Sqlite_Tables::PREFIX ), $this->clock() );
+		$source_account  = $source_accounts->get(
+			$source_accounts->save(
+				new Account( 0, 'source', 'Источник цен', true, [ 'shop_ref' => 'shop-1', 'key' => 'k-1' ], null, [ 'price_direction' => Wpdb_Account_Store::PRICE_FROM_MARKETPLACE ] )
+			)
+		);
+
+		$source_links->save( new Product_Link( $source_account->id(), $product, 0, 'source-article', [ 'item' => 9001 ], Product_Link::STATE_CREATED, [ 'sync_price' => true ] ) );
+
+		// WooCommerce fires the product-saved hook inside the save; both plugins' recorders listen to it.
+		$guards        = [];
+		$this->on_save = function ( \WC_Product $saved ) use ( $destination, &$guards ): void {
+			$guards = [
+				'source' => Price_Refresh_Guard::is_active( 'source' ),
+				'fake'   => Price_Refresh_Guard::is_active( Sqlite_Tables::MARKETPLACE_ID ),
+			];
+
+			$this->contexts->pairs[ $saved->get_id() ] = $this->pair( $this->shop[ $saved->get_id() ]['sale'], $this->shop[ $saved->get_id() ]['regular'] );
+			$destination->on_product_updated( $saved, [ 'regular_price', 'sale_price', 'price' ] );
+		};
+
+		$this->reader->prices['source-article'] = $this->pair( '450.00', '600.00' );
+		$result                                 = ( new Price_Refresher( $this->reader, $source_links, $this->contexts ) )->refresh( $source_account, [ 'source-article' ] );
+
+		$this->assertSame( [ 'source-article' ], $result->updated() );
+		$this->assertSame( '450.00', $this->shop[ $product ]['sale'] );
+		$this->assertSame(
+			[
+				'source' => true,
+				'fake'   => false,
+			],
+			$guards,
+			'the guard is the source marketplace\'s alone'
+		);
+
+		$wanted = $this->price_row( $product );
+
+		$this->assertNotNull( $wanted, 'the destination marketplace wants the refreshed price' );
+		$this->assertSame( [ '450.00', '600.00' ], [ $wanted['pending_payload']['price'], $wanted['pending_payload']['old_price'] ] );
 	}
 
 	/**
@@ -625,8 +709,12 @@ final class PriceSyncTest extends Sync_Test_Case {
 		}
 
 		$product->shouldReceive( 'save' )->andReturnUsing(
-			function () use ( $id ): int {
-				$this->shop[ $id ]['guarded'][] = Price_Refresh_Guard::is_active();
+			function () use ( $id, $product ): int {
+				$this->shop[ $id ]['guarded'][] = Price_Refresh_Guard::is_active( Sqlite_Tables::MARKETPLACE_ID );
+
+				if ( null !== $this->on_save ) {
+					call_user_func( $this->on_save, $product );
+				}
 
 				return $id;
 			}

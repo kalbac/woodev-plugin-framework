@@ -143,7 +143,8 @@ final class Price_Intents {
 
 	/**
 	 * Handles `woocommerce_product_object_updated_props`: re-works the price of the product's links in every account that
-	 * pushes prices. Ignored while a `from_marketplace` write is saving the product ({@see Price_Refresh_Guard}).
+	 * pushes prices. Ignored while a `from_marketplace` write of this same marketplace is saving the product
+	 * ({@see Price_Refresh_Guard}); a save made by another marketplace's refresh is a price change like any other.
 	 *
 	 * @since 2.0.30
 	 *
@@ -152,7 +153,7 @@ final class Price_Intents {
 	 * @return void
 	 */
 	public function on_product_updated( $product, $updated_props = [] ): void {
-		if ( ! $product instanceof \WC_Product || Price_Refresh_Guard::is_active() || [] === array_intersect( self::WATCHED_PROPS, (array) $updated_props ) ) {
+		if ( ! $product instanceof \WC_Product || Price_Refresh_Guard::is_active( $this->marketplace_id ) || [] === array_intersect( self::WATCHED_PROPS, (array) $updated_props ) ) {
 			return;
 		}
 

@@ -45,8 +45,10 @@ defined( 'ABSPATH' ) || exit;
  * - The caller's budget is in requests: the half sends at most `$remaining_budget` requests and returns how many it used. The
  *   time budget is the caller's {@see Account_Run}: the half checks its deadline before every round and starts no request
  *   after it.
- * - A marketplace that accepts prices asynchronously answers with a pending receipt. The half leaves those pairs in flight and
- *   lets them wait one price interval: settling a pending receipt is the task poll's work, not the sender's.
+ * - **Asynchronous acceptance is not supported.** The sender settles a request from its immediate per-item answers only; no
+ *   job polls a price task. A pending receipt therefore counts every pair of its request as unanswered — a counted failure with
+ *   the ladder and the attempt cap, plus a log line — so a pair is never re-submitted without end. A marketplace that accepts
+ *   prices asynchronously needs the settlement built before its adapter may return one.
  *
  * @since 2.0.30
  */
@@ -289,7 +291,9 @@ final class Price_Flush_Runner {
 		}
 
 		if ( $receipt->is_pending() ) {
-			return [ true, $this->await_receipt( $account, $token, $batch, $lines, $result ) ];
+			// Nothing here settles a task later, so a pending receipt carries no answer this sender can use: its pairs go the way
+			// of any unanswered line below — a counted failure, bounded by the attempt cap — and are never sent without end.
+			$this->log( 'flush_sync (prices): account ' . $account->id() . ': the marketplace answered with a pending receipt, which this sender does not settle; its prices are counted as unanswered.' );
 		}
 
 		return [ true, $this->settle_all( $account, $token, $batch, $receipt, $result ) ];
@@ -316,35 +320,6 @@ final class Price_Flush_Runner {
 		}
 
 		return $go_on;
-	}
-
-	/**
-	 * Lets the pairs of an asynchronously accepted batch wait: they stay in flight until the task poll settles the receipt, and
-	 * are not offered again before one price interval has passed.
-	 *
-	 * @param Account                                            $account Account.
-	 * @param string                                             $token   Claim token.
-	 * @param array<int,array{0:Price_Intent,1:Price_Line|null}> $batch   Intents of the request.
-	 * @param array<int,Price_Line>                              $lines   Lines that were in it.
-	 * @param Flush_Result                                       $result  Tally.
-	 * @return bool False when the claim is gone.
-	 */
-	private function await_receipt( Account $account, string $token, array $batch, array $lines, Flush_Result $result ): bool {
-		$wait = max( 1, $this->queue->cadence()->min_interval() );
-
-		foreach ( $batch as list( $intent, $line ) ) {
-			if ( null === $line || ! isset( $lines[ $intent->link_id() ] ) ) {
-				continue;
-			}
-
-			if ( ! $this->queue->defer( $account->id(), $intent, $wait, $token ) ) {
-				return $this->lost( $account );
-			}
-
-			$result->add_waiting();
-		}
-
-		return true;
 	}
 
 	/**

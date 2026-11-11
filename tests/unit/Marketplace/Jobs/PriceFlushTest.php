@@ -498,25 +498,47 @@ final class PriceFlushTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * A marketplace that accepts prices asynchronously answers with a pending receipt: the pairs stay in flight and wait one
-	 * price interval instead of being counted as refused.
+	 * Asynchronous acceptance is not supported: nothing settles a price task later. A pending receipt therefore carries no
+	 * answer the sender can use, and its pairs are counted as unanswered — never parked as «waiting» and sent again without end.
+	 * The fifth such answer stops the retries of the revision; a changed payload is a new try.
 	 *
 	 * @return void
 	 */
-	public function test_a_pending_receipt_leaves_the_pairs_in_flight(): void {
+	public function test_a_pending_receipt_is_a_bounded_failure_not_an_endless_resend(): void {
 		$product = $this->priced( 'a' );
 		$this->want_price( $product );
 
-		$this->prices->script[] = function (): Push_Receipt {
+		$pending = function (): Push_Receipt {
 			return Push_Receipt::pending( new Async_Task( $this->account_id, Async_Task::KIND_PRICE, 'price-task-1', Async_Task::STATUS_POLLING, 1, new \DateTimeImmutable( '@' . $this->now ) ) );
 		};
-		$result                 = $this->flush_now();
+
+		$this->prices->script[] = $pending;
+		$first                  = $this->flush_now();
+		$row                    = $this->price_row( $product );
+
+		$this->assertSame( [ 0, 1, 0 ], [ $first->sent(), $first->failed(), $first->waiting() ], 'not sent, not waiting: refused' );
+		$this->assertSame( 1, (int) $row['attempts'] );
+		$this->assertSame( 'Маркетплейс не вернул ответ по этому товару.', $row['last_error'] );
+		$this->assertNotSame( [], preg_grep( '/pending receipt, which this sender does not settle/', $this->log ) );
+
+		// The run the critic's probe made: one price interval later the pair is due again and the receipt is pending again.
+		for ( $run = 0; $run < 8; $run++ ) {
+			$this->now           += 4000;
+			$this->prices->script = [ $pending ];
+			$this->flush_now();
+		}
 
 		$row = $this->price_row( $product );
-		$this->assertSame( [ 0, 0, 1 ], [ $result->sent(), $result->failed(), $result->waiting() ] );
-		$this->assertSame( 1, (int) $row['in_flight_rev'] );
-		$this->assertSame( 0, (int) $row['attempts'] );
-		$this->assertSame( gmdate( 'Y-m-d H:i:s', $this->now + 360 ), $row['next_attempt_at'] );
+
+		$this->assertCount( 5, $this->prices->requests, 'the attempt cap ends the re-submission' );
+		$this->assertSame( 5, (int) $row['attempts'] );
+		$this->assertNull( $row['sent_payload'], 'nothing was ever reported as accepted' );
+
+		$this->prices->script = [];
+		$this->want_price( $product, [ 'price' => '120.00' ] );
+		$this->flush_now();
+
+		$this->assertCount( 6, $this->prices->requests, 'a changed payload is a new try' );
 	}
 
 	/**
