@@ -42,6 +42,14 @@ final class Wired_Test_Plugin extends Test_Marketplace_Plugin {
 	protected function get_account_store(): Account_Store {
 		return $this->store ?? parent::get_account_store();
 	}
+
+	/** @var callable|null */
+	public $write_gate;
+
+	/** @return callable|null */
+	protected function account_write_gate(): ?callable {
+		return $this->write_gate;
+	}
 }
 
 /**
@@ -148,7 +156,7 @@ final class FlowWiringTest extends TestCase {
 		);
 	}
 
-	private function wiring( string $plugin_id, ?Fake_Marketplace_Adapter $adapter = null ): Flow_Wiring {
+	private function wiring( string $plugin_id, ?Fake_Marketplace_Adapter $adapter = null, ?callable $write_gate = null ): Flow_Wiring {
 		$adapter  = $adapter ?? $this->adapter();
 		$accounts = Wpdb_Account_Store::for_adapter( $this->db, ( new Schema( $adapter->id() ) )->table_name( 'accounts', 'wp_' ), new Secret_Cipher( 'test-salt' ), $adapter );
 
@@ -165,7 +173,8 @@ final class FlowWiringTest extends TestCase {
 			),
 			function ( string $line ): void {
 				$this->log[] = $line;
-			}
+			},
+			$write_gate
 		);
 	}
 
@@ -328,6 +337,75 @@ final class FlowWiringTest extends TestCase {
 				}
 			)
 		);
+	}
+
+	public function test_a_write_gate_that_refuses_an_account_stops_its_flush_before_the_claim(): void {
+		$flush = null;
+		$allow = false;
+		$asked = [];
+
+		Actions\expectAdded( 'woodev_fake_seller_flush_sync' )->once()->whenHappen(
+			static function ( $callback ) use ( &$flush ): void {
+				$flush = $callback;
+			}
+		);
+
+		$this->wiring(
+			self::PLUGIN,
+			null,
+			function ( Account $account ) use ( &$allow, &$asked ): bool {
+				$asked[] = $account->id();
+
+				return $allow;
+			}
+		)->register();
+
+		$adapter    = $this->adapter();
+		$accounts   = Wpdb_Account_Store::for_adapter( $this->db, ( new Schema( 'fake_wildberries' ) )->table_name( 'accounts', 'wp_' ), new Secret_Cipher( 'test-salt' ), $adapter );
+		$account_id = $accounts->save( new Account( 0, 'fake_wildberries', 'Основной', true, [ 'cabinet' => '4417', 'token' => 'tok-1' ] ) );
+
+		$this->assertIsCallable( $flush );
+
+		$this->db->statements = [];
+		$flush( $account_id );
+
+		$this->assertContains( $account_id, $asked, 'the flush asks the write gate about the account' );
+		$this->assertSame( [], $this->claims(), 'a refused account is not claimed, so nothing is sent' );
+
+		$allow = true;
+		$flush( $account_id );
+
+		$this->assertNotSame( [], $this->claims(), 'once the gate lets the account write, the same run takes the claim' );
+	}
+
+	public function test_the_plugins_write_gate_reaches_the_flush_job_gate(): void {
+		global $wpdb;
+
+		$wpdb   = $this->db; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- A test double of WordPress's database.
+		$plugin = new Wired_Test_Plugin( self::PLUGIN, [ 'id' => 'fake-seller', 'title' => 'Fake', 'icon' => '', 'position' => '56' ] );
+		$plugin->store = Wpdb_Account_Store::for_adapter( $this->db, ( new Schema( 'fake_wildberries' ) )->table_name( 'accounts', 'wp_' ), new Secret_Cipher( 'test-salt' ), $plugin->get_marketplace_adapter() );
+		$plugin->write_gate = static function (): bool {
+			return false;
+		};
+
+		$flush = null;
+
+		Actions\expectAdded( 'woodev_fake_seller_flush_sync' )->once()->whenHappen(
+			static function ( $callback ) use ( &$flush ): void {
+				$flush = $callback;
+			}
+		);
+
+		$plugin->register_marketplace_flows();
+
+		$account_id = $plugin->store->save( new Account( 0, 'fake_wildberries', 'Основной', true, [ 'cabinet' => '4417', 'token' => 'tok-1' ] ) );
+
+		$this->assertIsCallable( $flush );
+
+		$this->db->statements = [];
+		$flush( $account_id );
+
+		$this->assertSame( [], $this->claims(), 'the plugin\'s refusing write gate reaches the flush: no claim, nothing sent' );
 	}
 
 	public function test_the_plugin_wires_its_flows_once_however_often_it_is_asked(): void {

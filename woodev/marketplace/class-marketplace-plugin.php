@@ -75,7 +75,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 *
 		 * Runs by itself on `init`. It is safe to call again: a plugin id is wired once, so a second call, or a second
 		 * marketplace plugin on the same framework copy, adds no hook, no schedule and no route twice. It makes no remote call;
-		 * every runner asks the licence gate and the account's state before it does. A plugin whose account store is not the
+		 * every runner asks the licence gate and the account's state before it does.
+		 *
+		 * The plugin's write gate ({@see self::account_write_gate()}) is read once here and given to every job gate. A plugin whose account store is not the
 		 * framework's table store (see {@see self::get_account_store()}) has no claim to take and runs no flow.
 		 *
 		 * @since 2.1.0
@@ -100,8 +102,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				License_Gate::for_plugin( $this ),
 				function ( string $line ): void {
 					$this->log( $line );
-				}
+				},
+				$this->account_write_gate()
 			) )->register();
+		}
+
+		/**
+		 * The plugin's write gate: whether an account may write to the marketplace right now. The write runners (stock flush, price flush, export) ask it before they call out, after the licence and pause checks; reads and polls never do. An account it refuses is not claimed, and nothing is sent for it in that run. Return null, the default, to let every account write.
+		 *
+		 * It is read once, when {@see self::register_marketplace_flows()} wires the flows, so the callable itself must answer
+		 * without a remote call or a query.
+		 *
+		 * @since 2.1.1
+		 *
+		 * @return callable|null `function ( Account $account ): bool`; true lets the account write, null lets every account write.
+		 */
+		protected function account_write_gate(): ?callable {
+			return null;
 		}
 
 		/**
