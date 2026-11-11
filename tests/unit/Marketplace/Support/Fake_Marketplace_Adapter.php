@@ -559,4 +559,30 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	public function label_provider(): ?\Woodev\Framework\Marketplace\Flows\Label_Provider {
 		return array_key_exists( 'label_provider', $this->policies ) ? $this->policies['label_provider'] : new Fake_Marketplace\Fake_Label_Provider();
 	}
+
+	/**
+	 * Returns the reader of the cabinet's existing cards (`link_resolver` in the policies, else a scripted one that is kept).
+	 *
+	 * @return \Woodev\Framework\Marketplace\Flows\Link_Resolver
+	 */
+	public function link_resolver(): \Woodev\Framework\Marketplace\Flows\Link_Resolver {
+		if ( ! isset( $this->policies['link_resolver'] ) ) {
+			$this->policies['link_resolver'] = new Fake_Marketplace\Scripted_Link_Resolver();
+		}
+
+		return $this->policies['link_resolver'];
+	}
+
+	/**
+	 * Returns the catalogue refresher (`catalog_refresher` in the policies, else a scripted one that is kept).
+	 *
+	 * @return \Woodev\Framework\Marketplace\Flows\Catalog_Refresher
+	 */
+	public function catalog_refresher(): \Woodev\Framework\Marketplace\Flows\Catalog_Refresher {
+		if ( ! isset( $this->policies['catalog_refresher'] ) ) {
+			$this->policies['catalog_refresher'] = new Fake_Marketplace\Scripted_Catalog_Refresher();
+		}
+
+		return $this->policies['catalog_refresher'];
+	}
 }

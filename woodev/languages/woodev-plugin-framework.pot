@@ -7637,3 +7637,44 @@ msgstr ""
 #: marketplace/jobs/class-label-jobs.php:308
 msgid "Не удалось поставить опрос маркетплейса в очередь. Нажмите «Этикетка» ещё раз."
 msgstr ""
+
+#: marketplace/flows/class-card-linker.php:121
+msgid "Товар связан с карточкой маркетплейса."
+msgstr ""
+
+#: marketplace/flows/class-card-linker.php:123
+msgid "Этот товар уже связан с карточкой маркетплейса. Сначала снимите старую связь."
+msgstr ""
+
+#: marketplace/flows/class-card-linker.php:125
+msgid "Эта карточка маркетплейса уже связана с другим товаром."
+msgstr ""
+
+#: marketplace/flows/class-card-linker.php:127
+msgid "К этому товару нельзя привязать карточку. Для вариативного товара выберите один из его вариантов."
+msgstr ""
+
+#: marketplace/flows/class-card-linker.php:129
+msgid "Товар сейчас обрабатывается (например, выгружается на маркетплейс). Повторите чуть позже."
+msgstr ""
+
+#: marketplace/flows/class-link-resolve-exception.php:58
+msgid "Маркетплейс вернул товары вне запрошенного списка"
+msgstr ""
+
+#: marketplace/flows/class-link-resolve-exception.php:69
+msgid "Маркетплейс не закончил выдачу товаров: список повторяется. Попробуйте позже."
+msgstr ""
+
+#: marketplace/jobs/class-link-jobs.php:285
+msgid "Аккаунт маркетплейса отключён или удалён."
+msgstr ""
+
+#. translators: %s: reason.
+#: marketplace/jobs/class-link-jobs.php:321
+msgid "Не удалось выполнить задачу: %s"
+msgstr ""
+
+#: marketplace/jobs/class-link-jobs.php:558
+msgid "Список карточек получен, но сохранить его не удалось: в нём слишком много товаров для просмотра на этой странице."
+msgstr ""

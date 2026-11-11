@@ -15,6 +15,7 @@ require_once __DIR__ . '/wpdb-stub.php';
  * Implements the few `wpdb` calls the plugin's stores use. `prepare()` fills `%i`, `%d` and `%s` the way WordPress does;
  * `INSERT IGNORE`, `ON DUPLICATE KEY UPDATE` and `GREATEST()` are run in their SQLite forms (`INSERT OR IGNORE`, `ON CONFLICT … DO UPDATE SET`, `MAX()`). Every statement is kept in {@see self::$statements}.
  */
+#[\AllowDynamicProperties] // The WordPress table-name properties (`posts`, `term_taxonomy`, …) that a test needs are set on it by name.
 final class Sqlite_Wpdb extends \wpdb {
 	/**
 	 * Table prefix.
