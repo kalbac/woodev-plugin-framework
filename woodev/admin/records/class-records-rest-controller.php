@@ -266,7 +266,7 @@ final class Records_Rest_Controller {
 	 * A POST because the id list does not fit a URL; it still only reads. The body is
 	 * `{ context, ids }` and nothing else.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error

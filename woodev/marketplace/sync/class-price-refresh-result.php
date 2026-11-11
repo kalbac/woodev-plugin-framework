@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The tally of a refresh, with the reason of every skipped article, and the merchant's one-line message for it.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Price_Refresh_Result {
 	/**
@@ -46,7 +46,7 @@ final class Price_Refresh_Result {
 	/**
 	 * Records an updated product.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $offer_id Article.
 	 * @return void
@@ -58,7 +58,7 @@ final class Price_Refresh_Result {
 	/**
 	 * Records a product that already matched.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $offer_id Article.
 	 * @return void
@@ -70,7 +70,7 @@ final class Price_Refresh_Result {
 	/**
 	 * Records a skipped product and why.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $offer_id Article.
 	 * @param string $reason   The sentence the merchant reads.
@@ -83,7 +83,7 @@ final class Price_Refresh_Result {
 	/**
 	 * Marks the refresh as refused because the account does not take prices from the marketplace.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -94,7 +94,7 @@ final class Price_Refresh_Result {
 	/**
 	 * Returns the updated articles.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string[]
 	 */
@@ -105,7 +105,7 @@ final class Price_Refresh_Result {
 	/**
 	 * Returns the articles that already matched.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string[]
 	 */
@@ -116,7 +116,7 @@ final class Price_Refresh_Result {
 	/**
 	 * Returns the skipped articles with their reasons.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,string>
 	 */
@@ -127,7 +127,7 @@ final class Price_Refresh_Result {
 	/**
 	 * Returns the one-line message for the merchant.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */

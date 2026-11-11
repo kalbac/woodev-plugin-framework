@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * `site` «Сайт — главный» (the default) or `marketplace` «Маркетплейс — главный», read from the account's `stock_mode`.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Stock_Mode {
 	public const SITE        = Wpdb_Account_Store::STOCK_SITE;
@@ -24,7 +24,7 @@ final class Stock_Mode {
 	/**
 	 * Tells whether the shop's stock is the truth for an account (anything but `marketplace` is `site`).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @return bool

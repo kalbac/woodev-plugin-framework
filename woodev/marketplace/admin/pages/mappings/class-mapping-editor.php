@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * the category's fields is dropped. A write result is an array `{status, id, errors, notices}`; the controller maps
  * the status to HTTP.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mapping_Editor {
 	/**
@@ -76,7 +76,7 @@ final class Mapping_Editor {
 	/**
 	 * Creates the editor.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Mapping_Store   $mappings       Mappings.
 	 * @param Wpdb_Profile_Store   $profiles       Profiles.
@@ -104,7 +104,7 @@ final class Mapping_Editor {
 	/**
 	 * Lists the term-bound mappings for the list.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<int,array<string,mixed>>
 	 */
@@ -131,7 +131,7 @@ final class Mapping_Editor {
 	/**
 	 * Returns a term-bound mapping as stored, without asking the marketplace anything.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $mapping_id Mapping id.
 	 * @return array<string,mixed>|null The stored row (`mapping_id`, `name`, `wc_product_id`, `category`, `profile_id`,
@@ -146,7 +146,7 @@ final class Mapping_Editor {
 	/**
 	 * Returns one mapping with the attribute table of its category.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $mapping_id Mapping id.
 	 * @return array<string,mixed>|null Null when it is not a term-bound mapping.
@@ -174,7 +174,7 @@ final class Mapping_Editor {
 	/**
 	 * Builds the attribute table of a category, filled from stored sources.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $identity Category identity.
 	 * @param array<string,mixed> $stored   Stored sources by attribute id; empty for a mapping that has none for this
@@ -206,7 +206,7 @@ final class Mapping_Editor {
 	/**
 	 * Searches the values of a dictionary field of a category.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $identity Category identity.
 	 * @param string              $field_id Attribute id.
@@ -242,7 +242,7 @@ final class Mapping_Editor {
 	/**
 	 * Saves a mapping: creates it when `$mapping_id` is null, else changes it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int|null            $mapping_id Mapping id, null for a new one.
 	 * @param array<string,mixed> $body       Decoded request body.
@@ -278,7 +278,7 @@ final class Mapping_Editor {
 	/**
 	 * Copies a mapping without its shop categories (a category cannot be in two mappings).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $mapping_id Mapping to copy.
 	 * @return array{status:string,id:int,errors:string[],notices:string[]}
@@ -310,7 +310,7 @@ final class Mapping_Editor {
 	/**
 	 * Deletes a mapping unless a product still names it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $mapping_id Mapping id.
 	 * @return array{status:string,id:int,errors:string[],notices:string[]} Status `saved` (deleted), `missing` or
@@ -421,7 +421,7 @@ final class Mapping_Editor {
 	 * Lists the shop categories with the mapping that holds each, so the editor can show the one-mapping-per-category
 	 * rule.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<int,array{id:int,label:string,mapping_id:int|null,mapping_name:string}>
 	 */

@@ -18,13 +18,13 @@ defined( 'ABSPATH' ) || exit;
  * A handler runs while the runner holds the event's claim. A side effect outside our tables happens only right after the claim
  * was checked, which the handler that has the side effect owns.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Event_Handler {
 	/**
 	 * Processes one event.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Inbound_Event $event Claimed event.
 	 * @return string Short result text, stored on the row.

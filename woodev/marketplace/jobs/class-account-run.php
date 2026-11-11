@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Each of them throws {@see Claim_Lost} when another run owns the account now; the run stops there.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Account_Run {
 	/**
@@ -76,7 +76,7 @@ final class Account_Run {
 	/**
 	 * Starts a run.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account       $account Account.
 	 * @param Claim_Fence   $fence   The run's claim.
@@ -99,7 +99,7 @@ final class Account_Run {
 	/**
 	 * Returns the account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Account
 	 */
@@ -110,7 +110,7 @@ final class Account_Run {
 	/**
 	 * Returns the run's claim.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return Claim_Fence
 	 */
@@ -121,7 +121,7 @@ final class Account_Run {
 	/**
 	 * Returns the claim token.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -132,7 +132,7 @@ final class Account_Run {
 	/**
 	 * Tells whether the budget allows one more request now.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -143,7 +143,7 @@ final class Account_Run {
 	/**
 	 * Renews the claim right before a request and counts it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 * @throws Claim_Lost When another run owns the account now.
@@ -156,7 +156,7 @@ final class Account_Run {
 	/**
 	 * Renews the claim right before a side effect.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 * @throws Claim_Lost When another run owns the account now.
@@ -170,7 +170,7 @@ final class Account_Run {
 	/**
 	 * Checks the result of a fenced write.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param bool $written What the fenced write returned.
 	 * @return void
@@ -185,7 +185,7 @@ final class Account_Run {
 	/**
 	 * Returns the requests sent.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int
 	 */
@@ -196,7 +196,7 @@ final class Account_Run {
 	/**
 	 * Returns the seconds left before the run's deadline (0 once it has passed).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return float
 	 */
@@ -207,7 +207,7 @@ final class Account_Run {
 	/**
 	 * Returns the requests left in the budget.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int
 	 */

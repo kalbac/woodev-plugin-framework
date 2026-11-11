@@ -19,13 +19,13 @@ defined( 'ABSPATH' ) || exit;
  * answers it through `order_meta()`; the answer of a marketplace that sold on an earlier plugin version is that version's meta, so
  * the orders already in the shop are found again.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Order_Meta_Contract {
 	/**
 	 * Returns the `created_via` value of the orders the marketplace's plugin makes.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -34,7 +34,7 @@ interface Order_Meta_Contract {
 	/**
 	 * Returns the `meta_query` clauses that identify the WooCommerce order of a remote order group.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Order_DTO $order Whole order.
 	 * @return array<int,array{key:string,value:string}>
@@ -45,7 +45,7 @@ interface Order_Meta_Contract {
 	 * Writes the marketplace's order meta (the identity included) before the order is saved, and adds the notes a change
 	 * deserves.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Order $wc_order The order.
 	 * @param Order_DTO $order    Whole order.
@@ -57,7 +57,7 @@ interface Order_Meta_Contract {
 	/**
 	 * Runs after the order was saved with its data (public hooks).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Order $wc_order The order.
 	 * @param Order_DTO $order    Whole order.
@@ -69,7 +69,7 @@ interface Order_Meta_Contract {
 	/**
 	 * Returns the WooCommerce product a line sells.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Order_DTO  $order Whole order.
 	 * @param Order_Line $line  Line.
@@ -80,7 +80,7 @@ interface Order_Meta_Contract {
 	/**
 	 * Writes the marketplace's item meta of a line.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Order_Item_Product $item  Item.
 	 * @param Order_DTO              $order Whole order (financial data per product lives there).
@@ -92,7 +92,7 @@ interface Order_Meta_Contract {
 	/**
 	 * Tells whether an existing item already is the line: same marketplace product, quantity and unit price.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Order_Item_Product $item Item.
 	 * @param Order_Line             $line Line.
@@ -104,7 +104,7 @@ interface Order_Meta_Contract {
 	 * Returns the value an account stamps on its orders to prove they are its own: for a marketplace whose orders carry the
 	 * seller's cabinet number, that number.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @return string Empty when the account has none (then it owns no order).
@@ -114,7 +114,7 @@ interface Order_Meta_Contract {
 	/**
 	 * Returns the owner stamp an order carries, to compare with {@see self::account_owner()}.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $order_id Order id.
 	 * @return string Empty when the order carries none.

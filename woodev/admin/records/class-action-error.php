@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
  * Both carry sentences that reach the merchant, so both pass the provider's text through
  * {@see wp_strip_all_tags()} and a length bound first.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Action_Error {
 
@@ -28,7 +28,7 @@ final class Action_Error {
 	 * 422: the input does not fit the action's fields. The body names every offending field, so
 	 * the dialog can mark each one; the message is for a toast above the form.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,string> $errors Field id => sentence.
 	 * @return \WP_Error
@@ -48,7 +48,7 @@ final class Action_Error {
 	 * 422 from a provider's {@see Action_Input_Exception}. Only declared fields may carry an error;
 	 * anything else is the provider breaking the contract.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,string>           $errors Field id => sentence, as the provider sent it.
 	 * @param array<int,array<string,mixed>> $fields The action's declared fields.
@@ -72,7 +72,7 @@ final class Action_Error {
 	 * 409: the action exists and the user may run it, but the current state refuses it. The
 	 * reason is the provider's own sentence.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $reason Provider sentence; a generic one is used when it is empty.
 	 * @return \WP_Error

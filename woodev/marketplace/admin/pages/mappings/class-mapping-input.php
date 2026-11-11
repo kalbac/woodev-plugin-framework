@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * `profile_id`, and `attributes{attribute id: {source, value, dictionary_value_id, key}}` where `source` is the kind
  * and `key` is the attribute taxonomy, meta key or product field for every kind but a fixed value.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mapping_Input {
 	public const MAX_NAME = 200;
@@ -84,7 +84,7 @@ final class Mapping_Input {
 	/**
 	 * Reads a body.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed>                        $body           Decoded request body.
 	 * @param array<string,mixed>|null                   $category       Identity of the category the caller resolved
@@ -120,7 +120,7 @@ final class Mapping_Input {
 	/**
 	 * Tells whether the form can be saved.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -131,7 +131,7 @@ final class Mapping_Input {
 	/**
 	 * Returns the error lines.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string[]
 	 */
@@ -142,7 +142,7 @@ final class Mapping_Input {
 	/**
 	 * Returns the label.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -153,7 +153,7 @@ final class Mapping_Input {
 	/**
 	 * Returns the shop category term ids.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int[]
 	 */
@@ -164,7 +164,7 @@ final class Mapping_Input {
 	/**
 	 * Returns the marketplace category identity, empty when none is chosen.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,mixed>
 	 */
@@ -175,7 +175,7 @@ final class Mapping_Input {
 	/**
 	 * Returns the profile id.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int|null
 	 */
@@ -186,7 +186,7 @@ final class Mapping_Input {
 	/**
 	 * Returns the attribute sources in the stored shape.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,array<string,string>>
 	 */

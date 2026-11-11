@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * so they — not the pusher — cut the work into requests, and they start no request that cannot finish inside the run's time
  * ({@see \Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter::sync_limits()}).
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Sync_Limits {
 	/**
@@ -41,7 +41,7 @@ final class Sync_Limits {
 	/**
 	 * Creates the limits.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int   $stock_batch     Most stock lines one push request takes.
 	 * @param int   $price_batch     Most prices one push request takes.
@@ -61,7 +61,7 @@ final class Sync_Limits {
 	/**
 	 * Returns the most stock lines one push request takes.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int
 	 */
@@ -72,7 +72,7 @@ final class Sync_Limits {
 	/**
 	 * Returns the most prices one push request takes.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int
 	 */
@@ -83,7 +83,7 @@ final class Sync_Limits {
 	/**
 	 * Returns the seconds one request may take.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return float
 	 */

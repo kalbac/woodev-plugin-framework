@@ -25,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  * account-specific facts (the cabinet currency, the article already held by another product): those are checked where
  * a product is sent.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mapping_Check {
 	/**
@@ -79,7 +79,7 @@ final class Mapping_Check {
 	/**
 	 * Creates the check.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Mapping_Store $mappings   Mappings.
 	 * @param Wpdb_Profile_Store $profiles   Profiles.
@@ -108,7 +108,7 @@ final class Mapping_Check {
 	/**
 	 * Checks one batch of the products of a mapping and adds it to what earlier batches found.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int                      $mapping_id Mapping id.
 	 * @param int                      $offset     Products already visited, in id order.

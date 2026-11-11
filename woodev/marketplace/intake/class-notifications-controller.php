@@ -22,7 +22,7 @@ defined( 'ABSPATH' ) || exit;
  * against the URL in a marketplace's health check), so this one route is answered from the `rest_pre_dispatch` filter, which
  * runs before that validation. The registered callback stays for discovery and does the same work.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Notifications_Controller {
 	public const REST_NAMESPACE = 'woodev/v1';
@@ -46,7 +46,7 @@ final class Notifications_Controller {
 	/**
 	 * Creates the controller.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string              $marketplace_id The adapter's id.
 	 * @param Notification_Intake $intake         Intake.
@@ -59,7 +59,7 @@ final class Notifications_Controller {
 	/**
 	 * Returns the part of the route every account of a marketplace shares: `/marketplace/{marketplace id}/notifications`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $marketplace_id The adapter's id.
 	 * @return string
@@ -71,7 +71,7 @@ final class Notifications_Controller {
 	/**
 	 * Hooks the route registration.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -86,7 +86,7 @@ final class Notifications_Controller {
 	 * Only a POST to exactly this route is taken; every other request, and any request another filter already answered, goes on
 	 * untouched.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed            $result  Answer of an earlier filter, null for none.
 	 * @param \WP_REST_Server  $server  Server.
@@ -110,7 +110,7 @@ final class Notifications_Controller {
 	/**
 	 * Registers the route.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -130,7 +130,7 @@ final class Notifications_Controller {
 	/**
 	 * Handles one notification.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response

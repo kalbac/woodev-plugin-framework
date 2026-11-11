@@ -30,7 +30,7 @@ defined( 'ABSPATH' ) || exit;
  * for the call; when a sender holds it, nothing is changed and the caller is told to try again, so an in-flight sender can never
  * acknowledge its old card's value into the replacement's rows.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Link_Detacher {
 	public const CLAIM_TTL = 60;
@@ -66,7 +66,7 @@ final class Link_Detacher {
 	/**
 	 * Creates the detacher.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Link_Store    $links    Links.
 	 * @param Sync_State_Queue   $queue    Intents and readbacks.
@@ -83,7 +83,7 @@ final class Link_Detacher {
 	/**
 	 * Detaches offer rows of one account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int           $account_id Account id.
 	 * @param Link_Record[] $rows       Rows to detach (offer rows with a card).

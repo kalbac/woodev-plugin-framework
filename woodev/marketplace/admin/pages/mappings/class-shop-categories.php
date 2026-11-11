@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Lists the `product_cat` terms with their path from the top («Clothing › Shoes › Boots»), so two categories of the
  * same name stay distinguishable, and answers whether a posted term id is a product category at all.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Shop_Categories {
 	/**
@@ -24,7 +24,7 @@ final class Shop_Categories {
 	/**
 	 * Lists every product category, by path.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<int,array{id:int,label:string}>
 	 */
@@ -68,7 +68,7 @@ final class Shop_Categories {
 	/**
 	 * Tells whether a term id is a product category.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $term_id Term id.
 	 * @return bool
@@ -80,7 +80,7 @@ final class Shop_Categories {
 	/**
 	 * Returns the name of a category, or its id when it is gone.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $term_id Term id.
 	 * @return string

@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Nothing else in a marketplace plugin should call `wc_get_orders()` with a `meta_query`.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Order_Query {
 	public const CPT_FILTER         = 'woocommerce_order_data_store_cpt_get_orders_query';
@@ -33,7 +33,7 @@ final class Order_Query {
 	/**
 	 * Returns the ids of the orders whose meta match the clauses, oldest id first.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<int|string,mixed> $clauses  `meta_query` clauses (`key`, `value`, `compare`).
 	 * @param int                     $limit    Orders per page; -1 for all.
@@ -94,7 +94,7 @@ final class Order_Query {
 	/**
 	 * Returns the orders whose meta match the clauses, oldest first, trashed orders left out (spec 3.2).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<int|string,mixed> $clauses `meta_query` clauses (`key`, `value`, `compare`).
 	 * @param int                     $limit   Orders to return; -1 for all.

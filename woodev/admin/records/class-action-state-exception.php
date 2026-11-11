@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * A request where only some rows are refused is not an exception: those rows are skipped and
  * come back as grouped reasons.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Action_State_Exception extends \RuntimeException {
 }

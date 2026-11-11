@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * sanitizers. A value the profile already stores but the form no longer offers (one a migration copied) is kept for
  * as long as the merchant leaves it alone.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Profile_Input {
 	public const MAX_NAME = 200;
@@ -110,7 +110,7 @@ final class Profile_Input {
 	/**
 	 * Lists the keys a profile body may hold; any other key is refused by the controller.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Profile_Choices $choices What the form offers.
 	 * @return string[]
@@ -128,7 +128,7 @@ final class Profile_Input {
 	/**
 	 * Reads a body.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $body         Decoded request body.
 	 * @param Profile_Choices     $choices      What the form offers.
@@ -157,7 +157,7 @@ final class Profile_Input {
 	/**
 	 * Tells whether the form can be saved.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -168,7 +168,7 @@ final class Profile_Input {
 	/**
 	 * Returns the error lines.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string[]
 	 */
@@ -179,7 +179,7 @@ final class Profile_Input {
 	/**
 	 * Returns the label.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -190,7 +190,7 @@ final class Profile_Input {
 	/**
 	 * Returns the settings JSON content.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,mixed>
 	 */

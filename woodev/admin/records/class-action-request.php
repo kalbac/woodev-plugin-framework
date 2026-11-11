@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  *   exactly one id). An account-wide action takes no ids at all: its reach is the account, and
  *   the preview says so.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Action_Request {
 
@@ -33,7 +33,7 @@ final class Action_Request {
 	/**
 	 * Parses the JSON body.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @param bool             $apply   Whether this is the apply route (adds `confirmed`).
@@ -75,7 +75,7 @@ final class Action_Request {
 	/**
 	 * Checks the id list against the action's scope.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Records_Definition  $definition Definition built for the current user.
 	 * @param array<string,mixed> $action     Normalised action descriptor.

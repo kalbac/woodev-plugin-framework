@@ -16,13 +16,13 @@ defined( 'ABSPATH' ) || exit;
  * The view reads every word and every option from here (Rule 9): it holds no copy and no domain list of its own, so a
  * missing key renders blank instead of falling back to a hidden default.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class View_Config {
 	/**
 	 * The sentences of the view, by key.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,string>
 	 */
@@ -33,7 +33,7 @@ final class View_Config {
 	/**
 	 * The options of the profile form.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Profile_Choices   $choices      What the form offers.
 	 * @param Price_Source|null $price_source Price source of the marketplace, whose own currency rule the form may
@@ -76,7 +76,7 @@ final class View_Config {
 	/**
 	 * Turns a `value => label` map into the list the selects take.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,string> $map Map.
 	 * @return array<int,array{value:string,label:string}>

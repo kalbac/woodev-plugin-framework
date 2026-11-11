@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Not final: a test replaces it to show what happens without the transaction.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 class Stock_Transaction {
 	/**
@@ -33,7 +33,7 @@ class Stock_Transaction {
 	/**
 	 * Creates the wrapper.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \wpdb $db Database.
 	 */
@@ -44,7 +44,7 @@ class Stock_Transaction {
 	/**
 	 * Runs work in a transaction: commits when it returns, rolls back and rethrows when it throws.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param callable $work    `function (): mixed`.
 	 * @param int[]    $touched Product ids whose caches are dropped after a rollback, so this process reads the stock again.

@@ -29,13 +29,13 @@ defined( 'ABSPATH' ) || exit;
  * Any implementation may throw what its client throws (the adapter's {@see Error_Classifier} sorts it), or
  * {@see Link_Resolve_Exception} when the answer cannot be trusted.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Link_Resolver {
 	/**
 	 * Names the request path the card list is read from. The error ring stores it next to a failure of a linking run.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -44,7 +44,7 @@ interface Link_Resolver {
 	/**
 	 * Reads the whole cabinet: one summary card per article.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account             $account Account.
 	 * @param string              $context Job hook, for the client's context.
@@ -58,7 +58,7 @@ interface Link_Resolver {
 	/**
 	 * Reads the details of cards (identifiers that the list does not carry, the state, the declined text).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account                        $account Account.
 	 * @param string                         $context Job hook.
@@ -73,7 +73,7 @@ interface Link_Resolver {
 	/**
 	 * Merges a summary card with its detail into the card that may be linked.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed>      $card   Summary card.
 	 * @param array<string,mixed>|null $detail Its detail, null when the marketplace did not answer for it.
@@ -87,7 +87,7 @@ interface Link_Resolver {
 	/**
 	 * Reads the cabinet with names and states, for the tab that lists the marketplace's cards.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account             $account Account.
 	 * @param string              $context Job hook.

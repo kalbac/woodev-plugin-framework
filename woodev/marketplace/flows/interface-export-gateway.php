@@ -19,13 +19,13 @@ defined( 'ABSPATH' ) || exit;
  * Builds a card in the marketplace's shape and sends a batch of them. The `export_batch` job owns everything around the call
  * (the gate, the claim, the task row, the retry ladder); this contract owns the card and the request.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Export_Gateway {
 	/**
 	 * Builds one card in the shape the marketplace's import takes.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Link_Record                                  $link      Its offer row.
 	 * @param \WC_Product                                  $product   Product or variation.
@@ -41,7 +41,7 @@ interface Export_Gateway {
 	/**
 	 * Sends a batch of built cards in one request.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account                        $account Account.
 	 * @param array<int,array<string,mixed>> $items   Link id => card, as {@see self::build_item()} returned them.

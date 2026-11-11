@@ -19,13 +19,13 @@ defined( 'ABSPATH' ) || exit;
  * A pass has a time budget. When it runs out the result says the pass is incomplete and the job continues it, with the same `$since`,
  * so what was refreshed already (cache rows fresher than `$since`) is not read again.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Catalog_Refresher {
 	/**
 	 * Refreshes the tree and the attributes of the mapped categories.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account  Account that pays for the calls.
 	 * @param string  $context  Job hook, for the client's context.

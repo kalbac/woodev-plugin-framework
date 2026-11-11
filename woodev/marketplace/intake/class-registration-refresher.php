@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Asks the marketplace what it now says about our URL and stores the answer in the account row, so every screen reads it
  * without a remote call. The settings buttons and the diagnostics page share this one path.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Registration_Refresher {
 	/**
@@ -33,7 +33,7 @@ final class Registration_Refresher {
 	/**
 	 * Creates the refresher.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Notification_Account_Reader $accounts       Accounts.
 	 * @param string                      $marketplace_id The adapter's id.
@@ -46,7 +46,7 @@ final class Registration_Refresher {
 	/**
 	 * Reads what the marketplace says about our URL and stores it with the time it was asked.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Push_Registrar       $registrar The marketplace's registry for the account.
 	 * @param Notification_Account $account   Account.

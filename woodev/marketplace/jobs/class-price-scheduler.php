@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * There is no flush hook here: the one `flush_sync` action per account belongs to the outer sender
  * ({@see Flush_Sync_Runner}), which calls {@see Price_Flush_Runner::flush_under_claim()} for the price half.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Price_Scheduler {
 	public const RECOMPUTE_JOB = 'recompute_prices';
@@ -46,7 +46,7 @@ final class Price_Scheduler {
 	/**
 	 * Creates the scheduler.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Names $names Job names of the plugin.
 	 */
@@ -57,7 +57,7 @@ final class Price_Scheduler {
 	/**
 	 * Returns the hook of the recompute job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -68,7 +68,7 @@ final class Price_Scheduler {
 	/**
 	 * Returns the hook of the refresh job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -79,7 +79,7 @@ final class Price_Scheduler {
 	/**
 	 * Queues the re-working of every link of an account. A request that waits unstarted already covers this one.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @return void
@@ -96,7 +96,7 @@ final class Price_Scheduler {
 	/**
 	 * Schedules the next page of a recompute, or the same page again after a failure.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id    Account id.
 	 * @param int $after_link_id Last link id already re-worked.
@@ -119,7 +119,7 @@ final class Price_Scheduler {
 	/**
 	 * Schedules a refresh batch again, after a wait or a failed attempt.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int      $account_id Account id.
 	 * @param string[] $offer_ids  Articles.
@@ -137,7 +137,7 @@ final class Price_Scheduler {
 	/**
 	 * Queues the `from_marketplace` read of some articles, in batches of {@see self::REFRESH_BATCH}.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int      $account_id Account id.
 	 * @param string[] $offer_ids  Articles.

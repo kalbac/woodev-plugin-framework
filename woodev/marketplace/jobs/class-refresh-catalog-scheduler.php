@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * a tree change, and the reschedule of a pass that ran out of time. The job arguments are `[ account_id, since, attempt ]`;
  * `account_id` 0 means "the first enabled account", `since` and `attempt` are filled by the runner when it reschedules itself.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Refresh_Catalog_Scheduler {
 	public const JOB  = 'refresh_catalog';
@@ -30,7 +30,7 @@ final class Refresh_Catalog_Scheduler {
 	/**
 	 * Creates the scheduler.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Names $names Job names of the plugin.
 	 */
@@ -41,7 +41,7 @@ final class Refresh_Catalog_Scheduler {
 	/**
 	 * Returns the hook of the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -52,7 +52,7 @@ final class Refresh_Catalog_Scheduler {
 	/**
 	 * Makes sure the weekly run exists.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 * @throws \RuntimeException When Action Scheduler did not create it.
@@ -72,7 +72,7 @@ final class Refresh_Catalog_Scheduler {
 	/**
 	 * Queues a run for an account now, unless one is already waiting.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account that pays for the calls.
 	 * @return bool Whether a run is queued.
@@ -94,7 +94,7 @@ final class Refresh_Catalog_Scheduler {
 	/**
 	 * Queues the continuation of a pass; one waiting continuation per argument set is enough.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account that pays for the calls.
 	 * @param int $since      Freshness limit of the pass being continued.

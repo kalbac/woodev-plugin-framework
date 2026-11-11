@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  *   the job will build from, stores the report on a blocked link and queues the valid ones (`unlinked` → `queued`) in batches.
  * - {@see self::reset()}: «Сбросить состояние», the link back to `unlinked` without touching the marketplace.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Export_Service {
 	/**
@@ -67,7 +67,7 @@ final class Export_Service {
 	/**
 	 * Creates the service.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Link_Store        $links     Links.
 	 * @param Export_Context_Builder $contexts  Export inputs.
@@ -86,7 +86,7 @@ final class Export_Service {
 	/**
 	 * Validates products and queues the valid ones for export.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account     Account the cards go to.
 	 * @param int[]   $product_ids Products or variations; a variable product stands for its variations.
@@ -104,7 +104,7 @@ final class Export_Service {
 	 * The link store decides (`queue()` refuses a card that is `submitted` or `archived`), so «valid» and «queued» are different
 	 * sets: the products screen must count the second.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account     Account the cards go to.
 	 * @param int[]   $product_ids Products or variations; a variable product stands for its variations.
@@ -191,7 +191,7 @@ final class Export_Service {
 	 * Validates products exactly as {@see self::queue()} would and writes nothing: the report of the confirmation window on the
 	 * products screen (the report comes first, the queue after the merchant agrees).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account     Account the cards would go to.
 	 * @param int[]   $product_ids Products or variations; a variable product stands for its variations.
@@ -212,7 +212,7 @@ final class Export_Service {
 	/**
 	 * «Сбросить состояние»: puts the products' links back to `unlinked`; nothing is sent to the marketplace.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account     Account.
 	 * @param int[]   $product_ids Products or variations; a variable product stands for its variations.

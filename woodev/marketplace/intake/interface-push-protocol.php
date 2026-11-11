@@ -15,14 +15,14 @@ defined( 'ABSPATH' ) || exit;
  * marketplace's, and the body the marketplace expects with an error status. The intake decides *when* to refuse; this decides
  * what a refusal looks like, because every marketplace documents its own error format and reads it.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Push_Protocol {
 	/**
 	 * Returns the address the request came from, read from the server variables the marketplace's network is known to set
 	 * (the peer address, or a forwarded one behind the shop's trusted proxies).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $server Request server variables.
 	 * @return string An IP address, or '' when none can be trusted.
@@ -33,7 +33,7 @@ interface Push_Protocol {
 	 * Tells whether an address belongs to the marketplace. Asked only for a request that carries no token: with a token the
 	 * address is recorded on the event and never refuses it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $ip Sender address.
 	 * @return bool
@@ -43,7 +43,7 @@ interface Push_Protocol {
 	/**
 	 * Returns the body of an error answer in the marketplace's documented format.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $reason  One of {@see Intake_Response}'s `REASON_*` constants.
 	 * @param string $message Short English text of what went wrong.

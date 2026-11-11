@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  * The store never looks inside a descriptor; two descriptors are the same when they give the same cache key
  * ({@see Wpdb_Catalog_Cache::attributes_key()}), and a mapping without a category yet (empty descriptor) is left out.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mapped_Pairs {
 	/**
@@ -39,7 +39,7 @@ final class Mapped_Pairs {
 	/**
 	 * Creates the reader.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \wpdb  $db    Database.
 	 * @param string $table Full name of the `mappings` table.
@@ -52,7 +52,7 @@ final class Mapped_Pairs {
 	/**
 	 * Lists the descriptors, each once, in the order of their cache keys.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<int,array<string,int|string>> Category descriptors.
 	 */

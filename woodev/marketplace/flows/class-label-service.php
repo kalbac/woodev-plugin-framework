@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * `{plugin id}_label_ready( document_id, task_id, account_id )` fires when a document is stored and
  * `{plugin id}_label_failed( task_id, account_id, message )` when a task ends without one.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Label_Service {
 	/**
@@ -89,7 +89,7 @@ final class Label_Service {
 	/**
 	 * Creates the service.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Label_Provider   $provider   The marketplace's label calls.
 	 * @param Wpdb_Label_Store $store      Store.
@@ -108,7 +108,7 @@ final class Label_Service {
 	/**
 	 * Returns the action that fires when a document is stored.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -119,7 +119,7 @@ final class Label_Service {
 	/**
 	 * Returns the action that fires when a task ends without a document.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -132,7 +132,7 @@ final class Label_Service {
 	 *
 	 * The caller queues the first poll ({@see \Woodev\Framework\Marketplace\Jobs\Label_Jobs::queue_poll()}).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account  $account       Account the orders belong to.
 	 * @param string[] $external_keys Remote-order keys.
@@ -167,7 +167,7 @@ final class Label_Service {
 	/**
 	 * Polls a label task once.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account of the task.
 	 * @param int     $task_id Local task id.
@@ -208,7 +208,7 @@ final class Label_Service {
 	/**
 	 * Ends an open task visibly, for the runner that gives a task up (a lasting failure, retries used up).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int    $task_id Local task id.
 	 * @param string $message What to tell the merchant.
@@ -260,7 +260,7 @@ final class Label_Service {
 		/**
 		 * A label document is stored.
 		 *
-		 * @since 2.0.30
+		 * @since 2.1.0
 		 *
 		 * @param int $document_id Document id; the download link is {@see Label_Download::url()}.
 		 * @param int $task_id     Local task id.
@@ -293,7 +293,7 @@ final class Label_Service {
 			/**
 			 * A label task ended without a document.
 			 *
-			 * @since 2.0.30
+			 * @since 2.1.0
 			 *
 			 * @param int    $task_id    Local task id.
 			 * @param int    $account_id Account id.

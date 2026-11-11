@@ -39,7 +39,7 @@ defined( 'ABSPATH' ) || exit;
  * back to `queued` and retries on the {@see Backoff} ladder, and the fifth failure marks them `failed`; an authorisation refusal
  * pauses the account; any other refusal fails the links at once. Nothing is thrown out of the job.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Export_Batch_Runner {
 	public const MAX_ATTEMPTS = 5;
@@ -120,7 +120,7 @@ final class Export_Batch_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Gate               $gate       Job gate.
 	 * @param Wpdb_Link_Store        $links      Links.
@@ -149,7 +149,7 @@ final class Export_Batch_Runner {
 	/**
 	 * Hooks the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -160,7 +160,7 @@ final class Export_Batch_Runner {
 	/**
 	 * Runs the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $account_id Account id.
 	 * @param mixed $link_ids   Link ids.

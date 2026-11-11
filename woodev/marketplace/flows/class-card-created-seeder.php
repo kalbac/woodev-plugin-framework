@@ -30,7 +30,7 @@ defined( 'ABSPATH' ) || exit;
  * The writes are idempotent ({@see Sync_State_Store::record()}); the poll calls this before it marks the link `created`, so a failed
  * seeding is retried by the next poll. Sending is the flushers' job.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Card_Created_Seeder {
 	/**
@@ -70,7 +70,7 @@ final class Card_Created_Seeder {
 	/**
 	 * Creates the seeder.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Sync_State_Store       $intents      Intents.
 	 * @param Export_Context_Builder $contexts     Export inputs.
@@ -89,7 +89,7 @@ final class Card_Created_Seeder {
 	 * store's UPDATE is keyed on the revision it read) the payload is rebuilt from freshly loaded product data and stored again, up
 	 * to {@see self::STORE_ATTEMPTS} times, so the newest data wins instead of a stale copy.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account     $account Account.
 	 * @param Link_Record $link    Link becoming `created`.
@@ -118,7 +118,7 @@ final class Card_Created_Seeder {
 	 *
 	 * The products screen asks it for its preview, so the preview and the write agree about what can be sent.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account     $account Account.
 	 * @param Link_Record $link    Link.

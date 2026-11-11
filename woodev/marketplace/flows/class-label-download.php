@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  *    may `edit_shop_order` it. An order with no WooCommerce order stops the download: there is nobody whose permission could be
  *    checked.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Label_Download {
 	/**
@@ -105,7 +105,7 @@ final class Label_Download {
 	/**
 	 * Creates the handler. The last three defaults are WordPress's own functions; tests pass doubles.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Label_Store    $store      Store.
 	 * @param Wpdb_Account_Store  $accounts   Accounts.
@@ -136,7 +136,7 @@ final class Label_Download {
 	/**
 	 * Returns the `admin-post.php` action of the download.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -147,7 +147,7 @@ final class Label_Download {
 	/**
 	 * Hooks the handler, for logged-in users and, to answer them with a 403, for anyone else.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -159,7 +159,7 @@ final class Label_Download {
 	/**
 	 * Builds the download address of a document, with its nonce.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $document_id Document id.
 	 * @return string
@@ -180,7 +180,7 @@ final class Label_Download {
 	/**
 	 * Returns the nonce action of a document.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $document_id Document id.
 	 * @return string
@@ -192,7 +192,7 @@ final class Label_Download {
 	/**
 	 * Answers the request: streams the document or ends with the status of the refusal.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -211,7 +211,7 @@ final class Label_Download {
 	/**
 	 * Runs every check and returns the document.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $document_id Document id from the request.
 	 * @return array{document_id:int,account_id:int,task_id:int,external_keys:string[],content_type:string,body:string}

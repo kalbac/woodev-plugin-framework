@@ -33,7 +33,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Accounts in `marketplace` mode are left alone: the marketplace's stock notifications set WC stock there.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Registry_Stock_Accounting {
 	public const RESULT_APPLIED = 'stock accounted';
@@ -106,7 +106,7 @@ final class Registry_Stock_Accounting {
 	/**
 	 * Creates the accounting.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Order_Registry    $registry        Registry.
 	 * @param callable          $product_for     `function ( int $account_id, string $item_id, string $offer_id ): ?\WC_Product`.
@@ -137,7 +137,7 @@ final class Registry_Stock_Accounting {
 	 * Hooks the accounting to the action the order refresh fires for an order of an account that creates no WooCommerce order:
 	 * `do_action( $action, Order_DTO $order, Account $account )`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $action Action name.
 	 * @return void
@@ -149,7 +149,7 @@ final class Registry_Stock_Accounting {
 	/**
 	 * Accounts a refreshed order; a busy row or a failure queues the refresh again, so nothing is thrown into the refresh job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $order   The marketplace order.
 	 * @param mixed $account Its account.
@@ -176,7 +176,7 @@ final class Registry_Stock_Accounting {
 	/**
 	 * Accounts one order.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Order_DTO $order   Marketplace order.
 	 * @param Account   $account Its account.

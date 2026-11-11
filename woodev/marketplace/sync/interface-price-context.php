@@ -21,13 +21,13 @@ defined( 'ABSPATH' ) || exit;
  * price, and the export flow is where they are resolved. The price intents and the refresher depend on this contract only, so
  * they do not know how a product finds its profile.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Price_Context {
 	/**
 	 * Loads a product or a variation.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $product_id Product id.
 	 * @return \WC_Product|null Null when the product no longer exists.
@@ -37,7 +37,7 @@ interface Price_Context {
 	/**
 	 * Works out the prices a card should carry on the marketplace.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account     $account Account.
 	 * @param \WC_Product $product Product or variation.
@@ -51,7 +51,7 @@ interface Price_Context {
 	 * Returns the `sync_state` payload of a pair: `{price, old_price, min_price, currency_code}`, the shape
 	 * {@see \Woodev\Framework\Marketplace\Price\Price_Intent::pair()} reads back.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Price_Pair $pair Prices.
 	 * @return array<string,string|null>
@@ -61,7 +61,7 @@ interface Price_Context {
 	/**
 	 * Returns the price rule and the currency rule in force for a product.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account     $account Account.
 	 * @param \WC_Product $product Product or variation.
@@ -73,7 +73,7 @@ interface Price_Context {
 	/**
 	 * Undoes the rule on a marketplace price: what the shop's regular and sale price must be for the rule to give these prices.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Money                    $price     The marketplace's selling price.
 	 * @param Money|null               $old_price The marketplace's crossed-out price, if any.

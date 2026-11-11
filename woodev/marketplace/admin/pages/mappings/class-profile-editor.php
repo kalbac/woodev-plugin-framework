@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  * The profile half of the editor, with no HTTP in it: the list, one profile as form values, and the guarded writes. A
  * write result is `{status, id, errors}`; the controller maps the status to HTTP.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Profile_Editor {
 	/**
@@ -53,7 +53,7 @@ final class Profile_Editor {
 	/**
 	 * Creates the editor.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Profile_Store $profiles     Profiles.
 	 * @param Wpdb_Mapping_Store $mappings     Mappings.
@@ -75,7 +75,7 @@ final class Profile_Editor {
 	/**
 	 * Lists the profiles for the list.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<int,array{id:int,name:string,mappings:int}>
 	 */
@@ -97,7 +97,7 @@ final class Profile_Editor {
 	/**
 	 * Returns one profile as the values of the form.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $profile_id Profile id.
 	 * @return array<string,mixed>|null
@@ -119,7 +119,7 @@ final class Profile_Editor {
 	/**
 	 * Saves a profile: creates it when `$profile_id` is null, else changes it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int|null            $profile_id Profile id, null for a new one.
 	 * @param array<string,mixed> $body       Decoded request body.
@@ -155,7 +155,7 @@ final class Profile_Editor {
 	/**
 	 * Deletes a profile unless a mapping uses it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $profile_id Profile id.
 	 * @return array{status:string,id:int,errors:string[]} Status `saved` (deleted), `missing` or `in_use`.

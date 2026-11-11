@@ -17,13 +17,13 @@ defined( 'ABSPATH' ) || exit;
  * ({@see \Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter::price_reader()}): what the marketplace now shows for
  * some articles. {@see Price_Refresher} turns the answer into shop prices.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Price_Reader {
 	/**
 	 * Reads the prices of some articles.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account  $account   Account.
 	 * @param string[] $offer_ids Articles (one job batch at most).

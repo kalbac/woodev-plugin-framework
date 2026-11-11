@@ -37,7 +37,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Nothing is thrown out of the job: a failure is written to the error log and the next minute runs again.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Flush_Sync_Runner {
 	public const JOB      = 'flush_sync';
@@ -123,7 +123,7 @@ final class Flush_Sync_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Names          $names          Job names of the plugin.
 	 * @param Job_Gate           $gate           Job gate.
@@ -152,7 +152,7 @@ final class Flush_Sync_Runner {
 	/**
 	 * Returns the hook of the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -163,7 +163,7 @@ final class Flush_Sync_Runner {
 	/**
 	 * Hooks the job and its schedule check.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -175,7 +175,7 @@ final class Flush_Sync_Runner {
 	/**
 	 * The Action Scheduler callback.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $account_id Account id.
 	 * @return void
@@ -187,7 +187,7 @@ final class Flush_Sync_Runner {
 	/**
 	 * Runs one flush of an account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $account_id Account id.
 	 * @return Stock_Flush_Result|null Null when the run did not flush (gate, write gate, another sender, failure).
@@ -207,7 +207,7 @@ final class Flush_Sync_Runner {
 	/**
 	 * Makes sure every enabled account has its recurring flush; checked at most once an hour.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */

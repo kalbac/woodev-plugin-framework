@@ -78,7 +78,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 * every runner asks the licence gate and the account's state before it does. A plugin whose account store is not the
 		 * framework's table store (see {@see self::get_account_store()}) has no claim to take and runs no flow.
 		 *
-		 * @since 2.0.30
+		 * @since 2.1.0
 		 *
 		 * @return void
 		 */

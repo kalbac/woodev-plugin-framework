@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * «Последнее уведомление: …, 2 мин назад, обработано». It reads our events table, never the marketplace, so rendering the page
  * costs one query and no remote call.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Last_Notification_Reader {
 	/**
@@ -33,7 +33,7 @@ final class Last_Notification_Reader {
 	/**
 	 * Creates the reader.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \wpdb  $db    Database.
 	 * @param string $table Full name of the events table.
@@ -46,7 +46,7 @@ final class Last_Notification_Reader {
 	/**
 	 * Returns the newest event of an account that was meant to be processed.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @return array{type:string,received_at:int,status:string}|null Null when no notification arrived yet.

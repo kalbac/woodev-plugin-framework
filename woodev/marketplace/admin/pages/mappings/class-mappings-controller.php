@@ -31,7 +31,7 @@ defined( 'ABSPATH' ) || exit;
  * searching, checking), never on the first paint, and an adapter failure is a 502 with the adapter's sentence rather
  * than a blank screen. A mapping is account-agnostic, so no route takes an account.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mappings_Controller {
 	/**
@@ -110,7 +110,7 @@ final class Mappings_Controller {
 	/**
 	 * Creates the controller.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string               $owner          Plugin id.
 	 * @param string               $capability     Capability the user needs.
@@ -149,7 +149,7 @@ final class Mappings_Controller {
 	 *
 	 * @internal
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -197,7 +197,7 @@ final class Mappings_Controller {
 	 * Gate for every route. The cookie nonce is checked by WordPress core before this runs; a valid nonce proves the
 	 * request is the user's own, not that the user may manage mappings.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return true|\WP_Error
 	 */
@@ -210,7 +210,7 @@ final class Mappings_Controller {
 	 * saved mappings and asks the marketplace for nothing else; a category list that cannot be read is a 502 with the
 	 * adapter's sentence.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -242,7 +242,7 @@ final class Mappings_Controller {
 	/**
 	 * `GET R/categories`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -266,7 +266,7 @@ final class Mappings_Controller {
 	/**
 	 * `GET R/fields`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -298,7 +298,7 @@ final class Mappings_Controller {
 	/**
 	 * `GET R/dictionary`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -332,7 +332,7 @@ final class Mappings_Controller {
 	/**
 	 * `GET R/mappings/{id}`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -360,7 +360,7 @@ final class Mappings_Controller {
 	/**
 	 * `POST R/mappings`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -372,7 +372,7 @@ final class Mappings_Controller {
 	/**
 	 * `POST R/mappings/{id}`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -384,7 +384,7 @@ final class Mappings_Controller {
 	/**
 	 * `POST R/mappings/{id}/copy`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -396,7 +396,7 @@ final class Mappings_Controller {
 	/**
 	 * `DELETE R/mappings/{id}`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -408,7 +408,7 @@ final class Mappings_Controller {
 	/**
 	 * `POST R/mappings/{id}/check`: one batch of the product check.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -430,7 +430,7 @@ final class Mappings_Controller {
 	/**
 	 * `GET R/profiles/{id}`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -453,7 +453,7 @@ final class Mappings_Controller {
 	/**
 	 * `POST R/profiles`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -465,7 +465,7 @@ final class Mappings_Controller {
 	/**
 	 * `POST R/profiles/{id}`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -477,7 +477,7 @@ final class Mappings_Controller {
 	/**
 	 * `DELETE R/profiles/{id}`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error

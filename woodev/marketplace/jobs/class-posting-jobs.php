@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  * framework. While the licence is not in force, or the account is paused after a refused key, neither job calls the marketplace:
  * a refresh waits, a poll waits for its next run.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Posting_Jobs {
 	public const JOB_REFRESH = 'refresh_posting';
@@ -99,7 +99,7 @@ final class Posting_Jobs {
 	/**
 	 * Creates the jobs.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Gate           $gate       Gate of licence, account and pause.
 	 * @param Wpdb_Account_Store $accounts   Accounts.
@@ -125,7 +125,7 @@ final class Posting_Jobs {
 	 * Not {@see Job_Names::hook()}: that one turns dashes into underscores, but a saved setting keeps the plugin id as it is
 	 * (`woodev_ozon-seller_poll_postings_minutes`), and a site that saved an interval must keep it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $plugin_id The plugin id, not normalised.
 	 * @return string
@@ -137,7 +137,7 @@ final class Posting_Jobs {
 	/**
 	 * Hooks the jobs.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -150,7 +150,7 @@ final class Posting_Jobs {
 	/**
 	 * Returns the hook of the refresh job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -161,7 +161,7 @@ final class Posting_Jobs {
 	/**
 	 * Returns the hook of the poll job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -172,7 +172,7 @@ final class Posting_Jobs {
 	/**
 	 * Queues the refresh of a posting unless one is already pending.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int    $account_id     Account id.
 	 * @param string $posting_number Posting number.
@@ -206,7 +206,7 @@ final class Posting_Jobs {
 	/**
 	 * Runs `refresh_posting`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int|string $account_id     Account id (Action Scheduler passes the stored argument).
 	 * @param string     $posting_number Posting number.
@@ -246,7 +246,7 @@ final class Posting_Jobs {
 	/**
 	 * Runs `poll_postings`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int|string $account_id Account id.
 	 * @return void
@@ -271,7 +271,7 @@ final class Posting_Jobs {
 	/**
 	 * Creates the recurring poll of every account that needs one. Checked at most once an hour.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -296,7 +296,7 @@ final class Posting_Jobs {
 	/**
 	 * Tells whether an account needs its postings: it creates orders, or the site keeps its stock (spec 5.3, 6.4).
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account $account Account.
 	 * @return bool

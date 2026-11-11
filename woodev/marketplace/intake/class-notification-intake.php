@@ -22,7 +22,7 @@ defined( 'ABSPATH' ) || exit;
  * print the {@see Intake_Response} it returns. What the body means ({@see Inbound_Decoder}) and what an error answer looks like
  * ({@see Push_Protocol}) are the marketplace's.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Notification_Intake {
 	private const UNAUTHORISED  = 'Unauthorized request';
@@ -83,7 +83,7 @@ final class Notification_Intake {
 	/**
 	 * Creates the intake.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Inbound_Decoder             $decoder   Decoder.
 	 * @param Push_Protocol               $protocol  The marketplace's endpoint rules.
@@ -109,7 +109,7 @@ final class Notification_Intake {
 	 * The token is the credential. An address outside the marketplace's ranges is recorded on the event by the decoder and does
 	 * not refuse the request: a 4xx would count against the URL in the marketplace's health check, and the token already matched.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int                 $account_id Account id from the URL.
 	 * @param string              $token      Token from the URL.
@@ -138,7 +138,7 @@ final class Notification_Intake {
 	 * Nothing proves who sent it but the address, so the marketplace's allow-list is enforced here, with a 403. The account is
 	 * the one the body names; the caller extracts that name, because only the plugin knows where the body keeps it.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string              $owner    The cabinet identifier or the seller id the body names, '' when it names none.
 	 * @param string              $raw_body Raw request body.

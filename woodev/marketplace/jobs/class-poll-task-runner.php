@@ -45,7 +45,7 @@ defined( 'ABSPATH' ) || exit;
  * Tasks that own unfinished links are found through the links whatever their age; links a refused export retry left queued get a
  * new batch.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Poll_Task_Runner {
 	public const FAST_PERIOD   = 600;
@@ -154,7 +154,7 @@ final class Poll_Task_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Gate         $gate       Job gate.
 	 * @param Wpdb_Link_Store  $links      Links.
@@ -185,7 +185,7 @@ final class Poll_Task_Runner {
 	/**
 	 * Hooks the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -196,7 +196,7 @@ final class Poll_Task_Runner {
 	/**
 	 * Runs the job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param mixed $task_id Task id; 0 runs the recovery sweep.
 	 * @param mixed $attempt Failed polls in a row.

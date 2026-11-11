@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * them. It names the links of those batches, so the caller can take them out of the queue — a link that is `queued` with no task
  * and no scheduled batch is found by nothing and would never be exported.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Export_Not_Scheduled extends \RuntimeException {
 	/**
@@ -27,7 +27,7 @@ final class Export_Not_Scheduled extends \RuntimeException {
 	/**
 	 * Creates the exception.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int[] $link_ids Links whose batch was not scheduled.
 	 */
@@ -40,7 +40,7 @@ final class Export_Not_Scheduled extends \RuntimeException {
 	/**
 	 * Returns the links whose batch was not scheduled.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int[]
 	 */

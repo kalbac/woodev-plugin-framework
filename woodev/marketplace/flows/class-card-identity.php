@@ -18,13 +18,13 @@ defined( 'ABSPATH' ) || exit;
  * {@see Card_Lifecycle::card_id_name()} at least) must be equal, and there must be one. Identifiers that appear only in the detail
  * (those that arrive late) are not compared.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Card_Identity {
 	/**
 	 * Tells whether the confirmed card is the card of the summary.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $summary   Card of {@see Link_Resolver::catalogue()}.
 	 * @param array<string,mixed> $confirmed Card {@see Link_Resolver::confirmed()} answered.

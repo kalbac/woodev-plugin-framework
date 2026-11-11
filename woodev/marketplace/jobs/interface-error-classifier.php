@@ -16,13 +16,13 @@ defined( 'ABSPATH' ) || exit;
  * Tells the jobs what a failed marketplace call means. Every marketplace has its own exception and its own codes; the runners
  * know neither and ask this ({@see \Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter::error_classifier()}).
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 interface Error_Classifier {
 	/**
 	 * Classifies what a marketplace call threw.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \Throwable $thrown What the pusher, the reader or the source threw.
 	 * @return Remote_Error|null Null when it is not a marketplace answer (a bug, a database error): the runner rethrows it.
@@ -33,7 +33,7 @@ interface Error_Classifier {
 	 * Returns the health an account gets when the marketplace refused its credentials: the status that pauses its jobs and the
 	 * sentence the merchant reads on the account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Remote_Error $error   A `PAUSE_ACCOUNT` error.
 	 * @param Account      $account The account whose credentials were refused.

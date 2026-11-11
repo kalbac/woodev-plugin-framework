@@ -50,7 +50,7 @@ defined( 'ABSPATH' ) || exit;
  *   the ladder and the attempt cap, plus a log line — so a pair is never re-submitted without end. A marketplace that accepts
  *   prices asynchronously needs the settlement built before its adapter may return one.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Price_Flush_Runner {
 	/**
@@ -112,7 +112,7 @@ final class Price_Flush_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Gate           $gate       Job gate (the pause and the write gate).
 	 * @param Wpdb_Account_Store $accounts   Accounts.
@@ -141,7 +141,7 @@ final class Price_Flush_Runner {
 	 * left of its request budget. This half re-reads the account, never exceeds the budget and reports the requests it really
 	 * sent.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int               $account_id       Account id.
 	 * @param string            $token            Account claim token the caller holds.

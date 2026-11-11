@@ -25,13 +25,13 @@ defined( 'ABSPATH' ) || exit;
  *   link the wrong product.
  * - A card that was paired exactly is not offered as a near match of another product.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Card_Matcher {
 	/**
 	 * Pairs cards with products.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<int,array<string,mixed>>                                           $cards    Cards of the cabinet; each carries at least `offer_id`, every other key of a {@see Link_Resolver} card is passed through.
 	 * @param array<int,array{id:int,parent_id:int,sku:string}>                        $products Shop products and variations that may carry a card (never a variable parent).

@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  * migrated with a category, type and attribute values and no mapping instance therefore validates and builds from its
  * own link row alone.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Link_Context_Resolver {
 	/**
@@ -47,7 +47,7 @@ final class Link_Context_Resolver {
 	/**
 	 * Creates the resolver.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Wpdb_Link_Store    $links    Links.
 	 * @param Wpdb_Mapping_Store $mappings Mappings.
@@ -60,7 +60,7 @@ final class Link_Context_Resolver {
 	/**
 	 * Builds the effective mapping of a product for an account.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int   $account_id    Account id.
 	 * @param int   $wc_product_id Product or variation id.
@@ -90,7 +90,7 @@ final class Link_Context_Resolver {
 	/**
 	 * Returns every value an override gives: `attribute_id => [ { dictionary_value_id, value } ]`, variation over parent.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id    Account id.
 	 * @param int $wc_product_id Product or variation id.
@@ -106,7 +106,7 @@ final class Link_Context_Resolver {
 	/**
 	 * Returns the id of the mapping a product uses for an account: its row's, its parent row's, then its categories'.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int   $account_id    Account id.
 	 * @param int   $wc_product_id Product or variation id.

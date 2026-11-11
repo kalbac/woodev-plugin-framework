@@ -30,7 +30,7 @@ defined( 'ABSPATH' ) || exit;
  * Who calls it: the handler of the marketplace's «card changed» notification and the daily reconcile, through the
  * `refresh_prices` job.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Price_Refresher {
 	/**
@@ -57,7 +57,7 @@ final class Price_Refresher {
 	/**
 	 * Creates the refresher.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Price_Reader    $reader   Reader.
 	 * @param Wpdb_Link_Store $links    Links.
@@ -72,7 +72,7 @@ final class Price_Refresher {
 	/**
 	 * Refreshes the shop prices of articles from the marketplace.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Account  $account   Account.
 	 * @param string[] $offer_ids Articles.

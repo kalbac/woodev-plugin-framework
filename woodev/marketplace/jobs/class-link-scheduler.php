@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Neither writes to the marketplace. A request that queues one is still a request-time intent only.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Link_Scheduler {
 	public const LINK_JOB    = 'link_cards';
@@ -36,7 +36,7 @@ final class Link_Scheduler {
 	/**
 	 * Creates the scheduler.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Job_Names $names Job names of the plugin.
 	 */
@@ -47,7 +47,7 @@ final class Link_Scheduler {
 	/**
 	 * Returns the hook of the linking job.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -58,7 +58,7 @@ final class Link_Scheduler {
 	/**
 	 * Returns the hook of the snapshot refresh.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -71,7 +71,7 @@ final class Link_Scheduler {
 	 *
 	 * A run already waiting for the same account and category is not queued twice.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int      $account_id  Account id.
 	 * @param int|null $category_id Product category (`product_cat` term id) to link, or null for the whole shop.
@@ -84,7 +84,7 @@ final class Link_Scheduler {
 	/**
 	 * Queues the refresh of the cards snapshot.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @return bool False when Action Scheduler is not available or refused the action.
@@ -96,7 +96,7 @@ final class Link_Scheduler {
 	/**
 	 * Schedules a linking run again.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id  Account id.
 	 * @param int $category_id Category, 0 for the whole shop.
@@ -111,7 +111,7 @@ final class Link_Scheduler {
 	/**
 	 * Schedules a snapshot refresh again.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param int $account_id Account id.
 	 * @param int $attempt    Failed attempts so far.

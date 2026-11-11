@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * stale category cannot be saved. The finder reads the schema once per request and never asks the marketplace itself;
  * whether `categories()` reads a cache is the adapter's business.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Category_Finder {
 	/**
@@ -63,7 +63,7 @@ final class Category_Finder {
 	/**
 	 * Creates the finder.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Catalog_Schema $schema Catalogue schema.
 	 */
@@ -74,7 +74,7 @@ final class Category_Finder {
 	/**
 	 * Returns the key of a category identity: stable for the same identity whatever the order of its keys.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $identity Category identity.
 	 * @return string
@@ -88,7 +88,7 @@ final class Category_Finder {
 	/**
 	 * Tells whether the schema offers any category.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -99,7 +99,7 @@ final class Category_Finder {
 	/**
 	 * Finds categories whose path contains every word of the search text.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $term Search text.
 	 * @return array<int,array{key:string,label:string}>
@@ -130,7 +130,7 @@ final class Category_Finder {
 	/**
 	 * Looks a category up by the key the browser sent.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $key Category key.
 	 * @return array{key:string,label:string,identity:array<string,mixed>}|null Null when the schema does not offer it.
@@ -142,7 +142,7 @@ final class Category_Finder {
 	/**
 	 * Looks a category up by a stored identity.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $identity Stored category descriptor.
 	 * @return array{key:string,label:string,identity:array<string,mixed>}|null Null when the schema no longer offers
@@ -155,7 +155,7 @@ final class Category_Finder {
 	/**
 	 * Lists the fields of a category.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,mixed> $identity Category identity from {@see self::find()}.
 	 * @return Field_Definition[]
@@ -167,7 +167,7 @@ final class Category_Finder {
 	/**
 	 * Searches the values of a dictionary field.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param Field_Definition $field Dictionary field.
 	 * @param string           $term  Search text.

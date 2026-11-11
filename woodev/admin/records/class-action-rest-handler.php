@@ -35,7 +35,7 @@ defined( 'ABSPATH' ) || exit;
  * Kept apart from {@see Records_Rest_Controller}, which serves the reads; it is handed to the
  * REST registrar by {@see Records_Registry} next to it.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Action_Rest_Handler {
 
@@ -59,7 +59,7 @@ final class Action_Rest_Handler {
 	 *
 	 * @internal
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return void
 	 */
@@ -87,7 +87,7 @@ final class Action_Rest_Handler {
 	/**
 	 * Gate: the table must exist and the user must hold its capability.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return true|\WP_Error
@@ -105,7 +105,7 @@ final class Action_Rest_Handler {
 	/**
 	 * `POST R/actions/{action}/preview`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -134,7 +134,7 @@ final class Action_Rest_Handler {
 	/**
 	 * `POST R/actions/{action}`.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error

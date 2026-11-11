@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * | `FAIL` | the marketplace refused these items for good (a validation error) | counts a failure with the text |
  * | `API_CHANGED` | the marketplace no longer offers the method | counts a failure and stops the run |
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Remote_Error {
 	public const PAUSE_ACCOUNT = 'pause_account';
@@ -70,7 +70,7 @@ final class Remote_Error {
 	/**
 	 * Creates the error.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string   $consequence One of the consequence constants.
 	 * @param string   $kind        The adapter's short name of the error, for the log.
@@ -95,7 +95,7 @@ final class Remote_Error {
 	/**
 	 * Returns the consequence.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -106,7 +106,7 @@ final class Remote_Error {
 	/**
 	 * Tells whether the error has a given consequence.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param string $consequence One of the consequence constants.
 	 * @return bool
@@ -118,7 +118,7 @@ final class Remote_Error {
 	/**
 	 * Returns the adapter's short name of the error.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -129,7 +129,7 @@ final class Remote_Error {
 	/**
 	 * Returns the marketplace's text.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */
@@ -140,7 +140,7 @@ final class Remote_Error {
 	/**
 	 * Returns the seconds the marketplace asked to wait, or null.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return int|null
 	 */
@@ -151,7 +151,7 @@ final class Remote_Error {
 	/**
 	 * Tells whether the request left this site.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return bool
 	 */
@@ -162,7 +162,7 @@ final class Remote_Error {
 	/**
 	 * Returns the line a log shows: the kind and the text.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return string
 	 */

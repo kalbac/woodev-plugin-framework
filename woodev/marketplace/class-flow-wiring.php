@@ -92,7 +92,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 	 *
 	 * @internal Built by {@see Marketplace_Plugin::register_marketplace_flows()}.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 */
 	final class Flow_Wiring {
 		/**
@@ -196,7 +196,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		/**
 		 * Creates the wiring of one plugin.
 		 *
-		 * @since 2.0.30
+		 * @since 2.1.0
 		 *
 		 * @param string              $plugin_id Plugin id.
 		 * @param Marketplace_Adapter $adapter   The plugin's adapter.
@@ -219,7 +219,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		/**
 		 * Builds and hooks every flow of the plugin, unless that was already done for this plugin id.
 		 *
-		 * @since 2.0.30
+		 * @since 2.1.0
 		 *
 		 * @return bool True when the flows were hooked now, false when they already were.
 		 */
@@ -257,7 +257,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 *
 		 * @internal
 		 *
-		 * @since 2.0.30
+		 * @since 2.1.0
 		 *
 		 * @return void
 		 */

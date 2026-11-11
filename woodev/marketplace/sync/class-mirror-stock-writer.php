@@ -21,13 +21,13 @@ defined( 'ABSPATH' ) || exit;
  * The callers are the handler of the marketplace's stock notification and the readback of {@see Stock_Readback}. The write
  * fires WooCommerce's stock hooks; {@see Stock_Intents} ignores them in `marketplace` mode, so the mirror never echoes back.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Mirror_Stock_Writer {
 	/**
 	 * Sets a product's stock to what the marketplace can still sell.
 	 *
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param \WC_Product $product  Product or variation.
 	 * @param int         $present  Units on the marketplace warehouse.

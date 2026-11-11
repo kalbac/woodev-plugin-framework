@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Sentences are shown to the merchant as written, so they must be merchant-safe.
  *
- * @since 2.0.30
+ * @since 2.1.0
  */
 final class Action_Input_Exception extends \RuntimeException {
 	/**
@@ -25,7 +25,7 @@ final class Action_Input_Exception extends \RuntimeException {
 	private $errors;
 
 	/**
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @param array<string,string> $errors Declared field id => sentence for the merchant.
 	 */
@@ -36,7 +36,7 @@ final class Action_Input_Exception extends \RuntimeException {
 	}
 
 	/**
-	 * @since 2.0.30
+	 * @since 2.1.0
 	 *
 	 * @return array<string,string> Field id => sentence.
 	 */
