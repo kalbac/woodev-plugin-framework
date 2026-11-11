@@ -36,7 +36,7 @@ final class Posting_Jobs {
 	public const JOB_POLL    = 'poll_postings';
 
 	/**
-	 * Settings-API option of the poll interval in minutes (spec 3.3), named like the jobs.
+	 * Name of the settings-API option of the poll interval in minutes (spec 3.3), after the settings prefix.
 	 */
 	public const OPTION_POLL_MINUTES = 'poll_postings_minutes';
 
@@ -90,6 +90,13 @@ final class Posting_Jobs {
 	private $adapter_id;
 
 	/**
+	 * Full key of the settings option that holds the poll interval.
+	 *
+	 * @var string
+	 */
+	private $poll_option;
+
+	/**
 	 * Creates the jobs.
 	 *
 	 * @since 2.0.30
@@ -100,14 +107,31 @@ final class Posting_Jobs {
 	 * @param Error_Classifier   $classifier Error classifier of the marketplace.
 	 * @param Job_Names          $names      Hook names of the plugin.
 	 * @param string             $adapter_id The marketplace's id (the adapter's `id()`).
+	 * @param string             $poll_option Key of the settings option that holds the poll interval, as {@see self::option_key()} builds it.
 	 */
-	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id ) {
+	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id, string $poll_option ) {
 		$this->gate       = $gate;
 		$this->accounts   = $accounts;
 		$this->handler    = $handler;
 		$this->classifier = $classifier;
 		$this->names      = $names;
 		$this->adapter_id = $adapter_id;
+		$this->poll_option = $poll_option;
+	}
+
+	/**
+	 * Builds the key of the poll-interval option from the plugin id as the settings API prefixes it.
+	 *
+	 * Not {@see Job_Names::hook()}: that one turns dashes into underscores, but a saved setting keeps the plugin id as it is
+	 * (`woodev_ozon-seller_poll_postings_minutes`), and a site that saved an interval must keep it.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @param string $plugin_id The plugin id, not normalised.
+	 * @return string
+	 */
+	public static function option_key( string $plugin_id ): string {
+		return 'woodev_' . $plugin_id . '_' . self::OPTION_POLL_MINUTES;
 	}
 
 	/**
@@ -260,7 +284,7 @@ final class Posting_Jobs {
 
 		set_transient( $transient, '1', HOUR_IN_SECONDS );
 
-		$interval = max( 1, (int) get_option( $this->names->hook( self::OPTION_POLL_MINUTES ), self::DEFAULT_POLL_MINUTES ) ) * MINUTE_IN_SECONDS;
+		$interval = max( 1, (int) get_option( $this->poll_option, self::DEFAULT_POLL_MINUTES ) ) * MINUTE_IN_SECONDS;
 
 		foreach ( $this->accounts->all( $this->adapter_id, true ) as $account ) {
 			if ( self::wants_postings( $account ) && ! as_has_scheduled_action( $this->poll_hook(), [ $account->id() ], $this->names->group() ) ) {

@@ -298,7 +298,16 @@ final class PostingJobsTest extends Sync_Test_Case {
 	 * @return void
 	 */
 	public function test_ensure_polls_creates_one_recurring_poll_per_needy_account_once_an_hour(): void {
-		$this->options['woodev_fake_seller_poll_postings_minutes'] = 7;
+		$this->options['woodev_fake-seller_poll_postings_minutes'] = 7;
+
+		$intervals = [];
+		Functions\when( 'as_schedule_recurring_action' )->alias(
+			function ( int $when, int $interval, string $hook, array $args = [], string $group = '' ) use ( &$intervals ): int {
+				$intervals[] = $interval;
+
+				return $this->scheduler->add( $hook, $args, 'recurring', 0, $group );
+			}
+		);
 
 		$jobs = $this->jobs();
 		$jobs->ensure_polls();
@@ -308,7 +317,33 @@ final class PostingJobsTest extends Sync_Test_Case {
 		$this->assertCount( 1, $polls );
 		$this->assertSame( [ $this->account_id ], $polls[0]['args'] );
 		$this->assertSame( 'recurring', $polls[0]['kind'] );
+		$this->assertSame( [ 420 ], $intervals, 'the saved seven minutes, not the default ten' );
 		$this->assertArrayHasKey( 'woodev_fake_seller_poll_check', $this->transients );
+	}
+
+	/**
+	 * The option key is the settings-API key of the plugin id as it is, dashes kept: a site that saved an interval keeps it. The
+	 * underscore form (the hook names') is not read.
+	 *
+	 * @return void
+	 */
+	public function test_the_poll_interval_option_keeps_the_plugin_id_as_it_is(): void {
+		$this->assertSame( 'woodev_fake-seller_poll_postings_minutes', Posting_Jobs::option_key( 'fake-seller' ) );
+
+		$this->options['woodev_fake_seller_poll_postings_minutes'] = 7;
+
+		$intervals = [];
+		Functions\when( 'as_schedule_recurring_action' )->alias(
+			function ( int $when, int $interval ) use ( &$intervals ): int {
+				$intervals[] = $interval;
+
+				return 1;
+			}
+		);
+
+		$this->jobs()->ensure_polls();
+
+		$this->assertSame( [ 600 ], $intervals, 'only the key of the saved setting counts' );
 	}
 
 	/**
@@ -368,6 +403,6 @@ final class PostingJobsTest extends Sync_Test_Case {
 			]
 		);
 
-		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $adapter->posting_handler(), $adapter->error_classifier(), $this->names(), Sqlite_Tables::MARKETPLACE_ID );
+		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $adapter->posting_handler(), $adapter->error_classifier(), $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ) );
 	}
 }

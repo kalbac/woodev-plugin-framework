@@ -215,6 +215,95 @@ class OrderStoresTest extends TestCase {
 	}
 
 	/**
+	 * The process dies right after the replacement two-unit lines were saved and before their stock was taken; the retry of the same
+	 * order, whose lines now match, still takes it: stock 8, and an identical retry changes nothing (donor finding 2).
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_an_interrupted_line_swap_takes_its_stock_on_the_retry( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$product  = $this->product( 'SKU-A', 10 );
+		$store    = new Wc_Order_Store( $this->meta );
+		$one      = $this->dto( 'R-1', [ [ 'SKU-A', 1 ] ] );
+		$two      = $this->dto( 'R-1', [ [ 'SKU-A', 2 ] ] );
+		$wc_order = $store->create( $one );
+		$store->update( $wc_order, $one, 'processing', [], true );
+		$this->assertSame( 9, wc_get_product( $product )->get_stock_quantity() );
+
+		$die = static function ( $saved ) use ( $wc_order ): void {
+			if ( $saved instanceof \WC_Order && $saved->get_id() === $wc_order->get_id() && 2 === array_values( $saved->get_items() )[0]->get_quantity() ) {
+				throw new \Error( 'Simulated death after the replacement was saved, before its stock was taken' );
+			}
+		};
+		add_action( 'woocommerce_after_order_object_save', $die );
+
+		try {
+			$store->update( $store->get( $wc_order->get_id() ), $two, 'processing', [], false );
+			$this->fail( 'The simulated death must stop the write.' );
+		} catch ( \Error $e ) {
+			$this->assertStringContainsString( 'Simulated death', $e->getMessage() );
+		} finally {
+			remove_action( 'woocommerce_after_order_object_save', $die );
+		}
+
+		$store->update( $store->get( $wc_order->get_id() ), $two, 'processing', [], false );
+		$store->update( $store->get( $wc_order->get_id() ), $two, 'processing', [], false );
+
+		$fresh = $store->get( $wc_order->get_id() );
+		$this->assertSame( 8, wc_get_product( $product )->get_stock_quantity() );
+		$this->assertSame( 2, array_values( $fresh->get_items() )[0]->get_quantity() );
+		$this->assertSame( '', (string) $fresh->get_meta( Wc_Order_Store::META_STOCK_PENDING ) );
+	}
+
+	/**
+	 * An order in a registered custom status that holds stock keeps holding it through a line swap: 1 → 2 units is stock 9 → 8, and
+	 * an identical retry changes nothing (donor round 2, finding 8).
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_a_custom_status_order_keeps_its_stock_through_a_line_swap( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$statuses = static function ( array $known ): array {
+			$known['wc-shipped'] = 'Shipped';
+
+			return $known;
+		};
+		add_filter( 'wc_order_statuses', $statuses );
+
+		try {
+			$product  = $this->product( 'SKU-A', 10 );
+			$store    = new Wc_Order_Store( $this->meta );
+			$one      = $this->dto( 'C-1', [ [ 'SKU-A', 1 ] ] );
+			$two      = $this->dto( 'C-1', [ [ 'SKU-A', 2 ] ] );
+			$wc_order = $store->create( $one );
+			$store->update( $wc_order, $one, 'processing', [], true );
+
+			$order = $store->get( $wc_order->get_id() );
+			$order->set_status( 'shipped' );
+			$order->save();
+			$this->assertSame( 9, wc_get_product( $product )->get_stock_quantity() );
+			$this->assertTrue( (bool) $order->get_data_store()->get_stock_reduced( $order->get_id() ) );
+
+			$store->update( $store->get( $wc_order->get_id() ), $two, 'shipped', [], false );
+			$store->update( $store->get( $wc_order->get_id() ), $two, 'shipped', [], false );
+
+			$fresh = $store->get( $wc_order->get_id() );
+			$this->assertSame( 'shipped', $fresh->get_status() );
+			$this->assertSame( 2, array_values( $fresh->get_items() )[0]->get_quantity() );
+			$this->assertSame( 8, wc_get_product( $product )->get_stock_quantity() );
+			$this->assertSame( '', (string) $fresh->get_meta( Wc_Order_Store::META_STOCK_PENDING ) );
+		} finally {
+			remove_filter( 'wc_order_statuses', $statuses );
+		}
+	}
+
+	/**
 	 * An order that lost its registration goes to the trash and is no longer found.
 	 *
 	 * @dataProvider datastore_provider
