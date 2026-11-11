@@ -122,7 +122,10 @@ final class LoggingAndQueueHealthTest extends TestCase {
 		$schema = new Schema( Sqlite_Tables::MARKETPLACE_ID );
 		$names  = new Job_Names( 'fake_mp' );
 
-		// Without Action Scheduler tables: returns null / 0 gracefully, while reading events & tasks.
+		// Action Scheduler has run nothing yet. Stubbed here so the test never depends on another test having defined the function.
+		Functions\when( 'as_get_scheduled_actions' )->justReturn( [] );
+
+		// No finished action and no store: null / 0 gracefully, while reading events & tasks.
 		$db->insert(
 			'wp_woodev_fake_events',
 			[
