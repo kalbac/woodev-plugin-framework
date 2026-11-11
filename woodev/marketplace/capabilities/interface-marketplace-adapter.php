@@ -249,4 +249,33 @@ interface Marketplace_Adapter {
 	 * @return Push_Protocol|null Null when the marketplace has no push, like {@see self::inbound_decoder()}.
 	 */
 	public function push_protocol(): ?Push_Protocol;
+
+	/**
+	 * Returns the marketplace's order meta contract: the meta that identifies its order and the meta it writes, the product of a
+	 * line, what an order is created via, and which account owns an order (F9b-3).
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return \Woodev\Framework\Marketplace\Flows\Order_Meta_Contract
+	 */
+	public function order_meta(): \Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
+
+	/**
+	 * Returns the marketplace's own half of the order flow: reading one remote order and writing it, and catching up on the orders
+	 * changed since the last run (F9b-3).
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return \Woodev\Framework\Marketplace\Jobs\Posting_Handler|null Null when the marketplace has no orders.
+	 */
+	public function posting_handler(): ?\Woodev\Framework\Marketplace\Jobs\Posting_Handler;
+
+	/**
+	 * Returns the marketplace's label calls (`Capability::GET_LABEL`, F9b-3).
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return \Woodev\Framework\Marketplace\Flows\Label_Provider|null Null when the marketplace has no labels.
+	 */
+	public function label_provider(): ?\Woodev\Framework\Marketplace\Flows\Label_Provider;
 }
