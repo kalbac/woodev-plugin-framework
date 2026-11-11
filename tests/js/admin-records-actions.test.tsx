@@ -114,12 +114,12 @@ function definition( overrides: Partial< Definition > = {} ): Definition {
 }
 
 /** A row that offers the actions of this suite (the fixture's own rows offer two others). */
-function shopRow( id: string, name: string ) {
+function shopRow( id: string, name: string, openUrl: string | null = `/wp-admin/post.php?post=${ id }&action=edit` ) {
 	return fixtureRow( id, name, {
 		actions: [
 			{ id: 'export', enabled: true, reason: '' },
 			{ id: 'sync', enabled: true, reason: '' },
-			{ id: 'open', enabled: true, reason: '' },
+			{ id: 'open', enabled: true, reason: '', ...( openUrl === null ? {} : { url: openUrl } ) },
 		],
 	} );
 }
@@ -268,7 +268,7 @@ function FakeTableCard( props: TableCardProps ) {
 	);
 }
 
-function Page() {
+function Page( { query = {} }: { query?: Record< string, string > } ) {
 	const extensions = useActionExtensions();
 
 	return (
@@ -276,7 +276,7 @@ function Page() {
 			owner="shop"
 			table="items"
 			title="Товары"
-			query={ {} }
+			query={ query }
 			navigate={ jest.fn() }
 			extensions={ extensions }
 		/>
@@ -284,8 +284,10 @@ function Page() {
 }
 
 async function renderPage( strict = false ) {
-	render( strict ? <StrictMode><Page /></StrictMode> : <Page /> );
+	const view = render( strict ? <StrictMode><Page /></StrictMode> : <Page /> );
 	await screen.findByRole( 'table', { name: 'Товары' } );
+
+	return view;
 }
 
 function row( key: string ): HTMLElement {
@@ -485,6 +487,53 @@ describe( 'apply', () => {
 		expect( document.querySelector( 'tr[data-key="p2"]' ) ).toBeNull();
 	} );
 
+	test( 'a result never shows the plan’s summary: eligibility changed between preview and apply', async () => {
+		serve( {
+			preview: () => plan( { requested: 4, eligible: 4, messages: { summary: 'Будет выгружено 4 из 4.' } } ),
+			apply: () =>
+				outcome( {
+					status: 'failed',
+					requested: 4,
+					accepted: 0,
+					skipped: 4,
+					groups: [ { kind: 'skipped', reason: 'Уже отправлено', count: 4, fix_label: '', fix_url: '', examples: [] } ],
+				} ),
+		} );
+		await renderPage();
+
+		const dialog = await openRowAction( 'p1', 'Выгрузить' );
+		await within( dialog ).findByText( 'Будет выгружено 4 из 4.' );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Выгрузить товар' } ) );
+
+		await within( dialog ).findByText( 'Ничего не принято.' );
+		expect( within( dialog ).queryByText( /Будет выгружено/ ) ).not.toBeInTheDocument();
+		expect( within( dialog ).getByText( 'Уже отправлено' ) ).toBeInTheDocument();
+	} );
+
+	test( 'an answer that arrives after the account changed is not applied to the other account’s rows', async () => {
+		const pending = defer< ApplyResponse >();
+		const forAccount = ( path: string ) => ( path.includes( 'account_id]=a2' ) ? 'a2' : 'a1' );
+		serve( {
+			definition: ( { path } ) => fixtureDefinitionEnvelope( definition(), forAccount( path ) ),
+			rows: ( { path } ) =>
+				fixtureList( [ shopRow( 'p1', forAccount( path ) === 'a2' ? 'Товар аккаунта B' : 'Товар аккаунта A' ) ] ),
+			apply: () => pending.promise,
+		} );
+		const view = await renderPage();
+
+		const dialog = await openRowAction( 'p1', 'Выгрузить' );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Выгрузить товар' } ) );
+		await within( dialog ).findByText( 'Выполняем…' );
+
+		view.rerender( <Page query={ { account: 'a2' } } /> );
+		await waitFor( () => expect( screen.getByText( 'Товар аккаунта B' ) ).toBeInTheDocument() );
+		await act( async () => pending.resolve( outcome( { rows: [ shopRow( 'p1', 'Результат аккаунта A' ) ] } ) ) );
+
+		expect( screen.queryByText( 'Результат аккаунта A' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Товар аккаунта B' ) ).toBeInTheDocument();
+		expect( applies() ).toHaveLength( 1 );
+	} );
+
 	test( 'a repeated click sends one apply, and the dialog cannot be dismissed meanwhile', async () => {
 		const pending = defer< ApplyResponse >();
 		serve( { apply: () => pending.promise } );
@@ -531,13 +580,35 @@ describe( 'apply', () => {
 		expect( applies()[ 0 ].data ).toMatchObject( { ids: [ 'p1' ], confirmed: true } );
 	} );
 
-	test( 'a link action is navigation: no dialog, no request', async () => {
+	test( 'a link action is a link to the row’s destination: no dialog, no request', async () => {
 		await renderPage();
 
-		fireEvent.click( within( row( 'p1' ) ).getByRole( 'button', { name: 'Открыть' } ) );
+		const link = within( row( 'p1' ) ).getByRole( 'link', { name: 'Открыть' } );
+		expect( link ).toHaveAttribute( 'href', '/wp-admin/post.php?post=p1&action=edit' );
+
+		// The click is left to the browser (nothing prevented it); jsdom cannot navigate, so stop it here.
+		let leftToTheBrowser = false;
+		const stop = ( event: Event ) => {
+			leftToTheBrowser = ! event.defaultPrevented;
+			event.preventDefault();
+		};
+		document.addEventListener( 'click', stop );
+		fireEvent.click( link );
+		document.removeEventListener( 'click', stop );
+
+		expect( leftToTheBrowser ).toBe( true );
 
 		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
 		expect( posts() ).toHaveLength( 0 );
+	} );
+
+	test( 'a link action without a destination is not drawn as a dead button', async () => {
+		serve( { rows: () => fixtureList( [ shopRow( 'p1', 'Кружка', null ) ] ) } );
+		await renderPage();
+
+		expect( within( row( 'p1' ) ).queryByRole( 'link', { name: 'Открыть' } ) ).not.toBeInTheDocument();
+		expect( within( row( 'p1' ) ).queryByRole( 'button', { name: 'Открыть' } ) ).not.toBeInTheDocument();
+		expect( within( row( 'p1' ) ).getByRole( 'button', { name: 'Выгрузить' } ) ).toBeInTheDocument();
 	} );
 
 	test( 'queued work reads the table again', async () => {
@@ -726,7 +797,7 @@ describe( 'bulk actions', () => {
 
 describe( 'guarded downloads', () => {
 	test( 'a read action applies on the click and offers the file on this site', async () => {
-		serve( { apply: () => outcome( { download: { url: '/wp-admin/admin-post.php?label=1', filename: 'labels.pdf' } } ) } );
+		serve( { apply: () => outcome( { download: { url: '/wp-admin/admin-post.php?label=1', filename: 'labels.pdf', origins: [] } } ) } );
 		await renderPage();
 
 		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
@@ -739,12 +810,23 @@ describe( 'guarded downloads', () => {
 		expect( previews() ).toHaveLength( 0 );
 	} );
 
+	test( 'with the admin and the front end on different hosts, the server’s origins are trusted', async () => {
+		serve( { apply: () => outcome( { download: { url: 'https://shop.example/labels.pdf', filename: 'labels.pdf', origins: [ 'https://shop.example', window.location.origin ] } } ) } );
+		await renderPage();
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
+		fireEvent.click( toolbarButton( 'Скачать этикетки' ) );
+		const dialog = await screen.findByRole( 'dialog' );
+
+		expect( await within( dialog ).findByRole( 'link', { name: 'Скачать файл' } ) ).toHaveAttribute( 'href', 'https://shop.example/labels.pdf' );
+	} );
+
 	test.each( [
 		[ 'another site', 'https://evil.example/labels.pdf' ],
 		[ 'a script', 'javascript:alert(1)' ],
 		[ 'a protocol-relative address', '//evil.example/labels.pdf' ],
 	] )( 'an address on %s is never offered', async ( _name, url ) => {
-		serve( { apply: () => outcome( { download: { url, filename: '' } } ) } );
+		serve( { apply: () => outcome( { download: { url, filename: '', origins: [ 'https://shop.example' ] } } ) } );
 		await renderPage();
 
 		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );

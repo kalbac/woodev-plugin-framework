@@ -44,13 +44,14 @@ function Busy( { text }: { text: string } ) {
 
 function ResultView( { result, messages }: { result: ApplyResponse; messages: Messages } ) {
 	const download = result.download;
-	const allowed = download !== undefined && isOwnDownloadUrl( download.url, window.location.origin );
+	const allowed = download !== undefined && isOwnDownloadUrl( download.url, download.origins );
 
 	return (
 		<div className="woodev-records__result" data-status={ result.status }>
 			<p role="status">
 				<strong>{ actionMessage( messages, STATUS_KEYS[ result.status ] ) }</strong>{ ' ' }
-				{ messages.summary ?? '' }
+				{ /* Only the apply's own sentence: the plan's summary promised what the plan saw, not what happened. */ }
+				{ result.messages.summary ?? '' }
 			</p>
 			<Counts
 				messages={ messages }
@@ -82,7 +83,7 @@ function PlanView( { state, messages }: { state: FlowState; messages: Messages }
 
 	return (
 		<div className="woodev-records__plan">
-			{ messages.summary && <p role="status">{ messages.summary }</p> }
+			{ plan.messages.summary && <p role="status">{ plan.messages.summary }</p> }
 			<Counts
 				messages={ messages }
 				entries={ [
@@ -178,6 +179,9 @@ function Footer( { flow, table, messages }: ActionDialogProps & { messages: Mess
 export function ActionDialog( { flow, table }: ActionDialogProps ) {
 	const state = flow.state;
 	const account = table.context.account_id;
+
+	// Every render says which table scope is on screen, so an answer from another one is not applied to it.
+	useEffect( () => flow.observe( table ), [ flow, table ] );
 
 	// The ids and fields belong to the account the flow started in.
 	useEffect( () => {

@@ -30,10 +30,12 @@ interface ActionButtonProps {
 	reason: string;
 	reasonId: string;
 	canRun: boolean;
+	/** Set for a `link` action that can run: the button is then an ordinary link to this address. */
+	href?: string;
 	onClick: () => void;
 }
 
-function ActionButton( { action, reason, reasonId, canRun, onClick }: ActionButtonProps ) {
+function ActionButton( { action, reason, reasonId, canRun, href, onClick }: ActionButtonProps ) {
 	return (
 		<>
 			<Button
@@ -41,6 +43,7 @@ function ActionButton( { action, reason, reasonId, canRun, onClick }: ActionButt
 				variant={ action.tone === 'primary' ? 'primary' : 'secondary' }
 				isDestructive={ action.tone === 'danger' }
 				disabled={ ! canRun }
+				href={ canRun ? href : undefined }
 				accessibleWhenDisabled
 				aria-describedby={ reason === '' ? undefined : reasonId }
 				data-action={ action.id }
@@ -72,6 +75,11 @@ export function RowActions( { row, rowKey, descriptors, onAction, blockedReason,
 				}
 
 				const reason = reasonFor( action, state );
+				const isLink = action.interaction === 'link';
+				if ( isLink && ! state.url ) {
+					// A link needs a destination; without one there is nothing to follow and nothing to run.
+					return null;
+				}
 
 				return (
 					<ActionButton
@@ -79,8 +87,9 @@ export function RowActions( { row, rowKey, descriptors, onAction, blockedReason,
 						action={ action }
 						reason={ reason }
 						reasonId={ `woodev-records-reason-${ rowKey }-${ action.id }` }
-						canRun={ reason === '' && onAction !== undefined }
-						onClick={ () => onAction?.( action, row ) }
+						canRun={ reason === '' && ( isLink || onAction !== undefined ) }
+						href={ isLink ? state.url : undefined }
+						onClick={ () => ( isLink ? undefined : onAction?.( action, row ) ) }
 					/>
 				);
 			} ) }

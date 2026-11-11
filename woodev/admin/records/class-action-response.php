@@ -130,8 +130,9 @@ final class Action_Response {
 
 	/**
 	 * Whether a URL may be opened by the browser as a download: a path on this site, or an
-	 * http(s) URL on one of this site's own hosts. The server applies it to what a provider
-	 * returns; the client applies the same rule again before it navigates.
+	 * http(s) URL on one of this site's own origins ({@see self::own_origins()}). The server
+	 * applies it to what a provider returns and sends the origins along, so the browser checks
+	 * the same list before it offers the link.
 	 *
 	 * @since 2.0.30
 	 *
@@ -145,27 +146,44 @@ final class Action_Response {
 			return false;
 		}
 
-		if ( 0 === strpos( $url, '/' ) ) {
-			return true;
-		}
-
-		$host = wp_parse_url( $url, PHP_URL_HOST );
-		if ( ! is_string( $host ) ) {
-			return false;
-		}
-
-		foreach ( [ home_url(), site_url(), admin_url() ] as $own ) {
-			if ( strtolower( $host ) === strtolower( (string) wp_parse_url( $own, PHP_URL_HOST ) ) ) {
-				return true;
-			}
-		}
-
-		return false;
+		return 0 === strpos( $url, '/' ) || in_array( self::origin_of( $url ), self::own_origins(), true );
 	}
 
 	/**
-	 * `requested` plus the named counts, each a whole number; the named ones may not exceed it
-	 * together.
+	 * The origins this site is served from: the front end and the admin may sit on different hosts.
+	 *
+	 * @since 2.0.30
+	 *
+	 * @return string[] `scheme://host[:port]`, lower-case, distinct.
+	 */
+	public static function own_origins(): array {
+		$origins = array_map( [ self::class, 'origin_of' ], [ home_url(), site_url(), admin_url() ] );
+
+		return array_values( array_unique( array_filter( $origins ) ) );
+	}
+
+	/**
+	 * @param string $url Absolute URL.
+	 * @return string Origin; empty when the URL has no http(s) scheme or host.
+	 */
+	private static function origin_of( string $url ): string {
+		$parts  = wp_parse_url( $url );
+		$scheme = is_array( $parts ) && is_string( $parts['scheme'] ?? null ) ? strtolower( $parts['scheme'] ) : '';
+		$host   = is_array( $parts ) && is_string( $parts['host'] ?? null ) ? strtolower( $parts['host'] ) : '';
+
+		if ( ! in_array( $scheme, [ 'http', 'https' ], true ) || '' === $host ) {
+			return '';
+		}
+
+		$default = 'https' === $scheme ? 443 : 80;
+		$port    = (int) ( $parts['port'] ?? $default );
+
+		return $scheme . '://' . $host . ( $port === $default ? '' : ':' . $port );
+	}
+
+	/**
+	 * `requested` plus the named counts, each a whole number; the named ones must add up to it
+	 * exactly, so no requested target goes unaccounted for.
 	 *
 	 * @param array<string,mixed> $result Provider result.
 	 * @param string[]            $names  Counts besides `requested`.
@@ -179,8 +197,8 @@ final class Action_Response {
 			$counts[ $name ] = self::whole( $result[ $name ] ?? null, $name );
 		}
 
-		if ( array_sum( $counts ) - $counts['requested'] > $counts['requested'] ) {
-			throw new \UnexpectedValueException( 'the counts add up to more than requested.' );
+		if ( array_sum( $counts ) - $counts['requested'] !== $counts['requested'] ) {
+			throw new \UnexpectedValueException( 'the counts must add up to requested.' );
 		}
 
 		return $counts;
@@ -275,7 +293,7 @@ final class Action_Response {
 
 	/**
 	 * @param mixed $download Raw download.
-	 * @return array{url:string,filename:string}
+	 * @return array{url:string,filename:string,origins:string[]}
 	 * @throws \UnexpectedValueException When the URL is not this site's or the file name is not a bare name.
 	 */
 	private static function download( $download ): array {
@@ -291,6 +309,7 @@ final class Action_Response {
 		return [
 			'url'      => $download['url'],
 			'filename' => $filename,
+			'origins'  => self::own_origins(),
 		];
 	}
 

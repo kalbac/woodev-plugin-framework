@@ -52,11 +52,18 @@ export interface BeginOptions {
 
 export interface ActionFlow {
 	state: FlowState | null;
+	/** Tells the flow which table scope is on screen now; the dialog calls it after every render. */
+	observe: ( table: TableHandle ) => void;
 	begin: ( action: ActionDescriptor, ids: string[], rowId: string, table: TableHandle, options?: BeginOptions ) => void;
 	edit: ( fieldId: string, value: FieldValue ) => void;
 	preview: ( table: TableHandle ) => Promise< void >;
 	confirm: ( table: TableHandle ) => Promise< void >;
 	close: () => void;
+}
+
+/** The table and account a handle belongs to: a response may change the rows only of the scope it was sent for. */
+function scopeOf( table: TableHandle ): string {
+	return `${ table.api.path }|${ table.context.account_id }`;
 }
 
 /** Mutating actions plan first, except a row action whose PHP definition says a click is enough. */
@@ -85,6 +92,8 @@ export function useActionFlow(): ActionFlow {
 	const ticket = useRef( 0 );
 	const abort = useRef< AbortController | null >( null );
 	const afterApply = useRef< ( () => void ) | undefined >( undefined );
+	// Updated by the dialog on every render, so it is the scope on screen now, not the one a request was sent from.
+	const onScreen = useRef( '' );
 
 	const update = useCallback( ( next: FlowState | null ) => {
 		current.current = next;
@@ -109,15 +118,21 @@ export function useActionFlow(): ActionFlow {
 			} else {
 				patch( { stage: 'failed', failure, failedAt: at } );
 			}
-			if ( at === 'apply' && mayHaveChangedRows( failure ) ) {
+			if ( at === 'apply' && mayHaveChangedRows( failure ) && scopeOf( table ) === onScreen.current ) {
 				table.reload();
 			}
 		},
 		[ patch ]
 	);
 
-	/** Brings the table in line with what the server did, then lets the caller clear its selection. */
+	/**
+	 * Brings the table in line with what the server did, then lets the caller clear its selection. If the merchant
+	 * has moved to another account meanwhile, the answer is not applied: its row ids may name other rows there.
+	 */
 	const showResult = useCallback( ( action: ActionDescriptor, result: ApplyResponse, table: TableHandle ) => {
+		if ( scopeOf( table ) !== onScreen.current ) {
+			return;
+		}
 		if ( result.status === 'queued' || action.scope === 'account' ) {
 			// The rows that changed are not in the answer: read them again.
 			table.reload();
@@ -211,6 +226,7 @@ export function useActionFlow(): ActionFlow {
 			ticket.current++;
 			abort.current?.abort();
 			busy.current = false;
+			onScreen.current = scopeOf( table );
 			afterApply.current = options.onApplied;
 			update( {
 				action,
@@ -270,5 +286,9 @@ export function useActionFlow(): ActionFlow {
 		update( null );
 	}, [ update ] );
 
-	return { state, begin, edit, preview, confirm, close };
+	const observe = useCallback( ( table: TableHandle ) => {
+		onScreen.current = scopeOf( table );
+	}, [] );
+
+	return { state, observe, begin, edit, preview, confirm, close };
 }

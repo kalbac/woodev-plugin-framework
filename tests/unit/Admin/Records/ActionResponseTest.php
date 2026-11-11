@@ -31,7 +31,7 @@ class ActionResponseTest extends TestCase {
 	 * @return array<string,mixed>|\WP_Error
 	 */
 	private function apply( array $result ) {
-		return Action_Response::apply( $this->definition, $this->action, $result + [ 'requested' => 4, 'accepted' => 0, 'skipped' => 0, 'failed' => 0 ] );
+		return Action_Response::apply( $this->definition, $this->action, $result + [ 'requested' => 4, 'accepted' => 4, 'skipped' => 0, 'failed' => 0 ] );
 	}
 
 	private function assertContractViolation( $result ): void {
@@ -51,10 +51,10 @@ class ActionResponseTest extends TestCase {
 	public function statuses(): array {
 		return [
 			'all accepted'                 => [ [ 'accepted' => 4 ], 'done' ],
-			'nothing requested nothing done' => [ [ 'requested' => 0 ], 'done' ],
+			'nothing requested nothing done' => [ [ 'requested' => 0, 'accepted' => 0 ], 'done' ],
 			'some skipped'                 => [ [ 'accepted' => 3, 'skipped' => 1 ], 'partial' ],
 			'some failed'                  => [ [ 'accepted' => 2, 'failed' => 2 ], 'partial' ],
-			'all skipped'                  => [ [ 'skipped' => 4 ], 'failed' ],
+			'all skipped'                  => [ [ 'accepted' => 0, 'skipped' => 4 ], 'failed' ],
 			'queued'                       => [ [ 'accepted' => 4, 'queued' => true ], 'queued' ],
 			'queued with a skip'           => [ [ 'accepted' => 3, 'skipped' => 1, 'queued' => true ], 'queued' ],
 		];
@@ -78,6 +78,8 @@ class ActionResponseTest extends TestCase {
 			'a float'        => [ [ 'accepted' => 2.0 ] + $ok ],
 			'a numeric text' => [ [ 'accepted' => '2' ] + $ok ],
 			'over requested' => [ [ 'accepted' => 3 ] + $ok ],
+			'under requested' => [ [ 'accepted' => 1 ] + $ok ],
+			'nothing accounted for' => [ [ 'accepted' => 0, 'skipped' => 0, 'failed' => 0 ] + $ok ],
 		];
 	}
 
@@ -86,7 +88,7 @@ class ActionResponseTest extends TestCase {
 	 * @param mixed $groups Groups that break the contract.
 	 */
 	public function test_a_broken_group_is_a_contract_violation( $groups ): void {
-		$this->assertContractViolation( $this->apply( [ 'skipped' => 1, 'groups' => $groups ] ) );
+		$this->assertContractViolation( $this->apply( [ 'accepted' => 3, 'skipped' => 1, 'groups' => $groups ] ) );
 	}
 
 	/** @return array<string,array{0:mixed}> */
@@ -106,7 +108,7 @@ class ActionResponseTest extends TestCase {
 	}
 
 	public function test_group_text_is_plain_and_unknown_keys_are_dropped(): void {
-		$body = $this->apply( [ 'skipped' => 1, 'groups' => [ [ 'reason' => '<b>Нет</b> склада', 'count' => 1, 'secret' => 'x', 'examples' => [ '<i>Чашка</i>' ] ] ] ] );
+		$body = $this->apply( [ 'accepted' => 3, 'skipped' => 1, 'groups' => [ [ 'reason' => '<b>Нет</b> склада', 'count' => 1, 'secret' => 'x', 'examples' => [ '<i>Чашка</i>' ] ] ] ] );
 
 		$this->assertSame(
 			[ [ 'kind' => 'skipped', 'reason' => 'Нет склада', 'count' => 1, 'fix_label' => '', 'fix_url' => '', 'examples' => [ 'Чашка' ] ] ],
@@ -119,6 +121,28 @@ class ActionResponseTest extends TestCase {
 		$this->assertContractViolation( $this->apply( [ 'removed_ids' => [ 'bad id' ] ] ) );
 		$this->assertContractViolation( $this->apply( [ 'rows' => [ [ 'id' => 'x' ] ] ] ) );
 		$this->assertSame( [ 'p:1' ], $this->apply( [ 'removed_ids' => [ 'p:1' ] ] )['removed_ids'] );
+	}
+
+	public function test_a_preview_must_account_for_every_requested_target(): void {
+		$action = $this->action;
+
+		$this->assertContractViolation( Action_Response::preview( $action, [ 'requested' => 4, 'eligible' => 2, 'skipped' => 1 ] ) );
+		$this->assertContractViolation( Action_Response::preview( $action, [ 'requested' => 4, 'eligible' => 4, 'skipped' => 1 ] ) );
+		$this->assertSame( 4, Action_Response::preview( $action, [ 'requested' => 4, 'eligible' => 3, 'skipped' => 1 ] )['requested'] );
+		$this->assertSame( 0, Action_Response::preview( $action, [ 'requested' => 0, 'eligible' => 0, 'skipped' => 0 ] )['requested'] );
+	}
+
+	public function test_a_download_names_the_origins_the_browser_may_trust(): void {
+		Functions\when( 'wp_parse_url' )->alias( static fn( $u, $component = -1 ) => parse_url( $u, $component ) );
+		Functions\when( 'home_url' )->justReturn( 'https://shop.example' );
+		Functions\when( 'site_url' )->justReturn( 'https://shop.example/cms' );
+		Functions\when( 'admin_url' )->justReturn( 'https://admin.shop.example:8443/wp-admin/' );
+		$download = $this->definition->get_action( 'labels' );
+		$result   = [ 'requested' => 1, 'accepted' => 1, 'skipped' => 0, 'failed' => 0, 'download' => [ 'url' => 'https://shop.example/labels.pdf' ] ];
+
+		$body = Action_Response::apply( $this->definition, $download, $result );
+
+		$this->assertSame( [ 'https://shop.example', 'https://admin.shop.example:8443' ], $body['download']['origins'] );
 	}
 
 	public function test_a_download_file_name_is_a_bare_name(): void {
@@ -153,6 +177,8 @@ class ActionResponseTest extends TestCase {
 			'protocol-relative'       => [ '//evil.example/f', false ],
 			'javascript scheme'       => [ 'javascript:alert(1)', false ],
 			'data scheme'             => [ 'data:text/html,x', false ],
+			'the right host, another scheme' => [ 'http://shop.example/file.pdf', false ],
+			'the right host, another port'   => [ 'https://shop.example:8443/file.pdf', false ],
 			'whitespace'              => [ 'https://shop.example/a b', false ],
 			'empty'                   => [ '', false ],
 		];

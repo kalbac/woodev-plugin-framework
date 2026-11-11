@@ -45,6 +45,8 @@ export type ApplyStatus = 'done' | 'partial' | 'queued' | 'failed';
 export interface DownloadTarget {
 	url: string;
 	filename: string;
+	/** The origins the server serves this site from (the front end and the admin may differ); the guard's allowlist. */
+	origins: string[];
 }
 
 export interface ApplyResponse {

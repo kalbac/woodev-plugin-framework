@@ -259,7 +259,10 @@ class ActionRestHandlerTest extends TestCase {
 		$own     = $this->handler->apply( $this->request( $this->apply_body( [ 'payload' => [] ] ), 'labels' ) )->get_data();
 		$foreign = $this->handler->apply( $this->request( $this->apply_body( [ 'payload' => [] ] ), 'labels' ) );
 
-		$this->assertSame( [ 'url' => 'https://shop.example/wp-admin/admin-post.php?x=1', 'filename' => 'labels.pdf' ], $own['download'] );
+		$this->assertSame(
+			[ 'url' => 'https://shop.example/wp-admin/admin-post.php?x=1', 'filename' => 'labels.pdf', 'origins' => [ 'https://shop.example' ] ],
+			$own['download']
+		);
 		$this->assertError( $foreign, 'woodev_records_invalid_provider_response', 500 );
 	}
 
@@ -445,6 +448,14 @@ class ActionRestHandlerTest extends TestCase {
 		$this->assertStringNotContainsString( 'boom', $result->get_error_message() );
 		$this->assertStringContainsString( 'ozon-seller/products', (string) $logged );
 		$this->assertStringNotContainsString( 'SECRET123', (string) $logged );
+	}
+
+	public function test_a_provider_that_leaves_targets_unaccounted_for_is_a_500_not_a_done(): void {
+		$this->provider->apply_results = [ [ 'requested' => 4, 'accepted' => 0, 'skipped' => 0, 'failed' => 0 ] ];
+		$this->assertError( $this->handler->apply( $this->request( $this->apply_body() ) ), 'woodev_records_invalid_provider_response', 500 );
+
+		$this->provider->preview_result = [ 'requested' => 4, 'eligible' => 2, 'skipped' => 1 ];
+		$this->assertError( $this->handler->preview( $this->request( $this->body() ) ), 'woodev_records_invalid_provider_response', 500 );
 	}
 
 	public function test_a_provider_that_breaks_the_answer_contract_is_a_500(): void {
