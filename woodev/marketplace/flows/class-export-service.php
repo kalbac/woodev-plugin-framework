@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Catalog\Bulk_Validation_Report;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Jobs\Export_Not_Scheduled;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
 
 defined( 'ABSPATH' ) || exit;
@@ -109,13 +110,15 @@ final class Export_Service {
 	 * @param int[]   $product_ids Products or variations; a variable product stands for its variations.
 	 * @return array{report:Bulk_Validation_Report,queued:int[],refused:array<int,string>} `queued`: product ids whose link is now
 	 *         `queued`; `refused`: valid product id => the card state that kept it out.
-	 * @throws \RuntimeException When a link cannot be stored or Action Scheduler refuses a batch.
+	 * @throws \RuntimeException When a link cannot be stored; {@see Export_Not_Scheduled} when Action Scheduler refuses a batch (its
+	 *                           links are put back to the state they had).
 	 */
 	public function enqueue( Account $account, array $product_ids ): array {
 		$bulk     = new Bulk_Validation_Report();
 		$link_ids = [];
 		$queued   = [];
 		$refused  = [];
+		$previous = [];
 
 		foreach ( $this->offers( $product_ids ) as $product ) {
 			$link    = $this->links->find( $account->id(), (int) $product->get_id() );
@@ -136,16 +139,19 @@ final class Export_Service {
 				continue;
 			}
 
+			$before = $link->card_state();
+
 			if ( $this->links->queue( (int) $link->link_id(), $article ) ) {
-				$link_ids[] = (int) $link->link_id();
-				$queued[]   = (int) $product->get_id();
+				$link_ids[]                          = (int) $link->link_id();
+				$queued[]                            = (int) $product->get_id();
+				$previous[ (int) $link->link_id() ] = $before;
 			} else {
 				$refused[ (int) $product->get_id() ] = $link->card_state();
 			}
 		}
 
 		if ( [] !== $link_ids ) {
-			$this->scheduler->queue_export( $account->id(), $link_ids );
+			$this->schedule( $account, $link_ids, $previous );
 		}
 
 		return [
@@ -153,6 +159,32 @@ final class Export_Service {
 			'queued'  => $queued,
 			'refused' => $refused,
 		];
+	}
+
+	/**
+	 * Schedules the batches of the links just queued. A link whose batch Action Scheduler refused is taken out of the queue again:
+	 * `queued` with no task and no batch is found by nothing (the poll sweep follows tasks), so it would never be exported. It goes
+	 * back to the state it was in, and an `unlinked` or `failed` row carries the reason where the merchant reads it.
+	 *
+	 * @param Account           $account  Account.
+	 * @param int[]             $link_ids Links just queued.
+	 * @param array<int,string> $previous Link id => the card state before it was queued.
+	 * @return void
+	 * @throws Export_Not_Scheduled After the rollback, when some batch was refused.
+	 */
+	private function schedule( Account $account, array $link_ids, array $previous ): void {
+		try {
+			$this->scheduler->queue_export( $account->id(), $link_ids );
+		} catch ( Export_Not_Scheduled $e ) {
+			foreach ( $e->link_ids() as $link_id ) {
+				$state = $previous[ $link_id ] ?? Link_Record::STATE_UNLINKED;
+				$shown = in_array( $state, [ Link_Record::STATE_UNLINKED, Link_Record::STATE_FAILED ], true );
+
+				$this->links->set_state( $link_id, $state, $shown ? __( 'Не удалось поставить товар в очередь выгрузки: планировщик задач не принял задание. Попробуйте ещё раз.', 'woodev-plugin-framework' ) : null );
+			}
+
+			throw $e;
+		}
 	}
 
 	/**

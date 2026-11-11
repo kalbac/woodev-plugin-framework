@@ -7557,3 +7557,7 @@ msgstr ""
 #: marketplace/jobs/class-poll-task-runner.php:654
 msgid "Не удалось обработать ответ маркетплейса после %1$d попыток: %2$s"
 msgstr ""
+
+#: marketplace/flows/class-export-service.php:183
+msgid "Не удалось поставить товар в очередь выгрузки: планировщик задач не принял задание. Попробуйте ещё раз."
+msgstr ""

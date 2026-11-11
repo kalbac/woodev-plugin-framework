@@ -91,25 +91,46 @@ final class Export_Scheduler {
 	}
 
 	/**
-	 * Queues the export of links, in batches of {@see self::BATCH_SIZE}.
+	 * Queues the export of links, in batches of {@see self::BATCH_SIZE}. Every batch is tried even when an earlier one was refused,
+	 * so one bad moment of Action Scheduler strands as few links as possible.
 	 *
 	 * @since 2.0.30
 	 *
 	 * @param int   $account_id Account id.
 	 * @param int[] $link_ids   Link ids.
 	 * @return int Batches queued.
-	 * @throws \RuntimeException When Action Scheduler refuses a batch.
+	 * @throws Export_Not_Scheduled When Action Scheduler refused or threw on a batch; it names the links of those batches.
 	 */
 	public function queue_export( int $account_id, array $link_ids ): int {
-		$batches = array_chunk( array_values( array_unique( array_map( 'intval', $link_ids ) ) ), self::BATCH_SIZE );
+		$batches     = array_chunk( array_values( array_unique( array_map( 'intval', $link_ids ) ) ), self::BATCH_SIZE );
+		$unscheduled = [];
 
 		foreach ( $batches as $batch ) {
-			if ( 0 === as_enqueue_async_action( $this->export_hook(), [ $account_id, $batch, 0 ], $this->names->group() ) ) {
-				throw new \RuntimeException( 'Action Scheduler did not queue the export batch.' );
+			if ( ! $this->enqueue_batch( $account_id, $batch ) ) {
+				$unscheduled = array_merge( $unscheduled, $batch );
 			}
 		}
 
+		if ( [] !== $unscheduled ) {
+			throw new Export_Not_Scheduled( $unscheduled );
+		}
+
 		return count( $batches );
+	}
+
+	/**
+	 * Queues one batch.
+	 *
+	 * @param int   $account_id Account id.
+	 * @param int[] $batch      Link ids.
+	 * @return bool False when Action Scheduler refused it or threw.
+	 */
+	private function enqueue_batch( int $account_id, array $batch ): bool {
+		try {
+			return 0 !== as_enqueue_async_action( $this->export_hook(), [ $account_id, $batch, 0 ], $this->names->group() );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
 	}
 
 	/**

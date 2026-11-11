@@ -167,6 +167,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Jobs\\Event_Handler' => 'woodev/marketplace/jobs/interface-event-handler.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Event_Handler_Registry' => 'woodev/marketplace/jobs/class-event-handler-registry.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Export_Batch_Runner' => 'woodev/marketplace/jobs/class-export-batch-runner.php',
+	'Woodev\\Framework\\Marketplace\\Jobs\\Export_Not_Scheduled' => 'woodev/marketplace/jobs/class-export-not-scheduled.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Export_Run' => 'woodev/marketplace/jobs/class-export-run.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Export_Scheduler' => 'woodev/marketplace/jobs/class-export-scheduler.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\First_Remote_Write' => 'woodev/marketplace/jobs/class-first-remote-write.php',

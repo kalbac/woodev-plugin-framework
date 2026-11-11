@@ -37,6 +37,13 @@ final class Fake_Action_Scheduler {
 	public $zero_for = [];
 
 	/**
+	 * Hooks that accept only so many actions and then return 0, as `hook => accepted so far allowed`.
+	 *
+	 * @var array<string,int>
+	 */
+	public $zero_after = [];
+
+	/**
 	 * Replaces the Action Scheduler functions.
 	 *
 	 * @return self
@@ -152,6 +159,10 @@ final class Fake_Action_Scheduler {
 		}
 
 		if ( isset( $this->zero_for[ $hook ] ) ) {
+			return 0;
+		}
+
+		if ( isset( $this->zero_after[ $hook ] ) && count( $this->of( $hook ) ) >= $this->zero_after[ $hook ] ) {
 			return 0;
 		}
 

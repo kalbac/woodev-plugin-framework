@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Unit\Marketplace\Flows;
 
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Jobs\Export_Not_Scheduled;
 use Woodev\Tests\Unit\Marketplace\Support\Export_Test_Case;
 
 /**
@@ -167,6 +168,66 @@ final class ExportServiceTest extends Export_Test_Case {
 		$this->expectException( \RuntimeException::class );
 
 		$this->service()->enqueue( $this->account_for(), [ $product->get_id() ] );
+	}
+
+	/**
+	 * When Action Scheduler takes the first batch and refuses the second, the links of the second are taken out of the queue (a
+	 * `queued` row with no task and no batch is found by nothing), the first batch stays scheduled, and the caller is told.
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_second_batch_does_not_strand_its_links(): void {
+		$ids = [];
+		for ( $i = 0; $i < 101; $i++ ) {
+			$ids[] = (int) $this->add_product()->get_id();
+		}
+		$this->scheduler->zero_after['woodev_fake_seller_export_batch'] = 1;
+
+		try {
+			$this->service()->enqueue( $this->account_for(), $ids );
+			$this->fail( 'the refused batch must be reported' );
+		} catch ( Export_Not_Scheduled $e ) {
+			$stranded = $e->link_ids();
+		}
+
+		$batches = $this->scheduler->of( 'woodev_fake_seller_export_batch' );
+		$this->assertCount( 1, $batches );
+		$this->assertCount( 100, $batches[0]['args'][1] );
+		$this->assertCount( 1, $stranded );
+
+		$left = $this->links()->get( $stranded[0] );
+		$this->assertSame( Link_Record::STATE_UNLINKED, $left->card_state(), 'not left queued' );
+		$this->assertNotSame( '', (string) $this->links()->last_error( $stranded[0] )['text'], 'the merchant sees why' );
+		$this->assertNotContains( $stranded[0], $batches[0]['args'][1] );
+
+		foreach ( $batches[0]['args'][1] as $scheduled ) {
+			$this->assertSame( Link_Record::STATE_QUEUED, $this->links()->get( $scheduled )->card_state() );
+		}
+	}
+
+	/**
+	 * A link goes back to the state it had: a failed one keeps showing a reason, a created card comes back clean.
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_batch_restores_the_previous_state(): void {
+		$failed  = $this->add_product();
+		$created = $this->add_product();
+		$this->add_link( $failed, Link_Record::STATE_FAILED );
+		$this->add_link( $created, Link_Record::STATE_CREATED );
+		$this->scheduler->zero_for['woodev_fake_seller_export_batch'] = true;
+
+		try {
+			$this->service()->enqueue( $this->account_for(), [ $failed->get_id(), $created->get_id() ] );
+			$this->fail( 'the refused batch must be reported' );
+		} catch ( Export_Not_Scheduled $e ) {
+			$this->assertCount( 2, $e->link_ids() );
+		}
+
+		$this->assertSame( Link_Record::STATE_FAILED, $this->link_of( (int) $failed->get_id() )->card_state() );
+		$this->assertNotSame( '', (string) $this->links()->last_error( (int) $this->link_of( (int) $failed->get_id() )->link_id() )['text'] );
+		$this->assertSame( Link_Record::STATE_CREATED, $this->link_of( (int) $created->get_id() )->card_state() );
+		$this->assertSame( '', (string) $this->links()->last_error( (int) $this->link_of( (int) $created->get_id() )->link_id() )['text'] );
 	}
 
 	/**
