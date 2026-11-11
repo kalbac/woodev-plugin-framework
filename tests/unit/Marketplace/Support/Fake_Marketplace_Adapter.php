@@ -30,6 +30,8 @@ use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
 use Woodev\Framework\Marketplace\Diagnostics\Support_Report;
 use Woodev\Framework\Marketplace\Governor\Bucket_Spec;
 use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
+use Woodev\Framework\Marketplace\Intake\Push_Protocol;
+use Woodev\Framework\Marketplace\Jobs\Error_Classifier;
 use Woodev\Framework\Marketplace\Ledger\Inbound_Decoder;
 use Woodev\Framework\Marketplace\Orders\Order_DTO;
 use Woodev\Framework\Marketplace\Orders\Order_Line;
@@ -40,15 +42,20 @@ use Woodev\Framework\Marketplace\Price\Price_Pusher;
 use Woodev\Framework\Marketplace\Price\Price_Source;
 use Woodev\Framework\Marketplace\Stock\Stock_Policy;
 use Woodev\Framework\Marketplace\Stock\Stock_Pusher;
+use Woodev\Framework\Marketplace\Sync\Price_Reader;
+use Woodev\Framework\Marketplace\Sync\Stock_Rules;
+use Woodev\Framework\Marketplace\Sync\Sync_Limits;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Article_Policy;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Card_Exporter;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Catalog_Schema;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Clock;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Credential_Health;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Error_Classifier;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Field_Price_Source;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Source;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Price_Pusher;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Stock_Pusher;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Stock_Pusher;
 
 /**
  * A second adapter that is deliberately NOT Ozon. It mimics the Wildberries shapes found in
@@ -129,7 +136,8 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 *
 	 * @param Fake_Clock|null     $clock    Clock; a new one when null.
 	 * @param array<string,mixed> $policies Answers that replace the defaults: `price_source`, `price_cadence`, `stock_cadence`,
-	 *                                      `article_policy`, `export_rules`, `stock_policy`.
+	 *                                      `article_policy`, `export_rules`, `stock_policy`, and the answers of the sync flows:
+	 *                                      `error_classifier`, `sync_limits`, `stock_rules`, `price_reader`, `push_protocol`.
 	 */
 	public function __construct( ?Fake_Clock $clock = null, array $policies = [] ) {
 		$this->policies = array_merge(
@@ -140,6 +148,12 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 				'article_policy' => new Fake_Article_Policy( 20 ),
 				'export_rules'   => [ new Category_Mapped_Rule(), new Required_Fields_Rule( true ), new Offer_Id_Rule(), new Selling_Price_Rule() ],
 				'stock_policy'   => new Stock_Policy( Stock_Policy::FORMULA_PLUS_RESERVED ),
+				// Wildberries-style again: a thousand lines per request, no price read-back, no push.
+				'error_classifier' => new Fake_Error_Classifier(),
+				'sync_limits'      => new Sync_Limits( Fake_Stock_Pusher::MAX_PER_REQUEST, 1000, 30.0 ),
+				'stock_rules'      => new Scripted_Stock_Pusher(),
+				'price_reader'     => null,
+				'push_protocol'    => null,
 			],
 			$policies
 		);
@@ -435,5 +449,50 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 				)
 			),
 		);
+	}
+
+	/**
+	 * Returns the classifier of the marketplace's errors.
+	 *
+	 * @return Error_Classifier
+	 */
+	public function error_classifier(): Error_Classifier {
+		return $this->policies['error_classifier'];
+	}
+
+	/**
+	 * Returns the per-request limits.
+	 *
+	 * @return Sync_Limits
+	 */
+	public function sync_limits(): Sync_Limits {
+		return $this->policies['sync_limits'];
+	}
+
+	/**
+	 * Returns the rules of a stock send.
+	 *
+	 * @return Stock_Rules
+	 */
+	public function stock_rules(): Stock_Rules {
+		return $this->policies['stock_rules'];
+	}
+
+	/**
+	 * Returns the price reader: none, prices are not read back.
+	 *
+	 * @return Price_Reader|null
+	 */
+	public function price_reader(): ?Price_Reader {
+		return $this->policies['price_reader'];
+	}
+
+	/**
+	 * Returns the notification endpoint rules: none, the marketplace has no push.
+	 *
+	 * @return Push_Protocol|null
+	 */
+	public function push_protocol(): ?Push_Protocol {
+		return $this->policies['push_protocol'];
 	}
 }
