@@ -1,6 +1,6 @@
 <?php
 /**
- * Unit tests for Notifications_Section, Ip_List_Validator and Advanced_Section.
+ * Unit tests for Notifications_Section and Advanced_Section.
  *
  * @package Woodev\Tests\Unit\Marketplace
  */
@@ -18,9 +18,9 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
+use Woodev\Framework\Marketplace\Intake\Webhook_Type;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Advanced_Section;
-use Woodev\Framework\Marketplace\Settings\Ip_List_Validator;
 use Woodev\Framework\Marketplace\Settings\Notifications_Section;
 use Woodev\Framework\Marketplace\Settings\Push_Admin;
 use Woodev\Framework\Marketplace\Settings\Settings_Handler;
@@ -123,10 +123,10 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$handler = new Settings_Handler( 'fake_mp', [ $notif ] );
 
 		$this->assertSame( [], $notif->sections() );
-		$this->assertNull( $handler->get_setting( Notifications_Section::ALLOWLIST_ID ) );
+		$this->assertNull( $handler->get_setting( 'webhook_order_created' ) );
 	}
 
-	public function test_notifications_section_masks_token_runs_four_actions_gates_on_license_and_validates_cidr(): void {
+	public function test_notifications_section_masks_token_and_runs_four_actions_gated_on_license(): void {
 		$fields = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
 		$store  = new Wpdb_Account_Store(
 			$this->db,
@@ -185,7 +185,7 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 				'capabilities'        => [ Capability::PUSH_NOTIFICATIONS ],
 				'credential_fields'   => $fields,
 				'settings_descriptor' => $descriptor,
-				'push_protocol'       => new Fake_Push_Protocol( "198.51.100.0/24\n2001:db8::/32" ),
+				'push_protocol'       => new Fake_Push_Protocol(),
 				'push_admin'          => static function () use ( $push_admin ): Push_Admin {
 					return $push_admin;
 				},
@@ -214,14 +214,15 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$handler  = new Settings_Handler( 'fake_mp', [ $notif ] );
 		$sections = $notif->sections();
 
-		$this->assertCount( 2, $sections );
-		$desc = $sections[0]->get_description();
+		$this->assertCount( 2, $sections, 'the switches card and one account card' );
+		$this->assertSame( 'notifications_webhooks', $sections[0]->get_id() );
+		$desc = $sections[1]->get_description();
 		$this->assertStringNotContainsString( $raw_token, $desc );
 		$this->assertStringContainsString( '[скрыто]', $desc );
 		$this->assertStringContainsString( 'Новые заказы, Остатки', $desc );
 
 		// Execute all 4 tools when licence is valid; state is refreshed in DB.
-		$actions = $sections[0]->get_actions();
+		$actions = $sections[1]->get_actions();
 		$this->assertCount( 4, $actions );
 		foreach ( $actions as $tool ) {
 			$res = call_user_func( $tool->get_callback(), [] );
@@ -234,38 +235,93 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$blocked       = call_user_func( $actions[0]->get_callback(), [] );
 		$this->assertFalse( $blocked->is_success() );
 		$this->assertStringContainsString( 'Лицензия не действует', $blocked->get_message() );
-
-		// IP/CIDR validation accepts IPv4, IPv6, comments, and rejects malformed CIDRs.
-		$valid_errs = $handler->validate_values(
-			[
-				Notifications_Section::ALLOWLIST_ID       => "198.51.100.0/24 # edge\n2001:db8::/32, 10.0.0.5",
-				Notifications_Section::TRUSTED_PROXIES_ID => '127.0.0.1',
-			]
-		);
-		$this->assertSame( [], $valid_errs );
-		$this->assertTrue( Ip_List_Validator::contains( '198.51.100.42', '198.51.100.0/24' ) );
-		$this->assertFalse( Ip_List_Validator::contains( '198.51.101.42', '198.51.100.0/24' ) );
-
-		$bad_errs = $handler->validate_values(
-			[
-				Notifications_Section::ALLOWLIST_ID => '999.1.1.1/24',
-			]
-		);
-		$this->assertArrayHasKey( Notifications_Section::ALLOWLIST_ID, $bad_errs );
 	}
 
-	public function test_the_lists_are_saved_under_the_option_names_the_adapter_reads(): void {
-		$fields  = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
+	public function test_each_declared_notification_type_gets_a_switch_with_its_explanation(): void {
+		$types   = [
+			new Webhook_Type( 'new_order', 'Новый заказ', 'Сообщает сайту о новом заказе сразу.', 'Кабинет → Интеграции' ),
+			new Webhook_Type( 'stocks', 'Остатки', 'Сообщает об изменении остатков.', '', false ),
+		];
+		$notif   = $this->push_section( new Fake_Push_Protocol( '203.0.113.0/24', $types ) );
+		$handler = new Settings_Handler( 'fake_mp', [ $notif ] );
+
+		$this->assertTrue( $handler->get_value( 'webhook_new_order' ), 'on until the merchant changes it' );
+		$this->assertFalse( $handler->get_value( 'webhook_stocks' ), 'the type declares itself off by default' );
+		$this->assertNull( $handler->get_setting( 'ip_allowlist' ), 'the sender addresses are no merchant setting' );
+		$this->assertNull( $handler->get_setting( 'trusted_proxies' ), 'neither are the proxies' );
+
+		$sections = $notif->sections();
+
+		$this->assertCount( 1, $sections );
+		$this->assertSame( [ 'webhook_new_order', 'webhook_stocks' ], $sections[0]->get_setting_ids() );
+		$this->assertStringContainsString( 'Сообщает сайту о новом заказе сразу.', $sections[0]->get_description() );
+		$this->assertStringContainsString( 'Где указать адрес: Кабинет → Интеграции.', $sections[0]->get_description() );
+		$this->assertStringNotContainsString( 'Где указать адрес: .', $sections[0]->get_description(), 'no empty cabinet location' );
+
+		$handler->get_setting( 'webhook_stocks' )->set_value( true );
+		$handler->save();
+
+		$this->assertSame( 'yes', $this->options['woodev_fake_mp_webhook_stocks'] ?? null, 'the row the intake reads' );
+	}
+
+	public function test_an_adapter_without_notification_types_gets_no_switches_card(): void {
+		$notif = $this->push_section( new Fake_Push_Protocol( '', [] ) );
+
+		$this->assertSame( [], $notif->sections() );
+	}
+
+	public function test_the_proxy_notice_appears_only_in_debug_mode_and_only_behind_a_proxy(): void {
+		$remote = $_SERVER['REMOTE_ADDR'] ?? null;
+
+		if ( ! class_exists( '\\WC_Geolocation' ) ) {
+			require_once dirname( __DIR__, 2 ) . '/Shipping/Rest_Api/wc-geolocation-stub.php';
+		}
+
+		$_SERVER['REMOTE_ADDR']   = '10.0.0.2';
+		\WC_Geolocation::$address = '198.51.100.20';
+
+		try {
+			$notif = $this->push_section( new Fake_Push_Protocol() );
+
+			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'a merchant who did not switch on the logging sees nothing' );
+
+			$this->options['woodev_fake_mp_advanced_logging'] = 'yes';
+
+			$this->assertStringContainsString( 'woodev_fake_push_trusted_proxies', $notif->sections()[0]->get_description() );
+
+			\WC_Geolocation::$address = '10.0.0.2';
+
+			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'no forwarded address, no proxy' );
+		} finally {
+			\WC_Geolocation::$address = null;
+
+			if ( null === $remote ) {
+				unset( $_SERVER['REMOTE_ADDR'] );
+			} else {
+				$_SERVER['REMOTE_ADDR'] = $remote;
+			}
+		}
+	}
+
+	/**
+	 * A notifications section over a push-capable fake marketplace with the given protocol.
+	 *
+	 * @param Fake_Push_Protocol $protocol Protocol.
+	 * @return Notifications_Section
+	 */
+	private function push_section( Fake_Push_Protocol $protocol ): Notifications_Section {
 		$adapter = new Fake_Marketplace_Adapter(
 			null,
 			[
-				'id'                => Sqlite_Tables::MARKETPLACE_ID,
-				'capabilities'      => [ Capability::PUSH_NOTIFICATIONS ],
-				'credential_fields' => $fields,
-				'push_protocol'     => new Fake_Push_Protocol( '198.51.100.0/24' ),
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => [ Capability::PUSH_NOTIFICATIONS ],
+				'credential_fields'   => new Credential_Fields( 'cabinet_id', [ 'api_token' ] ),
+				'settings_descriptor' => new Fake_Settings_Descriptor( new Credential_Fields( 'cabinet_id', [ 'api_token' ] ), 'PushMarket' ),
+				'push_protocol'       => $protocol,
 			]
 		);
-		$notif   = new Notifications_Section(
+
+		return new Notifications_Section(
 			$adapter,
 			new Notification_Account_Reader( $this->db, $this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ) ),
 			new Last_Notification_Reader( $this->db, $this->schema->table_name( 'events', Sqlite_Tables::PREFIX ) ),
@@ -276,25 +332,6 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 			),
 			'fake_mp'
 		);
-		$handler = new Settings_Handler( 'fake_mp', [ $notif ] );
-		$names   = Notifications_Section::option_names( 'fake_mp' );
-
-		$this->assertSame(
-			[
-				'allowlist'       => 'woodev_fake_mp_ip_allowlist',
-				'trusted_proxies' => 'woodev_fake_mp_trusted_proxies',
-			],
-			$names,
-			'the donor plugin\'s option names: an installed shop keeps its lists'
-		);
-		$this->assertSame( '198.51.100.0/24', $handler->get_value( Notifications_Section::ALLOWLIST_ID ), 'the protocol supplies the default list' );
-
-		$handler->get_setting( Notifications_Section::ALLOWLIST_ID )->set_value( "203.0.113.0/24\n10.0.0.5" );
-		$handler->get_setting( Notifications_Section::TRUSTED_PROXIES_ID )->set_value( '127.0.0.1' );
-		$handler->save();
-
-		$this->assertSame( "203.0.113.0/24\n10.0.0.5", $this->options[ $names['allowlist'] ] ?? null );
-		$this->assertSame( '127.0.0.1', $this->options[ $names['trusted_proxies'] ] ?? null );
 	}
 
 	public function test_option_backed_settings_use_the_base_class_type_conversion(): void {

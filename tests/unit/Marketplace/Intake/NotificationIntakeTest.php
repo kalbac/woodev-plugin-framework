@@ -15,6 +15,8 @@ use Woodev\Framework\Marketplace\Intake\Notification_Intake;
 use Woodev\Framework\Marketplace\Intake\Push_Rate_Limiter;
 use Woodev\Framework\Marketplace\Intake\Push_Registrar;
 use Woodev\Framework\Marketplace\Intake\Registration_Refresher;
+use Woodev\Framework\Marketplace\Intake\Sender_Network;
+use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
 use Woodev\Framework\Marketplace\Jobs\Drain_Events_Runner;
 use Woodev\Framework\Marketplace\Jobs\Drain_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Event_Handler_Registry;
@@ -53,6 +55,13 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 	 * @var Notification_Intake
 	 */
 	private $intake;
+
+	/**
+	 * What the merchant saved on the notification switches, by option name.
+	 *
+	 * @var array<string,string>
+	 */
+	private $switch_options = [];
 
 	/**
 	 * Two accounts and the intake over the real ledger.
@@ -334,6 +343,40 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 
 		$this->now += Push_Rate_Limiter::WINDOW;
 		$this->assertSame( 200, $this->push( $this->order_created( '9-9' ) )->status(), 'the next minute is a new budget' );
+	}
+
+	/**
+	 * A type the merchant switched off is answered 200 like any other and stored as ignored, never worked: no drain is queued,
+	 * and the switches of the other types are untouched.
+	 *
+	 * @return void
+	 */
+	public function test_a_switched_off_type_is_stored_as_ignored_and_never_worked(): void {
+		$this->switch_options['woodev_fake_seller_webhook_order_created'] = 'no';
+
+		$off = $this->push( $this->order_created( '1-1' ) );
+
+		$this->assertSame( 200, $off->status() );
+		$this->assertSame( Scripted_Inbound_Decoder::SUCCESS, $off->body() );
+		$this->assertSame( 'ignored', $this->events()[0]['status'] );
+		$this->assertSame( [], $this->scheduler->actions, 'nothing is queued for a switched-off type' );
+
+		$this->push( [ 'kind' => 'order_changed', 'id' => '2-1' ] );
+
+		$this->assertSame( [ 'ignored', 'new' ], array_column( $this->events(), 'status' ) );
+		$this->assertNotSame( [], $this->scheduler->actions );
+	}
+
+	/**
+	 * The intake, not the decoder, says whether the sender is the marketplace's: the decoder reports every address as foreign.
+	 *
+	 * @return void
+	 */
+	public function test_the_intake_records_whether_the_sender_is_in_the_marketplaces_network(): void {
+		$this->push( $this->order_created( '1-1' ), null, Fake_Push_Protocol::TRUSTED_IP );
+		$this->push( $this->order_created( '1-2' ), null, Fake_Push_Protocol::FOREIGN_IP );
+
+		$this->assertSame( [ '1', '0' ], array_map( 'strval', array_column( $this->events(), 'ip_trusted' ) ) );
 	}
 
 	/**
@@ -648,7 +691,17 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 			}
 		};
 
-		return new Notification_Intake( new Scripted_Inbound_Decoder(), new Fake_Push_Protocol(), $ledger, $this->reader(), new Drain_Scheduler( $this->names() ), $limiter, [ $this, 'log_line' ] );
+		$protocol = new Fake_Push_Protocol();
+		$network  = new Sender_Network( Sqlite_Tables::MARKETPLACE_ID, $protocol );
+		$switches = new Webhook_Switches(
+			$protocol->webhook_types(),
+			'woodev_fake_seller_',
+			function ( string $name, $default = null ) {
+				return $this->switch_options[ $name ] ?? $default;
+			}
+		);
+
+		return new Notification_Intake( new Scripted_Inbound_Decoder(), $protocol, $network, $switches, $ledger, $this->reader(), new Drain_Scheduler( $this->names() ), $limiter, [ $this, 'log_line' ] );
 	}
 
 	/**

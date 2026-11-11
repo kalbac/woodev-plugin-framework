@@ -162,6 +162,22 @@ final class Inbound_Event {
 	}
 
 	/**
+	 * Returns a copy that says whether the sender's address is in the marketplace's published range. The intake sets it: the
+	 * address rules belong to the framework ({@see \Woodev\Framework\Marketplace\Intake\Sender_Network}), not to the decoder.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @param bool $ip_trusted Whether the address is in the published range.
+	 * @return self
+	 */
+	public function with_ip_trusted( bool $ip_trusted ): self {
+		$copy             = clone $this;
+		$copy->ip_trusted = $ip_trusted;
+
+		return $copy;
+	}
+
+	/**
 	 * Returns the number of delivery attempts, counting the current one.
 	 *
 	 * @since 2.0.29

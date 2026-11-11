@@ -17,7 +17,7 @@ use Woodev\Framework\Marketplace\Ledger\Inbound_Event;
  * - a body that is not JSON, or a kind outside {@see self::KINDS}, is stored as ignored with the reason;
  * - an event no account was resolved for is stored as ignored «unknown account»;
  * - the dedup key is the kind and the id, so the same notification sent twice is one event whatever its `time` says;
- * - the address is trusted when {@see Fake_Push_Protocol} allows it.
+ * - the address is judged by the intake, so the decoder reports it as not trusted.
  */
 final class Scripted_Inbound_Decoder implements Inbound_Decoder {
 	public const KINDS = [ 'order_created', 'order_changed', 'stock_changed' ];
@@ -37,7 +37,7 @@ final class Scripted_Inbound_Decoder implements Inbound_Decoder {
 	 */
 	public function decode( string $raw_body, ?int $account_id, string $ip ): ?Inbound_Event {
 		$data    = json_decode( $raw_body, true );
-		$trusted = ( new Fake_Push_Protocol() )->is_allowed( $ip );
+		$trusted = false; // The intake decides that, not the decoder.
 		$at      = new \DateTimeImmutable( '2026-11-08T12:00:00Z' );
 
 		if ( ! is_array( $data ) ) {

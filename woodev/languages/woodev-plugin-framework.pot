@@ -8424,6 +8424,34 @@ msgstr ""
 msgid "Безопасность уведомлений %s"
 msgstr ""
 
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:178
+#, php-format
+msgid "Какие уведомления получать от %s"
+msgstr ""
+
+#. translators: %s: place in the marketplace cabinet.
+#: marketplace/settings/class-notifications-section.php:226
+#, php-format
+msgid "Где указать адрес: %s."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:233
+#, php-format
+msgid "Включите уведомления, которые вам нужны: %s сообщит о них сайту сразу, а выключенные сайт не станет принимать."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:235
+msgid "Адрес сайта для уведомлений показан в карточках аккаунтов ниже, а кнопка «Зарегистрировать URL» сама передаёт его в личный кабинет."
+msgstr ""
+
+#. translators: %s: name of the filter.
+#: marketplace/settings/class-notifications-section.php:254
+#, php-format
+msgid "Сайт работает за прокси или CDN: сервер видит адрес прокси, а не отправителя. Уведомления по адресам с секретным ключом (как в карточках ниже) это не затрагивает — они принимаются по ключу. Старый адрес без ключа проверяет отправителя по IP, и за прокси такая проверка может отклонять настоящие уведомления; разработчик указывает адреса своих прокси фильтром %s."
+msgstr ""
+
 #: marketplace/settings/class-notifications-section.php:247
 msgid "уведомления включены"
 msgstr ""

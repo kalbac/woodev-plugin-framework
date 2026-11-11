@@ -8,15 +8,18 @@
 namespace Woodev\Framework\Marketplace\Settings;
 
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Diagnostics_Reader;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
-use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Url;
 use Woodev\Framework\Marketplace\Intake\Registration_Refresher;
+use Woodev\Framework\Marketplace\Intake\Sender_Network;
+use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
+use Woodev\Framework\Marketplace\Intake\Webhook_Type;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Framework\Shipping\Settings\Shipping_Tool;
@@ -28,37 +31,15 @@ defined( 'ABSPATH' ) || exit;
  * Renders the push-notifications settings cards when the marketplace declares {@see Capability::PUSH_NOTIFICATIONS}:
  *
  * - Completely omitted (`sections() === []` and zero settings registered) when push notifications are unsupported (D2).
+ * - A switches card: one on/off switch for every {@see Webhook_Type} the adapter declares, each explained (what it is for, where
+ *   in the marketplace cabinet the address goes). The sender addresses and proxies are no merchant's setting ({@see Sender_Network}).
  * - Per-account card shows the masked webhook URL (`/notifications/{id}/[скрыто]`), wanted push event descriptions,
  *   stored registration status and latest received event, plus the four remote registration actions gated on
  *   {@see License_Gate}.
- * - Global security card validates `ip_allowlist` and `trusted_proxies` via
- *   {@see Ip_List_Validator}.
  *
  * @since 2.1.2
  */
 final class Notifications_Section implements Settings_Section_Provider {
-	// The ids the donor plugin saved under (`woodev_{plugin id}_ip_allowlist`): installed shops keep their lists.
-	public const ALLOWLIST_ID       = 'ip_allowlist';
-	public const TRUSTED_PROXIES_ID = 'trusted_proxies';
-
-	/**
-	 * Names the options the saved lists live in, for the adapter's {@see \Woodev\Framework\Marketplace\Intake\Push_Protocol}
-	 * to read (`get_option( $names['allowlist'], … )`) when it decides where a request came from and whether that is the marketplace.
-	 *
-	 * @since 2.1.2
-	 *
-	 * @param string $plugin_id Plugin id, e.g. `ozon-seller`.
-	 * @return array{allowlist:string,trusted_proxies:string}
-	 */
-	public static function option_names( string $plugin_id ): array {
-		$family = Uninstaller::option_prefix( $plugin_id );
-
-		return [
-			'allowlist'       => $family . self::ALLOWLIST_ID,
-			'trusted_proxies' => $family . self::TRUSTED_PROXIES_ID,
-		];
-	}
-
 	/**
 	 * Marketplace adapter.
 	 *
@@ -86,6 +67,13 @@ final class Notifications_Section implements Settings_Section_Provider {
 	 * @var License_Gate
 	 */
 	private $license;
+
+	/**
+	 * Plugin id, as the option names are built from it.
+	 *
+	 * @var string
+	 */
+	private $plugin_id;
 
 	/**
 	 * Sanitized plugin id prefix for unique action button ids.
@@ -125,12 +113,13 @@ final class Notifications_Section implements Settings_Section_Provider {
 		$this->accounts           = $accounts;
 		$this->last_notifications = $last_notifications;
 		$this->license            = $license;
+		$this->plugin_id          = '' !== $plugin_id ? $plugin_id : $adapter->id();
 		$this->plugin_slug        = '' !== $plugin_id ? sanitize_key( str_replace( '-', '_', $plugin_id ) ) : $adapter->id();
 		$this->clock              = $clock ?? 'time';
 	}
 
 	/**
-	 * Registers IP allowlist and trusted-proxies settings when push notifications are supported.
+	 * Registers one on/off switch for every notification type the marketplace declares.
 	 *
 	 * @since 2.1.2
 	 *
@@ -142,57 +131,30 @@ final class Notifications_Section implements Settings_Section_Provider {
 			return;
 		}
 
-		$marketplace = $this->adapter->settings_descriptor()->marketplace_name();
-		$protocol    = $this->adapter->push_protocol();
-		$ip_check    = static function ( $value ): bool {
-			return [] === Ip_List_Validator::invalid_entries( (string) $value );
-		};
-		$ip_message  = __( 'Укажите корректные IP-адреса или подсети CIDR (по одному в строке, например 198.51.100.0/24).', 'woodev-plugin-framework' );
+		foreach ( $this->webhook_types() as $type ) {
+			$id = Webhook_Switches::setting_id( $type->id() );
 
-		$handler->register_setting(
-			self::ALLOWLIST_ID,
-			\Woodev_Setting::TYPE_STRING,
-			[
-				/* translators: %s: marketplace name. */
-				'name'             => sprintf( __( 'Разрешённые адреса %s', 'woodev-plugin-framework' ), $marketplace ),
-				'default'          => null !== $protocol ? $protocol->default_ip_allowlist() : '',
-				'validate'         => $ip_check,
-				'validate_message' => $ip_message,
-			]
-		);
-		$handler->register_control(
-			self::ALLOWLIST_ID,
-			\Woodev_Control::TYPE_TEXTAREA,
-			[
-				/* translators: %s: marketplace name. */
-				'label'   => sprintf( __( 'Разрешённые адреса %s', 'woodev-plugin-framework' ), $marketplace ),
-				/* translators: %s: marketplace name. */
-				'tooltip' => sprintf( __( 'IP-адреса и подсети CIDR, с которых %s присылает уведомления (по одному на строку). Пустое поле отключает фильтрацию по IP.', 'woodev-plugin-framework' ), $marketplace ),
-			]
-		);
-
-		$handler->register_setting(
-			self::TRUSTED_PROXIES_ID,
-			\Woodev_Setting::TYPE_STRING,
-			[
-				'name'             => __( 'Доверенные обратные прокси', 'woodev-plugin-framework' ),
-				'default'          => '',
-				'validate'         => $ip_check,
-				'validate_message' => $ip_message,
-			]
-		);
-		$handler->register_control(
-			self::TRUSTED_PROXIES_ID,
-			\Woodev_Control::TYPE_TEXTAREA,
-			[
-				'label'   => __( 'Доверенные обратные прокси', 'woodev-plugin-framework' ),
-				'tooltip' => __( 'Адреса ваших балансировщиков (nginx, Cloudflare), от которых можно доверять заголовку X-Forwarded-For.', 'woodev-plugin-framework' ),
-			]
-		);
+			$handler->register_setting(
+				$id,
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'    => $type->label(),
+					'default' => $type->default_enabled(),
+				]
+			);
+			$handler->register_control(
+				$id,
+				\Woodev_Control::TYPE_TOGGLE,
+				[
+					'label'   => $type->label(),
+					'tooltip' => $type->purpose(),
+				]
+			);
+		}
 	}
 
 	/**
-	 * Builds per-account push status/action cards and the IP security card; returns `[]` when push is unsupported.
+	 * Builds the switches card and the per-account push status/action cards; returns `[]` when push is unsupported.
 	 *
 	 * @since 2.1.2
 	 *
@@ -206,19 +168,94 @@ final class Notifications_Section implements Settings_Section_Provider {
 		$marketplace = $this->adapter->settings_descriptor()->marketplace_name();
 		$sections    = [];
 		$now         = (int) call_user_func( $this->clock );
+		$types       = $this->webhook_types();
+		$notice      = $this->proxy_notice();
+
+		if ( [] !== $types || '' !== $notice ) {
+			$sections[] = Settings_Section::create(
+				'notifications_webhooks',
+				/* translators: %s: marketplace name. */
+				sprintf( __( 'Какие уведомления получать от %s', 'woodev-plugin-framework' ), $marketplace ),
+				array_map(
+					static function ( Webhook_Type $type ): string {
+						return Webhook_Switches::setting_id( $type->id() );
+					},
+					$types
+				),
+				$this->webhooks_html( $types, $marketplace ) . $notice
+			);
+		}
 
 		foreach ( $this->accounts->all() as $account ) {
 			$sections[] = $this->account_section( $account, $marketplace, $now );
 		}
 
-		$sections[] = Settings_Section::create(
-			'notifications_security',
-			/* translators: %s: marketplace name. */
-			sprintf( __( 'Безопасность уведомлений %s', 'woodev-plugin-framework' ), $marketplace ),
-			[ self::ALLOWLIST_ID, self::TRUSTED_PROXIES_ID ]
-		);
-
 		return $sections;
+	}
+
+	/**
+	 * Returns the notification types the marketplace declares.
+	 *
+	 * @return Webhook_Type[]
+	 */
+	private function webhook_types(): array {
+		$protocol = $this->adapter->push_protocol();
+
+		return null === $protocol ? [] : $protocol->webhook_types();
+	}
+
+	/**
+	 * Explains the switches: what every notification is for and where in the marketplace cabinet its address goes.
+	 *
+	 * @param Webhook_Type[] $types       Types.
+	 * @param string         $marketplace Marketplace name.
+	 * @return string
+	 */
+	private function webhooks_html( array $types, string $marketplace ): string {
+		if ( [] === $types ) {
+			return '';
+		}
+
+		$items = '';
+
+		foreach ( $types as $type ) {
+			$items .= sprintf(
+				'<li><strong>%1$s</strong> — %2$s %3$s</li>',
+				esc_html( $type->label() ),
+				esc_html( $type->purpose() ),
+				'' === $type->cabinet_location() ? '' : '<em>' . esc_html( sprintf( /* translators: %s: place in the marketplace cabinet. */ __( 'Где указать адрес: %s.', 'woodev-plugin-framework' ), $type->cabinet_location() ) ) . '</em>'
+			);
+		}
+
+		return sprintf(
+			'<p>%1$s</p><ul>%2$s</ul><p>%3$s</p>',
+			/* translators: %s: marketplace name. */
+			esc_html( sprintf( __( 'Включите уведомления, которые вам нужны: %s сообщит о них сайту сразу, а выключенные сайт не станет принимать.', 'woodev-plugin-framework' ), $marketplace ) ),
+			$items,
+			esc_html__( 'Адрес сайта для уведомлений показан в карточках аккаунтов ниже, а кнопка «Зарегистрировать URL» сама передаёт его в личный кабинет.', 'woodev-plugin-framework' )
+		);
+	}
+
+	/**
+	 * Tells, in debug mode only, that the site stands behind a reverse proxy.
+	 *
+	 * @return string HTML paragraph, or '' when the site is not behind a proxy or «Логирование» is off.
+	 */
+	private function proxy_notice(): string {
+		if ( ! ( new Logging( Logging::option_name_for( $this->plugin_id ) ) )->is_enabled() || ! Sender_Network::behind_proxy( $_SERVER ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only the peer address is read, and it is validated as an IP.
+			return '';
+		}
+
+		return sprintf(
+			'<p>%s</p>',
+			esc_html(
+				sprintf(
+					/* translators: %s: name of the filter. */
+					__( 'Сайт работает за прокси или CDN: сервер видит адрес прокси, а не отправителя. Уведомления по адресам с секретным ключом (как в карточках ниже) это не затрагивает — они принимаются по ключу. Старый адрес без ключа проверяет отправителя по IP, и за прокси такая проверка может отклонять настоящие уведомления; разработчик указывает адреса своих прокси фильтром %s.', 'woodev-plugin-framework' ),
+					'woodev_' . str_replace( '-', '_', $this->adapter->id() ) . '_push_trusted_proxies'
+				)
+			)
+		);
 	}
 
 	/**
