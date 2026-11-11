@@ -148,6 +148,8 @@ export interface RowActionState {
 	enabled: boolean;
 	/** Why the action is off; PHP always sends one for a disabled action. */
 	reason: string;
+	/** Where a `link` action goes for this row (http(s) or a path on this site); only link actions carry one. */
+	url?: string;
 }
 
 export interface AdminRecord {

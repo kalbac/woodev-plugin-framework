@@ -120,6 +120,7 @@ final class Records_Registry {
 		}
 
 		\Woodev_REST_V1_Registrar::register_controller( new Records_Rest_Controller( $this ), Records_Rest_Controller::class );
+		\Woodev_REST_V1_Registrar::register_controller( new Action_Rest_Handler( $this ), Action_Rest_Handler::class );
 		$this->controller_hooked = true;
 	}
 }

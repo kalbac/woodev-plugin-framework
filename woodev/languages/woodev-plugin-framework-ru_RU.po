@@ -6734,6 +6734,26 @@ msgstr ""
 msgid "Страницы плагина «%s» работают в панели WooCommerce Admin, а она сейчас недоступна. Включите WooCommerce Admin или обновите WooCommerce."
 msgstr ""
 
+#: admin/records/class-action-error.php:39
+msgid "Проверьте заполненные поля."
+msgstr ""
+
+#: admin/records/class-action-error.php:85
+msgid "Сейчас это действие недоступно."
+msgstr ""
+
+#: admin/records/class-action-input.php:131
+msgid "Значение слишком длинное."
+msgstr ""
+
+#: admin/records/class-action-input.php:136
+msgid "Значение содержит недопустимые символы."
+msgstr ""
+
+#: admin/records/class-action-input.php:215
+msgid "Некорректное значение."
+msgstr ""
+
 #: admin/records/class-records-error.php:34
 msgid "Некорректный параметр запроса."
 msgstr ""

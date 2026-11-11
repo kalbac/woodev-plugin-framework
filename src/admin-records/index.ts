@@ -8,5 +8,6 @@
 export { RecordsTable, type RecordsTableProps } from './records-table';
 export { createRecordsApi, errorMessage, type RecordsApi } from './api';
 export { MESSAGE_KEYS, message, type MessageKey } from './messages';
+export { useActionExtensions } from './actions';
 export type { RecordsExtensions, SelectionHandle, TableHandle } from './extensions';
 export type * from './types';

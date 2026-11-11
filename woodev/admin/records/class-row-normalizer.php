@@ -392,13 +392,6 @@ final class Row_Normalizer {
 		];
 	}
 
-	/**
-	 * A disabled action must say why: the reason is visible text, not colour alone.
-	 *
-	 * @param Records_Definition $definition Definition.
-	 * @param mixed              $actions    Provider row actions.
-	 * @return array<int,array{id:string,enabled:bool,reason:string}>
-	 */
 	private static function row_actions( Records_Definition $definition, $actions ): array {
 		if ( ! is_array( $actions ) || array_values( $actions ) !== $actions ) {
 			throw new \UnexpectedValueException( 'row actions must be a list.' );
@@ -423,7 +416,7 @@ final class Row_Normalizer {
 				'id'      => $id,
 				'enabled' => $enabled,
 				'reason'  => $reason,
-			];
+			] + self::row_action_url( $definition, $id, $action['url'] ?? null );
 		}
 
 		if ( count( $out ) !== count( $actions ) ) {
@@ -431,6 +424,29 @@ final class Row_Normalizer {
 		}
 
 		return array_values( $out );
+	}
+
+	/**
+	 * Where a `link` action goes for this row. Only a link action may carry one: the other
+	 * interactions run through the action routes and have no destination.
+	 *
+	 * @param Records_Definition $definition Definition.
+	 * @param string             $id         Declared row action id.
+	 * @param mixed              $url        Provider URL, or null when it sent none.
+	 * @return array{url?:string} Empty when there is no URL.
+	 * @throws \UnexpectedValueException When the URL is not allowed for this action.
+	 */
+	private static function row_action_url( Records_Definition $definition, string $id, $url ): array {
+		if ( null === $url ) {
+			return [];
+		}
+
+		$descriptor = $definition->get_action( $id );
+		if ( ! is_string( $url ) || null === $descriptor || 'link' !== $descriptor['interaction'] ) {
+			throw new \UnexpectedValueException( 'only a link action has a URL.' );
+		}
+
+		return [ 'url' => self::safe_url( $url ) ];
 	}
 
 	/**

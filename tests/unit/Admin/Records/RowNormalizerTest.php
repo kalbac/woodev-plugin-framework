@@ -109,6 +109,9 @@ class RowNormalizerTest extends TestCase {
 			'action that is not declared'      => [ [ 'actions' => [ [ 'id' => 'delete_all', 'enabled' => true ] ] ] ],
 			'action declared only as bulk'     => [ [ 'actions' => [ [ 'id' => 'sync_all', 'enabled' => true ] ] ] ],
 			'disabled action with no reason'   => [ [ 'actions' => [ [ 'id' => 'sync', 'enabled' => false, 'reason' => '' ] ] ] ],
+			'url on an action that is not a link' => [ [ 'actions' => [ [ 'id' => 'sync', 'enabled' => true, 'url' => '/wp-admin/x' ] ] ] ],
+			'script url on a link action'      => [ [ 'actions' => [ [ 'id' => 'open', 'enabled' => true, 'url' => 'javascript:alert(1)' ] ] ] ],
+			'url that is not text'             => [ [ 'actions' => [ [ 'id' => 'open', 'enabled' => true, 'url' => [ '/x' ] ] ] ] ],
 			'action listed twice'              => [ [ 'actions' => [ [ 'id' => 'open', 'enabled' => true ], [ 'id' => 'open', 'enabled' => true ] ] ] ],
 			'selectable that is not boolean'   => [ [ 'selectable' => 'yes' ] ],
 			'revision with markup'             => [ [ 'revision' => '<x>' ] ],
@@ -119,6 +122,15 @@ class RowNormalizerTest extends TestCase {
 		$row = Records_Definitions::row( 'p:1', [ 'actions' => [ [ 'id' => 'sync', 'enabled' => false, 'reason' => 'Нет склада' ] ] ] );
 
 		$this->assertSame( [ [ 'id' => 'sync', 'enabled' => false, 'reason' => 'Нет склада' ] ], $this->page( [ $row ] )['rows'][0]['actions'] );
+	}
+
+	public function test_a_link_action_carries_the_destination_of_its_row(): void {
+		$row = Records_Definitions::row( 'p:1', [ 'actions' => [ [ 'id' => 'open', 'enabled' => true, 'url' => 'https://example.test/card/p:1' ] ] ] );
+
+		$this->assertSame(
+			[ [ 'id' => 'open', 'enabled' => true, 'reason' => '', 'url' => 'https://example.test/card/p:1' ] ],
+			$this->page( [ $row ] )['rows'][0]['actions']
+		);
 	}
 
 	public function test_more_rows_than_the_requested_page_size_is_a_contract_break(): void {

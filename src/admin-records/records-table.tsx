@@ -325,6 +325,7 @@ export function RecordsTable( {
 				onChange={ change }
 			/>
 			{ extensions.renderActivity?.( handle ) }
+			{ extensions.renderActions?.( handle ) }
 			{ hasBulk &&
 				extensions.renderBulkActions?.(
 					{
