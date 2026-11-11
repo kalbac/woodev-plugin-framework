@@ -77,7 +77,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 	 *
 	 * **Registration is once per plugin id.** The hooks, the Action Scheduler job names and the options are all named after the
 	 * plugin id ({@see Job_Names}), the intake route after the adapter id, so two marketplace plugins on one framework copy never
-	 * share a hook or a route; a plugin id that is registered a second time changes nothing.
+	 * share a hook or a route; a plugin id that is registered a second time changes nothing. Ids that differ only in dashes
+	 * and underscores (`foo-bar`, `foo_bar`) are the same plugin here, as they are in {@see Job_Names}.
 	 *
 	 * **Nothing here talks to a marketplace.** Building the flows only reads the adapter's answers and makes objects (no query, no
 	 * request); every runner is a hook callback that waits for Action Scheduler, a REST request or a WooCommerce event. The
@@ -95,7 +96,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 	 */
 	final class Flow_Wiring {
 		/**
-		 * Plugin ids whose flows are hooked, by this PHP process.
+		 * Plugins whose flows are hooked, by this PHP process, keyed by {@see Job_Names::group()}.
 		 *
 		 * @var array<string,true>
 		 */
@@ -223,14 +224,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 * @return bool True when the flows were hooked now, false when they already were.
 		 */
 		public function register(): bool {
-			if ( isset( self::$registered[ $this->plugin_id ] ) ) {
+			// Keyed by what Job_Names makes of the id: `foo-bar` and `foo_bar` name the same hooks and the same group, so they are one.
+			$names = new Job_Names( $this->plugin_id );
+
+			if ( isset( self::$registered[ $names->group() ] ) ) {
 				return false;
 			}
 
-			self::$registered[ $this->plugin_id ] = true;
+			self::$registered[ $names->group() ] = true;
 
 			$this->schema     = new Schema( $this->adapter->id() );
-			$this->names      = new Job_Names( $this->plugin_id );
+			$this->names      = $names;
 			$classifier       = $this->adapter->error_classifier();
 			$this->gate       = new Job_Gate( $this->accounts, $this->license, Account_Pause::over( $this->accounts, $classifier ) );
 			$this->links      = new Wpdb_Link_Store( $this->db, $this->table( 'links' ), $this->table( 'link_ids' ) );

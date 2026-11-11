@@ -224,6 +224,13 @@ final class FlowWiringTest extends TestCase {
 		$this->assertFalse( $this->wiring( self::OTHER, $this->adapter() )->register() );
 	}
 
+	public function test_ids_that_differ_only_in_dashes_and_underscores_are_one_plugin(): void {
+		Actions\expectAdded( 'woodev_fake_seller_flush_sync' )->once();
+
+		$this->assertTrue( $this->wiring( 'fake-seller' )->register() );
+		$this->assertFalse( $this->wiring( 'fake_seller' )->register(), 'same hooks, same group: not a second plugin' );
+	}
+
 	public function test_the_posting_poll_reads_the_option_of_the_unnormalised_plugin_id(): void {
 		$this->assertSame( 'woodev_fake-seller_poll_postings_minutes', Posting_Jobs::option_key( self::PLUGIN ) );
 
