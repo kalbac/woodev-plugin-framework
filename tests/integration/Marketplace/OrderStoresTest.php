@@ -81,7 +81,7 @@ class OrderStoresTest extends TestCase {
 		$a      = $this->plain_order( 'A-1' );
 		$b      = $this->plain_order( 'B-1' );
 
-		$this->assertSame( [ $a ], Order_Query::ids_by_meta( $this->clause( 'A-1' ) ) );
+		$this->assertSame( [ $a ], Order_Query::ids_by_meta( $this->clause( 'A-1' ) ), $this->trace() );
 		$this->assertSame( [ $b ], Order_Query::ids_by_meta( $this->clause( 'B-1' ) ) );
 		$this->assertSame( [], Order_Query::ids_by_meta( $this->clause( 'C-1' ) ) );
 		$this->assertNotContains( $normal, Order_Query::ids_by_meta( $this->clause( 'A-1' ) ) );
@@ -97,15 +97,16 @@ class OrderStoresTest extends TestCase {
 	public function test_pages_follow_the_id_and_the_query_leaves_no_filter_behind( bool $hpos ): void {
 		$this->use_datastore( $hpos );
 
+		$before = [ $this->callbacks( Order_Query::CPT_FILTER ), $this->callbacks( Order_Query::UNSUPPORTED_FILTER ) ];
 		$first  = $this->plain_order( 'SAME' );
 		$second = $this->plain_order( 'SAME' );
 		$third  = $this->plain_order( 'SAME' );
 
-		$this->assertSame( [ $first, $second ], Order_Query::ids_by_meta( $this->clause( 'SAME' ), 2, 1 ) );
-		$this->assertSame( [ $third ], Order_Query::ids_by_meta( $this->clause( 'SAME' ), 2, 2 ) );
+		$this->assertSame( [ $first, $second ], Order_Query::ids_by_meta( $this->clause( 'SAME' ), 2, 1 ), $this->trace() );
+		$this->assertSame( [ $third ], Order_Query::ids_by_meta( $this->clause( 'SAME' ), 2, 2 ), $this->trace() );
 
-		$this->assertFalse( has_filter( Order_Query::CPT_FILTER ) );
-		$this->assertFalse( has_filter( Order_Query::UNSUPPORTED_FILTER ) );
+		// WooCommerce hooks the same filters itself, so the test compares what is hooked, not whether anything is.
+		$this->assertSame( $before, [ $this->callbacks( Order_Query::CPT_FILTER ), $this->callbacks( Order_Query::UNSUPPORTED_FILTER ) ] );
 	}
 
 	/**
@@ -149,6 +150,7 @@ class OrderStoresTest extends TestCase {
 		$this->assertSame( 'M-1', $fresh->get_meta( Fake_Order_Meta::ORDER ) );
 		$this->assertSame( (string) self::ACCOUNT, $fresh->get_meta( Fake_Order_Meta::CABINET ) );
 
+		$this->assertNotNull( $store->find( $this->dto( 'M-1', [] ) ), $this->trace() );
 		$this->assertSame( $wc_order->get_id(), $store->find( $this->dto( 'M-1', [] ) )->get_id() );
 		$this->assertNull( $store->find( $this->dto( 'M-2', [] ) ) );
 
@@ -320,6 +322,44 @@ class OrderStoresTest extends TestCase {
 
 		$this->assertNull( $store->get( $wc_order->get_id() ) );
 		$this->assertNull( $store->find( $this->dto( 'D-1', [] ) ) );
+	}
+
+	/**
+	 * The callbacks hooked to a filter, for a before/after comparison.
+	 *
+	 * @param string $hook Hook.
+	 * @return array<int,mixed>
+	 */
+	private function callbacks( string $hook ): array {
+		global $wp_filter;
+
+		return isset( $wp_filter[ $hook ] ) ? $wp_filter[ $hook ]->callbacks : [];
+	}
+
+	/**
+	 * DIAGNOSTIC (temporary, CI round 3).
+	 *
+	 * @return string
+	 */
+	private function trace(): string {
+		global $wpdb;
+
+		$out = 'last_query: ' . $wpdb->last_query . "\n";
+		$out .= 'hpos: ' . var_export( \Woodev_Plugin_Compatibility::is_hpos_enabled(), true ) . "\n";
+		$out .= 'datastore: ' . get_class( \WC_Data_Store::load( 'order' )->get_current_class_name() ? \WC_Data_Store::load( 'order' ) : new \stdClass() ) . ' ' . \WC_Data_Store::load( 'order' )->get_current_class_name() . "\n";
+
+		foreach ( [ 'wc_orders', 'wc_orders_meta' ] as $table ) {
+			$out .= $table . ': ' . var_export( $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}{$table} ORDER BY 1 DESC LIMIT 6", ARRAY_A ), true ) . ' err=' . $wpdb->last_error . "\n"; // phpcs:ignore
+		}
+
+		try {
+			new \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableQuery( [ 'return' => 'ids', 'type' => 'shop_order', 'status' => [ 'any' ], 'limit' => -1, 'meta_query' => [ [ 'key' => '_fake_order', 'value' => 'A-1' ] ] ] );
+			$out .= "direct OrdersTableQuery: no exception\n";
+		} catch ( \Throwable $e ) {
+			$out .= 'direct OrdersTableQuery: ' . $e->getMessage() . "\n";
+		}
+
+		return $out;
 	}
 
 	/**
