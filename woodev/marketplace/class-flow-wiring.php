@@ -152,6 +152,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		private $license;
 
 		/**
+		 * Write gate of the plugin: `function ( Account $account ): bool`, or null when every account may write.
+		 *
+		 * @var callable|null
+		 */
+		private $write_gate;
+
+		/**
 		 * Writes a line to the plugin's log: `function ( string $line ): void`.
 		 *
 		 * @var callable
@@ -205,8 +212,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 * @param string              $prefix    The site's table prefix (`$wpdb->prefix`).
 		 * @param License_Gate        $license   Licence gate of the plugin.
 		 * @param callable            $log_error `function ( string $line ): void`.
+		 * @param callable|null       $write_gate `function ( Account $account ): bool`, the plugin's write gate; null lets every account write.
 		 */
-		public function __construct( string $plugin_id, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, string $prefix, License_Gate $license, callable $log_error ) {
+		public function __construct( string $plugin_id, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, string $prefix, License_Gate $license, callable $log_error, ?callable $write_gate = null ) {
 			$this->plugin_id = $plugin_id;
 			$this->adapter   = $adapter;
 			$this->accounts  = $accounts;
@@ -214,6 +222,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->prefix    = $prefix;
 			$this->license   = $license;
 			$this->log_error = $log_error;
+			$this->write_gate = $write_gate;
 		}
 
 		/**
@@ -236,7 +245,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->schema     = new Schema( $this->adapter->id() );
 			$this->names      = $names;
 			$classifier       = $this->adapter->error_classifier();
-			$this->gate       = new Job_Gate( $this->accounts, $this->license, Account_Pause::over( $this->accounts, $classifier ) );
+			$this->gate       = new Job_Gate( $this->accounts, $this->license, Account_Pause::over( $this->accounts, $classifier ), $this->write_gate );
 			$this->links      = new Wpdb_Link_Store( $this->db, $this->table( 'links' ), $this->table( 'link_ids' ) );
 			$this->ring       = new Api_Error_Ring( $this->db, $this->table( 'api_errors' ) );
 			$this->contexts   = $this->export_context_builder();
