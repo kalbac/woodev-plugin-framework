@@ -1,6 +1,62 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.0] — 2026-11-11
+### Bug Fixes
+- **marketplace**: F14 critic round 1
+
+- **admin-records**: Drop cached children, expansion and rows when the scope changes; retry the failed child page
+
+- **admin-records**: Page-size control from PHP's options; one coherent navigation for WooCommerce's size and page callbacks
+
+- **admin-records**: Mirror the server's page, multi-value and search bounds in the URL codec and the controls
+
+- **admin-records**: Correct the Q3 claim — WooCommerce 7.0 reads the header's visible flag
+
+
+### Documentation
+- **s226**: Session save — 2.0.29 released, F14 and F5 merged, Ozon Seller O1 merged
+
+
+### Features
+- **marketplace**: F14 mappings and profiles view
+
+- **marketplace**: F14 wire the mappings view and shorten long lines
+
+- **admin-records**: F5 wire types, URL query codec and REST client
+
+- **admin-records**: F5 records table shell on the runtime TableCard
+
+- **marketplace**: Wire records pages to the admin-records shell; rebuild bundle
+
+- **admin-records**: F7 activity contract (#1685) (#1712)
+
+- **admin-records**: F6 preview and action interactions (#1684) (#1713)
+
+- **marketplace**: F9a run model, event intake, stock and price sync (#1687) (#1714)
+
+- **marketplace**: F9b-1 export core (#1688) (#1718)
+
+- **marketplace**: F9b-3 part 1 — orders and labels (#1716) (#1717)
+
+- **marketplace**: F9b-2 links and catalog refresh (#1715) (#1719)
+
+- **marketplace**: F9b-3 part 2 — wire F9a/F9b flows into Marketplace_Plugin (#1716) (#1720)
+
+
+### Build
+- **marketplace**: Rebuild marketplace-admin bundle for F14 in the primary checkout
+
+- **marketplace**: Rebuild marketplace-admin bundle after F14 critic round 1
+
+- **marketplace**: Rebuild marketplace-admin bundle after F5 critic round 1
+
+
+### Style
+- **admin-records**: Wrap long lines; tighten the stale-children test
+
+
+
 ## [2.0.29] — 2026-11-10
 ### Bug Fixes
 - **records**: Reject malformed date filters before DateTime; cover children isolation
