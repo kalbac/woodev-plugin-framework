@@ -30,7 +30,7 @@ interface Price_Context {
 	 * @since 2.0.30
 	 *
 	 * @param int $product_id Product id.
-	 * @return \WC_Product|null Null when it is gone or cannot be sold on a marketplace.
+	 * @return \WC_Product|null Null when the product no longer exists.
 	 */
 	public function product( int $product_id ): ?\WC_Product;
 

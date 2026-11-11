@@ -10,14 +10,14 @@ namespace Woodev\Tests\Unit\Marketplace\Architecture;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Reads every PHP file of `woodev/marketplace/{jobs,intake,sync}/` with the tokenizer and fails when code or a string names a
+ * Reads every PHP file of `woodev/marketplace/{flows,jobs,intake,sync}/` with the tokenizer and fails when code or a string names a
  * marketplace, or when a file depends on anything but the marketplace module. A comment may use a marketplace as an example;
  * nothing that runs may: every marketplace rule these flows need is an answer of the adapter.
  */
 final class SyncNeutralityTest extends TestCase {
 	private const MARKETPLACES = '/ozon|wildberries|yandex|aliexpress|sbermegamarket/i';
 
-	private const FOLDERS = [ 'jobs', 'intake', 'sync' ];
+	private const FOLDERS = [ 'flows', 'jobs', 'intake', 'sync' ];
 
 	/**
 	 * No identifier, constant or string names a marketplace.
