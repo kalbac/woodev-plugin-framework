@@ -143,6 +143,13 @@ abstract class Sync_Test_Case extends TestCase {
 	protected $log = [];
 
 	/**
+	 * Most prices one request of the fake marketplace takes.
+	 *
+	 * @var int
+	 */
+	protected $price_batch = 1000;
+
+	/**
 	 * Retries the registry accounting asked for: `[ account id, group key, delay ]`.
 	 *
 	 * @var array<int,array{0:int,1:string,2:int}>
@@ -193,6 +200,7 @@ abstract class Sync_Test_Case extends TestCase {
 		$this->write_gate    = null;
 		$this->log           = [];
 		$this->retries       = [];
+		$this->price_batch   = 1000;
 		$this->products      = [];
 		$this->post_status   = [];
 		$this->stock_hook    = null;
@@ -458,12 +466,12 @@ abstract class Sync_Test_Case extends TestCase {
 	}
 
 	/**
-	 * The per-request limits of the fake marketplace: 100 stock lines, 1000 prices, 15 s.
+	 * The per-request limits of the fake marketplace: 100 stock lines, 1000 prices (unless the test says otherwise), 15 s.
 	 *
 	 * @return Sync_Limits
 	 */
 	protected function limits(): Sync_Limits {
-		return new Sync_Limits( 100, 1000, 15.0 );
+		return new Sync_Limits( 100, $this->price_batch, 15.0 );
 	}
 
 	/**
