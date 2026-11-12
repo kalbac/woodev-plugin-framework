@@ -9687,3 +9687,140 @@ msgstr ""
 #: marketplace/admin/pages/products/class-site-products-rows.php:284
 msgid "По умолчанию"
 msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-activity.php:83
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:507
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:530
+msgid "Этикетки для этого заказа уже готовятся — дождитесь результата."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-activity.php:96
+#: marketplace/admin/pages/orders/class-site-orders-activity.php:100
+msgid "Этикетка"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-activity.php:96
+msgid "Маркетплейс готовит этикетки"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-activity.php:117
+msgid "Заказ обновляется по данным маркетплейса"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:99
+msgid "Отправление"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:132
+msgid "Этикетки"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:154
+msgid "Поиск по отправлению или ID заказа"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:159
+msgid "Состояние отправления"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:168
+msgid "Завершены"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:185
+msgid "Дата заказа"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:208
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:282
+msgid "Скачать этикетки"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:221
+msgid "Отправление будет отменено на маркетплейсе. Заказ на сайте обновится в течение нескольких минут."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:233
+msgid "Пояснение"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:235
+msgid "Нужно, если маркетплейс просит пояснить выбранную причину."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:251
+msgid "Заказов не найдено. Заказы появятся здесь, когда маркетплейс пришлёт их на сайт."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:252
+msgid "По этим фильтрам заказов нет."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:253
+msgid "Не удалось загрузить заказы. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:258
+msgid "Заказов на странице"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:259
+msgid "С"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:260
+msgid "По"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:264
+msgid "Проверяем заказ…"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:274
+msgid "Этикетки запрошены у маркетплейса. Ссылка появится в столбце «Этикетки», когда они будут готовы."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:280
+msgid "Ответа нет: действие могло выполниться. Мы обновили таблицу — проверьте состояние заказа."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:283
+msgid "Адрес этикеток не прошёл проверку, поэтому ссылка не показана."
+msgstr ""
+
+#. translators: %d: number of orders.
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:236
+#, php-format
+msgid "Найден %d заказ"
+msgid_plural "Найдено заказов: %d"
+msgstr[0] ""
+msgstr[1] ""
+
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:387
+msgid "Это действие недоступно для заказов этого маркетплейса."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:399
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:491
+msgid "Заказ не найден. Обновите страницу."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:449
+msgid "Выберите причину отмены."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:453
+msgid "Опишите причину отмены."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-rows.php:222
+msgid "Скачать"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-rows.php:257
+msgid "Нет права открывать этот заказ."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-rows.php:265
+msgid "Нет права изменять этот заказ."
+msgstr ""
