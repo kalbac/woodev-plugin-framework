@@ -17,7 +17,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Ip_Ranges {
 	/**
-	 * Tells whether `$ip` falls inside any entry of `$list`.
+	 * Tells whether `$ip` falls inside any entry of `$list`. An IPv4-mapped IPv6 address (`::ffff:a.b.c.d`) matches IPv4 entries as
+	 * the IPv4 address it stands for, and mapped entries match IPv4 addresses the same way.
 	 *
 	 * @since 2.1.2
 	 *
@@ -31,9 +32,17 @@ final class Ip_Ranges {
 			return false;
 		}
 
+		// A dual-stack server reports an IPv4 client as ::ffff:a.b.c.d; match it against the IPv4 ranges.
+		[ $packed_ip ] = self::unwrap_mapped( $packed_ip, 128 );
+
 		foreach ( self::tokens( $list ) as $entry ) {
 			$cidr = self::parse_cidr( $entry );
-			if ( null !== $cidr && strlen( $cidr['packed'] ) === strlen( $packed_ip ) && self::matches_prefix( $packed_ip, $cidr['packed'], $cidr['prefix'] ) ) {
+			if ( null === $cidr ) {
+				continue;
+			}
+
+			[ $network, $prefix ] = self::unwrap_mapped( $cidr['packed'], $cidr['prefix'] );
+			if ( strlen( $network ) === strlen( $packed_ip ) && self::matches_prefix( $packed_ip, $network, $prefix ) ) {
 				return true;
 			}
 		}
@@ -141,5 +150,25 @@ final class Ip_Ranges {
 		$mask = ( 0xFF << ( 8 - $rem_bits ) ) & 0xFF;
 
 		return ( ord( $ip[ $full_bytes ] ) & $mask ) === ( ord( $network[ $full_bytes ] ) & $mask );
+	}
+
+	/**
+	 * Unwraps an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`) to the plain IPv4 address and prefix it stands for. A prefix shorter
+	 * than /96 spans more than the mapped block and stays IPv6.
+	 *
+	 * @since 2.1.4
+	 *
+	 * @param string $packed Packed address or network.
+	 * @param int    $prefix Prefix length in bits.
+	 * @return array{0:string,1:int} Packed address and prefix length.
+	 */
+	private static function unwrap_mapped( string $packed, int $prefix ): array {
+		$mapped_marker = "\0\0\0\0\0\0\0\0\0\0\xff\xff";
+
+		if ( 16 !== strlen( $packed ) || 96 > $prefix || $mapped_marker !== substr( $packed, 0, 12 ) ) {
+			return [ $packed, $prefix ];
+		}
+
+		return [ substr( $packed, 12 ), $prefix - 96 ];
 	}
 }
