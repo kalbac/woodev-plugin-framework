@@ -1125,8 +1125,7 @@ class LicenseInForceTest extends TestCase {
 	 * @return void
 	 */
 	public function test_a_double_arm_keeps_the_pre_test_wpdb_for_teardown(): void {
-		$original        = new \stdClass();
-		$GLOBALS['wpdb'] = $original;
+		$original = $GLOBALS['wpdb'] ?? null;
 
 		$this->arm_wpdb();
 		$this->arm_wpdb();
