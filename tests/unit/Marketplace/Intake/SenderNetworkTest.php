@@ -137,4 +137,51 @@ final class SenderNetworkTest extends TestCase {
 		$this->assertFalse( Ip_Ranges::contains( '10.0.0.6', $list ) );
 		$this->assertFalse( Ip_Ranges::contains( 'nonsense', $list ) );
 	}
+
+	/**
+	 * An IPv4-mapped IPv6 sender (`::ffff:a.b.c.d`, any case) is matched as the IPv4 address it is, inside and outside a range.
+	 *
+	 * @return void
+	 */
+	public function test_ip_ranges_unwrap_an_ipv4_mapped_sender(): void {
+		$list = '198.51.100.0/24';
+
+		$this->assertTrue( Ip_Ranges::contains( '::ffff:198.51.100.42', $list ) );
+		$this->assertTrue( Ip_Ranges::contains( '::FFFF:198.51.100.42', $list ) );
+		$this->assertFalse( Ip_Ranges::contains( '::ffff:198.51.101.42', $list ) );
+	}
+
+	/**
+	 * A mapped entry in the list matches a plain IPv4 sender, so a list written in either form keeps working.
+	 *
+	 * @return void
+	 */
+	public function test_ip_ranges_unwrap_mapped_entries_for_plain_ipv4_senders(): void {
+		$this->assertTrue( Ip_Ranges::contains( '10.0.0.5', '::ffff:10.0.0.5' ) );
+		$this->assertTrue( Ip_Ranges::contains( '198.51.100.42', '::ffff:198.51.100.0/120' ) );
+		$this->assertFalse( Ip_Ranges::contains( '198.51.101.42', '::ffff:198.51.100.0/120' ) );
+		$this->assertTrue( Ip_Ranges::contains( '198.51.100.42', '::ffff:0:0/96' ), 'the /96 mapped block is all of IPv4' );
+	}
+
+	/**
+	 * Plain IPv6 senders and IPv6 ranges that merely contain an IPv4-looking tail are not unwrapped.
+	 *
+	 * @return void
+	 */
+	public function test_ip_ranges_leave_plain_ipv6_alone(): void {
+		$this->assertTrue( Ip_Ranges::contains( '2001:db8::1', '2001:db8::/32' ) );
+		$this->assertFalse( Ip_Ranges::contains( '2001:db8::1', '198.51.100.0/24' ) );
+		$this->assertFalse( Ip_Ranges::contains( '64:ff9b::198.51.100.42', '198.51.100.0/24' ) );
+	}
+
+	/**
+	 * Malformed mapped addresses are refused, and a malformed entry matches nothing.
+	 *
+	 * @return void
+	 */
+	public function test_ip_ranges_refuse_invalid_mapped_input(): void {
+		$this->assertFalse( Ip_Ranges::contains( '::ffff:999.1.1.1', '198.51.100.0/24' ) );
+		$this->assertFalse( Ip_Ranges::contains( '::ffff:198.51.100', '198.51.100.0/24' ) );
+		$this->assertFalse( Ip_Ranges::contains( '::ffff:198.51.100.42', '::ffff:bogus' ) );
+	}
 }
