@@ -229,7 +229,8 @@ final class ToolsControllerTest extends TestCase {
 			$registry,
 			static fn ( int $account_id ): Claim_Fence => new Claim_Fence( 'wp_fake_accounts', 'token' ),
 			static function ( int $account_id, Claim_Fence $fence ): void {},
-			static fn ( int $account_id, Claim_Fence $fence ): bool => true
+			static fn ( int $account_id, Claim_Fence $fence ): bool => true,
+			static function ( string $line ): void {}
 		);
 
 		return new Tools_Controller( 'fake_seller_plugin', 'manage_woocommerce', self::ADAPTER, $this->accounts(), $registry, $activity, $runner, $catalogue );

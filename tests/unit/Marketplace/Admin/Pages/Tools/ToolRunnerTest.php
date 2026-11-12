@@ -15,6 +15,13 @@ use Woodev\Framework\Shipping\Settings\Tool_Result;
 use Woodev\Tests\Unit\TestCase;
 
 final class ToolRunnerTest extends TestCase {
+	/**
+	 * Lines the runner logged, in order.
+	 *
+	 * @var string[]
+	 */
+	private $logged = [];
+
 	public function test_an_unknown_tool_fails_without_touching_the_claim(): void {
 		$calls  = [];
 		$runner = $this->runner( [], $calls, null );
@@ -148,6 +155,7 @@ final class ToolRunnerTest extends TestCase {
 		$this->assertSame( 'Инструмент остановился из-за ошибки. Попробуйте ещё раз позже.', $result->get_message() );
 		$this->assertStringNotContainsString( 'secret-key-123', $result->get_message() );
 		$this->assertSame( [ 'take:3', 'run:rerun:3', 'release:3:token' ], $calls );
+		$this->assertMatchesRegularExpression( '/^Tool rerun failed: RuntimeException at ToolRunnerTest\.php:\d+$/', implode( "\n", $this->logged ) );
 	}
 
 	/**
@@ -170,6 +178,9 @@ final class ToolRunnerTest extends TestCase {
 				$calls[] = 'renew:' . $account_id . ':' . $claim->token();
 
 				return true;
+			},
+			function ( string $line ): void {
+				$this->logged[] = $line;
 			}
 		);
 	}

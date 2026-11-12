@@ -21,8 +21,9 @@ defined( 'ABSPATH' ) || exit;
  * Three declarations decide when the tool may run:
  *
  * - `$remote` (default true): the tool calls the marketplace. A remote tool is a NEW remote action, so it is disabled while
- *   the licence is not in force or the account is paused, exactly like the background runs. Only a tool that touches local
- *   data alone (a migration, a cache clean) says `false`.
+ *   the licence is not in force or the account is paused, as the background runs are. The page does not check the plugin's
+ *   write gate (`Marketplace_Plugin::account_write_gate()`): a tool that writes checks that gate itself. Only a tool that
+ *   touches local data alone (a migration, a cache clean) says `false`.
  * - `$takes_claim`: the tool must not run beside a background run. It is disabled while another run holds the account
  *   claim, and the runner takes the claim itself before the callback runs. The callback then receives the claim fence for
  *   the fenced stores and a renew callable that extends the claim (it lasts a couple of minutes; a long tool calls it).

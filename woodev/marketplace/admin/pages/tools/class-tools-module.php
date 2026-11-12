@@ -84,7 +84,7 @@ final class Tools_Module {
 		$license     = License_Gate::for_plugin( $plugin );
 		$gate        = new Job_Gate( $accounts, $license, Account_Pause::over( $accounts, $adapter->error_classifier() ) );
 		$registry    = Tool_Registry::for_adapter( $adapter->id() );
-		$runner      = new Tool_Runner( $registry, [ $gate, 'claim' ], [ $gate, 'release' ], [ $gate, 'still_holds' ] );
+		$runner      = new Tool_Runner( $registry, [ $gate, 'claim' ], [ $gate, 'release' ], [ $gate, 'still_holds' ], [ $plugin, 'log_error' ] );
 		$hold        = self::remote_hold(
 			$license,
 			static function ( int $account_id ) use ( $gate ): int {
