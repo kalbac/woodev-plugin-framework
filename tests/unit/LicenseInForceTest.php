@@ -98,6 +98,8 @@ class LicenseInForceTest extends TestCase {
 			$GLOBALS['wpdb'] = $this->previous_wpdb;
 		}
 
+		$this->wpdb_armed = false;
+
 		parent::tearDown();
 	}
 
@@ -623,8 +625,11 @@ class LicenseInForceTest extends TestCase {
 	/** @var string the option the automatic-refresh backoff state lives in */
 	private const STATE_OPTION = 'woodev_test_plugin_claim_refresh_state';
 
-	/** @var mixed the global `$wpdb` before arm_wpdb() replaced it */
+	/** @var mixed the global `$wpdb` before the first arm_wpdb() of this test replaced it */
 	private $previous_wpdb = null;
+
+	/** @var bool whether arm_wpdb() has already captured $previous_wpdb in this test */
+	private bool $wpdb_armed = false;
 
 	/** @var string[] the single events scheduled so far (hook names) */
 	private array $scheduled = [];
@@ -1115,6 +1120,20 @@ class LicenseInForceTest extends TestCase {
 	}
 
 	/**
+	 * A second arm in one test keeps the pre-test `$wpdb` as the value tearDown() restores.
+	 *
+	 * @return void
+	 */
+	public function test_a_double_arm_keeps_the_pre_test_wpdb_for_teardown(): void {
+		$original = $GLOBALS['wpdb'] ?? null;
+
+		$this->arm_wpdb();
+		$this->arm_wpdb();
+
+		$this->assertSame( $original, $this->previous_wpdb, 'the second arm must not capture the first double as the original' );
+	}
+
+	/**
 	 * The options table as `$wpdb` sees it: the in-memory option map, values serialised, with the real
 	 * semantics of the two statements the budget uses — a compare-and-swap UPDATE (1 row only when the stored
 	 * value still equals the one the caller read) and INSERT IGNORE (1 row only when no row exists yet).
@@ -1182,8 +1201,14 @@ class LicenseInForceTest extends TestCase {
 			}
 		};
 
-		$this->previous_wpdb = $GLOBALS['wpdb'] ?? null;
-		$GLOBALS['wpdb']     = $wpdb;
+		// Capture the original only on the first arm: a second arm in the same test would otherwise
+		// record our own double as "previous", and tearDown() would leak it into later test classes.
+		if ( ! $this->wpdb_armed ) {
+			$this->previous_wpdb = $GLOBALS['wpdb'] ?? null;
+			$this->wpdb_armed    = true;
+		}
+
+		$GLOBALS['wpdb'] = $wpdb;
 
 		return $wpdb;
 	}
