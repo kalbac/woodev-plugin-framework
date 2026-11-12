@@ -387,7 +387,8 @@ final class Link_Jobs {
 
 		try {
 			$cards   = $this->resolver->catalogue( $account, $context, $renew, $state['catalogue'] );
-			$matched = Card_Matcher::match( $cards, call_user_func( $this->shop_products, $category_id ), $this->links->identity_map( $account_id ), $this->articles );
+			$products = call_user_func( $this->shop_products, $category_id );
+			$matched  = Card_Matcher::match( $cards, $products, $this->links->identity_map( $account_id ), $this->articles );
 
 			$renew();
 			$details = $this->resolver->details(
@@ -407,7 +408,13 @@ final class Link_Jobs {
 			throw $e;
 		}
 
-		$dropped = $this->reports->replace_near_matches( $account_id, $this->near_entries( $matched['near'], $details ) );
+		$entries = $this->near_entries( $matched['near'], $details );
+
+		if ( null !== $category_id ) {
+			$entries = array_merge( $this->near_entries_outside( $account_id, $products ), $entries );
+		}
+
+		$dropped = $this->reports->replace_near_matches( $account_id, $entries );
 
 		$this->progress->clear( $account_id, Link_Progress_Store::KIND_LINK );
 		$this->reports->save_run(
@@ -508,6 +515,27 @@ final class Link_Jobs {
 		$card = $this->resolver->confirmed( $summary, $details[ (string) $summary['offer_id'] ] ?? null );
 
 		return null !== $card && Card_Identity::same( $summary, $card ) ? $card : null;
+	}
+
+	/**
+	 * The entries of the stored report that a run over some products did not look at: a run of one category must not wipe the
+	 * pairs of the others.
+	 *
+	 * @param int                            $account_id Account id.
+	 * @param array<int,array<string,mixed>> $products   The shop products the run covered.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function near_entries_outside( int $account_id, array $products ): array {
+		$covered = array_map( 'intval', array_column( $products, 'id' ) );
+
+		return array_values(
+			array_filter(
+				$this->reports->near_matches( $account_id ),
+				static function ( array $entry ) use ( $covered ): bool {
+					return ! in_array( (int) ( $entry['wc_product_id'] ?? 0 ), $covered, true );
+				}
+			)
+		);
 	}
 
 	/**

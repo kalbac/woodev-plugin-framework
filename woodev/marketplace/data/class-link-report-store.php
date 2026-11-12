@@ -18,11 +18,16 @@ defined( 'ABSPATH' ) || exit;
  *   confirming it is a local write — a request never calls the marketplace;
  * - the **summary of the last run**, for the line the tools page and the tab show.
  *
- * A new run replaces the report: it is recomputed from the current state of both sides.
+ * A new run replaces the report: it is recomputed from the current state of both sides. A pair the merchant answered «no» to
+ * ({@see self::dismiss_near_match()}) is remembered, so the next run does not offer it again; the memory is by the product, the
+ * product's article and the card's article, so a pair whose article changed on either side is offered again. A run that does
+ * not find the pair (it covered one category, or a card detail did not come back) does not forget the answer; the memory is
+ * bounded by {@see self::MAX_ENTRIES}, oldest first.
  */
 final class Link_Report_Store {
-	public const NEAR_OPTION = 'near_matches_';
-	public const RUN_OPTION  = 'link_run_';
+	public const NEAR_OPTION      = 'near_matches_';
+	public const DISMISSED_OPTION = 'near_dismissed_';
+	public const RUN_OPTION       = 'link_run_';
 
 	/**
 	 * Most entries a report keeps. A shop with more look-alike pairs than this has a systematic problem a list cannot fix; the
@@ -49,14 +54,23 @@ final class Link_Report_Store {
 	}
 
 	/**
-	 * Replaces the near-match report of an account.
+	 * Replaces the near-match report of an account with the pairs of a run, minus the pairs the merchant answered «no» to.
 	 *
 	 * @param int                            $account_id Account id.
 	 * @param array<int,array<string,mixed>> $entries    Entries: `wc_product_id`, `wc_parent_id`, `wc_sku`, `relation`, `card`.
-	 * @return int Entries dropped for the limit.
+	 * @return int Offered entries dropped for the limit.
 	 */
 	public function replace_near_matches( int $account_id, array $entries ): int {
-		$kept = array_slice( array_values( $entries ), 0, self::MAX_ENTRIES );
+		$dismissed = $this->dismissed( $account_id );
+		$offered   = array_values(
+			array_filter(
+				$entries,
+				static function ( array $entry ) use ( $dismissed ): bool {
+					return ! in_array( self::fingerprint( $entry ), $dismissed, true );
+				}
+			)
+		);
+		$kept      = array_slice( $offered, 0, self::MAX_ENTRIES );
 
 		if ( [] === $kept ) {
 			delete_option( $this->near_option( $account_id ) );
@@ -64,7 +78,7 @@ final class Link_Report_Store {
 			update_option( $this->near_option( $account_id ), $kept, false );
 		}
 
-		return count( $entries ) - count( $kept );
+		return count( $offered ) - count( $kept );
 	}
 
 	/**
@@ -128,6 +142,33 @@ final class Link_Report_Store {
 	}
 
 	/**
+	 * «Нет, это разные»: takes the pair out of the report and remembers the answer, so that the next «link by article» run does not
+	 * offer the same pair again. Only the pair goes: the product and the card keep their other look-alikes.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int    $account_id    Account id.
+	 * @param int    $wc_product_id Product id.
+	 * @param string $offer_id      Article of the card.
+	 * @return bool False when the report holds no such pair (it was settled already).
+	 */
+	public function dismiss_near_match( int $account_id, int $wc_product_id, string $offer_id ): bool {
+		$entry = $this->find_near_match( $account_id, $wc_product_id, $offer_id );
+
+		if ( null === $entry ) {
+			return false;
+		}
+
+		$dismissed   = $this->dismissed( $account_id );
+		$dismissed[] = self::fingerprint( $entry );
+		$this->remember_dismissed( $account_id, array_slice( array_values( array_unique( $dismissed ) ), -self::MAX_ENTRIES ) );
+
+		$this->settle_near_match( $account_id, $wc_product_id, $offer_id, false );
+
+		return true;
+	}
+
+	/**
 	 * Stores the summary of the last run.
 	 *
 	 * @param int                 $account_id Account id.
@@ -158,5 +199,42 @@ final class Link_Report_Store {
 	 */
 	private function near_option( int $account_id ): string {
 		return $this->prefix . self::NEAR_OPTION . $account_id;
+	}
+
+	/**
+	 * What identifies a pair for a «no»: the product, its article and the card's article.
+	 *
+	 * @param array<string,mixed> $entry Report entry.
+	 * @return string
+	 */
+	private static function fingerprint( array $entry ): string {
+		return (int) ( $entry['wc_product_id'] ?? 0 ) . '|' . (string) ( $entry['wc_sku'] ?? '' ) . '|' . (string) ( $entry['card']['offer_id'] ?? '' );
+	}
+
+	/**
+	 * The pairs the merchant answered «no» to.
+	 *
+	 * @param int $account_id Account id.
+	 * @return string[] Fingerprints.
+	 */
+	private function dismissed( int $account_id ): array {
+		$stored = get_option( $this->prefix . self::DISMISSED_OPTION . $account_id, [] );
+
+		return is_array( $stored ) ? array_values( array_filter( $stored, 'is_string' ) ) : [];
+	}
+
+	/**
+	 * Stores the answered pairs; nothing to store removes the option.
+	 *
+	 * @param int      $account_id  Account id.
+	 * @param string[] $fingerprints Fingerprints.
+	 * @return void
+	 */
+	private function remember_dismissed( int $account_id, array $fingerprints ): void {
+		if ( [] === $fingerprints ) {
+			delete_option( $this->prefix . self::DISMISSED_OPTION . $account_id );
+		} else {
+			update_option( $this->prefix . self::DISMISSED_OPTION . $account_id, $fingerprints, false );
+		}
 	}
 }

@@ -10691,3 +10691,89 @@ msgstr ""
 #: assets/build/settings-page/index.js:7
 msgid "Новый аккаунт"
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:268
+msgid "Пара будет убрана из списка, товар и карточка останутся несвязанными. Эта пара не вернётся при следующем поиске по артикулу, пока артикул не изменится."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:347
+msgid "Пара убрана из списка: товар и карточка остались несвязанными."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:372
+msgid "Этого товара уже нет на сайте. Уберите пару кнопкой «Нет, это разные»."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:399
+msgid "Эта пара уже решена или список похожих артикулов обновился. Обновите страницу."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:156
+msgid "Показать"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:161
+msgid "Похожие артикулы — нужно решение"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:177
+msgid "Это тот же товар"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:183
+msgid "Карточка будет связана с товаром сайта, на который она похожа. На маркетплейсе ничего не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:196
+msgid "Нет, это разные"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:201
+msgid "Пара будет убрана из списка, товар и карточка останутся несвязанными."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:202
+msgid "Убрать из списка"
+msgstr ""
+
+#. translators: %s: the article of the shop product.
+#: marketplace/admin/pages/products/class-remote-cards-rows.php:110
+#, php-format
+msgid "Артикул на сайте: %s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-rows.php:144
+msgid "Артикулы отличаются регистром букв"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-rows.php:145
+msgid "Артикулы отличаются похожими буквами или цифрами"
+msgstr ""
+
+#. translators: 1: time of the run, 2: the reason it failed.
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:37
+#, php-format
+msgid "Последний поиск по артикулу (%1$s) не удался: %2$s"
+msgstr ""
+
+#. translators: 1: time of the run, 2: cards checked, 3: linked now, 4: already linked, 5: left without a pair for several candidates.
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:42
+#, php-format
+msgid "Последний поиск по артикулу (%1$s): карточек просмотрено — %2$d, связано — %3$d, уже были связаны — %4$d, неоднозначных — %5$d."
+msgstr ""
+
+#. translators: 1: pairs the list keeps, 2: pairs that did not fit.
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:55
+#, php-format
+msgid "В списке похожих артикулов показаны первые %1$d пар, ещё %2$d не поместились."
+msgstr ""
+
+#. translators: %d: number of pairs in the near-match report.
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:79
+#, php-format
+msgid "Пар с похожими артикулами, которые ждут вашего решения: %d. Выберите «Показать» → «Похожие артикулы»."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:92
+msgid "Артикулы в этих парах отличаются только регистром или буквами, которые выглядят одинаково (например, русская «С» и латинская «C», буква «O» и ноль). Автоматически такие пары не связываются: подтвердите, что это один и тот же товар, или скажите, что товары разные."
+msgstr ""

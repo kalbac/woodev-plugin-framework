@@ -111,6 +111,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Admin\\Pages\\Products\\Remote_Cards_Provider' => 'woodev/marketplace/admin/pages/products/class-remote-cards-provider.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Pages\\Products\\Remote_Cards_Query' => 'woodev/marketplace/admin/pages/products/class-remote-cards-query.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Pages\\Products\\Remote_Cards_Rows' => 'woodev/marketplace/admin/pages/products/class-remote-cards-rows.php',
+	'Woodev\\Framework\\Marketplace\\Admin\\Pages\\Products\\Remote_Cards_Summary' => 'woodev/marketplace/admin/pages/products/class-remote-cards-summary.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Pages\\Products\\Site_Products_Activity' => 'woodev/marketplace/admin/pages/products/class-site-products-activity.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Pages\\Products\\Site_Products_Bulk' => 'woodev/marketplace/admin/pages/products/class-site-products-bulk.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Pages\\Products\\Site_Products_Definition' => 'woodev/marketplace/admin/pages/products/class-site-products-definition.php',

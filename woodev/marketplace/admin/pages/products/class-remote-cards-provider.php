@@ -13,6 +13,7 @@ use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
+use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 
@@ -21,7 +22,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The cards the marketplace has in the cabinet, as a records provider: the list the «Обновить список» job stored, each card marked with
  * the product that carries its article. It is the small coordinator: filtering and paging are in {@see Remote_Cards_Query}, rows in
- * {@see Remote_Cards_Rows}, the product picker in {@see Remote_Cards_Products} and the three actions in {@see Remote_Cards_Actions}.
+ * {@see Remote_Cards_Rows}, the product picker in {@see Remote_Cards_Products} and the actions in {@see Remote_Cards_Actions}. The «Показать → Похожие артикулы» view lists the
+ * near-match report of the last «Связать по артикулу» run instead of the cards ({@see Link_Report_Store}).
  *
  * **A read of this table never calls the marketplace.** It reads the snapshot (a transient the job fills) and our link table; the only
  * way to a fresh list is the guarded job «Обновить список».
@@ -48,6 +50,11 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @var Wpdb_Link_Store
 	 */
 	private $links;
+
+	/**
+	 * @var Link_Report_Store
+	 */
+	private $reports;
 
 	/**
 	 * @var Remote_Cards_Rows
@@ -79,15 +86,17 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @param Wpdb_Account_Store    $accounts  Accounts.
 	 * @param Cards_Snapshot_Store  $snapshots Snapshot of the cabinet's cards.
 	 * @param Wpdb_Link_Store       $links     Links.
+	 * @param Link_Report_Store     $reports   The last link run's summary and near-match report.
 	 * @param Remote_Cards_Rows     $rows      Row builder.
 	 * @param Remote_Cards_Products $products  The shop's products.
 	 * @param Remote_Cards_Actions  $actions   The table's actions.
 	 * @param array<string,mixed>   $config    `adapter_id` and `marketplace`.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config ) {
+	public function __construct( Wpdb_Account_Store $accounts, Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config ) {
 		$this->accounts  = $accounts;
 		$this->snapshots = $snapshots;
 		$this->links     = $links;
+		$this->reports   = $reports;
 		$this->rows      = $rows;
 		$this->products  = $products;
 		$this->actions   = $actions;
@@ -131,7 +140,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		$account_id = $this->account_id( $context );
 
 		foreach ( $ids as $id ) {
-			if ( null === Remote_Cards_Ids::key_of( (string) $id, $account_id ) ) {
+			if ( null === Remote_Cards_Ids::key_of( (string) $id, $account_id ) && null === Remote_Cards_Ids::near_of( (string) $id, $account_id ) ) {
 				return false;
 			}
 		}
@@ -158,8 +167,13 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			];
 		}
 
+		$filters = (array) ( $query['filters'] ?? [] );
+
+		if ( Remote_Cards_Query::SHOW_NEAR === ( $filters[ Remote_Cards_Definition::SHOW_FILTER ] ?? '' ) ) {
+			return $this->near_matches( $account, (string) ( $filters['q'] ?? $query['search'] ?? '' ), (int) $query['page'], (int) $query['per_page'] );
+		}
+
 		$snapshot = $this->snapshots->get( $account->id() );
-		$filters  = (array) ( $query['filters'] ?? [] );
 		$page     = Remote_Cards_Query::page(
 			null === $snapshot ? [] : $snapshot['cards'],
 			$this->linked_offers( $account->id() ),
@@ -288,7 +302,8 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * One sentence about the list: when it was loaded and how many cards it holds, why it could not be loaded, or that there is none.
+	 * One sentence about the list: when it was loaded and how many cards it holds, why it could not be loaded, or that there is none;
+	 * then the summary of the last «link by article» run and the number of look-alike pairs that wait.
 	 *
 	 * @param int                                                             $account_id Account id.
 	 * @param array{fetched_at:int,cards:array<int,array<string,mixed>>}|null $snapshot   The stored list.
@@ -314,7 +329,36 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			$sentences[] = __( 'Список карточек не загружен или устарел. Нажмите «Обновить список».', 'woodev-plugin-framework' );
 		}
 
-		return implode( ' ', $sentences );
+		$sentences[] = Remote_Cards_Summary::last_run( $this->reports->last_run( $account_id ) );
+		$sentences[] = Remote_Cards_Summary::waiting( count( $this->reports->near_matches( $account_id ) ) );
+
+		return implode( ' ', array_filter( $sentences ) );
+	}
+
+	/**
+	 * One page of the near-match report: the pairs of a shop product and a card whose articles look alike, each waiting for the
+	 * merchant's answer. A local read of the report the last «Связать по артикулу» run stored.
+	 *
+	 * @param Account $account  The account the table is open for.
+	 * @param string  $search   Search text.
+	 * @param int     $page     Page number.
+	 * @param int     $per_page Rows per page.
+	 * @return array<string,mixed>
+	 */
+	private function near_matches( Account $account, string $search, int $page, int $per_page ): array {
+		$found = Remote_Cards_Query::near_page( $this->reports->near_matches( $account->id() ), $search, $page, $per_page );
+
+		return [
+			'rows'             => array_map(
+				function ( array $entry ) use ( $account ): array {
+					return $this->rows->near_row( $account->id(), $entry );
+				},
+				$found['entries']
+			),
+			'total'            => $found['total'],
+			'account_activity' => $this->account_activity( $account->id() ),
+			'messages'         => [ 'summary' => trim( Remote_Cards_Summary::near_explained() . ' ' . Remote_Cards_Summary::last_run( $this->reports->last_run( $account->id() ) ) ) ],
+		];
 	}
 
 	/**

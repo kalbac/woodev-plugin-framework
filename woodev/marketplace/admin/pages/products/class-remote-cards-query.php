@@ -27,6 +27,11 @@ final class Remote_Cards_Query {
 	public const ON_SITE = 'yes';
 
 	/**
+	 * The «Показать» filter: the near-match report instead of the cards.
+	 */
+	public const SHOW_NEAR = 'near';
+
+	/**
 	 * Selects a page of cards.
 	 *
 	 * @since 2.1.5
@@ -71,6 +76,57 @@ final class Remote_Cards_Query {
 		foreach ( $cards as $card ) {
 			if ( Remote_Cards_Ids::key( (string) ( $card['offer_id'] ?? '' ) ) === $key ) {
 				return $card;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Selects a page of the near-match report.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param array<int,array<string,mixed>> $entries  The report: `wc_product_id`, `wc_sku`, `relation`, `card`.
+	 * @param string                         $search   Text looked for in the card's article and name and in the product's article; empty for none.
+	 * @param int                            $page     Page number, from 1.
+	 * @param int                            $per_page Entries per page.
+	 * @return array{entries:array<int,array<string,mixed>>,total:int}
+	 */
+	public static function near_page( array $entries, string $search, int $page, int $per_page ): array {
+		$needle   = trim( $search );
+		$matching = array_values(
+			array_filter(
+				$entries,
+				static function ( array $entry ) use ( $needle ): bool {
+					return '' === $needle
+						|| false !== mb_stripos( (string) ( $entry['card']['offer_id'] ?? '' ), $needle )
+						|| false !== mb_stripos( (string) ( $entry['card']['name'] ?? '' ), $needle )
+						|| false !== mb_stripos( (string) ( $entry['wc_sku'] ?? '' ), $needle );
+				}
+			)
+		);
+
+		return [
+			'entries' => array_slice( $matching, ( max( 1, $page ) - 1 ) * max( 1, $per_page ), max( 1, $per_page ) ),
+			'total'   => count( $matching ),
+		];
+	}
+
+	/**
+	 * Finds an entry of the near-match report by the key of its card's article and the product.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param array<int,array<string,mixed>> $entries    The report.
+	 * @param string                         $key        {@see Remote_Cards_Ids::key()}.
+	 * @param int                            $product_id The shop product.
+	 * @return array<string,mixed>|null Null when the report no longer holds the pair.
+	 */
+	public static function find_near( array $entries, string $key, int $product_id ): ?array {
+		foreach ( $entries as $entry ) {
+			if ( (int) ( $entry['wc_product_id'] ?? 0 ) === $product_id && Remote_Cards_Ids::key( (string) ( $entry['card']['offer_id'] ?? '' ) ) === $key ) {
+				return $entry;
 			}
 		}
 

@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
+use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Uninstaller;
@@ -193,10 +194,13 @@ final class Site_Products_Module {
 		$ledger   = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
 		$products = new Remote_Cards_Products( Remote_Cards_Products::woocommerce_search() );
 		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ] );
-		$store    = new Cards_Snapshot_Store( Uninstaller::option_prefix( $plugin->get_id() ) );
+		$options  = Uninstaller::option_prefix( $plugin->get_id() );
+		$store    = new Cards_Snapshot_Store( $options );
+		$reports  = new Link_Report_Store( $options );
 		$actions  = new Remote_Cards_Actions(
 			$store,
 			$links,
+			$reports,
 			new Card_Linker( $links ),
 			new Link_Scheduler( new Job_Names( $plugin->get_id() ) ),
 			self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
@@ -209,6 +213,7 @@ final class Site_Products_Module {
 			$accounts,
 			$store,
 			$links,
+			$reports,
 			$rows,
 			$products,
 			$actions,
