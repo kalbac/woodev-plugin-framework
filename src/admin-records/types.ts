@@ -77,6 +77,8 @@ export interface ActionField {
 	required: boolean;
 	options: Option[];
 	options_source: boolean;
+	/** A select whose options are listed by the server may be searched: the merchant types, the server filters. */
+	searchable?: boolean;
 	help: string;
 }
 

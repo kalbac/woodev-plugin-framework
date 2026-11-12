@@ -368,7 +368,7 @@ if ( ! class_exists( Menu::class, false ) ) :
 					continue;
 				}
 
-				$entries[] = [
+				$entry = [
 					'id'          => $page->get_slug(),
 					'title'       => $page->get_title(),
 					'path'        => $this->get_page_path( $page ),
@@ -378,6 +378,13 @@ if ( ! class_exists( Menu::class, false ) ) :
 					'breadcrumbs' => [ [ $landing, $this->title ], $page->get_title() ],
 					'analytics'   => null,
 				];
+
+				// Only a page that offers several tables names them, so every other page's entry is as it was.
+				if ( [] !== $page->get_table_labels() ) {
+					$entry['tableLabels'] = $page->get_table_labels();
+				}
+
+				$entries[] = $entry;
 			}
 
 			if ( [] === $entries ) {
