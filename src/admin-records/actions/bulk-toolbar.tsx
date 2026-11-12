@@ -3,7 +3,9 @@
  * selection; an account-wide action does not need one, and its dialog says how far it reaches before anything runs.
  *
  * When the page has an activity part, a bulk action is also off — with the reason written beside it — while the
- * account line blocks it or a selected row's lock does.
+ * account line blocks it or a selected row's lock does. A selected row is a top-level row or an expanded child (a
+ * variation); the refresh loop keeps both fresh, so the button follows a lock that appears after the row was ticked.
+ * A parent's own lock only says that every variation is blocked; a selected expanded child adds its own.
  *
  * @package woodev-plugin-framework
  */
@@ -29,8 +31,7 @@ export interface BulkToolbarProps {
 const NO_ACTIVITY = createActivityState();
 
 /**
- * Why a bulk action cannot run now: the account line blocks it, or a selected row's lock does. Visible text from
- * PHP. Only top-level rows are known to the handle; PHP still refuses a blocked child on apply.
+ * Why a bulk action cannot run now: the account line blocks it, or a selected row's lock does. Visible text from PHP.
  */
 function blockedReason(
 	action: ActionDescriptor,
@@ -43,7 +44,7 @@ function blockedReason(
 		return account;
 	}
 
-	const locked = table.rows.find(
+	const locked = [ ...table.rows, ...table.children ].find(
 		( row ) => selectedIds.includes( row.id ) && row.activity?.blocked_actions.includes( action.id )
 	);
 

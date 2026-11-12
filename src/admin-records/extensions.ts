@@ -23,6 +23,8 @@ export interface TableHandle {
 	query: RecordsQuery;
 	/** Top-level rows on screen. */
 	rows: AdminRecord[];
+	/** Child rows (variations) of the expanded top-level rows, as far as they are loaded. */
+	children: AdminRecord[];
 	/** Ids of every row on screen, expanded children included — what an activity read asks about. */
 	visibleIds: string[];
 	/**
