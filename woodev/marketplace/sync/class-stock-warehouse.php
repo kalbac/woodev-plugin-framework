@@ -14,8 +14,9 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * The link's own warehouse, else the account's default; none means the product is reported «Не выбран склад» and nothing is
- * sent. An oversize product takes only a warehouse chosen on its link: falling back to the default warehouse is guesswork that
- * sends oversize goods to the wrong place.
+ * sent. An oversize product takes its link's warehouse, else the account's oversize warehouse
+ * (`settings.oversize_warehouse_id`): falling back to the default warehouse is guesswork that sends oversize goods to the wrong
+ * place, so without an oversize warehouse the product has none.
  *
  * @since 2.1.0
  */
@@ -37,11 +38,21 @@ final class Stock_Warehouse {
 		}
 
 		if ( $link->is_oversize() ) {
-			return null;
+			return self::positive( $account->setting( 'oversize_warehouse_id', 0 ) );
 		}
 
-		$default = (int) $account->setting( 'warehouse_id', 0 );
+		return self::positive( $account->setting( 'warehouse_id', 0 ) );
+	}
 
-		return $default > 0 ? $default : null;
+	/**
+	 * Turns a stored warehouse id into an id or null.
+	 *
+	 * @param mixed $stored Stored value.
+	 * @return int|null
+	 */
+	private static function positive( $stored ): ?int {
+		$id = (int) $stored;
+
+		return $id > 0 ? $id : null;
 	}
 }

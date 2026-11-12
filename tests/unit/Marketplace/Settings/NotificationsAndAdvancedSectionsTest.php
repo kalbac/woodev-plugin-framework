@@ -289,7 +289,7 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertSame( [], $notif->sections() );
 	}
 
-	public function test_the_proxy_notice_appears_only_in_debug_mode_and_only_behind_a_proxy(): void {
+	public function test_the_proxy_notice_needs_a_proxy_and_a_recent_notification_on_the_old_address_and_not_the_logging(): void {
 		$remote = $_SERVER['REMOTE_ADDR'] ?? null;
 
 		if ( ! class_exists( '\\WC_Geolocation' ) ) {
@@ -302,11 +302,20 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		try {
 			$notif = $this->push_section( new Fake_Push_Protocol() );
 
-			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'a merchant who did not switch on the logging sees nothing' );
+			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'behind a proxy, but nothing arrives on the old address' );
 
-			$this->options['woodev_fake_mp_advanced_logging'] = 'yes';
+			$this->record_event( 'tokenised', false, time() );
+			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'an address with a token needs no notice' );
 
-			$this->assertStringContainsString( 'woodev_fake_push_trusted_proxies', $notif->sections()[0]->get_description() );
+			$this->record_event( 'stale', true, time() - 30 * DAY_IN_SECONDS );
+			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'an old address that went quiet needs no notice' );
+
+			$this->record_event( 'fresh', true, time() - DAY_IN_SECONDS );
+			$description = $notif->sections()[0]->get_description();
+
+			$this->assertStringContainsString( 'за прокси', $description, 'shown without the logging setting' );
+			$this->assertStringContainsString( 'старый адрес на новый', $description );
+			$this->assertStringContainsString( 'woodev_fake_push_trusted_proxies', $description );
 
 			\WC_Geolocation::$address = '10.0.0.2';
 
@@ -320,6 +329,21 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 				$_SERVER['REMOTE_ADDR'] = $remote;
 			}
 		}
+	}
+
+	/**
+	 * Stores one inbound event in the journal.
+	 *
+	 * @param string $key    Deduplication key.
+	 * @param bool   $legacy Whether it came on the old address without a token.
+	 * @param int    $time   Receipt time.
+	 * @return void
+	 */
+	private function record_event( string $key, bool $legacy, int $time ): void {
+		$ledger = new \Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger( $this->db, $this->schema->table_name( 'events', Sqlite_Tables::PREFIX ) );
+		$event  = new \Woodev\Framework\Marketplace\Ledger\Inbound_Event( null, 'order_created', $key, [], ( new \DateTimeImmutable( '@' . $time ) ), '203.0.113.5', true );
+
+		$ledger->record( $event->with_legacy_url( $legacy ) );
 	}
 
 	/**

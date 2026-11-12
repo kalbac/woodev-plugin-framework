@@ -334,6 +334,7 @@ final class Schema {
 			result text NULL,
 			source_ip varchar(45) NOT NULL DEFAULT '',
 			ip_trusted tinyint(1) NOT NULL DEFAULT 0,
+			legacy_url tinyint(1) NOT NULL DEFAULT 0,
 			PRIMARY KEY  (event_id),
 			UNIQUE KEY account_dedup (account_id,dedup_key),
 			KEY account_status (account_id,status,next_attempt_at),

@@ -10,6 +10,8 @@ namespace Woodev\Framework\Marketplace\Intake;
 use Woodev\Framework\Marketplace\Jobs\Drain_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Inbound_Decoder;
+use Woodev\Framework\Marketplace\Ledger\Inbound_Event;
+use Woodev\Framework\Marketplace\Sync\Stock_Mode;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -147,7 +149,7 @@ final class Notification_Intake {
 			return $this->retryable( $e );
 		}
 
-		return $this->ingest( $account, $raw_body, $this->network->client_ip( $server ) );
+		return $this->ingest( $account, $raw_body, $this->network->client_ip( $server ), false );
 	}
 
 	/**
@@ -177,7 +179,7 @@ final class Notification_Intake {
 			return $this->retryable( $e );
 		}
 
-		return $this->ingest( $account, $raw_body, $ip );
+		return $this->ingest( $account, $raw_body, $ip, true );
 	}
 
 	/**
@@ -186,9 +188,10 @@ final class Notification_Intake {
 	 * @param Notification_Account|null $account  Account the endpoint resolved, if any.
 	 * @param string                    $raw_body Raw request body.
 	 * @param string                    $ip       Sender address.
+	 * @param bool                      $legacy   Whether it came on the old address without a token.
 	 * @return Intake_Response
 	 */
-	private function ingest( ?Notification_Account $account, string $raw_body, string $ip ): Intake_Response {
+	private function ingest( ?Notification_Account $account, string $raw_body, string $ip, bool $legacy ): Intake_Response {
 		$event = $this->decoder->decode( $raw_body, null === $account ? null : $account->id(), $ip );
 
 		if ( null === $event ) {
@@ -196,10 +199,10 @@ final class Notification_Intake {
 		}
 
 		// Whether the address is the marketplace's is the framework's call, not the decoder's.
-		$event = $event->with_ip_trusted( $this->network->is_allowed( $ip ) );
+		$event = $event->with_ip_trusted( $this->network->is_allowed( $ip ) )->with_legacy_url( $legacy );
 
 		// A switched-off type is stored and never worked, and answered 200: a 4xx would count against the URL in the marketplace's health check.
-		if ( '' === $event->ignore_reason() && ! $this->switches->is_enabled( $event->type() ) ) {
+		if ( '' === $event->ignore_reason() && ! $this->accepts( $event, $account ) ) {
 			$event = $event->with_ignore_reason( self::SWITCHED_OFF );
 		}
 
@@ -215,6 +218,22 @@ final class Notification_Intake {
 		}
 
 		return Intake_Response::ok( $this->decoder->success_body() );
+	}
+
+	/**
+	 * Tells whether the merchant wants this kind of notification: its switch is on and, for the stock notification, the account
+	 * syncs stock at all.
+	 *
+	 * @param Inbound_Event             $event   Decoded event.
+	 * @param Notification_Account|null $account Account the endpoint resolved, if any.
+	 * @return bool
+	 */
+	private function accepts( Inbound_Event $event, ?Notification_Account $account ): bool {
+		if ( ! $this->switches->is_enabled( $event->type() ) ) {
+			return false;
+		}
+
+		return null === $account || ! $this->switches->is_stock( $event->type() ) || Stock_Mode::OFF !== $account->stock_mode();
 	}
 
 	/**

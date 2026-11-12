@@ -309,7 +309,7 @@ final class Stock_Flusher {
 		}
 
 		if ( ! $archives && ! $site ) {
-			return __( 'Остатки ведёт маркетплейс: магазин их не отправляет.', 'woodev-plugin-framework' );
+			return __( 'Остатки ведёт маркетплейс или не синхронизируются: магазин их не отправляет.', 'woodev-plugin-framework' );
 		}
 
 		if ( ! $archives && ! $link->sync_stock() ) {

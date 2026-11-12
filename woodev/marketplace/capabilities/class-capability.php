@@ -53,6 +53,12 @@ final class Capability {
 	public const RENAME_SKU = 'rename_sku';
 
 	/**
+	 * Oversize goods go to a warehouse of their own (Ozon КГТ): the account settings offer an oversize warehouse and an oversize
+	 * product without a warehouse on its link takes it.
+	 */
+	public const OVERSIZE_WAREHOUSE = 'oversize_warehouse';
+
+	/**
 	 * Lists every capability name.
 	 *
 	 * @since 2.0.29
@@ -68,6 +74,7 @@ final class Capability {
 			self::CONFIRM_SHIPMENT,
 			self::IMPORT_PRODUCTS,
 			self::RENAME_SKU,
+			self::OVERSIZE_WAREHOUSE,
 		];
 	}
 }

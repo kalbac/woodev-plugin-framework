@@ -368,6 +368,36 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * An account that does not sync stock drops the stock notification like a switched-off type, and still takes the others.
+	 *
+	 * @return void
+	 */
+	public function test_an_account_with_stock_off_drops_the_stock_notification_only(): void {
+		$this->accounts()->update_fields( $this->a, [ 'stock_mode' => 'off' ] );
+
+		$this->assertSame( 200, $this->push( [ 'kind' => 'stock_changed', 'id' => '2-1' ] )->status() );
+		$this->assertSame( [ 'ignored' ], array_column( $this->events(), 'status' ) );
+		$this->assertSame( [], $this->scheduler->actions, 'nothing is queued for a stock notification of an account with stock off' );
+
+		$this->push( $this->order_created( '3-1' ) );
+		$this->push( [ 'kind' => 'stock_changed', 'id' => '2-2' ], $this->b );
+
+		$this->assertSame( [ 'ignored', 'new', 'new' ], array_column( $this->events(), 'status' ) );
+	}
+
+	/**
+	 * The journal remembers which address an event came on, so the proxy notice can tell the old address from the new one.
+	 *
+	 * @return void
+	 */
+	public function test_the_journal_marks_events_that_came_on_the_address_without_a_token(): void {
+		$this->push( $this->order_created( '1-1' ) );
+		$this->intake->handle_tokenless( 'cabinet-4417', $this->json( $this->order_created( '1-2' ) ), $this->from( Fake_Push_Protocol::TRUSTED_IP ) );
+
+		$this->assertSame( [ '0', '1' ], array_map( 'strval', array_column( $this->events(), 'legacy_url' ) ) );
+	}
+
+	/**
 	 * The intake, not the decoder, says whether the sender is the marketplace's: the decoder reports every address as foreign.
 	 *
 	 * @return void

@@ -70,6 +70,7 @@ final class Sqlite_Schema {
 				result TEXT NULL,
 				source_ip TEXT NOT NULL DEFAULT '',
 				ip_trusted INTEGER NOT NULL DEFAULT 0,
+				legacy_url INTEGER NOT NULL DEFAULT 0,
 				UNIQUE (account_id, dedup_key)
 			)"
 		);

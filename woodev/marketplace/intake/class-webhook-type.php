@@ -56,6 +56,13 @@ final class Webhook_Type {
 	private $default_enabled;
 
 	/**
+	 * Whether this is the stock notification, which an account that does not sync stock does not subscribe to.
+	 *
+	 * @var bool
+	 */
+	private $stock;
+
+	/**
 	 * Creates a type.
 	 *
 	 * @since 2.1.2
@@ -65,13 +72,15 @@ final class Webhook_Type {
 	 * @param string $purpose          What the notification is for, in a sentence a WordPress novice understands.
 	 * @param string $cabinet_location Where in the marketplace cabinet the shop's address goes, e.g. «Настройки → Интеграции → Уведомления».
 	 * @param bool   $default_enabled  Whether the switch is on until the merchant changes it.
+	 * @param bool   $stock            Whether this is the stock notification: an account in the stock mode `off` drops it.
 	 */
-	public function __construct( string $id, string $label, string $purpose, string $cabinet_location, bool $default_enabled = true ) {
+	public function __construct( string $id, string $label, string $purpose, string $cabinet_location, bool $default_enabled = true, bool $stock = false ) {
 		$this->id               = $id;
 		$this->label            = $label;
 		$this->purpose          = $purpose;
 		$this->cabinet_location = $cabinet_location;
 		$this->default_enabled  = $default_enabled;
+		$this->stock            = $stock;
 	}
 
 	/**
@@ -127,5 +136,16 @@ final class Webhook_Type {
 	 */
 	public function default_enabled(): bool {
 		return $this->default_enabled;
+	}
+
+	/**
+	 * Tells whether this is the stock notification.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @return bool
+	 */
+	public function is_stock(): bool {
+		return $this->stock;
 	}
 }

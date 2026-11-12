@@ -61,7 +61,7 @@ final class Fake_Push_Protocol implements Push_Protocol {
 		return $this->types ?? [
 			new Webhook_Type( 'order_created', 'Новый заказ', 'Сообщает о новом заказе.', 'Кабинет → Уведомления' ),
 			new Webhook_Type( 'order_changed', 'Изменение заказа', 'Сообщает, что заказ изменился.', 'Кабинет → Уведомления' ),
-			new Webhook_Type( 'stock_changed', 'Остатки', 'Сообщает об изменении остатков.', 'Кабинет → Уведомления' ),
+			new Webhook_Type( 'stock_changed', 'Остатки', 'Сообщает об изменении остатков.', 'Кабинет → Уведомления', true, true ),
 		];
 	}
 

@@ -111,8 +111,13 @@ final class Stock_Readback {
 	 */
 	public function reconcile( Account_Run $run, array $links ): array {
 		$account = $run->account();
-		$site    = Stock_Mode::is_site( $account );
-		$groups  = [];
+
+		if ( Stock_Mode::is_off( $account ) ) {
+			return []; // Nothing is compared and nothing is mirrored.
+		}
+
+		$site   = Stock_Mode::is_site( $account );
+		$groups = [];
 
 		foreach ( $links as $link ) {
 			$warehouse = Stock_Warehouse::for_link( $account, $link );

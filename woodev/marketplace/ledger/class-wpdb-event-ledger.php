@@ -112,6 +112,7 @@ class Wpdb_Event_Ledger implements Event_Ledger {
 			self::clip( $event->ignore_reason() ),
 			$event->source_ip(),
 			$event->ip_trusted() ? 1 : 0,
+			$event->legacy_url() ? 1 : 0,
 		];
 		if ( null !== $account ) {
 			array_splice( $values, 1, 0, [ $account ] );
@@ -119,7 +120,7 @@ class Wpdb_Event_Ledger implements Event_Ledger {
 
 		$result = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only fixed fragments and placeholders are concatenated into the statement.
 			$this->db->prepare(
-				'INSERT IGNORE INTO %i (account_id, type, dedup_key, received_at, status, payload, result, source_ip, ip_trusted) VALUES (' . ( null === $account ? 'NULL' : '%d' ) . ', %s, %s, %s, %s, %s, %s, %s, %d)',
+				'INSERT IGNORE INTO %i (account_id, type, dedup_key, received_at, status, payload, result, source_ip, ip_trusted, legacy_url) VALUES (' . ( null === $account ? 'NULL' : '%d' ) . ', %s, %s, %s, %s, %s, %s, %s, %d, %d)',
 				$values
 			)
 		);
@@ -317,7 +318,7 @@ class Wpdb_Event_Ledger implements Event_Ledger {
 			(string) $row['source_ip'],
 			(bool) $row['ip_trusted'],
 			(int) $row['event_id']
-		) )->with_attempts( (int) $row['attempts'] );
+		) )->with_attempts( (int) $row['attempts'] )->with_legacy_url( ! empty( $row['legacy_url'] ) );
 	}
 
 	/**

@@ -45,4 +45,18 @@ final class WebhookSwitchesTest extends TestCase {
 		$this->assertTrue( $switches->is_enabled( 'undeclared' ) );
 		$this->assertSame( 'webhook_a', Webhook_Switches::setting_id( 'a' ) );
 	}
+
+	public function test_only_a_type_declared_as_stock_is_the_stock_notification(): void {
+		$switches = new Webhook_Switches(
+			[
+				new Webhook_Type( 'a', 'A', 'a', '' ),
+				new Webhook_Type( 'stocks', 'S', 's', '', true, true ),
+			],
+			'woodev_x_'
+		);
+
+		$this->assertTrue( $switches->is_stock( 'stocks' ) );
+		$this->assertFalse( $switches->is_stock( 'a' ) );
+		$this->assertFalse( $switches->is_stock( 'undeclared' ) );
+	}
 }

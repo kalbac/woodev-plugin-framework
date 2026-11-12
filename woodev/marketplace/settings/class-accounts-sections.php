@@ -604,6 +604,20 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			)
 		);
 
+		if ( $this->adapter->supports( Capability::OVERSIZE_WAREHOUSE ) ) {
+			$this->add_select(
+				$handler,
+				self::setting_id( $key, 'oversize_warehouse_id' ),
+				__( 'Склад для крупногабаритных товаров', 'woodev-plugin-framework' ),
+				$this->warehouse_options( $account_id, 'oversize_warehouse_id' ),
+				sprintf(
+					/* translators: %s: marketplace name. */
+					__( 'Склад кабинета %s для крупногабаритных товаров без своего склада. Если не выбран, у такого товара остатки не отправляются: подставлять обычный склад нельзя.', 'woodev-plugin-framework' ),
+					$marketplace
+				)
+			);
+		}
+
 		if ( $this->adapter->supports( Capability::INBOUND_STOCK ) ) {
 			$this->add_select(
 				$handler,
@@ -620,6 +634,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 						/* translators: %s: marketplace name. */
 						sprintf( __( 'Главный — %1$s: остатки приходят с %2$s на сайт', 'woodev-plugin-framework' ), $marketplace, $marketplace )
 					),
+					self::option( Wpdb_Account_Store::STOCK_OFF, __( 'Не синхронизировать: остатки не отправляются и не приходят', 'woodev-plugin-framework' ) ),
 				],
 				__( 'Где ведётся учёт остатков.', 'woodev-plugin-framework' )
 			);
@@ -797,6 +812,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$all_ids   = [];
 		$stock_ids = [ self::setting_id( $key, 'warehouse_id' ) ];
 
+		if ( $this->adapter->supports( Capability::OVERSIZE_WAREHOUSE ) ) {
+			$stock_ids[] = self::setting_id( $key, 'oversize_warehouse_id' );
+		}
+
 		if ( $this->adapter->supports( Capability::INBOUND_STOCK ) ) {
 			$stock_ids[] = self::setting_id( $key, 'stock_mode' );
 		}
@@ -931,6 +950,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			case 'warehouse_id':
 				$id = (int) $account->setting( 'warehouse_id', 0 );
 				return $id > 0 ? (string) $id : '0';
+			case 'oversize_warehouse_id':
+				return (string) max( 0, (int) $account->setting( 'oversize_warehouse_id', 0 ) );
 			case 'stock_mode':
 				return (string) $account->setting( 'stock_mode', Wpdb_Account_Store::STOCK_SITE );
 			case 'price_direction':
@@ -1104,6 +1125,9 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				$wh = (int) $text;
 				$this->store->update_fields( $id, [ 'warehouse_id' => $wh > 0 ? $wh : null ] );
 				return;
+			case 'oversize_warehouse_id':
+				$this->save_oversize_warehouse( $id, (int) $text );
+				return;
 			case 'stock_mode':
 				$this->store->update_fields( $id, [ 'stock_mode' => $text ] );
 				return;
@@ -1118,6 +1142,28 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				$this->store->update_fields( $id, [ 'import_enabled' => self::to_bool( $value ) ] );
 				return;
 		}
+	}
+
+	/**
+	 * Saves the account's oversize warehouse into the `settings` JSON (it has no column); none removes the entry.
+	 *
+	 * @param int $id        Account id.
+	 * @param int $warehouse Marketplace warehouse id, 0 for none.
+	 * @return void
+	 */
+	private function save_oversize_warehouse( int $id, int $warehouse ): void {
+		$this->store->update_settings(
+			$id,
+			static function ( array $current ) use ( $warehouse ): array {
+				if ( $warehouse > 0 ) {
+					$current['oversize_warehouse_id'] = $warehouse;
+				} else {
+					unset( $current['oversize_warehouse_id'] );
+				}
+
+				return $current;
+			}
+		);
 	}
 
 	/**
@@ -1267,14 +1313,15 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	/**
 	 * Builds warehouse select pairs for an account, preserving a stored warehouse id even before the cache is populated.
 	 *
-	 * @param int $account_id Account id.
+	 * @param int    $account_id Account id.
+	 * @param string $setting    Account setting that holds the stored warehouse (`warehouse_id` or `oversize_warehouse_id`).
 	 * @return array<int,array{value:string,label:string}>
 	 */
-	private function warehouse_options( int $account_id ): array {
+	private function warehouse_options( int $account_id, string $setting = 'warehouse_id' ): array {
 		$pairs   = [ self::option( '0', __( '— Выберите склад —', 'woodev-plugin-framework' ) ) ];
 		$cached  = $this->warehouses->for_account( $account_id );
 		$account = $this->accounts()[ $account_id ] ?? null;
-		$stored  = null !== $account ? (int) $account->setting( 'warehouse_id', 0 ) : 0;
+		$stored  = null !== $account ? (int) $account->setting( $setting, 0 ) : 0;
 
 		if ( $stored > 0 && ! isset( $cached[ (string) $stored ] ) ) {
 			$pairs[] = self::option( (string) $stored, '#' . $stored );
@@ -1365,7 +1412,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return array_values(
 			array_unique(
 				array_merge(
-					[ 'name', 'enabled', 'warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled' ],
+					[ 'name', 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled' ],
 					$this->credential_field_names(),
 					array_keys( self::PRICE_RULE_FIELDS )
 				)

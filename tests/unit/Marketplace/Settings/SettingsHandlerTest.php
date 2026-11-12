@@ -128,7 +128,7 @@ final class SettingsHandlerTest extends TestCase {
 			null,
 			[
 				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
-				'capabilities'        => [ Capability::INBOUND_STOCK, Capability::IMPORT_PRODUCTS ],
+				'capabilities'        => [ Capability::INBOUND_STOCK, Capability::IMPORT_PRODUCTS, Capability::OVERSIZE_WAREHOUSE ],
 				'credential_fields'   => $fields,
 				'settings_descriptor' => $descriptor,
 			]
@@ -188,12 +188,16 @@ final class SettingsHandlerTest extends TestCase {
 		$handler->get_setting( "account_{$acc_id}_access_token" )->set_value( '' );
 		$handler->get_setting( "account_{$acc_id}_signing_secret" )->set_value( '' );
 		$handler->get_setting( "account_{$acc_id}_warehouse_id" )->set_value( '91' );
+		$handler->get_setting( "account_{$acc_id}_oversize_warehouse_id" )->set_value( '91' );
+		$handler->get_setting( "account_{$acc_id}_stock_mode" )->set_value( 'off' );
 		$handler->save();
 
 		$reloaded = $store->get( $acc_id );
 		$this->assertNotNull( $reloaded );
 		$this->assertSame( 'Renamed Shop', $reloaded->name() );
 		$this->assertSame( 91, $reloaded->setting( 'warehouse_id' ) );
+		$this->assertSame( 91, $reloaded->setting( 'oversize_warehouse_id' ), 'the oversize warehouse lives in the settings JSON' );
+		$this->assertSame( 'off', $reloaded->setting( 'stock_mode' ), 'the stock mode «Не синхронизировать»' );
 		$this->assertSame( 'super-secret-access-token-111', $reloaded->credentials()['access_token'] );
 		$this->assertSame( 'super-secret-signing-key-222', $reloaded->credentials()['signing_secret'] );
 	}
