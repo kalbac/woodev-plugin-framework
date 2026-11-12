@@ -454,8 +454,18 @@ What the code settled, where the text above left it open:
   `Notifications_Section::option_names()` are gone. **The address refuses a request on one route only**: the legacy URL without
   a token (`Notification_Intake::handle_tokenless()`, a plugin's own route). On the framework's route the 32-character token in the
   path is the credential and the address is only recorded, so a shop behind a proxy loses nothing there. Proxy detection reuses
-  WooCommerce: `WC_Geolocation::get_ip_address()` differing from `REMOTE_ADDR`; the notice shows in the notifications card only
-  with «Логирование» on.
+  WooCommerce: `WC_Geolocation::get_ip_address()` differing from `REMOTE_ADDR`; the notice shows in the notifications card (#1735) only while a proxy is detected **and** the
+  shop received a request on the tokenless URL within the last 14 days (`Tokenless_Seen`, the option
+  `woodev_{plugin id}_tokenless_seen_at`, noted by `Notification_Intake::handle_tokenless()` **before** the sender check, at most
+  once an hour — behind a proxy that check refuses the request and the journal stores nothing); it needs no
+  «Логирование» and asks the merchant to replace the address in the cabinet with the tokenised one.
+- **Oversize warehouse and stock mode `off` (#1734).** `Stock_Warehouse` gives an oversize product its link's warehouse, else the
+  account's `settings.oversize_warehouse_id`, else none — never the default warehouse. The select lists warehouses with the cache's
+  neutral `oversize` flag first, labelled «(КГТ)» (`Warehouse_Options::for_account( $id, true )`; the adapter maps its own word). An adapter that declares
+  `Capability::OVERSIZE_WAREHOUSE` gets the «Склад для крупногабаритных товаров» select in the account parameters. `Stock_Mode::OFF`
+  (`stock_mode = 'off'`): no stock push except the zero that precedes an archive, no readback or mirroring, and the intake drops a `Webhook_Type` declared as the stock one
+  (`$stock = true`) as `ignored`; an adapter's `Push_Admin` leaves that type out of the wanted subscriptions for an account whose
+  `Notification_Account::stock_mode()` is `Stock_Mode::OFF`.
 - **Notification types are switches.** The adapter declares them in `Push_Protocol::webhook_types()` (`Webhook_Type`: id = the
   decoder's event type, label, purpose, cabinet location, default). The framework registers one toggle per type
   (`woodev_{plugin id}_webhook_{type id}`), explains them in the first card, and `Notification_Intake` stores a switched-off type

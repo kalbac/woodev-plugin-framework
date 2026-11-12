@@ -289,7 +289,7 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertSame( [], $notif->sections() );
 	}
 
-	public function test_the_proxy_notice_appears_only_in_debug_mode_and_only_behind_a_proxy(): void {
+	public function test_the_proxy_notice_needs_a_proxy_and_a_recent_request_on_the_old_address_even_one_the_proxy_made_refuse(): void {
 		$remote = $_SERVER['REMOTE_ADDR'] ?? null;
 
 		if ( ! class_exists( '\\WC_Geolocation' ) ) {
@@ -302,14 +302,23 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		try {
 			$notif = $this->push_section( new Fake_Push_Protocol() );
 
-			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'a merchant who did not switch on the logging sees nothing' );
+			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'behind a proxy, but nothing arrives on the old address' );
 
-			$this->options['woodev_fake_mp_advanced_logging'] = 'yes';
+			// The proxy's address is not the marketplace's: the old address refuses the request with a 403 and stores nothing.
+			$answer = $this->intake()->handle_tokenless( 'cabinet-4417', '{}', [ 'REMOTE_ADDR' => Fake_Push_Protocol::FOREIGN_IP ] );
+			$this->assertSame( 403, $answer->status() );
 
-			$this->assertStringContainsString( 'woodev_fake_push_trusted_proxies', $notif->sections()[0]->get_description() );
+			$description = $notif->sections()[0]->get_description();
 
+			$this->assertStringContainsString( 'за прокси', $description, 'shown without the logging setting' );
+			$this->assertStringContainsString( 'старый адрес на новый', $description );
+			$this->assertStringContainsString( 'woodev_fake_push_trusted_proxies', $description );
+
+			$this->options['woodev_fake_mp_tokenless_seen_at'] = time() - 30 * DAY_IN_SECONDS;
+			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'an old address that went quiet needs no notice' );
+
+			$this->options['woodev_fake_mp_tokenless_seen_at'] = time();
 			\WC_Geolocation::$address = '10.0.0.2';
-
 			$this->assertStringNotContainsString( 'за прокси', $notif->sections()[0]->get_description(), 'no forwarded address, no proxy' );
 		} finally {
 			\WC_Geolocation::$address = null;
@@ -320,6 +329,51 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 				$_SERVER['REMOTE_ADDR'] = $remote;
 			}
 		}
+	}
+
+	public function test_a_request_on_the_old_address_is_noted_at_most_once_an_hour(): void {
+		$now  = 1000000;
+		$seen = new \Woodev\Framework\Marketplace\Intake\Tokenless_Seen(
+			'fake_mp',
+			static function () use ( &$now ): int {
+				return $now;
+			}
+		);
+
+		$seen->note();
+		$this->assertSame( 1000000, $this->options['woodev_fake_mp_tokenless_seen_at'] );
+
+		$now += 1800;
+		$seen->note();
+		$this->assertSame( 1000000, $this->options['woodev_fake_mp_tokenless_seen_at'], 'within the hour nothing is written' );
+
+		$now += 1800;
+		$seen->note();
+		$this->assertSame( 1003600, $this->options['woodev_fake_mp_tokenless_seen_at'] );
+		$this->assertTrue( $seen->seen_since( 1003000 ) );
+		$this->assertFalse( $seen->seen_since( 1004000 ) );
+	}
+
+	/**
+	 * An intake of the fake marketplace that notes the old address the way the plugin wires it.
+	 *
+	 * @return \Woodev\Framework\Marketplace\Intake\Notification_Intake
+	 */
+	private function intake(): \Woodev\Framework\Marketplace\Intake\Notification_Intake {
+		$protocol = new Fake_Push_Protocol();
+
+		return new \Woodev\Framework\Marketplace\Intake\Notification_Intake(
+			new \Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Inbound_Decoder(),
+			$protocol,
+			new \Woodev\Framework\Marketplace\Intake\Sender_Network( Sqlite_Tables::MARKETPLACE_ID, $protocol ),
+			new \Woodev\Framework\Marketplace\Intake\Webhook_Switches( [], 'woodev_fake_mp_' ),
+			new \Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger( $this->db, $this->schema->table_name( 'events', Sqlite_Tables::PREFIX ) ),
+			new Notification_Account_Reader( $this->db, $this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ) ),
+			new \Woodev\Framework\Marketplace\Jobs\Drain_Scheduler( new \Woodev\Framework\Marketplace\Jobs\Job_Names( 'fake_mp' ) ),
+			new \Woodev\Framework\Marketplace\Intake\Push_Rate_Limiter(),
+			null,
+			new \Woodev\Framework\Marketplace\Intake\Tokenless_Seen( 'fake_mp' )
+		);
 	}
 
 	/**

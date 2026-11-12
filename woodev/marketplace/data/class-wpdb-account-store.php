@@ -44,6 +44,7 @@ final class Wpdb_Account_Store implements Account_Store {
 	 */
 	public const STOCK_SITE        = 'site';
 	public const STOCK_MARKETPLACE = 'marketplace';
+	public const STOCK_OFF         = 'off';
 
 	/**
 	 * Price directions: to the marketplace, from it, or not synchronised.

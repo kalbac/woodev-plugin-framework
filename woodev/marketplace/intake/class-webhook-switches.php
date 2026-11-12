@@ -76,6 +76,18 @@ final class Webhook_Switches {
 	}
 
 	/**
+	 * Tells whether a type is the stock notification, which an account in the stock mode `off` does not subscribe to.
+	 *
+	 * @since 2.1.2
+	 *
+	 * @param string $type_id Event type the decoder gave the notification.
+	 * @return bool
+	 */
+	public function is_stock( string $type_id ): bool {
+		return isset( $this->types[ $type_id ] ) && $this->types[ $type_id ]->is_stock();
+	}
+
+	/**
 	 * Tells whether notifications of a type are accepted.
 	 *
 	 * @since 2.1.2
