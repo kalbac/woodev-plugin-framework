@@ -20,6 +20,8 @@ export interface ManifestPage {
 	path: string;
 	kind: PageKind;
 	tables: string[];
+	/** The label of each table, by id, when the page offers several tables to switch between; absent otherwise. */
+	tableLabels?: Record< string, string >;
 	view: string;
 	breadcrumbs: Breadcrumb[];
 	/** The reserved analytics slot: always null, never requested. */

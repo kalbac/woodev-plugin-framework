@@ -73,8 +73,44 @@ class RecordsDefinitionTest extends TestCase {
 			'children page larger than max'    => [ [ 'children' => [ 'default_per_page' => 30, 'max_per_page' => 20 ] ] ],
 			'activity max below refresh'       => [ [ 'activity' => [ 'refresh_ms' => 5000, 'max_refresh_ms' => 2000, 'stale_after_ms' => 9000, 'id_limit' => 50 ] ] ],
 			'message that is not a string'     => [ [ 'messages' => [ 'empty' => [ 'x' ] ] ] ],
+			'searchable select without a source' => [ [ 'bulk_actions' => [ self::searchable_action( [ 'options_source' => false, 'options' => [ [ 'value' => 'a', 'label' => 'A' ] ] ] ) ] ] ],
+			'searchable text field'            => [ [ 'bulk_actions' => [ self::searchable_action( [ 'type' => 'text', 'options_source' => false ] ) ] ] ],
+			'searchable multi select'          => [ [ 'bulk_actions' => [ self::searchable_action( [ 'type' => 'multi_select' ] ) ] ] ],
+			'searchable that is not a boolean' => [ [ 'bulk_actions' => [ self::searchable_action( [ 'searchable' => 'yes' ] ) ] ] ],
 			'account default outside options'  => [ [ 'context' => [ 'label' => 'A', 'options' => [ [ 'value' => 'a1', 'label' => 'A' ] ], 'default' => 'zz' ] ] ],
 		];
+	}
+
+	/**
+	 * A bulk action with one field, the field being the searchable select unless overridden.
+	 *
+	 * @param array<string,mixed> $field Field keys to override.
+	 * @return array<string,mixed>
+	 */
+	private static function searchable_action( array $field ): array {
+		return [
+			'id'          => 'link',
+			'label'       => 'Связать',
+			'effect'      => 'mutate',
+			'interaction' => 'dialog',
+			'fields'      => [ array_merge( [ 'id' => 'product', 'label' => 'Товар', 'type' => 'select', 'options_source' => true, 'searchable' => true ], $field ) ],
+		];
+	}
+
+	public function test_a_select_with_a_source_can_be_searchable_and_nothing_else_is_by_default(): void {
+		$definition = Records_Definition::from_array(
+			Records_Definitions::standard(
+				[
+					'bulk_actions' => [
+						self::searchable_action( [] ),
+						array_merge( self::searchable_action( [ 'searchable' => false, 'id' => 'warehouse' ] ), [ 'id' => 'send' ] ),
+					],
+				]
+			)
+		);
+
+		$this->assertTrue( $definition->get_action( 'link' )['fields'][0]['searchable'] );
+		$this->assertFalse( $definition->get_action( 'send' )['fields'][0]['searchable'], 'an existing field stays what it was' );
 	}
 
 	public function test_a_skipping_row_action_is_allowed_when_the_definition_says_so(): void {
