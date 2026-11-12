@@ -81,6 +81,27 @@ final class Settings_Section {
 	private array $groups = [];
 
 	/**
+	 * What a client draws for a connection block shown as an account card — see {@see self::with_card()}.
+	 *
+	 * @var array<string, mixed>
+	 */
+	private array $card = [];
+
+	/**
+	 * Whether the client draws this section stacked under its own heading — see {@see self::stacked()}.
+	 *
+	 * @var bool
+	 */
+	private bool $stacked = false;
+
+	/**
+	 * Muted line next to the heading of a stacked section.
+	 *
+	 * @var string
+	 */
+	private string $subtitle = '';
+
+	/**
 	 * Use one of the named constructors instead — {@see self::create()},
 	 * {@see self::create_connection()} or {@see self::create_tools()}. Private so that a call
 	 * site has to NAME the kind it is building rather than spell it out in positional
@@ -308,6 +329,82 @@ final class Settings_Section {
 		}
 
 		return $copy;
+	}
+
+	/**
+	 * A copy of this CONNECTION section that the client draws as a card instead of a sub-tab: title, identifier, a switch and
+	 * the buttons, with the block's own fields (and its «Проверить подключение») opening under the card.
+	 *
+	 * The array is data for the client (plain scalars and arrays), handed to it as the section's `card`. An ordinary or tools
+	 * block takes none: the call is reported and the section returned unchanged.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param array<string, mixed> $card the card's data.
+	 * @return self
+	 */
+	public function with_card( array $card ): self {
+		if ( ! $this->is_connection ) {
+			_doing_it_wrong( __METHOD__, 'Only a connection Settings_Section can be drawn as a card; the call was ignored.', '2.1.5' );
+
+			return $this;
+		}
+
+		$copy       = clone $this;
+		$copy->card = $card;
+
+		return $copy;
+	}
+
+	/**
+	 * A copy of this section that the client draws stacked: its title as a heading (with a muted line beside it) and the block under
+	 * it, one section after another on the tab, with no sub-tabs. For a tab whose sections are one per account, so each account
+	 * reads as its own block instead of a sub-tab.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param string $subtitle Muted text next to the heading, plain text (the account's identifier, say).
+	 * @return self
+	 */
+	public function stacked( string $subtitle = '' ): self {
+		$copy           = clone $this;
+		$copy->stacked  = true;
+		$copy->subtitle = $subtitle;
+
+		return $copy;
+	}
+
+	/**
+	 * Whether the client draws this section stacked ({@see self::stacked()}).
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return bool
+	 */
+	public function is_stacked(): bool {
+		return $this->stacked;
+	}
+
+	/**
+	 * The muted line beside a stacked section's heading, empty when there is none.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return string
+	 */
+	public function get_subtitle(): string {
+		return $this->subtitle;
+	}
+
+	/**
+	 * The card data of a connection section, empty when it is a plain block.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function get_card(): array {
+		return $this->card;
 	}
 
 	/**

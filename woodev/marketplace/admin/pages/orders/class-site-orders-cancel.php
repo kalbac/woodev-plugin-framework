@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Admin\Order\Cancel_Refused;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -88,7 +89,7 @@ final class Site_Orders_Cancel {
 			return __( 'Подключение к маркетплейсу для этого заказа выключено в настройках плагина. Включите его и повторите.', 'woodev-plugin-framework' );
 		}
 
-		if ( ! (bool) $account->setting( 'orders_enabled', true ) ) {
+		if ( ! Effective_Settings::for_adapter( $account->adapter_id() )->orders_enabled( $account ) ) {
 			return __( 'Приём заказов с маркетплейса выключен в настройках плагина, поэтому заказ не обновится после отмены. Включите приём заказов в настройках и повторите.', 'woodev-plugin-framework' );
 		}
 

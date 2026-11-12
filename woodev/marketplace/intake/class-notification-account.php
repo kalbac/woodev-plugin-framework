@@ -34,6 +34,13 @@ final class Notification_Account {
 	private $external_id;
 
 	/**
+	 * Account name, '' when the merchant gave none.
+	 *
+	 * @var string
+	 */
+	private $name;
+
+	/**
 	 * Seller id, '' when unknown.
 	 *
 	 * @var string
@@ -101,6 +108,7 @@ final class Notification_Account {
 
 		$this->id              = (int) $row['account_id'];
 		$this->external_id     = (string) $row['external_id'];
+		$this->name            = isset( $row['name'] ) ? (string) $row['name'] : '';
 		$this->seller_id       = isset( $row['seller_id'] ) ? (string) $row['seller_id'] : '';
 		$this->enabled         = (bool) $row['is_enabled'];
 		$this->token           = (string) $row['notification_token'];
@@ -131,6 +139,17 @@ final class Notification_Account {
 	 */
 	public function external_id(): string {
 		return $this->external_id;
+	}
+
+	/**
+	 * Returns the account name, '' when the merchant gave none.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return string
+	 */
+	public function name(): string {
+		return $this->name;
 	}
 
 	/**

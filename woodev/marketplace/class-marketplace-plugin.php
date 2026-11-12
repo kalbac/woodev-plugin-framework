@@ -352,7 +352,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		}
 
 		/**
-		 * Returns the default settings tab (`accounts`, optional `notifications`, `advanced`) placed on this plugin's own menu.
+		 * Returns the default settings tabs («Подключение», «Параметры», «Общие», «Уведомления», «Дополнительно») placed on this plugin's own menu.
 		 *
 		 * @since 2.1.2
 		 *
@@ -361,7 +361,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		public function get_settings_providers(): array {
 			$handler = $this->get_marketplace_settings_handler();
 
-			return null === $handler ? [] : [ $handler->get_settings_provider() ];
+			return null === $handler ? [] : $handler->get_settings_providers();
 		}
 
 		/**
@@ -594,8 +594,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			return Page::from_array(
 				[
 					'slug'  => Page::SETTINGS_SLUG,
-					'title' => __( 'Настройки', 'woodev-plugin-framework' ),
-					'kind'  => Page::KIND_SETTINGS,
+					'title'   => __( 'Настройки', 'woodev-plugin-framework' ),
+					/* translators: %s: the plugin's name. */
+					'heading' => sprintf( __( 'Настройки %s', 'woodev-plugin-framework' ), (string) $this->get_plugin_name() ),
+					'kind'    => Page::KIND_SETTINGS,
 				]
 			);
 		}

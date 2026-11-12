@@ -688,6 +688,27 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertArrayNotHasKey( 'actions', $sections[0] );
 	}
 
+	public function test_build_sections_flags_a_stacked_section_and_leaves_the_others_as_they_were(): void {
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$this->make_connection_handler(),
+			[
+				Settings_Section::create( 'one', 'One', [ 'token' ] )->stacked( 'Client-Id: 1' ),
+				Settings_Section::create( 'two', 'Two', [ 'token' ] )->stacked(),
+				Settings_Section::create( 'plain', 'Plain', [ 'token' ] ),
+			]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertTrue( $sections[0]['stacked'] );
+		$this->assertSame( 'Client-Id: 1', $sections[0]['subtitle'] );
+		$this->assertTrue( $sections[1]['stacked'] );
+		$this->assertArrayNotHasKey( 'subtitle', $sections[1] );
+		$this->assertArrayNotHasKey( 'stacked', $sections[2] );
+	}
+
 	public function test_build_sections_omits_the_groups_key_when_none_are_declared(): void {
 		$tool     = Shipping_Tool::create( 'sync', 'Статусы', '', 'Обновить', static fn( array $args ): Tool_Result => Tool_Result::success() );
 		$provider = Settings_Provider::create( 'cdek', 'СДЭК', $this->make_connection_handler(), [ Settings_Section::create( 'general', 'Общие', [ 'token' ] )->with_actions( [ $tool ] ) ] );

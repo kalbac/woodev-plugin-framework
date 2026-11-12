@@ -17,8 +17,9 @@ if ( ! class_exists( Page::class, false ) ) :
 	 * A plugin declares pages as arrays ({@see Marketplace_Plugin::get_marketplace_pages()}); this class is the one place that
 	 * turns such an array into a checked value, so the menu, the manifest and the legacy redirects cannot disagree about a page.
 	 *
-	 * Descriptor keys: `slug`, `title`, `kind`, `tables` (for `records`: a list of table ids, or a map of table id => label when the
-	 * page offers several tables to switch between), `view` (for `custom`), `capability`, `legacy_page`, and
+	 * Descriptor keys: `slug`, `title`, `heading` (the heading above the page when it differs from the menu title), `kind`, `tables` (for
+	 * `records`: a list of table ids, or a map of table id => label when the page offers several tables to switch between), `view`
+	 * (for `custom`), `capability`, `legacy_page`, and
 	 * `analytics` — reserved, always `null` (ADR-013: the analytics slot exists, nothing is computed or requested for it).
 	 *
 	 * @since 2.0.29
@@ -103,6 +104,13 @@ if ( ! class_exists( Page::class, false ) ) :
 		private $legacy_pages;
 
 		/**
+		 * Heading of the page; the title when empty.
+		 *
+		 * @var string
+		 */
+		private $heading;
+
+		/**
 		 * @param string      $slug         Page slug.
 		 * @param string      $title        Menu and page title, already translated.
 		 * @param string      $kind         One of the KIND_* constants.
@@ -111,8 +119,9 @@ if ( ! class_exists( Page::class, false ) ) :
 		 * @param string|null $capability   Capability that overrides the menu's; null inherits it.
 		 * @param string[]    $legacy_pages v1 admin URLs that now land here.
 		 * @param string[]    $table_labels Label of each table that has one, by table id.
+		 * @param string      $heading      Heading above the page; the title when empty.
 		 */
-		private function __construct( string $slug, string $title, string $kind, array $tables, string $view, ?string $capability, array $legacy_pages, array $table_labels = [] ) {
+		private function __construct( string $slug, string $title, string $kind, array $tables, string $view, ?string $capability, array $legacy_pages, array $table_labels = [], string $heading = '' ) {
 			$this->slug         = $slug;
 			$this->title        = $title;
 			$this->kind         = $kind;
@@ -121,6 +130,7 @@ if ( ! class_exists( Page::class, false ) ) :
 			$this->capability   = $capability;
 			$this->legacy_pages = $legacy_pages;
 			$this->table_labels = $table_labels;
+			$this->heading      = $heading;
 		}
 
 		/**
@@ -178,7 +188,8 @@ if ( ! class_exists( Page::class, false ) ) :
 				$view,
 				$capability,
 				self::string_list( $descriptor['legacy_page'] ?? [] ),
-				$tables['labels']
+				$tables['labels'],
+				isset( $descriptor['heading'] ) ? trim( (string) $descriptor['heading'] ) : ''
 			);
 		}
 
@@ -198,6 +209,17 @@ if ( ! class_exists( Page::class, false ) ) :
 		 */
 		public function get_title(): string {
 			return $this->title;
+		}
+
+		/**
+		 * The heading above the page: «Настройки OZON Seller» over a menu entry that says just «Настройки».
+		 *
+		 * @since 2.1.5
+		 *
+		 * @return string The title when the page names no heading of its own.
+		 */
+		public function get_heading(): string {
+			return '' !== $this->heading ? $this->heading : $this->title;
 		}
 
 		/**

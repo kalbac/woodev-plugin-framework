@@ -195,3 +195,41 @@ describe( 'an edit made while Save is pending survives the save (#1326)', () => 
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Сохранить' } ) ).toBeDisabled() );
 	} );
 } );
+
+/**
+ * Pins #1730: on a stacked tab every section's Save shares the tab's save
+ * state, so the spinner must sit on the section that is saving only.
+ */
+describe( 'on a stacked tab only the saving section\'s Save spins (#1730)', () => {
+	beforeEach( () => {
+		jest.clearAllMocks();
+		const tab = tabWithTwoFieldSections();
+		tab.sections.forEach( ( section ) => {
+			section.stacked = true;
+		} );
+		fetchSchema.mockResolvedValue( { tabs: [ tab ] } );
+	} );
+
+	it( 'spins the Save of the section being saved and leaves its sibling without a spinner', async () => {
+		let resolveSave;
+		saveTab.mockReturnValue( new Promise( ( resolve ) => {
+			resolveSave = resolve;
+		} ) );
+
+		render( <App /> );
+		await waitFor( () => expect( screen.getAllByRole( 'textbox' ) ).toHaveLength( 2 ) );
+		const [ inputA, inputB ] = screen.getAllByRole( 'textbox' );
+		fireEvent.change( inputA, { target: { value: 'A edit' } } );
+		fireEvent.change( inputB, { target: { value: 'B edit' } } );
+		const [ saveA, saveB ] = screen.getAllByRole( 'button', { name: 'Сохранить' } );
+
+		fireEvent.click( saveA );
+
+		await waitFor( () => expect( saveTab ).toHaveBeenCalledTimes( 1 ) );
+		expect( saveA ).toHaveClass( 'is-busy' );
+		expect( saveB ).not.toHaveClass( 'is-busy' );
+
+		resolveSave( { saved: true } );
+		await waitFor( () => expect( saveA ).not.toHaveClass( 'is-busy' ) );
+	} );
+} );

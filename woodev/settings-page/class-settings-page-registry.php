@@ -331,6 +331,15 @@ final class Settings_Page_Registry {
 				$entry['groups'] = $groups;
 			}
 
+			// Drawn under its own heading, one after another on the tab (Settings_Section::stacked()).
+			if ( $section->is_stacked() ) {
+				$entry['stacked'] = true;
+
+				if ( '' !== $section->get_subtitle() ) {
+					$entry['subtitle'] = $section->get_subtitle();
+				}
+			}
+
 			if ( $section->is_connection() ) {
 				$entry['is_connection'] = true;
 				$entry['action_label']  = $section->get_action_label();
@@ -339,6 +348,10 @@ final class Settings_Page_Registry {
 				$entry['supports_test'] = $handler instanceof Composite_Settings_Handler
 					? $handler->supports_connection_test( $section->get_id() )
 					: $handler instanceof \Woodev_Settings_Connection_Test;
+
+				if ( [] !== $section->get_card() ) {
+					$entry['card'] = $section->get_card();
+				}
 
 				if ( $handler instanceof \Woodev_Settings_Connection_Status ) {
 					$status = $handler->get_connection_status( $section->get_id() );

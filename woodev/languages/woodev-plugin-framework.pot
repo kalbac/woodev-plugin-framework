@@ -4405,12 +4405,6 @@ msgstr ""
 msgid "Последнее уведомление"
 msgstr ""
 
-#. translators: 1: marketplace name, 2: account identifier.
-#: marketplace/settings/class-notifications-section.php:331
-#, php-format
-msgid "Уведомления %1$s — «%2$s»"
-msgstr ""
-
 #: marketplace/settings/class-notifications-section.php:347
 msgid "Регистрация адреса"
 msgstr ""
@@ -10631,4 +10625,69 @@ msgstr ""
 
 #: marketplace/settings/class-notifications-section.php:262
 msgid "Адрес для приёма уведомлений (токен скрыт)"
+msgstr ""
+
+#: marketplace/class-marketplace-plugin.php:599
+#, php-format
+msgid "Настройки %s"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:265
+msgid "Параметры"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:267
+msgid "Подключите аккаунт на вкладке «Подключение»."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:679
+msgid "Правило цены"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:704
+msgid "Как на вкладке «Общие»"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:705
+msgid "Свои значения для этого аккаунта"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:707
+msgid "Значения берутся с вкладки «Общие» или задаются для этого аккаунта отдельно."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:830
+msgid "Удаление аккаунта появится в одном из следующих обновлений."
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:147
+msgid "Общие"
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:149
+msgid "Значения по умолчанию для всех аккаунтов. На вкладке «Параметры» каждый аккаунт может использовать их или задать свои."
+msgstr ""
+
+#: marketplace/settings/class-settings-module.php:76
+msgid "Подключение"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Выключен"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Подключение не проверялось"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Свернуть"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Выключить"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Новый аккаунт"
 msgstr ""

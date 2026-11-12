@@ -38,6 +38,15 @@ final class PageTest extends TestCase {
 		$this->assertSame( [ 'products' ], $page->get_tables() );
 	}
 
+	public function test_a_page_heading_defaults_to_its_title_and_can_differ_from_the_menu_entry(): void {
+		$plain   = Page::from_array( $this->records_descriptor() );
+		$heading = Page::from_array( $this->records_descriptor() + [ 'heading' => 'Товары OZON Seller' ] );
+
+		$this->assertSame( 'Товары', $plain->get_heading() );
+		$this->assertSame( 'Товары OZON Seller', $heading->get_heading() );
+		$this->assertSame( 'Товары', $heading->get_title(), 'the menu entry keeps its short title' );
+	}
+
 	public function test_a_page_inherits_the_capability_of_its_menu_unless_it_names_its_own(): void {
 		$inherits = Page::from_array( $this->records_descriptor() );
 		$own      = Page::from_array( $this->records_descriptor() + [ 'capability' => 'manage_options' ] );

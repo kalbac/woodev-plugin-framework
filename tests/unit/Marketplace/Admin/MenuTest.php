@@ -203,6 +203,21 @@ final class MenuTest extends TestCase {
 		$this->assertNull( $products['analytics'], 'the analytics slot is reserved: null, nothing computed' );
 	}
 
+	public function test_the_last_crumb_is_the_page_heading_when_it_differs_from_the_menu_entry(): void {
+		$pages   = $this->pages( [ 'products' ] );
+		$pages[] = Page::from_array( [ 'slug' => 'settings', 'title' => 'Настройки', 'heading' => 'Настройки OZON Seller', 'kind' => 'settings' ] );
+
+		$manifest = $this->menu( $pages )->build_manifest(
+			static function (): bool {
+				return true;
+			}
+		);
+
+		$settings = $manifest['pages'][1];
+		$this->assertSame( 'Настройки', $settings['title'], 'the menu entry stays short' );
+		$this->assertSame( 'Настройки OZON Seller', $settings['breadcrumbs'][1], 'the heading above the page is the long one' );
+	}
+
 	public function test_a_page_the_user_may_not_open_has_no_route(): void {
 		$pages   = $this->pages( [ 'products' ] );
 		$pages[] = Page::from_array( [ 'slug' => 'tools', 'title' => 'Tools', 'kind' => 'custom', 'view' => 'tools', 'capability' => 'manage_options' ] );

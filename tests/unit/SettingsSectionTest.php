@@ -252,4 +252,29 @@ class SettingsSectionTest extends TestCase {
 		$this->assertSame( [], $connection->with_actions( [ $this->make_tool( 'x' ) ] )->get_actions() );
 		$this->assertSame( [], $tools->with_actions( [ $this->make_tool( 'x' ) ] )->get_actions() );
 	}
+
+	public function test_with_card_returns_a_copy_of_a_connection_section_carrying_the_card(): void {
+		$section = Settings_Section::create_connection( 'api', 'API', [ 't' ], 'Проверить' );
+		$with    = $section->with_card( [ 'title' => 'Shop' ] );
+
+		$this->assertSame( [], $section->get_card(), 'immutable: the original has none' );
+		$this->assertSame( [ 'title' => 'Shop' ], $with->get_card() );
+		$this->assertTrue( $with->is_connection() );
+	}
+
+	public function test_an_ordinary_section_refuses_a_card(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$this->assertSame( [], Settings_Section::create( 'x', 'X', [] )->with_card( [ 'title' => 'Shop' ] )->get_card() );
+	}
+
+	public function test_stacked_returns_a_copy_drawn_under_its_own_heading(): void {
+		$section = Settings_Section::create( 'a', 'A', [] );
+		$stacked = $section->stacked( 'Client-Id: 1' );
+
+		$this->assertFalse( $section->is_stacked(), 'immutable: the original is not stacked' );
+		$this->assertTrue( $stacked->is_stacked() );
+		$this->assertSame( 'Client-Id: 1', $stacked->get_subtitle() );
+		$this->assertSame( '', $section->stacked()->get_subtitle() );
+	}
 }
