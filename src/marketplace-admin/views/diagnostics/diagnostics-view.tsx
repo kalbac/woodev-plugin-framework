@@ -61,6 +61,12 @@ export function DiagnosticsView( { menu }: PageViewProps ) {
 	};
 
 	const copy = () => {
+		// `navigator.clipboard` is undefined on a plain-http admin: say so and point at the text below instead of throwing.
+		if ( ! navigator.clipboard ) {
+			setNotice( { status: 'error', lines: [ copyOutcome( false, messages ) ] } );
+			return;
+		}
+
 		navigator.clipboard
 			.writeText( report?.report ?? '' )
 			.then( () => setNotice( { status: 'success', lines: [ copyOutcome( true, messages ) ] } ) )

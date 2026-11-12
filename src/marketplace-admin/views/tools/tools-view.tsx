@@ -12,7 +12,7 @@ import { Button, Notice, SelectControl, Spinner } from '@wordpress/components';
 import type { PageViewProps } from '../../types';
 import { errorLines } from '../mappings/api';
 import { createToolsApi } from './api';
-import { canConfirm, canPreview, chooseAccount, isBusy } from './tool-state';
+import { accountFor, canConfirm, canPreview, chooseAccount, isBusy } from './tool-state';
 import type { ToolPreview, ToolRow, ToolsState } from './types';
 
 const POLL_MS = 5000;
@@ -70,24 +70,24 @@ export function ToolsView( { menu }: PageViewProps ) {
 	const { messages } = state;
 
 	const openPreview = ( tool: ToolRow ) => {
-		if ( accountId === null ) {
+		if ( ! canPreview( tool, accountId ) ) {
 			return;
 		}
 
 		setPending( true );
-		api.preview( tool.id, accountId )
+		api.preview( tool.id, accountFor( tool, accountId ) )
 			.then( setPreview )
 			.catch( ( error ) => setNotice( { status: 'error', lines: errorLines( error, messages.loadFailed ) } ) )
 			.finally( () => setPending( false ) );
 	};
 
 	const run = ( tool: ToolRow ) => {
-		if ( accountId === null ) {
+		if ( ! canPreview( tool, accountId ) ) {
 			return;
 		}
 
 		setPending( true );
-		api.run( tool.id, accountId )
+		api.run( tool.id, accountFor( tool, accountId ) )
 			.then( ( result ) => {
 				setNotice( { status: result.success ? 'success' : 'error', lines: [ result.message ] } );
 				setPreview( null );

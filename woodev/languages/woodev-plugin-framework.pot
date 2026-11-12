@@ -9799,3 +9799,15 @@ msgstr ""
 #: marketplace/admin/pages/tools/class-tools-controller.php:382
 msgid "Номер аккаунта указан неверно."
 msgstr ""
+
+#: marketplace/admin/pages/tools/class-tool-runner.php:86
+msgid "Инструмент остановился из-за ошибки. Попробуйте ещё раз позже."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-module.php:120
+msgid "запустить инструмент, который обращается к маркетплейсу"
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-module.php:127
+msgid "Маркетплейс отказал аккаунту в доступе, поэтому работа с ним приостановлена. Проверьте ключи в настройках плагина — инструмент станет доступен позже."
+msgstr ""

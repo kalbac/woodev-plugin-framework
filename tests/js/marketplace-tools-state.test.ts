@@ -5,7 +5,7 @@
  * @see src/marketplace-admin/views/tools/tool-state.ts
  */
 
-import { canConfirm, canPreview, chooseAccount, isBusy } from '../../src/marketplace-admin/views/tools/tool-state';
+import { accountFor, canConfirm, canPreview, chooseAccount, isBusy } from '../../src/marketplace-admin/views/tools/tool-state';
 import type { ToolActivity, ToolPreview, ToolRow } from '../../src/marketplace-admin/views/tools/types';
 
 const tool = ( overrides: Partial< ToolRow > = {} ): ToolRow => ( {
@@ -14,6 +14,7 @@ const tool = ( overrides: Partial< ToolRow > = {} ): ToolRow => ( {
 	description: 'Переносит данные заново.',
 	button: 'Запустить',
 	takes_claim: true,
+	scope: 'account',
 	disabled: false,
 	disabled_reason: '',
 	...overrides,
@@ -61,6 +62,18 @@ describe( 'canPreview', () => {
 		expect( canPreview( tool(), 3 ) ).toBe( true );
 		expect( canPreview( tool(), null ) ).toBe( false );
 		expect( canPreview( tool( { disabled: true } ), 3 ) ).toBe( false );
+	} );
+
+	it( 'lets a site tool be previewed with no account, but not while it is disabled', () => {
+		expect( canPreview( tool( { scope: 'site', takes_claim: false } ), null ) ).toBe( true );
+		expect( canPreview( tool( { scope: 'site', disabled: true } ), null ) ).toBe( false );
+	} );
+} );
+
+describe( 'accountFor', () => {
+	it( 'names the chosen account for an account tool and none for a site tool', () => {
+		expect( accountFor( tool(), 3 ) ).toBe( 3 );
+		expect( accountFor( tool( { scope: 'site' } ), 3 ) ).toBeNull();
 	} );
 } );
 

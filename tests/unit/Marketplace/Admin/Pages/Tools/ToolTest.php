@@ -30,11 +30,39 @@ final class ToolTest extends TestCase {
 				'description' => 'Переносит данные заново.',
 				'button'      => 'Запустить',
 				'takes_claim' => true,
+				'scope'       => 'account',
 			],
 			$tool->describe()
 		);
 		$this->assertSame( 'rerun', $tool->id() );
 		$this->assertTrue( $tool->takes_claim() );
+	}
+
+	public function test_a_tool_is_remote_and_account_scoped_unless_it_says_otherwise(): void {
+		$tool = $this->tool( [] );
+
+		$this->assertTrue( $tool->is_remote() );
+		$this->assertFalse( $tool->is_site_wide() );
+		$this->assertSame( 'account', $tool->describe()['scope'] );
+	}
+
+	public function test_a_local_tool_opts_out_of_the_remote_gate(): void {
+		$this->assertFalse( $this->tool( [ false, false ] )->is_remote() );
+	}
+
+	public function test_a_site_tool_is_site_wide_and_cannot_take_a_claim(): void {
+		$tool = $this->tool( [ true, false, Tool::SCOPE_SITE ] );
+
+		$this->assertTrue( $tool->is_site_wide() );
+		$this->assertFalse( $tool->takes_claim() );
+		$this->assertSame( 'site', $tool->describe()['scope'] );
+	}
+
+	public function test_an_unknown_scope_is_an_account_tool(): void {
+		$tool = $this->tool( [ false, true, 'galaxy' ] );
+
+		$this->assertFalse( $tool->is_site_wide() );
+		$this->assertSame( 'account', $tool->describe()['scope'] );
 	}
 
 	public function test_summary_and_run_pass_the_chosen_account_to_their_callbacks(): void {
@@ -63,5 +91,22 @@ final class ToolTest extends TestCase {
 		$this->assertFalse( $result->is_success() );
 		$this->assertSame( 'Не удалось.', $result->get_message() );
 		$this->assertFalse( $tool->takes_claim() );
+	}
+
+	/**
+	 * A tool with the trailing `create()` arguments given: `[ takes_claim, remote, scope ]`.
+	 *
+	 * @param array<int,mixed> $flags Arguments after the run callback.
+	 */
+	private function tool( array $flags ): Tool {
+		return Tool::create(
+			'rerun',
+			'Перенос',
+			'Описание',
+			'Запустить',
+			static fn ( int $account_id ): string => 'plan',
+			static fn ( int $account_id ): Tool_Result => Tool_Result::success(),
+			...$flags
+		);
 	}
 }

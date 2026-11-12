@@ -23,17 +23,17 @@ export function createToolsApi( pluginId: string ) {
 			apiFetch< ToolsState >( {
 				path: accountId === null ? base : `${ base }?account_id=${ accountId }`,
 			} ),
-		preview: ( tool: string, accountId: number ) =>
+		preview: ( tool: string, accountId: number | null ) =>
 			apiFetch< ToolPreview >( {
 				path: `${ base }/${ encodeURIComponent( tool ) }/preview`,
 				method: 'POST',
-				data: { account_id: accountId },
+				data: accountId === null ? {} : { account_id: accountId },
 			} ),
-		run: ( tool: string, accountId: number ) =>
+		run: ( tool: string, accountId: number | null ) =>
 			apiFetch< ToolRunResult >( {
 				path: `${ base }/${ encodeURIComponent( tool ) }/run`,
 				method: 'POST',
-				data: { account_id: accountId, confirmed: true },
+				data: accountId === null ? { confirmed: true } : { account_id: accountId, confirmed: true },
 			} ),
 	};
 }

@@ -15,6 +15,8 @@ export interface ToolRow {
 	description: string;
 	button: string;
 	takes_claim: boolean;
+	/** `account` tools work on the chosen account; `site` tools need none. */
+	scope: 'account' | 'site';
 	disabled: boolean;
 	disabled_reason: string;
 }

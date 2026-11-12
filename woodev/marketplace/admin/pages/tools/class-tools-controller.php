@@ -23,7 +23,10 @@ defined( 'ABSPATH' ) || exit;
  * | `POST R/{tool}/run` `{account_id, confirmed: true}` | the confirmed run; 409 while the tool is disabled |
  *
  * Every route runs the same order: the capability before anything is read; the body checked against a declared key list
- * (unknown keys → 400); the tool and the account resolved on this plugin's adapter (unknown → 404); only then the work.
+ * (unknown keys → 400); the tool and the account resolved on this plugin's adapter (unknown → 404, switched off → 409);
+ * only then the work. A site tool needs no account: its body may leave `account_id` out and it is not read.
+ * «Disabled» is one rule for the list, the preview and the run: a remote tool waits for the licence and the account pause,
+ * a claim-taking tool for the background run ({@see Tool_Catalogue::state_for()}).
  * Results are `{status, success, message, activity}` so the page shows the sentence the tool gave, never a code.
  *
  * @since 2.1.5
@@ -83,21 +86,22 @@ final class Tools_Controller {
 	/**
 	 * @since 2.1.5
 	 *
-	 * @param string        $owner      Plugin id.
-	 * @param string        $capability Capability the page needs.
-	 * @param string        $adapter_id Adapter id.
-	 * @param Account_Store $accounts   Accounts of the plugin.
-	 * @param Tool_Registry $registry   Tools of the page.
-	 * @param Tool_Activity $activity   Account activity reader.
-	 * @param Tool_Runner   $runner     Runs a confirmed tool.
+	 * @param string         $owner      Plugin id.
+	 * @param string         $capability Capability the page needs.
+	 * @param string         $adapter_id Adapter id.
+	 * @param Account_Store  $accounts   Accounts of the plugin.
+	 * @param Tool_Registry  $registry   Tools of the page.
+	 * @param Tool_Activity  $activity   Account activity reader.
+	 * @param Tool_Runner    $runner     Runs a confirmed tool.
+	 * @param Tool_Catalogue $catalogue The tool list and the one rule that disables a tool.
 	 */
-	public function __construct( string $owner, string $capability, string $adapter_id, Account_Store $accounts, Tool_Registry $registry, Tool_Activity $activity, Tool_Runner $runner ) {
+	public function __construct( string $owner, string $capability, string $adapter_id, Account_Store $accounts, Tool_Registry $registry, Tool_Activity $activity, Tool_Runner $runner, Tool_Catalogue $catalogue ) {
 		$this->owner      = $owner;
 		$this->capability = $capability;
 		$this->adapter_id = $adapter_id;
 		$this->accounts   = $accounts;
 		$this->registry   = $registry;
-		$this->catalogue  = new Tool_Catalogue( $registry, $activity );
+		$this->catalogue  = $catalogue;
 		$this->activity   = $activity;
 		$this->runner     = $runner;
 	}
@@ -283,11 +287,11 @@ final class Tools_Controller {
 	 * @since 2.1.5
 	 *
 	 * @param Tool $tool       Tool.
-	 * @param int  $account_id Account.
+	 * @param int  $account_id Account; 0 for a site tool.
 	 * @return array{disabled:bool,reason:string}
 	 */
 	private function state_of( Tool $tool, int $account_id ): array {
-		return Tool_Catalogue::state( $tool->takes_claim(), $this->activity->claim_held( $account_id ) );
+		return $this->catalogue->state_for( $tool, $account_id );
 	}
 
 	/**
@@ -297,7 +301,7 @@ final class Tools_Controller {
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @param string[]         $allowed Keys the body may carry.
-	 * @return array{0:Tool,1:int}|\WP_Error
+	 * @return array{0:Tool,1:int}|\WP_Error The tool and its account id (0 for a site tool).
 	 */
 	private function resolve( \WP_REST_Request $request, array $allowed ) {
 		$body    = $request->get_json_params();
@@ -312,6 +316,10 @@ final class Tools_Controller {
 
 		if ( null === $tool ) {
 			return $this->error( 'woodev_tools_unknown_tool', __( 'Такого инструмента нет.', 'woodev-plugin-framework' ), 404 );
+		}
+
+		if ( $tool->is_site_wide() ) {
+			return [ $tool, 0 ];
 		}
 
 		$account_id = self::positive_int( $body['account_id'] ?? null );
