@@ -10773,23 +10773,29 @@ msgid "Артикулы отличаются похожими буквами и�
 msgstr ""
 
 #. translators: 1: time of the run, 2: the reason it failed.
-#: marketplace/admin/pages/products/class-remote-cards-summary.php:35
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:37
 #, php-format
 msgid "Последний поиск по артикулу (%1$s) не удался: %2$s"
 msgstr ""
 
 #. translators: 1: time of the run, 2: cards checked, 3: linked now, 4: already linked, 5: left without a pair for several candidates.
-#: marketplace/admin/pages/products/class-remote-cards-summary.php:40
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:42
 #, php-format
 msgid "Последний поиск по артикулу (%1$s): карточек просмотрено — %2$d, связано — %3$d, уже были связаны — %4$d, неоднозначных — %5$d."
 msgstr ""
 
+#. translators: 1: pairs the list keeps, 2: pairs that did not fit.
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:55
+#, php-format
+msgid "В списке похожих артикулов показаны первые %1$d пар, ещё %2$d не поместились."
+msgstr ""
+
 #. translators: %d: number of pairs in the near-match report.
-#: marketplace/admin/pages/products/class-remote-cards-summary.php:64
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:79
 #, php-format
 msgid "Пар с похожими артикулами, которые ждут вашего решения: %d. Выберите «Показать» → «Похожие артикулы»."
 msgstr ""
 
-#: marketplace/admin/pages/products/class-remote-cards-summary.php:77
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:92
 msgid "Артикулы в этих парах отличаются только регистром или буквами, которые выглядят одинаково (например, русская «С» и латинская «C», буква «O» и ноль). Автоматически такие пары не связываются: подтвердите, что это один и тот же товар, или скажите, что товары разные."
 msgstr ""

@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
+use Woodev\Framework\Marketplace\Data\Link_Report_Store;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -35,7 +37,7 @@ final class Remote_Cards_Summary {
 			return sprintf( __( 'Последний поиск по артикулу (%1$s) не удался: %2$s', 'woodev-plugin-framework' ), $time, (string) $run['error'] );
 		}
 
-		return sprintf(
+		$sentence = sprintf(
 			/* translators: 1: time of the run, 2: cards checked, 3: linked now, 4: already linked, 5: left without a pair for several candidates. */
 			__( 'Последний поиск по артикулу (%1$s): карточек просмотрено — %2$d, связано — %3$d, уже были связаны — %4$d, неоднозначных — %5$d.', 'woodev-plugin-framework' ),
 			$time,
@@ -44,6 +46,19 @@ final class Remote_Cards_Summary {
 			(int) ( $run['already_linked'] ?? 0 ),
 			(int) ( $run['ambiguous'] ?? 0 )
 		);
+
+		$dropped = (int) ( $run['near_dropped'] ?? 0 );
+
+		if ( $dropped > 0 ) {
+			$sentence .= ' ' . sprintf(
+				/* translators: 1: pairs the list keeps, 2: pairs that did not fit. */
+				__( 'В списке похожих артикулов показаны первые %1$d пар, ещё %2$d не поместились.', 'woodev-plugin-framework' ),
+				Link_Report_Store::MAX_ENTRIES,
+				$dropped
+			);
+		}
+
+		return $sentence;
 	}
 
 	/**

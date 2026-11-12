@@ -20,7 +20,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * A new run replaces the report: it is recomputed from the current state of both sides. A pair the merchant answered «no» to
  * ({@see self::dismiss_near_match()}) is remembered, so the next run does not offer it again; the memory is by the product, the
- * product's article and the card's article, so a pair whose article changed on either side is offered again.
+ * product's article and the card's article, so a pair whose article changed on either side is offered again. A run that does
+ * not find the pair (it covered one category, or a card detail did not come back) does not forget the answer; the memory is
+ * bounded by {@see self::MAX_ENTRIES}, oldest first.
  */
 final class Link_Report_Store {
 	public const NEAR_OPTION      = 'near_matches_';
@@ -51,6 +53,13 @@ final class Link_Report_Store {
 		$this->prefix = $option_prefix;
 	}
 
+	/**
+	 * Replaces the near-match report of an account with the pairs of a run, minus the pairs the merchant answered «no» to.
+	 *
+	 * @param int                            $account_id Account id.
+	 * @param array<int,array<string,mixed>> $entries    Entries: `wc_product_id`, `wc_parent_id`, `wc_sku`, `relation`, `card`.
+	 * @return int Offered entries dropped for the limit.
+	 */
 	public function replace_near_matches( int $account_id, array $entries ): int {
 		$dismissed = $this->dismissed( $account_id );
 		$offered   = array_values(
@@ -68,9 +77,6 @@ final class Link_Report_Store {
 		} else {
 			update_option( $this->near_option( $account_id ), $kept, false );
 		}
-
-		// A «no» is kept only while the pair still exists as it was answered: when an article changed, the pair is a new one.
-		$this->remember_dismissed( $account_id, array_values( array_intersect( $dismissed, array_map( [ self::class, 'fingerprint' ], $entries ) ) ) );
 
 		return count( $offered ) - count( $kept );
 	}

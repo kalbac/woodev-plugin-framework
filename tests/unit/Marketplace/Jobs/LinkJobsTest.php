@@ -289,6 +289,41 @@ final class LinkJobsTest extends Export_Test_Case {
 	}
 
 	/**
+	 * A run of one category replaces only the pairs of the products it looked at; the others keep waiting.
+	 *
+	 * @return void
+	 */
+	public function test_a_category_run_keeps_the_pairs_of_other_products(): void {
+		$this->jobs()->link_cards( $this->account_id, 0, 0 );
+		$this->assertSame( [ 102, 103 ], array_column( $this->reports()->near_matches( $this->account_id ), 'wc_product_id' ) );
+
+		$this->shop = [ $this->shop_product( 104, 'NOT-ON-MARKET' ) ];
+		$this->jobs()->link_cards( $this->account_id, 55, 0 );
+
+		$this->assertSame( [ 102, 103 ], array_column( $this->reports()->near_matches( $this->account_id ), 'wc_product_id' ), 'the category had no pair: the others stay' );
+
+		$this->shop = [ $this->shop_product( 103, 'OW-TEST-3' ) ]; // Latin letters now: an exact match, no longer a look-alike.
+		$this->jobs()->link_cards( $this->account_id, 55, 0 );
+
+		$this->assertSame( [ 102 ], array_column( $this->reports()->near_matches( $this->account_id ), 'wc_product_id' ), 'the product the run looked at is replaced, the other stays' );
+	}
+
+	/**
+	 * A run of the whole shop replaces the whole report.
+	 *
+	 * @return void
+	 */
+	public function test_a_whole_shop_run_replaces_the_whole_report(): void {
+		$this->jobs()->link_cards( $this->account_id, 0, 0 );
+		$this->assertCount( 2, $this->reports()->near_matches( $this->account_id ) );
+
+		$this->shop = [ $this->shop_product( 104, 'NOT-ON-MARKET' ) ];
+		$this->jobs()->link_cards( $this->account_id, 0, 0 );
+
+		$this->assertSame( [], $this->reports()->near_matches( $this->account_id ) );
+	}
+
+	/**
 	 * An archived card is linked as archived.
 	 *
 	 * @return void

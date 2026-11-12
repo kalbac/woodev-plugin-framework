@@ -301,6 +301,14 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		];
 	}
 
+	/**
+	 * One sentence about the list: when it was loaded and how many cards it holds, why it could not be loaded, or that there is none;
+	 * then the summary of the last «link by article» run and the number of look-alike pairs that wait.
+	 *
+	 * @param int                                                             $account_id Account id.
+	 * @param array{fetched_at:int,cards:array<int,array<string,mixed>>}|null $snapshot   The stored list.
+	 * @return string
+	 */
 	private function summary( int $account_id, ?array $snapshot ): string {
 		$sentences = [];
 		$error     = $this->snapshots->last_error( $account_id );

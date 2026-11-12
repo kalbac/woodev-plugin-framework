@@ -149,6 +149,16 @@ final class RemoteCardsNearMatchTest extends Remote_Cards_Test_Case {
 		$this->assertStringContainsString( 'которые ждут вашего решения: 2', $summary );
 	}
 
+	public function test_pairs_dropped_for_the_limit_are_mentioned_and_none_dropped_says_nothing(): void {
+		$run = [ 'finished_at' => 1700000000, 'cards' => 1, 'linked' => 0, 'already_linked' => 0, 'ambiguous' => 0, 'error' => '' ];
+
+		$this->reports()->save_run( $this->account_id, $run + [ 'near_dropped' => 7 ] );
+		$this->assertStringContainsString( 'показаны первые 500 пар, ещё 7 не поместились', $this->list_body()['messages']['summary'] );
+
+		$this->reports()->save_run( $this->account_id, $run + [ 'near_dropped' => 0 ] );
+		$this->assertStringNotContainsString( 'не поместились', $this->list_body()['messages']['summary'] );
+	}
+
 	public function test_a_failed_run_says_why_and_a_table_without_a_run_or_pairs_says_nothing_about_them(): void {
 		$this->reports()->save_run( $this->account_id, [ 'finished_at' => 1700000000, 'error' => 'Маркетплейс не ответил' ] );
 		$this->assertStringContainsString( 'не удался: Маркетплейс не ответил', $this->list_body()['messages']['summary'] );

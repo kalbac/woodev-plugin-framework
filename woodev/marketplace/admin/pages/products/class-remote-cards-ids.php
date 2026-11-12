@@ -42,6 +42,15 @@ final class Remote_Cards_Ids {
 		return $account_id . ':' . self::key( $offer_id );
 	}
 
+	/**
+	 * Reads the key of the card out of a row id of the given account.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param string $row_id     Row id.
+	 * @param int    $account_id Account the table is open for.
+	 * @return string|null The key; null for another account's id or a malformed one.
+	 */
 	public static function key_of( string $row_id, int $account_id ): ?string {
 		if ( 1 !== preg_match( '/^([1-9]\d{0,11}):([0-9a-f]{32})$/D', $row_id, $parts ) ) {
 			return null;

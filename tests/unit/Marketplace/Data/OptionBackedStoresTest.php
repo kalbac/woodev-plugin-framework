@@ -185,7 +185,7 @@ final class OptionBackedStoresTest extends TestCase {
 		$this->assertSame( [ 1 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ), 'a changed article makes it a new question' );
 
 		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ) ] );
-		$this->assertSame( [ 1 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ), 'the answer was dropped when the pair disappeared' );
+		$this->assertSame( [], $store->near_matches( 3 ), 'the answer outlives a run that did not find the pair' );
 
 		$other = new Link_Report_Store( 'woodev_two_' );
 		$other->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ) ] );
