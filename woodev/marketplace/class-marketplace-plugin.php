@@ -19,6 +19,7 @@ use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Framework\Marketplace\Admin\Notices\Key_Expiry_Notices;
 use Woodev\Framework\Marketplace\Admin\Page;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Module;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Diagnostics\Diagnostics_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Tools\Tools_Module;
@@ -125,6 +126,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			Site_Products_Module::register( $this, $accounts, $wpdb );
 			Tools_Module::register( $this, $accounts );
 			Diagnostics_Module::register( $this, $accounts );
+			Site_Orders_Module::register( $this, $accounts, $wpdb );
 		}
 
 		/**
