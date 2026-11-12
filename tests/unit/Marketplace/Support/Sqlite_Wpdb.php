@@ -241,6 +241,31 @@ final class Sqlite_Wpdb extends \wpdb {
 	}
 
 	/**
+	 * Reads one column of every row.
+	 *
+	 * @param string|null $query Statement.
+	 * @param int         $x     Column offset.
+	 * @return array<int,mixed>
+	 */
+	public function get_col( $query = null, $x = 0 ) {
+		$statement = $this->read( $query );
+
+		return null === $statement ? array() : $statement->fetchAll( \PDO::FETCH_COLUMN, (int) $x );
+	}
+
+	/**
+	 * Stands in for `wpdb::esc_like()`. SQLite's `LIKE` has no default escape character, so the text is returned as it is: a test
+	 * that searches with this database uses text without `%` or `_`, and the one pattern the reader builds from a literal prefix
+	 * (`attribute_`) is the only `_` it meets.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	public function esc_like( $text ) {
+		return (string) $text;
+	}
+
+	/**
 	 * Reads one value.
 	 *
 	 * @param string|null $query Statement.

@@ -9178,3 +9178,508 @@ msgstr ""
 #: marketplace/admin/product/class-product-tab.php:604
 msgid "Архивация поставлена в очередь: остаток на маркетплейсе станет нулевым, затем карточка уйдёт в архив. Это происходит в течение нескольких минут; состояние обновится — обновите страницу. Товар на сайте не меняется."
 msgstr ""
+
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:170
+msgid "По аккаунту идёт фоновая работа: отправка остатков, цен или карточек. «Снять связь» станет доступно, когда она закончится."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:196
+msgid "Карточка сейчас отправляется на маркетплейс — дождитесь результата."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:212
+msgid "В очереди на отправку"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:213
+msgid "Ожидаем ответ маркетплейса"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:217
+msgid "Маркетплейс создаёт карточку"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:224
+msgid "Карточка"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:237
+msgid "Результат выгрузки"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:237
+msgid "Маркетплейс ещё не ответил по этому товару"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:254
+msgid "Отправка остатков"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:254
+msgid "Отправка цены"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:258
+msgid "Отправляется"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:260
+msgid "Последняя попытка не удалась"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-activity.php:262
+msgid "Ждёт отправки"
+msgstr ""
+
+#. translators: %d: number of variations.
+#: marketplace/admin/pages/products/class-site-products-activity.php:316
+#, php-format
+msgid "%d вариант"
+msgid_plural "%d вариантов"
+msgstr[0] "%d вариант"
+msgstr[1] "%d варианта"
+msgstr[2] "%d вариантов"
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:286
+msgid "у вас нет прав менять этот товар"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:367
+msgid "этот товар не продаётся на маркетплейсе (например, виртуальный или скачиваемый)"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:392
+msgid "Не удалось поставить товары в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:412
+msgid "карточку одновременно изменил другой запрос — повторите действие"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:432
+#: marketplace/admin/pages/products/class-site-products-bulk.php:570
+msgid "карточка сейчас отправляется на маркетплейс — дождитесь результата"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:435
+msgid "карточка в архиве маркетплейса — отправить её снова нельзя"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:480
+msgid "не отправлялся на маркетплейс — сначала экспортируйте товар"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:525
+#: marketplace/admin/pages/products/class-site-products-bulk.php:528
+msgid "уже настроено так"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:530
+msgid "этот склад уже выбран"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:534
+msgid "на маркетплейсе нет созданной карточки этого товара"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:556
+msgid "состояние и так «Не связан», ошибок нет"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:567
+msgid "связи нет — снимать нечего"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:585
+#: marketplace/admin/pages/products/class-site-products-bulk.php:794
+msgid "карточка ещё не создана на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:589
+msgid "синхронизация остатков выключена"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:589
+#: marketplace/admin/pages/products/class-site-products-bulk.php:793
+msgid "синхронизация цен выключена"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:593
+msgid "в настройках аккаунта остатки не отправляются на маркетплейс"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:597
+msgid "в настройках аккаунта цены на маркетплейс не отправляются"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:612
+msgid "не выбран склад"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:618
+#: marketplace/admin/pages/products/class-site-products-bulk.php:637
+msgid "товар не найден в магазине"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:623
+msgid "для товара не ведётся учёт остатков"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:646
+#: marketplace/admin/pages/products/class-site-products-bulk.php:795
+msgid "у товара нет цены, которую можно отправить"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:653
+msgid "цену не удаётся рассчитать: проверьте правило цены и курс"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:754
+msgid "данные одновременно менял другой запрос — повторите действие"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:781
+#: marketplace/admin/pages/products/class-site-products-bulk.php:799
+msgid "нечего отправлять"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:828
+msgid "не удалось записать архивацию — повторите действие"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:859
+msgid "сейчас идёт отправка остатков и цен этого аккаунта — повторите через минуту"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:865
+msgid "товар сейчас выгружается на маркетплейс — повторите позже"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:961
+msgid "Исправить в «Сопоставлении»"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:962
+msgid "Исправить в профиле выгрузки"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:963
+msgid "Найти значение в «Сопоставлении»"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:964
+msgid "Исправить в настройках аккаунта"
+msgstr ""
+
+#. translators: %s: «120 товаров».
+#: marketplace/admin/pages/products/class-site-products-bulk.php:978
+#, php-format
+msgid "Весь аккаунт — %s магазина без связи с маркетплейсом. Связывание идёт по всему магазину, не только по отмеченным товарам; на маркетплейсе ничего не записывается."
+msgstr ""
+
+#. translators: %s: «3 товара».
+#: marketplace/admin/pages/products/class-site-products-bulk.php:987
+#, php-format
+msgid "Уйдут с предупреждением: %s. Подробности — в карточке товара."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:999
+msgid "Связывание по артикулу поставлено в очередь. Результат появится в таблице через минуту-две."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1001
+msgid "Ничего не изменилось: выбранные товары уже в нужном состоянии или это действие для них недоступно."
+msgstr ""
+
+#. translators: %s: «3 товара».
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1004
+#, php-format
+msgid "Принято в работу: %s. Ход работы виден в столбце «Состояние»."
+msgstr ""
+
+#. translators: %s: «3 товара».
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1007
+#, php-format
+msgid "Готово: %s."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:49
+msgid "Поиск по названию, артикулу"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:60
+msgid "Только с ошибками"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:68
+msgid "Категория"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:98
+msgid "Изменить товар"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/pages/products/class-site-products-definition.php:146
+#, php-format
+msgid "Остаток: сайт / %s"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/pages/products/class-site-products-definition.php:153
+#, php-format
+msgid "Цена: сайт / %s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:189
+msgid "Экспортировать / Обновить карточку"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:189
+msgid "Товары, прошедшие проверку, уйдут в очередь на отправку. Остальные останутся как есть — исправьте причину и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:192
+msgid "Связать по артикулу"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:197
+msgid "Связывание идёт по всему магазину, не только по отмеченным товарам. По артикулу сопоставляются все карточки аккаунта."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:199
+msgid "Отправить остатки"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:199
+msgid "Текущий остаток с сайта будет отправлен на маркетплейс в ближайшее время."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:200
+msgid "Отправить цены"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:200
+msgid "Текущая цена с сайта будет отправлена на маркетплейс в ближайшее время."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:201
+msgid "Включить синхронизацию остатков"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:202
+msgid "Выключить синхронизацию остатков"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:203
+msgid "Включить синхронизацию цен"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:204
+msgid "Выключить синхронизацию цен"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:206
+msgid "Выбрать склад"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:206
+msgid "Остатки этих товаров будут отправляться на выбранный склад."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:222
+msgid "Архивировать"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/pages/products/class-site-products-definition.php:224
+#, php-format
+msgid "Остаток на маркетплейсе станет нулевым, затем карточка уйдёт в архив %s. Товар на сайте не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:229
+msgid "Сайт забудет карточку: товар можно будет выгрузить заново или связать с другой карточкой. Карточка на маркетплейсе не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:232
+msgid "Сбросить состояние"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:232
+msgid "Товар снова станет «Не связан». На маркетплейсе ничего не меняется: карточка остаётся там как была."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:272
+msgid "Товаров не найдено. Добавьте аккаунт в настройках или измените фильтры."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:273
+msgid "По этим фильтрам товаров нет."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:274
+msgid "Не удалось загрузить товары. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:276
+msgid "Сбросить фильтры"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:277
+msgid "Варианты"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:278
+msgid "Показать варианты"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:279
+msgid "Скрыть варианты"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:281
+msgid "Показать ещё варианты"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:283
+msgid "Выбрать все товары на странице"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:285
+msgid "Выбрано предельное число товаров. Выполните действие и выберите остальные."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:286
+msgid "Любое"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:287
+msgid "Товаров на странице"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:295
+msgid "Будет обработано"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:296
+#: marketplace/admin/pages/products/class-site-products-definition.php:303
+msgid "Пропущено"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:298
+#: marketplace/admin/pages/products/class-site-products-definition.php:304
+msgid "Не удалось"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:300
+msgid "Выполнено частично: причины перечислены ниже."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:301
+msgid "Принято в работу. Ход работы виден в столбце «Состояние»."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:302
+msgid "Ничего не выполнено: причины перечислены ниже."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:305
+msgid "С предупреждением"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:306
+msgid "Предупреждения"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:307
+msgid "Ответа нет: действие могло выполниться. Мы обновили таблицу — проверьте состояние товаров."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:308
+msgid "Не удалось выполнить запрос. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:310
+msgid "Показать ещё"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:312
+msgid "Загружаем список…"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:313
+msgid "Данные о ходе работы устарели: обновляем."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:314
+msgid "Не удаётся получить ход работы. Попробуем ещё раз."
+msgstr ""
+
+#. translators: %d: number of products.
+#: marketplace/admin/pages/products/class-site-products-provider.php:185
+#, php-format
+msgid "Найден %d товар"
+msgid_plural "Найдено товаров: %d"
+msgstr[0] "Найден %d товар"
+msgstr[1] "Найдено товаров: %d"
+msgstr[2] "Найдено товаров: %d"
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:299
+msgid "По умолчанию (склад аккаунта)"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:333
+msgid "Аккаунт не найден или выключен."
+msgstr ""
+
+#. translators: %d: the most offers.
+#: marketplace/admin/pages/products/class-site-products-provider.php:349
+#, php-format
+msgid "В выборе слишком много товаров и вариантов: за один раз можно обработать не больше %d. Отметьте меньше товаров."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:374
+msgid "Выберите склад из списка."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:390
+msgid "отправить остатки на маркетплейс"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:391
+msgid "отправить цены на маркетплейс"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-reader.php:633
+msgid "любой"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-rows.php:133
+msgid "Нет права изменять этот товар."
+msgstr ""
+
+#. translators: %d: number of variations.
+#: marketplace/admin/pages/products/class-site-products-rows.php:193
+#, php-format
+msgid "Ошибка у %d варианта"
+msgid_plural "Ошибка у %d вариантов"
+msgstr[0] "Ошибка у %d варианта"
+msgstr[1] "Ошибка у %d вариантов"
+msgstr[2] "Ошибка у %d вариантов"
+
+#. translators: %s: value.
+#: marketplace/admin/pages/products/class-site-products-rows.php:251
+#, php-format
+msgid "На сайте: %s"
+msgstr ""
+
+#. translators: 1: «да» or «нет» for stock, 2: for price.
+#: marketplace/admin/pages/products/class-site-products-rows.php:272
+#, php-format
+msgid "Остатки: %1$s · Цены: %2$s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-rows.php:284
+msgid "По умолчанию"
+msgstr ""
