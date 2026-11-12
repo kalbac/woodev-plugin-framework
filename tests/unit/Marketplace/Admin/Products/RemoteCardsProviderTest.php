@@ -60,7 +60,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$definition = $this->cards_definition()->to_array();
 
 		$this->assertSame( [ 'refresh_list', 'link_by_article' ], array_column( $definition['bulk_actions'], 'id' ) );
-		$this->assertSame( [ 'link_to' ], array_column( $definition['row_actions'], 'id' ) );
+		$this->assertSame( [ 'link_to', 'near_confirm', 'near_dismiss' ], array_column( $definition['row_actions'], 'id' ) );
 		$this->assertSame( [], $definition['sorts']['keys'], 'The list is the marketplace\'s own order.' );
 		$this->assertNull( $definition['analytics'] );
 		$this->assertNull( $definition['children'] );

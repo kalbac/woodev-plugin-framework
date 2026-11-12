@@ -274,6 +274,21 @@ final class LinkJobsTest extends Export_Test_Case {
 	}
 
 	/**
+	 * «Нет, это разные» is kept: the next run finds the same pair again but does not offer it, while the other pair stays.
+	 *
+	 * @return void
+	 */
+	public function test_a_pair_answered_no_is_not_offered_again_by_the_next_run(): void {
+		$this->jobs()->link_cards( $this->account_id, 0, 0 );
+		$this->assertTrue( $this->reports()->dismiss_near_match( $this->account_id, 102, 'OW-TEST-2' ) );
+
+		$this->jobs()->link_cards( $this->account_id, 0, 0 );
+
+		$this->assertSame( [ 103 ], array_column( $this->reports()->near_matches( $this->account_id ), 'wc_product_id' ) );
+		$this->assertNull( $this->links()->find( $this->account_id, 102 ), 'and it is still not linked' );
+	}
+
+	/**
 	 * An archived card is linked as archived.
 	 *
 	 * @return void

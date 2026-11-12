@@ -12,8 +12,8 @@ use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Declares the table for the records engine: columns, the two filters, the two account-wide actions, the row action «Связать с…» and
- * every sentence the page shows. The engine validates the result ({@see \Woodev\Framework\Admin\Records\Records_Definition::from_array()}).
+ * Declares the table for the records engine: columns, the filters (the «Показать» filter swaps the cards for the near-match report), the two
+ * account-wide actions, the row action «Связать с…», the report's two answers and every sentence the page shows. The engine validates the result ({@see \Woodev\Framework\Admin\Records\Records_Definition::from_array()}).
  *
  * The table lists a snapshot, in the marketplace's order, so it declares no sorting.
  *
@@ -24,6 +24,17 @@ final class Remote_Cards_Definition {
 	 * Row action: link one card to a product of the shop.
 	 */
 	public const LINK_TO = 'link_to';
+
+	/**
+	 * Row actions of the near-match report: «Это тот же товар» links the pair, «Нет, это разные» dismisses it.
+	 */
+	public const NEAR_CONFIRM = 'near_confirm';
+	public const NEAR_DISMISS = 'near_dismiss';
+
+	/**
+	 * Filter that swaps the cards for the near-match report.
+	 */
+	public const SHOW_FILTER = 'show';
 
 	/**
 	 * Account action: read the cabinet's cards again (a background job; the table itself never calls the marketplace).
@@ -60,7 +71,7 @@ final class Remote_Cards_Definition {
 				'max_per_page'     => 100,
 				'max_selection'    => 1,
 			],
-			'row_actions'  => [ self::link_to() ],
+			'row_actions'  => [ self::link_to(), self::near_confirm(), self::near_dismiss() ],
 			'bulk_actions' => [ self::refresh( $marketplace ), Site_Products_Definition::link_by_article( __( 'Связывание идёт по всему магазину. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ) ) ],
 			'activity'     => [
 				'refresh_ms'     => 10000,
@@ -140,6 +151,55 @@ final class Remote_Cards_Definition {
 				],
 				'default' => Remote_Cards_Query::NOT_ON_SITE,
 			],
+			[
+				'id'      => self::SHOW_FILTER,
+				'label'   => __( 'Показать', 'woodev-plugin-framework' ),
+				'type'    => 'select',
+				'options' => [
+					[
+						'value' => Remote_Cards_Query::SHOW_NEAR,
+						'label' => __( 'Похожие артикулы — нужно решение', 'woodev-plugin-framework' ),
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * «Это тот же товар»: links a pair of the near-match report. The pair is a local record of the last «Связать по артикулу» run, so
+	 * nothing is sent to the marketplace.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function near_confirm(): array {
+		return [
+			'id'             => self::NEAR_CONFIRM,
+			'label'          => __( 'Это тот же товар', 'woodev-plugin-framework' ),
+			'tone'           => 'primary',
+			'effect'         => 'mutate',
+			'interaction'    => 'dialog',
+			'scope'          => 'selection',
+			'capability'     => 'edit_products',
+			'scope_sentence' => __( 'Карточка будет связана с товаром сайта, на который она похожа. На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' ),
+			'confirm_label'  => __( 'Связать', 'woodev-plugin-framework' ),
+		];
+	}
+
+	/**
+	 * «Нет, это разные»: removes a pair from the report; the next «Связать по артикулу» run does not offer it again until an article changes.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function near_dismiss(): array {
+		return [
+			'id'             => self::NEAR_DISMISS,
+			'label'          => __( 'Нет, это разные', 'woodev-plugin-framework' ),
+			'effect'         => 'mutate',
+			'interaction'    => 'dialog',
+			'scope'          => 'selection',
+			'capability'     => 'edit_products',
+			'scope_sentence' => __( 'Пара будет убрана из списка, товар и карточка останутся несвязанными.', 'woodev-plugin-framework' ),
+			'confirm_label'  => __( 'Убрать из списка', 'woodev-plugin-framework' ),
 		];
 	}
 

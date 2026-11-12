@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Products;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Rows;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
+use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
@@ -30,6 +31,13 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	 * @var array<string,mixed>
 	 */
 	protected $transients = [];
+
+	/**
+	 * Options, name => value.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected $options = [];
 
 	/**
 	 * Ids the shop's product search answers with.
@@ -49,6 +57,7 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 		parent::setUp();
 
 		$this->transients = [];
+		$this->options    = [];
 		$this->found      = [];
 		$this->searches   = [];
 
@@ -67,6 +76,25 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 		Functions\when( 'delete_transient' )->alias(
 			function ( string $name ): bool {
 				unset( $this->transients[ $name ] );
+
+				return true;
+			}
+		);
+		Functions\when( 'get_option' )->alias(
+			function ( string $name, $fallback = false ) {
+				return array_key_exists( $name, $this->options ) ? $this->options[ $name ] : $fallback;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			function ( string $name, $value ): bool {
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'delete_option' )->alias(
+			function ( string $name ): bool {
+				unset( $this->options[ $name ] );
 
 				return true;
 			}
@@ -132,6 +160,43 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	}
 
 	/**
+	 * @return Link_Report_Store
+	 */
+	protected function reports(): Link_Report_Store {
+		return new Link_Report_Store( 'woodev_test_' );
+	}
+
+	/**
+	 * An entry of the near-match report: a shop product and a card whose article looks like the product's.
+	 *
+	 * @param int    $product_id The shop product.
+	 * @param string $sku        The product's article.
+	 * @param string $offer_id   The card's article.
+	 * @param string $relation   How they differ.
+	 * @return array<string,mixed>
+	 */
+	protected function near_entry( int $product_id, string $sku, string $offer_id, string $relation = 'case' ): array {
+		return [
+			'wc_product_id' => $product_id,
+			'wc_parent_id'  => 0,
+			'wc_sku'        => $sku,
+			'relation'      => $relation,
+			'card'          => $this->card( $offer_id ),
+		];
+	}
+
+	/**
+	 * Row id of a near-match pair in the harness' account.
+	 *
+	 * @param string $offer_id   Article of the card.
+	 * @param int    $product_id The shop product.
+	 * @return string
+	 */
+	protected function near_row_id( string $offer_id, int $product_id ): string {
+		return \Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Ids::near_row_id( $this->account_id, $offer_id, $product_id );
+	}
+
+	/**
 	 * The shop's product helper, searching {@see self::$found}.
 	 *
 	 * @return Remote_Cards_Products
@@ -164,11 +229,13 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 			$this->accounts(),
 			$this->snapshots(),
 			$this->links(),
+			$this->reports(),
 			$rows,
 			$products,
 			new Remote_Cards_Actions(
 				$this->snapshots(),
 				$this->links(),
+				$this->reports(),
 				new Card_Linker( $this->links() ),
 				new Link_Scheduler( $this->names() ),
 				$this->bulk(),

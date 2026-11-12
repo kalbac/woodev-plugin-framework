@@ -154,6 +154,45 @@ final class OptionBackedStoresTest extends TestCase {
 	}
 
 	/**
+	 * A pair the merchant answered «no» to is not offered by the next run; it is, once an article of the pair changed, and the
+	 * memory goes with the account's options.
+	 *
+	 * @return void
+	 */
+	public function test_a_dismissed_pair_stays_out_of_the_next_run_until_an_article_changes(): void {
+		$store = new Link_Report_Store( 'woodev_one_' );
+		$pair  = static function ( int $product, string $sku, string $offer ): array {
+			return [
+				'wc_product_id' => $product,
+				'wc_sku'        => $sku,
+				'card'          => [ 'offer_id' => $offer ],
+			];
+		};
+
+		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ), $pair( 2, 'XYZ', 'xyz' ) ] );
+
+		$this->assertTrue( $store->dismiss_near_match( 3, 1, 'abc-1' ) );
+		$this->assertFalse( $store->dismiss_near_match( 3, 1, 'abc-1' ), 'the pair is gone from the report: nothing to dismiss twice' );
+		$this->assertSame( [ 2 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ) );
+
+		$this->assertSame( 0, $store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ), $pair( 2, 'XYZ', 'xyz' ) ] ) );
+		$this->assertSame( [ 2 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ), 'the same pair is not offered again' );
+
+		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ) ] );
+		$this->assertSame( [], $store->near_matches( 3 ), 'a run that finds only the answered pair offers nothing' );
+
+		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1x', 'abc-1' ) ] );
+		$this->assertSame( [ 1 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ), 'a changed article makes it a new question' );
+
+		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ) ] );
+		$this->assertSame( [ 1 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ), 'the answer was dropped when the pair disappeared' );
+
+		$other = new Link_Report_Store( 'woodev_two_' );
+		$other->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ) ] );
+		$this->assertCount( 1, $other->near_matches( 3 ), 'another plugin\'s family is untouched' );
+	}
+
+	/**
 	 * The near-match report is capped, replaced by a new run, found by pair, and settled by a decision.
 	 *
 	 * @return void
