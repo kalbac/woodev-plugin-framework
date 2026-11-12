@@ -245,7 +245,7 @@ interface Marketplace_Adapter {
 	public function price_reader(): ?Price_Reader;
 
 	/**
-	 * Returns the rules of the notification endpoint: the sender's address, the marketplace's allow-list and its error format.
+	 * Returns the rules of the notification endpoint: the marketplace's published addresses, the kinds of notification it pushes and its error format.
 	 *
 	 * @since 2.1.0
 	 *

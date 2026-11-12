@@ -1,62 +1,21 @@
 <?php
 /**
- * IPv4/IPv6 address and CIDR allowlist validator for push notification settings.
+ * IPv4/IPv6 address and CIDR list reader for the push-notification sender rules.
  *
  * @package Woodev\Framework\Marketplace
  */
 
-namespace Woodev\Framework\Marketplace\Settings;
+namespace Woodev\Framework\Marketplace\Intake;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Parses and checks newline- or comma-separated IPv4/IPv6 addresses and CIDR prefixes (`198.51.100.0/24`, `10.0.0.1`,
+ * Checks an address against a newline- or comma-separated list of IPv4/IPv6 addresses and CIDR prefixes (`198.51.100.0/24`, `10.0.0.1`,
  * `2001:db8::/32`). Blank lines and `#` comments are ignored.
  *
  * @since 2.1.2
  */
-final class Ip_List_Validator {
-	/**
-	 * Returns every entry in `$list` that is neither a valid IP address nor a valid CIDR range.
-	 *
-	 * @since 2.1.2
-	 *
-	 * @param string $list Raw textarea/input value.
-	 * @return string[] Malformed entries in input order; empty when every entry is valid.
-	 */
-	public static function invalid_entries( string $list ): array {
-		$invalid = [];
-
-		foreach ( self::tokens( $list ) as $entry ) {
-			if ( null === self::parse_cidr( $entry ) ) {
-				$invalid[] = $entry;
-			}
-		}
-
-		return $invalid;
-	}
-
-	/**
-	 * Parses valid IP/CIDR entries into normalized CIDR strings (`ip/prefix`).
-	 *
-	 * @since 2.1.2
-	 *
-	 * @param string $list Raw textarea/input value.
-	 * @return string[]
-	 */
-	public static function parse( string $list ): array {
-		$parsed = [];
-
-		foreach ( self::tokens( $list ) as $entry ) {
-			$cidr = self::parse_cidr( $entry );
-			if ( null !== $cidr ) {
-				$parsed[] = $cidr['ip'] . '/' . $cidr['prefix'];
-			}
-		}
-
-		return $parsed;
-	}
-
+final class Ip_Ranges {
 	/**
 	 * Tells whether `$ip` falls inside any entry of `$list`.
 	 *

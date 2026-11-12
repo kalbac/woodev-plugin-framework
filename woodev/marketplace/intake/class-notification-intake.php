@@ -30,6 +30,7 @@ final class Notification_Intake {
 	private const TOO_MANY      = 'Too many requests';
 	private const SCHEDULE_FAIL = 'Could not queue the notification drain: ';
 	private const ASYNC_MISSED  = 'The immediate drain was not queued; the five-minute sweep will pick the event up.';
+	private const SWITCHED_OFF  = 'notification type switched off';
 
 	/**
 	 * Decoder.
@@ -44,6 +45,20 @@ final class Notification_Intake {
 	 * @var Push_Protocol
 	 */
 	private $protocol;
+
+	/**
+	 * Sender-address rules.
+	 *
+	 * @var Sender_Network
+	 */
+	private $network;
+
+	/**
+	 * The merchant's notification-type switches.
+	 *
+	 * @var Webhook_Switches
+	 */
+	private $switches;
 
 	/**
 	 * Event ledger.
@@ -87,15 +102,19 @@ final class Notification_Intake {
 	 *
 	 * @param Inbound_Decoder             $decoder   Decoder.
 	 * @param Push_Protocol               $protocol  The marketplace's endpoint rules.
+	 * @param Sender_Network              $network   Sender-address rules.
+	 * @param Webhook_Switches            $switches  The merchant's notification-type switches.
 	 * @param Event_Ledger                $ledger    Event ledger.
 	 * @param Notification_Account_Reader $accounts  Accounts.
 	 * @param Drain_Scheduler             $scheduler Drain scheduler.
 	 * @param Push_Rate_Limiter           $limiter   Per-token rate limit.
 	 * @param callable|null               $log       Receives a line of text for the merchant's log.
 	 */
-	public function __construct( Inbound_Decoder $decoder, Push_Protocol $protocol, Event_Ledger $ledger, Notification_Account_Reader $accounts, Drain_Scheduler $scheduler, Push_Rate_Limiter $limiter, ?callable $log = null ) {
+	public function __construct( Inbound_Decoder $decoder, Push_Protocol $protocol, Sender_Network $network, Webhook_Switches $switches, Event_Ledger $ledger, Notification_Account_Reader $accounts, Drain_Scheduler $scheduler, Push_Rate_Limiter $limiter, ?callable $log = null ) {
 		$this->decoder   = $decoder;
 		$this->protocol  = $protocol;
+		$this->network   = $network;
+		$this->switches  = $switches;
 		$this->ledger    = $ledger;
 		$this->accounts  = $accounts;
 		$this->scheduler = $scheduler;
@@ -106,7 +125,7 @@ final class Notification_Intake {
 	/**
 	 * Handles a notification on the URL with a token, `…/notifications/{account_id}/{token}`.
 	 *
-	 * The token is the credential. An address outside the marketplace's ranges is recorded on the event by the decoder and does
+	 * The token is the credential. An address outside the marketplace's ranges is recorded on the event and does
 	 * not refuse the request: a 4xx would count against the URL in the marketplace's health check, and the token already matched.
 	 *
 	 * @since 2.1.0
@@ -128,7 +147,7 @@ final class Notification_Intake {
 			return $this->retryable( $e );
 		}
 
-		return $this->ingest( $account, $raw_body, $this->protocol->client_ip( $server ) );
+		return $this->ingest( $account, $raw_body, $this->network->client_ip( $server ) );
 	}
 
 	/**
@@ -146,9 +165,9 @@ final class Notification_Intake {
 	 * @return Intake_Response
 	 */
 	public function handle_tokenless( string $owner, string $raw_body, array $server ): Intake_Response {
-		$ip = $this->protocol->client_ip( $server );
+		$ip = $this->network->client_ip( $server );
 
-		if ( ! $this->protocol->is_allowed( $ip ) ) {
+		if ( ! $this->network->is_allowed( $ip ) ) {
 			return $this->refusal( 403, Intake_Response::REASON_UNAUTHORISED, self::UNAUTHORISED );
 		}
 
@@ -174,6 +193,14 @@ final class Notification_Intake {
 
 		if ( null === $event ) {
 			return Intake_Response::ok( $this->decoder->success_body() );
+		}
+
+		// Whether the address is the marketplace's is the framework's call, not the decoder's.
+		$event = $event->with_ip_trusted( $this->network->is_allowed( $ip ) );
+
+		// A switched-off type is stored and never worked, and answered 200: a 4xx would count against the URL in the marketplace's health check.
+		if ( '' === $event->ignore_reason() && ! $this->switches->is_enabled( $event->type() ) ) {
+			$event = $event->with_ignore_reason( self::SWITCHED_OFF );
 		}
 
 		try {

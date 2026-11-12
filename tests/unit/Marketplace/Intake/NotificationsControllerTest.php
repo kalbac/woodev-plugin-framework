@@ -15,6 +15,8 @@ use Woodev\Framework\Marketplace\Intake\Notification_Intake;
 use Woodev\Framework\Marketplace\Intake\Notification_Url;
 use Woodev\Framework\Marketplace\Intake\Notifications_Controller;
 use Woodev\Framework\Marketplace\Intake\Push_Rate_Limiter;
+use Woodev\Framework\Marketplace\Intake\Sender_Network;
+use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
 use Woodev\Framework\Marketplace\Jobs\Drain_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
@@ -75,6 +77,8 @@ final class NotificationsControllerTest extends Sync_Test_Case {
 			new Notification_Intake(
 				new Scripted_Inbound_Decoder(),
 				new Fake_Push_Protocol(),
+				new Sender_Network( Sqlite_Tables::MARKETPLACE_ID, new Fake_Push_Protocol() ),
+				new Webhook_Switches( [], 'woodev_fake_mp_' ),
 				new Wpdb_Event_Ledger( $this->db, Sqlite_Tables::table( 'events' ), $this->clock() ),
 				new Notification_Account_Reader( $this->db, Sqlite_Tables::table( 'accounts' ) ),
 				new Drain_Scheduler( $this->names() ),

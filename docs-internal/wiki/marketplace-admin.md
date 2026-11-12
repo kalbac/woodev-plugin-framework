@@ -446,10 +446,20 @@ What the code settled, where the text above left it open:
 
 What the code settled, where the text above left it open:
 
-- **Option names are the donor's.** The notification IP lists are saved as `woodev_{plugin id}_ip_allowlist` and
-  `woodev_{plugin id}_trusted_proxies`; `Notifications_Section::option_names( $plugin_id )` names them for the adapter's
-  `Push_Protocol` (the source-address policy stays in the plugin), and `Push_Protocol::default_ip_allowlist()` supplies the
-  list the screen offers first.
+- **The merchant decides no network detail (#1729, operator 12.11.2026).** The marketplace's sender addresses are the adapter's
+  constant, `Push_Protocol::default_ip_allowlist()`; a developer extends them with `woodev_{adapter id}_push_ip_allowlist`, and
+  declares the reverse proxies of a shop with `woodev_{adapter id}_push_trusted_proxies` (both through `Sender_Network`, which
+  also answers «where did this request come from» and «is that the marketplace»; the decoder no longer judges the address, the
+  intake stamps `Inbound_Event::ip_trusted`). The old `ip_allowlist` / `trusted_proxies` settings and
+  `Notifications_Section::option_names()` are gone. **The address refuses a request on one route only**: the legacy URL without
+  a token (`Notification_Intake::handle_tokenless()`, a plugin's own route). On the framework's route the 32-character token in the
+  path is the credential and the address is only recorded, so a shop behind a proxy loses nothing there. Proxy detection reuses
+  WooCommerce: `WC_Geolocation::get_ip_address()` differing from `REMOTE_ADDR`; the notice shows in the notifications card only
+  with «Логирование» on.
+- **Notification types are switches.** The adapter declares them in `Push_Protocol::webhook_types()` (`Webhook_Type`: id = the
+  decoder's event type, label, purpose, cabinet location, default). The framework registers one toggle per type
+  (`woodev_{plugin id}_webhook_{type id}`), explains them in the first card, and `Notification_Intake` stores a switched-off type
+  as `ignored` and answers 200 (a 4xx would count against the URL in the marketplace's health check).
 - **One seam per kind of answer.** `Settings_Descriptor` holds copy and field specs only. Remote push actions are
   `Marketplace_Adapter::push_admin( $account_id ): ?Push_Admin` (the `price_pusher()` pattern), so F11 and F15 reach them
   without a UI-copy object in between.
