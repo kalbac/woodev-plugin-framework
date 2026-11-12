@@ -162,6 +162,53 @@ final class PollTaskRunnerTest extends Export_Test_Case {
 	}
 
 	/**
+	 * A card created in the same answer that carries the oversize flag is seeded with the flag already set: the first stock
+	 * goes to the warehouse the flag selects, not to the ordinary one.
+	 *
+	 * @return void
+	 */
+	public function test_the_oversize_flag_is_known_when_a_card_is_first_seeded(): void {
+		$link = $this->sent( 'NB-1' );
+		$this->import_ok( 'NB-1', 'c-1' );
+		$this->lifecycle->cards = [ 'c-1' => new Card_Outcome( Link_Record::STATE_CREATED, true, false, 'created', [ 'card_ref' => 'c-1', 'model_ref' => 'm-1' ], true ) ];
+
+		$this->poll();
+
+		$this->assertSame( [ (int) $link->link_id() => true ], $this->seeded_oversize );
+	}
+
+	/**
+	 * The oversize flag the answer carries is written to the link while the card is still in progress.
+	 *
+	 * @return void
+	 */
+	public function test_the_oversize_flag_of_a_refreshed_card_is_written(): void {
+		$link = $this->sent( 'NB-1' );
+		$this->import_ok( 'NB-1', 'c-1' );
+		$this->lifecycle->cards = [ 'c-1' => new Card_Outcome( Link_Record::STATE_SKU_CREATED, false, false, 'processing', [], true ) ];
+
+		$this->poll();
+
+		$this->assertTrue( $this->link_of( $link->wc_product_id() )->is_oversize() );
+	}
+
+	/**
+	 * An answer without the flag keeps the stored one: it is never reset to false.
+	 *
+	 * @return void
+	 */
+	public function test_an_answer_without_the_oversize_flag_keeps_the_stored_one(): void {
+		$link = $this->sent( 'NB-1' );
+		$this->import_ok( 'NB-1', 'c-1' );
+		$this->links()->update_settings( (int) $link->link_id(), [ 'is_oversize' => true ] );
+		$this->lifecycle->cards = [ 'c-1' => new Card_Outcome( Link_Record::STATE_SKU_CREATED, false, false, 'processing' ) ];
+
+		$this->poll();
+
+		$this->assertTrue( $this->link_of( $link->wc_product_id() )->is_oversize() );
+	}
+
+	/**
 	 * A card the marketplace declines fails at once with its words; an item with import errors fails with the stored errors.
 	 *
 	 * @return void

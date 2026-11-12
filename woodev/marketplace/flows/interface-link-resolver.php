@@ -24,7 +24,9 @@ defined( 'ABSPATH' ) || exit;
  * A **card** is an array: `offer_id` (string, unique in the cabinet), `remote_ids` (name => identifier, the names are those of
  * {@see Card_Lifecycle::card_id_name()} and {@see Card_Lifecycle::late_id_names()}; an empty list means "not a card"), and, when the
  * marketplace says so, `state` (a `Link_Record` card state), `is_created` (bool), `archived` (bool), `failed` (bool) and `status_text`
- * (the marketplace's reason for a declined card).
+ * (the marketplace's reason for a declined card), and `oversize` (bool: the marketplace marks the card as oversize, e.g. Ozon `is_kgt`;
+ * an absent key keeps the stored `is_oversize` of the link, it is never reset to false). Stock of an oversize card goes to the
+ * account's oversize warehouse, so an adapter that knows the flag must pass it on.
  *
  * Any implementation may throw what its client throws (the adapter's {@see Error_Classifier} sorts it), or
  * {@see Link_Resolve_Exception} when the answer cannot be trusted.

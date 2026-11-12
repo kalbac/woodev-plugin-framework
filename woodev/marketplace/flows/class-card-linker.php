@@ -65,7 +65,7 @@ final class Card_Linker {
 	 * @param int                 $account_id    Account id.
 	 * @param int                 $wc_product_id Product or variation id.
 	 * @param int                 $wc_parent_id  Parent product id, 0 for a simple product.
-	 * @param array<string,mixed> $card          A {@see Link_Resolver} card: `offer_id`, `remote_ids` and, when known, `state`, `is_created`, `status_text`, `failed`.
+	 * @param array<string,mixed> $card          A {@see Link_Resolver} card: `offer_id`, `remote_ids` and, when known, `state`, `is_created`, `status_text`, `failed`, and `oversize` (bool; an absent key keeps the stored flag).
 	 * @param Claim_Fence|null    $fence         The account claim of the run, or null at request time.
 	 * @return string One of the class constants; {@see self::CLAIM_LOST} tells the job to stop.
 	 * @throws \Woodev\Framework\Marketplace\Data\Persistence_Exception When the database refuses the insert.
@@ -153,7 +153,7 @@ final class Card_Linker {
 				'remote_ids' => $remote_ids,
 				'card_state' => $state,
 				'is_created' => ! empty( $card['is_created'] ) ? 1 : 0,
-			]
+			] + $this->oversize( $card )
 		);
 
 		switch ( $this->links->insert_card( $record, $error, $fence ) ) {
@@ -193,6 +193,20 @@ final class Card_Linker {
 			'state'      => $state,
 			'is_created' => ! empty( $card['is_created'] ),
 			'error_text' => $error,
-		];
+		] + $this->oversize( $card );
+	}
+
+	/**
+	 * Builds the `is_oversize` column from the card's `oversize` flag. An absent key yields nothing, so the stored flag stays.
+	 *
+	 * @param array<string,mixed> $card Card.
+	 * @return array<string,int>
+	 */
+	private function oversize( array $card ): array {
+		if ( ! array_key_exists( 'oversize', $card ) ) {
+			return [];
+		}
+
+		return [ 'is_oversize' => ! empty( $card['oversize'] ) ? 1 : 0 ];
 	}
 }

@@ -94,6 +94,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	private $on_connected;
 
 	/**
+	 * Action fired with the account id after an `ok` connection test (`Job_Names::hook( 'account_connected' )`).
+	 *
+	 * @var string
+	 */
+	private $account_connected_hook;
+
+	/**
 	 * Loaded accounts keyed by account id (`null` before first load).
 	 *
 	 * @var array<int,Account>|null
@@ -140,6 +147,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$this->warehouses               = $warehouses;
 		$this->price_rules_changed_hook = ( new Job_Names( $plugin_id ) )->hook( 'account_price_rules_changed' );
 		$this->on_connected             = $on_connected;
+		$this->account_connected_hook   = ( new Job_Names( $plugin_id ) )->hook( 'account_connected' );
 	}
 
 	/**
@@ -420,6 +428,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			if ( $result->is_ok() && null !== $this->on_connected ) {
 				call_user_func( $this->on_connected, $id );
 			}
+
+			if ( $result->is_ok() ) {
+				do_action( $this->account_connected_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names (`woodev_{plugin_id}_account_connected`).
+			}
 		}
 
 		$safe_message = Report_Redactor::redact_text(
@@ -618,27 +630,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			);
 		}
 
-		if ( $this->adapter->supports( Capability::INBOUND_STOCK ) ) {
-			$this->add_select(
-				$handler,
-				self::setting_id( $key, 'stock_mode' ),
-				__( 'Остатки', 'woodev-plugin-framework' ),
-				[
-					self::option(
-						Wpdb_Account_Store::STOCK_SITE,
-						/* translators: %s: marketplace name. */
-						sprintf( __( 'Главный — сайт: остатки уходят с сайта на %s', 'woodev-plugin-framework' ), $marketplace )
-					),
-					self::option(
-						Wpdb_Account_Store::STOCK_MARKETPLACE,
-						/* translators: %s: marketplace name. */
-						sprintf( __( 'Главный — %1$s: остатки приходят с %2$s на сайт', 'woodev-plugin-framework' ), $marketplace, $marketplace )
-					),
-					self::option( Wpdb_Account_Store::STOCK_OFF, __( 'Не синхронизировать: остатки не отправляются и не приходят', 'woodev-plugin-framework' ) ),
-				],
-				__( 'Где ведётся учёт остатков.', 'woodev-plugin-framework' )
-			);
-		}
+		$this->add_select(
+			$handler,
+			self::setting_id( $key, 'stock_mode' ),
+			__( 'Остатки', 'woodev-plugin-framework' ),
+			$this->stock_mode_options( $marketplace ),
+			__( 'Где ведётся учёт остатков.', 'woodev-plugin-framework' )
+		);
 
 		$price_options = $this->price_direction_options( $marketplace );
 		if ( [] !== $price_options ) {
@@ -671,7 +669,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				__( 'Импортировать новые карточки автоматически', 'woodev-plugin-framework' ),
 				false,
 				/* translators: %s: marketplace name. */
-				sprintf( __( 'Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено.', 'woodev-plugin-framework' ), $marketplace )
+				sprintf( __( 'Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено.', 'woodev-plugin-framework' ), $marketplace ) . ' ' . __( 'In the other direction, add products manually on the Products screen.', 'woodev-plugin-framework' )
 			);
 		}
 	}
@@ -816,9 +814,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			$stock_ids[] = self::setting_id( $key, 'oversize_warehouse_id' );
 		}
 
-		if ( $this->adapter->supports( Capability::INBOUND_STOCK ) ) {
-			$stock_ids[] = self::setting_id( $key, 'stock_mode' );
-		}
+		$stock_ids[] = self::setting_id( $key, 'stock_mode' );
 
 		$all_ids  = array_merge( $all_ids, $stock_ids );
 		$groups[] = Settings_Group::create(
@@ -1129,7 +1125,9 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				$this->save_oversize_warehouse( $id, (int) $text );
 				return;
 			case 'stock_mode':
-				$this->store->update_fields( $id, [ 'stock_mode' => $text ] );
+				if ( $this->accepts_stock_mode( $text ) ) {
+					$this->store->update_fields( $id, [ 'stock_mode' => $text ] );
+				}
 				return;
 			case 'price_direction':
 				$this->store->update_fields( $id, [ 'price_direction' => $text ] );
@@ -1369,6 +1367,51 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		);
 
 		return $options;
+	}
+
+	/**
+	 * Builds the `stock_mode` option list: `marketplace` is offered only when the adapter receives stock inbound.
+	 *
+	 * @param string $marketplace Marketplace name.
+	 * @return array<int,array{value:string,label:string}>
+	 */
+	private function stock_mode_options( string $marketplace ): array {
+		$options = [
+			self::option(
+				Wpdb_Account_Store::STOCK_SITE,
+				/* translators: %s: marketplace name. */
+				sprintf( __( 'Главный — сайт: остатки уходят с сайта на %s', 'woodev-plugin-framework' ), $marketplace )
+			),
+		];
+
+		if ( $this->adapter->supports( Capability::INBOUND_STOCK ) ) {
+			$options[] = self::option(
+				Wpdb_Account_Store::STOCK_MARKETPLACE,
+				/* translators: %s: marketplace name. */
+				sprintf( __( 'Главный — %1$s: остатки приходят с %2$s на сайт', 'woodev-plugin-framework' ), $marketplace, $marketplace )
+			);
+		}
+
+		$options[] = self::option(
+			Wpdb_Account_Store::STOCK_OFF,
+			__( 'Не синхронизировать: остатки не отправляются и не приходят', 'woodev-plugin-framework' )
+		);
+
+		return $options;
+	}
+
+	/**
+	 * Tells whether a submitted `stock_mode` may be saved: `site` and `off` always, `marketplace` only with `INBOUND_STOCK`.
+	 *
+	 * @param string $mode Submitted value.
+	 * @return bool
+	 */
+	private function accepts_stock_mode( string $mode ): bool {
+		if ( Wpdb_Account_Store::STOCK_MARKETPLACE === $mode ) {
+			return $this->adapter->supports( Capability::INBOUND_STOCK );
+		}
+
+		return in_array( $mode, [ Wpdb_Account_Store::STOCK_SITE, Wpdb_Account_Store::STOCK_OFF ], true );
 	}
 
 	/**

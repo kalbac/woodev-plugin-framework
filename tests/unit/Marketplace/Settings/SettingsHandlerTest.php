@@ -202,6 +202,35 @@ final class SettingsHandlerTest extends TestCase {
 		$this->assertSame( 'super-secret-signing-key-222', $reloaded->credentials()['signing_secret'] );
 	}
 
+	public function test_stock_mode_offers_site_and_off_always_and_marketplace_only_with_inbound_stock(): void {
+		[ $bare_handler, , $bare_id ]       = $this->stock_mode_handler( [] );
+		[ $inbound_handler, , $inbound_id ] = $this->stock_mode_handler( [ Capability::INBOUND_STOCK ], '2' );
+
+		$this->assertSame( [ 'site', 'off' ], $this->stock_mode_values( $bare_handler, $bare_id ), 'without INBOUND_STOCK «Не синхронизировать» stays' );
+		$this->assertSame( [ 'site', 'marketplace', 'off' ], $this->stock_mode_values( $inbound_handler, $inbound_id ) );
+	}
+
+	public function test_saving_stock_mode_marketplace_is_refused_without_inbound_stock_and_off_is_kept(): void {
+		[ $handler, $store, $acc_id ] = $this->stock_mode_handler( [] );
+
+		$handler->get_setting( "account_{$acc_id}_stock_mode" )->set_value( 'off' );
+		$handler->save();
+		$this->assertSame( 'off', $store->get( $acc_id )->setting( 'stock_mode' ), 'off is saved without the capability' );
+
+		$handler->get_setting( "account_{$acc_id}_stock_mode" )->set_value( 'marketplace' );
+		$handler->save();
+		$this->assertSame( 'off', $store->get( $acc_id )->setting( 'stock_mode' ), 'marketplace is refused: the stored value stays' );
+	}
+
+	public function test_saving_stock_mode_marketplace_is_accepted_with_inbound_stock(): void {
+		[ $handler, $store, $acc_id ] = $this->stock_mode_handler( [ Capability::INBOUND_STOCK ] );
+
+		$handler->get_setting( "account_{$acc_id}_stock_mode" )->set_value( 'marketplace' );
+		$handler->save();
+
+		$this->assertSame( 'marketplace', $store->get( $acc_id )->setting( 'stock_mode' ) );
+	}
+
 	public function test_validates_adapter_rules_duplicates_half_filled_new_block_and_price_rules(): void {
 		$fields     = new Credential_Fields( 'merchant_uid', [ 'access_token' ] );
 		$descriptor = new Fake_Settings_Descriptor(
@@ -326,7 +355,7 @@ final class SettingsHandlerTest extends TestCase {
 		);
 
 		// Unsupported capabilities must NOT register settings at all (D2).
-		$this->assertNull( $handler->get_setting( "account_{$acc_id}_stock_mode" ) );
+		$this->assertNotNull( $handler->get_setting( "account_{$acc_id}_stock_mode" ), 'the stock select is always there (site and off)' );
 		$this->assertNull( $handler->get_setting( "account_{$acc_id}_import_enabled" ) );
 		$this->assertNull( $handler->get_setting( "account_{$acc_id}_orders_enabled" ) );
 
@@ -335,6 +364,7 @@ final class SettingsHandlerTest extends TestCase {
 		$this->assertSame( 0, $health_called );
 
 		// Live test_connection falls back to stored secret when input is '', redacts message, updates currency, calls on_connected.
+		Actions\expectDone( 'woodev_fake_mp_account_connected' )->once()->with( $acc_id );
 		$res = $handler->test_connection(
 			"account_connection_{$acc_id}",
 			[
@@ -360,6 +390,53 @@ final class SettingsHandlerTest extends TestCase {
 		$handler->save( "account_{$acc_id}_price_markup_kind" );
 	}
 
+	public function test_a_failed_connection_test_does_not_fire_account_connected(): void {
+		$fields = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
+		$health = new class() implements Credential_Health {
+			public function check( Account $account ): Health_Result {
+				return new Health_Result( Health_Result::AUTH_FAILED, 'Ключ отклонён', null, [] );
+			}
+		};
+
+		$adapter = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'      => [],
+				'credential_fields' => $fields,
+				'credential_health' => $health,
+				'posting_handler'   => null,
+				'price_reader'      => null,
+			]
+		);
+
+		$store = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-1' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+
+		$acc_id  = $store->save(
+			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Failing Shop', true, [ 'cabinet_id' => '701', 'api_token' => 'secret-token-701' ] )
+		);
+		$handler = $this->build_handler( $adapter, $store );
+
+		Actions\expectDone( 'woodev_fake_mp_account_connected' )->never();
+		$res = $handler->test_connection(
+			"account_connection_{$acc_id}",
+			[
+				"account_{$acc_id}_cabinet_id" => '701',
+				"account_{$acc_id}_api_token"  => '',
+			]
+		);
+
+		$this->assertFalse( $res->is_success() );
+	}
+
 	public function test_the_oversize_warehouse_list_puts_flagged_warehouses_first_and_marks_them(): void {
 		$this->cache->put(
 			Warehouse_Options::key_for( 5 ),
@@ -379,6 +456,61 @@ final class SettingsHandlerTest extends TestCase {
 		$this->assertSame( [ 2, 4, 1, 3 ], array_keys( $options->for_account( 5, true ) ), 'flagged first, stable inside the groups' );
 		$this->assertSame( 'Склад Б (КГТ)', $options->for_account( 5, true )['2'] );
 		$this->assertSame( 'Склад А', $options->for_account( 5, true )['1'] );
+	}
+
+	/**
+	 * Builds a handler over one saved account whose adapter declares only the given capabilities.
+	 *
+	 * @param string[] $capabilities Capabilities the fake adapter declares.
+	 * @param string   $uid          Merchant identifier (unique per account in one test).
+	 * @return array{0:Settings_Handler,1:Wpdb_Account_Store,2:int}
+	 */
+	private function stock_mode_handler( array $capabilities, string $uid = '1' ): array {
+		$fields     = new Credential_Fields( 'merchant_uid', [ 'access_token' ] );
+		$descriptor = new Fake_Settings_Descriptor(
+			$fields,
+			'Acme',
+			[
+				'merchant_uid' => new Credential_Field_Spec( 'UID продавца', 'Код продавца' ),
+				'access_token' => new Credential_Field_Spec( 'Токен доступа', 'Основной токен' ),
+			]
+		);
+		$adapter    = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => $capabilities,
+				'credential_fields'   => $fields,
+				'settings_descriptor' => $descriptor,
+			]
+		);
+		$store      = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-1' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$acc_id     = $store->save(
+			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', true, [ 'merchant_uid' => $uid, 'access_token' => 'token-1' ] )
+		);
+
+		return [ $this->build_handler( $adapter, $store ), $store, $acc_id ];
+	}
+
+	/**
+	 * Lists the values the rendered `stock_mode` select offers (the field schema is what the admin form renders).
+	 *
+	 * @param Settings_Handler $handler Handler.
+	 * @param int              $acc_id  Account id.
+	 * @return string[]
+	 */
+	private function stock_mode_values( Settings_Handler $handler, int $acc_id ): array {
+		$schema = Field_Schema::from_handler( $handler );
+
+		return array_column( $schema[ "account_{$acc_id}_stock_mode" ]['options'] ?? [], 'value' );
 	}
 
 	private function build_handler(
