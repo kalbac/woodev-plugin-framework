@@ -9698,3 +9698,104 @@ msgstr ""
 #: marketplace/admin/pages/products/class-site-products-rows.php:284
 msgid "По умолчанию"
 msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:76
+msgid "Включить логирование"
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:77
+msgid "Выключить логирование"
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:78
+msgid "Логирование включено: ниже подробная диагностика и отчёт для поддержки."
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:79
+msgid "Сейчас показано только состояние подключения. Чтобы увидеть, что происходит с уведомлениями, очередью и ошибками, и получить отчёт для поддержки, включите логирование."
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:80
+msgid "Отчёт для поддержки"
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:81
+msgid "Скопируйте этот текст и отправьте в поддержку. Ключи доступа в него не попадают."
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:82
+msgid "Скопировать отчёт для поддержки"
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:83
+msgid "Скопировано"
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:84
+msgid "Не удалось скопировать: выделите текст ниже и скопируйте вручную."
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:86
+msgid "Не удалось получить отчёт. Попробуйте ещё раз."
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:217
+msgid "Укажите, включить логирование или выключить."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tool-activity.php:107
+msgid "По аккаунту идёт фоновая работа. Инструменты, которым нужна эта работа, станут доступны, когда она закончится."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tool-catalogue.php:53
+msgid "Сейчас по аккаунту идёт фоновая работа. Инструмент станет доступен, когда она закончится."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tool-runner.php:73
+#: marketplace/admin/pages/tools/class-tools-controller.php:314
+msgid "Такого инструмента нет."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tool-runner.php:96
+msgid "По аккаунту уже идёт фоновая работа. Запустите инструмент, когда она закончится."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:201
+msgid "Выберите аккаунт, чтобы запускать инструменты."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:202
+msgid "Для этого маркетплейса пока нет инструментов."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:205
+msgid "Выполняется…"
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:206
+msgid "Не удалось загрузить инструменты. Обновите страницу."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:207
+msgid "Инструмент не выполнен."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:259
+msgid "Запуск не подтверждён."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:308
+msgid "В запросе есть поля, которых не бывает."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:321
+msgid "Аккаунт не найден. Обновите страницу."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:325
+msgid "Аккаунт выключен. Включите его в настройках плагина."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:382
+msgid "Номер аккаунта указан неверно."
+msgstr ""
