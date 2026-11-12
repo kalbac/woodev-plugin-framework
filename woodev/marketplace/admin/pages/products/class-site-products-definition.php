@@ -117,6 +117,26 @@ final class Site_Products_Definition {
 	}
 
 	/**
+	 * «Связать по артикулу»: the account-wide job that matches the cabinet's cards to the shop's products by article. It reaches the
+	 * whole shop whatever is selected, and says so; both tables of the products page offer it.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return array<string,mixed>
+	 */
+	public static function link_by_article(): array {
+		return [
+			'id'             => Site_Products_Bulk::LINK_BY_ARTICLE,
+			'label'          => __( 'Связать по артикулу', 'woodev-plugin-framework' ),
+			'effect'         => 'mutate',
+			'interaction'    => 'dialog',
+			'scope'          => 'account',
+			'capability'     => 'manage_woocommerce',
+			'scope_sentence' => __( 'Связывание идёт по всему магазину, не только по отмеченным товарам. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ),
+		];
+	}
+
+	/**
 	 * @param string $marketplace Marketplace name.
 	 * @return array<int,array<string,mixed>>
 	 */
@@ -187,15 +207,7 @@ final class Site_Products_Definition {
 	private static function bulk_actions( string $marketplace, array $withheld ): array {
 		$actions = [
 			self::action( Site_Products_Bulk::EXPORT, __( 'Экспортировать / Обновить карточку', 'woodev-plugin-framework' ), __( 'Товары, прошедшие проверку, уйдут в очередь на отправку. Остальные останутся как есть — исправьте причину и повторите.', 'woodev-plugin-framework' ) ),
-			[
-				'id'             => Site_Products_Bulk::LINK_BY_ARTICLE,
-				'label'          => __( 'Связать по артикулу', 'woodev-plugin-framework' ),
-				'effect'         => 'mutate',
-				'interaction'    => 'dialog',
-				'scope'          => 'account',
-				'capability'     => 'manage_woocommerce',
-				'scope_sentence' => __( 'Связывание идёт по всему магазину, не только по отмеченным товарам. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ),
-			],
+			self::link_by_article(),
 			self::action( Site_Products_Bulk::SEND_STOCK, __( 'Отправить остатки', 'woodev-plugin-framework' ), __( 'Текущий остаток с сайта будет отправлен на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
 			self::action( Site_Products_Bulk::SEND_PRICE, __( 'Отправить цены', 'woodev-plugin-framework' ), __( 'Текущая цена с сайта будет отправлена на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
 			self::action( Site_Products_Bulk::SYNC_STOCK_ON, __( 'Включить синхронизацию остатков', 'woodev-plugin-framework' ) ),
@@ -268,6 +280,15 @@ final class Site_Products_Definition {
 	 * @return array<string,string>
 	 */
 	private static function messages(): array {
+		return array_merge( self::shell_messages(), self::action_messages() );
+	}
+
+	/**
+	 * The sentences of the table itself.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function shell_messages(): array {
 		return [
 			'empty'                 => __( 'Товаров не найдено. Добавьте аккаунт в настройках или измените фильтры.', 'woodev-plugin-framework' ),
 			'empty_filtered'        => __( 'По этим фильтрам товаров нет.', 'woodev-plugin-framework' ),
@@ -285,6 +306,20 @@ final class Site_Products_Definition {
 			'selection_limit'       => __( 'Выбрано предельное число товаров. Выполните действие и выберите остальные.', 'woodev-plugin-framework' ),
 			'filter_any'            => __( 'Любое', 'woodev-plugin-framework' ),
 			'per_page'              => __( 'Товаров на странице', 'woodev-plugin-framework' ),
+			'activity_stale'        => __( 'Данные о ходе работы устарели: обновляем.', 'woodev-plugin-framework' ),
+			'activity_failed'       => __( 'Не удаётся получить ход работы. Попробуем ещё раз.', 'woodev-plugin-framework' ),
+		];
+	}
+
+	/**
+	 * The sentences of the action dialog (the preview, the confirmation, the result), the same on every table of the page.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return array<string,string>
+	 */
+	public static function action_messages(): array {
+		return [
 			'action_cancel'         => __( 'Отмена', 'woodev-plugin-framework' ),
 			'action_close'          => __( 'Закрыть', 'woodev-plugin-framework' ),
 			'action_preview'        => __( 'Проверить', 'woodev-plugin-framework' ),
@@ -310,8 +345,6 @@ final class Site_Products_Definition {
 			'action_options_more'   => __( 'Показать ещё', 'woodev-plugin-framework' ),
 			'action_options_error'  => __( 'Не удалось загрузить список.', 'woodev-plugin-framework' ),
 			'action_options_loading' => __( 'Загружаем список…', 'woodev-plugin-framework' ),
-			'activity_stale'        => __( 'Данные о ходе работы устарели: обновляем.', 'woodev-plugin-framework' ),
-			'activity_failed'       => __( 'Не удаётся получить ход работы. Попробуем ещё раз.', 'woodev-plugin-framework' ),
 		];
 	}
 }

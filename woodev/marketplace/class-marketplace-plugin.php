@@ -175,7 +175,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 					'slug'   => Page::LANDING_SLUG,
 					'title'  => __( 'Товары', 'woodev-plugin-framework' ),
 					'kind'   => Page::KIND_RECORDS,
-					'tables' => [ 'products' ],
+					'tables' => $this->get_product_tables(),
 				],
 				[
 					'slug'   => 'orders',
@@ -202,6 +202,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 					'view'  => 'diagnostics',
 				],
 			];
+		}
+
+		/**
+		 * The tables of the «Товары» page: the shop's products and, when the marketplace can list its cards (it can import products),
+		 * the cards of the marketplace's cabinet. A page with two tables lets the merchant switch between them, so each carries its label.
+		 *
+		 * @since 2.1.5
+		 *
+		 * @return array<string,string> Label by table id.
+		 */
+		private function get_product_tables(): array {
+			$tables = [ 'products' => __( 'Товары сайта', 'woodev-plugin-framework' ) ];
+
+			if ( $this->get_marketplace_adapter()->supports( Capabilities\Capability::IMPORT_PRODUCTS ) ) {
+				$tables['remote_cards'] = __( 'Карточки на маркетплейсе', 'woodev-plugin-framework' );
+			}
+
+			return $tables;
 		}
 
 		/**

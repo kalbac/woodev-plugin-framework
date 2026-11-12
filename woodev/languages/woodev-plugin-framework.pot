@@ -9698,3 +9698,183 @@ msgstr ""
 #: marketplace/admin/pages/products/class-site-products-rows.php:284
 msgid "По умолчанию"
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:178
+#, php-format
+msgid "Карточка %1$s «%2$s» будет связана с товаром «%3$s». На маркетплейсе ничего не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:209
+msgid "Не удалось записать связь: база данных не ответила. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:260
+msgid "Не удалось поставить загрузку списка в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:266
+msgid "Список карточек загружается. Это займёт от нескольких секунд до пары минут — обновите страницу чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:301
+msgid "Этой карточки нет в загруженном списке — он мог устареть. Нажмите «Обновить список» и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:305
+msgid "О карточке нет полных данных: при загрузке списка они не совпали. Обновите список и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:315
+msgid "Список уже загружается. Дождитесь окончания и обновите страницу."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:376
+msgid "загрузить список карточек с маркетплейса"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:94
+msgid "Номера на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:99
+msgid "Статус карточки"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:104
+msgid "На сайте"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:124
+msgid "Поиск по артикулу и названию"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:134
+msgid "Нет на сайте"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:138
+msgid "Уже на сайте"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:154
+msgid "Связать с…"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:159
+msgid "Карточка будет связана с выбранным товаром сайта. На маркетплейсе ничего не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:160
+msgid "Связать"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:164
+msgid "Товар сайта"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:169
+msgid "Начните вводить название или артикул. У вариативного товара выберите вариант."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:184
+msgid "Обновить список"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:191
+#, php-format
+msgid "Весь аккаунт — список карточек загрузится с маркетплейса %1$s заново и будет храниться %2$d минут. Товары на сайте и карточки на маркетплейсе не меняются."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:208
+msgid "Карточек не найдено. Нажмите «Обновить список» или измените фильтры."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:209
+msgid "По этим фильтрам карточек нет."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:211
+#, php-format
+msgid "Не удалось показать список карточек %s. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:215
+msgid "Все карточки"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:216
+msgid "Карточек на странице"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:217
+msgid "Проверяем…"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:218
+msgid "Ответа нет: действие могло выполниться. Мы обновили таблицу — проверьте её."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:219
+msgid "Ищем товары…"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:220
+msgid "Данные устарели: обновляем."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:221
+msgid "Не удаётся узнать, загружается ли список. Попробуем ещё раз."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-products.php:110
+msgid "Выберите товар из списка."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-products.php:114
+msgid "К вариативному товару нельзя привязать карточку. Выберите один из его вариантов."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-products.php:118
+msgid "У вас нет прав на изменение этого товара."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-products.php:142
+#, php-format
+msgid "Товар №%d (удалён)"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:284
+msgid "Список карточек загружается с маркетплейса. Когда загрузка закончится, обновите страницу."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:303
+#, php-format
+msgid "Не удалось загрузить список: %s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:309
+#, php-format
+msgid "Список загружен %1$s: %2$d карточка."
+msgid_plural "Список загружен %1$s: карточек — %2$d."
+msgstr[0] ""
+msgstr[1] ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:314
+msgid "Список карточек не загружен или устарел. Нажмите «Обновить список»."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-rows.php:196
+msgid "Карточка уже связана с товаром сайта."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-rows.php:198
+msgid "О карточке нет полных данных. Обновите список."
+msgstr ""
+
+#: marketplace/class-marketplace-plugin.php:216
+msgid "Товары сайта"
+msgstr ""
+
+#: marketplace/class-marketplace-plugin.php:219
+msgid "Карточки на маркетплейсе"
+msgstr ""

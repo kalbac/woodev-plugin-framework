@@ -17,7 +17,8 @@ if ( ! class_exists( Page::class, false ) ) :
 	 * A plugin declares pages as arrays ({@see Marketplace_Plugin::get_marketplace_pages()}); this class is the one place that
 	 * turns such an array into a checked value, so the menu, the manifest and the legacy redirects cannot disagree about a page.
 	 *
-	 * Descriptor keys: `slug`, `title`, `kind`, `tables` (for `records`), `view` (for `custom`), `capability`, `legacy_page`, and
+	 * Descriptor keys: `slug`, `title`, `kind`, `tables` (for `records`: a list of table ids, or a map of table id => label when the
+	 * page offers several tables to switch between), `view` (for `custom`), `capability`, `legacy_page`, and
 	 * `analytics` — reserved, always `null` (ADR-013: the analytics slot exists, nothing is computed or requested for it).
 	 *
 	 * @since 2.0.29
@@ -80,6 +81,13 @@ if ( ! class_exists( Page::class, false ) ) :
 		private $tables;
 
 		/**
+		 * Label of each table that has one, by table id.
+		 *
+		 * @var array<string,string>
+		 */
+		private $table_labels;
+
+		/**
 		 * @var string
 		 */
 		private $view;
@@ -102,8 +110,9 @@ if ( ! class_exists( Page::class, false ) ) :
 		 * @param string      $view         View handle (`custom` pages).
 		 * @param string|null $capability   Capability that overrides the menu's; null inherits it.
 		 * @param string[]    $legacy_pages v1 admin URLs that now land here.
+		 * @param string[]    $table_labels Label of each table that has one, by table id.
 		 */
-		private function __construct( string $slug, string $title, string $kind, array $tables, string $view, ?string $capability, array $legacy_pages ) {
+		private function __construct( string $slug, string $title, string $kind, array $tables, string $view, ?string $capability, array $legacy_pages, array $table_labels = [] ) {
 			$this->slug         = $slug;
 			$this->title        = $title;
 			$this->kind         = $kind;
@@ -111,6 +120,7 @@ if ( ! class_exists( Page::class, false ) ) :
 			$this->view         = $view;
 			$this->capability   = $capability;
 			$this->legacy_pages = $legacy_pages;
+			$this->table_labels = $table_labels;
 		}
 
 		/**
@@ -141,10 +151,10 @@ if ( ! class_exists( Page::class, false ) ) :
 				throw new \InvalidArgumentException( sprintf( 'Marketplace page "%s" has an unknown kind.', $slug ) );
 			}
 
-			$tables = self::string_list( $descriptor['tables'] ?? [] );
+			$tables = self::tables( $descriptor['tables'] ?? [], $slug );
 			$view   = isset( $descriptor['view'] ) ? (string) $descriptor['view'] : '';
 
-			if ( self::KIND_RECORDS === $kind && [] === $tables ) {
+			if ( self::KIND_RECORDS === $kind && [] === $tables['ids'] ) {
 				throw new \InvalidArgumentException( sprintf( 'Marketplace records page "%s" names no table.', $slug ) );
 			}
 
@@ -164,10 +174,11 @@ if ( ! class_exists( Page::class, false ) ) :
 				$slug,
 				$title,
 				$kind,
-				$tables,
+				$tables['ids'],
 				$view,
 				$capability,
-				self::string_list( $descriptor['legacy_page'] ?? [] )
+				self::string_list( $descriptor['legacy_page'] ?? [] ),
+				$tables['labels']
 			);
 		}
 
@@ -205,6 +216,18 @@ if ( ! class_exists( Page::class, false ) ) :
 		 */
 		public function get_tables(): array {
 			return $this->tables;
+		}
+
+		/**
+		 * The labels of the tables the page offers to switch between, by table id. A page whose descriptor listed bare ids has none, and
+		 * so has a page with a single table.
+		 *
+		 * @since 2.1.5
+		 *
+		 * @return array<string,string>
+		 */
+		public function get_table_labels(): array {
+			return $this->table_labels;
 		}
 
 		/**
@@ -304,6 +327,42 @@ if ( ! class_exists( Page::class, false ) ) :
 			}
 
 			return true;
+		}
+
+		/**
+		 * Reads the `tables` of a descriptor: a list of ids, or a map of id => label.
+		 *
+		 * @param mixed  $value Raw descriptor value.
+		 * @param string $slug  Page slug, for the error.
+		 * @return array{ids:string[],labels:array<string,string>}
+		 * @throws \InvalidArgumentException When a map gives a table no label.
+		 */
+		private static function tables( $value, string $slug ): array {
+			$items = (array) $value;
+
+			if ( array_values( $items ) === $items ) {
+				return [
+					'ids'    => self::string_list( $items ),
+					'labels' => [],
+				];
+			}
+
+			$labels = [];
+
+			foreach ( $items as $id => $label ) {
+				$label = is_scalar( $label ) ? trim( (string) $label ) : '';
+
+				if ( '' === $label ) {
+					throw new \InvalidArgumentException( sprintf( 'Marketplace page "%s": table "%s" has no label.', $slug, (string) $id ) );
+				}
+
+				$labels[ (string) $id ] = $label;
+			}
+
+			return [
+				'ids'    => array_keys( $labels ),
+				'labels' => $labels,
+			];
 		}
 
 		/**
