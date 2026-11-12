@@ -13,13 +13,16 @@ use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
+use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
 use Woodev\Framework\Marketplace\Data\Schema;
+use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
+use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
@@ -43,9 +46,9 @@ defined( 'ABSPATH' ) || exit;
  * Builds the services of the «Товары сайта» table from the plugin's adapter and registers the provider with the records engine. Nothing
  * here names a marketplace: every marketplace fact comes from the {@see Marketplace_Adapter}.
  *
- * The provider is built when the REST API starts, not on every request, and only when the plugin still has the `products` page.
+ * The providers are built when the REST API starts, not on every request, and only when the plugin still has the `products` page.
  * A plugin whose adapter cannot import cards (no {@see Capability::IMPORT_PRODUCTS}) gets the table without «Экспортировать» and
- * «Связать по артикулу».
+ * «Связать по артикулу», and no «Карточки на маркетплейсе» table: the page declares that one only for an adapter that can list the cards.
  *
  * @since 2.1.4
  */
@@ -70,6 +73,7 @@ final class Site_Products_Module {
 			'rest_api_init',
 			static function () use ( $plugin, $accounts, $db ): void {
 				self::register_provider( $plugin, $accounts, $db );
+				self::register_remote_cards( $plugin, $accounts, $db );
 			},
 			5 // Before the REST registrar walks its controllers (priority 10), so the routes of a table registered now exist.
 		);
@@ -86,18 +90,48 @@ final class Site_Products_Module {
 	 * @return bool Whether a provider was registered.
 	 */
 	public static function register_provider( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): bool {
+		$capability = self::capability_for( $plugin, null );
+
+		return null !== $capability && Records_Registry::instance()->register( $plugin->get_id(), self::provider( $plugin, $accounts, $db ), $capability );
+	}
+
+	/**
+	 * Registers the «Карточки на маркетплейсе» provider; does nothing when the plugin's `products` page does not declare that table
+	 * (its adapter cannot list the cards, or the plugin dropped the table) or its id cannot be a route segment.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
+	 * @param Wpdb_Account_Store $accounts Account store.
+	 * @param \wpdb              $db       Database.
+	 * @return bool Whether a provider was registered.
+	 */
+	public static function register_remote_cards( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): bool {
+		$capability = self::capability_for( $plugin, Remote_Cards_Provider::TABLE );
+
+		return null !== $capability && Records_Registry::instance()->register( $plugin->get_id(), self::remote_cards_provider( $plugin, $accounts, $db ), $capability );
+	}
+
+	/**
+	 * The capability a table of the `products` page is registered with, or null when the table is not to be registered.
+	 *
+	 * @param Marketplace_Plugin $plugin The marketplace plugin.
+	 * @param string|null        $table  A table the page must declare besides `products`; null for the products table itself.
+	 * @return string|null
+	 */
+	private static function capability_for( Marketplace_Plugin $plugin, ?string $table ): ?string {
 		$menu = $plugin->get_marketplace_admin_menu();
 		$page = null === $menu ? null : $menu->get_page( self::PAGE );
 
 		if ( null === $menu || null === $page || 1 !== preg_match( Records_Definition::SLUG_PATTERN, $plugin->get_id() ) ) {
-			return false;
+			return null;
 		}
 
-		return Records_Registry::instance()->register(
-			$plugin->get_id(),
-			self::provider( $plugin, $accounts, $db ),
-			$page->get_capability( $menu->get_capability() )
-		);
+		if ( null !== $table && ! in_array( $table, $page->get_tables(), true ) ) {
+			return null;
+		}
+
+		return $page->get_capability( $menu->get_capability() );
 	}
 
 	/**
@@ -135,6 +169,52 @@ final class Site_Products_Module {
 				'adapter_id'  => $adapter->id(),
 				'marketplace' => $adapter->settings_descriptor()->marketplace_name(),
 				'withheld'    => $withheld,
+			]
+		);
+	}
+
+	/**
+	 * Builds the «Карточки на маркетплейсе» provider, with the same services the products table uses for «Связать по артикулу».
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
+	 * @param Wpdb_Account_Store $accounts Account store.
+	 * @param \wpdb              $db       Database.
+	 * @return Remote_Cards_Provider
+	 */
+	public static function remote_cards_provider( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): Remote_Cards_Provider {
+		$adapter  = $plugin->get_marketplace_adapter();
+		$schema   = new Schema( $adapter->id() );
+		$table    = static function ( string $name ) use ( $schema, $db ): string {
+			return $schema->table_name( $name, $db->prefix );
+		};
+		$links    = new Wpdb_Link_Store( $db, $table( 'links' ), $table( 'link_ids' ) );
+		$ledger   = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
+		$products = new Remote_Cards_Products( Remote_Cards_Products::woocommerce_search() );
+		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ] );
+		$store    = new Cards_Snapshot_Store( Uninstaller::option_prefix( $plugin->get_id() ) );
+		$actions  = new Remote_Cards_Actions(
+			$store,
+			$links,
+			new Card_Linker( $links ),
+			new Link_Scheduler( new Job_Names( $plugin->get_id() ) ),
+			self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
+			License_Gate::for_plugin( $plugin ),
+			$products,
+			$rows
+		);
+
+		return new Remote_Cards_Provider(
+			$accounts,
+			$store,
+			$links,
+			$rows,
+			$products,
+			$actions,
+			[
+				'adapter_id'  => $adapter->id(),
+				'marketplace' => $adapter->settings_descriptor()->marketplace_name(),
 			]
 		);
 	}

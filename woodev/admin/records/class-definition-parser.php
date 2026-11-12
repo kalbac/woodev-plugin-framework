@@ -402,7 +402,7 @@ final class Definition_Parser {
 		foreach ( self::list( $raw, $path, 0, Records_Definition::MAX_ACTION_FIELDS ) as $i => $field ) {
 			$field_path = "{$path}[$i]";
 			$field      = self::map( $field, $field_path );
-			self::allow_keys( $field, [ 'id', 'label', 'type', 'required', 'options', 'options_source', 'help' ], $field_path );
+			self::allow_keys( $field, [ 'id', 'label', 'type', 'required', 'options', 'options_source', 'searchable', 'help' ], $field_path );
 
 			$entry = [
 				'id'             => self::slug( $field, 'id', $field_path ),
@@ -411,10 +411,17 @@ final class Definition_Parser {
 				'required'       => self::flag( $field, 'required', $field_path, false ),
 				'options'        => [],
 				'options_source' => self::flag( $field, 'options_source', $field_path, false ),
+				'searchable'     => self::flag( $field, 'searchable', $field_path, false ),
 				'help'           => self::text( $field, 'help', $field_path, true ),
 			];
 
-			$out[] = self::filter_options( $entry, $field, $field_path );
+			$entry = self::filter_options( $entry, $field, $field_path );
+
+			if ( $entry['searchable'] && ( 'select' !== $entry['type'] || ! $entry['options_source'] ) ) {
+				throw new \InvalidArgumentException( "$field_path: only a select with options_source can be searchable." );
+			}
+
+			$out[] = $entry;
 		}
 
 		self::unique_ids( $out, $path );
