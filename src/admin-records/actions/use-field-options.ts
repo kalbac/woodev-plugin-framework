@@ -51,6 +51,11 @@ export function useFieldOptions( table: TableHandle, action: string, field: stri
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ action, field, rowId, account ] );
 
+	// A cursor is forgotten when the search moves on, so coming back to an earlier term starts on its first page again.
+	useEffect( () => {
+		setPaging( ( known ) => ( known.search === search ? known : { search, cursor: '' } ) );
+	}, [ search ] );
+
 	useEffect( () => {
 		const controller = new AbortController();
 

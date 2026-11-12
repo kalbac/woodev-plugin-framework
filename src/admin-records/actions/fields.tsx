@@ -160,6 +160,11 @@ function SearchableField( props: FieldProps ) {
 					onChange( field.id, next );
 				} }
 			/>
+			{ source.status === 'loading' && (
+				<span role="status" aria-label={ actionMessage( messages, ACTION_MESSAGE_KEYS.optionsLoading ) }>
+					<Spinner />
+				</span>
+			) }
 			{ source.status === 'error' && <p role="alert">{ actionMessage( messages, ACTION_MESSAGE_KEYS.optionsError ) }</p> }
 			{ source.hasMore && (
 				<Button variant="link" disabled={ disabled } onClick={ source.loadMore }>

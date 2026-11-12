@@ -216,6 +216,67 @@ describe( 'a searchable select field', () => {
 		expect( optionReads()[ 2 ] ).not.toContain( 'cursor=' );
 	} );
 
+	test( 'coming back to an earlier search starts on its first page, not on the page the merchant had reached', async () => {
+		fetchMock.mockImplementation( ( { path }: { path: string } ) => {
+			const decoded = decodeURIComponent( path );
+			const route = decoded.split( '?' )[ 0 ];
+			const params = new URL( `https://shop.test${ decoded }` ).searchParams;
+
+			if ( route.endsWith( '/definition' ) ) {
+				return Promise.resolve( definitionEnvelope() );
+			}
+			if ( route.endsWith( '/options' ) ) {
+				if ( params.get( 'search' ) === 'Фут' ) {
+					return Promise.resolve( { options: [ { value: '21', label: 'Футболка (#21)' } ], next_cursor: null } );
+				}
+
+				return Promise.resolve(
+					params.get( 'cursor' ) === 'page2'
+						? { options: [ { value: '12', label: 'Кружка красная (#12)' } ], next_cursor: null }
+						: { options: [ { value: '11', label: 'Кружка синяя (#11)' } ], next_cursor: 'page2' }
+				);
+			}
+
+			return Promise.resolve( fixtureList( [ fixtureRow( 'c1', 'Карточка 1', { actions: [ { id: 'link_to', enabled: true, reason: '' } ] } ) ] ) );
+		} );
+
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+		await waitFor( () => expect( optionReads() ).toHaveLength( 1 ) );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Ещё товары' } ) );
+		await within( dialog ).findByRole( 'option', { name: 'Кружка красная (#12)' } );
+
+		fireEvent.change( input, { target: { value: 'Фут' } } );
+		await within( dialog ).findByRole( 'option', { name: 'Футболка (#21)' }, { timeout: SEARCH_DELAY_MS * 4 } );
+		fireEvent.change( input, { target: { value: '' } } );
+		await waitFor( () => expect( optionReads() ).toHaveLength( 4 ), { timeout: SEARCH_DELAY_MS * 4 } );
+
+		// The empty search is read from its first page, and the list shows that page alone: nothing of the other search or of page 2.
+		expect( optionReads()[ 3 ] ).not.toContain( 'cursor=' );
+		expect( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) ).toBeInTheDocument();
+		expect( within( dialog ).queryByRole( 'option', { name: 'Футболка (#21)' } ) ).not.toBeInTheDocument();
+		expect( within( dialog ).queryByRole( 'option', { name: 'Кружка красная (#12)' } ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'shows that the list is being read while the server answers', async () => {
+		let answer: ( value: unknown ) => void = () => undefined;
+		const base = fetchMock.getMockImplementation() as ( request: { path: string } ) => Promise< unknown >;
+		fetchMock.mockImplementation( ( request: { path: string } ) =>
+			decodeURIComponent( request.path ).split( '?' )[ 0 ].endsWith( '/options' )
+				? new Promise( ( resolve ) => {
+						answer = resolve;
+				  } )
+				: base( request )
+		);
+
+		const dialog = await openDialog();
+		const status = await within( dialog ).findByRole( 'status' );
+
+		expect( status ).toBeInTheDocument();
+		await act( async () => answer( { options: [], next_cursor: null } ) );
+		await waitFor( () => expect( within( dialog ).queryByRole( 'status' ) ).not.toBeInTheDocument() );
+	} );
+
 	test( 'sends the chosen product and still names it after another search replaced the list', async () => {
 		const dialog = await openDialog();
 		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
