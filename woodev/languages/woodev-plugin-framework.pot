@@ -10692,6 +10692,121 @@ msgstr ""
 msgid "Новый аккаунт"
 msgstr ""
 
+#: assets/build/settings-page/index.js:7
+msgid "Аккаунт удаляется — включить его нельзя."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-controller.php:144
+msgid "Введите идентификатор аккаунта, чтобы подтвердить удаление."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-progress.php:205
+msgid "Удаление прервалось. Запустите его снова: уже удалённые данные повторно не потребуются."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion.php:146
+msgid "Идентификатор введён неверно. Введите его в точности как на карточке аккаунта."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion.php:152
+msgid "Не удалось поставить удаление в очередь. Проверьте, что Action Scheduler работает, и повторите."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion.php:154
+msgid "Не удалось поставить удаление в очередь. Повторите позже."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion.php:167
+msgid "Сначала выключите аккаунт."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:80
+msgid "Заказы WooCommerce остаются в магазине: они удаляются отдельно."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:92
+msgid "Связи товаров с карточками"
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:93
+msgid "Задачи на отправку и проверку"
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:94
+msgid "Отправления"
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:95
+msgid "Документы и этикетки"
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:126
+msgid "У аккаунта выключен импорт заказов, поэтому отправления в плагине — единственный учёт списанных остатков. После удаления отмена старого отправления не вернёт остаток на склад."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:130
+msgid "Адрес уведомлений, зарегистрированный на стороне маркетплейса, может остаться в его личном кабинете. Если плагин не сможет снять его сам, мы скажем об этом после удаления."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-job.php:164
+msgid "Аккаунт снова включён, поэтому удаление остановлено. Выключите аккаунт и повторите удаление."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-job.php:253
+msgid "Адрес уведомлений остался зарегистрированным в личном кабинете маркетплейса. Если он больше не нужен, уберите его там."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-job.php:297
+msgid "Аккаунт снова включён, поэтому он не удалён. Данные аккаунта уже удалены частично: выключите аккаунт и повторите удаление."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-job.php:333
+msgid "Не удалось удалить все данные аккаунта. Повторите удаление позже; если ошибка повторится, включите логирование и напишите в поддержку."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:883
+msgid "Удаление аккаунта недоступно."
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Не удалось выполнить запрос. Повторите позже."
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Удалено строк:"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Удаление аккаунта"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Аккаунт сейчас нельзя удалить."
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "будет удалён вместе со своими данными в плагине. Это нельзя отменить."
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Чтобы подтвердить, введите"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Удалить аккаунт"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Удаляем данные аккаунта. Можно закрыть окно: удаление продолжится в фоне."
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Аккаунт удалён."
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Удаляется…"
+
 #: marketplace/admin/pages/products/class-remote-cards-actions.php:268
 msgid "Пара будет убрана из списка, товар и карточка останутся несвязанными. Эта пара не вернётся при следующем поиске по артикулу, пока артикул не изменится."
 msgstr ""
@@ -10776,4 +10891,5 @@ msgstr ""
 
 #: marketplace/admin/pages/products/class-remote-cards-summary.php:92
 msgid "Артикулы в этих парах отличаются только регистром или буквами, которые выглядят одинаково (например, русская «С» и латинская «C», буква «O» и ноль). Автоматически такие пары не связываются: подтвердите, что это один и тот же товар, или скажите, что товары разные."
+
 msgstr ""

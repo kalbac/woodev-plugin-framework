@@ -55,6 +55,44 @@ final class Wpdb_Catalog_Cache {
 	}
 
 	/**
+	 * Deletes named keys with their `fetched:` twin rows. The keys are exact, not a pattern: the account deletion names the
+	 * per-account keys one by one, so a shared row (`attributes:{category}:{type}`) whose last segment happens to equal an account
+	 * id stays.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param string[] $keys Cache keys.
+	 * @return int Rows deleted.
+	 */
+	public function delete_keys( array $keys ): int {
+		if ( [] === $keys ) {
+			return 0;
+		}
+
+		$twins        = array_map( [ $this, 'fetched_key' ], $keys );
+		$rows         = array_merge( $keys, $twins );
+		$placeholders = implode( ', ', array_fill( 0, count( $rows ), '%s' ) );
+		$sql          = $this->db->prepare( "DELETE FROM {$this->table} WHERE cache_key IN ({$placeholders})", $rows ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- The table name is ours; the placeholders are generated.
+		$deleted      = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
+
+		if ( false === $deleted ) {
+			throw new \RuntimeException( 'The cached rows could not be deleted.' );
+		}
+
+		return (int) $deleted;
+	}
+
+	/**
+	 * The key of the row that tells when a key was fetched.
+	 *
+	 * @param string $key Cache key.
+	 * @return string
+	 */
+	private function fetched_key( string $key ): string {
+		return self::FETCHED_PREFIX . $key;
+	}
+
+	/**
 	 * Returns the cache key of the attributes of a category.
 	 *
 	 * The key is made of the descriptor's values taken in the order of its sorted field names, so the same descriptor always

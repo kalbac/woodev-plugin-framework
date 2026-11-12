@@ -198,7 +198,7 @@ final class Sqlite_Wpdb extends \wpdb {
 	}
 
 	/**
-	 * Rewrites the MySQL forms the stores use into SQLite's: `INSERT IGNORE`, the upsert and `GREATEST()`.
+	 * Rewrites the MySQL forms the stores use into SQLite's: `INSERT IGNORE`, the upsert, `GREATEST()` and `DELETE … LIMIT`.
 	 *
 	 * @param string $sql MySQL statement.
 	 * @return string
@@ -207,6 +207,8 @@ final class Sqlite_Wpdb extends \wpdb {
 		$sql = (string) preg_replace( '/^INSERT IGNORE/', 'INSERT OR IGNORE', $sql );
 		$sql = 'START TRANSACTION' === $sql ? 'BEGIN' : $sql;
 		$sql = str_replace( 'ON DUPLICATE KEY UPDATE', 'ON CONFLICT(account_id, bucket) DO UPDATE SET', $sql );
+		// SQLite has no `DELETE … LIMIT` unless it was compiled with it: bound the delete by the rowids it would have taken.
+		$sql = (string) preg_replace( '/^DELETE FROM (\S+) WHERE (.+) LIMIT (\d+)$/s', 'DELETE FROM $1 WHERE rowid IN (SELECT rowid FROM $1 WHERE $2 LIMIT $3)', $sql );
 
 		return str_replace( 'GREATEST(', 'MAX(', $sql );
 	}

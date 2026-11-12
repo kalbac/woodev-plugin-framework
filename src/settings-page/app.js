@@ -400,6 +400,17 @@ export default function App( { bootstrap = null } ) {
 			.finally( () => setBusySection( '' ) );
 	};
 
+	// The deletion dialog changes the cards (an account is gone, or a deletion is running): read them again.
+	const refreshTabs = () => {
+		fetchSchema()
+			.then( ( res ) => {
+				if ( res && res.tabs ) {
+					setTabs( res.tabs );
+				}
+			} )
+			.catch( () => {} );
+	};
+
 	const renderSection = ( tab, sectionId ) => {
 		const section = tab.sections.find( ( s ) => s.id === sectionId ) || tab.sections[ 0 ];
 		const values = edits[ tab.id ] || {};
@@ -490,6 +501,7 @@ export default function App( { bootstrap = null } ) {
 							renderSection={ renderSection }
 							onToggleEnabled={ onToggleEnabled }
 							busySection={ busySection }
+							onAccountsChanged={ refreshTabs }
 						/>
 					) : isStackedTab( tab ) ? (
 						<StackedView tab={ tab } renderSection={ renderSection } />

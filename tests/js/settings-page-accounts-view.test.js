@@ -1,7 +1,10 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
-import AccountsView, { isAccountsTab, splitAccountSections, cardStatus } from '../../src/settings-page/accounts-view';
+import AccountsView, { isAccountsTab, splitAccountSections, cardStatus, canDelete } from '../../src/settings-page/accounts-view';
+import { fetchDeletion } from '../../src/settings-page/deletion-rest';
+
+jest.mock( '../../src/settings-page/deletion-rest' );
 
 const account = ( id, overrides = {} ) => ( {
 	id: `account_connection_${ id }`,
@@ -69,15 +72,39 @@ test( 'a card shows title, identifier and status, and opens its fields on «Ре
 	expect( screen.getByTestId( 'block-account_connection_1' ) ).toBeInTheDocument();
 } );
 
-test( '«Удалить» is disabled and the hint is its tooltip, not text under every card', () => {
-	view( [ account( 1 ), adder ] );
+test( '«Удалить» of an enabled account is disabled and the hint is its tooltip, not text under every card', () => {
+	view( [ account( 1, { delete_url: '/wp-json/x/deletion', delete_hint: 'Сначала выключите аккаунт.' } ), adder ] );
 
 	const button = screen.getByRole( 'button', { name: 'Удалить' } );
 
 	expect( button ).toBeDisabled();
-	expect( button ).toHaveAttribute( 'title', 'Удаление аккаунта появится позже.' );
-	expect( button.parentElement ).toHaveAttribute( 'title', 'Удаление аккаунта появится позже.' );
-	expect( screen.queryByText( 'Удаление аккаунта появится позже.' ) ).not.toBeInTheDocument();
+	expect( button ).toHaveAttribute( 'title', 'Сначала выключите аккаунт.' );
+	expect( button.parentElement ).toHaveAttribute( 'title', 'Сначала выключите аккаунт.' );
+	expect( screen.queryByText( 'Сначала выключите аккаунт.' ) ).not.toBeInTheDocument();
+} );
+
+test( '«Удалить» is available for a switched-off account only when the screen offers deleting', () => {
+	expect( canDelete( account( 1, { enabled: false, delete_url: '/wp-json/x/deletion' } ).card ) ).toBe( true );
+	expect( canDelete( account( 1, { enabled: true, delete_url: '/wp-json/x/deletion' } ).card ) ).toBe( false );
+	expect( canDelete( account( 1, { enabled: false } ).card ) ).toBe( false );
+} );
+
+test( 'pressing «Удалить» on a switched-off account opens the deletion dialog, and closing it reloads the cards', async () => {
+	fetchDeletion.mockResolvedValue( { deleted: false, can_delete: true, refusal: '', preview: { counts: [], kept: '', warnings: [] }, deletion: null } );
+	const onAccountsChanged = jest.fn();
+
+	render( createElement( AccountsView, {
+		tab: { id: 'ozon-seller', sections: [ account( 1, { enabled: false, delete_url: '/wp-json/x/deletion', delete_hint: '' } ), adder ] },
+		renderSection: () => null,
+		onToggleEnabled: jest.fn(),
+		onAccountsChanged,
+	} ) );
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Удалить' } ) );
+	expect( await screen.findByText( 'Удаление аккаунта' ) ).toBeInTheDocument();
+
+	fireEvent.click( await screen.findByRole( 'button', { name: 'Отмена' } ) );
+	expect( onAccountsChanged ).toHaveBeenCalledTimes( 1 );
 } );
 
 test( '«Выключить» hands the section to the page, and an off account offers «Включить»', () => {
@@ -93,4 +120,17 @@ test( '«Выключить» hands the section to the page, and an off account 
 	view( [ account( 1, { enabled: false } ), adder ] );
 
 	expect( screen.getByRole( 'button', { name: 'Включить' } ) ).toBeInTheDocument();
+} );
+
+test( '«Включить» is disabled while the account\'s data is being deleted', () => {
+	const onToggle = jest.fn();
+	view( [ account( 1, { enabled: false, delete_url: '/x/1', deletion: 'running' } ), adder ], onToggle );
+
+	const button = screen.getByRole( 'button', { name: 'Включить' } );
+
+	expect( button ).toBeDisabled();
+	expect( button ).toHaveAttribute( 'title', 'Аккаунт удаляется — включить его нельзя.' );
+	expect( button.parentElement ).toHaveAttribute( 'title', 'Аккаунт удаляется — включить его нельзя.' );
+	fireEvent.click( button );
+	expect( onToggle ).not.toHaveBeenCalled();
 } );

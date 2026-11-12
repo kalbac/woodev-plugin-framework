@@ -88,6 +88,19 @@ class Wpdb_Event_Ledger implements Event_Ledger {
 	}
 
 	/**
+	 * Deletes a batch of an account's inbound notification rows.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows to delete in this call.
+	 * @return int Rows deleted; 0 when the account has none left.
+	 */
+	public function delete_account( int $account_id, int $limit ): int {
+		return Account_Rows::delete( $this->db, $this->table, $account_id, $limit );
+	}
+
+	/**
 	 * Stores an event; a duplicate (same account and dedup key) is not stored again.
 	 *
 	 * A database error is told apart from a duplicate by the error state of the database object, never by «0 rows»

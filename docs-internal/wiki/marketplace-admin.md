@@ -504,7 +504,7 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   the manifest, which is what the wc-admin header shows (`Menu::build_manifest()`).
 - **«Подключение»** draws a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.tsx`): title, identifier, stored
   status, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение»), «Выключить» (saves
-  `enabled` at once) and «Удалить» (**disabled** with a hint; deleting is #1733). No account: one big «Добавить аккаунт» button. This is
+  `enabled` at once) and «Удалить» (enabled for a **switched-off** account only; an enabled one keeps it disabled with the hint «Сначала выключите аккаунт.»; see «Account deletion as built» below). No account: one big «Добавить аккаунт» button. This is
   the one part the PHP-driven renderer cannot express: one section holds one connection block, and a card needs buttons and an expand.
 - **«Параметры»** is one section per account, **stacked** one after another under the account's name with its identifier in muted text
   (`Settings_Section::stacked()`, `src/settings-page/stacked-view.tsx`; no sub-tabs). With none, a notice «Подключите аккаунт на вкладке „Подключение“».
@@ -528,6 +528,22 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   `Cancel_Ajax::require_usable()`, `Site_Orders_Cancel::refusal()`, and `Notification_Account_Reader` (an optional `Effective_Settings`; `Flow_Wiring` and
   `Settings_Module` pass it). A reader that still reads `Account::setting( 'price_rule' | 'orders_enabled' | 'import_enabled' )` sees the
   account's own value, which is only wrong for an account switched to «как в Общих».
+
+### Account deletion as built (#1733)
+
+`woodev/marketplace/deletion/` (`Woodev\Framework\Marketplace\Deletion`), wired by `Deletion_Module::register()` from `Marketplace_Plugin::register_marketplace_flows()`:
+
+- **Flow.** «Удалить» on a switched-off account card opens a dialog (`src/settings-page/account-delete-flow.tsx`): the preview (`GET …/accounts/{id}/deletion`: counts of links, tasks, postings and documents, the sentence that WooCommerce orders stay, the warnings),
+  confirmation by typing the account's identifier (Client-Id) (`POST` with `{confirm}`, 202), then progress (the dialog polls the same `GET`) and the result. `manage_woocommerce` (the menu capability) plus the REST cookie nonce; the rules live in `Account_Deletion`
+  (unknown account 404, switched on 409, wrong confirmation 400). The job checks the switch again, and the card refuses to switch an account on while its deletion runs.
+- **Job.** `Account_Deletion_Job` (`woodev_{plugin id}_delete_account( account_id, attempt )`, Action Scheduler) takes the account claim through `Job_Gate::claim()` (not `check()`: that ends silently for a disabled account), renews it after every batch and runs ordered steps of
+  `function ( int $account_id, int $limit ): int` until each removes nothing: `queue` (`Account_Queue_Cleaner`: pending actions of the plugin's group whose first argument is the account id), `sync_state`, `links` (+ `link_ids`), `tasks` (+ `task_items`), `postings`, `documents`, `throttle`, `api_errors`,
+  `options` (progress and report options, snapshot transients, `catalog_cache` keys ending `:{account id}`), `product_meta` (`_woodev_{marketplace}_offer_id_{account id}`), `events`, then the adapter's `plugin` step. **The account row goes last**, `Wpdb_Account_Store::delete()`, fenced by the claim and by the switch being off.
+  Nothing is remembered between runs: every step deletes what is left, so a resume is a re-run. A run stops after 20 s and queues itself; a thrown error retries three times, then the progress says `failed`.
+- **Stores.** Each owner of an account-keyed table has `delete_account( $account_id, $limit )` (bounded `DELETE … LIMIT` through `Ledger\Account_Rows`); links, tasks, postings and documents also have `count_for_account()` for the preview.
+- **Adapter capability.** An adapter that implements `Deletion\Account_Data_Cleaner` (like `Order_Canceller`) is asked for `erase_account_data( Account, $limit )` (its own data outside the framework's tables, in batches) and, once before the row goes, `unsubscribe_notifications( Account )`;
+  when that returns false (or throws) the merchant is told to remove the notification address in the marketplace cabinet.
+- **Progress** is one option per account under the plugin's option family (`account_deletion_{id}`); at the end it becomes a one-day transient, because the account row is gone. A `running` record that has not moved for 15 minutes reads as `failed`.
 
 ## Records engine
 

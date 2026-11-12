@@ -61,6 +61,33 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 	}
 
 	/**
+	 * Deletes a batch of an account's tasks: the items of its tasks first, then the tasks.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows to delete in this call.
+	 * @return int Rows deleted; 0 when the account has none left.
+	 */
+	public function delete_account( int $account_id, int $limit ): int {
+		$deleted = Account_Rows::delete_where( $this->db, $this->items, "task_id IN ( SELECT task_id FROM {$this->tasks} WHERE account_id = %d )", [ $account_id ], $limit ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- The table name is ours.
+
+		return $deleted > 0 ? $deleted : Account_Rows::delete( $this->db, $this->tasks, $account_id, $limit );
+	}
+
+	/**
+	 * Counts an account's tasks.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @return int
+	 */
+	public function count_for_account( int $account_id ): int {
+		return Account_Rows::count( $this->db, $this->tasks, $account_id );
+	}
+
+	/**
 	 * {@inheritDoc}
 	 *
 	 * @since 2.0.29

@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Orders;
 
+use Woodev\Framework\Marketplace\Ledger\Account_Rows;
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -63,6 +64,31 @@ final class Order_Registry {
 		$this->clock = $clock ?? static function (): int {
 			return time();
 		};
+	}
+
+	/**
+	 * Deletes a batch of an account's postings. WooCommerce orders are not touched.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows to delete in this call.
+	 * @return int Rows deleted; 0 when the account has none left.
+	 */
+	public function delete_account( int $account_id, int $limit ): int {
+		return Account_Rows::delete( $this->db, $this->table, $account_id, $limit );
+	}
+
+	/**
+	 * Counts an account's postings.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @return int
+	 */
+	public function count_for_account( int $account_id ): int {
+		return Account_Rows::count( $this->db, $this->table, $account_id );
 	}
 
 	/**

@@ -575,6 +575,24 @@ final class Wpdb_Account_Store implements Account_Store {
 	}
 
 	/**
+	 * Deletes the account row. The very last step of deleting an account, after every table that refers to it is empty.
+	 *
+	 * Two conditions are part of the `DELETE`: the caller holds the account's claim (a run that lost it deletes nothing), and the
+	 * merchant's switch is off (an account switched on again while its data was being deleted keeps its row).
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int    $id    Account id.
+	 * @param string $token The caller's claim token ({@see self::claim()}).
+	 * @return bool False when no row matched: the account is gone, enabled, or the claim is no longer the caller's.
+	 */
+	public function delete( int $id, string $token ): bool {
+		$sql = $this->db->prepare( "DELETE FROM {$this->table} WHERE account_id = %d AND is_enabled = 0 AND claim_token = %s", $id, $token ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- The table name is ours.
+
+		return 1 === (int) $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
+	}
+
+	/**
 	 * Returns the stored outcome of the last check, or null when the account does not exist or was never checked (or its
 	 * credentials changed since).
 	 *

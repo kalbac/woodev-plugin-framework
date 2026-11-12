@@ -193,6 +193,35 @@ final class OptionBackedStoresTest extends TestCase {
 	}
 
 	/**
+	 * Forgetting an account removes its report, its answered pairs and its last run, and only those of that account.
+	 *
+	 * @return void
+	 */
+	public function test_forgetting_an_account_removes_only_its_report_answers_and_run(): void {
+		$store = new Link_Report_Store( 'woodev_one_' );
+		$other = new Link_Report_Store( 'woodev_two_' );
+		$pair  = [ 'wc_product_id' => 1, 'wc_sku' => 'ABC-1', 'card' => [ 'offer_id' => 'abc-1' ] ];
+
+		foreach ( [ [ $store, 3 ], [ $store, 33 ], [ $other, 3 ] ] as [ $target, $account ] ) {
+			$target->replace_near_matches( $account, [ $pair ] );
+			$target->dismiss_near_match( $account, 1, 'abc-1' );
+			$target->save_run( $account, [ 'linked' => 2 ] );
+		}
+
+		$store->forget_account( 3 );
+
+		$this->assertSame( [], $store->near_matches( 3 ) );
+		$this->assertNull( $store->last_run( 3 ) );
+		$this->assertArrayNotHasKey( 'woodev_one_near_dismissed_3', $this->storage, 'the answered pairs go too' );
+		$this->assertArrayNotHasKey( 'woodev_one_near_matches_3', $this->storage );
+		$this->assertArrayNotHasKey( 'woodev_one_link_run_3', $this->storage );
+
+		foreach ( [ 'woodev_one_link_run_33', 'woodev_one_near_dismissed_33', 'woodev_two_link_run_3', 'woodev_two_near_dismissed_3' ] as $kept ) {
+			$this->assertArrayHasKey( $kept, $this->storage, 'another account and another plugin keep ' . $kept );
+		}
+	}
+
+	/**
 	 * The near-match report is capped, replaced by a new run, found by pair, and settled by a decision.
 	 *
 	 * @return void

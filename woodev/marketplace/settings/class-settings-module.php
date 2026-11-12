@@ -16,7 +16,9 @@ use Woodev\Framework\Marketplace\Admin\Diagnostics\Site_Facts;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
+use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Progress;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
@@ -67,7 +69,7 @@ final class Settings_Module {
 			$on_connected = [ $scheduler, 'queue_now' ];
 		}
 
-		$accounts_sections = new Accounts_Sections( $accounts, $adapter, $status, $warehouses, $plugin_id, $on_connected );
+		$accounts_sections = new Accounts_Sections( $accounts, $adapter, $status, $warehouses, $plugin_id, $on_connected, new Account_Deletion_Progress( Uninstaller::option_prefix( $plugin_id ) ) );
 		$defaults          = new Defaults_Section( $adapter, $accounts, $plugin_id );
 		$advanced          = new Advanced_Section();
 

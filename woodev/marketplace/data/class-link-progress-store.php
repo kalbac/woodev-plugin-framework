@@ -44,6 +44,20 @@ final class Link_Progress_Store {
 	}
 
 	/**
+	 * Removes the records of an account: the account is being deleted.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @return void
+	 */
+	public function forget_account( int $account_id ): void {
+		foreach ( [ self::KIND_LINK, self::KIND_REFRESH ] as $kind ) {
+			$this->clear( $account_id, $kind );
+		}
+	}
+
+	/**
 	 * Loads the record a run continues, or starts a new one.
 	 *
 	 * @param int    $account_id Account id.

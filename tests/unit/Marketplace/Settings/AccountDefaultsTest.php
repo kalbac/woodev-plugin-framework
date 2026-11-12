@@ -567,6 +567,16 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertSame( [ 'new' => true ], $sections[1]->get_card() );
 	}
 
+	public function test_a_disabled_account_on_a_screen_without_deletion_says_so(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Off', false, [ 'merchant_uid' => '778', 'access_token' => 't2' ] ) );
+
+		$card = $this->accounts_sections( $adapter, $store )->connection_sections()[0]->get_card();
+
+		$this->assertSame( 'Удаление аккаунта недоступно.', $card['delete_hint'] );
+		$this->assertArrayNotHasKey( 'delete_url', $card );
+	}
+
 	// Support -------------------------------------------------------------------------------------------------------------
 
 	/**

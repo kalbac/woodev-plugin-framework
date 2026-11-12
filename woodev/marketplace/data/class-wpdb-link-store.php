@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Data;
 
+use Woodev\Framework\Marketplace\Ledger\Account_Rows;
 use Woodev\Framework\Marketplace\Links\Link_Store;
 use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Framework\Marketplace\Price\Price_Override;
@@ -81,6 +82,33 @@ final class Wpdb_Link_Store implements Link_Store {
 		$this->table     = $table;
 		$this->ids_table = $ids_table;
 		$this->clock     = $clock ?? 'time';
+	}
+
+	/**
+	 * Deletes a batch of an account's links: the remote ids of its links first, then the links.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows to delete in this call.
+	 * @return int Rows deleted; 0 when the account has none left.
+	 */
+	public function delete_account( int $account_id, int $limit ): int {
+		$deleted = Account_Rows::delete( $this->db, $this->ids_table, $account_id, $limit );
+
+		return $deleted > 0 ? $deleted : Account_Rows::delete( $this->db, $this->table, $account_id, $limit );
+	}
+
+	/**
+	 * Counts an account's links.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @return int
+	 */
+	public function count_for_account( int $account_id ): int {
+		return Account_Rows::count( $this->db, $this->table, $account_id );
 	}
 
 	/**
