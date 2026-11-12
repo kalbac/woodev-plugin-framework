@@ -500,12 +500,16 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   lists one `Settings_Provider` per tab, all over the same handler, so a field keeps one owner and a save reaches it through whichever tab
   shows it. The first tab keeps the handler's id (`{plugin id}`, so the old address opens the page) and the `legacy_page`; the others are
   `{plugin id}-{slug}`. «Общие» exists only when the adapter has a price rule or exchange switch to default; «Уведомления» only with
-  `PUSH_NOTIFICATIONS`. The page heading is `Page::get_heading()` («Настройки {plugin name}») over a menu entry that stays «Настройки».
+  `PUSH_NOTIFICATIONS`. The page heading is `Page::get_heading()` («Настройки {plugin name}») over a menu entry that stays «Настройки»; it is also the last crumb of
+  the manifest, which is what the wc-admin header shows (`Menu::build_manifest()`).
 - **«Подключение»** draws a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.js`): title, identifier, stored
   status, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение»), «Выключить» (saves
   `enabled` at once) and «Удалить» (**disabled** with a hint; deleting is #1733). No account: one big «Добавить аккаунт» button. This is
   the one part the PHP-driven renderer cannot express: one section holds one connection block, and a card needs buttons and an expand.
-- **«Параметры»** is one section per account (sub-tabs by account title); with none, a notice «Подключите аккаунт на вкладке „Подключение“».
+- **«Параметры»** is one section per account, **stacked** one after another under the account's name with its identifier in muted text
+  (`Settings_Section::stacked()`, `src/settings-page/stacked-view.js`; no sub-tabs). With none, a notice «Подключите аккаунт на вкладке „Подключение“».
+  **«Уведомления»** is stacked too (`Settings_Tab` with `$stacked = true`): the five switches, then a block per account with its address
+  and «Зарегистрировать URL».
   Stock, warehouse, oversize warehouse and the price direction are always the account's own.
 - **«Общие» and the switch.** `Effective_Settings` is the ONE resolver of `price_rule`, `orders_enabled` and `import_enabled`. Two groups
   («Цены и наценка», «Заказы и карточки») each have a «как в Общих / свои» select on the account (`override_prices`, `override_exchange`),
@@ -513,13 +517,15 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   and a hidden field is never validated nor saved. **No flag means «свои»**: an account that existed before the defaults, or one a plugin's
   migration created, behaves exactly as before; only an account created on the screen gets `false`. The defaults are ONE option,
   `woodev_{adapter id}_account_defaults`, keyed by the **adapter** id because every runtime reader holds an `Account`, which knows its
-  adapter and not its plugin (`Uninstaller::run()` deletes it explicitly: the plugin-id family misses it). Switching a group back to «свои»
-  keeps the account's own values, which were never overwritten.
-- **Upgrade.** `Defaults_Migration` fills the defaults from the FIRST account (lowest id) on the first run of the settings screen and marks
-  `_seeded`; it writes nothing to accounts. Saving a price default queues the recompute of every account that follows it
+  adapter and not its plugin (`Uninstaller::run()` deletes it explicitly: the plugin-id family misses it). Switching a group to «свои» **copies the
+  «Общие» values in force into the account** (so «свои» starts from what the account was using, not the factory values), and while an
+  account follows «Общие» its fields show those values. Switching to «как в Общих» leaves the account's own values untouched.
+- **Upgrade.** `Defaults_Migration` fills the defaults from the FIRST account (lowest id) on the first handler build that finds an account and marks
+  `_seeded`; it writes nothing to accounts. A shop with no account yet is NOT marked (a v1 upgrade builds the handler before the plugin's
+  own migration creates the accounts); the first default the merchant saves on «Общие» marks it too, so a later fill never overwrites it. Saving a price default queues the recompute of every account that follows it
   (`account_price_rules_changed`), as an account's own change does.
 - **Readers routed through the resolver (framework).** `Export_Price_Policy::rule()`, `Posting_Jobs::wants_postings()`,
-  `Cancel_Ajax::require_usable()`, and `Notification_Account_Reader` (an optional `Effective_Settings`; `Flow_Wiring` and
+  `Cancel_Ajax::require_usable()`, `Site_Orders_Cancel::refusal()`, and `Notification_Account_Reader` (an optional `Effective_Settings`; `Flow_Wiring` and
   `Settings_Module` pass it). A reader that still reads `Account::setting( 'price_rule' | 'orders_enabled' | 'import_enabled' )` sees the
   account's own value, which is only wrong for an account switched to «как в Общих».
 
