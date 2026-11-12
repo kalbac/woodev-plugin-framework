@@ -375,7 +375,7 @@ if ( ! class_exists( Menu::class, false ) ) :
 					'kind'        => $page->get_kind(),
 					'tables'      => $page->get_tables(),
 					'view'        => $page->get_view(),
-					'breadcrumbs' => [ [ $landing, $this->title ], $page->get_title() ],
+					'breadcrumbs' => [ [ $landing, $this->title ], $page->get_heading() ],
 					'analytics'   => null,
 				];
 
