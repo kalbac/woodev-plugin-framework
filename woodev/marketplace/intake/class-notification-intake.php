@@ -10,6 +10,8 @@ namespace Woodev\Framework\Marketplace\Intake;
 use Woodev\Framework\Marketplace\Jobs\Drain_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Inbound_Decoder;
+use Woodev\Framework\Marketplace\Ledger\Inbound_Event;
+use Woodev\Framework\Marketplace\Sync\Stock_Mode;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -96,6 +98,13 @@ final class Notification_Intake {
 	private $log;
 
 	/**
+	 * Remembers that the old address without a token is still used, or null.
+	 *
+	 * @var Tokenless_Seen|null
+	 */
+	private $tokenless_seen;
+
+	/**
 	 * Creates the intake.
 	 *
 	 * @since 2.1.0
@@ -109,8 +118,9 @@ final class Notification_Intake {
 	 * @param Drain_Scheduler             $scheduler Drain scheduler.
 	 * @param Push_Rate_Limiter           $limiter   Per-token rate limit.
 	 * @param callable|null               $log       Receives a line of text for the merchant's log.
+	 * @param Tokenless_Seen|null         $tokenless_seen Remembers that the old address is still in use (the proxy notice reads it).
 	 */
-	public function __construct( Inbound_Decoder $decoder, Push_Protocol $protocol, Sender_Network $network, Webhook_Switches $switches, Event_Ledger $ledger, Notification_Account_Reader $accounts, Drain_Scheduler $scheduler, Push_Rate_Limiter $limiter, ?callable $log = null ) {
+	public function __construct( Inbound_Decoder $decoder, Push_Protocol $protocol, Sender_Network $network, Webhook_Switches $switches, Event_Ledger $ledger, Notification_Account_Reader $accounts, Drain_Scheduler $scheduler, Push_Rate_Limiter $limiter, ?callable $log = null, ?Tokenless_Seen $tokenless_seen = null ) {
 		$this->decoder   = $decoder;
 		$this->protocol  = $protocol;
 		$this->network   = $network;
@@ -120,6 +130,8 @@ final class Notification_Intake {
 		$this->scheduler = $scheduler;
 		$this->limiter   = $limiter;
 		$this->log       = $log;
+
+		$this->tokenless_seen = $tokenless_seen;
 	}
 
 	/**
@@ -165,6 +177,11 @@ final class Notification_Intake {
 	 * @return Intake_Response
 	 */
 	public function handle_tokenless( string $owner, string $raw_body, array $server ): Intake_Response {
+		// Noted before the sender check: behind a proxy that check refuses the request, and the proxy notice needs to see it.
+		if ( null !== $this->tokenless_seen ) {
+			$this->tokenless_seen->note();
+		}
+
 		$ip = $this->network->client_ip( $server );
 
 		if ( ! $this->network->is_allowed( $ip ) ) {
@@ -199,7 +216,7 @@ final class Notification_Intake {
 		$event = $event->with_ip_trusted( $this->network->is_allowed( $ip ) );
 
 		// A switched-off type is stored and never worked, and answered 200: a 4xx would count against the URL in the marketplace's health check.
-		if ( '' === $event->ignore_reason() && ! $this->switches->is_enabled( $event->type() ) ) {
+		if ( '' === $event->ignore_reason() && ! $this->accepts( $event, $account ) ) {
 			$event = $event->with_ignore_reason( self::SWITCHED_OFF );
 		}
 
@@ -215,6 +232,22 @@ final class Notification_Intake {
 		}
 
 		return Intake_Response::ok( $this->decoder->success_body() );
+	}
+
+	/**
+	 * Tells whether the merchant wants this kind of notification: its switch is on and, for the stock notification, the account
+	 * syncs stock at all.
+	 *
+	 * @param Inbound_Event             $event   Decoded event.
+	 * @param Notification_Account|null $account Account the endpoint resolved, if any.
+	 * @return bool
+	 */
+	private function accepts( Inbound_Event $event, ?Notification_Account $account ): bool {
+		if ( ! $this->switches->is_enabled( $event->type() ) ) {
+			return false;
+		}
+
+		return null === $account || ! $this->switches->is_stock( $event->type() ) || Stock_Mode::OFF !== $account->stock_mode();
 	}
 
 	/**

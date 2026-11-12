@@ -60,6 +60,9 @@ final class StockOwnershipTest extends Sync_Test_Case {
 			'marketplace stamp survives a switch to site mode' => [ Order_Stock_Filters::STAMP_MARKETPLACE, Stock_Mode::SITE, false, false, false ],
 			'legacy: never reduces, restores in site mode'     => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::SITE, false, false, true ],
 			'legacy in marketplace mode restores nothing'      => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::MARKETPLACE, false, false, false ],
+			'legacy in off mode restores (nothing else does)'  => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::OFF, false, false, true ],
+			'legacy line swap in off mode takes the new lines' => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::OFF, true, true, true ],
+			'marketplace stamp in off mode moves nothing'      => [ Order_Stock_Filters::STAMP_MARKETPLACE, Stock_Mode::OFF, false, false, false ],
 			'legacy line swap takes the new lines'             => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::SITE, true, true, true ],
 			'legacy line swap in marketplace mode takes none'  => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::MARKETPLACE, true, false, false ],
 		];
@@ -216,6 +219,51 @@ final class StockOwnershipTest extends Sync_Test_Case {
 
 		$this->set_account( [ 'warehouse_id' => 0 ] );
 		$this->assertNull( Stock_Warehouse::for_link( $this->account_now(), $this->link_of( $default ) ) );
+	}
+
+	/**
+	 * An oversize product takes its link's warehouse, else the account's oversize warehouse; with neither it has none, and the
+	 * default warehouse is never a substitute.
+	 *
+	 * @return void
+	 */
+	public function test_an_oversize_product_takes_the_account_oversize_warehouse_and_never_the_default(): void {
+		$own      = $this->stock_product( 'own-big', 1, 1, [ 'oversize' => true, 'warehouse_id' => 77 ] );
+		$oversize = $this->stock_product( 'big', 3, 1, [ 'oversize' => true ] );
+		$regular  = $this->stock_product( 'regular', 2 );
+
+		$this->set_account( [ 'oversize_warehouse_id' => 555 ] );
+		$account = $this->account_now();
+
+		$this->assertSame( 77, Stock_Warehouse::for_link( $account, $this->link_of( $own ) ), 'the link wins' );
+		$this->assertSame( 555, Stock_Warehouse::for_link( $account, $this->link_of( $oversize ) ) );
+		$this->assertSame( self::WAREHOUSE, Stock_Warehouse::for_link( $account, $this->link_of( $regular ) ), 'a regular product ignores it' );
+
+		$this->set_account( [ 'oversize_warehouse_id' => 0 ] );
+		$this->assertNull( Stock_Warehouse::for_link( $this->account_now(), $this->link_of( $oversize ) ), 'no oversize warehouse, no substitute' );
+	}
+
+	/**
+	 * `off` pushes nothing, mirrors nothing and is not the site's stock either.
+	 *
+	 * @return void
+	 */
+	public function test_the_off_mode_syncs_no_stock(): void {
+		$product = $this->stock_product( 'a', 1001, 9 );
+		$this->market->present['a'] = 4;
+
+		$this->set_account( [ 'stock_mode' => Stock_Mode::OFF ] );
+		$account = $this->account_now();
+
+		$this->assertTrue( Stock_Mode::is_off( $account ) );
+		$this->assertFalse( Stock_Mode::is_site( $account ) );
+		$this->assertSame( [], $this->reconcile() );
+		$this->assertSame( 9, $this->wc_stock( $product ), 'WooCommerce stock is untouched' );
+		$this->assertSame( [], $this->market->requests, 'the marketplace is not even read' );
+
+		$this->set_account( [ 'stock_mode' => Stock_Mode::SITE ] );
+		$this->assertFalse( Stock_Mode::is_off( $this->account_now() ) );
+		$this->assertTrue( Stock_Mode::is_site( $this->account_now() ) );
 	}
 
 	/**

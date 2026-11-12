@@ -8,7 +8,6 @@
 namespace Woodev\Framework\Marketplace\Settings;
 
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Diagnostics_Reader;
-use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -18,6 +17,7 @@ use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Url;
 use Woodev\Framework\Marketplace\Intake\Registration_Refresher;
 use Woodev\Framework\Marketplace\Intake\Sender_Network;
+use Woodev\Framework\Marketplace\Intake\Tokenless_Seen;
 use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
 use Woodev\Framework\Marketplace\Intake\Webhook_Type;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
@@ -40,6 +40,11 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.1.2
  */
 final class Notifications_Section implements Settings_Section_Provider {
+	/**
+	 * How many days back a notification on the old address without a token still counts for the proxy notice.
+	 */
+	private const LEGACY_URL_DAYS = 14;
+
 	/**
 	 * Marketplace adapter.
 	 *
@@ -245,12 +250,15 @@ final class Notifications_Section implements Settings_Section_Provider {
 	}
 
 	/**
-	 * Tells, in debug mode only, that the site stands behind a reverse proxy.
+	 * Tells that the site stands behind a reverse proxy while notifications still arrive on the old address without a token.
 	 *
-	 * @return string HTML paragraph, or '' when the site is not behind a proxy or «Логирование» is off.
+	 * Only that address checks the sender by IP, and behind a proxy the shop sees the proxy's address, so the notice shows when
+	 * both are true and asks the merchant to replace the address in the marketplace cabinet. It does not depend on «Логирование».
+	 *
+	 * @return string HTML paragraph, or '' when there is nothing to replace.
 	 */
 	private function proxy_notice(): string {
-		if ( ! ( new Logging( Logging::option_name_for( $this->plugin_id ) ) )->is_enabled() || ! Sender_Network::behind_proxy( $_SERVER ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only the peer address is read, and it is validated as an IP.
+		if ( ! Sender_Network::behind_proxy( $_SERVER ) || ! ( new Tokenless_Seen( $this->plugin_id ) )->seen_since( (int) call_user_func( $this->clock ) - self::LEGACY_URL_DAYS * DAY_IN_SECONDS ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only the peer address is read, and it is validated as an IP.
 			return '';
 		}
 
@@ -259,7 +267,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 			esc_html(
 				sprintf(
 					/* translators: %s: name of the filter. */
-					__( 'Сайт работает за прокси или CDN: сервер видит адрес прокси, а не отправителя. Уведомления по адресам с секретным ключом (как в карточках ниже) это не затрагивает — они принимаются по ключу. Старый адрес без ключа проверяет отправителя по IP, и за прокси такая проверка может отклонять настоящие уведомления; разработчик указывает адреса своих прокси фильтром %s.', 'woodev-plugin-framework' ),
+					__( 'Сайт работает за прокси или CDN, а уведомления до сих пор приходят на старый адрес без секретного ключа. Такой адрес проверяет отправителя по IP, а за прокси сайт видит адрес прокси, поэтому настоящие уведомления могут отклоняться. Замените в личном кабинете старый адрес на новый — с секретным ключом (он показан в карточках ниже): по нему уведомления принимаются и за прокси. Разработчик может указать адреса своих прокси фильтром %s.', 'woodev-plugin-framework' ),
 					'woodev_' . str_replace( '-', '_', $this->adapter->id() ) . '_push_trusted_proxies'
 				)
 			)

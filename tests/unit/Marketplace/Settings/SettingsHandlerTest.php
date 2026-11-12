@@ -128,7 +128,7 @@ final class SettingsHandlerTest extends TestCase {
 			null,
 			[
 				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
-				'capabilities'        => [ Capability::INBOUND_STOCK, Capability::IMPORT_PRODUCTS ],
+				'capabilities'        => [ Capability::INBOUND_STOCK, Capability::IMPORT_PRODUCTS, Capability::OVERSIZE_WAREHOUSE ],
 				'credential_fields'   => $fields,
 				'settings_descriptor' => $descriptor,
 			]
@@ -188,12 +188,16 @@ final class SettingsHandlerTest extends TestCase {
 		$handler->get_setting( "account_{$acc_id}_access_token" )->set_value( '' );
 		$handler->get_setting( "account_{$acc_id}_signing_secret" )->set_value( '' );
 		$handler->get_setting( "account_{$acc_id}_warehouse_id" )->set_value( '91' );
+		$handler->get_setting( "account_{$acc_id}_oversize_warehouse_id" )->set_value( '91' );
+		$handler->get_setting( "account_{$acc_id}_stock_mode" )->set_value( 'off' );
 		$handler->save();
 
 		$reloaded = $store->get( $acc_id );
 		$this->assertNotNull( $reloaded );
 		$this->assertSame( 'Renamed Shop', $reloaded->name() );
 		$this->assertSame( 91, $reloaded->setting( 'warehouse_id' ) );
+		$this->assertSame( 91, $reloaded->setting( 'oversize_warehouse_id' ), 'the oversize warehouse lives in the settings JSON' );
+		$this->assertSame( 'off', $reloaded->setting( 'stock_mode' ), 'the stock mode «Не синхронизировать»' );
 		$this->assertSame( 'super-secret-access-token-111', $reloaded->credentials()['access_token'] );
 		$this->assertSame( 'super-secret-signing-key-222', $reloaded->credentials()['signing_secret'] );
 	}
@@ -354,6 +358,27 @@ final class SettingsHandlerTest extends TestCase {
 		$handler->get_setting( "account_{$acc_id}_price_markup_kind" )->set_value( 'percent' );
 		$handler->get_setting( "account_{$acc_id}_price_markup" )->set_value( '15' );
 		$handler->save( "account_{$acc_id}_price_markup_kind" );
+	}
+
+	public function test_the_oversize_warehouse_list_puts_flagged_warehouses_first_and_marks_them(): void {
+		$this->cache->put(
+			Warehouse_Options::key_for( 5 ),
+			[
+				'warehouses' => [
+					[ 'warehouse_id' => 1, 'name' => 'Склад А' ],
+					[ 'warehouse_id' => 2, 'name' => 'Склад Б', 'oversize' => true ],
+					[ 'warehouse_id' => 3, 'name' => 'Склад В' ],
+					[ 'warehouse_id' => 4, 'name' => 'Склад Г', 'oversize' => true ],
+				],
+			]
+		);
+		$options = new Warehouse_Options( $this->cache );
+
+		$this->assertSame( [ 1, 2, 3, 4 ], array_keys( $options->for_account( 5 ) ), 'the default warehouse select keeps the order' );
+		$this->assertSame( 'Склад Б', $options->for_account( 5 )['2'], 'and does not mark anything' );
+		$this->assertSame( [ 2, 4, 1, 3 ], array_keys( $options->for_account( 5, true ) ), 'flagged first, stable inside the groups' );
+		$this->assertSame( 'Склад Б (КГТ)', $options->for_account( 5, true )['2'] );
+		$this->assertSame( 'Склад А', $options->for_account( 5, true )['1'] );
 	}
 
 	private function build_handler(

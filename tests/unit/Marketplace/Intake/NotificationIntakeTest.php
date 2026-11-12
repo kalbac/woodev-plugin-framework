@@ -368,6 +368,24 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * An account that does not sync stock drops the stock notification like a switched-off type, and still takes the others.
+	 *
+	 * @return void
+	 */
+	public function test_an_account_with_stock_off_drops_the_stock_notification_only(): void {
+		$this->accounts()->update_fields( $this->a, [ 'stock_mode' => 'off' ] );
+
+		$this->assertSame( 200, $this->push( [ 'kind' => 'stock_changed', 'id' => '2-1' ] )->status() );
+		$this->assertSame( [ 'ignored' ], array_column( $this->events(), 'status' ) );
+		$this->assertSame( [], $this->scheduler->actions, 'nothing is queued for a stock notification of an account with stock off' );
+
+		$this->push( $this->order_created( '3-1' ) );
+		$this->push( [ 'kind' => 'stock_changed', 'id' => '2-2' ], $this->b );
+
+		$this->assertSame( [ 'ignored', 'new', 'new' ], array_column( $this->events(), 'status' ) );
+	}
+
+	/**
 	 * The intake, not the decoder, says whether the sender is the marketplace's: the decoder reports every address as foreign.
 	 *
 	 * @return void

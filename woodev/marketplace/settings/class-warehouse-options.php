@@ -16,7 +16,8 @@ defined( 'ABSPATH' ) || exit;
  * making remote API calls during settings or diagnostics rendering.
  *
  * Supports both `['id' => ..., 'name' => ...]` and `['warehouse_id' => ..., 'name' => ...]` list payloads, as well as
- * direct `['warehouses' => [...]]` wrappers.
+ * direct `['warehouses' => [...]]` wrappers. An item may carry a neutral `oversize` flag (the adapter maps its marketplace's own
+ * word, e.g. Ozon `is_kgt`, when it fills the cache); the oversize warehouse select lists such warehouses first.
  *
  * @since 2.1.2
  */
@@ -58,10 +59,12 @@ final class Warehouse_Options {
 	 *
 	 * @since 2.1.2
 	 *
-	 * @param int $account_id Account id.
+	 * @param int  $account_id     Account id.
+	 * @param bool $oversize_first Whether to list the warehouses flagged `oversize` first (the order is otherwise kept) and mark
+	 *                             their labels, for the select of the oversize warehouse.
 	 * @return array<string,string>
 	 */
-	public function for_account( int $account_id ): array {
+	public function for_account( int $account_id, bool $oversize_first = false ): array {
 		if ( $account_id <= 0 ) {
 			return [];
 		}
@@ -76,6 +79,7 @@ final class Warehouse_Options {
 			: $payload;
 
 		$options = [];
+		$flagged = [];
 		foreach ( $items as $item ) {
 			if ( ! is_array( $item ) ) {
 				continue;
@@ -93,8 +97,35 @@ final class Warehouse_Options {
 
 			$name           = isset( $item['name'] ) ? trim( (string) $item['name'] ) : '';
 			$options[ $id ] = '' !== $name ? $name : ( '#' . $id );
+
+			if ( ! empty( $item['oversize'] ) ) {
+				$flagged[] = $id;
+			}
 		}
 
-		return $options;
+		return $oversize_first ? self::oversize_first( $options, $flagged ) : $options;
+	}
+
+	/**
+	 * Moves the flagged warehouses to the front, keeping the order inside both groups, and marks their labels.
+	 *
+	 * @param array<string,string> $options Options by warehouse id.
+	 * @param string[]             $flagged Ids of the oversize warehouses.
+	 * @return array<string,string>
+	 */
+	private static function oversize_first( array $options, array $flagged ): array {
+		$first = [];
+		$rest  = [];
+
+		foreach ( $options as $id => $label ) {
+			if ( in_array( (string) $id, $flagged, true ) ) {
+				/* translators: %s: warehouse name. */
+				$first[ $id ] = sprintf( __( '%s (КГТ)', 'woodev-plugin-framework' ), $label );
+			} else {
+				$rest[ $id ] = $label;
+			}
+		}
+
+		return $first + $rest;
 	}
 }

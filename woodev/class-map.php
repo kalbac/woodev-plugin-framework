@@ -203,6 +203,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Intake\\Push_Registrar' => 'woodev/marketplace/intake/interface-push-registrar.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Registration_Refresher' => 'woodev/marketplace/intake/class-registration-refresher.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Sender_Network' => 'woodev/marketplace/intake/class-sender-network.php',
+	'Woodev\\Framework\\Marketplace\\Intake\\Tokenless_Seen' => 'woodev/marketplace/intake/class-tokenless-seen.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Webhook_Switches' => 'woodev/marketplace/intake/class-webhook-switches.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Webhook_Type' => 'woodev/marketplace/intake/class-webhook-type.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Account_Pause' => 'woodev/marketplace/jobs/class-account-pause.php',
