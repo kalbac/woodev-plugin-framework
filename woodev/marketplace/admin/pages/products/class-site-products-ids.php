@@ -13,13 +13,13 @@ defined( 'ABSPATH' ) || exit;
  * A row id names an account and a product: `{account id}:{product id}`. The product id alone would name the same product in every
  * account, so a row shown under one account could be sent to another by editing a request.
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Ids {
 	/**
 	 * Builds the id of a row.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int $account_id Account id.
 	 * @param int $product_id Product or variation id.
@@ -32,7 +32,7 @@ final class Site_Products_Ids {
 	/**
 	 * Reads the product out of a row id of the given account.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param string $row_id     Row id.
 	 * @param int    $account_id Account the table is open for.

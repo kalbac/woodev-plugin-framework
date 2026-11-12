@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  * Every text is clipped to what the engine accepts, so one long product title or a long marketplace error cannot turn the whole
  * page into a server error.
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Rows {
 	/**
@@ -56,7 +56,7 @@ final class Site_Products_Rows {
 	/**
 	 * Creates the builder.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param string               $marketplace Merchant-facing name of the marketplace.
 	 * @param array<string,string> $warehouses  Warehouse id => name of the account.
@@ -71,7 +71,7 @@ final class Site_Products_Rows {
 	/**
 	 * Builds the row of a listed product.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int                 $account_id Account.
 	 * @param array<string,mixed> $product    Row of {@see Site_Products_Reader::rows()}.
@@ -91,7 +91,7 @@ final class Site_Products_Rows {
 	/**
 	 * Builds the row of a variation.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int                 $account_id Account.
 	 * @param int                 $parent_id  Variable product.

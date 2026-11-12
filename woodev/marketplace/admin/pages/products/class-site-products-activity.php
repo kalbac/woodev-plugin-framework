@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * | stock and price revisions of the sync state | one process per active send (in flight, waiting, or the last one failed); no lock — a product action only sets a flag or seeds an intent |
  * | the account row's claim | the account line; «Снять связь» takes the claim itself, so it is blocked while another holder has it |
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Activity {
 	/**
@@ -62,7 +62,7 @@ final class Site_Products_Activity {
 	/**
 	 * Creates the reader.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Task_Ledger   $ledger         Task ledger.
 	 * @param \wpdb         $db             Database.
@@ -81,7 +81,7 @@ final class Site_Products_Activity {
 	/**
 	 * Reads the activity of offers.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int                            $account_id Account.
 	 * @param array<int,array<string,mixed>> $offers     Offers by product id, as {@see Site_Products_Reader} builds them.
@@ -116,7 +116,7 @@ final class Site_Products_Activity {
 	 * server skips the locked ones with a reason ({@see Site_Products_Bulk}: a card being submitted, or with an open export task). The processes are one line per kind with the number of variations, with no counts: the
 	 * parts are not the same size, so no percentage is honest.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<int,array<string,mixed>> $children Activity of the variations.
 	 * @return array<string,mixed>
@@ -151,7 +151,7 @@ final class Site_Products_Activity {
 	/**
 	 * The account line: work that belongs to the whole account, and the account actions that take its claim themselves.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int $account_id Account.
 	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::account()}.

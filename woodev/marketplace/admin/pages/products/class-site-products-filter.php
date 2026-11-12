@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * value is already typed; the state is still checked against the groups and the sort against the whitelist, because the reader
  * puts them in SQL.
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Filter {
 	/**
@@ -67,7 +67,7 @@ final class Site_Products_Filter {
 	/**
 	 * Creates the filter.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int    $account_id  Account.
 	 * @param string $state       State group; anything but a group is ignored.
@@ -90,7 +90,7 @@ final class Site_Products_Filter {
 	/**
 	 * Builds the filter from the engine's validated query.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int                 $account_id Account.
 	 * @param array<string,mixed> $query      `search`, `sort`, `direction` and `filters`.
@@ -111,7 +111,7 @@ final class Site_Products_Filter {
 	}
 
 	/**
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @return int
 	 */
@@ -120,7 +120,7 @@ final class Site_Products_Filter {
 	}
 
 	/**
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @return string State group, empty for any.
 	 */
@@ -129,7 +129,7 @@ final class Site_Products_Filter {
 	}
 
 	/**
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @return int Category term id, 0 for any.
 	 */
@@ -138,7 +138,7 @@ final class Site_Products_Filter {
 	}
 
 	/**
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @return bool
 	 */
@@ -147,7 +147,7 @@ final class Site_Products_Filter {
 	}
 
 	/**
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @return string
 	 */
@@ -158,7 +158,7 @@ final class Site_Products_Filter {
 	/**
 	 * The `ORDER BY` list: the chosen key, then the product id, so two reads of one page agree.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param string $stock_sql What the stock sort orders by when the reader knows better than the lookup column (a variable product's
 	 *                          stock is the sum over its variations); the whitelisted column when empty.

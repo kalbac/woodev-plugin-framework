@@ -47,7 +47,7 @@ defined( 'ABSPATH' ) || exit;
  * A plugin whose adapter cannot import cards (no {@see Capability::IMPORT_PRODUCTS}) gets the table without «Экспортировать» and
  * «Связать по артикулу».
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Module {
 	/**
@@ -58,7 +58,7 @@ final class Site_Products_Module {
 	/**
 	 * Hooks the registration for a plugin.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
@@ -78,7 +78,7 @@ final class Site_Products_Module {
 	/**
 	 * Registers the provider with the records engine; does nothing when the plugin has no `products` page or its id cannot be a route segment.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
@@ -103,7 +103,7 @@ final class Site_Products_Module {
 	/**
 	 * Builds the provider.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
@@ -208,7 +208,7 @@ final class Site_Products_Module {
 	/**
 	 * Counts the shop products with an article that have no card identity yet: what linking by article would try to match.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<int,array{id:int,parent_id:int,sku:string}>                        $products Shop products with an article.
 	 * @param array<int,array{offer_id:?string,has_remote_ids:bool,card_state:string}> $identity Identity of the account's links by product id.

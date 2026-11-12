@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * `remote_stock_at`, `site_price`, `remote_price`, `warehouse_id`, `sync_stock`, `sync_price` (the last three null when there is no
  * link row).
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Reader {
 	/**
@@ -57,7 +57,7 @@ final class Site_Products_Reader {
 	/**
 	 * Creates the reader.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param \wpdb         $db            Database.
 	 * @param string        $links_table   Full name of the links table.
@@ -78,7 +78,7 @@ final class Site_Products_Reader {
 	/**
 	 * Reads one page of product ids, sorted and filtered in SQL: the whole result is ordered, not the page.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Site_Products_Filter $filter   Filters and sort.
 	 * @param int                  $page     Page number, from 1.
@@ -110,7 +110,7 @@ final class Site_Products_Reader {
 	/**
 	 * Builds the rows of listed products, each with all its offers.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int   $account_id Account.
 	 * @param int[] $ids        Product ids, in display order.
@@ -155,7 +155,7 @@ final class Site_Products_Reader {
 	/**
 	 * Reads one page of the variations of a variable product, as offers.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int $account_id Account.
 	 * @param int $parent_id  Variable product.
@@ -188,7 +188,7 @@ final class Site_Products_Reader {
 	/**
 	 * Builds the offers of variations named by their own ids.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int   $account_id Account.
 	 * @param int[] $ids        Variation ids.
@@ -209,7 +209,7 @@ final class Site_Products_Reader {
 	/**
 	 * Tells which of the ids are listed products or published variations, and what each is.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int[] $ids Product or variation ids.
 	 * @return array<int,array{parent:int,is_variation:bool}> Keyed by id; an id that is neither is absent.
@@ -243,7 +243,7 @@ final class Site_Products_Reader {
 	/**
 	 * Lists the published variations of variable products.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int[] $parent_ids Product ids.
 	 * @return array<int,int[]> Parent id => its variation ids, in display order; a parent with none is absent.

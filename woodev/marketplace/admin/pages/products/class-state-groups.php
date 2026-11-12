@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  * The eleven card states ({@see Link_Record}) in the seven groups the filter and the badges show. The labels and tones are
  * {@see Card_State_Badge}'s, so the table and the product tab name a state the same way.
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class State_Groups {
 	public const UNLINKED = 'unlinked';
@@ -57,7 +57,7 @@ final class State_Groups {
 	/**
 	 * Group of a card state; a product without a link row is `unlinked`.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param string $card_state `Link_Record::STATE_*`, or '' for no link row.
 	 * @return string
@@ -75,7 +75,7 @@ final class State_Groups {
 	/**
 	 * Card states of a group.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param string $group Group.
 	 * @return string[] Empty for an unknown group.
@@ -87,7 +87,7 @@ final class State_Groups {
 	/**
 	 * Whether the string names a group.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param string $group Candidate.
 	 * @return bool
@@ -99,7 +99,7 @@ final class State_Groups {
 	/**
 	 * The options of the «Состояние» filter: group => label.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @return array<string,string>
 	 */
@@ -116,7 +116,7 @@ final class State_Groups {
 	/**
 	 * A badge cell for a group.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param string $group Group.
 	 * @param int    $count How many offers are in it; 0 or 1 adds nothing to the label.

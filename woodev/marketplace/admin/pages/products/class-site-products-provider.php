@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  * Variable products are parent rows that expand into variations ({@see self::get_children()}); every row is `{account}:{product}`.
  * Sorting, filtering and paging are done in SQL over the whole table, never over one page. Nothing here calls the marketplace.
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Provider implements Records_Provider, Provides_Field_Options {
 	/**
@@ -84,7 +84,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	/**
 	 * Creates the provider.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Wpdb_Account_Store      $accounts   Accounts.
 	 * @param Site_Products_Reader    $reader     Reader.
@@ -111,7 +111,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	}
 
 	/**
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @return string
 	 */
@@ -120,7 +120,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	}
 
 	/**
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<string,string> $context Requested context.
 	 * @return array<string,mixed>
@@ -133,7 +133,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * Every id must be a row of this account's table; an id of another account or a product that is not listed is refused like an
 	 * unknown id. The edit right is not asked here: a product the user may not edit is reported by the action as skipped, with its reason.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param string               $operation `definition`, `list`, `children`, `options`, `activity` or an action id.
 	 * @param array<string,string> $context   Resolved context.
@@ -179,7 +179,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	/**
 	 * Reads one page, sorted and filtered over the whole table.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<string,string> $context Resolved context.
 	 * @param array<string,mixed>  $query   Validated query.
@@ -212,7 +212,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	/**
 	 * Reads one page of the variations of a variable product.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<string,string> $context   Resolved context.
 	 * @param string               $parent_id Row id of the variable product.
@@ -241,7 +241,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	/**
 	 * The validation report, or the plan, of an action. Writes nothing.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<string,string> $context Resolved context.
 	 * @param string               $action  Action id.
@@ -260,7 +260,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	/**
 	 * Replans from current state and applies an action.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<string,string> $context Resolved context.
 	 * @param string               $action  Action id.
@@ -279,7 +279,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	/**
 	 * The current rows of the asked ids and the account line. A local read.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<string,string> $context Resolved context.
 	 * @param string[]             $ids     Visible or expanded row ids.
@@ -306,7 +306,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	/**
 	 * The options of the warehouse field: «по умолчанию» (0) and the account's warehouses.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<string,string>                             $context Resolved context.
 	 * @param string                                           $action  Action id.

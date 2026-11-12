@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * eligible children, and the server normalises the selection to **distinct domain targets**, so a variation is never processed
  * twice. A target is an offer: a simple product, or one variation.
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Selection {
 	/**
@@ -31,7 +31,7 @@ final class Site_Products_Selection {
 	/**
 	 * Creates the resolver.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Site_Products_Reader $reader Reader.
 	 */
@@ -42,7 +42,7 @@ final class Site_Products_Selection {
 	/**
 	 * Resolves row ids to offers.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int      $account_id Account the table is open for.
 	 * @param string[] $row_ids    Row ids.
@@ -99,7 +99,7 @@ final class Site_Products_Selection {
 	/**
 	 * Tells whether a row is a variable product with variations to read.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param int    $account_id Account.
 	 * @param string $row_id  Row id.

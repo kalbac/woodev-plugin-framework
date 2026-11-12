@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * engine validates the result ({@see \Woodev\Framework\Admin\Records\Records_Definition::from_array()}), so a typo here is a developer
  * error caught on the first request.
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Definition {
 	/**
@@ -25,7 +25,7 @@ final class Site_Products_Definition {
 	/**
 	 * Builds the definition.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param array<int,array{value:string,label:string}> $accounts    Accounts the user may open: the account selector's options.
 	 * @param string                                      $marketplace Merchant-facing marketplace name.

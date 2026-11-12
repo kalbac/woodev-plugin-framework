@@ -40,7 +40,7 @@ defined( 'ABSPATH' ) || exit;
  * Plan shape: `targets` (link rows the action changes; empty for export and for linking), `will` (offers the action reaches), `groups`
  * (left out, by reason: `reason`, `ids`, `fix`), `warnings` (offers that go on with a warning).
  *
- * @since 2.1.3
+ * @since 2.1.4
  */
 final class Site_Products_Bulk {
 	public const EXPORT          = 'export';
@@ -137,7 +137,7 @@ final class Site_Products_Bulk {
 	/**
 	 * Creates the planner.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Export_Service      $export          Export service.
 	 * @param Wpdb_Link_Store     $links           Links.
@@ -166,7 +166,7 @@ final class Site_Products_Bulk {
 	/**
 	 * Every action id, in the order of the toolbar.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @return string[]
 	 */
@@ -190,7 +190,7 @@ final class Site_Products_Bulk {
 	/**
 	 * What the action would do. Writes nothing.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Account        $account   Account.
 	 * @param string         $action    Action id.
@@ -229,7 +229,7 @@ final class Site_Products_Bulk {
 	/**
 	 * Does the action.
 	 *
-	 * @since 2.1.3
+	 * @since 2.1.4
 	 *
 	 * @param Account        $account   Account.
 	 * @param string         $action    Action id.
