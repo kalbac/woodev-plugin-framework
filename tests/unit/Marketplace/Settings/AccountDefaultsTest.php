@@ -341,18 +341,63 @@ final class AccountDefaultsTest extends TestCase {
 
 		Actions\expectDone( self::HOOK )->twice()->with( $id ); // Once for each switch of the price group; the exchange switch queues nothing.
 
-		$handler->get_setting( "account_{$id}_override_prices" )->set_value( 'defaults' );
-		$handler->get_setting( "account_{$id}_override_exchange" )->set_value( 'defaults' );
-		$handler->save();
+		$handler->update_value( "account_{$id}_override_prices", 'defaults' );
+		$handler->update_value( "account_{$id}_override_exchange", 'defaults' );
 
 		$settings = $store->get( $id )->settings();
 		$this->assertFalse( $settings[ Effective_Settings::OVERRIDES_KEY ][ Effective_Settings::GROUP_PRICES ] );
 		$this->assertFalse( $settings[ Effective_Settings::OVERRIDES_KEY ][ Effective_Settings::GROUP_EXCHANGE ] );
 		$this->assertSame( [ 'markup' => '15' ], $settings['price_rule'], 'the account\'s own values are kept for the way back' );
 
-		$handler->get_setting( "account_{$id}_override_prices" )->set_value( 'own' );
-		$handler->save();
+		$handler->update_value( "account_{$id}_override_prices", 'own' );
 		$this->assertTrue( Effective_Settings::uses_own( $store->get( $id )->settings(), Effective_Settings::GROUP_PRICES ) );
+	}
+
+	public function test_an_account_that_follows_the_defaults_shows_them_in_its_fields(): void {
+		[ $adapter, $store ] = $this->adapter_and_store( [ Capability::IMPORT_PRODUCTS ] );
+		$this->options[ Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ) ] = [ 'markup_kind' => 'percent', 'markup' => '10', 'rounding' => 'ends_99', 'orders_enabled' => false, 'import_enabled' => true ];
+		$id = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'New', true, [ 'merchant_uid' => '2', 'access_token' => 't2' ], null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] ) );
+
+		$schema = Field_Schema::from_handler( $this->handler( $adapter, $store ) );
+
+		$this->assertSame( '10', $schema[ "account_{$id}_price_markup" ]['value'] );
+		$this->assertSame( 'ends_99', $schema[ "account_{$id}_price_rounding" ]['value'] );
+		$this->assertFalse( $schema[ "account_{$id}_orders_enabled" ]['value'] );
+		$this->assertTrue( $schema[ "account_{$id}_import_enabled" ]['value'] );
+	}
+
+	public function test_switching_a_group_to_own_starts_from_the_defaults_in_force(): void {
+		[ $adapter, $store ] = $this->adapter_and_store( [ Capability::IMPORT_PRODUCTS ] );
+		$this->options[ Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ) ] = [ 'markup_kind' => 'percent', 'markup' => '10', 'rounding' => 'ends_99', 'min_percent' => '80', 'orders_enabled' => false, 'import_enabled' => true ];
+		$id      = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'New', true, [ 'merchant_uid' => '2', 'access_token' => 't2' ], null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] ) );
+		$handler = $this->handler( $adapter, $store );
+
+		// The screen sends the switches first, then the one field the merchant edited.
+		$handler->update_value( "account_{$id}_override_prices", 'own' );
+		$handler->update_value( "account_{$id}_override_exchange", 'own' );
+		$handler->update_value( "account_{$id}_price_markup", '15' );
+
+		$account = $store->get( $id );
+		$rule    = $account->setting( 'price_rule' );
+
+		$this->assertSame( '15', $rule['markup'] );
+		$this->assertSame( 'percent', $rule['markup_kind'], 'the rest of the shared rule is kept' );
+		$this->assertSame( 'ends_99', $rule['rounding'] );
+		$this->assertSame( '80', $rule['min_percent'] );
+		$this->assertFalse( $account->setting( 'orders_enabled' ) );
+		$this->assertTrue( $account->setting( 'import_enabled' ) );
+		$this->assertTrue( Effective_Settings::uses_own( $account->settings(), Effective_Settings::GROUP_PRICES ) );
+	}
+
+	public function test_an_account_that_already_uses_its_own_values_is_not_overwritten_by_the_defaults(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$this->options[ Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ) ] = [ 'markup' => '99' ];
+		$id      = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Old', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'price_rule' => [ 'markup' => '15' ] ] ) );
+		$handler = $this->handler( $adapter, $store );
+
+		$handler->update_value( "account_{$id}_override_prices", 'own' );
+
+		$this->assertSame( '15', $store->get( $id )->setting( 'price_rule' )['markup'] );
 	}
 
 	public function test_an_account_created_on_the_screen_follows_the_defaults(): void {

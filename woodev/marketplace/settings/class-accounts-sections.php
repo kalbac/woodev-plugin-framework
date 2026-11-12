@@ -520,6 +520,15 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	}
 
 	/**
+	 * The resolver of the values in force for this adapter's accounts.
+	 *
+	 * @return Effective_Settings
+	 */
+	private function resolver(): Effective_Settings {
+		return Effective_Settings::for_adapter( $this->adapter->id() );
+	}
+
+	/**
 	 * Records a fenced `auth_failed` health when stored secrets fail decryption (after WordPress salt rotation).
 	 *
 	 * @param Account $account Account.
@@ -842,7 +851,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$currency = '' !== $currency ? $currency : 'RUB';
 
 		try {
-			$rule = Price_Rule::from_array( array_merge( self::default_price_rule_array(), Effective_Settings::for_adapter( $this->adapter->id() )->price_rule( $account ) ) );
+			$rule = Price_Rule::from_array( array_merge( self::default_price_rule_array(), $this->resolver()->price_rule( $account ) ) );
 			$pair = Price_Calculator::calculate(
 				Money::from_string( '1000', $currency ),
 				Money::from_string( '1200', $currency ),
@@ -890,7 +899,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	}
 
 	/**
-	 * Reads one field from a loaded `Account`.
+	 * Reads one field from a loaded `Account`: for the price rule and the exchange switches the value **in force**, so an account that
+	 * follows «Общие» shows (and compares an edit against) the defaults, not the values it kept from before.
 	 *
 	 * @param Account $account Account.
 	 * @param string  $field   Field name.
@@ -924,16 +934,16 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			case self::OVERRIDE_EXCHANGE:
 				return Effective_Settings::uses_own( $account->settings(), self::OVERRIDE_GROUPS[ $field ] ) ? self::SOURCE_OWN : self::SOURCE_DEFAULTS;
 			case 'orders_enabled':
-				return (bool) $account->setting( 'orders_enabled', true );
+				return $this->resolver()->orders_enabled( $account );
 			case 'import_enabled':
-				return (bool) $account->setting( 'import_enabled', false );
+				return $this->resolver()->import_enabled( $account );
 		}
 
 		if ( isset( Shared_Fields::PRICE_RULE_FIELDS[ $field ] ) ) {
 			$rule_key = Shared_Fields::PRICE_RULE_FIELDS[ $field ];
-			$stored   = array_merge( self::default_price_rule_array(), (array) $account->setting( 'price_rule', [] ) );
+			$rule     = array_merge( self::default_price_rule_array(), $this->resolver()->price_rule( $account ) );
 
-			return (string) ( $stored[ $rule_key ] ?? '' );
+			return (string) ( $rule[ $rule_key ] ?? '' );
 		}
 
 		return '';
@@ -1110,7 +1120,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	/**
 	 * Saves one group's «как в Общих / свои» choice into the account's `settings` JSON.
 	 *
-	 * Switching the price group queues the account's recompute: the rule in force changes with it.
+	 * Switching a group from «как в Общих» to «свои» first copies the defaults in force into the account: «свои» starts from the
+	 * values the account was working with a second earlier, and the fields the merchant leaves alone keep them. (The UI flips the
+	 * switch before it reveals the group's fields, so the switch is always written before any edit of the group.) Switching the
+	 * price group queues the account's recompute: the rule in force changes with it.
 	 *
 	 * @param int    $id    Account id.
 	 * @param string $group `Effective_Settings::GROUP_*`.
@@ -1118,11 +1131,17 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 * @return void
 	 */
 	private function save_override( int $id, string $group, bool $own ): void {
+		$account = $this->accounts()[ $id ] ?? null;
+
+		if ( $own && null !== $account && ! Effective_Settings::uses_own( $account->settings(), $group ) ) {
+			$this->copy_defaults_into( $id, $group );
+		}
+
 		$updated = $this->store->update_settings(
 			$id,
 			static function ( array $current ) use ( $group, $own ): array {
-				$flags                                   = isset( $current[ Effective_Settings::OVERRIDES_KEY ] ) && is_array( $current[ Effective_Settings::OVERRIDES_KEY ] ) ? $current[ Effective_Settings::OVERRIDES_KEY ] : [];
-				$flags[ $group ]                         = $own;
+				$flags                                        = isset( $current[ Effective_Settings::OVERRIDES_KEY ] ) && is_array( $current[ Effective_Settings::OVERRIDES_KEY ] ) ? $current[ Effective_Settings::OVERRIDES_KEY ] : [];
+				$flags[ $group ]                              = $own;
 				$current[ Effective_Settings::OVERRIDES_KEY ] = $flags;
 
 				return $current;
@@ -1132,6 +1151,39 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		if ( $updated && Effective_Settings::GROUP_PRICES === $group ) {
 			do_action( $this->price_rules_changed_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names.
 		}
+	}
+
+	/**
+	 * Copies the «Общие» values of a group into an account as its own.
+	 *
+	 * @param int    $id    Account id.
+	 * @param string $group `Effective_Settings::GROUP_*`.
+	 * @return void
+	 */
+	private function copy_defaults_into( int $id, string $group ): void {
+		$defaults = $this->resolver()->defaults();
+
+		if ( Effective_Settings::GROUP_EXCHANGE === $group ) {
+			$this->store->update_fields(
+				$id,
+				[
+					'orders_enabled' => (bool) $defaults['orders_enabled'],
+					'import_enabled' => (bool) $defaults['import_enabled'],
+				]
+			);
+			return;
+		}
+
+		$rule = array_intersect_key( $defaults, array_flip( Effective_Settings::PRICE_KEYS ) );
+
+		$this->store->update_settings(
+			$id,
+			static function ( array $current ) use ( $rule ): array {
+				$current['price_rule'] = $rule;
+
+				return $current;
+			}
+		);
 	}
 
 	/**
