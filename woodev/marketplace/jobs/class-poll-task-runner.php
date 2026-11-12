@@ -422,28 +422,35 @@ final class Poll_Task_Runner {
 	}
 
 	/**
-	 * Writes the marketplace's oversize flag of a card to its link. The state stays as the run read it; an answer without the
-	 * flag ({@see Card_Outcome::oversize()} is null) keeps the stored value.
+	 * Writes the marketplace's oversize flag of a card to its link and returns the link as the run now sees it. The state stays as
+	 * the run read it; an answer without the flag ({@see Card_Outcome::oversize()} is null) keeps the stored value.
+	 *
+	 * The copy carries the flag before the state branches run: the first stock seed of a card created in this answer reads the
+	 * flag from the link it is given. A stock row of a link that was already created is not re-recorded here; a flip in that
+	 * state takes effect with the next stock change (known limitation).
 	 *
 	 * @param int          $task_id Task id.
 	 * @param Link_Record  $link    Link the card belongs to.
 	 * @param Card_Outcome $outcome What the marketplace reports for the card.
 	 * @param Claim_Fence  $fence   The run's claim.
-	 * @return void
+	 * @return Link_Record The link, with the flag when it was written.
 	 */
-	private function remember_oversize( int $task_id, Link_Record $link, Card_Outcome $outcome, Claim_Fence $fence ): void {
+	private function remember_oversize( int $task_id, Link_Record $link, Card_Outcome $outcome, Claim_Fence $fence ): Link_Record {
 		if ( null === $outcome->oversize() ) {
-			return;
+			return $link;
 		}
 
-		$this->links->advance(
+		$flag  = $outcome->oversize() ? 1 : 0;
+		$saved = $this->links->advance(
 			(int) $link->link_id(),
 			$task_id,
 			$link->card_state(),
-			[ 'is_oversize' => $outcome->oversize() ? 1 : 0 ],
+			[ 'is_oversize' => $flag ],
 			$fence,
 			$link->card_state()
 		);
+
+		return $saved ? $link->with( [ 'is_oversize' => $flag ] ) : $link;
 	}
 
 	/**
@@ -473,7 +480,7 @@ final class Poll_Task_Runner {
 				$created[ $card_id ] = true;
 			}
 
-			$this->remember_oversize( $task_id, $link, $outcome, $fence );
+			$link = $this->remember_oversize( $task_id, $link, $outcome, $fence );
 
 			if ( Link_Record::STATE_CREATED === $link->card_state() ) {
 				$this->learn_late_ids( $task_id, $link, $outcome, $fence );

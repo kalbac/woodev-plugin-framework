@@ -106,6 +106,13 @@ abstract class Export_Test_Case extends Sync_Test_Case {
 	protected $seeded = [];
 
 	/**
+	 * The `is_oversize` flag each seeded link had when the seeding ran, by link id.
+	 *
+	 * @var array<int,bool>
+	 */
+	protected $seeded_oversize = [];
+
+	/**
 	 * Builds the harness.
 	 *
 	 * @return void
@@ -120,7 +127,8 @@ abstract class Export_Test_Case extends Sync_Test_Case {
 		$this->lifecycle    = $this->adapter->card_lifecycle();
 		$this->created      = [];
 		$this->skus         = [];
-		$this->seeded       = [];
+		$this->seeded         = [];
+		$this->seeded_oversize = [];
 		$this->seed_failure = null;
 		$this->mapping_id   = $this->mappings()->create( 'Блокноты', null, [ 'category_ref' => 'c-1' ], null, [] );
 		$this->mappings()->link_term_if_absent( self::TERM, $this->mapping_id );
@@ -334,6 +342,8 @@ abstract class Export_Test_Case extends Sync_Test_Case {
 				}
 
 				$this->seeded[] = (int) $link->link_id();
+
+				$this->seeded_oversize[ (int) $link->link_id() ] = $link->is_oversize();
 			},
 			function ( int $link_id, int $account_id ): void {
 				$this->created[] = [ $link_id, $account_id ];

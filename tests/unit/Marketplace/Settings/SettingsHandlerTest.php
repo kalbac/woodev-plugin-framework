@@ -364,6 +364,7 @@ final class SettingsHandlerTest extends TestCase {
 		$this->assertSame( 0, $health_called );
 
 		// Live test_connection falls back to stored secret when input is '', redacts message, updates currency, calls on_connected.
+		Actions\expectDone( 'woodev_fake_mp_account_connected' )->once()->with( $acc_id );
 		$res = $handler->test_connection(
 			"account_connection_{$acc_id}",
 			[
@@ -387,6 +388,53 @@ final class SettingsHandlerTest extends TestCase {
 		$handler->get_setting( "account_{$acc_id}_price_markup_kind" )->set_value( 'percent' );
 		$handler->get_setting( "account_{$acc_id}_price_markup" )->set_value( '15' );
 		$handler->save( "account_{$acc_id}_price_markup_kind" );
+	}
+
+	public function test_a_failed_connection_test_does_not_fire_account_connected(): void {
+		$fields = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
+		$health = new class() implements Credential_Health {
+			public function check( Account $account ): Health_Result {
+				return new Health_Result( Health_Result::AUTH_FAILED, 'Ключ отклонён', null, [] );
+			}
+		};
+
+		$adapter = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'      => [],
+				'credential_fields' => $fields,
+				'credential_health' => $health,
+				'posting_handler'   => null,
+				'price_reader'      => null,
+			]
+		);
+
+		$store = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-1' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+
+		$acc_id  = $store->save(
+			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Failing Shop', true, [ 'cabinet_id' => '701', 'api_token' => 'secret-token-701' ] )
+		);
+		$handler = $this->build_handler( $adapter, $store );
+
+		Actions\expectDone( 'woodev_fake_mp_account_connected' )->never();
+		$res = $handler->test_connection(
+			"account_connection_{$acc_id}",
+			[
+				"account_{$acc_id}_cabinet_id" => '701',
+				"account_{$acc_id}_api_token"  => '',
+			]
+		);
+
+		$this->assertFalse( $res->is_success() );
 	}
 
 	public function test_the_oversize_warehouse_list_puts_flagged_warehouses_first_and_marks_them(): void {

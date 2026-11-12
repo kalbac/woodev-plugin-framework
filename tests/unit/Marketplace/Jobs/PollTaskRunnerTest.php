@@ -162,6 +162,22 @@ final class PollTaskRunnerTest extends Export_Test_Case {
 	}
 
 	/**
+	 * A card created in the same answer that carries the oversize flag is seeded with the flag already set: the first stock
+	 * goes to the warehouse the flag selects, not to the ordinary one.
+	 *
+	 * @return void
+	 */
+	public function test_the_oversize_flag_is_known_when_a_card_is_first_seeded(): void {
+		$link = $this->sent( 'NB-1' );
+		$this->import_ok( 'NB-1', 'c-1' );
+		$this->lifecycle->cards = [ 'c-1' => new Card_Outcome( Link_Record::STATE_CREATED, true, false, 'created', [ 'card_ref' => 'c-1', 'model_ref' => 'm-1' ], true ) ];
+
+		$this->poll();
+
+		$this->assertSame( [ (int) $link->link_id() => true ], $this->seeded_oversize );
+	}
+
+	/**
 	 * The oversize flag the answer carries is written to the link while the card is still in progress.
 	 *
 	 * @return void

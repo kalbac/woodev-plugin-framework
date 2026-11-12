@@ -94,6 +94,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	private $on_connected;
 
 	/**
+	 * Action fired with the account id after an `ok` connection test (`Job_Names::hook( 'account_connected' )`).
+	 *
+	 * @var string
+	 */
+	private $account_connected_hook;
+
+	/**
 	 * Loaded accounts keyed by account id (`null` before first load).
 	 *
 	 * @var array<int,Account>|null
@@ -140,6 +147,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$this->warehouses               = $warehouses;
 		$this->price_rules_changed_hook = ( new Job_Names( $plugin_id ) )->hook( 'account_price_rules_changed' );
 		$this->on_connected             = $on_connected;
+		$this->account_connected_hook   = ( new Job_Names( $plugin_id ) )->hook( 'account_connected' );
 	}
 
 	/**
@@ -419,6 +427,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 			if ( $result->is_ok() && null !== $this->on_connected ) {
 				call_user_func( $this->on_connected, $id );
+			}
+
+			if ( $result->is_ok() ) {
+				do_action( $this->account_connected_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names (`woodev_{plugin_id}_account_connected`).
 			}
 		}
 
