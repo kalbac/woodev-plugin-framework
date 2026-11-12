@@ -9,28 +9,72 @@
  * @package woodev-plugin-framework
  */
 
+import type { ReactNode } from 'react';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 
+/** The stored connection status of an account section (`Settings_Section` status). */
+export interface SectionStatus {
+	success?: boolean;
+	message?: string;
+}
+
+/** `Settings_Section::with_card()` as the registry serialises it. */
+export interface AccountCardSchema {
+	title: string;
+	identifier_label: string;
+	identifier: string;
+	enabled: boolean;
+	enabled_field: string;
+	delete_hint?: string;
+	/** True for the block that adds a new account instead of showing a saved one. */
+	new?: boolean;
+}
+
+/** The slice of a section the accounts and stacked views read. */
+export interface AccountSection {
+	id: string;
+	label?: string;
+	subtitle?: string;
+	stacked?: boolean;
+	card?: AccountCardSchema;
+	status?: SectionStatus | null;
+}
+
+/** The slice of a tab schema the accounts and stacked views read. */
+export interface AccountsTab {
+	id: string;
+	sections?: AccountSection[];
+}
+
+/** A section known to carry a card. */
+type CardSection = AccountSection & { card: AccountCardSchema };
+
+/** The text of an account card's status line and whether it is good news. */
+export interface CardStatus {
+	ok: boolean;
+	text: string;
+}
+
 /**
  * Whether a tab is the accounts tab: some of its sections are drawn as cards.
  *
- * @param {Object} tab the tab schema.
+ * @param {AccountsTab} tab the tab schema.
  * @return {boolean} true when it has card sections.
  */
-export function isAccountsTab( tab ) {
+export function isAccountsTab( tab: AccountsTab ): boolean {
 	return ( tab.sections || [] ).some( ( section ) => !! section.card );
 }
 
 /**
  * Splits an accounts tab into the saved accounts' sections and the block that adds a new one.
  *
- * @param {Object} tab the tab schema.
- * @return {{accounts: Object[], adder: ?Object}} the saved accounts' sections and the add block.
+ * @param {AccountsTab} tab the tab schema.
+ * @return {{accounts: CardSection[], adder: CardSection|null}} the saved accounts' sections and the add block.
  */
-export function splitAccountSections( tab ) {
-	const cards = ( tab.sections || [] ).filter( ( section ) => !! section.card );
+export function splitAccountSections( tab: AccountsTab ): { accounts: CardSection[]; adder: CardSection | null } {
+	const cards = ( tab.sections || [] ).filter( ( section ): section is CardSection => !! section.card );
 
 	return {
 		accounts: cards.filter( ( section ) => ! section.card.new ),
@@ -41,10 +85,10 @@ export function splitAccountSections( tab ) {
 /**
  * The status line of a saved account card.
  *
- * @param {Object} section the account's connection section.
- * @return {{ok: boolean, text: string}} the text and whether it is good news.
+ * @param {CardSection} section the account's connection section.
+ * @return {CardStatus} the text and whether it is good news.
  */
-export function cardStatus( section ) {
+export function cardStatus( section: CardSection ): CardStatus {
 	if ( ! section.card.enabled ) {
 		return { ok: false, text: __( 'Выключен', 'woodev-plugin-framework' ) };
 	}
@@ -57,7 +101,16 @@ export function cardStatus( section ) {
 	return { ok: !! status.success, text: status.message };
 }
 
-function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, children } ) {
+interface AccountCardProps {
+	section: CardSection;
+	open: boolean;
+	busy: boolean;
+	onToggleOpen: () => void;
+	onToggleEnabled: () => void;
+	children?: ReactNode;
+}
+
+function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, children }: AccountCardProps ) {
 	const card = section.card;
 	const status = cardStatus( section );
 
@@ -93,14 +146,23 @@ function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, chil
 	);
 }
 
+interface AccountsViewProps {
+	/** The accounts tab. */
+	tab: AccountsTab;
+	/** The connection block of one section. */
+	renderSection: ( tab: AccountsTab, sectionId: string ) => ReactNode;
+	/** Switches the account on or off and saves. */
+	onToggleEnabled: ( tab: AccountsTab, section: CardSection ) => void;
+	/** Id of the section whose switch is being saved. */
+	busySection?: string;
+}
+
 /**
- * @param {Object}   props
- * @param {Object}   props.tab             the accounts tab.
- * @param {Function} props.renderSection   (tab, sectionId) => node — the connection block of one section.
- * @param {Function} props.onToggleEnabled (tab, section) => void — switches the account on or off and saves.
- * @param {string}   props.busySection     id of the section whose switch is being saved.
+ * The accounts tab: a card per saved account and the way to add another.
+ *
+ * @param {AccountsViewProps} props the view props.
  */
-export default function AccountsView( { tab, renderSection, onToggleEnabled, busySection = '' } ) {
+export default function AccountsView( { tab, renderSection, onToggleEnabled, busySection = '' }: AccountsViewProps ) {
 	const { accounts, adder } = splitAccountSections( tab );
 	const [ openId, setOpenId ] = useState( '' );
 	const [ adding, setAdding ] = useState( false );

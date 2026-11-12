@@ -502,12 +502,12 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   `{plugin id}-{slug}`. «Общие» exists only when the adapter has a price rule or exchange switch to default; «Уведомления» only with
   `PUSH_NOTIFICATIONS`. The page heading is `Page::get_heading()` («Настройки {plugin name}») over a menu entry that stays «Настройки»; it is also the last crumb of
   the manifest, which is what the wc-admin header shows (`Menu::build_manifest()`).
-- **«Подключение»** draws a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.js`): title, identifier, stored
+- **«Подключение»** draws a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.tsx`): title, identifier, stored
   status, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение»), «Выключить» (saves
   `enabled` at once) and «Удалить» (**disabled** with a hint; deleting is #1733). No account: one big «Добавить аккаунт» button. This is
   the one part the PHP-driven renderer cannot express: one section holds one connection block, and a card needs buttons and an expand.
 - **«Параметры»** is one section per account, **stacked** one after another under the account's name with its identifier in muted text
-  (`Settings_Section::stacked()`, `src/settings-page/stacked-view.js`; no sub-tabs). With none, a notice «Подключите аккаунт на вкладке „Подключение“».
+  (`Settings_Section::stacked()`, `src/settings-page/stacked-view.tsx`; no sub-tabs). With none, a notice «Подключите аккаунт на вкладке „Подключение“».
   **«Уведомления»** is stacked too (`Settings_Tab` with `$stacked = true`): the five switches, then a block per account with its address
   and «Зарегистрировать URL».
   Stock, warehouse, oversize warehouse and the price direction are always the account's own.

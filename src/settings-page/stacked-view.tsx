@@ -8,22 +8,32 @@
  * @package woodev-plugin-framework
  */
 
+import type { ReactNode } from 'react';
+import type { AccountsTab } from './accounts-view';
+
 /**
  * Whether a tab draws its sections stacked.
  *
- * @param {Object} tab the tab schema.
+ * @param {AccountsTab} tab the tab schema.
  * @return {boolean} true when some section is flagged `stacked`.
  */
-export function isStackedTab( tab ) {
+export function isStackedTab( tab: AccountsTab ): boolean {
 	return ( tab.sections || [] ).some( ( section ) => !! section.stacked );
 }
 
+interface StackedViewProps {
+	/** The stacked tab. */
+	tab: AccountsTab;
+	/** The card of one section. */
+	renderSection: ( tab: AccountsTab, sectionId: string ) => ReactNode;
+}
+
 /**
- * @param {Object}   props
- * @param {Object}   props.tab           the stacked tab.
- * @param {Function} props.renderSection (tab, sectionId) => node — the card of one section.
+ * The tab's sections one after another, each under its own heading.
+ *
+ * @param {StackedViewProps} props the view props.
  */
-export default function StackedView( { tab, renderSection } ) {
+export default function StackedView( { tab, renderSection }: StackedViewProps ) {
 	return (
 		<div className="woodev-stacked">
 			{ ( tab.sections || [] ).map( ( section ) => (

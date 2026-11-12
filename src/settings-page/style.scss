@@ -318,7 +318,7 @@ $settings-label-col: 200px;
 	@media ( max-width: 782px ) { grid-template-columns: 1fr; }
 }
 
-// «Подключение» tab of a marketplace plugin: one card per account (accounts-view.js).
+// «Подключение» tab of a marketplace plugin: one card per account (accounts-view.tsx).
 .woodev-accounts {
 	display: flex;
 	flex-direction: column;
@@ -400,7 +400,7 @@ $settings-label-col: 200px;
 	}
 }
 
-// A tab of sections drawn one after another, each under its own heading (stacked-view.js).
+// A tab of sections drawn one after another, each under its own heading (stacked-view.tsx).
 .woodev-stacked {
 	display: flex;
 	flex-direction: column;
