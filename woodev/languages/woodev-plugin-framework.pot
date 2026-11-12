@@ -7,7 +7,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-12T15:50:10+00:00\n"
+"POT-Creation-Date: 2026-11-12T16:00:30+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woodev-plugin-framework\n"
@@ -10434,4 +10434,201 @@ msgstr ""
 #: shipping-method/checkout/blocks/shipping-pickup/block.json
 msgctxt "block description"
 msgid "Lets the shopper choose a pickup point on the map for the selected shipping method."
+msgstr ""
+
+
+#: box-packer/class-packer-dispatcher.php:101
+msgid "Single box (items stacked along one axis)"
+msgstr ""
+
+#: box-packer/class-packer-dispatcher.php:124
+msgid "Store boxes (items packed into the boxes set up in the store)"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:267
+msgid "Packing algorithm"
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:748
+msgid "Выгрузка"
+msgstr ""
+
+#: shipping-method/map/class-yandex-map-provider.php:264
+msgid "Ключ API Яндекс.Карт"
+msgstr ""
+
+#: shipping-method/map/class-yandex-map-provider.php:285
+msgid "Если не указан, используется общий ключ поставщика плагина. Общий ключ расходует одну квоту на все магазины и может быть заблокирован. Рекомендуем указать собственный ключ."
+msgstr ""
+
+#. translators: %s: URL to instructions for obtaining a Yandex Maps API key.
+#: shipping-method/map/class-yandex-map-provider.php:298
+#, php-format
+msgid "Инструкция по получению ключа: %s."
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-handler.php:1666
+msgid "Акцентный цвет карты"
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-handler.php:1669
+msgid "Цвет кнопок, активных пунктов и кластеров на карте пунктов выдачи."
+msgstr ""
+
+#: shipping-method/rest-api/class-pickup-controller.php:587
+msgid "Пункт выдачи не указан."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:386
+msgid "Коробки"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:388
+msgid "Коробки магазина, в которые упаковываются заказы у способов доставки с алгоритмом упаковки «Коробки магазина». Товар, который не помещается ни в одну коробку, едет в отдельной посылке — он не теряется."
+msgstr ""
+
+#: shipping-method/settings/class-boxes-settings.php:226
+msgid "Список коробок"
+msgstr ""
+
+#: shipping-method/settings/class-boxes-settings.php:229
+msgid "Каждая непустая строка должна быть вида «название; длина; ширина; высота; макс. вес; вес коробки». Размеры — числа больше нуля, веса — числа не меньше нуля."
+msgstr ""
+
+#. translators: 1: the store's dimension unit, e.g. cm; 2: the store's weight unit, e.g. kg
+#: shipping-method/settings/class-boxes-settings.php:238
+#, php-format
+msgid "По одной коробке в строке: «название; длина; ширина; высота; макс. вес; вес коробки». Размеры (внутренние) — в %1$s, веса — в %2$s. Макс. вес и вес коробки можно не указывать: пусто — без ограничения и коробка ничего не весит. Макс. вес считается вместе с самой коробкой."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Скоро"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Здесь появится аналитика по доставке — показатели и график за период."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:77
+msgid "Включить"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:79
+msgid "Отправлять это письмо покупателю"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:85
+msgid "Доступны переменные: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:90
+msgid "Заголовок"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:95
+msgid "Формат письма"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:102
+msgid "Текст письма"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:106
+msgid "Переменные можно вставлять в фигурных скобках."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Передан в доставку + трек"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Письмо покупателю после передачи отправления перевозчику."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:54
+msgid "Заказ ждёт в пункте выдачи"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:54
+msgid "Письмо покупателю, когда отправление поступило в пункт выдачи."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:55
+msgid "Письмо покупателю после доставки заказа."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Возврат / не доставлено"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Письмо покупателю при возврате или неудачной доставке."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid ""
+"Your shipment has been handed over to the carrier. Tracking number: "
+"{tracking_number}. {tracking_url}"
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "Документ ещё готовится. Повторите попытку примерно через %d с."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Минимальная коробка"
+msgstr ""
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Размеры: %1$s × %2$s × %3$s см. Использовать, если подходящей упаковки магазина нет."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:312
+msgid "Остатки ведёт маркетплейс: магазин их не отправляет."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:150
+msgid "Укажите корректные IP-адреса или подсети CIDR (по одному в строке, например 198.51.100.0/24)."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:157
+#: marketplace/settings/class-notifications-section.php:168
+#, php-format
+msgid "Разрешённые адреса %s"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:170
+#, php-format
+msgid "IP-адреса и подсети CIDR, с которых %s присылает уведомления (по одному на строку). Пустое поле отключает фильтрацию по IP."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:178
+#: marketplace/settings/class-notifications-section.php:188
+msgid "Доверенные обратные прокси"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:189
+msgid "Адреса ваших балансировщиков (nginx, Cloudflare), от которых можно доверять заголовку X-Forwarded-For."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:217
+#, php-format
+msgid "Безопасность уведомлений %s"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:235
+msgid "Адрес сайта для уведомлений показан в карточках аккаунтов ниже, а кнопка «Зарегистрировать URL» сама передаёт его в личный кабинет."
+msgstr ""
+
+#. translators: %s: name of the filter.
+#: marketplace/settings/class-notifications-section.php:254
+#, php-format
+msgid "Сайт работает за прокси или CDN: сервер видит адрес прокси, а не отправителя. Уведомления по адресам с секретным ключом (как в карточках ниже) это не затрагивает — они принимаются по ключу. Старый адрес без ключа проверяет отправителя по IP, и за прокси такая проверка может отклонять настоящие уведомления; разработчик указывает адреса своих прокси фильтром %s."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:262
+msgid "Адрес для приёма уведомлений (токен скрыт)"
 msgstr ""
