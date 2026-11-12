@@ -400,6 +400,35 @@ $settings-label-col: 200px;
 	}
 }
 
+// The deletion dialog of one account (account-delete-flow.tsx): a WordPress Modal, so the plain selectors apply.
+.woodev-account-delete {
+	// The gap between the warnings above and the confirm field below.
+	&__confirm {
+		margin-top: wd.$gap-lg;
+	}
+
+	// «Отмена» and the confirm button side by side, on the right, with the gap WordPress gives its own buttons.
+	&__actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: wd.$gap-sm;
+		margin-top: wd.$gap-lg;
+
+		.components-button {
+			white-space: nowrap;
+		}
+
+		// A disabled primary button keeps its accent colour, so a destructive one reads as faded red. Until the identifier
+		// matches it must look like the other disabled controls.
+		.components-button.is-destructive:disabled {
+			background: wd.$disabled-bg;
+			border-color: wd.$disabled-line;
+			color: wd.$disabled-ink;
+		}
+	}
+}
+
 // A tab of sections drawn one after another, each under its own heading (stacked-view.tsx).
 .woodev-stacked {
 	display: flex;

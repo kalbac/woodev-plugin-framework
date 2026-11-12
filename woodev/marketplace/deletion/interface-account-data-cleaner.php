@@ -15,7 +15,8 @@ defined( 'ABSPATH' ) || exit;
  * An optional capability of the adapter, like {@see \Woodev\Framework\Marketplace\Admin\Order\Order_Canceller}: an adapter that
  * implements it is asked by {@see Account_Deletion_Job} for the two things only the plugin knows. The framework deletes its own
  * tables, options, transients, queued jobs and the pinned-article product meta by itself; an adapter that keeps nothing else and
- * can do nothing at the marketplace does not implement this.
+ * can do nothing at the marketplace does not implement this. Per-account keys the adapter writes to the framework's catalogue
+ * cache are its own to delete here, with {@see \Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache::delete_keys()}.
  *
  * @since 2.1.5
  */

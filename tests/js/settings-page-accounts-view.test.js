@@ -130,6 +130,7 @@ test( '«Включить» is disabled while the account\'s data is being delet
 
 	expect( button ).toBeDisabled();
 	expect( button ).toHaveAttribute( 'title', 'Аккаунт удаляется — включить его нельзя.' );
+	expect( button.parentElement ).toHaveAttribute( 'title', 'Аккаунт удаляется — включить его нельзя.' );
 	fireEvent.click( button );
 	expect( onToggle ).not.toHaveBeenCalled();
 } );

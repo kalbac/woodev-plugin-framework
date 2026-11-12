@@ -130,6 +130,7 @@ export function canDelete( card: AccountCardSchema ): boolean {
 function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, onDelete, children }: AccountCardProps ) {
 	const card = section.card;
 	const status = cardStatus( section );
+	const switchHint = 'running' === card.deletion ? __( 'Аккаунт удаляется — включить его нельзя.', 'woodev-plugin-framework' ) : undefined;
 
 	return (
 		<div className={ 'woodev-account-card' + ( open ? ' is-open' : '' ) + ( card.enabled ? '' : ' is-disabled' ) }>
@@ -148,15 +149,18 @@ function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, onDe
 						{ open ? __( 'Свернуть', 'woodev-plugin-framework' ) : __( 'Редактировать', 'woodev-plugin-framework' ) }
 					</Button>
 					{ /* While the data is being deleted the account stays off: the server ignores a switch-on, so the button does not offer it. */ }
-					<Button
-						variant="secondary"
-						isBusy={ busy }
-						disabled={ busy || 'running' === card.deletion }
-						title={ 'running' === card.deletion ? __( 'Аккаунт удаляется — включить его нельзя.', 'woodev-plugin-framework' ) : undefined }
-						onClick={ onToggleEnabled }
-					>
-						{ card.enabled ? __( 'Выключить', 'woodev-plugin-framework' ) : __( 'Включить', 'woodev-plugin-framework' ) }
-					</Button>
+					{ /* A disabled button shows no tooltip of its own in Chrome: the wrapper carries the hint, as with «Удалить». */ }
+					<span title={ switchHint }>
+						<Button
+							variant="secondary"
+							isBusy={ busy }
+							disabled={ busy || 'running' === card.deletion }
+							title={ switchHint }
+							onClick={ onToggleEnabled }
+						>
+							{ card.enabled ? __( 'Выключить', 'woodev-plugin-framework' ) : __( 'Включить', 'woodev-plugin-framework' ) }
+						</Button>
+					</span>
 					{ /* A disabled button shows no tooltip of its own in every browser: the wrapper carries the hint. */ }
 					<span title={ card.delete_hint }>
 						<Button variant="secondary" isDestructive disabled={ ! canDelete( card ) } title={ card.delete_hint } onClick={ onDelete }>

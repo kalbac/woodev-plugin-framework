@@ -53,6 +53,21 @@ test( 'the preview shows the counts, what stays and the warnings, and asks for t
 	expect( screen.getByRole( 'button', { name: 'Удалить аккаунт' } ) ).toBeDisabled();
 } );
 
+test( 'the identifier is the input placeholder, not text under the field, and the button stays disabled until it matches exactly', async () => {
+	fetchDeletion.mockResolvedValue( state() );
+	flow();
+
+	const input = await screen.findByRole( 'textbox' );
+	expect( input ).toHaveAttribute( 'placeholder', card.identifier );
+	expect( document.querySelector( '.components-base-control__help' ) ).toBeNull();
+
+	fireEvent.change( input, { target: { value: '4180' } } );
+	expect( screen.getByRole( 'button', { name: 'Удалить аккаунт' } ) ).toBeDisabled();
+
+	fireEvent.change( input, { target: { value: '41801' } } );
+	expect( screen.getByRole( 'button', { name: 'Удалить аккаунт' } ) ).toBeEnabled();
+} );
+
 test( 'typing the identifier enables the button, and it sends the typed text', async () => {
 	fetchDeletion.mockResolvedValue( state() );
 	startDeletion.mockResolvedValue( state( { deletion: { state: 'running', removed: {}, message: '', step: '' } } ) );

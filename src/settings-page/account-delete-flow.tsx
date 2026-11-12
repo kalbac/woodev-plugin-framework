@@ -189,8 +189,9 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 					) }
 					{ error && <Notice status="error" isDismissible={ false }>{ error }</Notice> }
 					<TextControl
+						className="woodev-account-delete__confirm"
 						label={ `${ __( 'Чтобы подтвердить, введите', 'woodev-plugin-framework' ) } ${ card.identifier_label }` }
-						help={ card.identifier }
+						placeholder={ card.identifier }
 						value={ typed }
 						disabled={ busy }
 						onChange={ setTyped }
