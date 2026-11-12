@@ -133,7 +133,7 @@ final class Site_Orders_Storage {
 			case 'posting':
 				return 'pg.external_key';
 			case 'status':
-				return 'pg.status_raw';
+				return $this->status_column(); // The badge the column shows first, not the small marketplace status under it.
 			case 'total':
 				return $this->total_expression( $db );
 			default:

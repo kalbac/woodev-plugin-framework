@@ -27,6 +27,11 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Site_Orders_Cancel {
 	/**
+	 * How long the reasons of one posting are kept, in seconds: the dialog is open for a moment, the list does not change under it.
+	 */
+	private const REASONS_KEEP = 5 * MINUTE_IN_SECONDS;
+
+	/**
 	 * @var Order_Canceller
 	 */
 	private $canceller;
@@ -91,7 +96,8 @@ final class Site_Orders_Cancel {
 	}
 
 	/**
-	 * The reasons the marketplace offers for cancelling the posting of an order: one remote read.
+	 * The reasons the marketplace offers for cancelling the posting of an order: one remote read, then kept for
+	 * {@see self::REASONS_KEEP} seconds per account and posting — the search box asks again with every keystroke.
 	 *
 	 * @since 2.1.5
 	 *
@@ -107,6 +113,13 @@ final class Site_Orders_Cancel {
 			return [];
 		}
 
+		$key  = 'woodev_mp_cancel_reasons_' . md5( $account->id() . '|' . $posting );
+		$kept = get_transient( $key );
+
+		if ( is_array( $kept ) ) {
+			return $kept;
+		}
+
 		$options = [];
 
 		foreach ( $this->canceller->reasons( $account, $posting ) as $reason ) {
@@ -114,6 +127,10 @@ final class Site_Orders_Cancel {
 				'value' => (string) $reason['id'],
 				'label' => (string) $reason['title'],
 			];
+		}
+
+		if ( [] !== $options ) {
+			set_transient( $key, $options, self::REASONS_KEEP ); // An empty answer is not kept: the next look asks again.
 		}
 
 		return $options;

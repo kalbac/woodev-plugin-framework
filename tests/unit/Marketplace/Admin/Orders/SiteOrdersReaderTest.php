@@ -105,7 +105,7 @@ final class SiteOrdersReaderTest extends TestCase {
 		$this->assertSame( [ 103, 104, 101, 102 ], $this->ids( $reader, [ '', '', '', '', '', 'total', 'asc' ] ) );
 		$this->assertSame( [ 104, 103, 102, 101 ], $this->ids( $reader, [ '', '', '', '', '', 'order', 'desc' ] ) );
 		$this->assertSame( [ 101, 102, 103, 104 ], $this->ids( $reader, [ '', '', '', '', '', 'posting', 'asc' ] ) );
-		$this->assertSame( [ 101, 103, 102, 104 ], $this->ids( $reader, [ '', '', '', '', '', 'status', 'asc' ] ), 'By the marketplace\'s own status: awaiting_packaging, cancelled, delivered, delivering.' );
+		$this->assertSame( [ 103, 102, 101, 104 ], $this->ids( $reader, [ '', '', '', '', '', 'status', 'asc' ] ), 'By the WooCommerce status the column shows first: cancelled, completed, processing (101, 104 by id).' );
 	}
 
 	/**

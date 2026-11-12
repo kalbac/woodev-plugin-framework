@@ -87,15 +87,35 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	 */
 	private $logged = [];
 
+	/**
+	 * The transients, by key.
+	 *
+	 * @var array<string,mixed>
+	 */
+	private $transients = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->forbidden = [];
+		$this->transients = [];
+		$this->forbidden  = [];
 		$this->notes     = [];
 		$this->logged    = [];
 		$this->meta      = new Fake_Order_Meta();
 		$this->canceller = new Fake_Order_Canceller();
 
+		Functions\when( 'get_transient' )->alias(
+			function ( string $key ) {
+				return $this->transients[ $key ] ?? false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			function ( string $key, $value ): bool {
+				$this->transients[ $key ] = $value;
+
+				return true;
+			}
+		);
 		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
 		Functions\when( 'wp_parse_url' )->alias( 'parse_url' );
 		Functions\when( 'wp_timezone' )->alias(
@@ -459,6 +479,25 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertNull( $rows[ $this->row_id( 102 ) ]['cells']['label'] );
 	}
 
+	public function test_a_busy_account_does_not_push_a_posting_out_of_view_and_a_similar_number_is_not_the_same_posting(): void {
+		$this->stock( false );
+		$document = $this->document( [ 'P-104' ] );
+		$this->document( [ 'P-1040' ] ); // Newer, and a different posting.
+
+		for ( $i = 0; $i < 305; $i++ ) {
+			$this->document( [ 'Q-' . $i ] );
+		}
+
+		$rows = $this->by_id( $this->list_body() );
+
+		$this->assertSame( [ 'label' => 'Скачать', 'url' => $this->label_url( $document ) ], $rows[ $this->row_id( 104 ) ]['cells']['label'], 'More than 300 newer documents of the account do not hide it.' );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertSame( $this->label_url( $document ), $body['download']['url'], 'The stored document is handed over, not asked for again.' );
+		$this->assertSame( [], $this->provider_calls() );
+	}
+
 	public function test_a_label_task_in_the_making_is_a_process_and_blocks_asking_again(): void {
 		$this->stock( false );
 		$task = $this->task( [ 'P-104' ] );
@@ -651,6 +690,48 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$found = $provider->get_field_options( $this->context(), 'cancel', 'reason', [ 'row_id' => $this->row_id( 104 ), 'search' => 'дру', 'cursor' => '' ] );
 
 		$this->assertSame( [ '9' ], array_column( $found['options'], 'value' ) );
+		$this->assertSame( 1, $this->canceller->reason_calls, 'Typing in the search box filters the list already read.' );
+	}
+
+	public function test_the_reasons_of_a_posting_are_read_once_per_posting_and_a_failed_or_empty_read_is_not_kept(): void {
+		$this->stock( false );
+		$provider = $this->provider();
+		$query    = static function ( string $row_id ): array {
+			return [ 'row_id' => $row_id, 'search' => '', 'cursor' => '' ];
+		};
+
+		$provider->get_field_options( $this->context(), 'cancel', 'reason', $query( $this->row_id( 104 ) ) );
+		$provider->get_field_options( $this->context(), 'cancel', 'reason', $query( $this->row_id( 104 ) ) );
+
+		$this->assertSame( 1, $this->canceller->reason_calls );
+
+		$provider->get_field_options( $this->context(), 'cancel', 'reason', $query( $this->row_id( 101 ) ) );
+
+		$this->assertSame( 2, $this->canceller->reason_calls, 'Another posting is another list.' );
+
+		$this->transients         = [];
+		$this->canceller->reasons = [];
+		$provider->get_field_options( $this->context(), 'cancel', 'reason', $query( $this->row_id( 104 ) ) );
+		$provider->get_field_options( $this->context(), 'cancel', 'reason', $query( $this->row_id( 104 ) ) );
+
+		$this->assertSame( 4, $this->canceller->reason_calls, 'An empty answer is asked for again.' );
+	}
+
+	public function test_the_cancel_window_does_not_ask_the_marketplace_without_the_account_and_the_licence(): void {
+		$this->stock( false );
+		$provider = $this->provider();
+		$query    = [ 'row_id' => $this->row_id( 104 ), 'search' => '', 'cursor' => '' ];
+		$none     = [ 'options' => [], 'next_cursor' => null ];
+
+		$this->licensed = false;
+
+		$this->assertSame( $none, $provider->get_field_options( $this->context(), 'cancel', 'reason', $query ), 'No licence in force.' );
+
+		$this->licensed = true;
+		$this->set_account( [ 'orders_enabled' => false ] );
+
+		$this->assertSame( $none, $provider->get_field_options( $this->context(), 'cancel', 'reason', $query ), 'Order receiving is off.' );
+		$this->assertSame( 0, $this->canceller->reason_calls );
 	}
 
 	public function test_the_cancel_window_asks_the_marketplace_only_for_an_order_the_user_may_cancel(): void {

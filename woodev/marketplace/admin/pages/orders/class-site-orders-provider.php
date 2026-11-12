@@ -336,7 +336,9 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	}
 
 	/**
-	 * The reasons of the cancel window: the marketplace's own list for the posting of the row.
+	 * The reasons of the cancel window: the marketplace's own list for the posting of the row, asked for only once the account and the
+	 * licence allow cancelling (the same gate the preview and the metabox use) and kept for a few minutes per posting, so typing in the
+	 * search box filters a list already at hand.
 	 *
 	 * @since 2.1.5
 	 *
@@ -356,8 +358,8 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		$target  = null === $account || null === $this->cancel || Site_Orders_Definition::CANCEL !== $action || 'reason' !== $field ? null : $this->target_of_row( $account, $query['row_id'] );
 		$order   = null === $target ? null : $this->order( $target['order_id'] );
 
-		if ( null === $account || null === $order ) {
-			return $none;
+		if ( null === $account || null === $order || null !== $this->cancel->refusal( $account ) ) {
+			return $none; // No account, no order, or no licence in force: the preview says why; the marketplace is not asked.
 		}
 
 		$options = array_filter(
