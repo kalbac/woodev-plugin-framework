@@ -197,7 +197,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 		}
 
 		foreach ( $this->accounts->all() as $account ) {
-			$sections[] = $this->account_section( $account, $marketplace, $now );
+			$sections[] = $this->account_section( $account, $now );
 		}
 
 		return $sections;
@@ -277,12 +277,11 @@ final class Notifications_Section implements Settings_Section_Provider {
 	/**
 	 * Builds the notification card and four remote action buttons for one account.
 	 *
-	 * @param Notification_Account $account     Account.
-	 * @param string               $marketplace Marketplace name.
-	 * @param int                  $now         Current timestamp.
+	 * @param Notification_Account $account Account.
+	 * @param int                  $now     Current timestamp.
 	 * @return Settings_Section
 	 */
-	private function account_section( Notification_Account $account, string $marketplace, int $now ): Settings_Section {
+	private function account_section( Notification_Account $account, int $now ): Settings_Section {
 		$id         = $account->id();
 		// The full address, token included: the merchant copies it into the marketplace cabinet (v1 showed it too). The settings
 		// screen is for administrators; logs and the support report still redact the token.
@@ -323,15 +322,42 @@ final class Notifications_Section implements Settings_Section_Provider {
 			esc_html( $latest_text )
 		);
 
-		$title_label = '' !== trim( $account->external_id() ) ? trim( $account->external_id() ) : ( '#' . $id );
-
 		return Settings_Section::create(
 			'notifications_account_' . $id,
-			/* translators: 1: marketplace name, 2: account identifier. */
-			sprintf( __( 'Уведомления %1$s — «%2$s»', 'woodev-plugin-framework' ), $marketplace, $title_label ),
+			$this->account_title( $account ),
 			[],
 			$html
-		)->with_actions( $this->tools_for_account( $id ) );
+		)->stacked( $this->identifier_line( $account ) )->with_actions( $this->tools_for_account( $id ) );
+	}
+
+	/**
+	 * The heading of an account's block: its name, else its cabinet identifier, else its id.
+	 *
+	 * @param Notification_Account $account Account.
+	 * @return string
+	 */
+	private function account_title( Notification_Account $account ): string {
+		if ( '' !== trim( $account->name() ) ) {
+			return trim( $account->name() );
+		}
+
+		return '' !== trim( $account->external_id() ) ? trim( $account->external_id() ) : '#' . $account->id();
+	}
+
+	/**
+	 * «Client-Id: 4180680» — the muted line under an account's heading; empty when the account holds no identifier.
+	 *
+	 * @param Notification_Account $account Account.
+	 * @return string
+	 */
+	private function identifier_line( Notification_Account $account ): string {
+		$identifier = trim( $account->external_id() );
+
+		if ( '' === $identifier ) {
+			return '';
+		}
+
+		return $this->adapter->settings_descriptor()->field_spec( $this->adapter->credential_fields()->identifier() )->label() . ': ' . $identifier;
 	}
 
 	/**

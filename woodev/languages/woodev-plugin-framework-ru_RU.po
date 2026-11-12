@@ -8750,12 +8750,6 @@ msgstr ""
 msgid "Последнее уведомление"
 msgstr ""
 
-#. translators: 1: marketplace name, 2: account identifier.
-#: marketplace/settings/class-notifications-section.php:331
-#, php-format
-msgid "Уведомления %1$s — «%2$s»"
-msgstr ""
-
 #: marketplace/settings/class-notifications-section.php:347
 msgid "Регистрация адреса"
 msgstr ""

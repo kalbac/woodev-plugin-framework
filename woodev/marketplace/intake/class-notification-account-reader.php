@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.1.0
  */
 final class Notification_Account_Reader {
-	private const COLUMNS = 'account_id, external_id, is_enabled, seller_id, stock_mode, price_direction, orders_enabled, import_enabled, notification_token, notification_state, settings';
+	private const COLUMNS = 'account_id, name, external_id, is_enabled, seller_id, stock_mode, price_direction, orders_enabled, import_enabled, notification_token, notification_state, settings';
 
 	/**
 	 * Database.

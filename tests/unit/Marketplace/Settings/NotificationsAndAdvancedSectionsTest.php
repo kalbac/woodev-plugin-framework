@@ -21,6 +21,7 @@ use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Webhook_Type;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Advanced_Section;
+use Woodev\Framework\Marketplace\Settings\Credential_Field_Spec;
 use Woodev\Framework\Marketplace\Settings\Notifications_Section;
 use Woodev\Framework\Marketplace\Settings\Push_Admin;
 use Woodev\Framework\Marketplace\Settings\Settings_Handler;
@@ -236,6 +237,67 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$blocked       = call_user_func( $actions[0]->get_callback(), [] );
 		$this->assertFalse( $blocked->is_success() );
 		$this->assertStringContainsString( 'Лицензия не действует', $blocked->get_message() );
+	}
+
+	public function test_each_account_block_is_titled_with_its_name_and_the_client_id_sits_beside_it(): void {
+		$fields     = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
+		$descriptor = new Fake_Settings_Descriptor( $fields, 'PushMarket', [ 'cabinet_id' => new Credential_Field_Spec( 'Client-Id', 'Client-Id' ) ] );
+		$adapter    = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => [ Capability::PUSH_NOTIFICATIONS ],
+				'credential_fields'   => $fields,
+				'settings_descriptor' => $descriptor,
+				'push_protocol'       => new Fake_Push_Protocol(),
+			]
+		);
+		$store      = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-1' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Основной', true, [ 'cabinet_id' => '4180680', 'api_token' => 't1' ] ) );
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, '', true, [ 'cabinet_id' => '5123456', 'api_token' => 't2' ] ) );
+
+		$notif = new Notifications_Section(
+			$adapter,
+			new Notification_Account_Reader( $this->db, $this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ) ),
+			new Last_Notification_Reader( $this->db, $this->schema->table_name( 'events', Sqlite_Tables::PREFIX ) ),
+			new License_Gate(
+				static function (): bool {
+					return true;
+				}
+			),
+			'fake_mp',
+			static function (): int {
+				return self::NOW;
+			}
+		);
+
+		$blocks = array_values(
+			array_filter(
+				$notif->sections(),
+				static function ( $section ): bool {
+					return 0 === strpos( $section->get_id(), 'notifications_account_' );
+				}
+			)
+		);
+
+		$this->assertSame(
+			[ 'Основной', '5123456' ],
+			array_map( static function ( $section ) { return $section->get_label(); }, $blocks ),
+			'the account name heads its block; without a name, the cabinet identifier does'
+		);
+		$this->assertSame(
+			[ 'Client-Id: 4180680', 'Client-Id: 5123456' ],
+			array_map( static function ( $section ) { return $section->get_subtitle(); }, $blocks ),
+			'the Client-Id sits under the heading'
+		);
 	}
 
 	public function test_each_declared_notification_type_gets_a_switch_with_its_explanation(): void {
