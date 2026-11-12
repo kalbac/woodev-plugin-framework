@@ -53,6 +53,10 @@ while i < len(text):
 - **Do not background a `check --wait`** — it holds the FIFO waiter and starves every later one
   (its own gotcha).
 
+- **`worker-start --json` can print several JSON objects too (s229).** A `json.load` of the whole output failed, and the
+  failure masked that the first launch had never happened — none of the workers had started. Parse it with the same
+  `raw_decode` loop, then confirm each worker with `worker-list`.
+
 ## Related
 
 - [a-backgrounded-orca-check-wait-starves-every-later-waiter](a-backgrounded-orca-check-wait-starves-every-later-waiter.md)

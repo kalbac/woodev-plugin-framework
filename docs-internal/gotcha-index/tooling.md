@@ -95,6 +95,7 @@
 
 - [tooling/github] **A force-pushed commit stays fetchable by SHA on a PUBLIC repo until GitHub GC — no commercial source or keys on any pushed branch, worker branches included.** → [a-force-pushed-commit-stays-fetchable-by-sha-on-a-public-repo](../gotchas/a-force-pushed-commit-stays-fetchable-by-sha-on-a-public-repo.md)
 
+- [tooling/phpstan] **"Variable might not be defined" after a try/catch whose catch calls a terminating helper documented `@return void` — document it `@return never`.** → [phpstan-says-variable-might-not-be-defined-after-a-catch-that-calls-a-void-helper](../gotchas/phpstan-says-variable-might-not-be-defined-after-a-catch-that-calls-a-void-helper.md) (s229)
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
 - [tooling/git] **`gh pr merge --delete-branch` from a DETACHED checkout merges the PR, then errors «not on any branch» — it reads as a refusal, a retry is a no-op, and the remote branch survives. Pass `-R <owner/repo>` and verify with `gh pr view`.** → [gh-pr-merge-from-a-detached-head-merges-then-errors](../gotchas/gh-pr-merge-from-a-detached-head-merges-then-errors.md) (s149)
 - [tooling/orca] **A settled Claude worker can exit after `worker_done`: `terminal send` → `terminal_not_writable`, `--terminal` reuse → «not running a recognized agent». Start a fresh worker in the same worktree.** → [an-orca-claude-worker-exits-after-worker-done-so-its-terminal-is-not-writable](../gotchas/an-orca-claude-worker-exits-after-worker-done-so-its-terminal-is-not-writable.md) (s149)

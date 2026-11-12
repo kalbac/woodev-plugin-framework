@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 518 atomic gotchas across 30 topics. At session start read THIS file, then open
+> **Topic map.** 522 atomic gotchas across 30 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -27,10 +27,10 @@
 | [`testing/*`](gotcha-index/testing.md) | 59 | Testing patterns |
 | [`js/*`](gotcha-index/js.md) | 9 | JavaScript language traps |
 | [`testing/js`](gotcha-index/testing-js.md) | 9 | JavaScript testing pitfalls |
-| [`api/*`](gotcha-index/api.md) | 7 | API layer |
+| [`api/*`](gotcha-index/api.md) | 8 | API layer |
 | [`licensing/*`](gotcha-index/licensing.md) | 7 | License/EDD store |
 | [`build/*`](gotcha-index/build.md) | 29 | Build/CI/release |
-| [`admin-ui/*`](gotcha-index/admin-ui.md) | 10 | Admin pages / React UI |
+| [`admin-ui/*`](gotcha-index/admin-ui.md) | 11 | Admin pages / React UI |
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 5 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |
 | [`box-packer/*`](gotcha-index/box-packer.md) | 3 | Box-packer algorithm (S2) |
@@ -38,8 +38,8 @@
 | [`shipping/pickup`](gotcha-index/shipping-pickup.md) | 31 | Pickup point picker / ymaps |
 | [`shipping/*`](gotcha-index/shipping.md) | 13 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 4 | Payload size and wire cost |
-| [`i18n/*`](gotcha-index/i18n.md) | 12 | Localization |
-| [`tooling/*`](gotcha-index/tooling.md) | 124 | Dev tooling, codex critic |
+| [`i18n/*`](gotcha-index/i18n.md) | 13 | Localization |
+| [`tooling/*`](gotcha-index/tooling.md) | 125 | Dev tooling, codex critic |
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
