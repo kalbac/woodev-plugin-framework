@@ -426,6 +426,8 @@ export default function App( { bootstrap = null } ) {
 
 		// Stacked sections each have a card: the inline result belongs to the one that was saved.
 		const showNotices = ! isStackedTab( tab ) || noticeSection === section.id;
+		// Every stacked section shares the tab's save state; only the section being saved spins.
+		const isSavingThis = saving === tab.id && ( ! isStackedTab( tab ) || noticeSection === section.id );
 
 		return (
 			<Card className="woodev-settings__card">
@@ -464,7 +466,7 @@ export default function App( { bootstrap = null } ) {
 						<div className="woodev-settings__actions">
 							<Button
 								variant="primary"
-								isBusy={ saving === tab.id }
+								isBusy={ isSavingThis }
 								disabled={ saving === tab.id || ! hasChanges || hasProviderMismatch }
 								onClick={ () => onSave( tab.id, tab, section ) }
 							>
