@@ -23,6 +23,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Reader;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Rows;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Order_Canceller;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Flows\Label_Test_Case;
@@ -852,6 +853,39 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		}
 
 		$this->assertSame( [], $this->canceller->cancelled );
+	}
+
+	public function test_the_cancel_check_reads_the_order_receiving_switch_in_force(): void {
+		$this->stock( false );
+		$this->licensed = true;
+		$provider       = $this->provider();
+
+		// The account follows «Общие»; its own column says «on», the default says «off».
+		$this->set_account( [ 'orders_enabled' => true, Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] );
+		$option = Effective_Settings::option_name( $this->account_now()->adapter_id() );
+		Functions\when( 'get_option' )->alias(
+			static function ( string $key, $default = false ) use ( $option ) {
+				return $option === $key ? [ 'orders_enabled' => false ] : $default;
+			}
+		);
+
+		try {
+			$provider->apply( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [ 'reason' => '1' ] );
+			$this->fail( 'The default turns order receiving off, whatever the account column holds.' );
+		} catch ( Action_State_Exception $e ) {
+			$this->assertStringContainsString( 'Приём заказов', $e->getMessage() );
+		}
+
+		// The reverse: own column off, but the account follows a default that is on.
+		$this->set_account( [ 'orders_enabled' => false ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( string $key, $default = false ) use ( $option ) {
+				return $option === $key ? [ 'orders_enabled' => true ] : $default;
+			}
+		);
+
+		$provider->apply( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [ 'reason' => '1' ] );
+		$this->assertNotSame( [], $this->canceller->cancelled );
 	}
 
 	/**
