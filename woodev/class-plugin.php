@@ -12,14 +12,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 	 * plugin.  This class handles all the "non-feature" support tasks such
 	 * as verifying dependencies are met, loading the text domain, etc.
 	 *
-	 * @version 2.1.2
+	 * @version 2.1.3
 	 */
 	abstract class Woodev_Plugin {
 
 		/**
 		 * Plugin Framework Version
 		 */
-		const VERSION = '2.1.2';
+		const VERSION = '2.1.3';
 
 		/**
 		 * @var object single instance of plugin
