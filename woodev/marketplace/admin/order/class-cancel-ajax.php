@@ -232,7 +232,7 @@ final class Cancel_Ajax {
 	 * Answers 502 for a failure the adapter did not turn into a {@see Cancel_Refused}, and logs it.
 	 *
 	 * @param \Throwable $e The failure.
-	 * @return void
+	 * @return never
 	 */
 	private function fail_unexpectedly( \Throwable $e ): void {
 		if ( null !== $this->log_error ) {

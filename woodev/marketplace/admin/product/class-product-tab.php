@@ -652,7 +652,7 @@ final class Product_Tab {
 	 *
 	 * @param string $message Sentence for the merchant.
 	 * @param int    $status  HTTP status.
-	 * @return void
+	 * @return never
 	 */
 	private function fail( string $message, int $status ): void {
 		wp_send_json_error( [ 'message' => $message ], $status );
