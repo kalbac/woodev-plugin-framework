@@ -27,6 +27,7 @@ use Woodev\Framework\Marketplace\Admin\Product\Embedded_Screens;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Deletion\Deletion_Module;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Settings_Handler;
 use Woodev\Framework\Marketplace\Settings\Settings_Module;
@@ -125,6 +126,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			Embedded_Screens::register( $this, $accounts, $wpdb );
 			Site_Products_Module::register( $this, $accounts, $wpdb );
 			Tools_Module::register( $this, $accounts );
+			Deletion_Module::register( $this, $accounts, $wpdb );
 			Diagnostics_Module::register( $this, $accounts );
 			Site_Orders_Module::register( $this, $accounts, $wpdb );
 		}

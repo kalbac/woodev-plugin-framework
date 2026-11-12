@@ -49,6 +49,21 @@ final class Link_Report_Store {
 	}
 
 	/**
+	 * Removes the near-match report, the dismissed pairs and the last run summary of an account: the account is being deleted.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @return void
+	 */
+	public function forget_account( int $account_id ): void {
+		delete_option( $this->near_option( $account_id ) );
+		delete_option( $this->prefix . self::RUN_OPTION . $account_id );
+		// The dismissed near-match pairs (#1754, PR #1756) are `near_dismissed_{account}`; use that PR's constant once it is merged.
+		delete_option( $this->prefix . 'near_dismissed_' . $account_id );
+	}
+
+	/**
 	 * Replaces the near-match report of an account.
 	 *
 	 * @param int                            $account_id Account id.

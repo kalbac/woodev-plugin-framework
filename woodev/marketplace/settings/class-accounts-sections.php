@@ -13,6 +13,8 @@ use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Controller;
+use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Progress;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Price\Money;
 use Woodev\Framework\Marketplace\Price\Price_Calculator;
@@ -112,6 +114,20 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	private $account_connected_hook;
 
 	/**
+	 * Plugin id, the owner in the deletion route.
+	 *
+	 * @var string
+	 */
+	private $plugin_id;
+
+	/**
+	 * Progress of account deletions, or null when the screen does not offer deleting.
+	 *
+	 * @var Account_Deletion_Progress|null
+	 */
+	private $deletion;
+
+	/**
 	 * Loaded accounts keyed by account id (`null` before first load).
 	 *
 	 * @var array<int,Account>|null
@@ -137,12 +153,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 *
 	 * @since 2.1.2
 	 *
-	 * @param Wpdb_Account_Store  $store        Account store.
-	 * @param Marketplace_Adapter $adapter      Marketplace adapter.
-	 * @param Account_Status      $status       Connection status formatter.
-	 * @param Warehouse_Options   $warehouses   Cached warehouses reader.
-	 * @param string              $plugin_id    Plugin id (drives `Job_Names` hooks).
-	 * @param callable|null       $on_connected Optional `function ( int $account_id ): void` called after an `ok` connection test.
+	 * @param Wpdb_Account_Store             $store        Account store.
+	 * @param Marketplace_Adapter            $adapter      Marketplace adapter.
+	 * @param Account_Status                 $status       Connection status formatter.
+	 * @param Warehouse_Options              $warehouses   Cached warehouses reader.
+	 * @param string                         $plugin_id    Plugin id (drives `Job_Names` hooks).
+	 * @param callable|null                  $on_connected Optional `function ( int $account_id ): void` called after an `ok` connection test.
+	 * @param Account_Deletion_Progress|null $deletion Progress of account deletions; with it the card offers «Удалить» for a switched-off account.
 	 */
 	public function __construct(
 		Wpdb_Account_Store $store,
@@ -150,8 +167,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		Account_Status $status,
 		Warehouse_Options $warehouses,
 		string $plugin_id,
-		?callable $on_connected = null
+		?callable $on_connected = null,
+		?Account_Deletion_Progress $deletion = null
 	) {
+		$this->plugin_id                = $plugin_id;
+		$this->deletion                 = $deletion;
 		$this->store                    = $store;
 		$this->adapter                  = $adapter;
 		$this->status                   = $status;
@@ -837,7 +857,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	}
 
 	/**
-	 * What the «Подключение» tab draws for a saved account: its title, identifier, switch and the disabled «Удалить».
+	 * What the «Подключение» tab draws for a saved account: its title, identifier, switch and «Удалить».
+	 *
+	 * «Удалить» is offered only for a switched-off account: for an enabled one the card carries the reason instead. `delete_url` is
+	 * the deletion route the screen asks for the preview and posts the confirmation to; `deletion` is the state of a deletion
+	 * already under way (`running` / `failed`), so a reloaded screen goes on showing it.
 	 *
 	 * @param Account $account Account.
 	 * @return array<string,mixed>
@@ -845,16 +869,38 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	private function card_of( Account $account ): array {
 		$id_field = $this->adapter->credential_fields()->identifier();
 		$spec     = $this->adapter->settings_descriptor()->field_spec( $id_field );
-
-		return [
+		$card     = [
 			'new'              => false,
 			'title'            => $this->account_title( $account ),
 			'identifier_label' => $spec->label(),
 			'identifier'       => (string) ( $account->credentials()[ $id_field ] ?? '' ),
 			'enabled'          => $account->is_enabled(),
 			'enabled_field'    => self::setting_id( (string) $account->id(), 'enabled' ),
-			'delete_hint'      => __( 'Удаление аккаунта появится в одном из следующих обновлений.', 'woodev-plugin-framework' ),
+			'delete_hint'      => $account->is_enabled() ? __( 'Сначала выключите аккаунт.', 'woodev-plugin-framework' ) : '',
 		];
+
+		if ( null === $this->deletion ) {
+			return $card + [ 'delete_hint' => __( 'Удаление аккаунта недоступно.', 'woodev-plugin-framework' ) ];
+		}
+
+		$state = $this->deletion->get( $account->id() );
+
+		return $card + [
+			'delete_url' => rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . Account_Deletion_Controller::path( $this->plugin_id, $account->id() ) ),
+			'deletion'   => null === $state ? '' : (string) $state['state'],
+		];
+	}
+
+	/**
+	 * Tells whether an account's data is being deleted now.
+	 *
+	 * @param int $id Account id.
+	 * @return bool
+	 */
+	private function is_being_deleted( int $id ): bool {
+		$state = null === $this->deletion ? null : $this->deletion->get( $id );
+
+		return null !== $state && Account_Deletion_Progress::RUNNING === $state['state'];
 	}
 
 	/**
@@ -1103,7 +1149,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				$this->store->update_fields( $id, [ 'name' => $text ] );
 				return;
 			case 'enabled':
-				$this->store->set_enabled( $id, self::to_bool( $value ) );
+				// An account whose data is being deleted stays off: switching it on would put work back on a half-deleted account.
+				if ( ! self::to_bool( $value ) || ! $this->is_being_deleted( $id ) ) {
+					$this->store->set_enabled( $id, self::to_bool( $value ) );
+				}
 				return;
 			case 'warehouse_id':
 				$wh = (int) $text;

@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Data;
 
+use Woodev\Framework\Marketplace\Ledger\Account_Rows;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 
 defined( 'ABSPATH' ) || exit;
@@ -80,6 +81,31 @@ final class Wpdb_Label_Store {
 		$this->tasks     = $tasks;
 		$this->documents = $documents;
 		$this->clock     = $clock ?? 'time';
+	}
+
+	/**
+	 * Deletes a batch of an account's stored documents. Its tasks belong to the task ledger.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows to delete in this call.
+	 * @return int Rows deleted; 0 when the account has none left.
+	 */
+	public function delete_account( int $account_id, int $limit ): int {
+		return Account_Rows::delete( $this->db, $this->documents, $account_id, $limit );
+	}
+
+	/**
+	 * Counts an account's stored documents.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @return int
+	 */
+	public function count_for_account( int $account_id ): int {
+		return Account_Rows::count( $this->db, $this->documents, $account_id );
 	}
 
 	/**

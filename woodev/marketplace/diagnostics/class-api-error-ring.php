@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Diagnostics;
 
+use Woodev\Framework\Marketplace\Ledger\Account_Rows;
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -59,6 +60,19 @@ final class Api_Error_Ring {
 		$this->db    = $db;
 		$this->table = $table;
 		$this->clock = $clock ?? 'time';
+	}
+
+	/**
+	 * Deletes a batch of the failed calls recorded for an account.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows to delete in this call.
+	 * @return int Rows deleted; 0 when the account has none left.
+	 */
+	public function delete_account( int $account_id, int $limit ): int {
+		return Account_Rows::delete( $this->db, $this->table, $account_id, $limit );
 	}
 
 	/**

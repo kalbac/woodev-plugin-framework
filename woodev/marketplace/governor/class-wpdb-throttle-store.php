@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Governor;
 
+use Woodev\Framework\Marketplace\Ledger\Account_Rows;
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -45,6 +46,19 @@ final class Wpdb_Throttle_Store implements Throttle_Store {
 	public function __construct( \wpdb $db, string $table ) {
 		$this->db    = $db;
 		$this->table = $table;
+	}
+
+	/**
+	 * Deletes a batch of an account's governor buckets.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows to delete in this call.
+	 * @return int Rows deleted; 0 when the account has none left.
+	 */
+	public function delete_account( int $account_id, int $limit ): int {
+		return Account_Rows::delete( $this->db, $this->table, $account_id, $limit );
 	}
 
 	/**

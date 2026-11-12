@@ -55,6 +55,26 @@ final class Wpdb_Catalog_Cache {
 	}
 
 	/**
+	 * Deletes the rows an account owns. A key that belongs to one account ends with its id as the last `:` segment
+	 * (`warehouses:7`, `fetched:warehouses:7`); the shared keys (`tree`) do not.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int $account_id Account id.
+	 * @return int Rows deleted.
+	 */
+	public function delete_account( int $account_id ): int {
+		$sql     = $this->db->prepare( "DELETE FROM {$this->table} WHERE cache_key LIKE %s", '%' . $this->db->esc_like( ':' . $account_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- The table name is ours.
+		$deleted = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
+
+		if ( false === $deleted ) {
+			throw new \RuntimeException( 'The cached rows of the account could not be deleted.' );
+		}
+
+		return (int) $deleted;
+	}
+
+	/**
 	 * Returns the cache key of the attributes of a category.
 	 *
 	 * The key is made of the descriptor's values taken in the order of its sorted field names, so the same descriptor always

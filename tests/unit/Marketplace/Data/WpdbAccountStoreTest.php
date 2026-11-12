@@ -670,6 +670,29 @@ final class WpdbAccountStoreTest extends TestCase {
 	}
 
 	/**
+	 * The row goes only for a switched-off account whose claim the caller holds.
+	 *
+	 * @return void
+	 */
+	public function test_the_row_is_deleted_only_for_a_switched_off_account_with_the_callers_claim(): void {
+		$enabled  = $this->seed();
+		$disabled = $this->seed( [], false, 'cabinet-9', self::TOKEN, 'Выключенный' );
+
+		$enabled_token = $this->store->claim( $enabled, 120 );
+		$this->assertFalse( $this->store->delete( $enabled, (string) $enabled_token ), 'an account that is on keeps its row' );
+		$this->assertNotNull( $this->store->get( $enabled ) );
+
+		$token = $this->store->claim( $disabled, 120 );
+		$this->assertFalse( $this->store->delete( $disabled, 'not-the-token' ), 'a caller that is not the holder deletes nothing' );
+		$this->assertNotNull( $this->store->get( $disabled ) );
+
+		$this->assertTrue( $this->store->delete( $disabled, (string) $token ) );
+		$this->assertNull( $this->store->get( $disabled ) );
+		$this->assertFalse( $this->store->delete( $disabled, (string) $token ), 'a second delete finds no row' );
+		$this->assertNotNull( $this->store->get( $enabled ), 'the other account is untouched' );
+	}
+
+	/**
 	 * Builds a store over the test database.
 	 *
 	 * @param Credential_Fields  $fields Credential fields.
