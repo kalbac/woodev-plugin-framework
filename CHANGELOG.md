@@ -1,6 +1,94 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.5] — 2026-11-12
+### Bug Fixes
+- **marketplace**: F15 tools — licence/pause gate, claim fence, site scope, controller tests (#1695)
+
+- **marketplace**: Log a failed tool run and correct the tool docblock (#1695)
+
+- **marketplace**: Gate and cache the cancel reasons, read label state per posting, sort orders by WC status (#1693)
+
+- **marketplace**: F12b critic round 1 — picker keeps server results, one-table labels, cards scope sentence (#1692)
+
+- **marketplace**: F12b critic round 2 — forget the cursor on a new search, show loading on the picker (#1692)
+
+- **i18n**: Restore the 45 catalogue msgids main has (#1695)
+
+- **marketplace**: Route the orders-page cancel check through Effective_Settings (#1730)
+
+- **marketplace**: Seed the «Общие» defaults only once an account exists (#1730)
+
+- **marketplace**: «свои» starts from the Общие values in force; fields show the values in force (#1730)
+
+- **marketplace**: The settings page header shows «Настройки {plugin}» (#1730)
+
+- **marketplace**: Validate the price rule the account will really get (#1730)
+
+- **marketplace**: Title each notification account with its name (#1730)
+
+- **settings-page**: Only the saving section's Save spins on a stacked tab (#1730)
+
+- **marketplace**: Account deletion critic round 1 (#1733)
+
+- **marketplace**: Keep «no» answers, scope near-match replace by category, restore docs (#1754)
+
+- **marketplace**: Account deletion critic round 2 (#1733)
+
+
+### Documentation
+- **wiki**: Settings layout — stacked tabs, «свои» copies the defaults, seed rule (#1730)
+
+
+### Features
+- **marketplace**: Five-tab settings screen with account cards and «Общие» defaults (#1730)
+
+- **marketplace**: F15 tools and diagnostics views (#1695)
+
+- **marketplace**: Register the F15 tools and diagnostics pages (#1695)
+
+- **marketplace**: F13 «Заказы» records provider (#1693)
+
+- **marketplace**: Register the «Заказы» table with the plugin (#1693)
+
+- **marketplace**: F12b «Карточки на маркетплейсе» records provider (#1692)
+
+- **marketplace**: Stack «Параметры» and «Уведомления» under headings; delete hint as a tooltip (#1730)
+
+- **marketplace**: Delete a disabled account with all its data (#1733)
+
+- **marketplace**: Near-match report and last link-run summary on the cards table (#1754)
+
+
+### Refactoring
+- **settings-page**: Accounts-view and stacked-view are TypeScript (#1730)
+
+
+### Build
+- **marketplace-admin**: Rebuild bundle from the primary checkout
+
+- **marketplace-admin**: Rebuild bundle for the search-box picker
+
+- **marketplace-admin**: Rebuild bundle for the cursor reset and the picker spinner
+
+- Rebuild bundles from the primary checkout
+
+- Settings-page and ui-kit-gallery bundles for the stacked tabs (#1730)
+
+- Rebuild bundles from the primary checkout
+
+- Rebuild bundles from the primary checkout
+
+- Rebuild bundles from the primary checkout
+
+- Settings-page and ui-kit-gallery bundles (worktree build; primary checkout rebuilds)
+
+- Rebuild bundles from the primary checkout
+
+- Rebuild bundles from the primary checkout
+
+
+
 ## [2.1.4] — 2026-11-12
 ### Bug Fixes
 - **marketplace**: Ip_Ranges matches IPv4-mapped IPv6 addresses as IPv4 (#1746)
