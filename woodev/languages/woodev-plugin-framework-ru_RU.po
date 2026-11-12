@@ -8599,3 +8599,582 @@ msgstr ""
 #: marketplace/settings/class-warehouse-options.php:117
 msgid "%s (КГТ)"
 msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:141
+msgid "Маркетплейс не вернул причин, с которыми можно отменить это отправление. Попробуйте позже."
+msgstr ""
+
+#. translators: 1: posting number, 2: marketplace name, 3: cancellation reason.
+#: marketplace/admin/order/class-cancel-ajax.php:178
+#, php-format
+msgid "Отправление %1$s отменено: %2$s, из WooCommerce. Причина: %3$s."
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:181
+msgid "Отправление отменено. Заказ обновится в течение нескольких минут."
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:195
+msgid "Страница устарела или у вас нет прав для этого действия. Обновите страницу и повторите."
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:224
+msgid "отменить отправление на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:242
+msgid "Маркетплейс не ответил. Повторите позже."
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:279
+msgid "Подключение к маркетплейсу для этого заказа выключено в настройках плагина. Включите его и повторите."
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:283
+msgid "Приём заказов с маркетплейса выключен в настройках плагина, поэтому заказ не обновится после отмены. Включите приём заказов в настройках и повторите."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/order/class-cancel-ajax.php:294
+#, php-format
+msgid "Заказ не найден среди заказов «%s» этого сайта. Обновите страницу."
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:323
+msgid "Это отправление уже завершено или отменено, отменить его нельзя."
+msgstr ""
+
+#. translators: %s: posting number.
+#: marketplace/admin/order/class-cancel-metabox.php:114
+#, php-format
+msgid "Отправление: %s"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-metabox.php:119
+msgid "Отправление завершено или отменено — отменить его нельзя."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/order/class-cancel-modal.php:103
+#, php-format
+msgid "Отменить: %s"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-modal.php:123
+msgid "Загружаем причины…"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-modal.php:123
+msgid "Отменяем…"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-modal.php:123
+msgid "Не удалось связаться с сайтом. Проверьте интернет и повторите."
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-modal.php:124
+msgid "Отменить отправление"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-modal.php:125
+msgid "Отправление будет отменено на маркетплейсе. Это нельзя отменить: покупатель получит уведомление, а товар вернётся на склад сайта."
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-modal.php:127
+msgid "Причина отмены"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-modal.php:131
+msgid "Напишите, что случилось"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-modal.php:137
+msgid "Не отменять"
+msgstr ""
+
+#: marketplace/admin/product/class-card-state-badge.php:37
+msgid "В очереди"
+msgstr ""
+
+#: marketplace/admin/product/class-card-state-badge.php:39
+msgid "Отправлен"
+msgstr ""
+
+#: marketplace/admin/product/class-card-state-badge.php:44
+msgid "Создаётся"
+msgstr ""
+
+#: marketplace/admin/product/class-card-state-badge.php:46
+msgid "Создан"
+msgstr ""
+
+#: marketplace/admin/product/class-card-state-badge.php:49
+msgid "Ошибка"
+msgstr ""
+
+#: marketplace/admin/product/class-card-state-badge.php:51
+msgid "В архиве"
+msgstr ""
+
+#: marketplace/admin/product/class-card-state-badge.php:53
+msgid "Не связан"
+msgstr ""
+
+#: marketplace/admin/product/class-link-form-input.php:209
+msgid "Цена"
+msgstr ""
+
+#: marketplace/admin/product/class-link-form-input.php:211
+msgid "Минимальная цена"
+msgstr ""
+
+#. translators: %s: name of the price field.
+#: marketplace/admin/product/class-link-form-input.php:216
+#, php-format
+msgid "«%s»: введите число больше нуля (сумма — не больше двух знаков после запятой; наценка в процентах — не меньше −99, минимальная цена — до 100) или оставьте «По правилу»."
+msgstr ""
+
+#: marketplace/admin/product/class-link-form-input.php:227
+msgid "Запрос не удалось разобрать. Обновите страницу и повторите."
+msgstr ""
+
+#: marketplace/admin/product/class-link-settings-writer.php:139
+msgid "Не удалось сохранить настройки товара. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/product/class-link-settings-writer.php:240
+msgid "Такого склада нет в списке аккаунта. Обновите страницу и выберите склад из списка."
+msgstr ""
+
+#: marketplace/admin/product/class-link-settings-writer.php:244
+msgid "Такого сопоставления нет. Обновите страницу и выберите сопоставление из списка."
+msgstr ""
+
+#. translators: %d: warehouse id.
+#: marketplace/admin/product/class-panel-reader.php:425
+#, php-format
+msgid "склад %d"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-reader.php:449
+msgid "У товара нет цены, поэтому цену для маркетплейса посчитать нельзя."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-reader.php:456
+msgid "Цену для маркетплейса посчитать не удалось: проверьте правило цены и курс валюты в профиле."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-reader.php:491
+msgid "Настроено для этого товара"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-reader.php:589
+msgid "Крупногабаритный товар без крупногабаритного склада — выберите склад для этого товара на вкладке товара."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:80
+#, php-format
+msgid "Нет подключённых аккаунтов %s."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:80
+msgid "Добавить аккаунт"
+msgstr ""
+
+#. translators: 1: marketplace name, 2: account name.
+#: marketplace/admin/product/class-panel-view.php:141
+#, php-format
+msgid "Аккаунт %1$s: %2$s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:167
+msgid "Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой. Остатки, цены, склад и проверка товара — у каждого варианта, во вкладке «Вариации». Кнопка «Экспортировать» проверит все варианты сразу и покажет, что мешает."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:182
+msgid "У товара пока нет вариантов, которые продаются на маркетплейсе (виртуальные и скачиваемые не выгружаются)."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:189
+msgid "Вариант"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:192
+#, php-format
+msgid "Остаток: %s"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:193
+#, php-format
+msgid "Цена: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:207
+msgid "(будет отправлен)"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:232
+msgid "Артикул товара на маркетплейсе. Пока товар не отправлен, его можно изменить; по умолчанию берётся артикул (SKU) товара. После отправки артикул уже не меняется."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:235
+msgid "Артикул уже отправлен на маркетплейс и больше не меняется."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:242
+#, php-format
+msgid "Открыть карточку: %s"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:244
+#, php-format
+msgid "Номера: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:244
+msgid "Эти номера назначает сам маркетплейс, изменить их нельзя."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:255
+msgid "Проверка"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:258
+msgid "Проверить товар сейчас не удалось. Откройте «Сопоставление» и убедитесь, что категории загружены."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:263
+msgid "Товар готов к выгрузке."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:263
+msgid "Проверка идёт по данным сайта и не обращается к маркетплейсу."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:273
+msgid "Проверка идёт по данным сайта и не обращается к маркетплейсу. Ошибки нужно исправить до выгрузки."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:289
+msgid "Синхронизация"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:291
+msgid "Что сайт отправляет на маркетплейс для этого товара. Выключите, если остатки или цены этого товара вы ведёте на маркетплейсе сами."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:300
+msgid "Крупногабарит"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:300
+msgid "Крупногабаритный товар"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:300
+msgid "Отметьте, если маркетплейс считает товар крупногабаритным. Для такого товара нужно выбрать склад выше: запасного склада нет."
+msgstr ""
+
+#. translators: %s: warehouse name.
+#: marketplace/admin/product/class-panel-view.php:320
+#, php-format
+msgid "Как у аккаунта: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:320
+msgid "Как у аккаунта (склад не выбран)"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:324
+msgid "Склад"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:324
+msgid "Склад, на который отправляются остатки этого товара. Оставьте «Как у аккаунта», если товар лежит на основном складе."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:339
+msgid "По правилу"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:371
+#, php-format
+msgid "Цена для %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:373
+msgid "Своя сумма"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:374
+msgid "Наценка, %"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:377
+msgid "По умолчанию цена на маркетплейсе считается по правилу из настроек аккаунта или профиля. Здесь можно задать свою цену именно для этого товара. В сером — цена, которая получится по правилу."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:383
+msgid "Выше цены на, %"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:384
+msgid "Не показывать"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:386
+msgid "Зачёркнутая цена на маркетплейсе. «Не показывать» убирает её у этого товара."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:392
+msgid "% от цены"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:394
+msgid "Ниже этой цены маркетплейс не опустит цену в акциях."
+msgstr ""
+
+#. translators: %s: name of the mapping.
+#: marketplace/admin/product/class-panel-view.php:409
+#, php-format
+msgid "По категории (сейчас: %s)"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:409
+msgid "По категории (сопоставления для категории нет)"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:416
+msgid "Открыть «Сопоставление»"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:418
+msgid "Какой категории маркетплейса и какому набору характеристик соответствует товар. Обычно подходит «По категории»: сопоставление берётся из категории товара на сайте."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:433
+#, php-format
+msgid "Точно архивировать: %s? Нажмите ещё раз."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:434
+msgid "Точно снять связь? Нажмите ещё раз."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:459
+msgid "Кнопки работают с уже сохранённым товаром: сначала нажмите «Обновить», если меняли поля выше."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:477
+msgid "Обновить карточку"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:478
+msgid "Связать категорию по артикулу"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:478
+msgid "Связать все товары по артикулу"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:482
+#, php-format
+msgid "Архивировать: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:486
+msgid "Снять связь"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:499
+msgid "Проверит товар и поставит его в очередь на отправку на маркетплейс. Результат появится в состоянии выше через минуту-две."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:500
+msgid "Ищет в кабинете маркетплейса карточки с таким же артикулом, как у товаров, и связывает их с сайтом. Работает не с одним этим товаром, а со всеми товарами категории (или магазина). На маркетплейсе ничего не меняется."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:501
+msgid "Остаток карточки на маркетплейсе станет нулевым, и карточка уйдёт в архив. Товар на сайте не меняется."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:502
+msgid "Сайт забудет связь с карточкой маркетплейса. Сама карточка не удаляется и не меняется."
+msgstr ""
+
+#. translators: %s: category name.
+#: marketplace/admin/product/class-panel-view.php:514
+#, php-format
+msgid "Кнопка «Связать категорию по артикулу» ищет карточки маркетплейса для всех товаров категории «%s», а не только для этого товара."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:515
+msgid "У товара нет категории, поэтому кнопка «Связать все товары по артикулу» ищет карточки маркетплейса для всех товаров магазина, а не только для этого."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:531
+#, php-format
+msgid "Ответ: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:531
+msgid "Текст ошибки так, как его прислал маркетплейс."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:545
+msgid "Почему не синхронизируется"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:548
+msgid "Включите «Логирование» в настройках, чтобы увидеть разбор причин"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:553
+msgid "Причин не найдено: остатки и цены этого товара отправляются."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:563
+msgid "Причины перечислены по порядку: сначала самая важная. Исправьте первую и обновите страницу."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:629
+msgid "Нет вариантов"
+msgstr ""
+
+#. translators: %s: name of the page.
+#: marketplace/admin/product/class-panel-view.php:651
+#, php-format
+msgid "Исправить: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:378
+msgid "Аккаунт выключен или товар не найден. Обновите страницу."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:419
+msgid "Выполняем…"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:420
+msgid "Не получилось: страница не ответила. Обновите её и повторите."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-product-tab.php:455
+#, php-format
+msgid "Настройки «%s» не сохранены: страница устарела или у вас нет прав. Обновите страницу и повторите."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-product-tab.php:466
+#, php-format
+msgid "Не удалось сохранить настройки «%s». Повторите чуть позже."
+msgstr ""
+
+#. translators: 1: marketplace name, 2: account name, 3: what went wrong.
+#: marketplace/admin/product/class-product-tab.php:471
+#, php-format
+msgid "%1$s, аккаунт «%2$s»: %3$s"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:484
+msgid "отправить товар на маркетплейс"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:489
+msgid "Не удалось поставить товар в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:497
+msgid "Нечего отправлять: у товара нет вариантов, которые продаются на маркетплейсе."
+msgstr ""
+
+#. translators: %s: reasons.
+#: marketplace/admin/product/class-product-tab.php:497
+#, php-format
+msgid "Товар не прошёл проверку и не отправлен. %s"
+msgstr ""
+
+#. translators: %d: number of cards.
+#: marketplace/admin/product/class-product-tab.php:502
+#, php-format
+msgid "Поставили в очередь на отправку: %d карточка."
+msgid_plural "Поставили в очередь на отправку: %d карточек."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. translators: %s: reasons.
+#: marketplace/admin/product/class-product-tab.php:503
+#, php-format
+msgid "Не прошли проверку: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:505
+msgid "Состояние обновится через минуту-две — обновите страницу."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:516
+msgid "искать карточки на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:521
+msgid "Не удалось поставить поиск в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:526
+msgid "Ищем карточки маркетплейса с совпадающим артикулом среди всех товаров магазина: у этого товара нет категории. Результат появится через минуту-две; обновите страницу."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:527
+msgid "Ищем карточки маркетплейса с совпадающим артикулом у товаров этой категории. Результат появится через минуту-две; обновите страницу. Похожие, но не совпавшие артикулы покажет раздел «Товары»."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:552
+msgid "Связи нет — снимать нечего."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:558
+msgid "Не удалось снять связь. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:562
+msgid "Сейчас идёт отправка остатков и цен этого аккаунта на маркетплейс. Повторите через минуту."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:566
+msgid "Товар сейчас выгружается на маркетплейс. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:569
+msgid "Связь снята. Карточка на маркетплейсе не изменилась. Обновите страницу: после этого можно выбрать артикул и выгрузить товар заново."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:570
+msgid "Часть вариантов выгружается прямо сейчас — для них повторите позже."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:584
+msgid "архивировать карточку на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:597
+msgid "Не удалось записать архивацию. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:601
+msgid "Архивировать нечего: на маркетплейсе нет созданной карточки этого товара."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:604
+msgid "Архивация поставлена в очередь: остаток на маркетплейсе станет нулевым, затем карточка уйдёт в архив. Это происходит в течение нескольких минут; состояние обновится — обновите страницу. Товар на сайте не меняется."
+msgstr ""
