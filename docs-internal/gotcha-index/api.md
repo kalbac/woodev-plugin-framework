@@ -12,5 +12,6 @@
 
 ## Related
 
+- [api/rest] **`@wordpress/api-fetch` always appends `?_locale=user`; a route that rejects unknown query params must allow core keys (`Query_Validator::CORE_QUERY_KEYS`) or every browser call is a 400.** → [wordpress-api-fetch-appends-locale-user-so-a-strict-query-validator-rejects-every-call](../gotchas/wordpress-api-fetch-appends-locale-user-so-a-strict-query-validator-rejects-every-call.md) (s229)
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
 - [api/rest] **A REST arg `default` outside its own `minimum`/`maximum` rejects EVERY request that omits the arg (WP validates defaults); handler-level tests miss it — test the schema, probe with `rest_do_request()`.** → [a-rest-arg-default-outside-its-own-minimum-rejects-every-request](../gotchas/a-rest-arg-default-outside-its-own-minimum-rejects-every-request.md) (s170)

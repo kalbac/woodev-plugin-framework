@@ -16,4 +16,5 @@
 
 ## Related
 
+- [admin-ui/records] **A records page passes every unit/jest test and asset parity while its extensions are never mounted — check the built entry mounts the hooks.** → [a-records-page-can-pass-every-test-while-its-extensions-are-never-mounted](../gotchas/a-records-page-can-pass-every-test-while-its-extensions-are-never-mounted.md) (s229)
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
