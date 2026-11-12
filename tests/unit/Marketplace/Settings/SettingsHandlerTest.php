@@ -360,6 +360,27 @@ final class SettingsHandlerTest extends TestCase {
 		$handler->save( "account_{$acc_id}_price_markup_kind" );
 	}
 
+	public function test_the_oversize_warehouse_list_puts_flagged_warehouses_first_and_marks_them(): void {
+		$this->cache->put(
+			Warehouse_Options::key_for( 5 ),
+			[
+				'warehouses' => [
+					[ 'warehouse_id' => 1, 'name' => 'Склад А' ],
+					[ 'warehouse_id' => 2, 'name' => 'Склад Б', 'oversize' => true ],
+					[ 'warehouse_id' => 3, 'name' => 'Склад В' ],
+					[ 'warehouse_id' => 4, 'name' => 'Склад Г', 'oversize' => true ],
+				],
+			]
+		);
+		$options = new Warehouse_Options( $this->cache );
+
+		$this->assertSame( [ 1, 2, 3, 4 ], array_keys( $options->for_account( 5 ) ), 'the default warehouse select keeps the order' );
+		$this->assertSame( 'Склад Б', $options->for_account( 5 )['2'], 'and does not mark anything' );
+		$this->assertSame( [ 2, 4, 1, 3 ], array_keys( $options->for_account( 5, true ) ), 'flagged first, stable inside the groups' );
+		$this->assertSame( 'Склад Б (КГТ)', $options->for_account( 5, true )['2'] );
+		$this->assertSame( 'Склад А', $options->for_account( 5, true )['1'] );
+	}
+
 	private function build_handler(
 		Fake_Marketplace_Adapter $adapter,
 		Wpdb_Account_Store $store,

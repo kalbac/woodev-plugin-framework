@@ -8595,3 +8595,7 @@ msgstr ""
 #: marketplace/sync/class-stock-flusher.php:312
 msgid "Остатки ведёт маркетплейс или не синхронизируются: магазин их не отправляет."
 msgstr ""
+
+#: marketplace/settings/class-warehouse-options.php:117
+msgid "%s (КГТ)"
+msgstr ""

@@ -60,6 +60,9 @@ final class StockOwnershipTest extends Sync_Test_Case {
 			'marketplace stamp survives a switch to site mode' => [ Order_Stock_Filters::STAMP_MARKETPLACE, Stock_Mode::SITE, false, false, false ],
 			'legacy: never reduces, restores in site mode'     => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::SITE, false, false, true ],
 			'legacy in marketplace mode restores nothing'      => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::MARKETPLACE, false, false, false ],
+			'legacy in off mode restores (nothing else does)'  => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::OFF, false, false, true ],
+			'legacy line swap in off mode takes the new lines' => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::OFF, true, true, true ],
+			'marketplace stamp in off mode moves nothing'      => [ Order_Stock_Filters::STAMP_MARKETPLACE, Stock_Mode::OFF, false, false, false ],
 			'legacy line swap takes the new lines'             => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::SITE, true, true, true ],
 			'legacy line swap in marketplace mode takes none'  => [ Order_Stock_Filters::STAMP_LEGACY, Stock_Mode::MARKETPLACE, true, false, false ],
 		];

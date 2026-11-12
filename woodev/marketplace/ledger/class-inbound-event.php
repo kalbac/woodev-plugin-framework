@@ -70,13 +70,6 @@ final class Inbound_Event {
 	private $ip_trusted;
 
 	/**
-	 * Whether the event came on the old address without a token.
-	 *
-	 * @var bool
-	 */
-	private $legacy_url = false;
-
-	/**
 	 * Ledger row id, null before the row is stored.
 	 *
 	 * @var int|null
@@ -182,33 +175,6 @@ final class Inbound_Event {
 		$copy->ip_trusted = $ip_trusted;
 
 		return $copy;
-	}
-
-	/**
-	 * Returns a copy that says the event came on the old address without a token (the plugin's own route, kept for the addresses
-	 * registered before tokens existed). The intake sets it; the proxy notice reads it back from the ledger.
-	 *
-	 * @since 2.1.2
-	 *
-	 * @param bool $legacy_url Whether the event came on the tokenless address.
-	 * @return self
-	 */
-	public function with_legacy_url( bool $legacy_url ): self {
-		$copy             = clone $this;
-		$copy->legacy_url = $legacy_url;
-
-		return $copy;
-	}
-
-	/**
-	 * Tells whether the event came on the old address without a token.
-	 *
-	 * @since 2.1.2
-	 *
-	 * @return bool
-	 */
-	public function legacy_url(): bool {
-		return $this->legacy_url;
 	}
 
 	/**

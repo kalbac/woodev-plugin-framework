@@ -14,8 +14,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * `site` «Сайт — главный» (the default), `marketplace` «Маркетплейс — главный» or `off` «Не синхронизировать», read from the
- * account's `stock_mode`. In `off` nothing is pushed, nothing is mirrored into WooCommerce and the stock notification type is not
- * subscribed ({@see self::is_off()}).
+ * account's `stock_mode`. In `off` no stock is pushed (except the zero that precedes an archive), nothing is mirrored into
+ * WooCommerce and the stock notification type is not subscribed ({@see self::is_off()}).
  *
  * @since 2.1.0
  */

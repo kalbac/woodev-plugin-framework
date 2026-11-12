@@ -44,27 +44,6 @@ final class Last_Notification_Reader {
 	}
 
 	/**
-	 * Tells whether any notification came on the old address without a token since a moment. The «site is behind a proxy» notice
-	 * shows only while such notifications still arrive: they are the only ones a proxy can make the shop refuse.
-	 *
-	 * @since 2.1.2
-	 *
-	 * @param int $since Unix time.
-	 * @return bool
-	 */
-	public function legacy_url_seen_since( int $since ): bool {
-		$found = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-			$this->db->prepare(
-				'SELECT event_id FROM %i WHERE legacy_url = 1 AND received_at >= %s LIMIT 1',
-				$this->table,
-				gmdate( 'Y-m-d H:i:s', $since )
-			)
-		);
-
-		return null !== $found && false !== $found && '' !== (string) $found;
-	}
-
-	/**
 	 * Returns the newest event of an account that was meant to be processed.
 	 *
 	 * @since 2.1.0

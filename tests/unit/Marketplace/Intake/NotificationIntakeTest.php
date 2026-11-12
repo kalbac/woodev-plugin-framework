@@ -386,18 +386,6 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * The journal remembers which address an event came on, so the proxy notice can tell the old address from the new one.
-	 *
-	 * @return void
-	 */
-	public function test_the_journal_marks_events_that_came_on_the_address_without_a_token(): void {
-		$this->push( $this->order_created( '1-1' ) );
-		$this->intake->handle_tokenless( 'cabinet-4417', $this->json( $this->order_created( '1-2' ) ), $this->from( Fake_Push_Protocol::TRUSTED_IP ) );
-
-		$this->assertSame( [ '0', '1' ], array_map( 'strval', array_column( $this->events(), 'legacy_url' ) ) );
-	}
-
-	/**
 	 * The intake, not the decoder, says whether the sender is the marketplace's: the decoder reports every address as foreign.
 	 *
 	 * @return void

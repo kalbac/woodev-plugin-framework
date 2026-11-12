@@ -19,7 +19,10 @@ defined( 'ABSPATH' ) || exit;
  * |---|---|---|
  * | `site` | WooCommerce's own rule | WooCommerce's own rule |
  * | `marketplace` | no: the marketplace's stock notification or the readback moves WC stock, an order would subtract the sale twice | no |
- * | `legacy` | no: an earlier generation of the plugin already took the sale from WC stock | only while the account is in `site` mode |
+ * | `legacy` | no: an earlier generation of the plugin already took the sale from WC stock | only while the account is in `site` or `off` mode |
+ *
+ * In `off` nothing else moves WC stock (no notification, no readback), so a `legacy` restore is allowed as in `site`. Which stamp a
+ * plugin writes on a new order in `off` is the plugin's call: `marketplace` means WooCommerce never subtracts that sale.
  *
  * One exception keeps a `legacy` order honest when its lines change: the order writer gives back what the old lines took and
  * marks the order ({@see self::META_STOCK_PENDING}) before the new lines take theirs. That reduction is this generation's own
@@ -150,7 +153,7 @@ final class Order_Stock_Filters {
 	}
 
 	/**
-	 * Tells whether the order's account is in `site` mode now. An order whose account is gone keeps WooCommerce's answer.
+	 * Tells whether the order's account is in `site` or `off` mode now (nothing else moves its WC stock). An order whose account is gone keeps WooCommerce's answer.
 	 *
 	 * @param \WC_Order $order The order.
 	 * @return bool
@@ -158,6 +161,6 @@ final class Order_Stock_Filters {
 	private function site_mode( \WC_Order $order ): bool {
 		$account = call_user_func( $this->account_of, $order );
 
-		return ! $account instanceof Account || Stock_Mode::is_site( $account );
+		return ! $account instanceof Account || Stock_Mode::is_site( $account ) || Stock_Mode::is_off( $account );
 	}
 }

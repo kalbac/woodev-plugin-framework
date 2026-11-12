@@ -34,7 +34,7 @@ final class SchemaTest extends TestCase {
 			'link_ids'      => [ 'link_id', 'account_id', 'id_name', 'id_value', 'id_type' ],
 			'tasks'         => [ 'task_id', 'account_id', 'kind', 'remote_task_id', 'status', 'submitted_at', 'last_polled_at', 'finished_at', 'poll_count', 'item_count', 'request_hash', 'result' ],
 			'task_items'    => [ 'task_id', 'link_id', 'offer_id', 'status', 'errors' ],
-			'events'        => [ 'event_id', 'account_id', 'type', 'dedup_key', 'received_at', 'processed_at', 'status', 'attempts', 'claim_token', 'claim_until', 'next_attempt_at', 'payload', 'result', 'source_ip', 'ip_trusted', 'legacy_url' ],
+			'events'        => [ 'event_id', 'account_id', 'type', 'dedup_key', 'received_at', 'processed_at', 'status', 'attempts', 'claim_token', 'claim_until', 'next_attempt_at', 'payload', 'result', 'source_ip', 'ip_trusted' ],
 			'sync_state'    => [ 'account_id', 'link_id', 'warehouse_id', 'kind', 'pending_payload', 'pending_rev', 'pending_since', 'in_flight_rev', 'in_flight_payload', 'sent_payload', 'sent_rev', 'sent_at', 'attempts', 'next_attempt_at', 'last_error', 'remote_present', 'remote_reserved', 'remote_read_at' ],
 			'postings'      => [ 'account_id', 'external_key', 'wc_order_id', 'members', 'status_raw', 'is_terminal', 'claim_token', 'claim_until', 'lines', 'baseline', 'first_seen_at', 'refreshed_at' ],
 			'documents'     => [ 'document_id', 'account_id', 'task_id', 'external_keys', 'content_type', 'body', 'created_at' ],

@@ -36,6 +36,7 @@ use Woodev\Framework\Marketplace\Intake\Notification_Intake;
 use Woodev\Framework\Marketplace\Intake\Notifications_Controller;
 use Woodev\Framework\Marketplace\Intake\Push_Rate_Limiter;
 use Woodev\Framework\Marketplace\Intake\Sender_Network;
+use Woodev\Framework\Marketplace\Intake\Tokenless_Seen;
 use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
 use Woodev\Framework\Marketplace\Jobs\Drain_Events_Runner;
@@ -492,7 +493,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$network  = new Sender_Network( $this->adapter->id(), $protocol );
 			$switches = new Webhook_Switches( $protocol->webhook_types(), Uninstaller::option_prefix( $this->plugin_id ) );
 
-			( new Notifications_Controller( $this->adapter->id(), new Notification_Intake( $decoder, $protocol, $network, $switches, $events, $reader, $scheduler, new Push_Rate_Limiter(), $this->log_error ) ) )->register();
+			( new Notifications_Controller( $this->adapter->id(), new Notification_Intake( $decoder, $protocol, $network, $switches, $events, $reader, $scheduler, new Push_Rate_Limiter(), $this->log_error, new Tokenless_Seen( $this->plugin_id ) ) ) )->register();
 		}
 
 		/**

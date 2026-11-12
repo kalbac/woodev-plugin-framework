@@ -98,6 +98,13 @@ final class Notification_Intake {
 	private $log;
 
 	/**
+	 * Remembers that the old address without a token is still used, or null.
+	 *
+	 * @var Tokenless_Seen|null
+	 */
+	private $tokenless_seen;
+
+	/**
 	 * Creates the intake.
 	 *
 	 * @since 2.1.0
@@ -111,8 +118,9 @@ final class Notification_Intake {
 	 * @param Drain_Scheduler             $scheduler Drain scheduler.
 	 * @param Push_Rate_Limiter           $limiter   Per-token rate limit.
 	 * @param callable|null               $log       Receives a line of text for the merchant's log.
+	 * @param Tokenless_Seen|null         $tokenless_seen Remembers that the old address is still in use (the proxy notice reads it).
 	 */
-	public function __construct( Inbound_Decoder $decoder, Push_Protocol $protocol, Sender_Network $network, Webhook_Switches $switches, Event_Ledger $ledger, Notification_Account_Reader $accounts, Drain_Scheduler $scheduler, Push_Rate_Limiter $limiter, ?callable $log = null ) {
+	public function __construct( Inbound_Decoder $decoder, Push_Protocol $protocol, Sender_Network $network, Webhook_Switches $switches, Event_Ledger $ledger, Notification_Account_Reader $accounts, Drain_Scheduler $scheduler, Push_Rate_Limiter $limiter, ?callable $log = null, ?Tokenless_Seen $tokenless_seen = null ) {
 		$this->decoder   = $decoder;
 		$this->protocol  = $protocol;
 		$this->network   = $network;
@@ -122,6 +130,8 @@ final class Notification_Intake {
 		$this->scheduler = $scheduler;
 		$this->limiter   = $limiter;
 		$this->log       = $log;
+
+		$this->tokenless_seen = $tokenless_seen;
 	}
 
 	/**
@@ -149,7 +159,7 @@ final class Notification_Intake {
 			return $this->retryable( $e );
 		}
 
-		return $this->ingest( $account, $raw_body, $this->network->client_ip( $server ), false );
+		return $this->ingest( $account, $raw_body, $this->network->client_ip( $server ) );
 	}
 
 	/**
@@ -167,6 +177,11 @@ final class Notification_Intake {
 	 * @return Intake_Response
 	 */
 	public function handle_tokenless( string $owner, string $raw_body, array $server ): Intake_Response {
+		// Noted before the sender check: behind a proxy that check refuses the request, and the proxy notice needs to see it.
+		if ( null !== $this->tokenless_seen ) {
+			$this->tokenless_seen->note();
+		}
+
 		$ip = $this->network->client_ip( $server );
 
 		if ( ! $this->network->is_allowed( $ip ) ) {
@@ -179,7 +194,7 @@ final class Notification_Intake {
 			return $this->retryable( $e );
 		}
 
-		return $this->ingest( $account, $raw_body, $ip, true );
+		return $this->ingest( $account, $raw_body, $ip );
 	}
 
 	/**
@@ -188,10 +203,9 @@ final class Notification_Intake {
 	 * @param Notification_Account|null $account  Account the endpoint resolved, if any.
 	 * @param string                    $raw_body Raw request body.
 	 * @param string                    $ip       Sender address.
-	 * @param bool                      $legacy   Whether it came on the old address without a token.
 	 * @return Intake_Response
 	 */
-	private function ingest( ?Notification_Account $account, string $raw_body, string $ip, bool $legacy ): Intake_Response {
+	private function ingest( ?Notification_Account $account, string $raw_body, string $ip ): Intake_Response {
 		$event = $this->decoder->decode( $raw_body, null === $account ? null : $account->id(), $ip );
 
 		if ( null === $event ) {
@@ -199,7 +213,7 @@ final class Notification_Intake {
 		}
 
 		// Whether the address is the marketplace's is the framework's call, not the decoder's.
-		$event = $event->with_ip_trusted( $this->network->is_allowed( $ip ) )->with_legacy_url( $legacy );
+		$event = $event->with_ip_trusted( $this->network->is_allowed( $ip ) );
 
 		// A switched-off type is stored and never worked, and answered 200: a 4xx would count against the URL in the marketplace's health check.
 		if ( '' === $event->ignore_reason() && ! $this->accepts( $event, $account ) ) {

@@ -17,6 +17,7 @@ use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Url;
 use Woodev\Framework\Marketplace\Intake\Registration_Refresher;
 use Woodev\Framework\Marketplace\Intake\Sender_Network;
+use Woodev\Framework\Marketplace\Intake\Tokenless_Seen;
 use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
 use Woodev\Framework\Marketplace\Intake\Webhook_Type;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
@@ -257,7 +258,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 	 * @return string HTML paragraph, or '' when there is nothing to replace.
 	 */
 	private function proxy_notice(): string {
-		if ( ! Sender_Network::behind_proxy( $_SERVER ) || ! $this->last_notifications->legacy_url_seen_since( (int) call_user_func( $this->clock ) - self::LEGACY_URL_DAYS * DAY_IN_SECONDS ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only the peer address is read, and it is validated as an IP.
+		if ( ! Sender_Network::behind_proxy( $_SERVER ) || ! ( new Tokenless_Seen( $this->plugin_id ) )->seen_since( (int) call_user_func( $this->clock ) - self::LEGACY_URL_DAYS * DAY_IN_SECONDS ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only the peer address is read, and it is validated as an IP.
 			return '';
 		}
 
