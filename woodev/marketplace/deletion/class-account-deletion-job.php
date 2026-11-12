@@ -176,7 +176,8 @@ final class Account_Deletion_Job {
 			$this->progress->begin( $account_id );
 
 			if ( ! $this->erase( $account, $fence ) ) {
-				$this->scheduler->later( $account_id, $attempt, 0 );
+				// The run ran out of time after deleting something: that is progress, so the failure count starts again.
+				$this->scheduler->later( $account_id, 0, 0 );
 			}
 		} catch ( Claim_Lost $e ) {
 			$this->scheduler->later( $account_id, $attempt, Job_Gate::BUSY_DELAY );

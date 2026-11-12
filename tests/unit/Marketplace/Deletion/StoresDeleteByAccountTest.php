@@ -13,12 +13,14 @@ use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Deletion\Deletion_Module;
 use Woodev\Framework\Marketplace\Deletion\Pinned_Offer_Eraser;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Governor\Wpdb_Throttle_Store;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
+use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
@@ -67,6 +69,19 @@ final class StoresDeleteByAccountTest extends TestCase {
 	protected function tearDown(): void {
 		Monkey\tearDown();
 		parent::tearDown();
+	}
+
+	/**
+	 * The links are deleted before `sync_state`: a stock or price change writes a `sync_state` row for every link it still finds, so
+	 * deleting the state first lets a sale during a long deletion leave rows behind.
+	 *
+	 * @return void
+	 */
+	public function test_sync_state_is_deleted_after_the_links(): void {
+		$names = array_keys( Deletion_Module::stores( $this->db, Sqlite_Tables::schema() ) );
+
+		$this->assertSame( [ 'links', 'sync_state', 'tasks', 'postings', 'documents', 'throttle', 'api_errors' ], $names );
+		$this->assertGreaterThan( array_search( 'links', $names, true ), array_search( 'sync_state', $names, true ) );
 	}
 
 	/**
@@ -153,10 +168,15 @@ final class StoresDeleteByAccountTest extends TestCase {
 	public function test_cached_rows_of_the_account_are_deleted_and_the_shared_ones_stay(): void {
 		$cache = new Wpdb_Catalog_Cache( $this->db, Sqlite_Tables::table( 'catalog_cache' ) );
 
-		$this->assertSame( 2, $cache->delete_account( self::GONE ) );
+		$this->assertSame( 2, $cache->delete_keys( [ Warehouse_Options::key_for( self::GONE ) ] ) );
+		$this->assertSame( 0, $cache->delete_keys( [] ) );
 
 		$keys = $this->db->get_col( 'SELECT cache_key FROM ' . Sqlite_Tables::table( 'catalog_cache' ) . ' ORDER BY cache_key' );
-		$this->assertSame( [ 'fetched:warehouses:8', 'tree', 'warehouses:78', 'warehouses:8' ], $keys, 'account 78 is not account 8 nor 7' );
+		$this->assertSame(
+			[ 'attributes:12:7', 'fetched:attributes:12:7', 'fetched:warehouses:8', 'tree', 'warehouses:78', 'warehouses:8' ],
+			$keys,
+			'account 78 is not account 8 nor 7, and a shared row ending in :7 stays'
+		);
 	}
 
 	/**
@@ -248,6 +268,11 @@ final class StoresDeleteByAccountTest extends TestCase {
 			$this->db->insert( 'wp_postmeta', [ 'post_id' => 1, 'meta_key' => '_unrelated_7', 'meta_value' => 'X' ] );
 			$this->db->insert( Sqlite_Tables::table( 'catalog_cache' ), [ 'cache_key' => 'tree', 'fetched_at' => self::NOW ] );
 			$this->db->insert( Sqlite_Tables::table( 'catalog_cache' ), [ 'cache_key' => 'warehouses:78', 'fetched_at' => self::NOW ] );
+
+			// Shared rows whose last segment is an account id (a type id of 7): they belong to no account.
+			foreach ( [ 'attributes:12:7', 'fetched:attributes:12:7' ] as $key ) {
+				$this->db->insert( Sqlite_Tables::table( 'catalog_cache' ), [ 'cache_key' => $key, 'fetched_at' => self::NOW ] );
+			}
 		}
 	}
 }

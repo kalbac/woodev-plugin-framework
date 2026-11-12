@@ -147,7 +147,14 @@ function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, onDe
 					<Button variant="secondary" aria-expanded={ open } onClick={ onToggleOpen }>
 						{ open ? __( 'Свернуть', 'woodev-plugin-framework' ) : __( 'Редактировать', 'woodev-plugin-framework' ) }
 					</Button>
-					<Button variant="secondary" isBusy={ busy } disabled={ busy } onClick={ onToggleEnabled }>
+					{ /* While the data is being deleted the account stays off: the server ignores a switch-on, so the button does not offer it. */ }
+					<Button
+						variant="secondary"
+						isBusy={ busy }
+						disabled={ busy || 'running' === card.deletion }
+						title={ 'running' === card.deletion ? __( 'Аккаунт удаляется — включить его нельзя.', 'woodev-plugin-framework' ) : undefined }
+						onClick={ onToggleEnabled }
+					>
 						{ card.enabled ? __( 'Выключить', 'woodev-plugin-framework' ) : __( 'Включить', 'woodev-plugin-framework' ) }
 					</Button>
 					{ /* A disabled button shows no tooltip of its own in every browser: the wrapper carries the hint. */ }

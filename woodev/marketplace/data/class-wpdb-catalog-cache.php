@@ -55,20 +55,32 @@ final class Wpdb_Catalog_Cache {
 	}
 
 	/**
-	 * Deletes the rows an account owns. A key that belongs to one account ends with its id as the last `:` segment
-	 * (`warehouses:7`, `fetched:warehouses:7`); the shared keys (`tree`) do not.
+	 * Deletes named keys with their `fetched:` twin rows. The keys are exact, not a pattern: the account deletion names the
+	 * per-account keys one by one, so a shared row (`attributes:{category}:{type}`) whose last segment happens to equal an account
+	 * id stays.
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param int $account_id Account id.
+	 * @param string[] $keys Cache keys.
 	 * @return int Rows deleted.
 	 */
-	public function delete_account( int $account_id ): int {
-		$sql     = $this->db->prepare( "DELETE FROM {$this->table} WHERE cache_key LIKE %s", '%' . $this->db->esc_like( ':' . $account_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- The table name is ours.
-		$deleted = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
+	public function delete_keys( array $keys ): int {
+		if ( [] === $keys ) {
+			return 0;
+		}
+
+		$rows         = array_merge( $keys, array_map(
+			static function ( string $key ): string {
+				return self::FETCHED_PREFIX . $key;
+			},
+			$keys
+		) );
+		$placeholders = implode( ', ', array_fill( 0, count( $rows ), '%s' ) );
+		$sql          = $this->db->prepare( "DELETE FROM {$this->table} WHERE cache_key IN ({$placeholders})", $rows ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- The table name is ours; the placeholders are generated.
+		$deleted      = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
 
 		if ( false === $deleted ) {
-			throw new \RuntimeException( 'The cached rows of the account could not be deleted.' );
+			throw new \RuntimeException( 'The cached rows could not be deleted.' );
 		}
 
 		return (int) $deleted;

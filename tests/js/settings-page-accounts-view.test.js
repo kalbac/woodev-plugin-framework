@@ -121,3 +121,15 @@ test( '«Выключить» hands the section to the page, and an off account 
 
 	expect( screen.getByRole( 'button', { name: 'Включить' } ) ).toBeInTheDocument();
 } );
+
+test( '«Включить» is disabled while the account\'s data is being deleted', () => {
+	const onToggle = jest.fn();
+	view( [ account( 1, { enabled: false, delete_url: '/x/1', deletion: 'running' } ), adder ], onToggle );
+
+	const button = screen.getByRole( 'button', { name: 'Включить' } );
+
+	expect( button ).toBeDisabled();
+	expect( button ).toHaveAttribute( 'title', 'Аккаунт удаляется — включить его нельзя.' );
+	fireEvent.click( button );
+	expect( onToggle ).not.toHaveBeenCalled();
+} );

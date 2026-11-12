@@ -876,11 +876,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			'identifier'       => (string) ( $account->credentials()[ $id_field ] ?? '' ),
 			'enabled'          => $account->is_enabled(),
 			'enabled_field'    => self::setting_id( (string) $account->id(), 'enabled' ),
-			'delete_hint'      => $account->is_enabled() ? __( 'Сначала выключите аккаунт.', 'woodev-plugin-framework' ) : '',
+			'delete_hint'      => $this->delete_hint( $account ),
 		];
 
 		if ( null === $this->deletion ) {
-			return $card + [ 'delete_hint' => __( 'Удаление аккаунта недоступно.', 'woodev-plugin-framework' ) ];
+			return $card;
 		}
 
 		$state = $this->deletion->get( $account->id() );
@@ -889,6 +889,20 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			'delete_url' => rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . Account_Deletion_Controller::path( $this->plugin_id, $account->id() ) ),
 			'deletion'   => null === $state ? '' : (string) $state['state'],
 		];
+	}
+
+	/**
+	 * Why «Удалить» is unavailable on an account's card; empty when it is available.
+	 *
+	 * @param Account $account Account.
+	 * @return string
+	 */
+	private function delete_hint( Account $account ): string {
+		if ( $account->is_enabled() ) {
+			return __( 'Сначала выключите аккаунт.', 'woodev-plugin-framework' );
+		}
+
+		return null === $this->deletion ? __( 'Удаление аккаунта недоступно.', 'woodev-plugin-framework' ) : '';
 	}
 
 	/**

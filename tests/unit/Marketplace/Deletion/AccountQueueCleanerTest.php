@@ -124,13 +124,19 @@ final class AccountQueueCleanerTest extends TestCase {
 			}
 
 			/**
-			 * Lists pending ids, a page at a time.
+			 * Lists pending ids, a page at a time. Rejects what Action Scheduler 4.1.0 rejects: the second argument is the query type,
+			 * `select` (ids) or `count`, and anything else throws.
 			 *
-			 * @param array  $query  Query.
-			 * @param string $return Return type.
+			 * @param array  $query      Query.
+			 * @param string $query_type `select` or `count`.
 			 * @return int[]
+			 * @throws \InvalidArgumentException For any other query type.
 			 */
-			public function query_actions( array $query, string $return = 'ids' ): array {
+			public function query_actions( array $query, string $query_type = 'select' ): array {
+				if ( ! in_array( $query_type, [ 'select', 'count' ], true ) ) {
+					throw new \InvalidArgumentException( 'Invalid value for select or count parameter. Cannot query actions.' );
+				}
+
 				return $this->test->page( (int) $query['offset'], (int) $query['per_page'] );
 			}
 

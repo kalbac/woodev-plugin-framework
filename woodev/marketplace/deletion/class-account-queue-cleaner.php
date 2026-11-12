@@ -88,14 +88,14 @@ final class Account_Queue_Cleaner {
 		$offset    = 0;
 
 		do {
+			// The default `select` query type returns the action ids; `ids` is a return format of `as_get_scheduled_actions()` and throws here.
 			$ids = (array) $store->query_actions(
 				[
 					'group'    => $this->group,
 					'status'   => 'pending',
 					'per_page' => self::PAGE,
 					'offset'   => $offset,
-				],
-				'ids'
+				]
 			);
 
 			$kept     = 0;

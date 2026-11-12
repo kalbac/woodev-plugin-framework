@@ -256,6 +256,27 @@ final class AccountDeletionJobTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * A run that made progress starts the failure count again, so transient errors spread over a long deletion never add up to the
+	 * limit.
+	 *
+	 * @return void
+	 */
+	public function test_progress_resets_the_failure_count(): void {
+		$steps = [
+			'links' => function () {
+				$this->now += Account_Deletion_Job::RUN_SECONDS + 1;
+
+				return 500;
+			},
+		];
+
+		$this->job( $steps )->run( $this->account_id, Account_Deletion_Job::MAX_RETRIES - 1 );
+
+		$next = $this->scheduler->of( 'woodev_fake_seller_delete_account' );
+		$this->assertSame( [ $this->account_id, 0 ], $next[0]['args'] );
+	}
+
+	/**
 	 * A deleted account is not an error: a late duplicate of the job does nothing.
 	 *
 	 * @return void

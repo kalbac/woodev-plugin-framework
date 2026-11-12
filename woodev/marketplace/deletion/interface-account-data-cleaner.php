@@ -41,6 +41,9 @@ interface Account_Data_Cleaner {
 	 * with push notifications. A refusal or a failure is not an error: the merchant is told to remove the address in the
 	 * marketplace's cabinet.
 	 *
+	 * It is called whatever the licence state: it is clean-up the merchant asked for, not a new remote action, so no licence
+	 * gate belongs here.
+	 *
 	 * @since 2.1.5
 	 *
 	 * @param Account $account Account being deleted.
