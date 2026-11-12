@@ -440,6 +440,18 @@ final class MappingsEditorTest extends TestCase {
 	}
 
 	/**
+	 * WordPress core query parameters (`_locale=user` from api-fetch) pass; a real unknown one still does not.
+	 *
+	 * @return void
+	 */
+	public function test_wordpress_core_query_parameters_are_not_unknown_fields(): void {
+		$result = $this->h->controller->get_categories( new Json_Request( [], [ 'search' => 'a', '_locale' => 'user' ] ) );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $result );
+		$this->assertError( $this->h->controller->get_categories( new Json_Request( [], [ 'search' => 'a', '_locale' => 'user', 'owner' => 'x' ] ) ), 'woodev_mappings_unknown_field', 400 );
+	}
+
+	/**
 	 * Each editor status has its HTTP status, and a validation failure carries every sentence.
 	 *
 	 * @return void
