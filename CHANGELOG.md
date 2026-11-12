@@ -1,6 +1,34 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.2] — 2026-11-12
+### Bug Fixes
+- **marketplace**: Fresh install — lazy settings sections, install outside admin (#1727) (#1731)
+
+
+### Documentation
+- **s227**: Session save — 2.1.0/2.1.1 released, F6-F9b merged, Ozon O2 merged, Gemini 4 Carbon measured
+
+- **s227**: Record the uninstall-toggle decision for the F10 fix round
+
+- **s228**: Session save — ozon #68, F10 and #1727 merged, settings decisions, #1698 root cause
+
+
+### Features
+- **marketplace**: F10 settings sections and diagnostics (#1689) (#1728)
+
+- **marketplace**: Drop sender IP and proxy settings, add per-webhook switches (#1729) (#1732)
+
+- **marketplace**: Oversize warehouse, stock mode off, proxy notice only for the old address (#1738)
+
+- **marketplace**: F11 embedded classic screens (#1690) (#1739)
+
+
+### Tests
+- Restore the original $wpdb after a double arm in LicenseInForceTest (#1698) (#1736)
+
+
+
 ## [2.1.1] — 2026-11-11
 ### Bug Fixes
 - **marketplace**: Pass the plugin write gate to the framework jobs (#1724)
