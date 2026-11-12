@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.4] — 2026-11-12
+### Bug Fixes
+- **marketplace**: Ip_Ranges matches IPv4-mapped IPv6 addresses as IPv4 (#1746)
+
+- **marketplace**: Accept WordPress core query params on mappings routes (#1748)
+
+
+### Documentation
+- **s229**: Session save
+
+
+### Features
+- **marketplace**: F12a «Товары сайта» records provider (#1743)
+
+
+
 ## [2.1.3] — 2026-11-12
 ### Features
 - **marketplace**: Stock select always rendered, oversize flag reaches links (#1742)
