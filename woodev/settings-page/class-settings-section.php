@@ -88,6 +88,20 @@ final class Settings_Section {
 	private array $card = [];
 
 	/**
+	 * Whether the client draws this section stacked under its own heading — see {@see self::stacked()}.
+	 *
+	 * @var bool
+	 */
+	private bool $stacked = false;
+
+	/**
+	 * Muted line next to the heading of a stacked section.
+	 *
+	 * @var string
+	 */
+	private string $subtitle = '';
+
+	/**
 	 * Use one of the named constructors instead — {@see self::create()},
 	 * {@see self::create_connection()} or {@see self::create_tools()}. Private so that a call
 	 * site has to NAME the kind it is building rather than spell it out in positional
@@ -340,6 +354,46 @@ final class Settings_Section {
 		$copy->card = $card;
 
 		return $copy;
+	}
+
+	/**
+	 * A copy of this section that the client draws stacked: its title as a heading (with a muted line beside it) and the block under
+	 * it, one section after another on the tab, with no sub-tabs. For a tab whose sections are one per account, so each account
+	 * reads as its own block instead of a sub-tab.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param string $subtitle Muted text next to the heading, plain text (the account's identifier, say).
+	 * @return self
+	 */
+	public function stacked( string $subtitle = '' ): self {
+		$copy           = clone $this;
+		$copy->stacked  = true;
+		$copy->subtitle = $subtitle;
+
+		return $copy;
+	}
+
+	/**
+	 * Whether the client draws this section stacked ({@see self::stacked()}).
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return bool
+	 */
+	public function is_stacked(): bool {
+		return $this->stacked;
+	}
+
+	/**
+	 * The muted line beside a stacked section's heading, empty when there is none.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return string
+	 */
+	public function get_subtitle(): string {
+		return $this->subtitle;
 	}
 
 	/**

@@ -69,11 +69,15 @@ test( 'a card shows title, identifier and status, and opens its fields on «Ре
 	expect( screen.getByTestId( 'block-account_connection_1' ) ).toBeInTheDocument();
 } );
 
-test( '«Удалить» is disabled and its hint is on the card', () => {
+test( '«Удалить» is disabled and the hint is its tooltip, not text under every card', () => {
 	view( [ account( 1 ), adder ] );
 
-	expect( screen.getByRole( 'button', { name: 'Удалить' } ) ).toBeDisabled();
-	expect( screen.getByText( 'Удаление аккаунта появится позже.' ) ).toBeInTheDocument();
+	const button = screen.getByRole( 'button', { name: 'Удалить' } );
+
+	expect( button ).toBeDisabled();
+	expect( button ).toHaveAttribute( 'title', 'Удаление аккаунта появится позже.' );
+	expect( button.parentElement ).toHaveAttribute( 'title', 'Удаление аккаунта появится позже.' );
+	expect( screen.queryByText( 'Удаление аккаунта появится позже.' ) ).not.toBeInTheDocument();
 } );
 
 test( '«Выключить» hands the section to the page, and an off account offers «Включить»', () => {

@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Settings;
 
+use Woodev\Framework\Settings\Settings_Section;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -41,6 +43,13 @@ final class Settings_Tab implements Settings_Section_Provider {
 	private $sections;
 
 	/**
+	 * Whether the tab draws its sections stacked under headings instead of as sub-tabs.
+	 *
+	 * @var bool
+	 */
+	private $stacked;
+
+	/**
 	 * Creates the tab.
 	 *
 	 * @since 2.1.5
@@ -48,11 +57,14 @@ final class Settings_Tab implements Settings_Section_Provider {
 	 * @param string   $slug     Short id (`connection`, `parameters`, …).
 	 * @param string   $label    Localized label.
 	 * @param callable $sections `function (): Settings_Section[]`, called when the page or a route needs the sections.
+	 * @param bool     $stacked  True to draw every section of the tab under its own heading, one after another, with no sub-tabs
+	 *                           ({@see Settings_Section::stacked()}).
 	 */
-	public function __construct( string $slug, string $label, callable $sections ) {
+	public function __construct( string $slug, string $label, callable $sections, bool $stacked = false ) {
 		$this->slug     = $slug;
 		$this->label    = $label;
 		$this->sections = $sections;
+		$this->stacked  = $stacked;
 	}
 
 	/**
@@ -93,9 +105,20 @@ final class Settings_Tab implements Settings_Section_Provider {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @return \Woodev\Framework\Settings\Settings_Section[]
+	 * @return Settings_Section[]
 	 */
 	public function sections(): array {
-		return array_values( (array) call_user_func( $this->sections ) );
+		$sections = array_values( (array) call_user_func( $this->sections ) );
+
+		if ( ! $this->stacked ) {
+			return $sections;
+		}
+
+		return array_map(
+			static function ( Settings_Section $section ): Settings_Section {
+				return $section->is_stacked() ? $section : $section->stacked();
+			},
+			$sections
+		);
 	}
 }

@@ -395,13 +395,29 @@ $settings-label-col: 200px;
 		}
 	}
 
-	&__hint {
-		margin: wd.$gap-sm 0 0;
-		color: wd.$muted;
-		font-size: 13px;
-	}
-
 	&__body {
 		margin-top: wd.$gap-lg;
+	}
+}
+
+// A tab of sections drawn one after another, each under its own heading (stacked-view.js).
+.woodev-stacked {
+	display: flex;
+	flex-direction: column;
+	gap: wd.$gap-lg * 2;
+
+	&__title {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: wd.$gap-sm wd.$gap;
+		margin: 0 0 wd.$gap;
+		font-size: 16px;
+	}
+
+	&__subtitle {
+		color: wd.$muted;
+		font-size: 13px;
+		font-weight: 400;
 	}
 }

@@ -267,4 +267,14 @@ class SettingsSectionTest extends TestCase {
 
 		$this->assertSame( [], Settings_Section::create( 'x', 'X', [] )->with_card( [ 'title' => 'Shop' ] )->get_card() );
 	}
+
+	public function test_stacked_returns_a_copy_drawn_under_its_own_heading(): void {
+		$section = Settings_Section::create( 'a', 'A', [] );
+		$stacked = $section->stacked( 'Client-Id: 1' );
+
+		$this->assertFalse( $section->is_stacked(), 'immutable: the original is not stacked' );
+		$this->assertTrue( $stacked->is_stacked() );
+		$this->assertSame( 'Client-Id: 1', $stacked->get_subtitle() );
+		$this->assertSame( '', $section->stacked()->get_subtitle() );
+	}
 }

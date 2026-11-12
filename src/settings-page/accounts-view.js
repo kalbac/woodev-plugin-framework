@@ -80,12 +80,14 @@ function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, chil
 					<Button variant="secondary" isBusy={ busy } disabled={ busy } onClick={ onToggleEnabled }>
 						{ card.enabled ? __( 'Выключить', 'woodev-plugin-framework' ) : __( 'Включить', 'woodev-plugin-framework' ) }
 					</Button>
-					<Button variant="secondary" isDestructive disabled title={ card.delete_hint }>
-						{ __( 'Удалить', 'woodev-plugin-framework' ) }
-					</Button>
+					{ /* A disabled button shows no tooltip of its own in every browser: the wrapper carries the hint. */ }
+					<span title={ card.delete_hint }>
+						<Button variant="secondary" isDestructive disabled title={ card.delete_hint }>
+							{ __( 'Удалить', 'woodev-plugin-framework' ) }
+						</Button>
+					</span>
 				</div>
 			</div>
-			{ card.delete_hint && <p className="woodev-account-card__hint">{ card.delete_hint }</p> }
 			{ open && <div className="woodev-account-card__body">{ children }</div> }
 		</div>
 	);

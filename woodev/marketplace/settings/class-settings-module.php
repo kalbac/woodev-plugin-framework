@@ -90,7 +90,7 @@ final class Settings_Module {
 				$plugin_id
 			);
 			$section_providers[] = $notifications;
-			$tabs[]              = new Settings_Tab( 'notifications', __( 'Уведомления', 'woodev-plugin-framework' ), [ $notifications, 'sections' ] );
+			$tabs[]              = new Settings_Tab( 'notifications', __( 'Уведомления', 'woodev-plugin-framework' ), [ $notifications, 'sections' ], true );
 		}
 
 		$section_providers[] = $advanced;

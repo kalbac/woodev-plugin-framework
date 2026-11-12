@@ -30,6 +30,7 @@ use Woodev\Framework\Marketplace\Settings\Settings_Handler;
 use Woodev\Framework\Marketplace\Settings\Settings_Tab;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Settings\Field_Schema;
+use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Settings_Descriptor;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
@@ -495,6 +496,42 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertCount( 1, $sections );
 		$this->assertSame( [], $sections[0]->get_setting_ids() );
 		$this->assertStringContainsString( 'Подключите аккаунт на вкладке «Подключение»', $sections[0]->get_description() );
+	}
+
+	public function test_every_account_gets_its_own_stacked_parameters_section_under_its_name(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop one', true, [ 'merchant_uid' => '1001', 'access_token' => 't1' ] ) );
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop two', true, [ 'merchant_uid' => '1002', 'access_token' => 't2' ] ) );
+
+		$sections = $this->accounts_sections( $adapter, $store )->parameter_sections();
+
+		$this->assertSame( [ 'Shop one', 'Shop two' ], array_map( static function ( $s ) { return $s->get_label(); }, $sections ) );
+		$this->assertSame( [ 'UID продавца: 1001', 'UID продавца: 1002' ], array_map( static function ( $s ) { return $s->get_subtitle(); }, $sections ), 'the identifier sits beside the name' );
+		$this->assertSame( [ true, true ], array_map( static function ( $s ) { return $s->is_stacked(); }, $sections ) );
+		$this->assertSame( [], array_intersect( $sections[0]->get_setting_ids(), $sections[1]->get_setting_ids() ), 'two accounts, two separate blocks' );
+	}
+
+	public function test_the_notice_without_accounts_is_not_stacked(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+
+		$this->assertFalse( $this->accounts_sections( $adapter, $store )->parameter_sections()[0]->is_stacked() );
+	}
+
+	public function test_a_stacked_tab_draws_every_section_stacked_and_keeps_a_subtitle_that_is_already_there(): void {
+		$sections = [
+			Settings_Section::create( 'switches', 'Switches', [] ),
+			Settings_Section::create( 'account_1', 'Account', [] )->stacked( 'Client-Id: 7' ),
+		];
+		$builder  = static function () use ( $sections ): array {
+			return $sections;
+		};
+
+		$plain   = ( new Settings_Tab( 'notifications', 'Уведомления', $builder ) )->sections();
+		$stacked = ( new Settings_Tab( 'notifications', 'Уведомления', $builder, true ) )->sections();
+
+		$this->assertFalse( $plain[0]->is_stacked() );
+		$this->assertSame( [ true, true ], array_map( static function ( $s ) { return $s->is_stacked(); }, $stacked ) );
+		$this->assertSame( 'Client-Id: 7', $stacked[1]->get_subtitle() );
 	}
 
 	public function test_connection_sections_are_cards_and_the_last_one_adds_an_account(): void {

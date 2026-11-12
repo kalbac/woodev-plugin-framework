@@ -21,6 +21,7 @@ import { ACTIVE_PROVIDER_SETTING_ID } from '../components/control-field';
 import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
 import AccountsView, { isAccountsTab } from './accounts-view';
+import StackedView, { isStackedTab } from './stacked-view';
 
 /**
  * Whether a staged value is still the one that was submitted (scalars by identity,
@@ -160,6 +161,7 @@ export default function App( { bootstrap = null } ) {
 	const [ fieldErrors, setFieldErrors ] = useState( {} ); // { providerId: { settingId: message } }
 	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
 	const [ busySection, setBusySection ] = useState( '' ); // account card whose on/off switch is being saved.
+	const [ noticeSection, setNoticeSection ] = useState( '' ); // section whose save the inline notices report (stacked tabs).
 
 	// Native WP snackbar notices (created on save via the notices store).
 	const snackbars = useSelect(
@@ -320,6 +322,7 @@ export default function App( { bootstrap = null } ) {
 		}
 
 		setSaving( providerId );
+		setNoticeSection( section.id );
 		setSaveError( '' );
 		setSaved( '' );
 		setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
@@ -421,15 +424,18 @@ export default function App( { bootstrap = null } ) {
 		} );
 		const hasProviderMismatch = hasBlockingProviderMismatch( tabFields, conditionValues );
 
+		// Stacked sections each have a card: the inline result belongs to the one that was saved.
+		const showNotices = ! isStackedTab( tab ) || noticeSection === section.id;
+
 		return (
 			<Card className="woodev-settings__card">
 				<CardBody>
-					{ saveError && '' === saving && (
+					{ showNotices && saveError && '' === saving && (
 						<Notice status="error" onRemove={ () => setSaveError( '' ) }>
 							{ saveError }
 						</Notice>
 					) }
-					{ saved === tab.id && (
+					{ showNotices && saved === tab.id && (
 						<Notice
 							status="success"
 							isDismissible={ true }
@@ -483,6 +489,8 @@ export default function App( { bootstrap = null } ) {
 							onToggleEnabled={ onToggleEnabled }
 							busySection={ busySection }
 						/>
+					) : isStackedTab( tab ) ? (
+						<StackedView tab={ tab } renderSection={ renderSection } />
 					) : (
 						renderSection( tab, sectionId )
 					)
