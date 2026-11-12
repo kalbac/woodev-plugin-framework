@@ -186,6 +186,14 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertFalse( $provider->authorize( 'children', $this->context(), [ $this->row_id( 10 ) ] ), 'Neither has a simple product.' );
 	}
 
+	public function test_the_activity_refresh_is_not_refused_because_a_row_has_vanished(): void {
+		$provider = $this->provider();
+
+		$this->assertTrue( $provider->authorize( 'activity', $this->context(), [ $this->row_id( 10 ), $this->row_id( 777 ) ] ), 'A trashed product is answered in removed_ids.' );
+		$this->assertFalse( $provider->authorize( 'activity', $this->context(), [ '999:10' ] ), 'Another account is still refused.' );
+		$this->assertFalse( $provider->authorize( 'activity', $this->context(), [ 'nonsense' ] ) );
+	}
+
 	public function test_selecting_a_parent_and_its_child_reaches_each_variation_once(): void {
 		$resolved = ( new Site_Products_Selection( $this->reader() ) )->resolve( $this->account_id, [ $this->row_id( 20 ), $this->row_id( 21 ), $this->row_id( 10 ) ] );
 

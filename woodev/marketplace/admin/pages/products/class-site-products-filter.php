@@ -160,11 +160,14 @@ final class Site_Products_Filter {
 	 *
 	 * @since 2.1.3
 	 *
+	 * @param string $stock_sql What the stock sort orders by when the reader knows better than the lookup column (a variable product's
+	 *                          stock is the sum over its variations); the whitelisted column when empty.
 	 * @return string A fixed fragment; nothing the request sent is in it.
 	 */
-	public function order_by(): string {
+	public function order_by( string $stock_sql = '' ): string {
 		$direction = strtoupper( $this->direction );
+		$column    = 'stock' === $this->sort && '' !== $stock_sql ? $stock_sql : self::SORTS[ $this->sort ];
 
-		return self::SORTS[ $this->sort ] . ' ' . $direction . ', p.ID ' . $direction;
+		return $column . ' ' . $direction . ', p.ID ' . $direction;
 	}
 }

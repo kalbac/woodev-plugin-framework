@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Catalog\Validation_Report;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
+use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
@@ -170,6 +171,51 @@ final class SiteProductsBulkTest extends Products_Test_Case {
 		$this->assertSame( 'failed', $result['groups'][0]['kind'] );
 		$this->assertStringContainsString( 'повторите через минуту', $result['groups'][0]['reason'] );
 		$this->assertSame( Link_Record::STATE_CREATED, $this->link_of( $id )->card_state() );
+	}
+
+	public function test_a_card_with_an_open_export_task_is_neither_exported_nor_detached(): void {
+		$busy = $this->add_product();
+		$link = $this->add_link( $busy, Link_Record::STATE_CREATED, [ 'offer_id' => 'A-1' ] );
+		$free = $this->add_product();
+		$this->add_link( $free, Link_Record::STATE_CREATED, [ 'offer_id' => 'A-2' ] );
+		$task = $this->ledger()->open( new Async_Task( $this->account_id, Async_Task::KIND_IMPORT ), [] );
+		$this->ledger()->add_items( $task, [ (int) $link->link_id() => 'A-1' ] );
+		$this->ledger()->mark_sending( $task, 'hash', [ (int) $link->link_id() ] );
+		$ids = [ (int) $busy->get_id(), (int) $free->get_id() ];
+
+		foreach ( [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::DETACH ] as $action ) {
+			$plan = $this->preview( $action, $ids );
+
+			$this->assertSame( 1, $plan['eligible'], $action );
+			$this->assertSame( 'карточка сейчас отправляется на маркетплейс — дождитесь результата', $plan['groups'][0]['reason'], $action );
+		}
+
+		$this->assertSame( 1, $this->apply( Site_Products_Bulk::DETACH, $ids )['accepted'] );
+		$this->assertSame( Link_Record::STATE_CREATED, $this->link_of( (int) $busy->get_id() )->card_state(), 'The open task still owns it.' );
+		$this->assertSame( Link_Record::STATE_UNLINKED, $this->link_of( (int) $free->get_id() )->card_state() );
+		$this->assertSame( 1, $this->preview( Site_Products_Bulk::SYNC_STOCK_OFF, [ (int) $busy->get_id() ] )['eligible'], 'Local switches do not wait for a task.' );
+	}
+
+	public function test_a_detach_race_reports_how_many_were_kept_without_naming_the_wrong_cards(): void {
+		$first  = $this->add_product();
+		$second = $this->add_product();
+		$this->add_link( $first, Link_Record::STATE_CREATED );
+		$this->add_link( $second, Link_Record::STATE_CREATED );
+		$second_link = (int) $this->link_of( (int) $second->get_id() )->link_id();
+		$db          = $this->db;
+
+		// Between the plan and the write, the second card goes out to the marketplace.
+		$db->before_query_pattern = '/WHERE link_id = ' . $second_link . ' AND account_id/';
+		$db->before_query         = function () use ( $second_link ): void {
+			$this->links()->set_state( $second_link, Link_Record::STATE_SUBMITTED );
+		};
+
+		$result = $this->apply( Site_Products_Bulk::DETACH, [ (int) $first->get_id(), (int) $second->get_id() ] );
+
+		$this->assertSame( 1, $result['accepted'] );
+		$this->assertSame( 1, $result['failed'] );
+		$this->assertSame( 1, $result['groups'][0]['count'] );
+		$this->assertSame( [], $result['groups'][0]['examples'], 'The detacher says how many it kept, not which.' );
 	}
 
 	public function test_archive_records_the_intent_for_created_cards_only(): void {

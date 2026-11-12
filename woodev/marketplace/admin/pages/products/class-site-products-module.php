@@ -182,6 +182,7 @@ final class Site_Products_Module {
 			$contexts,
 			new Link_Detacher( $links, $queue, $ledger, $accounts ),
 			new Link_Scheduler( $job_names ),
+			$ledger,
 			[
 				'link_candidates' => static function ( int $account_id ) use ( $shop, $links ): int {
 					return self::count_candidates( $shop->products(), $links->identity_map( $account_id ) );

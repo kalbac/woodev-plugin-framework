@@ -64,9 +64,9 @@ final class Site_Products_Activity {
 	 *
 	 * @since 2.1.3
 	 *
-	 * @param Task_Ledger $ledger         Task ledger.
-	 * @param \wpdb       $db             Database.
-	 * @param string      $sync_table     Full name of the sync state table.
+	 * @param Task_Ledger   $ledger         Task ledger.
+	 * @param \wpdb         $db             Database.
+	 * @param string        $sync_table     Full name of the sync state table.
 	 * @param string        $accounts_table Full name of the accounts table.
 	 * @param callable|null $clock          Returns the Unix time; the system clock when null.
 	 */
@@ -113,7 +113,7 @@ final class Site_Products_Activity {
 	 * Sums the activity of a variable product's variations into the parent row's.
 	 *
 	 * An action is blocked on the parent only when **every** variation blocks it — then nothing could go; when some can, the
-	 * server skips the rest with a reason. The processes are one line per kind with the number of variations, with no counts: the
+	 * server skips the locked ones with a reason ({@see Site_Products_Bulk}: a card being submitted, or with an open export task). The processes are one line per kind with the number of variations, with no counts: the
 	 * parts are not the same size, so no percentage is honest.
 	 *
 	 * @since 2.1.3

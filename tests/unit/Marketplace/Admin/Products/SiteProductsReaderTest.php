@@ -40,9 +40,6 @@ final class SiteProductsReaderTest extends TestCase {
 			Sqlite_Tables::table( 'sync_state' ),
 			static function ( int $term_id ): array {
 				return 7 === $term_id ? [ 7, 8 ] : [ $term_id ];
-			},
-			static function (): ?\WC_Product {
-				return null;
 			}
 		);
 	}
@@ -69,8 +66,6 @@ final class SiteProductsReaderTest extends TestCase {
 
 	public function test_sorting_and_paging_cover_the_whole_table_not_one_page(): void {
 		$this->assertSame( [ 30, 10, 20 ], $this->ids( [ 'sort' => 'name', 'direction' => 'desc' ] ) );
-		// Stock ascending over the whole table: the bag (0) comes before the dress (5); the variable parent has no stock and sorts first.
-		$this->assertSame( [ 20, 30, 10 ], $this->ids( [ 'sort' => 'stock' ] ) );
 		$this->assertSame( [ 10, 30, 20 ], $this->ids( [ 'sort' => 'price', 'direction' => 'desc' ] ), 'Price descending: 100, 50, then the parent with none.' );
 
 		$second = $this->reader->page( Site_Products_Filter::from_query( Products_Shop::ACCOUNT, [ 'sort' => 'name' ] ), 2, 2 );
@@ -137,22 +132,17 @@ final class SiteProductsReaderTest extends TestCase {
 		$this->shop->product( 50, 'Рубашка', 'R-50', 12, null, 'variable' );
 		$this->shop->variation( 51, 50, 'R-51', null, '10', 'S' );
 
-		$product = \Mockery::mock( 'WC_Product' );
-		$product->shouldReceive( 'get_stock_quantity' )->andReturn( 12 );
-		$reader = new Site_Products_Reader(
-			$this->shop->db,
-			Sqlite_Tables::table( 'links' ),
-			Sqlite_Tables::table( 'sync_state' ),
-			null,
-			static function () use ( $product ) {
-				return $product;
-			}
-		);
-
-		$offer = $reader->rows( 1, [ 50 ] )[0]['offers'][0];
+		// The parent's own lookup row holds the pool: no product is loaded to learn it.
+		$offer = $this->reader->rows( 1, [ 50 ] )[0]['offers'][0];
 
 		$this->assertSame( 12, $offer['site_stock'] );
 		$this->assertSame( 50, $offer['stock_pool'], 'The parent id marks a shared pool, so a sum counts it once.' );
+	}
+
+	public function test_stock_sorts_by_what_the_cell_shows_a_variable_product_by_the_sum_of_its_variations(): void {
+		// 20 keeps its stock on variations 21 and 22 (3 + 4 = 7); 10 has 5, 30 has 0.
+		$this->assertSame( [ 30, 10, 20 ], $this->ids( [ 'sort' => 'stock' ] ) );
+		$this->assertSame( [ 20, 10, 30 ], $this->ids( [ 'sort' => 'stock', 'direction' => 'desc' ] ) );
 	}
 
 	public function test_variations_are_read_a_page_at_a_time(): void {

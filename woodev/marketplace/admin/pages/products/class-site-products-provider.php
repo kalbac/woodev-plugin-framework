@@ -147,11 +147,33 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 
 		$account_id = $this->account_id( $context );
 
+		if ( 'activity' === $operation ) {
+			// The refresh asks about rows that were on screen; one that has vanished since is answered in `removed_ids`, not refused.
+			return $this->are_ids_of_account( $account_id, $ids );
+		}
+
 		if ( 'children' === $operation ) {
 			return 1 === count( $ids ) && null !== $this->selection->expandable( $account_id, (string) $ids[0] );
 		}
 
 		return null !== $this->selection->resolve( $account_id, $ids );
+	}
+
+	/**
+	 * Whether every row id is well formed and belongs to the account; says nothing about whether the product still exists.
+	 *
+	 * @param int      $account_id Account.
+	 * @param string[] $ids        Row ids.
+	 * @return bool
+	 */
+	private function are_ids_of_account( int $account_id, array $ids ): bool {
+		foreach ( $ids as $id ) {
+			if ( null === Site_Products_Ids::product_id( (string) $id, $account_id ) ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**

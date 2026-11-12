@@ -48,13 +48,6 @@ final class Site_Products_Reader {
 	private $sync_table;
 
 	/**
-	 * Loads a product: `function ( int $id ): ?\WC_Product`.
-	 *
-	 * @var callable
-	 */
-	private $load;
-
-	/**
 	 * Gives the category and its descendants: `function ( int $term_id ): int[]`.
 	 *
 	 * @var callable
@@ -70,17 +63,11 @@ final class Site_Products_Reader {
 	 * @param string        $links_table   Full name of the links table.
 	 * @param string        $sync_table    Full name of the sync state table.
 	 * @param callable|null $category_tree `function ( int $term_id ): int[]`; the term and its `product_cat` descendants when null.
-	 * @param callable|null $load          `function ( int $id ): ?\WC_Product`, used only for a variation that may share its parent's stock; `wc_get_product()` when null.
 	 */
-	public function __construct( \wpdb $db, string $links_table, string $sync_table, ?callable $category_tree = null, ?callable $load = null ) {
+	public function __construct( \wpdb $db, string $links_table, string $sync_table, ?callable $category_tree = null ) {
 		$this->db            = $db;
 		$this->links_table   = $links_table;
 		$this->sync_table    = $sync_table;
-		$this->load          = $load ?? static function ( int $id ): ?\WC_Product {
-			$product = wc_get_product( $id );
-
-			return $product instanceof \WC_Product ? $product : null;
-		};
 		$this->category_tree = $category_tree ?? static function ( int $term_id ): array {
 			$children = get_term_children( $term_id, 'product_cat' );
 
@@ -111,7 +98,7 @@ final class Site_Products_Reader {
 
 		$ids = $this->db->get_col(
 			'SELECT p.ID FROM ' . $this->db->prepare( '%i AS p LEFT JOIN %i AS lk ON lk.product_id = p.ID', $this->db->posts, $this->lookup_table() ) . ' WHERE ' . $where // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Every fragment is prepared.
-			. ' ORDER BY ' . $filter->order_by() . $this->db->prepare( ' LIMIT %d OFFSET %d', $per_page, max( 0, $page - 1 ) * $per_page )
+			. ' ORDER BY ' . $filter->order_by( $this->shown_stock_sql() ) . $this->db->prepare( ' LIMIT %d OFFSET %d', $per_page, max( 0, $page - 1 ) * $per_page )
 		);
 
 		return [
@@ -377,6 +364,16 @@ final class Site_Products_Reader {
 	}
 
 	/**
+	 * The stock a row shows, as SQL: the product's own quantity, or for a variable product (which keeps none) the sum over its
+	 * published variations, so sorting by stock orders what the cell displays.
+	 *
+	 * @return string Prepared SQL over the aliases `p` and `lk`.
+	 */
+	private function shown_stock_sql(): string {
+		return $this->db->prepare( "COALESCE(lk.stock_quantity, (SELECT SUM(vl.stock_quantity) FROM %i AS vl INNER JOIN %i AS v ON v.ID = vl.product_id WHERE v.post_parent = p.ID AND v.post_type = 'product_variation' AND v.post_status IN ('publish', 'private')))", $this->lookup_table(), $this->db->posts ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+	}
+
+	/**
 	 * Full name of WooCommerce's product lookup table.
 	 *
 	 * @return string
@@ -458,8 +455,9 @@ final class Site_Products_Reader {
 
 	/**
 	 * Gives a variation the stock WooCommerce gives it. A variation that does not manage stock itself but sits under a parent that
-	 * does has no quantity in the lookup table; WooCommerce answers with the parent's pool. The offer then carries `stock_pool` (the
-	 * parent's id), so a sum over the variations counts that pool once.
+	 * does has no quantity in the lookup table; WooCommerce answers with the parent's pool, which is the parent's own lookup row
+	 * already read here, so no product is loaded. The offer then carries `stock_pool` (the parent's id), so a sum over the
+	 * variations counts that pool once.
 	 *
 	 * @param array<int,array<string,mixed>> $variations Variations by id.
 	 * @param array<int,array<string,mixed>> $products   Products by id.
@@ -473,13 +471,8 @@ final class Site_Products_Reader {
 				continue;
 			}
 
-			$product  = call_user_func( $this->load, $id );
-			$quantity = null === $product ? null : $product->get_stock_quantity();
-
-			if ( null !== $quantity ) {
-				$variations[ $id ]['stock']      = (int) $quantity;
-				$variations[ $id ]['stock_pool'] = (int) $variation['parent'];
-			}
+			$variations[ $id ]['stock']      = $parent['stock'];
+			$variations[ $id ]['stock_pool'] = (int) $variation['parent'];
 		}
 
 		return $variations;

@@ -80,6 +80,7 @@ abstract class Products_Test_Case extends Export_Test_Case {
 			$this->contexts(),
 			new Link_Detacher( $this->links(), $this->queue(), $this->ledger(), $this->accounts() ),
 			new Link_Scheduler( $this->names() ),
+			$this->ledger(),
 			[
 				'link_candidates' => function (): int {
 					return $this->candidates;
@@ -107,9 +108,6 @@ abstract class Products_Test_Case extends Export_Test_Case {
 			Sqlite_Tables::table( 'sync_state' ),
 			static function ( int $term_id ): array {
 				return [ $term_id ];
-			},
-			static function (): ?\WC_Product {
-				return null;
 			}
 		);
 	}

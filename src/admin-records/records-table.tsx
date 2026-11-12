@@ -304,6 +304,7 @@ export function RecordsTable( {
 		messages,
 		query,
 		rows,
+		children: rows.flatMap( ( row ) => records.children[ row.id ]?.rows ?? [] ),
 		visibleIds: visibleRowIds( rows, records.children ),
 		epoch: records.epoch,
 		loading: records.list.status === 'loading',

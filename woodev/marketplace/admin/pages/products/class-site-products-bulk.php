@@ -16,6 +16,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
+use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 use Woodev\Framework\Marketplace\Sync\Price_Context;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
@@ -101,6 +102,11 @@ final class Site_Products_Bulk {
 	private $scheduler;
 
 	/**
+	 * @var Task_Ledger
+	 */
+	private $ledger;
+
+	/**
 	 * Counts the shop's products the linking job would try to match, in the whole account: `function ( int $account_id ): int`.
 	 *
 	 * @var callable
@@ -142,7 +148,7 @@ final class Site_Products_Bulk {
 	 * @param Link_Scheduler      $scheduler       Queues the linking job.
 	 * @param array<string,mixed> $callbacks       `link_candidates`, `can_edit`, `describe` (see the properties) and `fix_urls` (FIX_* => address).
 	 */
-	public function __construct( Export_Service $export, Wpdb_Link_Store $links, Stock_Intents $stock, Price_Intents $prices, Price_Context $contexts, Link_Detacher $detacher, Link_Scheduler $scheduler, array $callbacks ) {
+	public function __construct( Export_Service $export, Wpdb_Link_Store $links, Stock_Intents $stock, Price_Intents $prices, Price_Context $contexts, Link_Detacher $detacher, Link_Scheduler $scheduler, Task_Ledger $ledger, array $callbacks ) {
 		$this->export          = $export;
 		$this->links           = $links;
 		$this->stock           = $stock;
@@ -150,6 +156,7 @@ final class Site_Products_Bulk {
 		$this->contexts        = $contexts;
 		$this->detacher        = $detacher;
 		$this->scheduler       = $scheduler;
+		$this->ledger          = $ledger;
 		$this->link_candidates = $callbacks['link_candidates'];
 		$this->can_edit        = $callbacks['can_edit'];
 		$this->describe        = $callbacks['describe'];
@@ -278,12 +285,21 @@ final class Site_Products_Bulk {
 		}
 
 		list( $allowed, $denied ) = $this->by_right( $offers, $editable );
+		$busy                     = [];
+
+		if ( in_array( $action, [ self::EXPORT, self::DETACH ], true ) ) {
+			list( $allowed, $busy ) = $this->without_open_tasks( $account, $allowed );
+		}
 
 		$plan           = self::EXPORT === $action ? $this->plan_export( $account, $allowed ) : $this->plan_links( $account, $action, $allowed, $warehouse );
 		$plan['offers'] = $allowed;
 
 		if ( [] !== $denied ) {
 			$plan['groups'][] = $this->group( __( 'у вас нет прав менять этот товар', 'woodev-plugin-framework' ), $denied );
+		}
+
+		if ( [] !== $busy ) {
+			$plan['groups'][] = $this->group( __( 'карточка сейчас отправляется на маркетплейс — дождитесь результата', 'woodev-plugin-framework' ), $busy );
 		}
 
 		return $plan;
@@ -309,6 +325,27 @@ final class Site_Products_Bulk {
 		}
 
 		return [ $allowed, $denied ];
+	}
+
+	/**
+	 * Splits offers by whether an export task of theirs is still open. The result of that task is applied to the link by id; queueing
+	 * or detaching the card meanwhile would drop it, so the activity column's lock is enforced here too.
+	 *
+	 * @param Account $account Account.
+	 * @param int[]   $offers  Offers.
+	 * @return array{0:int[],1:int[]} Free, busy.
+	 */
+	private function without_open_tasks( Account $account, array $offers ): array {
+		$by_link = [];
+
+		foreach ( $this->links->offers_of( $account->id(), $offers ) as $record ) {
+			$by_link[ (int) $record->link_id() ] = $record->wc_product_id();
+		}
+
+		$open = [] === $by_link ? [] : $this->ledger->open_items( $account->id(), array_keys( $by_link ) );
+		$busy = array_values( array_intersect_key( $by_link, $open ) );
+
+		return [ array_values( array_diff( $offers, $busy ) ), $busy ];
 	}
 
 	/**
@@ -489,7 +526,7 @@ final class Site_Products_Bulk {
 		usort(
 			$groups,
 			static function ( array $left, array $right ): int {
-				return count( $right['ids'] ) <=> count( $left['ids'] );
+				return $right['count'] <=> $left['count'];
 			}
 		);
 
@@ -862,7 +899,8 @@ final class Site_Products_Bulk {
 
 		return [
 			'done'   => $outcome['detached'],
-			'groups' => $outcome['kept'] > 0 ? [ $this->group( __( 'товар сейчас выгружается на маркетплейс — повторите позже', 'woodev-plugin-framework' ), array_slice( $ids, 0, $outcome['kept'] ) ) ] : [],
+			// The detacher says how many it kept, not which: naming the first N targets would blame cards that were detached.
+			'groups' => $outcome['kept'] > 0 ? [ $this->group( __( 'товар сейчас выгружается на маркетплейс — повторите позже', 'woodev-plugin-framework' ), [], null, $outcome['kept'] ) ] : [],
 		];
 	}
 
@@ -885,13 +923,15 @@ final class Site_Products_Bulk {
 	 * @param string      $reason Reason.
 	 * @param int[]       $ids    Products with this reason.
 	 * @param string|null $fix    `Validation_Report::FIX_*`.
-	 * @return array{reason:string,ids:int[],fix:?string}
+	 * @param int|null    $count  How many offers, when it is known without naming them; the number of ids when null.
+	 * @return array{reason:string,ids:int[],fix:?string,count:int}
 	 */
-	private function group( string $reason, array $ids, ?string $fix = null ): array {
+	private function group( string $reason, array $ids, ?string $fix = null, ?int $count = null ): array {
 		return [
 			'reason' => $reason,
 			'ids'    => array_values( $ids ),
 			'fix'    => $fix,
+			'count'  => $count ?? count( $ids ),
 		];
 	}
 
@@ -927,7 +967,7 @@ final class Site_Products_Bulk {
 			$out[] = [
 				'kind'      => $kind,
 				'reason'    => $group['reason'],
-				'count'     => count( $group['ids'] ),
+				'count'     => $group['count'],
 				'fix_label' => '' === $url ? '' : $label,
 				'fix_url'   => $url,
 				'examples'  => $this->examples( $group['ids'] ),
