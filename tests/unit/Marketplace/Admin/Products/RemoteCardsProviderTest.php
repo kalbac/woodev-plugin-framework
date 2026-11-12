@@ -82,6 +82,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 
 		$this->assertStringContainsString( 'Тестмаркет', $actions['refresh_list']['scope_sentence'] );
 		$this->assertStringContainsString( 'по всему магазину', $actions['link_by_article']['scope_sentence'] );
+		$this->assertStringNotContainsString( 'отмеченным', $actions['link_by_article']['scope_sentence'], 'no card row can be marked on this table' );
 	}
 
 	public function test_the_table_opens_on_the_cards_that_are_not_on_the_site_yet(): void {

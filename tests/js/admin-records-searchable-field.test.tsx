@@ -1,6 +1,7 @@
 /**
- * A searchable select field of an action: the merchant types, the server filters (a product of the shop, say). The route
- * already took `search`; the field now sends it, debounced, and starts every new search on the first page.
+ * A searchable select field of an action: the merchant types in a search box, the server filters (a product of the shop,
+ * say) and the list shows what the server returned, unfiltered. The route already took `search`; the field now sends it,
+ * debounced, and starts every new search on the first page.
  *
  * @see src/admin-records/actions/fields.tsx
  * @see src/admin-records/actions/use-field-options.ts
@@ -114,9 +115,12 @@ function products( path: string ) {
 		{ value: '11', label: 'Кружка синяя (#11)' },
 		{ value: '12', label: 'Кружка красная (#12)' },
 		{ value: '21', label: 'Футболка (#21)' },
+		{ value: '31', label: 'Футболка хлопковая красная (TSH-01)' },
 	];
+	// Like the shop's own search: every word of the term must be found, in any order, not the whole phrase.
+	const words = term.split( ' ' ).filter( ( word ) => word !== '' );
 
-	return { options: all.filter( ( option ) => option.label.includes( term ) ), next_cursor: null };
+	return { options: all.filter( ( option ) => words.every( ( word ) => option.label.toLowerCase().includes( word.toLowerCase() ) ) ), next_cursor: null };
 }
 
 function previews() {
@@ -163,7 +167,7 @@ describe( 'a searchable select field', () => {
 	test( 'lists the options once, with no search term', async () => {
 		const dialog = await openDialog();
 
-		await within( dialog ).findByRole( 'combobox', { name: 'Товар сайта' } );
+		await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
 		await waitFor( () => expect( optionReads() ).toHaveLength( 1 ) );
 
 		expect( optionReads()[ 0 ] ).not.toContain( 'search=' );
@@ -171,7 +175,7 @@ describe( 'a searchable select field', () => {
 
 	test( 'asks the server for what the merchant typed, once he stops typing', async () => {
 		const dialog = await openDialog();
-		const input = await within( dialog ).findByRole( 'combobox', { name: 'Товар сайта' } );
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
 		await waitFor( () => expect( optionReads() ).toHaveLength( 1 ) );
 
 		fireEvent.change( input, { target: { value: 'Кр' } } );
@@ -199,7 +203,7 @@ describe( 'a searchable select field', () => {
 		} );
 
 		const dialog = await openDialog();
-		const input = await within( dialog ).findByRole( 'combobox', { name: 'Товар сайта' } );
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
 		await waitFor( () => expect( optionReads() ).toHaveLength( 1 ) );
 		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Ещё товары' } ) );
 		await waitFor( () => expect( optionReads() ).toHaveLength( 2 ) );
@@ -214,21 +218,35 @@ describe( 'a searchable select field', () => {
 
 	test( 'sends the chosen product and still names it after another search replaced the list', async () => {
 		const dialog = await openDialog();
-		const input = await within( dialog ).findByRole( 'combobox', { name: 'Товар сайта' } );
-		fireEvent.focus( input );
-		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+		const list = await within( dialog ).findByRole( 'combobox', { name: 'Товар сайта' } );
+		await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } );
 
-		await waitFor( () => expect( input ).toHaveValue( 'Кружка синяя (#11)' ) );
+		fireEvent.change( list, { target: { value: '11' } } );
+		await waitFor( () => expect( list ).toHaveValue( '11' ) );
 
 		fireEvent.change( input, { target: { value: 'Футб' } } );
 		await act( async () => {
 			await new Promise( ( resolve ) => setTimeout( resolve, SEARCH_DELAY_MS * 2 ) );
 		} );
 
-		expect( input ).toHaveValue( 'Футб' );
+		expect( list ).toHaveValue( '11' ); // The search replaced the list; the chosen product stays in it.
+		expect( within( list ).getByRole( 'option', { name: 'Кружка синяя (#11)' } ) ).toBeInTheDocument();
 		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
 		await waitFor( () => expect( previews() ).toHaveLength( 1 ) );
 
 		expect( previews()[ 0 ].data ).toMatchObject( { ids: [ 'c1' ], payload: { product: '11' } } );
+	} );
+
+	test( 'lists what the server found for a several-word search, even when no label holds the whole phrase', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+		await waitFor( () => expect( optionReads() ).toHaveLength( 1 ) );
+
+		fireEvent.change( input, { target: { value: 'футболка красная' } } );
+		await waitFor( () => expect( optionReads() ).toHaveLength( 2 ), { timeout: SEARCH_DELAY_MS * 4 } );
+
+		// The server answered with the one product that has both words; its label has not "футболка красная" in it.
+		expect( await within( dialog ).findByRole( 'option', { name: 'Футболка хлопковая красная (TSH-01)' } ) ).toBeInTheDocument();
 	} );
 } );

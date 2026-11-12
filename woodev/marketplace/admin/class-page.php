@@ -359,9 +359,10 @@ if ( ! class_exists( Page::class, false ) ) :
 				$labels[ (string) $id ] = $label;
 			}
 
+			// A map of one table is a page of one table: it keeps the page's own title, there is nothing to switch between.
 			return [
 				'ids'    => array_keys( $labels ),
-				'labels' => $labels,
+				'labels' => count( $labels ) > 1 ? $labels : [],
 			];
 		}
 

@@ -9732,6 +9732,10 @@ msgstr ""
 msgid "загрузить список карточек с маркетплейса"
 msgstr ""
 
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:63
+msgid "Связывание идёт по всему магазину. По артикулу сопоставляются все карточки аккаунта."
+msgstr ""
+
 #: marketplace/admin/pages/products/class-remote-cards-definition.php:94
 msgid "Номера на маркетплейсе"
 msgstr ""

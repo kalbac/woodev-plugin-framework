@@ -122,9 +122,11 @@ final class Site_Products_Definition {
 	 *
 	 * @since 2.1.5
 	 *
+	 * @param string|null $scope_sentence The sentence that names the reach of the job, for a table whose rows cannot be selected. The
+	 *                                    products table's own wording (which speaks of the marked products) when omitted.
 	 * @return array<string,mixed>
 	 */
-	public static function link_by_article(): array {
+	public static function link_by_article( ?string $scope_sentence = null ): array {
 		return [
 			'id'             => Site_Products_Bulk::LINK_BY_ARTICLE,
 			'label'          => __( 'Связать по артикулу', 'woodev-plugin-framework' ),
@@ -132,7 +134,7 @@ final class Site_Products_Definition {
 			'interaction'    => 'dialog',
 			'scope'          => 'account',
 			'capability'     => 'manage_woocommerce',
-			'scope_sentence' => __( 'Связывание идёт по всему магазину, не только по отмеченным товарам. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ),
+			'scope_sentence' => $scope_sentence ?? __( 'Связывание идёт по всему магазину, не только по отмеченным товарам. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ),
 		];
 	}
 

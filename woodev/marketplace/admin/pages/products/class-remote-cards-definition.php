@@ -61,7 +61,7 @@ final class Remote_Cards_Definition {
 				'max_selection'    => 1,
 			],
 			'row_actions'  => [ self::link_to() ],
-			'bulk_actions' => [ self::refresh( $marketplace ), Site_Products_Definition::link_by_article() ],
+			'bulk_actions' => [ self::refresh( $marketplace ), Site_Products_Definition::link_by_article( __( 'Связывание идёт по всему магазину. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ) ) ],
 			'activity'     => [
 				'refresh_ms'     => 10000,
 				'max_refresh_ms' => 60000,

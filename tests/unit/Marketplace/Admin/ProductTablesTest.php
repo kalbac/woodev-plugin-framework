@@ -66,7 +66,10 @@ final class ProductTablesTest extends TestCase {
 	}
 
 	public function test_the_products_page_of_a_marketplace_without_import_has_the_site_table_only(): void {
-		$this->assertSame( [ 'products' ], $this->products_page( false )->get_tables() );
+		$page = $this->products_page( false );
+
+		$this->assertSame( [ 'products' ], $page->get_tables() );
+		$this->assertSame( [], $page->get_table_labels(), 'one table keeps the page title: nothing to switch between' );
 	}
 
 	public function test_a_map_of_tables_keeps_the_ids_in_order_and_their_labels(): void {
