@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.3] — 2026-11-12
+### Features
+- **marketplace**: Stock select always rendered, oversize flag reaches links (#1742)
+
+
+
 ## [2.1.2] — 2026-11-12
 ### Bug Fixes
 - **marketplace**: Fresh install — lazy settings sections, install outside admin (#1727) (#1731)
