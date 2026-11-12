@@ -14,7 +14,7 @@ use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 /**
  * Reads the posting from the `_fake_posting` meta of the order; records what it was asked to do.
  */
-final class Fake_Order_Canceller implements Order_Canceller {
+class Fake_Order_Canceller implements Order_Canceller {
 	public const META_POSTING  = '_fake_posting';
 	public const META_FINISHED = '_fake_finished';
 

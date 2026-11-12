@@ -100,6 +100,8 @@ final class EmbeddedScreensTest extends TestCase {
 		$adapter->shouldReceive( 'export_rules' )->andReturn( [] );
 		$adapter->shouldReceive( 'stock_policy' )->andReturn( new Stock_Policy( Stock_Policy::FORMULA_WC_ONLY ) );
 		$adapter->shouldReceive( 'supports_oversize' )->andReturn( false );
+		$adapter->shouldReceive( 'price_pusher' )->andReturn( null );
+		$adapter->shouldReceive( 'supports' )->andReturn( false );
 
 		Filters\expectAdded( 'woocommerce_product_data_tabs' )->once();
 		Actions\expectAdded( 'wp_ajax_woodev_fake_product' )->once();

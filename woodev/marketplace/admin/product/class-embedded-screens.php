@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Metabox;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Modal;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
+use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
@@ -134,7 +135,17 @@ final class Embedded_Screens {
 	private static function order_cancel( $plugin, Marketplace_Adapter $adapter, Account_Store $accounts, Admin_Guard $guard, Screen_Names $names, string $assets_url ): void {
 		$modal = new Cancel_Modal( $names, $adapter, $assets_url, $plugin->get_version() );
 
-		( new Cancel_Ajax( $guard, $accounts, $adapter->order_meta(), $adapter, $names ) )->register();
+		( new Cancel_Ajax(
+			$guard,
+			$accounts,
+			$adapter->order_meta(),
+			$adapter,
+			$names,
+			License_Gate::for_plugin( $plugin ),
+			function ( string $line ) use ( $plugin ): void {
+				$plugin->log_error( $line );
+			}
+		) )->register();
 		( new Cancel_Metabox( $names, $adapter, $modal ) )->register();
 	}
 
@@ -197,7 +208,7 @@ final class Embedded_Screens {
 			$accounts,
 			$links,
 			new Panel_Reader( $links, $contexts, $adapter->export_facts(), $validator, $mappings, $warehouses, $store, $accounts, $license, Logging::for_plugin( $plugin ), $pinned, $adapter->article_policy(), $facts ),
-			new Panel_View( $names, $facts->supports_oversize() ),
+			new Panel_View( $names, $facts->supports_oversize(), null !== $adapter->price_pusher() ),
 			new Link_Settings_Writer( $links, $intents, $mappings, $warehouses, $stock, $pinned ),
 			new Link_Form_Input( $pinned ),
 			new Export_Service( $links, $contexts, new Export_Scheduler( $job_names ), $adapter->export_facts(), $validator ),
@@ -211,7 +222,8 @@ final class Embedded_Screens {
 				'mappings' => $plugin->get_marketplace_page_url( 'mappings' ),
 				'assets'   => $assets_url,
 			],
-			$plugin->get_version()
+			$plugin->get_version(),
+			$adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ 'export', 'link' ]
 		);
 	}
 }

@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
+use Woodev\Framework\Marketplace\Jobs\License_Gate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -22,8 +23,8 @@ defined( 'ABSPATH' ) || exit;
  * Every request must pass, in this order: the nonce of this order together with the capability `edit_shop_orders`
  * ({@see Admin_Guard}), then the ownership check — the order carries the owner stamp of an account of this plugin
  * ({@see Order_Meta_Contract::order_owner()}) and a posting number. An order that is not a marketplace order, or whose account is
- * gone, is answered 404 and the marketplace is never asked. The licence gate and the reason check live in the
- * {@see Order_Canceller}.
+ * gone, is answered 404 and the marketplace is never asked. The licence gate runs here, before either remote call; the reason
+ * check lives in the {@see Order_Canceller}. Any other failure of the adapter is answered 502 and logged.
  *
  * The WooCommerce order is not changed here beyond a note: the posting is queued for a refresh, and the order writer moves the order
  * to `cancelled` (restoring stock through WooCommerce) once the marketplace reports it. It works the same on both order storages:
@@ -70,6 +71,20 @@ final class Cancel_Ajax {
 	private $names;
 
 	/**
+	 * Licence.
+	 *
+	 * @var License_Gate
+	 */
+	private $license;
+
+	/**
+	 * Writes a line to the plugin's log: `function ( string $line ): void`.
+	 *
+	 * @var callable|null
+	 */
+	private $log_error;
+
+	/**
 	 * Creates the handler.
 	 *
 	 * @since 2.1.2
@@ -79,13 +94,17 @@ final class Cancel_Ajax {
 	 * @param Order_Meta_Contract $meta      The marketplace's order meta contract.
 	 * @param Order_Canceller     $canceller The marketplace's cancellation.
 	 * @param Screen_Names        $names     Names.
+	 * @param License_Gate        $license   Licence: no licence in force, no remote call.
+	 * @param callable|null       $log_error `function ( string $line ): void`, for failures that are not a refusal.
 	 */
-	public function __construct( Admin_Guard $guard, Account_Store $accounts, Order_Meta_Contract $meta, Order_Canceller $canceller, Screen_Names $names ) {
+	public function __construct( Admin_Guard $guard, Account_Store $accounts, Order_Meta_Contract $meta, Order_Canceller $canceller, Screen_Names $names, License_Gate $license, ?callable $log_error = null ) {
 		$this->guard     = $guard;
 		$this->accounts  = $accounts;
 		$this->meta      = $meta;
 		$this->canceller = $canceller;
 		$this->names     = $names;
+		$this->license   = $license;
+		$this->log_error = $log_error;
 	}
 
 	/**
@@ -114,6 +133,8 @@ final class Cancel_Ajax {
 			$reasons = $this->canceller->reasons( $account, $posting_number );
 		} catch ( Cancel_Refused $e ) {
 			wp_send_json_error( [ 'message' => $e->getMessage() ], $e->status() );
+		} catch ( \Throwable $e ) {
+			$this->fail_unexpectedly( $e );
 		}
 
 		if ( [] === $reasons ) {
@@ -149,6 +170,8 @@ final class Cancel_Ajax {
 			);
 		} catch ( Cancel_Refused $e ) {
 			wp_send_json_error( [ 'message' => $e->getMessage() ], $e->status() );
+		} catch ( \Throwable $e ) {
+			$this->fail_unexpectedly( $e );
 		}
 
 		/* translators: 1: posting number, 2: marketplace name, 3: cancellation reason. */
@@ -186,8 +209,37 @@ final class Cancel_Ajax {
 		}
 
 		$this->require_usable( $account );
+		$this->require_licence();
 
 		return [ $order, $account, $posting_number ];
+	}
+
+	/**
+	 * Refuses every remote call (the reasons included) while the licence is not in force.
+	 *
+	 * @return void
+	 * @throws Cancel_Refused When the licence is not in force.
+	 */
+	private function require_licence(): void {
+		$refusal = $this->license->refusal_for( __( 'отменить отправление на маркетплейсе', 'woodev-plugin-framework' ) );
+
+		if ( null !== $refusal ) {
+			throw new Cancel_Refused( $refusal, 403 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+	}
+
+	/**
+	 * Answers 502 for a failure the adapter did not turn into a {@see Cancel_Refused}, and logs it.
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return void
+	 */
+	private function fail_unexpectedly( \Throwable $e ): void {
+		if ( null !== $this->log_error ) {
+			call_user_func( $this->log_error, sprintf( 'Cancelling a posting failed: %s: %s', get_class( $e ), $e->getMessage() ) );
+		}
+
+		wp_send_json_error( [ 'message' => __( 'Маркетплейс не ответил. Повторите позже.', 'woodev-plugin-framework' ) ], 502 );
 	}
 
 	/**

@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Order_Canceller;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Json_Answer;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Account_Store;
@@ -61,6 +62,20 @@ final class CancelAjaxTest extends TestCase {
 	private $notes = [];
 
 	/**
+	 * Whether the licence is in force.
+	 *
+	 * @var bool
+	 */
+	private $licensed = true;
+
+	/**
+	 * Lines logged.
+	 *
+	 * @var string[]
+	 */
+	private $logged = [];
+
+	/**
 	 * Boots the doubles: a licensed user, a valid nonce, one enabled account, one marketplace order.
 	 *
 	 * @return void
@@ -68,7 +83,11 @@ final class CancelAjaxTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
+		$this->licensed = true;
+		$this->logged   = [];
+
 		Json_Answer::install();
+		Functions\when( 'admin_url' )->justReturn( 'https://example.test/wp-admin/admin.php?page=x' );
 		Functions\when( 'sanitize_text_field' )->returnArg();
 		Functions\when( 'sanitize_textarea_field' )->returnArg();
 		Functions\when( 'wp_unslash' )->returnArg();
@@ -228,6 +247,36 @@ final class CancelAjaxTest extends TestCase {
 		$this->assertSame( [], $this->notes );
 	}
 
+	public function test_without_a_licence_neither_the_reasons_nor_the_cancellation_reach_the_marketplace(): void {
+		$this->licensed     = false;
+		$_POST['reason_id'] = '1';
+
+		foreach ( [ 'handle_reasons', 'handle_cancel' ] as $handler ) {
+			$answer = $this->call( $handler );
+
+			$this->assertFalse( $answer->success, $handler );
+			$this->assertSame( 403, $answer->status, $handler );
+		}
+
+		$this->assertSame( 0, $this->canceller->reason_calls );
+		$this->assertSame( [], $this->canceller->cancelled );
+	}
+
+	public function test_a_failure_that_is_not_a_refusal_is_a_502_and_is_logged(): void {
+		$this->canceller = new class() extends Fake_Order_Canceller {
+			public function reasons( \Woodev\Framework\Marketplace\Account\Account $account, string $posting_number ): array {
+				throw new \RuntimeException( 'HTTP 503' );
+			}
+		};
+
+		$answer = $this->call( 'handle_reasons' );
+
+		$this->assertFalse( $answer->success );
+		$this->assertSame( 502, $answer->status );
+		$this->assertCount( 1, $this->logged );
+		$this->assertStringContainsString( 'HTTP 503', $this->logged[0] );
+	}
+
 	public function test_an_empty_reason_list_is_a_502(): void {
 		$this->canceller->reasons = [];
 
@@ -241,7 +290,17 @@ final class CancelAjaxTest extends TestCase {
 	 * @return Json_Answer
 	 */
 	private function call( string $handler ): Json_Answer {
-		$ajax = new Cancel_Ajax( new Admin_Guard(), $this->accounts, $this->meta, $this->canceller, new Screen_Names( 'fake', 'Fake' ) );
+		$ajax = new Cancel_Ajax( new Admin_Guard(), $this->accounts, $this->meta, $this->canceller,
+			new Screen_Names( 'fake', 'Fake' ),
+			new License_Gate(
+				function (): bool {
+					return $this->licensed;
+				}
+			),
+			function ( string $line ): void {
+				$this->logged[] = $line;
+			}
+		);
 
 		try {
 			$ajax->{$handler}();

@@ -56,6 +56,27 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( '[is_oversize]', $with );
 	}
 
+	public function test_the_price_fields_are_hidden_for_a_marketplace_without_prices(): void {
+		$with = $this->render_tab( [ $this->block() ], [] );
+
+		ob_start();
+		( new Panel_View( new Screen_Names( 'fake', 'Fake' ), false, false ) )->render_tab(
+			[
+				'blocks'       => [ $this->block() ],
+				'nonce'        => 'save-nonce',
+				'ops'          => [],
+				'link_scope'   => '',
+				'settings_url' => 'https://example.test/settings',
+				'mappings_url' => 'https://example.test/mappings',
+			]
+		);
+		$without = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '[price][price][kind]', $with );
+		$this->assertStringNotContainsString( '[price][price][kind]', $without );
+		$this->assertStringContainsString( '[sync_price]', $without );
+	}
+
 	public function test_a_variation_panel_uses_the_loop_in_its_field_names(): void {
 		ob_start();
 		( new Panel_View( new Screen_Names( 'fake', 'Fake' ) ) )->render_variation(

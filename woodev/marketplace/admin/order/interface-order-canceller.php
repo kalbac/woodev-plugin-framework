@@ -62,7 +62,7 @@ interface Order_Canceller {
 	public function other_reason_id(): int;
 
 	/**
-	 * Cancels the posting on the marketplace. The licence gate and the reason check live here.
+	 * Cancels the posting on the marketplace. The reason check lives here; the licence gate has already run ({@see Cancel_Ajax}).
 	 *
 	 * @since 2.1.2
 	 *

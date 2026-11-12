@@ -9146,3 +9146,11 @@ msgstr ""
 #: marketplace/admin/product/class-product-tab.php:595
 msgid "Архивация поставлена в очередь: остаток на маркетплейсе станет нулевым, затем карточка уйдёт в архив. Это происходит в течение нескольких минут; состояние обновится — обновите страницу. Товар на сайте не меняется."
 msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:224
+msgid "отменить отправление на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/order/class-cancel-ajax.php:242
+msgid "Маркетплейс не ответил. Повторите позже."
+msgstr ""

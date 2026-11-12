@@ -131,6 +131,20 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 		$this->assertSame( 409, $answer->status ); // Past the guard: the product has no link to detach.
 	}
 
+	public function test_operations_the_marketplace_cannot_serve_get_no_button_and_no_answer(): void {
+		$id = $this->tab_product( 'ART-12', 5012 );
+
+		foreach ( [ 'export', 'link' ] as $op ) {
+			$this->request_button( $op, $id, 'ok:woodev_fake_product_save_' . $op );
+
+			$this->assertSame( 400, $this->press( [ 'export', 'link' ] )->status, $op );
+		}
+
+		$this->request_button( 'archive', $id, 'ok:woodev_fake_product_save_archive' );
+
+		$this->assertTrue( $this->press( [ 'export', 'link' ] )->success ); // The others still work.
+	}
+
 	public function test_an_unknown_account_is_refused(): void {
 		$id = $this->tab_product( 'ART-6', 5006 );
 		$this->request_button( 'archive', $id, 'ok:woodev_fake_product_save_archive' );
@@ -214,11 +228,12 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 	/**
 	 * Runs the AJAX handler and returns the answer.
 	 *
+	 * @param string[] $withheld Operations the marketplace cannot serve.
 	 * @return Json_Answer
 	 */
-	private function press(): Json_Answer {
+	private function press( array $withheld = [] ): Json_Answer {
 		try {
-			$this->tab()->handle_ajax();
+			$this->tab( $withheld )->handle_ajax();
 		} catch ( Json_Answer $answer ) {
 			return $answer;
 		}
@@ -267,9 +282,10 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 	/**
 	 * Builds the tab over the real stores, with the collaborators the refused requests never reach left bare.
 	 *
+	 * @param string[] $withheld Operations the marketplace cannot serve.
 	 * @return Product_Tab
 	 */
-	private function tab(): Product_Tab {
+	private function tab( array $withheld = [] ): Product_Tab {
 		$names  = new Screen_Names( 'fake', 'Fake' );
 		$pinned = new Pinned_Offer_Id( 'fake', new Fake_Article_Policy() );
 		$gate   = new License_Gate(
@@ -297,7 +313,8 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 				'mappings' => 'https://example.test/mappings',
 				'assets'   => 'https://example.test/assets/',
 			],
-			'1.0'
+			'1.0',
+			$withheld
 		);
 	}
 

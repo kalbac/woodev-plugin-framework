@@ -163,6 +163,13 @@ final class Product_Tab {
 	private $version;
 
 	/**
+	 * Operations the marketplace cannot serve.
+	 *
+	 * @var string[]
+	 */
+	private $withheld;
+
+	/**
 	 * Creates the tab.
 	 *
 	 * @since 2.1.2
@@ -182,8 +189,9 @@ final class Product_Tab {
 	 * @param Screen_Names         $names     Names.
 	 * @param array<string,string> $urls      `settings`, `mappings`, `assets`.
 	 * @param string               $version   Plugin version.
+	 * @param string[]             $withheld  Operations the marketplace cannot serve (`export`, `link`): no button, and the AJAX refuses them.
 	 */
-	public function __construct( Admin_Guard $guard, Wpdb_Account_Store $accounts, Wpdb_Link_Store $links, Panel_Reader $reader, Panel_View $view, Link_Settings_Writer $writer, Link_Form_Input $input, Export_Service $export, Link_Scheduler $scheduler, License_Gate $license, Link_Detacher $detacher, Stock_Intents $stock, Screen_Names $names, array $urls, string $version ) {
+	public function __construct( Admin_Guard $guard, Wpdb_Account_Store $accounts, Wpdb_Link_Store $links, Panel_Reader $reader, Panel_View $view, Link_Settings_Writer $writer, Link_Form_Input $input, Export_Service $export, Link_Scheduler $scheduler, License_Gate $license, Link_Detacher $detacher, Stock_Intents $stock, Screen_Names $names, array $urls, string $version, array $withheld = [] ) {
 		$this->guard     = $guard;
 		$this->accounts  = $accounts;
 		$this->links     = $links;
@@ -199,6 +207,7 @@ final class Product_Tab {
 		$this->names     = $names;
 		$this->urls      = $urls;
 		$this->version   = $version;
+		$this->withheld  = $withheld;
 	}
 
 	/**
@@ -352,7 +361,7 @@ final class Product_Tab {
 		$product_id = $this->posted_id( 'product_id' );
 		$account_id = $this->posted_id( 'account_id' );
 
-		if ( '' === $op || $product_id <= 0 || $account_id <= 0 ) {
+		if ( '' === $op || $product_id <= 0 || $account_id <= 0 || in_array( $op, $this->withheld, true ) ) {
 			$this->fail( __( 'Запрос не удалось разобрать. Обновите страницу и повторите.', 'woodev-plugin-framework' ), 400 );
 		}
 
@@ -697,6 +706,10 @@ final class Product_Tab {
 		$shop   = current_user_can( self::SHOP_CAP ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- WooCommerce's own capability.
 
 		foreach ( self::OPS as $op ) {
+			if ( in_array( $op, $this->withheld, true ) ) {
+				continue;
+			}
+
 			if ( $shop || ! in_array( $op, self::SHOP_OPS, true ) ) {
 				$nonces[ $op ] = wp_create_nonce( $this->names->save_nonce() . '_' . $op );
 			}

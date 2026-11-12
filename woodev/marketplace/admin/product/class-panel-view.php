@@ -39,16 +39,25 @@ final class Panel_View {
 	private $oversize;
 
 	/**
+	 * Tells whether the price fields are shown.
+	 *
+	 * @var bool
+	 */
+	private $prices;
+
+	/**
 	 * Creates the view.
 	 *
 	 * @since 2.1.2
 	 *
 	 * @param Screen_Names $names    Names.
 	 * @param bool         $oversize Whether the marketplace has an oversize flag ({@see Product_Tab_Facts::supports_oversize()}).
+	 * @param bool         $prices   Whether the marketplace takes prices; false hides the price fields.
 	 */
-	public function __construct( Screen_Names $names, bool $oversize = false ) {
+	public function __construct( Screen_Names $names, bool $oversize = false, bool $prices = true ) {
 		$this->names    = $names;
 		$this->oversize = $oversize;
+		$this->prices   = $prices;
 	}
 
 	/**
@@ -283,7 +292,9 @@ final class Panel_View {
 		);
 
 		$this->warehouse_field( $block['warehouse'], $base, $id );
-		$this->price_fields( $block['price'], $base, $id );
+		if ( $this->prices ) {
+			$this->price_fields( $block['price'], $base, $id );
+		}
 
 		if ( $this->oversize ) {
 			$this->row( '', __( 'Крупногабарит', 'woodev-plugin-framework' ), $this->checkbox( $base . '[is_oversize]', $id . 'is_oversize', (bool) $block['oversize'], __( 'Крупногабаритный товар', 'woodev-plugin-framework' ) ), __( 'Отметьте, если маркетплейс считает товар крупногабаритным. Для такого товара нужно выбрать склад выше: запасного склада нет.', 'woodev-plugin-framework' ) );
