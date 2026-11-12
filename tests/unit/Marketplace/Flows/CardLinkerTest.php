@@ -161,6 +161,43 @@ final class CardLinkerTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * A card's oversize flag (Ozon «КГТ») reaches the new row.
+	 *
+	 * @return void
+	 */
+	public function test_the_oversize_flag_of_a_new_link_is_written(): void {
+		$this->linker->link( $this->account_id, 101, 0, $this->card( [ 'oversize' => true ] ) );
+
+		$this->assertTrue( $this->link_of( 101 )->is_oversize() );
+	}
+
+	/**
+	 * An idle row adopts the card's oversize flag too.
+	 *
+	 * @return void
+	 */
+	public function test_the_oversize_flag_of_an_adopted_row_is_written(): void {
+		$this->links()->insert_if_absent( Link_Record::offer( $this->account_id, 101, 0, '' ) );
+
+		$this->linker->link( $this->account_id, 101, 0, $this->card( [ 'oversize' => true ] ) );
+
+		$this->assertTrue( $this->link_of( 101 )->is_oversize() );
+	}
+
+	/**
+	 * A card without the `oversize` key leaves the stored flag alone: it is never reset to false.
+	 *
+	 * @return void
+	 */
+	public function test_an_absent_oversize_key_keeps_the_stored_flag(): void {
+		$this->links()->insert_if_absent( Link_Record::offer( $this->account_id, 101, 0, '', [ 'is_oversize' => 1 ] ) );
+
+		$this->linker->link( $this->account_id, 101, 0, $this->card() );
+
+		$this->assertTrue( $this->link_of( 101 )->is_oversize() );
+	}
+
+	/**
 	 * A product that already has an article keeps its link, whatever the new card is.
 	 *
 	 * @return void
