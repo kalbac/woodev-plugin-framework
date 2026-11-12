@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * One exception keeps a `legacy` order honest when its lines change: the order writer gives back what the old lines took and
  * marks the order ({@see self::META_STOCK_PENDING}) before the new lines take theirs. That reduction is this generation's own
- * accounting of the new lines, so it is allowed in `site` mode; otherwise a legacy order whose line was replaced would give
+ * accounting of the new lines, so it is allowed in `site` or `off` mode; otherwise a legacy order whose line was replaced would give
  * stock back and never take it again.
  *
  * Where the stamp is kept and how an order names its account is the plugin's order meta, so both are asked through callables.
