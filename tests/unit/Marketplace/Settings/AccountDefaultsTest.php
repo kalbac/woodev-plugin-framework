@@ -20,6 +20,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Flows\Export_Price_Policy;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
+use Woodev\Framework\Marketplace\Price\Price_Rule;
 use Woodev\Framework\Marketplace\Settings\Account_Status;
 use Woodev\Framework\Marketplace\Settings\Accounts_Sections;
 use Woodev\Framework\Marketplace\Settings\Credential_Field_Spec;
@@ -423,6 +424,22 @@ final class AccountDefaultsTest extends TestCase {
 		$errors = $this->handler( $adapter, $store )->validate_values( [ "account_{$id}_price_min_percent" => '500' ] );
 
 		$this->assertArrayHasKey( "account_{$id}_price_min_percent", $errors );
+	}
+
+	public function test_a_price_switch_to_own_is_validated_against_the_defaults_it_copies(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$this->options[ Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ) ] = [ 'markup_kind' => Price_Rule::MARKUP_FIXED, 'markup' => '100' ];
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] ) );
+
+		$errors = $this->handler( $adapter, $store )->validate_values(
+			[
+				"account_{$id}_override_prices" => 'own',
+				"account_{$id}_price_markup"    => '-50',
+			]
+		);
+
+		$this->assertArrayHasKey( "account_{$id}_price_markup", $errors, 'the markup is checked against the «Общие» kind that the switch copies' );
+		$this->assertFalse( Effective_Settings::uses_own( $store->get( $id )->settings(), Effective_Settings::GROUP_PRICES ), 'validation saves nothing' );
 	}
 
 	// Runtime readers -----------------------------------------------------------------------------------------------------

@@ -1337,7 +1337,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		foreach ( $this->accounts() as $account ) {
 			$key    = (string) $account->id();
-			$stored = (array) $account->setting( 'price_rule', [] );
+			$stored = $this->resolver()->price_rule( $account );
 			$id_for = static function ( string $field ) use ( $key ): string {
 				return self::setting_id( $key, $field );
 			};
