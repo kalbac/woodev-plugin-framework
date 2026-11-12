@@ -154,6 +154,74 @@ final class OptionBackedStoresTest extends TestCase {
 	}
 
 	/**
+	 * A pair the merchant answered «no» to is not offered by the next run; it is, once an article of the pair changed, and the
+	 * memory goes with the account's options.
+	 *
+	 * @return void
+	 */
+	public function test_a_dismissed_pair_stays_out_of_the_next_run_until_an_article_changes(): void {
+		$store = new Link_Report_Store( 'woodev_one_' );
+		$pair  = static function ( int $product, string $sku, string $offer ): array {
+			return [
+				'wc_product_id' => $product,
+				'wc_sku'        => $sku,
+				'card'          => [ 'offer_id' => $offer ],
+			];
+		};
+
+		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ), $pair( 2, 'XYZ', 'xyz' ) ] );
+
+		$this->assertTrue( $store->dismiss_near_match( 3, 1, 'abc-1' ) );
+		$this->assertFalse( $store->dismiss_near_match( 3, 1, 'abc-1' ), 'the pair is gone from the report: nothing to dismiss twice' );
+		$this->assertSame( [ 2 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ) );
+
+		$this->assertSame( 0, $store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ), $pair( 2, 'XYZ', 'xyz' ) ] ) );
+		$this->assertSame( [ 2 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ), 'the same pair is not offered again' );
+
+		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ) ] );
+		$this->assertSame( [], $store->near_matches( 3 ), 'a run that finds only the answered pair offers nothing' );
+
+		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1x', 'abc-1' ) ] );
+		$this->assertSame( [ 1 ], array_column( $store->near_matches( 3 ), 'wc_product_id' ), 'a changed article makes it a new question' );
+
+		$store->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ) ] );
+		$this->assertSame( [], $store->near_matches( 3 ), 'the answer outlives a run that did not find the pair' );
+
+		$other = new Link_Report_Store( 'woodev_two_' );
+		$other->replace_near_matches( 3, [ $pair( 1, 'ABC-1', 'abc-1' ) ] );
+		$this->assertCount( 1, $other->near_matches( 3 ), 'another plugin\'s family is untouched' );
+	}
+
+	/**
+	 * Forgetting an account removes its report, its answered pairs and its last run, and only those of that account.
+	 *
+	 * @return void
+	 */
+	public function test_forgetting_an_account_removes_only_its_report_answers_and_run(): void {
+		$store = new Link_Report_Store( 'woodev_one_' );
+		$other = new Link_Report_Store( 'woodev_two_' );
+		$pair  = [ 'wc_product_id' => 1, 'wc_sku' => 'ABC-1', 'card' => [ 'offer_id' => 'abc-1' ] ];
+
+		foreach ( [ [ $store, 3 ], [ $store, 33 ], [ $other, 3 ] ] as [ $target, $account ] ) {
+			$target->replace_near_matches( $account, [ $pair ] );
+			$target->dismiss_near_match( $account, 1, 'abc-1' );
+			$target->save_run( $account, [ 'linked' => 2 ] );
+		}
+
+		$store->forget_account( 3 );
+
+		$this->assertSame( [], $store->near_matches( 3 ) );
+		$this->assertNull( $store->last_run( 3 ) );
+		$this->assertArrayNotHasKey( 'woodev_one_near_dismissed_3', $this->storage, 'the answered pairs go too' );
+		$this->assertArrayNotHasKey( 'woodev_one_near_matches_3', $this->storage );
+		$this->assertArrayNotHasKey( 'woodev_one_link_run_3', $this->storage );
+
+		foreach ( [ 'woodev_one_link_run_33', 'woodev_one_near_dismissed_33', 'woodev_two_link_run_3', 'woodev_two_near_dismissed_3' ] as $kept ) {
+			$this->assertArrayHasKey( $kept, $this->storage, 'another account and another plugin keep ' . $kept );
+		}
+	}
+
+	/**
 	 * The near-match report is capped, replaced by a new run, found by pair, and settled by a decision.
 	 *
 	 * @return void

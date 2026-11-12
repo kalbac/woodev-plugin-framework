@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Marketplace\Admin\Product\Card_State_Badge;
+use Woodev\Framework\Marketplace\Catalog\Offer_Id_Likeness;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 
 defined( 'ABSPATH' ) || exit;
@@ -76,6 +77,72 @@ final class Remote_Cards_Rows {
 			'selectable'   => false,
 			'has_children' => false,
 		];
+	}
+
+	/**
+	 * Builds a row of the near-match report: the card, the product it looks like, and the two answers.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param int                 $account_id Account id.
+	 * @param array<string,mixed> $entry      Report entry: `wc_product_id`, `wc_sku`, `relation`, `card`.
+	 * @return array<string,mixed>
+	 */
+	public function near_row( int $account_id, array $entry ): array {
+		$card       = (array) ( $entry['card'] ?? [] );
+		$offer_id   = (string) ( $card['offer_id'] ?? '' );
+		$product_id = (int) ( $entry['wc_product_id'] ?? 0 );
+
+		return [
+			'id'           => Remote_Cards_Ids::near_row_id( $account_id, $offer_id, $product_id ),
+			'revision'     => '',
+			'cells'        => [
+				'offer_id' => $offer_id,
+				'name'     => (string) ( $card['name'] ?? '' ),
+				'ids'      => $this->ids( (array) ( $card['remote_ids'] ?? [] ) ),
+				'state'    => $this->state( array_merge( $card, [ 'details_ok' => true ] ) ),
+				'on_site'  => array_merge(
+					$this->on_site( $product_id ),
+					[
+						[
+							'type'  => 'text',
+							/* translators: %s: the article of the shop product. */
+							'value' => sprintf( __( 'Артикул на сайте: %s', 'woodev-plugin-framework' ), (string) ( $entry['wc_sku'] ?? '' ) ),
+						],
+						[
+							'type'  => 'text',
+							'value' => self::relation_label( (string) ( $entry['relation'] ?? '' ) ),
+						],
+					]
+				),
+			],
+			'actions'      => [
+				[
+					'id'      => Remote_Cards_Definition::NEAR_CONFIRM,
+					'enabled' => true,
+					'reason'  => '',
+				],
+				[
+					'id'      => Remote_Cards_Definition::NEAR_DISMISS,
+					'enabled' => true,
+					'reason'  => '',
+				],
+			],
+			'selectable'   => false,
+			'has_children' => false,
+		];
+	}
+
+	/**
+	 * Says how the two articles of a near match differ.
+	 *
+	 * @param string $relation {@see Offer_Id_Likeness::CASE} or {@see Offer_Id_Likeness::LOOK_ALIKE}.
+	 * @return string
+	 */
+	private static function relation_label( string $relation ): string {
+		return Offer_Id_Likeness::CASE === $relation
+			? __( 'Артикулы отличаются регистром букв', 'woodev-plugin-framework' )
+			: __( 'Артикулы отличаются похожими буквами или цифрами', 'woodev-plugin-framework' );
 	}
 
 	/**

@@ -69,12 +69,8 @@ final class Wpdb_Catalog_Cache {
 			return 0;
 		}
 
-		$rows         = array_merge( $keys, array_map(
-			static function ( string $key ): string {
-				return self::FETCHED_PREFIX . $key;
-			},
-			$keys
-		) );
+		$twins        = array_map( [ $this, 'fetched_key' ], $keys );
+		$rows         = array_merge( $keys, $twins );
 		$placeholders = implode( ', ', array_fill( 0, count( $rows ), '%s' ) );
 		$sql          = $this->db->prepare( "DELETE FROM {$this->table} WHERE cache_key IN ({$placeholders})", $rows ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- The table name is ours; the placeholders are generated.
 		$deleted      = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
@@ -84,6 +80,16 @@ final class Wpdb_Catalog_Cache {
 		}
 
 		return (int) $deleted;
+	}
+
+	/**
+	 * The key of the row that tells when a key was fetched.
+	 *
+	 * @param string $key Cache key.
+	 * @return string
+	 */
+	private function fetched_key( string $key ): string {
+		return self::FETCHED_PREFIX . $key;
 	}
 
 	/**
