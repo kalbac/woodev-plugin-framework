@@ -422,6 +422,31 @@ final class Poll_Task_Runner {
 	}
 
 	/**
+	 * Writes the marketplace's oversize flag of a card to its link. The state stays as the run read it; an answer without the
+	 * flag ({@see Card_Outcome::oversize()} is null) keeps the stored value.
+	 *
+	 * @param int          $task_id Task id.
+	 * @param Link_Record  $link    Link the card belongs to.
+	 * @param Card_Outcome $outcome What the marketplace reports for the card.
+	 * @param Claim_Fence  $fence   The run's claim.
+	 * @return void
+	 */
+	private function remember_oversize( int $task_id, Link_Record $link, Card_Outcome $outcome, Claim_Fence $fence ): void {
+		if ( null === $outcome->oversize() ) {
+			return;
+		}
+
+		$this->links->advance(
+			(int) $link->link_id(),
+			$task_id,
+			$link->card_state(),
+			[ 'is_oversize' => $outcome->oversize() ? 1 : 0 ],
+			$fence,
+			$link->card_state()
+		);
+	}
+
+	/**
 	 * Applies each card of the answer to its link.
 	 *
 	 * @param Account                    $account  Account.
@@ -447,6 +472,8 @@ final class Poll_Task_Runner {
 			if ( $outcome->is_created() ) {
 				$created[ $card_id ] = true;
 			}
+
+			$this->remember_oversize( $task_id, $link, $outcome, $fence );
 
 			if ( Link_Record::STATE_CREATED === $link->card_state() ) {
 				$this->learn_late_ids( $task_id, $link, $outcome, $fence );

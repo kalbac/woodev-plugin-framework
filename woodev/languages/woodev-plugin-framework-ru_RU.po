@@ -8207,6 +8207,10 @@ msgstr ""
 msgid "Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено."
 msgstr ""
 
+#: marketplace/settings/class-accounts-sections.php:659
+msgid "In the other direction, add products manually on the Products screen."
+msgstr "В обратную сторону — вручную на экране Товары."
+
 #: marketplace/settings/class-accounts-sections.php:676
 msgid "От какой цены считать"
 msgstr ""

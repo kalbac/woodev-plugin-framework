@@ -53,6 +53,13 @@ final class Card_Outcome {
 	private $remote_ids;
 
 	/**
+	 * Whether the marketplace marks the card as oversize (KGT), or null when the answer does not say.
+	 *
+	 * @var bool|null
+	 */
+	private $oversize;
+
+	/**
 	 * Creates the outcome.
 	 *
 	 * @since 2.1.0
@@ -62,13 +69,15 @@ final class Card_Outcome {
 	 * @param bool                     $failed      Whether the marketplace declined it.
 	 * @param string                   $status_text Status in the marketplace's words.
 	 * @param array<string,int|string> $remote_ids  Identifiers the card carries.
+	 * @param bool|null                $oversize    The marketplace's oversize flag, null when the answer does not carry one.
 	 */
-	public function __construct( string $state, bool $created, bool $failed, string $status_text, array $remote_ids = [] ) {
+	public function __construct( string $state, bool $created, bool $failed, string $status_text, array $remote_ids = [], ?bool $oversize = null ) {
 		$this->state       = $state;
 		$this->created     = $created;
 		$this->failed      = $failed;
 		$this->status_text = $status_text;
 		$this->remote_ids  = $remote_ids;
+		$this->oversize    = $oversize;
 	}
 
 	/**
@@ -124,5 +133,16 @@ final class Card_Outcome {
 	 */
 	public function remote_ids(): array {
 		return $this->remote_ids;
+	}
+
+	/**
+	 * Returns the marketplace's oversize flag, or null when the answer does not carry one (an absent flag keeps the stored one).
+	 *
+	 * @since 2.1.3
+	 *
+	 * @return bool|null
+	 */
+	public function oversize(): ?bool {
+		return $this->oversize;
 	}
 }
