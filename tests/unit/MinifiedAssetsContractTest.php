@@ -27,6 +27,8 @@ class MinifiedAssetsContractTest extends TestCase {
 		'woodev/payment-gateway/assets/css',
 		'woodev/shipping-method/assets/js',
 		'woodev/shipping-method/assets/css',
+		'woodev/marketplace/assets/js',
+		'woodev/marketplace/assets/css',
 	];
 
 	/** Third-party `.min` files shipped as they are; the only `.min` names PHP may spell literally. */
@@ -267,7 +269,7 @@ class MinifiedAssetsContractTest extends TestCase {
 	 * looks like: the enqueue compiles, the browser 404s.
 	 */
 	public function test_complete_asset_path_literals_resolve_to_a_file(): void {
-		$roots   = [ 'woodev/assets', 'woodev/payment-gateway/assets', 'woodev/shipping-method/assets' ];
+		$roots   = [ 'woodev/assets', 'woodev/payment-gateway/assets', 'woodev/shipping-method/assets', 'woodev/marketplace/assets' ];
 		$missing = [];
 		$checked = 0;
 

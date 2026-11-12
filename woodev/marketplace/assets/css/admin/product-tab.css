@@ -1,0 +1,161 @@
+/* The marketplace tab of the product edit screen. */
+#woocommerce-product-data ul.wc-tabs li.woodev-mp-tab-link a::before {
+	content: "\f513";
+}
+
+.woodev-mp-tab .woodev-mp-block__title {
+	margin: 0;
+	padding: 12px 12px 4px;
+	font-size: 14px;
+}
+
+.woodev-mp-tab .woodev-mp-block .form-field > .woodev-mp-check {
+	float: none;
+	width: auto;
+	margin: 0 12px 0 0;
+	padding: 0;
+}
+
+.woodev-mp-tab .woodev-mp-block .form-field > select.short,
+.woodev-mp-tab .woodev-mp-block .form-field > input.short,
+.woodev-mp-tab .woodev-mp-block .form-field > .woodev-mp-kind {
+	margin-right: 4px;
+}
+
+.woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-kind {
+	width: 28%;
+}
+
+.woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-value {
+	width: 20%;
+}
+
+.woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-wide {
+	width: 62%;
+}
+
+.woodev-mp-tab .woodev-mp-buttons .woodev-mp-buttons__row {
+	display: inline-block;
+	width: 75%;
+}
+
+.woodev-mp-badge {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 2px 8px;
+	border-radius: 10px;
+	background: #dcdcde;
+	color: #1d2327;
+	font-size: 12px;
+	font-weight: 500;
+	vertical-align: middle;
+}
+
+.woodev-mp-badge--ok {
+	background: #c6e1c6;
+	color: #0b3d0b;
+}
+
+.woodev-mp-badge--wait {
+	background: #f8dda7;
+	color: #573b00;
+}
+
+.woodev-mp-badge--error {
+	background: #eba3a3;
+	color: #570000;
+}
+
+.woodev-mp-ok {
+	color: #007017;
+}
+
+.woodev-mp-error,
+.woodev-mp-result--error {
+	color: #b32d2e;
+}
+
+.woodev-mp-issues {
+	display: inline-block;
+	max-width: 62%;
+	vertical-align: top;
+}
+
+.woodev-mp-issue {
+	display: block;
+	margin: 0 0 4px;
+}
+
+.woodev-mp-issue--error::before {
+	content: "✗ ";
+	color: #b32d2e;
+}
+
+.woodev-mp-issue--warning::before {
+	content: "! ";
+	color: #996800;
+}
+
+.woodev-mp-tab .woodev-mp-buttons .woodev-mp-result {
+	display: block;
+	margin: 6px 0 0 162px;
+}
+
+.woodev-mp-tab .woodev-mp-variations {
+	width: auto;
+	margin: 12px;
+}
+
+.woodev-mp-variation {
+	margin: 0 0 12px;
+	padding: 0 12px;
+	border-top: 1px solid #dcdcde;
+}
+
+.woodev-mp-variation .form-field {
+	display: block;
+	clear: both;
+	margin: 0;
+	padding: 6px 0;
+}
+
+.woodev-mp-variation .form-field > label:first-child {
+	display: block;
+	float: none;
+	width: auto;
+	margin: 0 0 3px;
+}
+
+.woodev-mp-variation .form-field select,
+.woodev-mp-variation .form-field input[type="text"] {
+	display: inline-block;
+	float: none;
+	width: auto;
+	min-width: 180px;
+	max-width: 100%;
+}
+
+.woodev-mp-variation .form-field .woodev-mp-check {
+	display: inline-block;
+	float: none;
+	width: auto;
+	margin: 0 12px 0 0;
+}
+
+.woodev-mp-variation .woodev-mp-issues {
+	max-width: 100%;
+}
+
+.woodev-mp-block--variation h4 {
+	margin: 8px 0 4px;
+}
+
+@media screen and (max-width: 782px) {
+	.woodev-mp-tab .woodev-mp-buttons .woodev-mp-result {
+		margin-left: 0;
+	}
+
+	.woodev-mp-issues {
+		max-width: 100%;
+	}
+}

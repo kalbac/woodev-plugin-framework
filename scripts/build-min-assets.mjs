@@ -47,6 +47,8 @@ const ASSET_ROOTS = [
 	'woodev/payment-gateway/assets/css',
 	'woodev/shipping-method/assets/js',
 	'woodev/shipping-method/assets/css',
+	'woodev/marketplace/assets/js',
+	'woodev/marketplace/assets/css',
 ];
 
 const SKIPPED_DIRECTORIES = new Set( [ 'vendor', 'build', 'dist', 'fonts', 'images' ] );

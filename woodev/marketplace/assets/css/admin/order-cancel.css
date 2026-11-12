@@ -1,0 +1,19 @@
+/* The cancel dialog of a marketplace posting on the order screens. */
+.woodev-mp-cancel-dialog {
+	max-width: 480px;
+	padding: 20px 24px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+}
+
+.woodev-mp-cancel-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.5);
+}
+
+.woodev-mp-cancel-dialog h2 {
+	margin-top: 0;
+}
+
+.woodev-mp-cancel-dialog select {
+	max-width: 100%;
+}
