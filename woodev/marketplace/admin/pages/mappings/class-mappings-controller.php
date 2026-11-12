@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 
+use Woodev\Framework\Admin\Records\Query_Validator;
 use Woodev\Framework\Admin\Records\Records_Error;
 use Woodev\Framework\Marketplace\Price\Price_Source;
 
@@ -657,12 +658,18 @@ final class Mappings_Controller {
 	/**
 	 * Refuses query parameters the route does not declare.
 	 *
+	 * WordPress core adds its own parameters (`_locale`, `_fields`, `_embed`, ...) to every REST request, so the
+	 * shared core list {@see Query_Validator::CORE_QUERY_KEYS} is always accepted next to the route's own keys.
+	 *
+	 * @since 2.1.4
+	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @param string[]         $allowed Parameters the route accepts.
-	 * @return \WP_Error|null Null when every parameter is declared.
+	 * @return \WP_Error|null Null when every parameter is declared or a WordPress core one.
 	 */
 	private function reject_unknown_query( \WP_REST_Request $request, array $allowed ): ?\WP_Error {
-		$unknown = array_diff( array_keys( $request->get_query_params() ), $allowed );
+		$known   = array_merge( $allowed, Query_Validator::CORE_QUERY_KEYS );
+		$unknown = array_diff( array_keys( $request->get_query_params() ), $known );
 
 		if ( [] === $unknown ) {
 			return null;
