@@ -18,8 +18,12 @@ defined( 'ABSPATH' ) || exit;
  * values the shop already worked with, not factory ones.
  *
  * Nothing is written to the accounts: an account without the `overrides` flag already counts as «свои» ({@see Effective_Settings}),
- * so every existing account keeps behaving as before. The run is marked in the defaults option and never repeats; a fresh install
- * (no accounts) is marked too and keeps the built-in defaults.
+ * so every existing account keeps behaving as before. The run is marked in the defaults option and never repeats.
+ *
+ * A shop without accounts is **not** marked: on an upgrade from v1 the settings handler can be built (the plugin-list «Настройки» link,
+ * the not-configured notice) before the plugin's own migration has created the accounts, and the mark would keep the built-in defaults
+ * for good. The mark is set by the run that finds an account, or by the first default the merchant saves on «Общие»
+ * ({@see Defaults_Section::write()}), whichever comes first.
  *
  * @since 2.1.5
  */
@@ -65,8 +69,13 @@ final class Defaults_Migration {
 			return false;
 		}
 
-		$first    = $this->first_account();
-		$defaults = null === $first ? [] : $this->values_of( $first );
+		$first = $this->first_account();
+
+		if ( null === $first ) {
+			return false;
+		}
+
+		$defaults = $this->values_of( $first );
 
 		$defaults[ Effective_Settings::SEEDED_KEY ] = 1;
 

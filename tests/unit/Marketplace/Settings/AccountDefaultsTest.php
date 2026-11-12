@@ -209,15 +209,44 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertTrue( Effective_Settings::uses_own( $store->get( $first )->settings(), Effective_Settings::GROUP_PRICES ) );
 	}
 
-	public function test_a_shop_without_accounts_is_marked_and_keeps_the_built_in_defaults(): void {
+	public function test_a_shop_without_accounts_is_not_marked_and_keeps_the_built_in_defaults(): void {
 		[ , $store ] = $this->adapter_and_store();
 
-		$this->assertTrue( ( new Defaults_Migration( $store, Sqlite_Tables::MARKETPLACE_ID ) )->run() );
+		$this->assertFalse( ( new Defaults_Migration( $store, Sqlite_Tables::MARKETPLACE_ID ) )->run() );
 
-		$defaults = Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID )->defaults();
+		$resolver = Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID );
+		$defaults = $resolver->defaults();
+		$this->assertFalse( $resolver->is_seeded(), 'the plugin\'s own migration may still create the accounts' );
+		$this->assertArrayNotHasKey( Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ), $this->options );
 		$this->assertSame( '0', $defaults['markup'] );
 		$this->assertTrue( $defaults['orders_enabled'] );
 		$this->assertFalse( $defaults['import_enabled'] );
+	}
+
+	public function test_accounts_that_appear_after_an_empty_run_still_seed_the_defaults(): void {
+		[ , $store ] = $this->adapter_and_store();
+		$migration   = new Defaults_Migration( $store, Sqlite_Tables::MARKETPLACE_ID );
+
+		$this->assertFalse( $migration->run(), 'the handler was built before the v1 accounts were migrated' );
+
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'price_rule' => [ 'markup_kind' => 'percent', 'markup' => '12' ] ] ) );
+
+		$this->assertTrue( $migration->run() );
+		$this->assertSame( '12', Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID )->defaults()['markup'] );
+	}
+
+	public function test_a_default_the_merchant_saved_first_is_never_overwritten_by_a_later_fill(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$section             = new Defaults_Section( $adapter, $store, self::PLUGIN );
+
+		$section->write( 'defaults_price_markup', '30' );
+
+		$this->assertTrue( Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID )->is_seeded() );
+
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'price_rule' => [ 'markup' => '12' ] ] ) );
+
+		$this->assertFalse( ( new Defaults_Migration( $store, Sqlite_Tables::MARKETPLACE_ID ) )->run() );
+		$this->assertSame( '30', Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID )->defaults()['markup'] );
 	}
 
 	// «Общие» tab ---------------------------------------------------------------------------------------------------------

@@ -214,7 +214,8 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 			return;
 		}
 
-		$all[ $key ] = $new;
+		$all[ $key ]                        = $new;
+		$all[ Effective_Settings::SEEDED_KEY ] = 1; // The merchant's own value: a later fill from an account must never overwrite it.
 		update_option( $option, $all );
 
 		if ( ! $this->is_boolean( $field ) ) {
