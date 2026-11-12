@@ -35,7 +35,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Settings_Module {
 	/**
-	 * Builds the default {@see Settings_Handler} (`accounts`, optional `notifications`, `advanced`) for `$plugin`,
+	 * Builds the default {@see Settings_Handler} for `$plugin` — tabs «Подключение», «Параметры», «Общие» (when the adapter has
+	 * any default to offer), «Уведомления» (when it supports push) and «Дополнительно» —
 	 * or null when the plugin's account store is not {@see Wpdb_Account_Store}.
 	 *
 	 * @since 2.1.2
@@ -66,24 +67,38 @@ final class Settings_Module {
 			$on_connected = [ $scheduler, 'queue_now' ];
 		}
 
-		$section_providers   = [];
-		$section_providers[] = new Accounts_Sections( $accounts, $adapter, $status, $warehouses, $plugin_id, $on_connected );
+		$accounts_sections = new Accounts_Sections( $accounts, $adapter, $status, $warehouses, $plugin_id, $on_connected );
+		$defaults          = new Defaults_Section( $adapter, $accounts, $plugin_id );
+		$advanced          = new Advanced_Section();
+
+		$section_providers = [ $accounts_sections, $defaults ];
+		$tabs              = [
+			new Settings_Tab( 'connection', __( 'Подключение', 'woodev-plugin-framework' ), [ $accounts_sections, 'connection_sections' ] ),
+			new Settings_Tab( 'parameters', __( 'Параметры', 'woodev-plugin-framework' ), [ $accounts_sections, 'parameter_sections' ] ),
+		];
+
+		if ( $defaults->has_fields() ) {
+			$tabs[] = new Settings_Tab( 'defaults', __( 'Общие', 'woodev-plugin-framework' ), [ $defaults, 'sections' ] );
+		}
 
 		if ( $adapter->supports( Capability::PUSH_NOTIFICATIONS ) ) {
-			$section_providers[] = new Notifications_Section(
+			$notifications       = new Notifications_Section(
 				$adapter,
-				new Notification_Account_Reader( $wpdb, $schema->table_name( 'accounts', $wpdb->prefix ) ),
+				new Notification_Account_Reader( $wpdb, $schema->table_name( 'accounts', $wpdb->prefix ), Effective_Settings::for_adapter( $adapter->id() ) ),
 				new Last_Notification_Reader( $wpdb, $schema->table_name( 'events', $wpdb->prefix ) ),
 				License_Gate::for_plugin( $plugin ),
 				$plugin_id
 			);
+			$section_providers[] = $notifications;
+			$tabs[]              = new Settings_Tab( 'notifications', __( 'Уведомления', 'woodev-plugin-framework' ), [ $notifications, 'sections' ] );
 		}
 
-		$section_providers[] = new Advanced_Section();
+		$section_providers[] = $advanced;
+		$tabs[]              = new Settings_Tab( 'advanced', __( 'Дополнительно', 'woodev-plugin-framework' ), [ $advanced, 'sections' ] );
 
 		return new Settings_Handler(
 			$plugin_id,
-			$section_providers,
+			array_merge( $section_providers, $tabs ),
 			$adapter->settings_descriptor()->marketplace_name(),
 			$provider_args
 		);
@@ -102,7 +117,7 @@ final class Settings_Module {
 	public static function providers_for( Marketplace_Plugin $plugin, Account_Store $accounts, array $provider_args = [] ): array {
 		$handler = self::handler_for( $plugin, $accounts, $provider_args );
 
-		return null === $handler ? [] : [ $handler->get_settings_provider() ];
+		return null === $handler ? [] : $handler->get_settings_providers();
 	}
 
 	/**
@@ -131,7 +146,7 @@ final class Settings_Module {
 		$last_notifications = null;
 
 		if ( $adapter->supports( Capability::PUSH_NOTIFICATIONS ) ) {
-			$notif_accounts     = new Notification_Account_Reader( $wpdb, $schema->table_name( 'accounts', $wpdb->prefix ) );
+			$notif_accounts     = new Notification_Account_Reader( $wpdb, $schema->table_name( 'accounts', $wpdb->prefix ), Effective_Settings::for_adapter( $adapter->id() ) );
 			$last_notifications = new Last_Notification_Reader( $wpdb, $schema->table_name( 'events', $wpdb->prefix ) );
 		}
 

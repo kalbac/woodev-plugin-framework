@@ -282,7 +282,7 @@ if ( ! class_exists( Menu::class, false ) ) :
 			return [
 				'id'         => $this->get_page_id( $page ),
 				'title'      => $page->get_title(),
-				'page_title' => $page->get_title(),
+				'page_title' => $page->get_heading(),
 				'parent'     => $this->get_root_id(),
 				'path'       => $this->get_page_path( $page ),
 				'capability' => $page->get_capability( $this->capability ),

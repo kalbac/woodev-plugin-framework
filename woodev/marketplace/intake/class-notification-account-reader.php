@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Intake;
 
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -19,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.1.0
  */
 final class Notification_Account_Reader {
-	private const COLUMNS = 'account_id, external_id, is_enabled, seller_id, stock_mode, price_direction, orders_enabled, import_enabled, notification_token, notification_state';
+	private const COLUMNS = 'account_id, external_id, is_enabled, seller_id, stock_mode, price_direction, orders_enabled, import_enabled, notification_token, notification_state, settings';
 
 	/**
 	 * Database.
@@ -36,16 +38,26 @@ final class Notification_Account_Reader {
 	private $table;
 
 	/**
+	 * Resolver of the «Общие» defaults; null reads the account's own columns as they are.
+	 *
+	 * @var Effective_Settings|null
+	 */
+	private $effective;
+
+	/**
 	 * Creates the reader.
 	 *
 	 * @since 2.1.0
+	 * @since 2.1.5 Takes the resolver of the defaults.
 	 *
-	 * @param \wpdb  $db    Database.
-	 * @param string $table Full name of the accounts table.
+	 * @param \wpdb                   $db        Database.
+	 * @param string                  $table     Full name of the accounts table.
+	 * @param Effective_Settings|null $effective Resolver; without it the account's own switches are read.
 	 */
-	public function __construct( \wpdb $db, string $table ) {
-		$this->db    = $db;
-		$this->table = $table;
+	public function __construct( \wpdb $db, string $table, ?Effective_Settings $effective = null ) {
+		$this->db        = $db;
+		$this->table     = $table;
+		$this->effective = $effective;
 	}
 
 	/**
@@ -110,7 +122,7 @@ final class Notification_Account_Reader {
 		);
 		$this->assert_read_succeeded();
 
-		return is_array( $rows ) && 1 === count( $rows ) ? new Notification_Account( $rows[0] ) : null;
+		return is_array( $rows ) && 1 === count( $rows ) ? $this->account( $rows[0] ) : null;
 	}
 
 	/**
@@ -129,9 +141,7 @@ final class Notification_Account_Reader {
 		$this->assert_read_succeeded();
 
 		return array_map(
-			static function ( array $row ): Notification_Account {
-				return new Notification_Account( $row );
-			},
+			[ $this, 'account' ],
 			is_array( $rows ) ? $rows : []
 		);
 	}
@@ -167,7 +177,22 @@ final class Notification_Account_Reader {
 		$row = $this->db->get_row( $sql, 'ARRAY_A' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Prepared by the caller.
 		$this->assert_read_succeeded();
 
-		return is_array( $row ) ? new Notification_Account( $row ) : null;
+		return is_array( $row ) ? $this->account( $row ) : null;
+	}
+
+	/**
+	 * Builds the account view of a row; the orders and card-import switches are the effective ones (the account's own, or the
+	 * «Общие» defaults while its group follows them).
+	 *
+	 * @param array<string,mixed> $row Row of the accounts table.
+	 * @return Notification_Account
+	 */
+	private function account( array $row ): Notification_Account {
+		if ( null !== $this->effective ) {
+			$row = array_merge( $row, $this->effective->exchange_of_row( $row ) );
+		}
+
+		return new Notification_Account( $row );
 	}
 
 	/**

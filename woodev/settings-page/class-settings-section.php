@@ -81,6 +81,13 @@ final class Settings_Section {
 	private array $groups = [];
 
 	/**
+	 * What a client draws for a connection block shown as an account card — see {@see self::with_card()}.
+	 *
+	 * @var array<string, mixed>
+	 */
+	private array $card = [];
+
+	/**
 	 * Use one of the named constructors instead — {@see self::create()},
 	 * {@see self::create_connection()} or {@see self::create_tools()}. Private so that a call
 	 * site has to NAME the kind it is building rather than spell it out in positional
@@ -308,6 +315,42 @@ final class Settings_Section {
 		}
 
 		return $copy;
+	}
+
+	/**
+	 * A copy of this CONNECTION section that the client draws as a card instead of a sub-tab: title, identifier, a switch and
+	 * the buttons, with the block's own fields (and its «Проверить подключение») opening under the card.
+	 *
+	 * The array is data for the client (plain scalars and arrays), handed to it as the section's `card`. An ordinary or tools
+	 * block takes none: the call is reported and the section returned unchanged.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @param array<string, mixed> $card the card's data.
+	 * @return self
+	 */
+	public function with_card( array $card ): self {
+		if ( ! $this->is_connection ) {
+			_doing_it_wrong( __METHOD__, 'Only a connection Settings_Section can be drawn as a card; the call was ignored.', '2.1.5' );
+
+			return $this;
+		}
+
+		$copy       = clone $this;
+		$copy->card = $card;
+
+		return $copy;
+	}
+
+	/**
+	 * The card data of a connection section, empty when it is a plain block.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function get_card(): array {
+		return $this->card;
 	}
 
 	/**

@@ -317,3 +317,91 @@ $settings-label-col: 200px;
 	grid-template-columns: $settings-label-col minmax( 0, 1fr );
 	@media ( max-width: 782px ) { grid-template-columns: 1fr; }
 }
+
+// «Подключение» tab of a marketplace plugin: one card per account (accounts-view.js).
+.woodev-accounts {
+	display: flex;
+	flex-direction: column;
+	gap: wd.$gap-lg;
+
+	&__add.is-first {
+		display: flex;
+		justify-content: center;
+		padding: wd.$gap-lg * 2 0;
+	}
+
+	// The one big button of a shop with no account yet.
+	&__add.is-first &__add-button {
+		justify-content: center;
+		min-width: 280px;
+		height: 56px;
+		font-size: 16px;
+	}
+
+	&__form-title {
+		margin: 0 0 wd.$gap;
+	}
+}
+
+.woodev-account-card {
+	border: 1px solid wd.$border;
+	border-radius: wd.$radius;
+	padding: wd.$gap-lg;
+	background: wd.$surface;
+
+	&.is-disabled &__title {
+		color: wd.$muted;
+	}
+
+	&__head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: wd.$gap;
+	}
+
+	&__main {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: wd.$gap-sm wd.$gap-lg;
+	}
+
+	&__title {
+		font-size: 15px;
+	}
+
+	&__identifier {
+		color: wd.$muted;
+	}
+
+	// Text, not a signal dot — the darker text tokens, like the connection block's result.
+	&__status {
+		font-size: 13px;
+
+		&.is-ok { color: wd.$ok-text; }
+		&.is-error { color: wd.$error-text; }
+	}
+
+	// Buttons never wrap their labels.
+	&__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: wd.$gap-sm;
+
+		.components-button {
+			white-space: nowrap;
+		}
+	}
+
+	&__hint {
+		margin: wd.$gap-sm 0 0;
+		color: wd.$muted;
+		font-size: 13px;
+	}
+
+	&__body {
+		margin-top: wd.$gap-lg;
+	}
+}

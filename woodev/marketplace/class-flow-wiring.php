@@ -63,6 +63,7 @@ use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
@@ -483,7 +484,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			}
 
 			$events    = new Wpdb_Event_Ledger( $this->db, $this->table( 'events' ) );
-			$reader    = new Notification_Account_Reader( $this->db, $this->table( 'accounts' ) );
+			$reader    = new Notification_Account_Reader( $this->db, $this->table( 'accounts' ), Effective_Settings::for_adapter( $this->adapter->id() ) );
 			$scheduler = new Drain_Scheduler( $this->names );
 			$handlers  = new Event_Handler_Registry();
 

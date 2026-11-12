@@ -207,13 +207,57 @@ final class Settings_Handler extends \Woodev_Abstract_Settings implements \Woode
 				$sections = [];
 
 				foreach ( $this->providers as $provider ) {
-					$sections = array_merge( $sections, $provider->sections() );
+					if ( ! $provider instanceof Settings_Tab ) {
+						$sections = array_merge( $sections, $provider->sections() );
+					}
 				}
 
 				return $sections;
 			},
 			$this->provider_args
 		);
+	}
+
+	/**
+	 * Builds the settings page's tabs: one {@see Settings_Provider} for every {@see Settings_Tab} the handler was given, in order.
+	 *
+	 * All tabs share this handler, so a field keeps one owner and a save reaches it through whichever tab shows it. The first tab
+	 * keeps the handler's id (the id the one-tab page had, so its address still opens the page) and the `legacy_page` address; the
+	 * others are `{id}-{slug}`. A handler given no tab returns the one-tab provider of {@see self::get_settings_provider()}.
+	 *
+	 * @since 2.1.5
+	 *
+	 * @return Settings_Provider[]
+	 */
+	public function get_settings_providers(): array {
+		$tabs = array_values(
+			array_filter(
+				$this->providers,
+				static function ( $provider ): bool {
+					return $provider instanceof Settings_Tab;
+				}
+			)
+		);
+
+		if ( [] === $tabs ) {
+			return [ $this->get_settings_provider() ];
+		}
+
+		$providers = [];
+
+		foreach ( $tabs as $index => $tab ) {
+			$args = 0 === $index ? $this->provider_args : array_diff_key( $this->provider_args, [ 'legacy_page' => true ] );
+
+			$providers[] = Settings_Provider::create_lazy(
+				0 === $index ? $this->get_id() : $this->get_id() . '-' . $tab->slug(),
+				$tab->label(),
+				$this,
+				[ $tab, 'sections' ],
+				$args
+			);
+		}
+
+		return $providers;
 	}
 
 	/**

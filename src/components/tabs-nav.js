@@ -108,7 +108,7 @@ export default function TabsNav( { tabs, renderSection, onTabChange } ) {
 
 				return (
 					<>
-						{ tab.sections.length > 1 && (
+						{ tab.sections.length > 1 && ! tab.sections.some( ( s ) => s.card ) && (
 							<nav className="woodev-subtabs">
 								{ tab.sections.map( ( s ) => (
 									<button

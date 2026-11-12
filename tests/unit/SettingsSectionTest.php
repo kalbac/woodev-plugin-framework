@@ -252,4 +252,19 @@ class SettingsSectionTest extends TestCase {
 		$this->assertSame( [], $connection->with_actions( [ $this->make_tool( 'x' ) ] )->get_actions() );
 		$this->assertSame( [], $tools->with_actions( [ $this->make_tool( 'x' ) ] )->get_actions() );
 	}
+
+	public function test_with_card_returns_a_copy_of_a_connection_section_carrying_the_card(): void {
+		$section = Settings_Section::create_connection( 'api', 'API', [ 't' ], 'Проверить' );
+		$with    = $section->with_card( [ 'title' => 'Shop' ] );
+
+		$this->assertSame( [], $section->get_card(), 'immutable: the original has none' );
+		$this->assertSame( [ 'title' => 'Shop' ], $with->get_card() );
+		$this->assertTrue( $with->is_connection() );
+	}
+
+	public function test_an_ordinary_section_refuses_a_card(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$this->assertSame( [], Settings_Section::create( 'x', 'X', [] )->with_card( [ 'title' => 'Shop' ] )->get_card() );
+	}
 }

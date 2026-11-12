@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Data;
 
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -89,6 +91,9 @@ final class Uninstaller {
 		foreach ( (array) $names as $name ) {
 			delete_option( $name );
 		}
+
+		// The «Общие» defaults are named by the adapter id (an account knows its adapter, not its plugin), so the family above misses them.
+		delete_option( Effective_Settings::option_name( $schema->marketplace_id() ) );
 	}
 
 	/**

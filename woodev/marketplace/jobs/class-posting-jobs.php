@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Orders\Order_Claim_Exception;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Sync\Stock_Mode;
 
 defined( 'ABSPATH' ) || exit;
@@ -302,7 +303,7 @@ final class Posting_Jobs {
 	 * @return bool
 	 */
 	public static function wants_postings( Account $account ): bool {
-		return (bool) $account->setting( 'orders_enabled', true ) || Stock_Mode::is_site( $account );
+		return Effective_Settings::for_adapter( $account->adapter_id() )->orders_enabled( $account ) || Stock_Mode::is_site( $account );
 	}
 
 	/**

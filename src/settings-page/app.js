@@ -20,6 +20,7 @@ import { getProviderMismatchError } from '../components/location-picker-field';
 import { ACTIVE_PROVIDER_SETTING_ID } from '../components/control-field';
 import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
+import AccountsView, { isAccountsTab } from './accounts-view';
 
 /**
  * Whether a staged value is still the one that was submitted (scalars by identity,
@@ -158,6 +159,7 @@ export default function App( { bootstrap = null } ) {
 	const [ showErrors, setShowErrors ] = useState( {} ); // { providerId: bool }
 	const [ fieldErrors, setFieldErrors ] = useState( {} ); // { providerId: { settingId: message } }
 	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
+	const [ busySection, setBusySection ] = useState( '' ); // account card whose on/off switch is being saved.
 
 	// Native WP snackbar notices (created on save via the notices store).
 	const snackbars = useSelect(
@@ -373,6 +375,28 @@ export default function App( { bootstrap = null } ) {
 			} );
 	};
 
+	// «Выключить» / «Включить» on an account card saves the account's `enabled` field at once.
+	const onToggleEnabled = ( tab, section ) => {
+		setBusySection( section.id );
+		saveTab( tab.id, { [ section.card.enabled_field ]: ! section.card.enabled } )
+			.then( () => {
+				dispatch( noticesStore ).createSuccessNotice( __( 'Настройки сохранены.', 'woodev-plugin-framework' ), { type: 'snackbar' } );
+				return fetchSchema();
+			} )
+			.then( ( res ) => {
+				if ( res && res.tabs ) {
+					setTabs( res.tabs );
+				}
+			} )
+			.catch( ( err ) => {
+				dispatch( noticesStore ).createErrorNotice(
+					( err && err.message ) || __( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' ),
+					{ type: 'snackbar' }
+				);
+			} )
+			.finally( () => setBusySection( '' ) );
+	};
+
 	const renderSection = ( tab, sectionId ) => {
 		const section = tab.sections.find( ( s ) => s.id === sectionId ) || tab.sections[ 0 ];
 		const values = edits[ tab.id ] || {};
@@ -451,7 +475,18 @@ export default function App( { bootstrap = null } ) {
 		<div className="woodev-settings">
 			<TabsNav
 				tabs={ tabs }
-				renderSection={ renderSection }
+				renderSection={ ( tab, sectionId ) =>
+					isAccountsTab( tab ) ? (
+						<AccountsView
+							tab={ tab }
+							renderSection={ renderSection }
+							onToggleEnabled={ onToggleEnabled }
+							busySection={ busySection }
+						/>
+					) : (
+						renderSection( tab, sectionId )
+					)
+				}
 				onTabChange={ () => {
 					setSaveError( '' );
 					setSaved( '' );

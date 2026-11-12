@@ -340,6 +340,10 @@ final class Settings_Page_Registry {
 					? $handler->supports_connection_test( $section->get_id() )
 					: $handler instanceof \Woodev_Settings_Connection_Test;
 
+				if ( [] !== $section->get_card() ) {
+					$entry['card'] = $section->get_card();
+				}
+
 				if ( $handler instanceof \Woodev_Settings_Connection_Status ) {
 					$status = $handler->get_connection_status( $section->get_id() );
 					if ( null !== $status ) {

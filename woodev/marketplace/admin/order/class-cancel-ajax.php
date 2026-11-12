@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -279,7 +280,7 @@ final class Cancel_Ajax {
 			throw new Cancel_Refused( __( 'Подключение к маркетплейсу для этого заказа выключено в настройках плагина. Включите его и повторите.', 'woodev-plugin-framework' ), 409 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
-		if ( ! (bool) $account->setting( 'orders_enabled', true ) ) {
+		if ( ! Effective_Settings::for_adapter( $account->adapter_id() )->orders_enabled( $account ) ) {
 			throw new Cancel_Refused( __( 'Приём заказов с маркетплейса выключен в настройках плагина, поэтому заказ не обновится после отмены. Включите приём заказов в настройках и повторите.', 'woodev-plugin-framework' ), 409 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 	}

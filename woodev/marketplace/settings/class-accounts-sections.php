@@ -39,16 +39,27 @@ defined( 'ABSPATH' ) || exit;
 final class Accounts_Sections implements Connection_Section_Provider, Table_Backed_Settings {
 	public const NEW_KEY = 'new';
 
+	/**
+	 * Fields that choose, per group, between the «Общие» defaults and the account's own values.
+	 */
+	public const OVERRIDE_PRICES   = 'override_prices';
+	public const OVERRIDE_EXCHANGE = 'override_exchange';
+
+	/**
+	 * Values of an override field.
+	 */
+	public const SOURCE_DEFAULTS = 'defaults';
+	public const SOURCE_OWN      = 'own';
+
 	private const CONNECTION_PREFIX = 'account_connection_';
 	private const PARAMS_PREFIX     = 'account_params_';
 
-	private const PRICE_RULE_FIELDS = [
-		'price_base'           => 'base',
-		'price_markup_kind'    => 'markup_kind',
-		'price_markup'         => 'markup',
-		'price_rounding'       => 'rounding',
-		'price_old_price_rule' => 'old_price_rule',
-		'price_min_percent'    => 'min_percent',
+	/**
+	 * Override field => the {@see Effective_Settings} group it decides.
+	 */
+	private const OVERRIDE_GROUPS = [
+		self::OVERRIDE_PRICES   => Effective_Settings::GROUP_PRICES,
+		self::OVERRIDE_EXCHANGE => Effective_Settings::GROUP_EXCHANGE,
 	];
 
 	/**
@@ -205,25 +216,25 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$this->register_connection_fields( $handler, self::NEW_KEY );
 	}
 
+	public function sections(): array {
+		return array_merge( $this->connection_sections(), $this->parameter_sections() );
+	}
+
 	/**
-	 * Builds the ordered list of connection and parameter sections.
+	 * Builds the «Подключение» sections: one per saved account, then the block that adds a new one.
 	 *
-	 * @since 2.1.2
+	 * Each carries the card the screen draws for it ({@see Settings_Section::with_card()}).
+	 *
+	 * @since 2.1.5
 	 *
 	 * @return Settings_Section[]
 	 */
-	public function sections(): array {
+	public function connection_sections(): array {
 		$accounts = $this->accounts();
 		$sections = [];
 
 		foreach ( $accounts as $account ) {
-			$key        = (string) $account->id();
-			$sections[] = $this->connection_section( $key, $this->account_title( $account ) );
-
-			$params = $this->parameters_section( $account );
-			if ( null !== $params ) {
-				$sections[] = $params;
-			}
+			$sections[] = $this->connection_section( (string) $account->id(), $this->account_title( $account ) )->with_card( $this->card_of( $account ) );
 		}
 
 		$marketplace = $this->adapter->settings_descriptor()->marketplace_name();
@@ -232,7 +243,30 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			? sprintf( __( 'Подключение к %s', 'woodev-plugin-framework' ), $marketplace )
 			: __( 'Добавить ещё один аккаунт', 'woodev-plugin-framework' );
 
-		$sections[] = $this->connection_section( self::NEW_KEY, $new_title );
+		$sections[] = $this->connection_section( self::NEW_KEY, $new_title )->with_card( [ 'new' => true ] );
+
+		return $sections;
+	}
+
+	public function parameter_sections(): array {
+		$sections = [];
+
+		foreach ( $this->accounts() as $account ) {
+			$params = $this->parameters_section( $account );
+
+			if ( null !== $params ) {
+				$sections[] = $params;
+			}
+		}
+
+		if ( [] === $sections ) {
+			$sections[] = Settings_Section::create(
+				'account_params_none',
+				__( 'Параметры', 'woodev-plugin-framework' ),
+				[],
+				'<p>' . esc_html__( 'Подключите аккаунт на вкладке «Подключение».', 'woodev-plugin-framework' ) . '</p>'
+			);
+		}
 
 		return $sections;
 	}
@@ -529,7 +563,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$id_field   = $fields->identifier();
 		$id_spec    = $descriptor->field_spec( $id_field );
 
-		$this->add(
+		Field_Kit::add(
 			$handler,
 			self::setting_id( $key, 'name' ),
 			\Woodev_Setting::TYPE_STRING,
@@ -544,7 +578,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			]
 		);
 
-		$this->add(
+		Field_Kit::add(
 			$handler,
 			self::setting_id( $key, $id_field ),
 			\Woodev_Setting::TYPE_STRING,
@@ -564,7 +598,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		foreach ( $fields->secrets() as $secret_field ) {
 			$secret_spec = $descriptor->field_spec( $secret_field );
-			$this->add(
+			Field_Kit::add(
 				$handler,
 				self::setting_id( $key, $secret_field ),
 				\Woodev_Setting::TYPE_STRING,
@@ -584,7 +618,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			);
 		}
 
-		$this->add_toggle(
+		Field_Kit::add_toggle(
 			$handler,
 			self::setting_id( $key, 'enabled' ),
 			__( 'Аккаунт включён', 'woodev-plugin-framework' ),
@@ -593,18 +627,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		);
 	}
 
-	/**
-	 * Registers capability-gated parameter fields for a saved account.
-	 *
-	 * @param Settings_Handler $handler    Handler.
-	 * @param string           $key        Account id string.
-	 * @param int              $account_id Account id.
-	 * @return void
-	 */
 	private function register_parameter_fields( Settings_Handler $handler, string $key, int $account_id ): void {
 		$marketplace = $this->adapter->settings_descriptor()->marketplace_name();
+		$id_for      = static function ( string $field ) use ( $key ): string {
+			return self::setting_id( $key, $field );
+		};
 
-		$this->add_select(
+		Field_Kit::add_select(
 			$handler,
 			self::setting_id( $key, 'warehouse_id' ),
 			__( 'Склад по умолчанию', 'woodev-plugin-framework' ),
@@ -617,7 +646,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		);
 
 		if ( $this->adapter->supports( Capability::OVERSIZE_WAREHOUSE ) ) {
-			$this->add_select(
+			Field_Kit::add_select(
 				$handler,
 				self::setting_id( $key, 'oversize_warehouse_id' ),
 				__( 'Склад для крупногабаритных товаров', 'woodev-plugin-framework' ),
@@ -630,7 +659,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			);
 		}
 
-		$this->add_select(
+		Field_Kit::add_select(
 			$handler,
 			self::setting_id( $key, 'stock_mode' ),
 			__( 'Остатки', 'woodev-plugin-framework' ),
@@ -640,133 +669,60 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		$price_options = $this->price_direction_options( $marketplace );
 		if ( [] !== $price_options ) {
-			$this->add_select(
+			Field_Kit::add_select(
 				$handler,
 				self::setting_id( $key, 'price_direction' ),
 				__( 'Цены', 'woodev-plugin-framework' ),
 				$price_options,
 				__( 'В какую сторону передаются цены.', 'woodev-plugin-framework' )
 			);
-			$this->register_price_rule_fields( $handler, $key, $marketplace );
+			$this->register_override_switch( $handler, $key, self::OVERRIDE_PRICES, __( 'Правило цены', 'woodev-plugin-framework' ) );
+			Shared_Fields::register_price_rule( $handler, $id_for, $this->adapter, $this->shown_when_own( $key, self::OVERRIDE_PRICES ) );
 		}
 
-		if ( null !== $this->adapter->posting_handler() ) {
-			$this->add_toggle(
-				$handler,
-				self::setting_id( $key, 'orders_enabled' ),
-				/* translators: %s: marketplace name. */
-				sprintf( __( 'Заказы %s → WooCommerce', 'woodev-plugin-framework' ), $marketplace ),
-				true,
-				/* translators: %s: marketplace name. */
-				sprintf( __( 'Заказы с %s появляются в WooCommerce как обычные заказы.', 'woodev-plugin-framework' ), $marketplace )
-			);
-		}
-
-		if ( $this->adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
-			$this->add_toggle(
-				$handler,
-				self::setting_id( $key, 'import_enabled' ),
-				__( 'Импортировать новые карточки автоматически', 'woodev-plugin-framework' ),
-				false,
-				/* translators: %s: marketplace name. */
-				sprintf( __( 'Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено.', 'woodev-plugin-framework' ), $marketplace ) . ' ' . __( 'In the other direction, add products manually on the Products screen.', 'woodev-plugin-framework' )
-			);
+		if ( [] !== Shared_Fields::exchange_field_names( $this->adapter ) ) {
+			$this->register_override_switch( $handler, $key, self::OVERRIDE_EXCHANGE, __( 'Заказы и карточки', 'woodev-plugin-framework' ) );
+			Shared_Fields::register_exchange( $handler, $id_for, $this->adapter, $this->shown_when_own( $key, self::OVERRIDE_EXCHANGE ) );
 		}
 	}
 
 	/**
-	 * Registers the six `Price_Rule` fields for an account.
+	 * Registers the «как в Общих / свои» switch of one group for an account.
 	 *
-	 * @param Settings_Handler $handler     Handler.
-	 * @param string           $key         Account id string.
-	 * @param string           $marketplace Marketplace name.
+	 * @param Settings_Handler $handler Handler.
+	 * @param string           $key     Account id string.
+	 * @param string           $field   `override_prices` or `override_exchange`.
+	 * @param string           $label   Label.
 	 * @return void
 	 */
-	private function register_price_rule_fields( Settings_Handler $handler, string $key, string $marketplace ): void {
-		$this->add_select(
+	private function register_override_switch( Settings_Handler $handler, string $key, string $field, string $label ): void {
+		Field_Kit::add_select(
 			$handler,
-			self::setting_id( $key, 'price_base' ),
-			__( 'От какой цены считать', 'woodev-plugin-framework' ),
+			self::setting_id( $key, $field ),
+			$label,
 			[
-				self::option( Price_Rule::BASE_ACTIVE, __( 'От цены на сайте (со скидкой, если она есть)', 'woodev-plugin-framework' ) ),
-				self::option( Price_Rule::BASE_REGULAR, __( 'От обычной цены (скидки сайта не учитывать)', 'woodev-plugin-framework' ) ),
+				Field_Kit::option( self::SOURCE_DEFAULTS, __( 'Как на вкладке «Общие»', 'woodev-plugin-framework' ) ),
+				Field_Kit::option( self::SOURCE_OWN, __( 'Свои значения для этого аккаунта', 'woodev-plugin-framework' ) ),
 			],
-			/* translators: %s: marketplace name. */
-			sprintf( __( 'Какую цену сайта брать за основу. Со скидкой — %s получит цену со скидкой и зачёркнутую обычную цену.', 'woodev-plugin-framework' ), $marketplace )
+			__( 'Значения берутся с вкладки «Общие» или задаются для этого аккаунта отдельно.', 'woodev-plugin-framework' )
 		);
+	}
 
-		$this->add_select(
-			$handler,
-			self::setting_id( $key, 'price_markup_kind' ),
-			__( 'Наценка', 'woodev-plugin-framework' ),
-			[
-				self::option( Price_Rule::MARKUP_NONE, __( 'Без наценки', 'woodev-plugin-framework' ) ),
-				self::option( Price_Rule::MARKUP_FIXED, __( 'Фиксированная сумма', 'woodev-plugin-framework' ) ),
-				self::option( Price_Rule::MARKUP_PERCENT, __( 'Процент от цены', 'woodev-plugin-framework' ) ),
+	/**
+	 * Setting args that show a field only while the account's switch says «свои».
+	 *
+	 * @param string $key   Account id string.
+	 * @param string $field `override_prices` or `override_exchange`.
+	 * @return array<string,mixed>
+	 */
+	private function shown_when_own( string $key, string $field ): array {
+		return [
+			'show_if' => [
+				'setting'  => self::setting_id( $key, $field ),
+				'operator' => '=',
+				'value'    => self::SOURCE_OWN,
 			],
-			/* translators: %s: marketplace name. */
-			sprintf( __( 'Насколько цена на %s отличается от цены на сайте (например, на величину комиссии).', 'woodev-plugin-framework' ), $marketplace )
-		);
-
-		$this->add(
-			$handler,
-			self::setting_id( $key, 'price_markup' ),
-			\Woodev_Setting::TYPE_STRING,
-			[
-				'name'    => __( 'Размер наценки', 'woodev-plugin-framework' ),
-				'default' => '0',
-			],
-			\Woodev_Control::TYPE_TEXT,
-			[
-				'tooltip'     => __( 'Сумма в валюте кабинета или процент — как выбрано выше. Например, 150 или 15.', 'woodev-plugin-framework' ),
-				'placeholder' => '0',
-			]
-		);
-
-		if ( null === $this->adapter->price_pusher() ) {
-			return;
-		}
-
-		$this->add_select(
-			$handler,
-			self::setting_id( $key, 'price_rounding' ),
-			__( 'Округление', 'woodev-plugin-framework' ),
-			[
-				self::option( Price_Rule::ROUND_NONE, __( 'Не округлять', 'woodev-plugin-framework' ) ),
-				self::option( Price_Rule::ROUND_TO_1, __( 'До целой единицы валюты', 'woodev-plugin-framework' ) ),
-				self::option( Price_Rule::ROUND_TO_10, __( 'До десятков', 'woodev-plugin-framework' ) ),
-				self::option( Price_Rule::ROUND_ENDS_99, __( 'Чтобы цена заканчивалась на 99', 'woodev-plugin-framework' ) ),
-			],
-			__( 'Как округлять цену после наценки.', 'woodev-plugin-framework' )
-		);
-
-		$this->add_select(
-			$handler,
-			self::setting_id( $key, 'price_old_price_rule' ),
-			__( 'Старая цена', 'woodev-plugin-framework' ),
-			[
-				self::option( Price_Rule::OLD_PRICE_ON_SALE, __( 'Показывать зачёркнутую цену, пока на сайте скидка', 'woodev-plugin-framework' ) ),
-				self::option( Price_Rule::OLD_PRICE_OFF, __( 'Не отправлять старую цену', 'woodev-plugin-framework' ) ),
-			],
-			/* translators: %s: marketplace name. */
-			sprintf( __( 'Нужна ли на %s зачёркнутая цена, когда на сайте действует скидка.', 'woodev-plugin-framework' ), $marketplace )
-		);
-
-		$this->add(
-			$handler,
-			self::setting_id( $key, 'price_min_percent' ),
-			\Woodev_Setting::TYPE_STRING,
-			[
-				'name'    => __( 'Минимальная цена, %', 'woodev-plugin-framework' ),
-				'default' => '',
-			],
-			\Woodev_Control::TYPE_TEXT,
-			[
-				/* translators: %s: marketplace name. */
-				'tooltip'     => sprintf( __( 'Процент от цены, ниже которого %s не опустит цену в акциях. Пусто — минимальная цена не отправляется.', 'woodev-plugin-framework' ), $marketplace ),
-				'placeholder' => '80',
-			]
-		);
+		];
 	}
 
 	/**
@@ -798,16 +754,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		);
 	}
 
-	/**
-	 * Builds the parameters `Settings_Section` card for a saved account.
-	 *
-	 * @param Account $account Saved account.
-	 * @return Settings_Section|null
-	 */
 	private function parameters_section( Account $account ): ?Settings_Section {
 		$key       = (string) $account->id();
-		$groups    = [];
-		$all_ids   = [];
 		$stock_ids = [ self::setting_id( $key, 'warehouse_id' ) ];
 
 		if ( $this->adapter->supports( Capability::OVERSIZE_WAREHOUSE ) ) {
@@ -816,54 +764,71 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		$stock_ids[] = self::setting_id( $key, 'stock_mode' );
 
-		$all_ids  = array_merge( $all_ids, $stock_ids );
-		$groups[] = Settings_Group::create(
-			'stock_' . $key,
-			__( 'Остатки и склад', 'woodev-plugin-framework' )
-		)->with_fields( $stock_ids );
+		$all_ids  = $stock_ids;
+		$groups   = [ Settings_Group::create( 'stock_' . $key, __( 'Остатки и склад', 'woodev-plugin-framework' ) )->with_fields( $stock_ids ) ];
+		$has_push = null !== $this->adapter->price_pusher();
 
-		$has_pusher = null !== $this->adapter->price_pusher();
-		$has_reader = null !== $this->adapter->price_reader();
-
-		if ( $has_pusher || $has_reader ) {
-			$price_ids = [
-				self::setting_id( $key, 'price_direction' ),
-				self::setting_id( $key, 'price_base' ),
-				self::setting_id( $key, 'price_markup_kind' ),
-				self::setting_id( $key, 'price_markup' ),
-			];
-
-			if ( $has_pusher ) {
-				$price_ids[] = self::setting_id( $key, 'price_rounding' );
-				$price_ids[] = self::setting_id( $key, 'price_old_price_rule' );
-				$price_ids[] = self::setting_id( $key, 'price_min_percent' );
-			}
+		if ( [] !== $this->price_direction_options( '' ) ) {
+			$price_ids = array_merge(
+				[ self::setting_id( $key, 'price_direction' ), self::setting_id( $key, self::OVERRIDE_PRICES ) ],
+				$this->ids_of( $key, Shared_Fields::price_rule_field_names( $this->adapter ) )
+			);
 
 			$all_ids  = array_merge( $all_ids, $price_ids );
 			$groups[] = Settings_Group::create( 'prices_' . $key, __( 'Цены и наценка', 'woodev-plugin-framework' ) )->with_fields( $price_ids );
 		}
 
-		$exchange_ids = [];
-		if ( null !== $this->adapter->posting_handler() ) {
-			$exchange_ids[] = self::setting_id( $key, 'orders_enabled' );
-		}
-		if ( $this->adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
-			$exchange_ids[] = self::setting_id( $key, 'import_enabled' );
-		}
-		if ( [] !== $exchange_ids ) {
+		$exchange_names = Shared_Fields::exchange_field_names( $this->adapter );
+		if ( [] !== $exchange_names ) {
+			$exchange_ids = array_merge( [ self::setting_id( $key, self::OVERRIDE_EXCHANGE ) ], $this->ids_of( $key, $exchange_names ) );
+
 			$all_ids  = array_merge( $all_ids, $exchange_ids );
 			$groups[] = Settings_Group::create( 'exchange_' . $key, __( 'Заказы и карточки', 'woodev-plugin-framework' ) )->with_fields( $exchange_ids );
 		}
 
-		$description = $has_pusher ? $this->price_example_html( $account ) : '';
-
 		return Settings_Section::create(
 			self::params_section_id( $account->id() ),
-			/* translators: %s: account display label. */
-			sprintf( __( 'Параметры обмена — «%s»', 'woodev-plugin-framework' ), $this->account_title( $account ) ),
+			$this->account_title( $account ),
 			$all_ids,
-			$description
+			$has_push ? $this->price_example_html( $account ) : ''
 		)->with_groups( $groups );
+	}
+
+	/**
+	 * Setting ids of some of an account's fields.
+	 *
+	 * @param string   $key    Account id string.
+	 * @param string[] $fields Field names.
+	 * @return string[]
+	 */
+	private function ids_of( string $key, array $fields ): array {
+		return array_map(
+			static function ( string $field ) use ( $key ): string {
+				return self::setting_id( $key, $field );
+			},
+			$fields
+		);
+	}
+
+	/**
+	 * What the «Подключение» tab draws for a saved account: its title, identifier, switch and the disabled «Удалить».
+	 *
+	 * @param Account $account Account.
+	 * @return array<string,mixed>
+	 */
+	private function card_of( Account $account ): array {
+		$id_field = $this->adapter->credential_fields()->identifier();
+		$spec     = $this->adapter->settings_descriptor()->field_spec( $id_field );
+
+		return [
+			'new'              => false,
+			'title'            => $this->account_title( $account ),
+			'identifier_label' => $spec->label(),
+			'identifier'       => (string) ( $account->credentials()[ $id_field ] ?? '' ),
+			'enabled'          => $account->is_enabled(),
+			'enabled_field'    => self::setting_id( (string) $account->id(), 'enabled' ),
+			'delete_hint'      => __( 'Удаление аккаунта появится в одном из следующих обновлений.', 'woodev-plugin-framework' ),
+		];
 	}
 
 	/**
@@ -877,7 +842,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$currency = '' !== $currency ? $currency : 'RUB';
 
 		try {
-			$rule = Price_Rule::from_array( (array) $account->setting( 'price_rule', [] ) );
+			$rule = Price_Rule::from_array( array_merge( self::default_price_rule_array(), Effective_Settings::for_adapter( $this->adapter->id() )->price_rule( $account ) ) );
 			$pair = Price_Calculator::calculate(
 				Money::from_string( '1000', $currency ),
 				Money::from_string( '1200', $currency ),
@@ -955,14 +920,17 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 					? Wpdb_Account_Store::PRICE_TO_MARKETPLACE
 					: Wpdb_Account_Store::PRICE_OFF;
 				return (string) $account->setting( 'price_direction', $default );
+			case self::OVERRIDE_PRICES:
+			case self::OVERRIDE_EXCHANGE:
+				return Effective_Settings::uses_own( $account->settings(), self::OVERRIDE_GROUPS[ $field ] ) ? self::SOURCE_OWN : self::SOURCE_DEFAULTS;
 			case 'orders_enabled':
 				return (bool) $account->setting( 'orders_enabled', true );
 			case 'import_enabled':
 				return (bool) $account->setting( 'import_enabled', false );
 		}
 
-		if ( isset( self::PRICE_RULE_FIELDS[ $field ] ) ) {
-			$rule_key = self::PRICE_RULE_FIELDS[ $field ];
+		if ( isset( Shared_Fields::PRICE_RULE_FIELDS[ $field ] ) ) {
+			$rule_key = Shared_Fields::PRICE_RULE_FIELDS[ $field ];
 			$stored   = array_merge( self::default_price_rule_array(), (array) $account->setting( 'price_rule', [] ) );
 
 			return (string) ( $stored[ $rule_key ] ?? '' );
@@ -977,14 +945,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 * @return array<string,mixed>
 	 */
 	private static function default_price_rule_array(): array {
-		return [
-			'base'           => Price_Rule::BASE_ACTIVE,
-			'markup_kind'    => Price_Rule::MARKUP_NONE,
-			'markup'         => '0',
-			'rounding'       => Price_Rule::ROUND_NONE,
-			'old_price_rule' => Price_Rule::OLD_PRICE_ON_SALE,
-			'min_percent'    => null,
-		];
+		return array_intersect_key( Effective_Settings::builtin_defaults(), array_flip( Effective_Settings::PRICE_KEYS ) );
 	}
 
 	/**
@@ -1017,7 +978,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$enabled = array_key_exists( 'enabled', $this->pending ) ? self::to_bool( $this->pending['enabled'] ) : true;
 
 		$this->created_id = $this->store->save(
-			new Account( 0, $this->adapter->id(), $name, $enabled, $credentials )
+			new Account( 0, $this->adapter->id(), $name, $enabled, $credentials, null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] )
 		);
 		$this->refresh( $this->created_id );
 	}
@@ -1088,8 +1049,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			return;
 		}
 
-		if ( isset( self::PRICE_RULE_FIELDS[ $field ] ) ) {
-			$rule_key = self::PRICE_RULE_FIELDS[ $field ];
+		if ( isset( Shared_Fields::PRICE_RULE_FIELDS[ $field ] ) ) {
+			$rule_key = Shared_Fields::PRICE_RULE_FIELDS[ $field ];
 			$defaults = self::default_price_rule_array();
 			$updated  = $this->store->update_settings(
 				$id,
@@ -1133,12 +1094,43 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				$this->store->update_fields( $id, [ 'price_direction' => $text ] );
 				do_action( $this->price_rules_changed_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names.
 				return;
+			case self::OVERRIDE_PRICES:
+			case self::OVERRIDE_EXCHANGE:
+				$this->save_override( $id, self::OVERRIDE_GROUPS[ $field ], self::SOURCE_OWN === $text );
+				return;
 			case 'orders_enabled':
 				$this->store->update_fields( $id, [ 'orders_enabled' => self::to_bool( $value ) ] );
 				return;
 			case 'import_enabled':
 				$this->store->update_fields( $id, [ 'import_enabled' => self::to_bool( $value ) ] );
 				return;
+		}
+	}
+
+	/**
+	 * Saves one group's «как в Общих / свои» choice into the account's `settings` JSON.
+	 *
+	 * Switching the price group queues the account's recompute: the rule in force changes with it.
+	 *
+	 * @param int    $id    Account id.
+	 * @param string $group `Effective_Settings::GROUP_*`.
+	 * @param bool   $own   True for «свои».
+	 * @return void
+	 */
+	private function save_override( int $id, string $group, bool $own ): void {
+		$updated = $this->store->update_settings(
+			$id,
+			static function ( array $current ) use ( $group, $own ): array {
+				$flags                                   = isset( $current[ Effective_Settings::OVERRIDES_KEY ] ) && is_array( $current[ Effective_Settings::OVERRIDES_KEY ] ) ? $current[ Effective_Settings::OVERRIDES_KEY ] : [];
+				$flags[ $group ]                         = $own;
+				$current[ Effective_Settings::OVERRIDES_KEY ] = $flags;
+
+				return $current;
+			}
+		);
+
+		if ( $updated && Effective_Settings::GROUP_PRICES === $group ) {
+			do_action( $this->price_rules_changed_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names.
 		}
 	}
 
@@ -1275,34 +1267,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$errors = [];
 
 		foreach ( $this->accounts() as $account ) {
-			$key     = (string) $account->id();
-			$touched = false;
-			$merged  = array_merge( self::default_price_rule_array(), (array) $account->setting( 'price_rule', [] ) );
+			$key    = (string) $account->id();
+			$stored = (array) $account->setting( 'price_rule', [] );
+			$id_for = static function ( string $field ) use ( $key ): string {
+				return self::setting_id( $key, $field );
+			};
 
-			foreach ( self::PRICE_RULE_FIELDS as $setting_field => $rule_key ) {
-				$id = self::setting_id( $key, $setting_field );
-				if ( array_key_exists( $id, $values ) ) {
-					$touched             = true;
-					$val                 = trim( (string) $values[ $id ] );
-					$merged[ $rule_key ] = '' === $val && 'min_percent' === $rule_key ? null : $val;
-				}
-			}
-
-			if ( ! $touched ) {
-				continue;
-			}
-
-			try {
-				Price_Rule::from_array( $merged );
-			} catch ( \InvalidArgumentException $e ) {
-				$min_id    = self::setting_id( $key, 'price_min_percent' );
-				$markup_id = self::setting_id( $key, 'price_markup' );
-				$target    = false !== stripos( $e->getMessage(), 'min' ) ? $min_id : $markup_id;
-
-				$errors[ $target ] = $target === $min_id
-					? __( 'Укажите процент больше 0 и не больше 100 (например, 80) или оставьте поле пустым.', 'woodev-plugin-framework' )
-					: __( 'Укажите корректное число для наценки (например, 150 или 15.5; скидка в процентах должна быть строго больше -100).', 'woodev-plugin-framework' );
-			}
+			$errors = array_merge( $errors, Shared_Fields::validate_price_rule( $stored, $values, $id_for ) );
 		}
 
 		return $errors;
@@ -1316,17 +1287,17 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 * @return array<int,array{value:string,label:string}>
 	 */
 	private function warehouse_options( int $account_id, string $setting = 'warehouse_id' ): array {
-		$pairs   = [ self::option( '0', __( '— Выберите склад —', 'woodev-plugin-framework' ) ) ];
+		$pairs   = [ Field_Kit::option( '0', __( '— Выберите склад —', 'woodev-plugin-framework' ) ) ];
 		$cached  = $this->warehouses->for_account( $account_id, 'oversize_warehouse_id' === $setting );
 		$account = $this->accounts()[ $account_id ] ?? null;
 		$stored  = null !== $account ? (int) $account->setting( $setting, 0 ) : 0;
 
 		if ( $stored > 0 && ! isset( $cached[ (string) $stored ] ) ) {
-			$pairs[] = self::option( (string) $stored, '#' . $stored );
+			$pairs[] = Field_Kit::option( (string) $stored, '#' . $stored );
 		}
 
 		foreach ( $cached as $id => $name ) {
-			$pairs[] = self::option( (string) $id, $name );
+			$pairs[] = Field_Kit::option( (string) $id, $name );
 		}
 
 		return $pairs;
@@ -1348,20 +1319,20 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		$options = [];
 		if ( $has_pusher ) {
-			$options[] = self::option(
+			$options[] = Field_Kit::option(
 				Wpdb_Account_Store::PRICE_TO_MARKETPLACE,
 				/* translators: %s: marketplace name. */
 				sprintf( __( 'С сайта на %1$s: цены на %2$s считаются от цен сайта', 'woodev-plugin-framework' ), $marketplace, $marketplace )
 			);
 		}
 		if ( $has_reader ) {
-			$options[] = self::option(
+			$options[] = Field_Kit::option(
 				Wpdb_Account_Store::PRICE_FROM_MARKETPLACE,
 				/* translators: %s: marketplace name. */
 				sprintf( __( 'С %1$s на сайт: цены сайта берутся с %2$s', 'woodev-plugin-framework' ), $marketplace, $marketplace )
 			);
 		}
-		$options[] = self::option(
+		$options[] = Field_Kit::option(
 			Wpdb_Account_Store::PRICE_OFF,
 			__( 'Не синхронизировать цены', 'woodev-plugin-framework' )
 		);
@@ -1377,7 +1348,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 */
 	private function stock_mode_options( string $marketplace ): array {
 		$options = [
-			self::option(
+			Field_Kit::option(
 				Wpdb_Account_Store::STOCK_SITE,
 				/* translators: %s: marketplace name. */
 				sprintf( __( 'Главный — сайт: остатки уходят с сайта на %s', 'woodev-plugin-framework' ), $marketplace )
@@ -1385,14 +1356,14 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		];
 
 		if ( $this->adapter->supports( Capability::INBOUND_STOCK ) ) {
-			$options[] = self::option(
+			$options[] = Field_Kit::option(
 				Wpdb_Account_Store::STOCK_MARKETPLACE,
 				/* translators: %s: marketplace name. */
 				sprintf( __( 'Главный — %1$s: остатки приходят с %2$s на сайт', 'woodev-plugin-framework' ), $marketplace, $marketplace )
 			);
 		}
 
-		$options[] = self::option(
+		$options[] = Field_Kit::option(
 			Wpdb_Account_Store::STOCK_OFF,
 			__( 'Не синхронизировать: остатки не отправляются и не приходят', 'woodev-plugin-framework' )
 		);
@@ -1455,9 +1426,9 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return array_values(
 			array_unique(
 				array_merge(
-					[ 'name', 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled' ],
+					[ 'name', 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', self::OVERRIDE_PRICES, self::OVERRIDE_EXCHANGE ],
 					$this->credential_field_names(),
-					array_keys( self::PRICE_RULE_FIELDS )
+					array_keys( Shared_Fields::PRICE_RULE_FIELDS )
 				)
 			)
 		);
@@ -1521,108 +1492,5 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		}
 
 		return in_array( strtolower( trim( (string) $value ) ), [ '1', 'true', 'yes', 'on' ], true );
-	}
-
-	/**
-	 * Builds one `{value, label}` pair for `Woodev_Setting::set_options()`.
-	 *
-	 * @param string $value Option value.
-	 * @param string $label Option label.
-	 * @return array{value:string,label:string}
-	 */
-	private static function option( string $value, string $label ): array {
-		return [
-			'value' => $value,
-			'label' => $label,
-		];
-	}
-
-	/**
-	 * Registers a setting + control on `$handler`.
-	 *
-	 * @param Settings_Handler    $handler      Handler.
-	 * @param string              $setting_id   Setting id.
-	 * @param string              $setting_type `Woodev_Setting::TYPE_*`.
-	 * @param array<string,mixed> $setting_args Setting args.
-	 * @param string              $control_type `Woodev_Control::TYPE_*`.
-	 * @param array<string,mixed> $control_args Control args.
-	 * @return void
-	 */
-	private function add(
-		Settings_Handler $handler,
-		string $setting_id,
-		string $setting_type,
-		array $setting_args,
-		string $control_type,
-		array $control_args = []
-	): void {
-		$handler->register_setting(
-			$setting_id,
-			$setting_type,
-			$setting_args
-		);
-		$handler->register_control(
-			$setting_id,
-			$control_type,
-			array_merge( [ 'label' => $setting_args['name'] ?? '' ], $control_args )
-		);
-	}
-
-	/**
-	 * Registers a select control with explicit `{value, label}` pairs.
-	 *
-	 * @param Settings_Handler                            $handler    Handler.
-	 * @param string                                      $setting_id Setting id.
-	 * @param string                                      $label      Label.
-	 * @param array<int,array{value:string,label:string}> $options    Option pairs.
-	 * @param string                                      $tooltip    Tooltip.
-	 * @return void
-	 */
-	private function add_select( Settings_Handler $handler, string $setting_id, string $label, array $options, string $tooltip = '' ): void {
-		$default = $options[0]['value'] ?? '';
-		$this->add(
-			$handler,
-			$setting_id,
-			\Woodev_Setting::TYPE_STRING,
-			[
-				'name'    => $label,
-				'default' => $default,
-				'options' => $options,
-			],
-			\Woodev_Control::TYPE_SELECT,
-			array_filter(
-				[
-					'options' => $options,
-					'tooltip' => $tooltip,
-				],
-				static function ( $v ): bool {
-					return '' !== $v && [] !== $v;
-				}
-			)
-		);
-	}
-
-	/**
-	 * Registers a boolean toggle control.
-	 *
-	 * @param Settings_Handler $handler    Handler.
-	 * @param string           $setting_id Setting id.
-	 * @param string           $label      Label.
-	 * @param bool             $default    Default boolean state.
-	 * @param string           $tooltip    Tooltip.
-	 * @return void
-	 */
-	private function add_toggle( Settings_Handler $handler, string $setting_id, string $label, bool $default, string $tooltip = '' ): void {
-		$this->add(
-			$handler,
-			$setting_id,
-			\Woodev_Setting::TYPE_BOOLEAN,
-			[
-				'name'    => $label,
-				'default' => $default,
-			],
-			\Woodev_Control::TYPE_TOGGLE,
-			array_filter( [ 'tooltip' => $tooltip ], 'strlen' )
-		);
 	}
 }

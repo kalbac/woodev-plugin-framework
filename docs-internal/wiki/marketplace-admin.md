@@ -491,6 +491,38 @@ What the code settled, where the text above left it open:
   class's type conversion in both. A later card may unify the two.
 - **Left for F15:** the donor's `Logging::REFUSAL`, `hint()` and `set_enabled()` were not ported; the diagnostics page needs them.
 
+### Settings screen layout as built (#1730)
+
+The screen is five tabs on the plugin's own page, not one tab with a row of sections (operator decision 12.11.2026):
+
+- **Tabs.** «Подключение» · «Параметры» · «Общие» · «Уведомления» · «Дополнительно». `Settings_Module::handler_for()` gives the
+  handler a `Settings_Tab` per tab (a thin view over the provider that owns the fields) and `Settings_Handler::get_settings_providers()`
+  lists one `Settings_Provider` per tab, all over the same handler, so a field keeps one owner and a save reaches it through whichever tab
+  shows it. The first tab keeps the handler's id (`{plugin id}`, so the old address opens the page) and the `legacy_page`; the others are
+  `{plugin id}-{slug}`. «Общие» exists only when the adapter has a price rule or exchange switch to default; «Уведомления» only with
+  `PUSH_NOTIFICATIONS`. The page heading is `Page::get_heading()` («Настройки {plugin name}») over a menu entry that stays «Настройки».
+- **«Подключение»** draws a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.js`): title, identifier, stored
+  status, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение»), «Выключить» (saves
+  `enabled` at once) and «Удалить» (**disabled** with a hint; deleting is #1733). No account: one big «Добавить аккаунт» button. This is
+  the one part the PHP-driven renderer cannot express: one section holds one connection block, and a card needs buttons and an expand.
+- **«Параметры»** is one section per account (sub-tabs by account title); with none, a notice «Подключите аккаунт на вкладке „Подключение“».
+  Stock, warehouse, oversize warehouse and the price direction are always the account's own.
+- **«Общие» and the switch.** `Effective_Settings` is the ONE resolver of `price_rule`, `orders_enabled` and `import_enabled`. Two groups
+  («Цены и наценка», «Заказы и карточки») each have a «как в Общих / свои» select on the account (`override_prices`, `override_exchange`),
+  stored as `settings.overrides.{prices|exchange}` in the account's JSON (true = own); the rule fields show only while «свои» (`show_if`),
+  and a hidden field is never validated nor saved. **No flag means «свои»**: an account that existed before the defaults, or one a plugin's
+  migration created, behaves exactly as before; only an account created on the screen gets `false`. The defaults are ONE option,
+  `woodev_{adapter id}_account_defaults`, keyed by the **adapter** id because every runtime reader holds an `Account`, which knows its
+  adapter and not its plugin (`Uninstaller::run()` deletes it explicitly: the plugin-id family misses it). Switching a group back to «свои»
+  keeps the account's own values, which were never overwritten.
+- **Upgrade.** `Defaults_Migration` fills the defaults from the FIRST account (lowest id) on the first run of the settings screen and marks
+  `_seeded`; it writes nothing to accounts. Saving a price default queues the recompute of every account that follows it
+  (`account_price_rules_changed`), as an account's own change does.
+- **Readers routed through the resolver (framework).** `Export_Price_Policy::rule()`, `Posting_Jobs::wants_postings()`,
+  `Cancel_Ajax::require_usable()`, and `Notification_Account_Reader` (an optional `Effective_Settings`; `Flow_Wiring` and
+  `Settings_Module` pass it). A reader that still reads `Account::setting( 'price_rule' | 'orders_enabled' | 'import_enabled' )` sees the
+  account's own value, which is only wrong for an account switched to «как в Общих».
+
 ## Records engine
 
 Generic, in `Woodev\Framework\Admin\Records\*` and `src/admin-records/`; usable by any

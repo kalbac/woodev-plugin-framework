@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Price\Price_Currency;
 use Woodev\Framework\Marketplace\Price\Price_Override;
 use Woodev\Framework\Marketplace\Price\Price_Pair;
 use Woodev\Framework\Marketplace\Price\Price_Rule;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -52,7 +53,7 @@ final class Export_Price_Policy {
 	 */
 	public static function rule( Account $account, Profile $profile ): Price_Rule {
 		$stored = $profile->setting( 'price_rule' );
-		$stored = is_array( $stored ) && [] !== $stored ? $stored : $account->setting( 'price_rule' );
+		$stored = is_array( $stored ) && [] !== $stored ? $stored : Effective_Settings::for_adapter( $account->adapter_id() )->price_rule( $account );
 
 		return Price_Rule::from_array( self::normalised( is_array( $stored ) ? $stored : [] ) );
 	}
