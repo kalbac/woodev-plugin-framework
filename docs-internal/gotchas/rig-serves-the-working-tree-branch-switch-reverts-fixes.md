@@ -144,6 +144,15 @@ In s92 that read `0` before the switch and `10` after, which settled it in one c
 `?ver=` query string is a filemtime, so a branch switch busts the cache on its own — a stale asset
 is not the explanation, the branch is.
 
+## A plugin whose `woodev/` is mapped to the framework checkout follows the branch too (s228, 12.11.2026)
+
+`.wp-env.override.json` can map `wp-content/plugins/<plugin>/woodev` to `./woodev`, so the plugin runs the framework of the
+CURRENT checkout. In s228 the coordinator detached the primary checkout onto F10's branch to run integration; F10 changed
+`Marketplace_Plugin::log_error()` to return `void`, and Ozon Seller (built against 2.1.1) fataled with «Declaration … must be
+compatible» on every rig request — while the operator was connecting an account (it failed twice, «some WordPress error»).
+A merged breaking marketplace change does the same. While a plugin is mid-port and pinned to a framework version, drop its
+`woodev` mapping so it loads its own vendored copy (check with `wp eval` + `ReflectionClass::getFileName()`).
+
 ## Related
 
 - [jest-scans-agent-worktrees-inside-the-repo](jest-scans-agent-worktrees-inside-the-repo.md) — the same family: local state that silently
