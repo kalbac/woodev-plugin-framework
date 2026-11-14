@@ -83,6 +83,26 @@ final class Remote_Cards_Query {
 	}
 
 	/**
+	 * The articles our link table knows, each with the product that carries it.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param array<int,array{offer_id:?string,has_remote_ids:bool,card_state:string}> $identity Identity of the account's links by product id ({@see \Woodev\Framework\Marketplace\Data\Wpdb_Link_Store::identity_map()}).
+	 * @return array<string,int> Product id by article.
+	 */
+	public static function linked_offers( array $identity ): array {
+		$linked = [];
+
+		foreach ( $identity as $product_id => $row ) {
+			if ( null !== $row['offer_id'] ) {
+				$linked[ $row['offer_id'] ] = $product_id;
+			}
+		}
+
+		return $linked;
+	}
+
+	/**
 	 * Selects a page of the near-match report.
 	 *
 	 * @since 2.1.5

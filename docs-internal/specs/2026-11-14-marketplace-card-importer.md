@@ -169,9 +169,12 @@ A scheduling failure throws, so the drain's retry ladder applies. The body is tr
 
 ### 2.4 Bulk action on the cards tab
 
-`Remote_Cards_Definition::IMPORT` (`import`), declared **both** as a row action and as a bulk action: `effect: mutate`,
+«Импортировать» is declared **both** as a row action, `Remote_Cards_Definition::IMPORT` (`import`), and as a bulk action,
+`IMPORT_SELECTED` (`import_selected`) — the records engine keeps one id space for row and bulk actions
+(`Definition_Parser::actions()` → `unique_ids`), so the two cannot share an id; the server handles both alike. `effect: mutate`,
 `interaction: dialog`, `scope: selection`, capability `manage_woocommerce` (it starts a remote read and creates products, like
-«Обновить список»). `pagination.max_selection` rises from 1 to 100 (one page).
+«Обновить список»). `pagination.max_selection` rises from 1 to 100 (one page), and the rows become `selectable`, only for an
+adapter that imports (I6, built).
 
 - **Preview** (no remote call, no write): reads the cards from this account's snapshot, the links and
   `wc_get_product_id_by_sku()`, and groups the selection — «будет создано товаров: N», «уже на сайте: K», «товар с таким
@@ -181,13 +184,14 @@ A scheduling failure throws, so the drain's retry ladder applies. The body is tr
 - **Apply** replans, requires the licence (`License_Gate::refusal_for( 'импортировать карточки с маркетплейса' )`), queues the
   eligible articles in batches of `Import_Scheduler::BATCH` and answers 202 «Импорт поставлен в очередь…».
 - **Activity.** A row whose article is in a pending or running `import_cards` action is `locked` with «Импортируется» and blocks
-  `import` and `link_to`; the account line says «Импортируем карточки…». Both read Action Scheduler's own tables — local state.
+  the row's `import` and `link_to` (the bulk action is not blocked: one locked row would grey it for a whole selection, and the plan skips that card with its own reason); the account line says «Импортируем карточки…». Both read Action Scheduler's own tables — local state.
 - **After the job** the card moves to «Уже на сайте» by itself: that column is computed from the links.
 
-Raising `max_selection` exposes the three one-row actions: `link_to`, `near_confirm` and `near_dismiss` all read `$ids[0]`
-(READ `Remote_Cards_Actions::preview()` / `apply()`), so with several rows selected they would silently act on the first. I6 makes
-each of them **refuse more than one id** on the server (preview and apply). I6 also checks that the records shell shows checkboxes
-once `max_selection` is above 1 (UNVERIFIED — not run for this spec).
+Raising `max_selection` leaves the three one-row actions — `link_to`, `near_confirm` and `near_dismiss`, all of which read `$ids[0]` —
+safe: the engine already refuses a row action with more than one id (`Action_Request::targets()` answers 400). I6 repeats that
+refusal in `Remote_Cards_Actions` (preview and apply), so a direct caller of the provider cannot make them act on the first row either. I6 checked the records shell (jest `tests/js/admin-records-selection-cap.test.tsx`): the
+checkboxes do **not** depend on `max_selection` — they show whenever the table has bulk actions and the page gave the shell its bulk
+toolbar, and a row's own `selectable` flag enables its box — so no React change was needed.
 
 ### 2.5 The job
 
@@ -391,7 +395,7 @@ soon as I1 is merged, beside I2 and I4.
 - The Ozon answers behind `Card_Content` (image, price, weight and dimension field names and units) were read from v1 code only,
   not from the v2 client, fixtures or the live API — O6 pins them with fixtures.
 - `wc_rest_upload_image_from_url()` inside an Action Scheduler request was read in WooCommerce's source, not run (I3 runs it). The
-  records shell with a selectable cards table was not run (I6).
+  records shell with a selectable cards table was run by I6 (§2.4).
 - How a mapping's stored `category` JSON compares with the adapter's `remote_category()` descriptor (key order, extra keys) was
   not measured — I3's acceptance covers `for_category()`.
 - Whether Ozon sends `CREATE_OR_UPDATE_ITEM` when only a price changes is not known; the price row of §4 depends on it.

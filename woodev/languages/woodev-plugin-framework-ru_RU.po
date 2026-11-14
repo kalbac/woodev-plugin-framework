@@ -10934,3 +10934,91 @@ msgid_plural "Не удалось загрузить %d фото — товар 
 msgstr[0] "Не удалось загрузить %d фото — товар создан без него."
 msgstr[1] "Не удалось загрузить %d фото — товар создан без них."
 msgstr[2] "Не удалось загрузить %d фото — товар создан без них."
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:255
+msgid "Не удалось поставить импорт в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:264
+msgid "Импорт поставлен в очередь. Товары появятся на сайте в течение нескольких минут — обновите страницу чуть позже. Ход работы виден в строках: пока карточка импортируется, она заблокирована."
+msgstr ""
+
+#. translators: %d: number of products that will be created.
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:307
+#, php-format
+msgid "Будет создано товаров: %d."
+msgstr ""
+
+#. translators: %d: number of cards that will be linked to existing products.
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:312
+#, php-format
+msgid "Товар с таким артикулом уже есть, свяжем: %d."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:315
+msgid "Импорт идёт в фоне. На маркетплейсе ничего не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:329
+msgid "Уже импортируется — дождитесь результата"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:330
+msgid "Товар с таким артикулом — вариативный: выберите вариант через «Связать с…»"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:331
+msgid "Карточка в архиве — не импортируем"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:332
+msgid "Нет полных данных — обновите список"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:333
+msgid "Нет в загруженном списке — обновите список"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:388
+msgid "Это действие выполняется для одной карточки. Выберите одну."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:745
+msgid "Карточка сейчас импортируется — дождитесь результата."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:818
+msgid "импортировать карточки с маркетплейса"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:216
+msgid "Импортировать"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:222
+msgid "Для выбранных карточек будут созданы товары на сайте; если товар с таким артикулом уже есть, карточка свяжется с ним. Импорт идёт в фоне. На маркетплейсе ничего не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:334
+msgid "Выбрать все карточки на странице"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:336
+msgid "Выбрано предельное число карточек. Выполните действие и выберите остальные."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:326
+msgid "Импортируем карточки…"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-rows.php:119
+msgid "Импортируется"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-rows.php:369
+msgid "Карточка уже на сайте."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-rows.php:373
+msgid "Карточка в архиве — не импортируем."
+msgstr ""

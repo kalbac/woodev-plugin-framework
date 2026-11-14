@@ -10,13 +10,16 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Admin\Records\Records_Definition;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Actions;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Import_Plan;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Products;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Rows;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
@@ -53,8 +56,61 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	 */
 	protected $searches = [];
 
+	/**
+	 * Whether the provider is wired as for an adapter that can import cards.
+	 *
+	 * @var bool
+	 */
+	protected $importable = false;
+
+	/**
+	 * What the shop's SKU lookup answers, by article: one of the `Remote_Cards_Import_Plan::SKU_*` kinds; an article not listed has no product.
+	 *
+	 * @var array<string,string>
+	 */
+	protected $sku_kinds = [];
+
 	protected function setUp(): void {
 		parent::setUp();
+
+		$this->importable = false;
+		$this->sku_kinds  = [];
+
+		// The queue as the import scheduler reads it: the pending and running actions of a hook, as objects with their arguments.
+		Functions\when( 'as_get_scheduled_actions' )->alias(
+			function ( array $query = [] ): array {
+				if ( isset( $query['args'] ) ) {
+					return array_keys( $this->scheduler->matching( (string) $query['hook'], (array) $query['args'], (string) ( $query['status'] ?? '' ) ) );
+				}
+
+				$pending = array_filter(
+					$this->scheduler->of( (string) $query['hook'] ),
+					static function ( array $action ) use ( $query ): bool {
+						return in_array( $action['status'], (array) $query['status'], true );
+					}
+				);
+
+				return array_map(
+					static function ( array $action ) {
+						return new class( $action['args'] ) {
+							/** @var array<int,mixed> */
+							private $args;
+
+							/** @param array<int,mixed> $args Arguments. */
+							public function __construct( array $args ) {
+								$this->args = $args;
+							}
+
+							/** @return array<int,mixed> */
+							public function get_args(): array {
+								return $this->args;
+							}
+						};
+					},
+					array_values( $pending )
+				);
+			}
+		);
 
 		$this->transients = [];
 		$this->options    = [];
@@ -218,7 +274,14 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	 */
 	protected function cards_provider(): Remote_Cards_Provider {
 		$products = $this->shop_products();
-		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ] );
+		$logging  = new Logging(
+			'woodev_test_advanced_logging',
+			function ( string $name, $fallback = false ) {
+				return $this->options[ $name ] ?? $fallback;
+			}
+		);
+		$importer = $this->importable ? $this->import_scheduler() : null;
+		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], $logging, $this->importable );
 		$license  = new License_Gate(
 			function (): bool {
 				return $this->licensed;
@@ -241,12 +304,35 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 				$this->bulk(),
 				$license,
 				$products,
-				$rows
+				$rows,
+				$importer,
+				null === $importer ? null : $this->import_plan()
 			),
 			[
 				'adapter_id'  => Sqlite_Tables::MARKETPLACE_ID,
 				'marketplace' => 'Тестмаркет',
-			]
+			],
+			$importer
+		);
+	}
+
+	/**
+	 * @return Import_Scheduler
+	 */
+	protected function import_scheduler(): Import_Scheduler {
+		return new Import_Scheduler( $this->names() );
+	}
+
+	/**
+	 * The import plan over the harness' shop: {@see self::$sku_kinds} answers the SKU lookup.
+	 *
+	 * @return Remote_Cards_Import_Plan
+	 */
+	protected function import_plan(): Remote_Cards_Import_Plan {
+		return new Remote_Cards_Import_Plan(
+			function ( string $sku ): string {
+				return $this->sku_kinds[ $sku ] ?? Remote_Cards_Import_Plan::SKU_NONE;
+			}
 		);
 	}
 

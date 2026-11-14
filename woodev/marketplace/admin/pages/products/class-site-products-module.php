@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
@@ -23,13 +24,16 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
+use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
+use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
+use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
@@ -175,7 +179,8 @@ final class Site_Products_Module {
 	}
 
 	/**
-	 * Builds the «Карточки на маркетплейсе» provider, with the same services the products table uses for «Связать по артикулу».
+	 * Builds the «Карточки на маркетплейсе» provider, with the same services the products table uses for «Связать по артикулу». The
+	 * table offers «Импортировать» only when the adapter implements {@see Card_Importer} and reports {@see Capability::IMPORT_PRODUCTS}.
 	 *
 	 * @since 2.1.5
 	 *
@@ -193,10 +198,12 @@ final class Site_Products_Module {
 		$links    = new Wpdb_Link_Store( $db, $table( 'links' ), $table( 'link_ids' ) );
 		$ledger   = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
 		$products = new Remote_Cards_Products( Remote_Cards_Products::woocommerce_search() );
-		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ] );
+		$importer = $adapter instanceof Card_Importer && $adapter->supports( Capability::IMPORT_PRODUCTS ) ? new Import_Scheduler( new Job_Names( $plugin->get_id() ) ) : null;
+		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer );
 		$options  = Uninstaller::option_prefix( $plugin->get_id() );
 		$store    = new Cards_Snapshot_Store( $options );
 		$reports  = new Link_Report_Store( $options );
+		$plan     = null === $importer ? null : new Remote_Cards_Import_Plan( Remote_Cards_Import_Plan::woocommerce_lookup( Product_Writer::marker_key( $adapter->id() ) ) );
 		$actions  = new Remote_Cards_Actions(
 			$store,
 			$links,
@@ -206,7 +213,9 @@ final class Site_Products_Module {
 			self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
 			License_Gate::for_plugin( $plugin ),
 			$products,
-			$rows
+			$rows,
+			$importer,
+			$plan
 		);
 
 		return new Remote_Cards_Provider(
@@ -220,7 +229,8 @@ final class Site_Products_Module {
 			[
 				'adapter_id'  => $adapter->id(),
 				'marketplace' => $adapter->settings_descriptor()->marketplace_name(),
-			]
+			],
+			$importer
 		);
 	}
 

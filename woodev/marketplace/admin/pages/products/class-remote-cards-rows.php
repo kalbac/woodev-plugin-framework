@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
+use Woodev\Framework\Admin\Records\Activity_Normalizer;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Admin\Product\Card_State_Badge;
 use Woodev\Framework\Marketplace\Catalog\Offer_Id_Likeness;
 use Woodev\Framework\Marketplace\Data\Link_Record;
@@ -41,14 +43,32 @@ final class Remote_Cards_Rows {
 	private $describe;
 
 	/**
+	 * Decides whether an import note's technical tail is shown. Null: the tail is never shown.
+	 *
+	 * @var Logging|null
+	 */
+	private $logging;
+
+	/**
+	 * Whether the table offers «Импортировать» (the adapter can import cards): rows are then selectable and carry the action.
+	 *
+	 * @var bool
+	 */
+	private $importable;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param callable $describe `function ( int $product_id ): array{title:string,url:string}`.
+	 * @param callable     $describe   `function ( int $product_id ): array{title:string,url:string}`.
+	 * @param Logging|null $logging    The «Логирование» switch, read when a row is built, so the technical tail of an import note follows it as it is now.
+	 * @param bool         $importable Whether the table offers «Импортировать».
 	 */
-	public function __construct( callable $describe ) {
-		$this->describe = $describe;
+	public function __construct( callable $describe, ?Logging $logging = null, bool $importable = false ) {
+		$this->describe   = $describe;
+		$this->logging    = $logging;
+		$this->importable = $importable;
 	}
 
 	/**
@@ -56,11 +76,13 @@ final class Remote_Cards_Rows {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param int                 $account_id Account id.
-	 * @param array<string,mixed> $card       Snapshot card with `wc_product_id` (0 when no product carries it).
+	 * @param int                                                   $account_id Account id.
+	 * @param array<string,mixed>                                   $card       Snapshot card with `wc_product_id` (0 when no product carries it).
+	 * @param array{offer_id:string,text:string,detail:string}|null $note       The card's import note, if it has one.
+	 * @param bool                                                  $importing  Whether an import of the card is pending or running: the row is then locked.
 	 * @return array<string,mixed>
 	 */
-	public function row( int $account_id, array $card ): array {
+	public function row( int $account_id, array $card, ?array $note = null, bool $importing = false ): array {
 		$offer_id = (string) ( $card['offer_id'] ?? '' );
 
 		return [
@@ -70,12 +92,35 @@ final class Remote_Cards_Rows {
 				'offer_id' => $offer_id,
 				'name'     => (string) ( $card['name'] ?? '' ),
 				'ids'      => $this->ids( (array) ( $card['remote_ids'] ?? [] ) ),
-				'state'    => $this->state( $card ),
+				'state'    => array_merge( $this->state( $card ), $this->note( $note ) ),
 				'on_site'  => $this->on_site( (int) ( $card['wc_product_id'] ?? 0 ) ),
 			],
-			'actions'      => [ $this->link_action( $card ) ],
-			'selectable'   => false,
+			'actions'      => $this->actions( $card, $importing ),
+			'selectable'   => $this->importable,
 			'has_children' => false,
+			'activity'     => $importing ? self::importing_activity() : Activity_Normalizer::idle(),
+		];
+	}
+
+	/**
+	 * The activity of a row whose card is being imported: it is locked, and neither the row's «Импортировать» nor «Связать с…» may run. The bulk
+	 * action is not blocked: it would go grey for a whole selection because of one locked row, and the plan already skips such a card with its own reason.
+	 *
+	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::row()}.
+	 */
+	public static function importing_activity(): array {
+		return [
+			'locked'          => true,
+			'reason'          => self::locked_reason(),
+			'blocked_actions' => [ Remote_Cards_Definition::IMPORT, Remote_Cards_Definition::LINK_TO ],
+			'processes'       => [
+				[
+					'id'    => 'import',
+					'state' => 'running',
+					'label' => __( 'Импортируется', 'woodev-plugin-framework' ),
+				],
+			],
+			'observed_at'     => Activity_Normalizer::now(),
 		];
 	}
 
@@ -131,6 +176,44 @@ final class Remote_Cards_Rows {
 			'selectable'   => false,
 			'has_children' => false,
 		];
+	}
+
+	/**
+	 * @return string Why a card that is being imported takes no action.
+	 */
+	private static function locked_reason(): string {
+		return __( 'Карточка сейчас импортируется — дождитесь результата.', 'woodev-plugin-framework' );
+	}
+
+	/**
+	 * The card's last import note, under its state. The sentence is stored whole; the technical tail is stored apart and asked from the
+	 * «Логирование» switch only now, so turning the switch on or off changes this same note both ways.
+	 *
+	 * @param array{offer_id:string,text:string,detail:string}|null $note The note, if the card has one.
+	 * @return array<int,array{type:string,value:string}>
+	 */
+	private function note( ?array $note ): array {
+		if ( null === $note || '' === $note['text'] ) {
+			return [];
+		}
+
+		$lines = [
+			[
+				'type'  => 'text',
+				'value' => $note['text'],
+			],
+		];
+
+		$detail = null === $this->logging || '' === $note['detail'] ? '' : $this->logging->hint( $note['detail'] );
+
+		if ( '' !== $detail ) {
+			$lines[] = [
+				'type'  => 'text',
+				'value' => $detail,
+			];
+		}
+
+		return $lines;
 	}
 
 	/**
@@ -244,6 +327,56 @@ final class Remote_Cards_Rows {
 					],
 				],
 		];
+	}
+
+	/**
+	 * The actions of a card's row: «Импортировать» (when the table offers it) and «Связать с…».
+	 *
+	 * @param array<string,mixed> $card      Card.
+	 * @param bool                $importing Whether the card is being imported.
+	 * @return array<int,array{id:string,enabled:bool,reason:string}>
+	 */
+	private function actions( array $card, bool $importing ): array {
+		$locked = $importing ? self::locked_reason() : '';
+		$link   = $this->link_action( $card );
+
+		if ( $importing ) {
+			$link['enabled'] = false;
+			$link['reason']  = $locked;
+		}
+
+		return $this->importable ? [ $this->import_action( $card, $locked ), $link ] : [ $link ];
+	}
+
+	/**
+	 * «Импортировать» is open for a card no product carries whose details are known and that is not archived; the other cards say why it is not.
+	 *
+	 * @param array<string,mixed> $card   Card.
+	 * @param string              $locked Why the card is locked, or '' when it is not.
+	 * @return array{id:string,enabled:bool,reason:string}
+	 */
+	private function import_action( array $card, string $locked ): array {
+		$action = [
+			'id'      => Remote_Cards_Definition::IMPORT,
+			'enabled' => false,
+			'reason'  => $locked,
+		];
+
+		if ( '' !== $locked ) {
+			return $action;
+		}
+
+		if ( (int) ( $card['wc_product_id'] ?? 0 ) > 0 ) {
+			$action['reason'] = __( 'Карточка уже на сайте.', 'woodev-plugin-framework' );
+		} elseif ( empty( $card['details_ok'] ) ) {
+			$action['reason'] = __( 'О карточке нет полных данных. Обновите список.', 'woodev-plugin-framework' );
+		} elseif ( ! empty( $card['archived'] ) || Link_Record::STATE_ARCHIVED === (string) ( $card['state'] ?? '' ) ) {
+			$action['reason'] = __( 'Карточка в архиве — не импортируем.', 'woodev-plugin-framework' );
+		} else {
+			$action['enabled'] = true;
+		}
+
+		return $action;
 	}
 
 	/**

@@ -15,17 +15,19 @@ use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Plans and does the actions of the table. **None of them calls the marketplace**: «Обновить список» and «Связать по артикулу»
- * start a background job, and the other three write our own link table or the near-match report.
+ * Plans and does the actions of the table. **None of them calls the marketplace**: «Обновить список», «Связать по артикулу» and
+ * «Импортировать» start a background job, and the other three write our own link table or the near-match report.
  *
  * | Action | What it does | Who may |
  * |---|---|---|
+ * | `import`, `import_selected` | «Импортировать»: sorts the selected cards ({@see Remote_Cards_Import_Plan}) and queues the eligible ones on {@see Import_Scheduler}; the job itself reads the marketplace | `manage_woocommerce` |
  * | `refresh_list` | marks the snapshot as being refreshed and queues the job that fills it | `manage_woocommerce` |
  * | `link_by_article` | the account-wide job of {@see Site_Products_Bulk}, the same as on the products table | `manage_woocommerce` |
  * | `link_to` | links the one card to the product the merchant picked ({@see Card_Linker}); a link settles the pair in the near-match report | `edit_products`, and `edit_post` on the product |
@@ -34,6 +36,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * The card for `link_to` is read from **this account's** snapshot, never from the request: a row id names a card by the key of its
  * article, and a card that is not in the snapshot any more (the list expired) is refused as a stale list.
+ *
+ * `link_to`, `near_confirm` and `near_dismiss` act on one card: the table lets the merchant select many rows for «Импортировать», so each of
+ * them refuses more than one id, at preview and at apply, instead of acting on the first.
  *
  * Both of the linking actions are previewed and then replanned at apply, as every action of the records engine is.
  *
@@ -86,21 +91,37 @@ final class Remote_Cards_Actions {
 	private $rows;
 
 	/**
+	 * Queues the import job; null when the adapter cannot import cards.
+	 *
+	 * @var Import_Scheduler|null
+	 */
+	private $importer;
+
+	/**
+	 * Decides what the import does with each selected card; null when the adapter cannot import cards.
+	 *
+	 * @var Remote_Cards_Import_Plan|null
+	 */
+	private $plan;
+
+	/**
 	 * Creates the actions.
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param Cards_Snapshot_Store  $snapshots Snapshot of the cabinet's cards.
-	 * @param Wpdb_Link_Store       $links     Links.
-	 * @param Link_Report_Store     $reports   The near-match report, which a link settles.
-	 * @param Card_Linker           $linker    The one place that writes a card's link.
-	 * @param Link_Scheduler        $scheduler Queues the jobs.
-	 * @param Site_Products_Bulk    $bulk      The products table's actions, for «Связать по артикулу».
-	 * @param License_Gate          $license   Licence gate.
-	 * @param Remote_Cards_Products $products  The shop's products.
-	 * @param Remote_Cards_Rows     $rows      Row builder, for the row an action changed.
+	 * @param Cards_Snapshot_Store          $snapshots Snapshot of the cabinet's cards.
+	 * @param Wpdb_Link_Store               $links     Links.
+	 * @param Link_Report_Store             $reports   The near-match report, which a link settles.
+	 * @param Card_Linker                   $linker    The one place that writes a card's link.
+	 * @param Link_Scheduler                $scheduler Queues the jobs.
+	 * @param Site_Products_Bulk            $bulk      The products table's actions, for «Связать по артикулу».
+	 * @param License_Gate                  $license   Licence gate.
+	 * @param Remote_Cards_Products         $products  The shop's products.
+	 * @param Remote_Cards_Rows             $rows      Row builder, for the row an action changed.
+	 * @param Import_Scheduler|null         $importer  Queues the import job, null when the adapter cannot import cards.
+	 * @param Remote_Cards_Import_Plan|null $plan Sorts the cards of an import, null when the adapter cannot import cards.
 	 */
-	public function __construct( Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Card_Linker $linker, Link_Scheduler $scheduler, Site_Products_Bulk $bulk, License_Gate $license, Remote_Cards_Products $products, Remote_Cards_Rows $rows ) {
+	public function __construct( Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Card_Linker $linker, Link_Scheduler $scheduler, Site_Products_Bulk $bulk, License_Gate $license, Remote_Cards_Products $products, Remote_Cards_Rows $rows, ?Import_Scheduler $importer = null, ?Remote_Cards_Import_Plan $plan = null ) {
 		$this->snapshots = $snapshots;
 		$this->links     = $links;
 		$this->reports   = $reports;
@@ -110,6 +131,8 @@ final class Remote_Cards_Actions {
 		$this->license   = $license;
 		$this->products  = $products;
 		$this->rows      = $rows;
+		$this->importer  = $importer;
+		$this->plan      = $plan;
 	}
 
 	/**
@@ -119,16 +142,20 @@ final class Remote_Cards_Actions {
 	 *
 	 * @param Account             $account Account.
 	 * @param string              $action  Action id.
-	 * @param string[]            $ids     Row ids (one for `link_to`, none for an account action).
+	 * @param string[]            $ids     Row ids (one for `link_to`, many for «Импортировать», none for an account action).
 	 * @param array<string,mixed> $payload Validated fields.
 	 * @return array<string,mixed> The preview answer of the records engine.
-	 * @throws Action_State_Exception When the licence is not in force.
+	 * @throws Action_State_Exception When the licence is not in force, or a one-card action got several rows.
 	 * @throws Action_Input_Exception When the picked product cannot take a card.
 	 */
 	public function preview( Account $account, string $action, array $ids, array $payload ): array {
+		$this->require_one_card( $action, $ids );
 		$this->require_licence( $action );
 
 		switch ( $action ) {
+			case Remote_Cards_Definition::IMPORT:
+			case Remote_Cards_Definition::IMPORT_SELECTED:
+				return $this->preview_import( $account, $ids );
 			case Remote_Cards_Definition::LINK_TO:
 				return $this->preview_link( $account, (string) ( $ids[0] ?? '' ), $payload );
 			case Remote_Cards_Definition::NEAR_CONFIRM:
@@ -151,13 +178,17 @@ final class Remote_Cards_Actions {
 	 * @param string[]            $ids     Row ids.
 	 * @param array<string,mixed> $payload Validated fields.
 	 * @return array<string,mixed> The apply answer of the records engine.
-	 * @throws Action_State_Exception When the licence is not in force or the queue refuses the job.
+	 * @throws Action_State_Exception When the licence is not in force, a one-card action got several rows, or the queue refuses the job.
 	 * @throws Action_Input_Exception When the picked product cannot take a card.
 	 */
 	public function apply( Account $account, string $action, array $ids, array $payload ): array {
+		$this->require_one_card( $action, $ids );
 		$this->require_licence( $action );
 
 		switch ( $action ) {
+			case Remote_Cards_Definition::IMPORT:
+			case Remote_Cards_Definition::IMPORT_SELECTED:
+				return $this->apply_import( $account, $ids );
 			case Remote_Cards_Definition::LINK_TO:
 				return $this->apply_link( $account, (string) ( $ids[0] ?? '' ), $payload );
 			case Remote_Cards_Definition::NEAR_CONFIRM:
@@ -172,6 +203,193 @@ final class Remote_Cards_Actions {
 	}
 
 	/**
+	 * What «Импортировать» will do with the selected cards. Reads the snapshot, the links, the shop's products and the import queue:
+	 * nothing is written and nothing is sent to the marketplace.
+	 *
+	 * @param Account  $account Account.
+	 * @param string[] $ids     Row ids.
+	 * @return array<string,mixed>
+	 */
+	private function preview_import( Account $account, array $ids ): array {
+		$plan     = $this->import_plan( $account, $ids );
+		$eligible = count( $plan[ Remote_Cards_Import_Plan::CREATE ] ) + count( $plan[ Remote_Cards_Import_Plan::LINK ] );
+		$skipped  = $this->skipped_count( $plan );
+
+		return [
+			'requested'      => $eligible + $skipped,
+			'eligible'       => $eligible,
+			'skipped'        => $skipped,
+			'scope_sentence' => $this->import_sentence( $plan ),
+			'groups'         => $this->import_groups( $plan ),
+		];
+	}
+
+	/**
+	 * Replans from the current state, then queues the eligible cards on the import job. The job reads the marketplace, not this request.
+	 *
+	 * @param Account  $account Account.
+	 * @param string[] $ids     Row ids.
+	 * @return array<string,mixed>
+	 * @throws Action_State_Exception When Action Scheduler refuses the job.
+	 */
+	private function apply_import( Account $account, array $ids ): array {
+		$plan     = $this->import_plan( $account, $ids );
+		$offers   = array_merge( $plan[ Remote_Cards_Import_Plan::CREATE ], $plan[ Remote_Cards_Import_Plan::LINK ] );
+		$skipped  = $this->skipped_count( $plan );
+		$groups   = $this->import_groups( $plan );
+		$result   = [
+			'requested' => count( $offers ) + $skipped,
+			'accepted'  => 0,
+			'skipped'   => $skipped,
+			'failed'    => 0,
+			'groups'    => $groups,
+		];
+
+		if ( [] === $offers ) {
+			return $result;
+		}
+
+		try {
+			$this->importer->import( $account->id(), $offers );
+		} catch ( Persistence_Exception $e ) {
+			throw new Action_State_Exception( __( 'Не удалось поставить импорт в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите.', 'woodev-plugin-framework' ) );
+		}
+
+		return array_merge(
+			$result,
+			[
+				'accepted' => count( $offers ),
+				'queued'   => true,
+				'rows'     => $this->locked_rows( $account, $offers ),
+				'messages' => [ 'action_status_queued' => __( 'Импорт поставлен в очередь. Товары появятся на сайте в течение нескольких минут — обновите страницу чуть позже. Ход работы виден в строках: пока карточка импортируется, она заблокирована.', 'woodev-plugin-framework' ) ],
+			]
+		);
+	}
+
+	/**
+	 * Sorts the selected cards from local facts.
+	 *
+	 * @param Account  $account Account.
+	 * @param string[] $ids     Row ids.
+	 * @return array{create:string[],link:string[],skipped:array<string,string[]>}
+	 */
+	private function import_plan( Account $account, array $ids ): array {
+		$snapshot = $this->snapshots->get( $account->id() );
+		$cards    = [];
+
+		foreach ( array_values( array_unique( $ids ) ) as $row_id ) {
+			$key     = Remote_Cards_Ids::key_of( (string) $row_id, $account->id() );
+			$cards[] = null === $key || null === $snapshot ? null : Remote_Cards_Query::find( $snapshot['cards'], $key );
+		}
+
+		return $this->plan->build( $cards, Remote_Cards_Query::linked_offers( $this->links->identity_map( $account->id() ) ), $this->importer->pending_offer_ids( $account->id() ) );
+	}
+
+	/**
+	 * @param array{create:string[],link:string[],skipped:array<string,string[]>} $plan Plan.
+	 * @return int
+	 */
+	private function skipped_count( array $plan ): int {
+		return array_sum( array_map( 'count', $plan['skipped'] ) );
+	}
+
+	/**
+	 * «Будет создано товаров: N. Товар с таким артикулом уже есть, свяжем: M.»
+	 *
+	 * @param array{create:string[],link:string[],skipped:array<string,string[]>} $plan Plan.
+	 * @return string
+	 */
+	private function import_sentence( array $plan ): string {
+		$parts = [];
+
+		if ( [] !== $plan[ Remote_Cards_Import_Plan::CREATE ] ) {
+			/* translators: %d: number of products that will be created. */
+			$parts[] = sprintf( __( 'Будет создано товаров: %d.', 'woodev-plugin-framework' ), count( $plan[ Remote_Cards_Import_Plan::CREATE ] ) );
+		}
+
+		if ( [] !== $plan[ Remote_Cards_Import_Plan::LINK ] ) {
+			/* translators: %d: number of cards that will be linked to existing products. */
+			$parts[] = sprintf( __( 'Товар с таким артикулом уже есть, свяжем: %d.', 'woodev-plugin-framework' ), count( $plan[ Remote_Cards_Import_Plan::LINK ] ) );
+		}
+
+		$parts[] = __( 'Импорт идёт в фоне. На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' );
+
+		return implode( ' ', $parts );
+	}
+
+	/**
+	 * The cards the import leaves out, one group per reason.
+	 *
+	 * @param array{create:string[],link:string[],skipped:array<string,string[]>} $plan Plan.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function import_groups( array $plan ): array {
+		$reasons = [
+			Remote_Cards_Import_Plan::ON_SITE         => __( 'Уже на сайте', 'woodev-plugin-framework' ),
+			Remote_Cards_Import_Plan::IMPORTING       => __( 'Уже импортируется — дождитесь результата', 'woodev-plugin-framework' ),
+			Remote_Cards_Import_Plan::VARIABLE_PARENT => __( 'Товар с таким артикулом — вариативный: выберите вариант через «Связать с…»', 'woodev-plugin-framework' ),
+			Remote_Cards_Import_Plan::ARCHIVED        => __( 'Карточка в архиве — не импортируем', 'woodev-plugin-framework' ),
+			Remote_Cards_Import_Plan::INCOMPLETE      => __( 'Нет полных данных — обновите список', 'woodev-plugin-framework' ),
+			Remote_Cards_Import_Plan::NOT_IN_LIST     => __( 'Нет в загруженном списке — обновите список', 'woodev-plugin-framework' ),
+		];
+		$groups  = [];
+
+		foreach ( $reasons as $outcome => $reason ) {
+			$offers = $plan['skipped'][ $outcome ] ?? [];
+
+			if ( [] !== $offers ) {
+				$groups[] = [
+					'kind'     => 'skipped',
+					'reason'   => $reason,
+					'count'    => count( $offers ),
+					'examples' => array_slice( array_values( array_filter( $offers, 'strlen' ) ), 0, 3 ),
+				];
+			}
+		}
+
+		return $groups;
+	}
+
+	/**
+	 * The rows of the queued cards, locked, so the table shows the import at once.
+	 *
+	 * @param Account  $account Account.
+	 * @param string[] $offers  Articles that were queued.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function locked_rows( Account $account, array $offers ): array {
+		$snapshot = $this->snapshots->get( $account->id() );
+		$rows     = [];
+
+		foreach ( $offers as $offer_id ) {
+			$card = null === $snapshot ? null : Remote_Cards_Query::find( $snapshot['cards'], Remote_Cards_Ids::key( $offer_id ) );
+
+			if ( null !== $card ) {
+				$rows[] = $this->rows->row( $account->id(), array_merge( $card, [ 'wc_product_id' => 0 ] ), null, true );
+			}
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * `link_to`, `near_confirm` and `near_dismiss` act on one card. The table selects many rows for «Импортировать», so a request that
+	 * names several is refused rather than acting on the first.
+	 *
+	 * @param string   $action Action id.
+	 * @param string[] $ids    Row ids.
+	 * @return void
+	 * @throws Action_State_Exception When the action is a one-card action and the request names more than one row.
+	 */
+	private function require_one_card( string $action, array $ids ): void {
+		$one_card = [ Remote_Cards_Definition::LINK_TO, Remote_Cards_Definition::NEAR_CONFIRM, Remote_Cards_Definition::NEAR_DISMISS ];
+
+		if ( in_array( $action, $one_card, true ) && count( array_unique( $ids ) ) > 1 ) {
+			throw new Action_State_Exception( __( 'Это действие выполняется для одной карточки. Выберите одну.', 'woodev-plugin-framework' ) );
+		}
+	}
+
+	/**
 	 * @param Account             $account Account.
 	 * @param string              $row_id  Row id.
 	 * @param array<string,mixed> $payload Fields.
@@ -180,7 +398,7 @@ final class Remote_Cards_Actions {
 	private function preview_link( Account $account, string $row_id, array $payload ): array {
 		$product = $this->products->pick( $payload[ Remote_Cards_Definition::PRODUCT_FIELD ] ?? null, Remote_Cards_Definition::PRODUCT_FIELD );
 		$card    = $this->card( $account, $row_id );
-		$reason  = $this->reason_not_to_link( $card );
+		$reason  = $this->reason_not_to_link( $account, $card );
 
 		if ( null !== $reason ) {
 			return $this->refused_preview( $reason );
@@ -209,7 +427,7 @@ final class Remote_Cards_Actions {
 	private function apply_link( Account $account, string $row_id, array $payload ): array {
 		$product = $this->products->pick( $payload[ Remote_Cards_Definition::PRODUCT_FIELD ] ?? null, Remote_Cards_Definition::PRODUCT_FIELD );
 		$card    = $this->card( $account, $row_id );
-		$reason  = $this->reason_not_to_link( $card );
+		$reason  = $this->reason_not_to_link( $account, $card );
 
 		if ( null !== $reason ) {
 			return $this->refused_apply( $reason, (string) ( $card['offer_id'] ?? '' ) );
@@ -226,6 +444,7 @@ final class Remote_Cards_Actions {
 		}
 
 		$this->reports->settle_near_match( $account->id(), $product['id'], (string) $card['offer_id'], true );
+		$this->reports->clear_import_note( $account->id(), (string) $card['offer_id'] );
 
 		$text = Card_Linker::message( Card_Linker::LINKED );
 
@@ -508,18 +727,23 @@ final class Remote_Cards_Actions {
 
 	/**
 	 * Why a card cannot be linked from this list, or null when it can. A card whose details did not agree with the list is not
-	 * linkable: its identifiers are not trustworthy.
+	 * linkable: its identifiers are not trustworthy. A card that is being imported is not linkable either: the import links it itself.
 	 *
-	 * @param array<string,mixed>|null $card Card.
+	 * @param Account                  $account Account.
+	 * @param array<string,mixed>|null $card    Card.
 	 * @return string|null
 	 */
-	private function reason_not_to_link( ?array $card ): ?string {
+	private function reason_not_to_link( Account $account, ?array $card ): ?string {
 		if ( null === $card ) {
 			return __( 'Этой карточки нет в загруженном списке — он мог устареть. Нажмите «Обновить список» и повторите.', 'woodev-plugin-framework' );
 		}
 
 		if ( empty( $card['details_ok'] ) ) {
 			return __( 'О карточке нет полных данных: при загрузке списка они не совпали. Обновите список и повторите.', 'woodev-plugin-framework' );
+		}
+
+		if ( null !== $this->importer && in_array( (string) $card['offer_id'], $this->importer->pending_offer_ids( $account->id() ), true ) ) {
+			return __( 'Карточка сейчас импортируется — дождитесь результата.', 'woodev-plugin-framework' );
 		}
 
 		return null;
@@ -590,8 +814,10 @@ final class Remote_Cards_Actions {
 	 */
 	private function require_licence( string $action ): void {
 		$phrases = [
-			Remote_Cards_Definition::REFRESH    => __( 'загрузить список карточек с маркетплейса', 'woodev-plugin-framework' ),
-			Site_Products_Bulk::LINK_BY_ARTICLE => __( 'искать карточки на маркетплейсе', 'woodev-plugin-framework' ),
+			Remote_Cards_Definition::REFRESH         => __( 'загрузить список карточек с маркетплейса', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::LINK_BY_ARTICLE      => __( 'искать карточки на маркетплейсе', 'woodev-plugin-framework' ),
+			Remote_Cards_Definition::IMPORT          => __( 'импортировать карточки с маркетплейса', 'woodev-plugin-framework' ),
+			Remote_Cards_Definition::IMPORT_SELECTED => __( 'импортировать карточки с маркетплейса', 'woodev-plugin-framework' ),
 		];
 
 		$refusal = isset( $phrases[ $action ] ) ? $this->license->refusal_for( $phrases[ $action ] ) : null;

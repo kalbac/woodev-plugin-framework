@@ -16,6 +16,7 @@ use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -79,6 +80,13 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	private $config;
 
 	/**
+	 * Reads the articles being imported; null when the adapter cannot import cards.
+	 *
+	 * @var Import_Scheduler|null
+	 */
+	private $importer;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
@@ -91,8 +99,9 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @param Remote_Cards_Products $products  The shop's products.
 	 * @param Remote_Cards_Actions  $actions   The table's actions.
 	 * @param array<string,mixed>   $config    `adapter_id` and `marketplace`.
+	 * @param Import_Scheduler|null $importer  Reads the import queue; null when the adapter cannot import cards, and the table then offers no «Импортировать».
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config ) {
+	public function __construct( Wpdb_Account_Store $accounts, Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null ) {
 		$this->accounts  = $accounts;
 		$this->snapshots = $snapshots;
 		$this->links     = $links;
@@ -104,6 +113,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			'adapter_id'  => (string) ( $config['adapter_id'] ?? '' ),
 			'marketplace' => (string) ( $config['marketplace'] ?? '' ),
 		];
+		$this->importer  = $importer;
 	}
 
 	/**
@@ -122,7 +132,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @return array<string,mixed>
 	 */
 	public function get_definition( array $context ): array {
-		return Remote_Cards_Definition::build( $this->account_options(), $this->config['marketplace'] );
+		return Remote_Cards_Definition::build( $this->account_options(), $this->config['marketplace'], null !== $this->importer );
 	}
 
 	/**
@@ -174,6 +184,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		}
 
 		$snapshot = $this->snapshots->get( $account->id() );
+		$state    = $this->import_state( $account->id() );
 		$page     = Remote_Cards_Query::page(
 			null === $snapshot ? [] : $snapshot['cards'],
 			$this->linked_offers( $account->id() ),
@@ -185,13 +196,13 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 
 		return [
 			'rows'             => array_map(
-				function ( array $card ) use ( $account ): array {
-					return $this->rows->row( $account->id(), $card );
+				function ( array $card ) use ( $account, $state ): array {
+					return $this->card_row( $account->id(), $card, $state );
 				},
 				$page['cards']
 			),
 			'total'            => $page['total'],
-			'account_activity' => $this->account_activity( $account->id() ),
+			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
 			'messages'         => [ 'summary' => $this->summary( $account->id(), $snapshot ) ],
 		];
 	}
@@ -246,7 +257,8 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * The account line and nothing else: no row of this table has a process of its own.
+	 * The current rows of the asked ids and the account line: a row's import lock, its import note and where it now stands on the site.
+	 * Local reads only: the snapshot, the links, the notes and the import queue.
 	 *
 	 * @since 2.1.5
 	 *
@@ -257,10 +269,20 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	public function get_activity( array $context, array $ids ): array {
 		$account = $this->account( $context );
 
+		if ( null === $account ) {
+			return [
+				'rows'             => [],
+				'removed_ids'      => [],
+				'account_activity' => Activity_Normalizer::idle_account(),
+			];
+		}
+
+		$state = $this->import_state( $account->id() );
+
 		return [
-			'rows'             => [],
+			'rows'             => $this->current_rows( $account, $ids, $state ),
 			'removed_ids'      => [],
-			'account_activity' => null === $account ? Activity_Normalizer::idle_account() : $this->account_activity( $account->id() ),
+			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
 		];
 	}
 
@@ -283,22 +305,99 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * «Обновить список» is blocked while the job runs.
+	 * The account line: «Обновить список» is blocked while its job runs, and a pending import is announced.
 	 *
-	 * @param int $account_id Account id.
+	 * @param int      $account_id    Account id.
+	 * @param string[] $importing_ids Articles being imported, read once per request by the caller ({@see self::import_state()}).
 	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::account()}.
 	 */
-	private function account_activity( int $account_id ): array {
-		if ( ! $this->snapshots->is_refreshing( $account_id ) ) {
+	private function account_activity( int $account_id, array $importing_ids ): array {
+		$refreshing = $this->snapshots->is_refreshing( $account_id );
+		$importing  = [] !== $importing_ids;
+
+		if ( ! $refreshing && ! $importing ) {
 			return Activity_Normalizer::idle_account();
+		}
+
+		$text = [];
+
+		if ( $refreshing ) {
+			$text[] = __( 'Список карточек загружается с маркетплейса. Когда загрузка закончится, обновите страницу.', 'woodev-plugin-framework' );
+		}
+
+		if ( $importing ) {
+			$text[] = __( 'Импортируем карточки…', 'woodev-plugin-framework' );
 		}
 
 		return [
 			'active'          => true,
-			'text'            => __( 'Список карточек загружается с маркетплейса. Когда загрузка закончится, обновите страницу.', 'woodev-plugin-framework' ),
-			'blocked_actions' => [ Remote_Cards_Definition::REFRESH ],
+			'text'            => implode( ' ', $text ),
+			'blocked_actions' => $refreshing ? [ Remote_Cards_Definition::REFRESH ] : [],
 			'observed_at'     => Activity_Normalizer::now(),
 		];
+	}
+
+	/**
+	 * What the rows need besides the card: the import notes of the account, by article, and the articles being imported.
+	 *
+	 * @param int $account_id Account id.
+	 * @return array{notes:array<string,array{offer_id:string,text:string,detail:string}>,importing:string[]}
+	 */
+	private function import_state( int $account_id ): array {
+		$notes = [];
+
+		foreach ( $this->reports->import_notes( $account_id ) as $note ) {
+			$notes[ $note['offer_id'] ] = $note;
+		}
+
+		return [
+			'notes'     => $notes,
+			'importing' => null === $this->importer ? [] : $this->importer->pending_offer_ids( $account_id ),
+		];
+	}
+
+	/**
+	 * One row of a card.
+	 *
+	 * @param int                 $account_id Account id.
+	 * @param array<string,mixed> $card       Snapshot card with `wc_product_id`.
+	 * @param array<string,mixed> $state      {@see self::import_state()}.
+	 * @return array<string,mixed>
+	 */
+	private function card_row( int $account_id, array $card, array $state ): array {
+		$offer_id = (string) $card['offer_id'];
+
+		return $this->rows->row( $account_id, $card, $state['notes'][ $offer_id ] ?? null, in_array( $offer_id, $state['importing'], true ) );
+	}
+
+	/**
+	 * The rows of the asked ids that are cards of the snapshot, as the table would list them now.
+	 *
+	 * @param Account             $account Account.
+	 * @param string[]            $ids     Row ids.
+	 * @param array<string,mixed> $state   {@see self::import_state()}.
+	 * @return array<int,array<string,mixed>> No row for the id of a near-match pair or of a card the list no longer holds.
+	 */
+	private function current_rows( Account $account, array $ids, array $state ): array {
+		$snapshot = $this->snapshots->get( $account->id() );
+
+		if ( null === $snapshot ) {
+			return [];
+		}
+
+		$linked = $this->linked_offers( $account->id() );
+		$rows   = [];
+
+		foreach ( $ids as $row_id ) {
+			$key  = Remote_Cards_Ids::key_of( (string) $row_id, $account->id() );
+			$card = null === $key ? null : Remote_Cards_Query::find( $snapshot['cards'], $key );
+
+			if ( null !== $card ) {
+				$rows[] = $this->card_row( $account->id(), array_merge( $card, [ 'wc_product_id' => $linked[ (string) $card['offer_id'] ] ?? 0 ] ), $state );
+			}
+		}
+
+		return $rows;
 	}
 
 	/**
@@ -356,7 +455,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 				$found['entries']
 			),
 			'total'            => $found['total'],
-			'account_activity' => $this->account_activity( $account->id() ),
+			'account_activity' => $this->account_activity( $account->id(), $this->import_state( $account->id() )['importing'] ),
 			'messages'         => [ 'summary' => trim( Remote_Cards_Summary::near_explained() . ' ' . Remote_Cards_Summary::last_run( $this->reports->last_run( $account->id() ) ) ) ],
 		];
 	}
@@ -368,15 +467,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @return array<string,int> Product id by article.
 	 */
 	private function linked_offers( int $account_id ): array {
-		$linked = [];
-
-		foreach ( $this->links->identity_map( $account_id ) as $product_id => $identity ) {
-			if ( null !== $identity['offer_id'] ) {
-				$linked[ $identity['offer_id'] ] = $product_id;
-			}
-		}
-
-		return $linked;
+		return Remote_Cards_Query::linked_offers( $this->links->identity_map( $account_id ) );
 	}
 
 	/**
