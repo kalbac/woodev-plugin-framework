@@ -8,7 +8,9 @@
 namespace Woodev\Framework\Marketplace\Settings;
 
 use Woodev\Framework\Marketplace\Account\Account_Store;
+use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Settings\Settings_Group;
 use Woodev\Framework\Settings\Settings_Section;
@@ -17,7 +19,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * The values an account uses while its group is «как в Общих»: the price rule (base, markup, rounding, old price, minimum price)
- * and the exchange switches (orders import, cards auto-import).
+ * and the exchange switches (orders import, cards auto-import). An adapter that imports cards ({@see Card_Importer}) adds the two
+ * card-import settings — publish at once, create missing categories — which exist only here, never per account.
  *
  * The values are one option, {@see Effective_Settings::option_name()}, that {@see Effective_Settings} reads at runtime; this class is
  * only the screen over it. Setting ids are `defaults_{field}` (`defaults_price_base`, `defaults_orders_enabled`, …).
@@ -104,6 +107,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 		}
 
 		Shared_Fields::register_exchange( $handler, $id_for, $this->adapter );
+		$this->register_import_fields( $handler );
 	}
 
 	/**
@@ -114,7 +118,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 * @return bool
 	 */
 	public function has_fields(): bool {
-		return [] !== $this->price_fields() || [] !== Shared_Fields::exchange_field_names( $this->adapter );
+		return [] !== $this->price_fields() || [] !== $this->exchange_fields();
 	}
 
 	/**
@@ -126,7 +130,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 */
 	public function sections(): array {
 		$price_ids    = array_map( [ self::class, 'setting_id' ], $this->price_fields() );
-		$exchange_ids = array_map( [ self::class, 'setting_id' ], Shared_Fields::exchange_field_names( $this->adapter ) );
+		$exchange_ids = array_map( [ self::class, 'setting_id' ], $this->exchange_fields() );
 		$groups       = [];
 
 		if ( [] !== $price_ids ) {
@@ -251,6 +255,56 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	}
 
 	/**
+	 * Names of the card-import settings; none unless the adapter really imports cards.
+	 *
+	 * @return string[]
+	 */
+	private function import_fields(): array {
+		if ( ! $this->adapter instanceof Card_Importer || ! $this->adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+			return [];
+		}
+
+		return [ Effective_Settings::KEY_IMPORT_PUBLISH, Effective_Settings::KEY_IMPORT_CATEGORIES ];
+	}
+
+	/**
+	 * Names of every field of the «Заказы и карточки» card: the exchange switches, then the card-import settings.
+	 *
+	 * @return string[]
+	 */
+	private function exchange_fields(): array {
+		return array_merge( Shared_Fields::exchange_field_names( $this->adapter ), $this->import_fields() );
+	}
+
+	/**
+	 * Registers the card-import toggles.
+	 *
+	 * @param Settings_Handler $handler Handler.
+	 * @return void
+	 */
+	private function register_import_fields( Settings_Handler $handler ): void {
+		if ( [] === $this->import_fields() ) {
+			return;
+		}
+
+		Field_Kit::add_toggle(
+			$handler,
+			self::setting_id( Effective_Settings::KEY_IMPORT_PUBLISH ),
+			__( 'Сразу публиковать импортированные товары', 'woodev-plugin-framework' ),
+			false,
+			__( 'Если выключено, товары, созданные из карточек, сохраняются как черновики: проверьте их и опубликуйте сами. Действует для всех аккаунтов.', 'woodev-plugin-framework' )
+		);
+
+		Field_Kit::add_toggle(
+			$handler,
+			self::setting_id( Effective_Settings::KEY_IMPORT_CATEGORIES ),
+			__( 'Создавать категории для импортированных товаров', 'woodev-plugin-framework' ),
+			true,
+			__( 'Если для карточки нет подходящей категории на сайте, плагин создаст её. Если выключено, товар сохранится без категории. Действует для всех аккаунтов.', 'woodev-plugin-framework' )
+		);
+	}
+
+	/**
 	 * Field name behind a setting id, when it is a default this adapter shows.
 	 *
 	 * @param string $setting_id Setting id.
@@ -262,7 +316,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 		}
 
 		$field = substr( $setting_id, strlen( self::PREFIX ) );
-		$known = array_merge( $this->price_fields(), Shared_Fields::exchange_field_names( $this->adapter ) );
+		$known = array_merge( $this->price_fields(), $this->exchange_fields() );
 
 		return in_array( $field, $known, true ) ? $field : null;
 	}
@@ -274,7 +328,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 * @return bool
 	 */
 	private function is_boolean( string $field ): bool {
-		return in_array( $field, [ 'orders_enabled', 'import_enabled' ], true );
+		return in_array( $field, [ 'orders_enabled', 'import_enabled', Effective_Settings::KEY_IMPORT_PUBLISH, Effective_Settings::KEY_IMPORT_CATEGORIES ], true );
 	}
 
 	/**

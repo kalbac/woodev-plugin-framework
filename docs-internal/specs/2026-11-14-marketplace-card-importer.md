@@ -1,8 +1,9 @@
 # Marketplace card importer (marketplace card → WooCommerce product) — design
 
-**Date:** 2026-11-14. **Status:** draft r2 — written for `kalbac/woocommerce-ozon-seller#75`; r2 folds in the eight findings of the
-r1 critic (Claude Opus, PR #1763), see the [revision log](#revision-log). The three operator questions of §6 are still open.
-**Target:** framework **2.1.6** (cards I1–I6 below); first consumer Ozon Seller 2.0.0 (card O6).
+**Date:** 2026-11-14. **Status:** draft r3 — written for `kalbac/woocommerce-ozon-seller#75`; r2 folded in the eight findings of the
+r1 critic (Claude Opus, PR #1763); r3 records the operator's answers to the three questions of §6 (15.11.2026), see the
+[revision log](#revision-log). No question is open.
+**Target:** framework **2.1.6** (cards I1–I7 below); first consumer Ozon Seller 2.0.0 (card O6).
 
 **Evidence labels:** **READ** (code or document read for this spec), **UNVERIFIED** (reason given; the named card proves it).
 `fw:` = this repo at `f72878e3`; `ozon:` = `kalbac/woocommerce-ozon-seller` `main` at `99bee18`; `v1:` = the same repo at tag `v1.1.7`
@@ -59,22 +60,23 @@ gate is the default for every remote action. No call to woodev.ru is added.
 
 ### 1.3 What 2.0 does
 
-1. Imports a card as a **simple product**: name, SKU = article, description, price, weight and dimensions, images, category.
+1. Imports a card as a **simple product**: name, SKU = article, description, price, weight and dimensions, images, category; cards
+   of one Ozon group become **one variable product** (card I7, operator decision 15.11.2026).
 2. Never duplicates: a linked card is skipped; a card whose article is the SKU of an existing product is **linked** to it, unless
    that product is a variable parent (§2.6). An archived card is not imported.
 3. Two triggers, one job: the item notification (auto-import on) and «Импортировать» on the cards tab (row and bulk).
 4. Two merchant settings on «Общие» — both v1 settings, migrated by the Ozon plugin: «Сразу публиковать импортированные товары»
-   (v1 `product_status`) and «Создавать категории для импортированных товаров» (v1 `create_new_category`).
+   (v1 `product_status`; **off** for a new shop, an upgraded v1 shop keeps its value) and «Создавать категории для импортированных
+   товаров» (v1 `create_new_category`).
 5. A linked card's notification refreshes its price when the account reads prices from the marketplace (§4).
 
 ### 1.4 Not in this design
 
 | Item | Why | Where it goes |
 |---|---|---|
-| Ozon groups (`model_id`) → one variable product | not v1 parity; the largest and riskiest part (in-place simple → variable conversion). The Ozon spec's D9 adopted it for 2.0 **provisionally** | card I7, pending open question 1 |
-| WooCommerce attributes from card attributes | v1 default off; creates global taxonomies in the merchant's shop (Ozon spec risk 11) | later, by demand (open question 3) |
-| Overwriting an existing product («replace existing») | v1 default off; destroys merchant edits | not planned (open question 3) |
-| `external` product type | Ozon spec §5.6 imports simple products; the storefront «Купить на Ozon» button was removed (its R3) | not planned (open question 3) |
+| WooCommerce attributes from card attributes | v1 default off; creates global taxonomies in the merchant's shop (Ozon spec risk 11) | **dropped** (operator, 15.11.2026); one migration-report line for a shop that had it on (O6); back only on a ticket |
+| Overwriting an existing product («replace existing») | v1 default off; destroys merchant edits | **dropped** (operator, 15.11.2026); one migration-report line for a shop that had it on (O6) |
+| `external` product type | Ozon spec §5.6 imports simple products; the storefront «Купить на Ozon» button was removed (its R3) | **dropped** (operator, 15.11.2026); one migration-report line for a shop that had it on (O6) |
 | Visibility and stock-status settings | WooCommerce's own defaults equal v1's defaults | dropped |
 | Stock quantity | v1 never imported it; the link starts with both sync switches off (`Card_Linker`) | unchanged |
 | Barcode; the card's attributes stored as link `attribute_overrides` | v1 did not import a barcode; overrides are an export concern of every linked card, not only imported ones | separate card if export needs it |
@@ -123,7 +125,7 @@ interface Card_Importer {
 | `primary_image(): string`, `images(): string[]` | absolute URLs |
 | `remote_category(): array` | the descriptor `Mapping::remote_category()` stores; `[]` when unknown |
 | `category_path(): string[]` | category names from the root down, for creating shop categories; `[]` when unknown |
-| `group(): array` | reserved for I7: `key` (string, '' = stands alone), `size` (int), `aspects` (name => value). I1–I6 ignore it |
+| `group(): array` | the Ozon group of the card, read by I7: `key` (string, '' = stands alone), `size` (int), `aspects` (name => value). I1–I6 carry it and ignore it |
 
 Ozon (card O6): `Ozon_Adapter implements Card_Importer`, delegating to a new `Ozon_Card_Reader` that reads the card's summary,
 attributes and description and builds `Card_Content`. `import_event_types()` = `Ozon_Push_Types::item_types()`;
@@ -146,6 +148,7 @@ attributes and description and builds `Card_Content`. `import_event_types()` = `
 | `jobs/class-import-jobs.php` | `Jobs\Import_Jobs` | the `import_cards` job | I5 |
 | `jobs/class-card-event-handler.php` | `Jobs\Card_Event_Handler` | the item notification | I5 |
 | `class-flow-wiring.php` (changed) | `Flow_Wiring::import()` | builds and registers the above | I5 |
+| `flows/class-group-assembler.php`, `flows/class-card-import.php` (changed) | `Flows\Group_Assembler` | cards of one group → one variable product | I7 |
 | `admin/pages/products/class-remote-cards-{definition,actions,rows,provider}.php`, `class-site-products-module.php` (changed) | — | «Импортировать», notes, activity; the module builds the three classes and hands them the scheduler, the notes store and `Logging` | I6 |
 
 Client code: **none expected.** The cards tab is the generic records view (`src/marketplace-admin/views/records/`); a new action, a
@@ -180,7 +183,7 @@ adapter that imports (I6, built).
   `wc_get_product_id_by_sku()`, and groups the selection — «будет создано товаров: N», «уже на сайте: K», «товар с таким
   артикулом уже есть, свяжем: M», «товар с таким артикулом — вариативный, выберите вариант через „Связать с…“»,
   «карточка в архиве — не импортируем», «нет полных данных — обновите список» (`details_ok` false), «нет в загруженном
-  списке». The plan uses the same decision as the job (§2.6), so the two cannot disagree.
+  списке». The plan uses the same decision as the job (§2.6), so the two cannot disagree; from I7 on that decision includes groups, and the cards of one group count as one product.
 - **Apply** replans, requires the licence (`License_Gate::refusal_for( 'импортировать карточки с маркетплейса' )`), queues the
   eligible articles in batches of `Import_Scheduler::BATCH` and answers 202 «Импорт поставлен в очередь…».
 - **Activity.** A row whose article is in a pending or running `import_cards` action is `locked` with «Импортируется» and blocks
@@ -284,7 +287,7 @@ constant and not a setting. WooCommerce's helper and its checks stay in use. Bef
 
 | What failed | Where it is reported |
 |---|---|
-| the run (remote refusal, lost claim, unexpected error) | `Api_Error_Ring::record()` with `import_path()`, and `log_error` — as `Link_Jobs::report()`; when the run gives up, every card of the batch gets the note «Не удалось импортировать: {reason}» |
+| the run (remote refusal, lost claim, unexpected error) | `Api_Error_Ring::record()` with `import_path()`, and `log_error` — as `Link_Jobs::report()`; when the run gives up, every card of the batch gets a note whose `text` is the fixed sentence «Не удалось импортировать карточку. Попробуйте ещё раз позже.» and whose `detail` is the technical reason (the exception message), never the `text` |
 | one card (save refused, no answer for the article, linker refusal, a variable parent with that SKU, an archived card) | an **import note** for that article |
 | a warning on a created product (images missing, price not set) | an import note; the product exists |
 | an event that led to nothing | the event row's result text (diagnostics page) — no merchant note |
@@ -293,8 +296,9 @@ Import notes: `Link_Report_Store::set_import_note()`, `import_notes()`, `clear_i
 (`import_notes_{account id}`, at most `MAX_ENTRIES`, oldest dropped), cleared by `forget_account()`. `Remote_Cards_Rows` shows a
 card's note in its «Статус карточки» cell; a later successful import clears it.
 
-A note entry has **two fields**: `text`, the plain sentence the merchant reads, and `detail`, the technical tail (exception class,
-HTTP status), stored separately and possibly empty. The job never calls `Logging::hint()`: that method answers by the switch **at the
+A note entry has **two fields**: `text`, the plain sentence the merchant reads — always a fixed Russian sentence, never an exception
+message or a remote answer — and `detail`, the technical tail (exception class and message, HTTP status), stored separately and
+possibly empty. The job's give-up path therefore writes the fixed sentence into `text` and the raw reason into `detail`. The job never calls `Logging::hint()`: that method answers by the switch **at the
 moment it is called**, so a tail glued on at write time would be missing after the merchant turns «Логирование» on to
 investigate, and would stay visible after it is turned off. `Remote_Cards_Rows` calls `hint( $detail )` **when it renders the row**,
 so the tail follows the switch as it is now.
@@ -330,14 +334,14 @@ it on export**, so an imported product round-trips; only when nothing maps the p
 | weight, dimensions | `wc_get_weight( g )`, `wc_get_dimension( mm )` into the **profile's units** (`units.weight`, `units.dimension`: the export reads the product's numbers in them) when it names them, else the shop's units | profile |
 | category | the mapping's terms; else, when «Создавать категории…» is on, `category_path()` created by name (an existing term with the same name and parent is reused); else none | mapping |
 | status | `publish` when «Сразу публиковать…» is on, else `draft` | setting |
-| type, visibility, stock | `simple`; WooCommerce defaults (visible, in stock, stock not managed) | — |
+| type, visibility, stock | `simple` (a group → variable, I7); WooCommerce defaults (visible, in stock, stock not managed) | — |
 
 Settings (card I4), both on «Общие», group «Заказы и карточки», stored as keys of the one defaults option
 `woodev_{adapter id}_account_defaults`, shown only when the adapter is a `Card_Importer`:
 
 | Key | Label | Default | v1 source (O6 migration) |
 |---|---|---|---|
-| `import_publish` | «Сразу публиковать импортированные товары» | open question 2 | `product_status = publish` → on, anything else → off |
+| `import_publish` | «Сразу публиковать импортированные товары» | **off** (draft) for a new shop; an upgraded v1 shop keeps its value | `product_status = publish` → on, anything else → off |
 | `import_create_categories` | «Создавать категории для импортированных товаров» | on (v1) | `create_new_category` |
 
 Readers: `Effective_Settings::import_publish()` and `::import_create_categories()`. A draft is the safe meaning of «off»: the card's
@@ -369,26 +373,24 @@ framework text domain with the Russian catalogue, PHP 7.4, a critic of another l
 | I4 — Import settings | S · Haiku 5.5 | — | `settings/class-effective-settings.php`, `settings/class-defaults-section.php` | §3 settings. Accept: hidden for an adapter that is not a `Card_Importer`; saved values survive a reload; defaults as decided |
 | I5 — One-card import, job, event handler, wiring | M · Sonnet 5.5 | I1–I4 | `flows/class-card-import.php`, `jobs/class-import-jobs.php`, `jobs/class-card-event-handler.php`, `class-flow-wiring.php`, the wiki page | §2.3, §2.5, §2.6, §2.9, §2.10, §4. Accept: the five rows of §2.6 and its four cut points; **a variable parent with the card's SKU and no link row gets no link** and the note of row 3; a variation with that SKU is linked with its real parent id; an archived card creates no product and no link; the five rows of §2.3; the claim is renewed before every card and a lost claim stops the run; budget requeue keeps the attempt, and a run whose `read_cards()` used the whole budget still finishes one card or one image; no handler and no hook without `Card_Importer`; no remote call at request time |
 | I6 — «Импортировать» on the cards tab | M · Sonnet 5.5 | I1 (parallel with I5) | `admin/pages/products/class-remote-cards-{definition,actions,rows,provider}.php`, `admin/pages/products/class-site-products-module.php` (construction of the three classes only) | §2.4, the note cell. Accept: preview writes and calls nothing and has the variable-parent and archived groups; apply replans; licence refusal; locked rows; **`link_to`, `near_confirm` and `near_dismiss` each refuse more than one id** in preview and apply; the note's `detail` is shown only while «Логирование» is on, switching it changes the same stored note's rendering both ways; a table GET never calls the marketplace |
-| I7 — Groups → variable products | L · Fable 5 | I5; open question 1 | `flows/class-group-assembler.php`, `flows/class-card-import.php` | Ozon spec §5.6 group assembly on `Card_Content::group()`, its five-step in-place conversion and its acceptance tests (red-then-black equals red+black). Not part of 2.1.6 unless question 1 says so |
-| Release 2.1.6 | coordinator | I1–I6 | — | — |
-| O6 — Ozon adapter (repo `woocommerce-ozon-seller`) | M · Sonnet 5.5 | released 2.1.6 | `includes/ozon/catalog/class-ozon-card-reader.php`, `includes/ozon/adapter/class-ozon-adapter.php`, `includes/migration/**` (the two settings, warnings for the dropped v1 options), fixtures, `docs/spec` §5.6 and `docs/wiki` | `Card_Importer` on the adapter; `Card_Content` from recorded fixtures of the three requests; migration carries `product_status` and `create_new_category`. Accept on the rig: bulk import of several cards, auto-import by a real notification, a re-click duplicates nothing, a card with an existing SKU is linked, a card whose SKU is a variable parent's is refused with the note, an archived card is skipped, an image failure leaves a product |
+| I7 — Groups → variable products | L · Fable 5 | I5 | `flows/class-group-assembler.php`, `flows/class-card-import.php`, `admin/pages/products/class-remote-cards-actions.php` (the import plan) | Ozon spec §5.6 group assembly on `Card_Content::group()`, its five-step in-place conversion and its acceptance tests (red-then-black equals red+black). **Owns the preview too:** the cards-tab plan counts the cards of one group as **one** product («будет создано товаров: 1» for three colour cards), through the same group decision as the job, so §2.4's «the two cannot disagree» stays true; accept: a plan test with a three-card group. Part of 2.1.6 (operator decision 15.11.2026) |
+| Release 2.1.6 | coordinator | I1–I7 | — | — |
+| O6 — Ozon adapter (repo `woocommerce-ozon-seller`) | M · Sonnet 5.5 | released 2.1.6 | `includes/ozon/catalog/class-ozon-card-reader.php`, `includes/ozon/adapter/class-ozon-adapter.php`, `includes/migration/**` (the two settings; one report line per dropped v1 option a shop had switched on: `external` type, attributes from the card, replace existing), fixtures, `docs/spec` §5.6 and `docs/wiki` | `Card_Importer` on the adapter; `Card_Content` from recorded fixtures of the three requests; migration carries `product_status` and `create_new_category`. Accept on the rig: bulk import of several cards, auto-import by a real notification, a re-click duplicates nothing, a card with an existing SKU is linked, a card whose SKU is a variable parent's is refused with the note, an archived card is skipped, an image failure leaves a product |
 
-Waves (at most three workers, disjoint files): **I1 ∥ I2 ∥ I4** → **I3** → **I5 ∥ I6** → release 2.1.6 → **O6**. I3 may start as
+Waves (at most three workers, disjoint files): **I1 ∥ I2 ∥ I4** → **I3** → **I5 ∥ I6** → **I7** → release 2.1.6 → **O6**. I3 may start as
 soon as I1 is merged, beside I2 and I4.
 
-## 6. Open questions for the operator
+## 6. Operator decisions (15.11.2026)
 
-1. **Ozon groups → variable products: in 2.0 or right after?** The Ozon spec adopted «in 2.0» provisionally (its D9, agenda item 10,
-   seven tickets). v1 imported every card as a separate simple product. **Recommendation: right after 2.0** (card I7, framework
-   2.1.7). 2.0 then ships v1 parity, and nothing is redone: `Card_Content::group()` is reserved now, and the Ozon spec's in-place
-   conversion was designed for a sibling card that arrives later. Keeping it in 2.0 adds one L card on the hardest code of the importer
-   before the release.
-2. **Default of «Сразу публиковать импортированные товары» for a new shop.** v1's default was «publish». **Recommendation: off
-   (draft).** An imported product carries the marketplace's price and untested content, and auto-import runs unattended. Upgraded
-   shops keep whatever v1 had, either way.
-3. **Three non-default v1 options are not carried into 2.0**: the `external` product type, WooCommerce attributes created from card
-   attributes, and «replace existing product». **Recommendation: drop them, with a line in the migration report for a shop that had
-   one switched on**, and bring one back only on a ticket. How many shops use them is not known.
+The three questions r2 left open were answered by the operator on 15.11.2026:
+
+1. **Ozon groups → variable products: in 2.0.** The operator overrode the recommendation (right after 2.0). Card I7 is part of
+   framework 2.1.6, the release gate is I1–I7, and Ozon Seller 2.0.0 ships with group assembly.
+2. **«Сразу публиковать импортированные товары» for a new shop: off → draft.** An upgraded v1 shop keeps its v1 value (the O6
+   migration carries `product_status`).
+3. **The three non-default v1 options are dropped:** the `external` product type, WooCommerce attributes created from card
+   attributes, and «replace existing product». The O6 migration report carries one line per option a shop had switched on; one comes
+   back only on a ticket.
 
 ## 7. What this spec did not verify
 
@@ -400,7 +402,7 @@ soon as I1 is merged, beside I2 and I4.
   not measured — I3's acceptance covers `for_category()`.
 - Whether Ozon sends `CREATE_OR_UPDATE_ITEM` when only a price changes is not known; the price row of §4 depends on it.
 - v1's category creation in a background job (the capability check) was read, not run.
-- Nothing was run on the rig. r2 itself has not been re-read by a critic.
+- Nothing was run on the rig. r2 and r3 have not been re-read by a critic.
 
 ## Revision log
 
@@ -408,6 +410,7 @@ soon as I1 is merged, beside I2 and I4.
 |---|---|---|
 | r1 | 14.11.2026 | First draft (PR #1763). |
 | r2 | 14.11.2026 | The r1 critic's eight findings (Claude Opus). (1) §2.6: the first save carries the SKU, the marker and the category — r1 let the SKU arrive with the final save, so a run cut during images left a draft the next run could not find. (2) §2.6 row 3: a variable parent is refused before `Card_Linker` (the linker refuses a parent only when it already has a parent row), and a variation passes its real parent id. (3) §2.6, §3: the price is worked out after the category is stored. (4) §2.1, §2.4, §2.6 row 2: an archived card is skipped with a note, never linked. (5) §2.5, §2.8: the claim is extended before every card and every image; one download is bounded at 30 s. (6) §2.9: a note stores its technical tail separately and `Logging::hint()` is called at render. (7) §2.2, §2.4, I6: `class-site-products-module.php` joins the file set; `link_to`, `near_confirm`, `near_dismiss` refuse more than one id. (8) §2.5: a run always finishes one card or one image before the budget may stop it. Card acceptances I1, I2, I3, I5, I6 and O6 updated; §2.8 records that the image helpers load in a background job (read in WooCommerce's source); §7 gains the critic's unchecked items. §6 is unchanged. |
+| r3 | 15.11.2026 | The operator's answers to §6 (15.11.2026). (1) Groups → variable products are **in 2.0**: I7 joins release 2.1.6, the release row depends on I1–I7, the waves gain I7, §1.3 and §1.4 no longer list groups as out of scope. (2) «Сразу публиковать…» defaults to **off (draft)** for a new shop; an upgraded v1 shop keeps its value. (3) The `external` type, attributes from the card and «replace existing» are **dropped**, one migration-report line per option a shop had on (O6). §6 becomes «Operator decisions». §2.9: the give-up path wrote the raw exception message into the merchant `text`; it now writes a fixed Russian sentence into `text` and the reason into `detail`. The I7 row owns the cards-tab preview, which must count a group as one product. |
 
 ## Related
 

@@ -38,6 +38,12 @@ final class Effective_Settings {
 	public const OVERRIDES_KEY = 'overrides';
 
 	/**
+	 * Keys of the two card-import settings. They exist once per shop, on «Общие» only: an account never overrides them.
+	 */
+	public const KEY_IMPORT_PUBLISH    = 'import_publish';
+	public const KEY_IMPORT_CATEGORIES = 'import_create_categories';
+
+	/**
 	 * Key of the defaults option that marks «already filled from the first account» (see {@see Defaults_Migration}).
 	 */
 	public const SEEDED_KEY = '_seeded';
@@ -119,18 +125,20 @@ final class Effective_Settings {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @return array<string,mixed> `price_rule` keys plus `orders_enabled` and `import_enabled`.
+	 * @return array<string,mixed> `price_rule` keys, `orders_enabled`, `import_enabled`, and the two card-import settings.
 	 */
 	public static function builtin_defaults(): array {
 		return [
-			'base'           => Price_Rule::BASE_ACTIVE,
-			'markup_kind'    => Price_Rule::MARKUP_NONE,
-			'markup'         => '0',
-			'rounding'       => Price_Rule::ROUND_NONE,
-			'old_price_rule' => Price_Rule::OLD_PRICE_ON_SALE,
-			'min_percent'    => null,
-			'orders_enabled' => true,
-			'import_enabled' => false,
+			'base'                      => Price_Rule::BASE_ACTIVE,
+			'markup_kind'               => Price_Rule::MARKUP_NONE,
+			'markup'                    => '0',
+			'rounding'                  => Price_Rule::ROUND_NONE,
+			'old_price_rule'            => Price_Rule::OLD_PRICE_ON_SALE,
+			'min_percent'               => null,
+			'orders_enabled'            => true,
+			'import_enabled'            => false,
+			self::KEY_IMPORT_PUBLISH    => false, // A new shop gets drafts: the price and the text are the marketplace's, nobody has looked at them yet.
+			self::KEY_IMPORT_CATEGORIES => true,
 		];
 	}
 
@@ -220,6 +228,30 @@ final class Effective_Settings {
 	 */
 	public function import_enabled( Account $account ): bool {
 		return $this->exchange_flag( $account, 'import_enabled', false );
+	}
+
+	/**
+	 * Whether an imported product is published at once; otherwise it is saved as a draft.
+	 *
+	 * Shop-wide: it is not part of an account's «свои / как в Общих» choice.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @return bool
+	 */
+	public function import_publish(): bool {
+		return (bool) $this->defaults()[ self::KEY_IMPORT_PUBLISH ];
+	}
+
+	/**
+	 * Whether the importer creates the shop categories a card needs when none is mapped.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @return bool
+	 */
+	public function import_create_categories(): bool {
+		return (bool) $this->defaults()[ self::KEY_IMPORT_CATEGORIES ];
 	}
 
 	/**

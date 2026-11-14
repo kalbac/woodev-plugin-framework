@@ -10999,3 +10999,19 @@ msgstr ""
 #: marketplace/admin/pages/products/class-remote-cards-rows.php:373
 msgid "Карточка в архиве — не импортируем."
 msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:293
+msgid "Сразу публиковать импортированные товары"
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:295
+msgid "Если выключено, товары, созданные из карточек, сохраняются как черновики: проверьте их и опубликуйте сами. Действует для всех аккаунтов."
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:301
+msgid "Создавать категории для импортированных товаров"
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:303
+msgid "Если для карточки нет подходящей категории на сайте, плагин создаст её. Если выключено, товар сохранится без категории. Действует для всех аккаунтов."
+msgstr ""
