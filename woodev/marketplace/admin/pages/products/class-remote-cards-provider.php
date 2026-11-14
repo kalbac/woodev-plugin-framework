@@ -202,7 +202,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 				$page['cards']
 			),
 			'total'            => $page['total'],
-			'account_activity' => $this->account_activity( $account->id() ),
+			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
 			'messages'         => [ 'summary' => $this->summary( $account->id(), $snapshot ) ],
 		];
 	}
@@ -277,10 +277,12 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			];
 		}
 
+		$state = $this->import_state( $account->id() );
+
 		return [
-			'rows'             => $this->current_rows( $account, $ids ),
+			'rows'             => $this->current_rows( $account, $ids, $state ),
 			'removed_ids'      => [],
-			'account_activity' => $this->account_activity( $account->id() ),
+			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
 		];
 	}
 
@@ -305,12 +307,13 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	/**
 	 * The account line: «Обновить список» is blocked while its job runs, and a pending import is announced.
 	 *
-	 * @param int $account_id Account id.
+	 * @param int      $account_id    Account id.
+	 * @param string[] $importing_ids Articles being imported, read once per request by the caller ({@see self::import_state()}).
 	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::account()}.
 	 */
-	private function account_activity( int $account_id ): array {
+	private function account_activity( int $account_id, array $importing_ids ): array {
 		$refreshing = $this->snapshots->is_refreshing( $account_id );
-		$importing  = null !== $this->importer && [] !== $this->importer->pending_offer_ids( $account_id );
+		$importing  = [] !== $importing_ids;
 
 		if ( ! $refreshing && ! $importing ) {
 			return Activity_Normalizer::idle_account();
@@ -370,11 +373,12 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	/**
 	 * The rows of the asked ids that are cards of the snapshot, as the table would list them now.
 	 *
-	 * @param Account  $account Account.
-	 * @param string[] $ids     Row ids.
+	 * @param Account             $account Account.
+	 * @param string[]            $ids     Row ids.
+	 * @param array<string,mixed> $state   {@see self::import_state()}.
 	 * @return array<int,array<string,mixed>> No row for the id of a near-match pair or of a card the list no longer holds.
 	 */
-	private function current_rows( Account $account, array $ids ): array {
+	private function current_rows( Account $account, array $ids, array $state ): array {
 		$snapshot = $this->snapshots->get( $account->id() );
 
 		if ( null === $snapshot ) {
@@ -382,7 +386,6 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		}
 
 		$linked = $this->linked_offers( $account->id() );
-		$state  = $this->import_state( $account->id() );
 		$rows   = [];
 
 		foreach ( $ids as $row_id ) {
@@ -452,7 +455,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 				$found['entries']
 			),
 			'total'            => $found['total'],
-			'account_activity' => $this->account_activity( $account->id() ),
+			'account_activity' => $this->account_activity( $account->id(), $this->import_state( $account->id() )['importing'] ),
 			'messages'         => [ 'summary' => trim( Remote_Cards_Summary::near_explained() . ' ' . Remote_Cards_Summary::last_run( $this->reports->last_run( $account->id() ) ) ) ],
 		];
 	}

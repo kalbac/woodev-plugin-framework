@@ -272,7 +272,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [], $this->scheduler->actions );
 	}
 
-	public function test_a_row_being_imported_is_locked_and_blocks_import_and_link_to(): void {
+	public function test_a_row_being_imported_is_locked_and_blocks_its_import_and_link_to_but_not_the_bulk_action(): void {
 		$this->put_scenario();
 		$this->import_scheduler()->import( $this->account_id, [ 'NEW-1' ] );
 
@@ -281,7 +281,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$other  = $rows[ $this->card_row_id( 'NEW-2' ) ];
 
 		$this->assertTrue( $locked['activity']['locked'] );
-		$this->assertSame( [ 'import', 'import_selected', 'link_to' ], $locked['activity']['blocked_actions'] );
+		$this->assertSame( [ 'import', 'link_to' ], $locked['activity']['blocked_actions'] );
 		$this->assertSame( 'Импортируется', $locked['activity']['processes'][0]['label'] );
 		$this->assertSame( [ false, false ], array_column( $locked['actions'], 'enabled' ) );
 		$this->assertFalse( $other['activity']['locked'] );

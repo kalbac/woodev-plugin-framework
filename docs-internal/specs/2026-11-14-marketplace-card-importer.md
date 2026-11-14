@@ -184,12 +184,12 @@ adapter that imports (I6, built).
 - **Apply** replans, requires the licence (`License_Gate::refusal_for( 'импортировать карточки с маркетплейса' )`), queues the
   eligible articles in batches of `Import_Scheduler::BATCH` and answers 202 «Импорт поставлен в очередь…».
 - **Activity.** A row whose article is in a pending or running `import_cards` action is `locked` with «Импортируется» and blocks
-  `import` and `link_to`; the account line says «Импортируем карточки…». Both read Action Scheduler's own tables — local state.
+  the row's `import` and `link_to` (the bulk action is not blocked: one locked row would grey it for a whole selection, and the plan skips that card with its own reason); the account line says «Импортируем карточки…». Both read Action Scheduler's own tables — local state.
 - **After the job** the card moves to «Уже на сайте» by itself: that column is computed from the links.
 
-Raising `max_selection` exposes the three one-row actions: `link_to`, `near_confirm` and `near_dismiss` all read `$ids[0]`
-(READ `Remote_Cards_Actions::preview()` / `apply()`), so with several rows selected they would silently act on the first. I6 makes
-each of them **refuse more than one id** on the server (preview and apply). I6 checked the records shell (jest `tests/js/admin-records-selection-cap.test.tsx`): the
+Raising `max_selection` leaves the three one-row actions — `link_to`, `near_confirm` and `near_dismiss`, all of which read `$ids[0]` —
+safe: the engine already refuses a row action with more than one id (`Action_Request::targets()` answers 400). I6 repeats that
+refusal in `Remote_Cards_Actions` (preview and apply), so a direct caller of the provider cannot make them act on the first row either. I6 checked the records shell (jest `tests/js/admin-records-selection-cap.test.tsx`): the
 checkboxes do **not** depend on `max_selection` — they show whenever the table has bulk actions and the page gave the shell its bulk
 toolbar, and a row's own `selectable` flag enables its box — so no React change was needed.
 

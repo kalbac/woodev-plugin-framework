@@ -103,7 +103,8 @@ final class Remote_Cards_Rows {
 	}
 
 	/**
-	 * The activity of a row whose card is being imported: it is locked, and neither «Импортировать» nor «Связать с…» may run.
+	 * The activity of a row whose card is being imported: it is locked, and neither the row's «Импортировать» nor «Связать с…» may run. The bulk
+	 * action is not blocked: it would go grey for a whole selection because of one locked row, and the plan already skips such a card with its own reason.
 	 *
 	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::row()}.
 	 */
@@ -111,7 +112,7 @@ final class Remote_Cards_Rows {
 		return [
 			'locked'          => true,
 			'reason'          => self::locked_reason(),
-			'blocked_actions' => [ Remote_Cards_Definition::IMPORT, Remote_Cards_Definition::IMPORT_SELECTED, Remote_Cards_Definition::LINK_TO ],
+			'blocked_actions' => [ Remote_Cards_Definition::IMPORT, Remote_Cards_Definition::LINK_TO ],
 			'processes'       => [
 				[
 					'id'    => 'import',
