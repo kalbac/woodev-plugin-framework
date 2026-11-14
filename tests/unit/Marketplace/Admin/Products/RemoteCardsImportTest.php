@@ -400,4 +400,14 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$this->assertSame( 0, $result['eligible'] );
 		$this->assertStringContainsString( 'импортируется', $result['groups'][0]['reason'] );
 	}
+
+	public function test_linking_a_card_by_hand_clears_its_stale_import_note(): void {
+		$this->put_scenario();
+		$this->add_product( [ 'id' => 44, 'sku' => 'X-44' ] );
+		$this->reports()->set_import_note( $this->account_id, 'NEW-1', 'Не удалось сохранить товар.' );
+
+		$this->cards_provider()->apply( $this->context(), 'link_to', $this->ids( [ 'NEW-1' ] ), [ 'product' => '44' ] );
+
+		$this->assertSame( [], $this->reports()->import_notes( $this->account_id ) );
+	}
 }

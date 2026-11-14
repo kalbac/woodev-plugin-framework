@@ -444,6 +444,7 @@ final class Remote_Cards_Actions {
 		}
 
 		$this->reports->settle_near_match( $account->id(), $product['id'], (string) $card['offer_id'], true );
+		$this->reports->clear_import_note( $account->id(), (string) $card['offer_id'] );
 
 		$text = Card_Linker::message( Card_Linker::LINKED );
 
