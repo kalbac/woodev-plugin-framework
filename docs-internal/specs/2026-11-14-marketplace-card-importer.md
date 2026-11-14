@@ -1,6 +1,7 @@
 # Marketplace card importer (marketplace card → WooCommerce product) — design
 
-**Date:** 2026-11-14. **Status:** draft r1 — written for `kalbac/woocommerce-ozon-seller#75`, not yet reviewed by a critic.
+**Date:** 2026-11-14. **Status:** draft r2 — written for `kalbac/woocommerce-ozon-seller#75`; r2 folds in the eight findings of the
+r1 critic (Claude Opus, PR #1763), see the [revision log](#revision-log). The three operator questions of §6 are still open.
 **Target:** framework **2.1.6** (cards I1–I6 below); first consumer Ozon Seller 2.0.0 (card O6).
 
 **Evidence labels:** **READ** (code or document read for this spec), **UNVERIFIED** (reason given; the named card proves it).
@@ -59,7 +60,8 @@ gate is the default for every remote action. No call to woodev.ru is added.
 ### 1.3 What 2.0 does
 
 1. Imports a card as a **simple product**: name, SKU = article, description, price, weight and dimensions, images, category.
-2. Never duplicates: a linked card is skipped; a card whose article is the SKU of an existing product is **linked** to it (§2.6).
+2. Never duplicates: a linked card is skipped; a card whose article is the SKU of an existing product is **linked** to it, unless
+   that product is a variable parent (§2.6). An archived card is not imported.
 3. Two triggers, one job: the item notification (auto-import on) and «Импортировать» on the cards tab (row and bulk).
 4. Two merchant settings on «Общие» — both v1 settings, migrated by the Ozon plugin: «Сразу публиковать импортированные товары»
    (v1 `product_status`) and «Создавать категории для импортированных товаров» (v1 `create_new_category`).
@@ -114,7 +116,7 @@ interface Card_Importer {
 
 | Member | Meaning |
 |---|---|
-| `card(): array` | the `Link_Resolver` card (`offer_id`, `remote_ids`, `state`, `is_created`, `archived`, `failed`, `status_text`, `oversize`) — exactly what `Card_Linker::link()` takes |
+| `card(): array` | the `Link_Resolver` card (`offer_id`, `remote_ids`, `state`, `is_created`, `archived`, `failed`, `status_text`, `oversize`) — what `Card_Linker::link()` takes. The linker itself ignores `archived` (`Link_Jobs::link_pair()` turns it into the state before the call), so `Card_Import` reads the flag and never hands an archived card to the linker (§2.6 row 2) |
 | `name()`, `description()` | strings; the description is raw, the framework sanitises it |
 | `prices(): ?Price_Pair` | price and old price as `Money` in the cabinet's currency; null when the card has none |
 | `weight_g(): ?int`, `length_mm()`, `width_mm()`, `height_mm()` | null when unknown |
@@ -144,7 +146,7 @@ attributes and description and builds `Card_Content`. `import_event_types()` = `
 | `jobs/class-import-jobs.php` | `Jobs\Import_Jobs` | the `import_cards` job | I5 |
 | `jobs/class-card-event-handler.php` | `Jobs\Card_Event_Handler` | the item notification | I5 |
 | `class-flow-wiring.php` (changed) | `Flow_Wiring::import()` | builds and registers the above | I5 |
-| `admin/pages/products/class-remote-cards-{definition,actions,rows,provider}.php` (changed) | — | «Импортировать», notes, activity | I6 |
+| `admin/pages/products/class-remote-cards-{definition,actions,rows,provider}.php`, `class-site-products-module.php` (changed) | — | «Импортировать», notes, activity; the module builds the three classes and hands them the scheduler, the notes store and `Logging` | I6 |
 
 Client code: **none expected.** The cards tab is the generic records view (`src/marketplace-admin/views/records/`); a new action, a
 locked row and a note in a `stack` cell are all PHP-declared. I6 names the one thing to check (§2.4).
@@ -173,15 +175,19 @@ A scheduling failure throws, so the drain's retry ladder applies. The body is tr
 
 - **Preview** (no remote call, no write): reads the cards from this account's snapshot, the links and
   `wc_get_product_id_by_sku()`, and groups the selection — «будет создано товаров: N», «уже на сайте: K», «товар с таким
-  артикулом уже есть, свяжем: M», «нет полных данных — обновите список» (`details_ok` false), «нет в загруженном списке».
+  артикулом уже есть, свяжем: M», «товар с таким артикулом — вариативный, выберите вариант через „Связать с…“»,
+  «карточка в архиве — не импортируем», «нет полных данных — обновите список» (`details_ok` false), «нет в загруженном
+  списке». The plan uses the same decision as the job (§2.6), so the two cannot disagree.
 - **Apply** replans, requires the licence (`License_Gate::refusal_for( 'импортировать карточки с маркетплейса' )`), queues the
   eligible articles in batches of `Import_Scheduler::BATCH` and answers 202 «Импорт поставлен в очередь…».
 - **Activity.** A row whose article is in a pending or running `import_cards` action is `locked` with «Импортируется» and blocks
   `import` and `link_to`; the account line says «Импортируем карточки…». Both read Action Scheduler's own tables — local state.
 - **After the job** the card moves to «Уже на сайте» by itself: that column is computed from the links.
 
-I6 must check two things in the records shell: that `link_to` still refuses more than one id now that several rows can be
-selected, and that the table shows checkboxes once `max_selection` is above 1 (UNVERIFIED — not run for this spec).
+Raising `max_selection` exposes the three one-row actions: `link_to`, `near_confirm` and `near_dismiss` all read `$ids[0]`
+(READ `Remote_Cards_Actions::preview()` / `apply()`), so with several rows selected they would silently act on the first. I6 makes
+each of them **refuse more than one id** on the server (preview and apply). I6 also checks that the records shell shows checkboxes
+once `max_selection` is above 1 (UNVERIFIED — not run for this spec).
 
 ### 2.5 The job
 
@@ -195,8 +201,14 @@ selected, and that the table shows checkboxes once `max_selection` is above 1 (U
   `Job_Gate::BUSY_DELAY`. **No write gate**: nothing is written to the marketplace (as in `Link_Jobs`).
 - Work: `read_cards()` once for the batch, then `Card_Import::import()` per card. A card's own failure (WooCommerce refused the
   save) is caught, noted (§2.9) and the batch goes on.
+- **Claim.** The run extends the account claim (`Account_Job`'s `hold()`, i.e. `Job_Gate::still_holds()`) **before every card and
+  before every image**, and throws `Claim_Lost` when another run took it. The claim lives 120 s (`Job_Gate::CLAIM_TTL`) and one
+  image download is bounded at 30 s (§2.8), so the step between two renewals cannot outlive it.
 - Budget `BUDGET_SECONDS = 20`, checked before every card and before every image. When it is spent, the run stops and requeues the
   cards it has not finished, the current one included, with the attempt unchanged.
+- **A run always advances.** The budget check may stop a run only after that run has finished one card or downloaded one image. A
+  slow `read_cards()` that eats the budget by itself therefore still ends with progress, and a requeue with the attempt unchanged
+  cannot repeat forever.
 
 ### 2.6 One card — idempotency
 
@@ -205,24 +217,40 @@ selected, and that the table shows checkboxes once `max_selection` is above 1 (U
 | # | State found | Action | Outcome |
 |---|---|---|---|
 | 1 | the article has a link in this account | nothing | `already_linked` |
-| 2 | a product with SKU = article exists and carries **no** import marker | `Card_Linker::link()` to it; its content is not touched | `linked_existing`, or the linker's refusal as a note (a variable parent is `NOT_A_CARD`; a product linked to another card is `PRODUCT_LINKED`) |
-| 3 | a product with SKU = article carries the import marker (an earlier run of ours was cut short) | continue 4 on that product | — |
-| 4 | no product | create the product, then link | `created` |
+| 2 | the card is archived (`archived` true, or its state is `Link_Record::STATE_ARCHIVED`) | nothing: no product, no link | `skipped`, note «Карточка в архиве — не импортируем» |
+| 3 | a product with SKU = article exists and carries **no** import marker | load it (`wc_get_product()`). A **variable parent** is refused here, before the linker. Anything else (a simple product, or a variation) → `Card_Linker::link( account, id, $product->get_parent_id(), card, fence )`; its content is not touched | `linked_existing`; for a variable parent the note «К вариативному товару нельзя привязать карточку. Выберите один из его вариантов через „Связать с…“»; a linker refusal (`PRODUCT_LINKED`, `CARD_LINKED`, `BUSY`) as a note with `Card_Linker::message()` |
+| 4 | a product with SKU = article carries the import marker (an earlier run of ours was cut short) | continue 5 on that product | — |
+| 5 | no product | create the product, then link | `created` |
 
-Step 4 in order: create the product as `draft` with the marker meta `_woodev_{marketplace id}_importing` and save (the id exists
-now) → category → fields and price → images, each reused by source URL → final status, marker removed, save →
-`Card_Linker::link()` with the run's fence.
+Row 3 must refuse the parent itself: `Card_Linker::link()` answers `NOT_A_CARD` only when the product **already has a row of kind
+parent**. A variable product nobody opened on the marketplace tab has no row, and the linker would insert an offer link onto it
+(READ `Card_Linker::link()`: `find()` null → `insert()`). Every existing caller filters parents out first (`Shop_Sku_Source`,
+`Remote_Cards_Products::pick()`), and so does the importer. `wc_get_product_id_by_sku()` can also return a variation, which is why
+the parent id comes from the loaded product, not from a constant 0.
+
+Row 5 in order:
+
+1. **First save:** a `draft` product with the name, `set_sku( article )`, the marker meta `_woodev_{marketplace id}_importing` and
+   the category (§3). The SKU and the marker go in together because rows 3 and 4 find a half-made product **by its SKU**; the
+   category goes in so that it is stored before the price is worked out.
+2. Fields (description, weight, dimensions), then the price — after step 1, because the price rule is resolved from the product's
+   **stored** categories (§3).
+3. Images, one at a time, each reused by its source URL (§2.8).
+4. **Final save:** the final status, the marker removed.
+5. `Card_Linker::link()` with the run's fence.
 
 Why this order holds at every cut point (a PHP time limit during image downloads is the real case — Ozon spec risk 7):
 
-- cut before the final save → the marker is there → the next run resumes on the same product (row 3); images already fetched are
-  found by their source URL;
-- cut between the final save and the link → the next run finds the SKU without a marker and links it (row 2);
-- the link is refused as `CLAIM_LOST` → `Claim_Lost` → the job retries → row 2.
+- cut before the first save → nothing exists → the next run starts row 5 again;
+- cut between the first and the final save → the SKU and the marker are both stored → the next run resumes on the same product
+  (row 4); images already fetched are found by their source URL;
+- cut between the final save and the link → the next run finds the SKU without a marker and links it (row 3);
+- the link is refused as `CLAIM_LOST` → `Claim_Lost` → the job retries → row 3.
 
-Two runs cannot create the same product at once: every run holds the account claim, the unique `(account_id, offer_id)` index is
-the last guard for the link, and WooCommerce refuses a second product with the same SKU. Matching is **exact** SKU only; look-alike
-articles stay the business of «Связать по артикулу» and its report.
+Two runs cannot create the same product at once. Every run holds the account claim and extends it before each card and each image
+(§2.5). `set_sku()` throws when another product already has the SKU, so even a run that lost its claim unnoticed gets a refused
+save (a note), not a second product. The unique `(account_id, offer_id)` index is the last guard for the link. Matching is **exact**
+SKU only; look-alike articles stay the business of «Связать по артикулу» and its report.
 
 ### 2.7 The link record
 
@@ -236,22 +264,36 @@ therefore never makes the shop push stock or price to it; the merchant switches 
 helpers (Context7 `/woocommerce/woocommerce`; the stubs in `vendor/php-stubs/woocommerce-stubs`), the pair v1 and WooCommerce's CSV
 importer use. An image is looked up first by the `_wc_attachment_source` meta (WooCommerce's convention, so images v1 imported are
 reused) and the meta is written after a download. All of a card's images are taken, as in v1. A failed image is **not** fatal: the
-product is kept and the note says how many images could not be loaded. Whether the helpers are loaded in an Action Scheduler
-request is UNVERIFIED (I3's real-WordPress test).
+product is kept and the note says how many images could not be loaded.
+
+The helpers work in a background job (READ WooCommerce `includes/wc-core-functions.php:35` requires `wc-rest-functions.php` on every
+request; the upload helper includes `wp-admin/includes/file.php` itself and passes its own `mimes` to `wp_handle_sideload()`, so
+there is no user or capability check). I3's real-WordPress test still proves it inside an Action Scheduler callback.
+
+**Each download is bounded.** The helper calls `download_url( $image_url )` with WordPress's default timeout of **300 s** (READ
+`wp-admin/includes/file.php`), longer than the account claim lives. `Product_Writer` therefore wraps that one call in an
+`http_request_args` filter that sets `timeout` to `IMAGE_TIMEOUT = 30` — added right before the call, removed right after, a
+constant and not a setting. WooCommerce's helper and its checks stay in use. Before each image the writer calls the run's `$renew`
+(§2.5).
 
 ### 2.9 Failure reporting
 
 | What failed | Where it is reported |
 |---|---|
 | the run (remote refusal, lost claim, unexpected error) | `Api_Error_Ring::record()` with `import_path()`, and `log_error` — as `Link_Jobs::report()`; when the run gives up, every card of the batch gets the note «Не удалось импортировать: {reason}» |
-| one card (save refused, no answer for the article, linker refusal) | an **import note** for that article |
+| one card (save refused, no answer for the article, linker refusal, a variable parent with that SKU, an archived card) | an **import note** for that article |
 | a warning on a created product (images missing, price not set) | an import note; the product exists |
 | an event that led to nothing | the event row's result text (diagnostics page) — no merchant note |
 
 Import notes: `Link_Report_Store::set_import_note()`, `import_notes()`, `clear_import_note()` — one option per account
 (`import_notes_{account id}`, at most `MAX_ENTRIES`, oldest dropped), cleared by `forget_account()`. `Remote_Cards_Rows` shows a
-card's note in its «Статус карточки» cell; a later successful import clears it. Notes are plain sentences. The technical tail
-(exception class, HTTP status) is appended through `Logging::hint()`, so it appears only while «Логирование» is on.
+card's note in its «Статус карточки» cell; a later successful import clears it.
+
+A note entry has **two fields**: `text`, the plain sentence the merchant reads, and `detail`, the technical tail (exception class,
+HTTP status), stored separately and possibly empty. The job never calls `Logging::hint()`: that method answers by the switch **at the
+moment it is called**, so a tail glued on at write time would be missing after the merchant turns «Логирование» on to
+investigate, and would stay visible after it is turned off. `Remote_Cards_Rows` calls `hint( $detail )` **when it renders the row**,
+so the tail follows the switch as it is now.
 
 ### 2.10 Gates
 
@@ -276,7 +318,7 @@ product round-trips; with no mapping the built-in profile defaults apply (`Profi
 | description | profile `description_source`: `description` (default), `short_description` or a meta key; `wp_kses_post()` | profile |
 | primary image | profile `primary_image_source`: featured image (default, downloaded — §2.8), or a meta key, which on export holds a link to the photo, so the card's URL is written there and nothing is downloaded | profile |
 | other images | profile `images_source`: gallery (default, downloaded), a meta key (the URLs are written, nothing is downloaded), or `none` → not imported | profile |
-| prices | regular and sale price by the **inverse of the price rule in force** (`Shop_Price_Writer`, the code `Price_Refresher` uses today). No markup → old price → regular, price → sale: v1's result. A currency the rule cannot resolve → no price, a note | account / profile price rule |
+| prices | regular and sale price by the **inverse of the price rule in force** (`Shop_Price_Writer`, the code `Price_Refresher` uses today). No markup → old price → regular, price → sale: v1's result. A currency the rule cannot resolve → no price, a note. **Worked out only after the category is stored** (§2.6, first save): the rule comes from `Price_Context::price_terms()`, which resolves the mapping through `Category_Ancestry::for_product()` → `wc_get_product_term_ids()`, i.e. the categories in the database, not those set on an unsaved object. Before the save, a profile-level markup would be missed and the first export would send the marketplace price times that markup | account / profile price rule |
 | weight, dimensions | `wc_get_weight( g )`, `wc_get_dimension( mm )` into the shop's units | — |
 | category | the mapping's terms; else, when «Создавать категории…» is on, `category_path()` created by name (an existing term with the same name and parent is reused); else none | mapping |
 | status | `publish` when «Сразу публиковать…» is on, else `draft` | setting |
@@ -313,15 +355,15 @@ framework text domain with the Russian catalogue, PHP 7.4, a critic of another l
 
 | Id | Size · tier | Depends on | Files | Scope · acceptance |
 |---|---|---|---|---|
-| I1 — Contract, card value, scheduler, notes | S · Haiku 5.5 | — | `catalog/class-card-content.php`, `flows/interface-card-importer.php`, `jobs/class-import-scheduler.php`, `data/class-link-report-store.php` | §2.1, §2.5 scheduling, §2.9 notes. Accept: the layer scanner passes with `Card_Content`; the fake adapter of the contract tests implements `Card_Importer`; a duplicate chunk is not queued twice; notes are bounded and forgotten with the account |
-| I2 — `Account_Job` skeleton | S · Sonnet 5.5 | — | `jobs/class-account-job.php`, `jobs/class-link-jobs.php` | Move `guarded()`, `after_failure()`, `hold()`, `report()` out of `Link_Jobs` unchanged; `Link_Jobs` uses it. Accept: the existing `Link_Jobs` tests pass untouched |
-| I3 — Product writer | M · Sonnet 5.5 | I1 | `flows/class-product-writer.php`, `flows/class-import-category.php`, `sync/class-shop-price-writer.php`, `sync/class-price-refresher.php`, `data/class-wpdb-mapping-store.php`, `tests/integration/Marketplace/` | §2.6 step 4 without the link, §2.8, §3. Accept: resumes on a marked product without a second download; a failed image keeps the product; `Price_Refresher` tests pass untouched; a real-WordPress test creates a product with an image inside an Action Scheduler callback |
+| I1 — Contract, card value, scheduler, notes | S · Haiku 5.5 | — | `catalog/class-card-content.php`, `flows/interface-card-importer.php`, `jobs/class-import-scheduler.php`, `data/class-link-report-store.php` | §2.1, §2.5 scheduling, §2.9 notes. Accept: the layer scanner passes with `Card_Content`; the fake adapter of the contract tests implements `Card_Importer`; a duplicate chunk is not queued twice; a note keeps `text` and `detail` as two fields and the store never calls `Logging`; notes are bounded and forgotten with the account |
+| I2 — `Account_Job` skeleton | S · Sonnet 5.5 | — | `jobs/class-account-job.php`, `jobs/class-link-jobs.php` | Move `guarded()`, `after_failure()`, `hold()`, `report()` out of `Link_Jobs`; `Link_Jobs` uses it. Two things of `Link_Jobs` become parameters: the extra exception it gives up on (`Link_Resolve_Exception`) and the request path `report()` names (`list_path()` there, `import_path()` for the importer). Accept: the existing `Link_Jobs` tests pass untouched |
+| I3 — Product writer | M · Sonnet 5.5 | I1 | `flows/class-product-writer.php`, `flows/class-import-category.php`, `sync/class-shop-price-writer.php`, `sync/class-price-refresher.php`, `data/class-wpdb-mapping-store.php`, `tests/integration/Marketplace/` | §2.6 row 5 steps 1–4, §2.8, §3. Accept: **the first save stores the SKU, the marker and the category together** (a test cuts the run right after it and finds the product by SKU with the marker); the price is computed after that save and a profile-level markup is applied (test: mapping profile +10 %, account rule none → regular = card price ÷ 1.1); resumes on a marked product without a second download; a failed image keeps the product; the writer calls `$renew` before each image and stops when it throws; a download is cut at `IMAGE_TIMEOUT` and the filter is gone afterwards; `for_category()` matches a stored mapping whatever the key order of the adapter's descriptor; `Price_Refresher` tests pass untouched; a real-WordPress test creates a product with an image inside an Action Scheduler callback |
 | I4 — Import settings | S · Haiku 5.5 | — | `settings/class-effective-settings.php`, `settings/class-defaults-section.php` | §3 settings. Accept: hidden for an adapter that is not a `Card_Importer`; saved values survive a reload; defaults as decided |
-| I5 — One-card import, job, event handler, wiring | M · Sonnet 5.5 | I1–I4 | `flows/class-card-import.php`, `jobs/class-import-jobs.php`, `jobs/class-card-event-handler.php`, `class-flow-wiring.php`, the wiki page | §2.3, §2.5, §2.6, §2.9, §2.10, §4. Accept: the four rows of §2.6 and the three cut points; the five rows of §2.3; budget requeue keeps the attempt; no handler and no hook without `Card_Importer`; no remote call at request time |
-| I6 — «Импортировать» on the cards tab | M · Sonnet 5.5 | I1 (parallel with I5) | `admin/pages/products/class-remote-cards-{definition,actions,rows,provider}.php` | §2.4, the note cell. Accept: preview writes and calls nothing; apply replans; licence refusal; locked rows; `link_to` refuses several ids; a table GET never calls the marketplace |
+| I5 — One-card import, job, event handler, wiring | M · Sonnet 5.5 | I1–I4 | `flows/class-card-import.php`, `jobs/class-import-jobs.php`, `jobs/class-card-event-handler.php`, `class-flow-wiring.php`, the wiki page | §2.3, §2.5, §2.6, §2.9, §2.10, §4. Accept: the five rows of §2.6 and its four cut points; **a variable parent with the card's SKU and no link row gets no link** and the note of row 3; a variation with that SKU is linked with its real parent id; an archived card creates no product and no link; the five rows of §2.3; the claim is renewed before every card and a lost claim stops the run; budget requeue keeps the attempt, and a run whose `read_cards()` used the whole budget still finishes one card or one image; no handler and no hook without `Card_Importer`; no remote call at request time |
+| I6 — «Импортировать» on the cards tab | M · Sonnet 5.5 | I1 (parallel with I5) | `admin/pages/products/class-remote-cards-{definition,actions,rows,provider}.php`, `admin/pages/products/class-site-products-module.php` (construction of the three classes only) | §2.4, the note cell. Accept: preview writes and calls nothing and has the variable-parent and archived groups; apply replans; licence refusal; locked rows; **`link_to`, `near_confirm` and `near_dismiss` each refuse more than one id** in preview and apply; the note's `detail` is shown only while «Логирование» is on, switching it changes the same stored note's rendering both ways; a table GET never calls the marketplace |
 | I7 — Groups → variable products | L · Fable 5 | I5; open question 1 | `flows/class-group-assembler.php`, `flows/class-card-import.php` | Ozon spec §5.6 group assembly on `Card_Content::group()`, its five-step in-place conversion and its acceptance tests (red-then-black equals red+black). Not part of 2.1.6 unless question 1 says so |
 | Release 2.1.6 | coordinator | I1–I6 | — | — |
-| O6 — Ozon adapter (repo `woocommerce-ozon-seller`) | M · Sonnet 5.5 | released 2.1.6 | `includes/ozon/catalog/class-ozon-card-reader.php`, `includes/ozon/adapter/class-ozon-adapter.php`, `includes/migration/**` (the two settings, warnings for the dropped v1 options), fixtures, `docs/spec` §5.6 and `docs/wiki` | `Card_Importer` on the adapter; `Card_Content` from recorded fixtures of the three requests; migration carries `product_status` and `create_new_category`. Accept on the rig: bulk import of several cards, auto-import by a real notification, a re-click duplicates nothing, a card with an existing SKU is linked, an image failure leaves a product |
+| O6 — Ozon adapter (repo `woocommerce-ozon-seller`) | M · Sonnet 5.5 | released 2.1.6 | `includes/ozon/catalog/class-ozon-card-reader.php`, `includes/ozon/adapter/class-ozon-adapter.php`, `includes/migration/**` (the two settings, warnings for the dropped v1 options), fixtures, `docs/spec` §5.6 and `docs/wiki` | `Card_Importer` on the adapter; `Card_Content` from recorded fixtures of the three requests; migration carries `product_status` and `create_new_category`. Accept on the rig: bulk import of several cards, auto-import by a real notification, a re-click duplicates nothing, a card with an existing SKU is linked, a card whose SKU is a variable parent's is refused with the note, an archived card is skipped, an image failure leaves a product |
 
 Waves (at most three workers, disjoint files): **I1 ∥ I2 ∥ I4** → **I3** → **I5 ∥ I6** → release 2.1.6 → **O6**. I3 may start as
 soon as I1 is merged, beside I2 and I4.
@@ -344,10 +386,20 @@ soon as I1 is merged, beside I2 and I4.
 
 - The Ozon answers behind `Card_Content` (image, price, weight and dimension field names and units) were read from v1 code only,
   not from the v2 client, fixtures or the live API — O6 pins them with fixtures.
-- `wc_rest_upload_image_from_url()` inside an Action Scheduler request, and the records shell with a selectable cards table — I3
-  and I6 respectively.
+- `wc_rest_upload_image_from_url()` inside an Action Scheduler request was read in WooCommerce's source, not run (I3 runs it). The
+  records shell with a selectable cards table was not run (I6).
+- How a mapping's stored `category` JSON compares with the adapter's `remote_category()` descriptor (key order, extra keys) was
+  not measured — I3's acceptance covers `for_category()`.
+- Whether Ozon sends `CREATE_OR_UPDATE_ITEM` when only a price changes is not known; the price row of §4 depends on it.
 - v1's category creation in a background job (the capability check) was read, not run.
-- Nothing was run on the rig, and no critic has read this draft.
+- Nothing was run on the rig. r2 itself has not been re-read by a critic.
+
+## Revision log
+
+| Rev | Date | Change |
+|---|---|---|
+| r1 | 14.11.2026 | First draft (PR #1763). |
+| r2 | 14.11.2026 | The r1 critic's eight findings (Claude Opus). (1) §2.6: the first save carries the SKU, the marker and the category — r1 let the SKU arrive with the final save, so a run cut during images left a draft the next run could not find. (2) §2.6 row 3: a variable parent is refused before `Card_Linker` (the linker refuses a parent only when it already has a parent row), and a variation passes its real parent id. (3) §2.6, §3: the price is worked out after the category is stored. (4) §2.1, §2.4, §2.6 row 2: an archived card is skipped with a note, never linked. (5) §2.5, §2.8: the claim is extended before every card and every image; one download is bounded at 30 s. (6) §2.9: a note stores its technical tail separately and `Logging::hint()` is called at render. (7) §2.2, §2.4, I6: `class-site-products-module.php` joins the file set; `link_to`, `near_confirm`, `near_dismiss` refuse more than one id. (8) §2.5: a run always finishes one card or one image before the budget may stop it. Card acceptances I1, I2, I3, I5, I6 and O6 updated; §2.8 records that the image helpers load in a background job (read in WooCommerce's source); §7 gains the critic's unchecked items. §6 is unchanged. |
 
 ## Related
 
