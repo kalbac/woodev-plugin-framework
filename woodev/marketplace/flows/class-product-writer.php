@@ -27,8 +27,9 @@ defined( 'ABSPATH' ) || exit;
  *    it stops the writer; one image that cannot be loaded does not fail the product.
  * 4. The **final save**: the status and the marker removed.
  *
- * Each field goes where the card's mapping profile reads it on export, so an imported product round-trips; with no mapping the
- * built-in defaults apply (full description, featured image, gallery).
+ * Each field goes where the profile reads it on export, so an imported product round-trips. One profile governs the price and the
+ * fields: the one the saved product's categories (and their ancestors) point at ({@see Import_Category::profile_id()}); with
+ * none, the built-in defaults apply (full description, featured image, gallery, the shop's units).
  *
  * @since 2.1.6
  */
@@ -123,7 +124,7 @@ final class Product_Writer {
 		$product->set_status( 'draft' );
 		$product->set_sku( $article );
 		$product->update_meta_data( self::marker_key( $account->adapter_id() ), '1' );
-		$product->set_category_ids( $this->categories->resolve( $content, $create_categories )['term_ids'] );
+		$product->set_category_ids( $this->categories->term_ids( $content, $create_categories ) );
 		$product->save();
 
 		return $product;
@@ -143,7 +144,7 @@ final class Product_Writer {
 	 * @return string[] Warnings for the merchant: what could not be set (the product exists).
 	 */
 	public function complete( Account $account, Card_Content $content, \WC_Product $product, bool $publish, callable $renew ): array {
-		$profile  = $this->profile( $this->categories->resolve( $content, false )['profile_id'] );
+		$profile  = $this->profile( $this->categories->profile_id( $product ) );
 		$warnings = [];
 
 		$this->fill( $content, $product, $profile );
@@ -213,8 +214,10 @@ final class Product_Writer {
 	private function fill( Card_Content $content, \WC_Product $product, Profile $profile ): void {
 		$this->describe( $content->description(), $product, (string) $profile->setting( 'description_source', 'description' ) );
 
+		$units = (array) $profile->setting( 'units', [] );
+
 		if ( null !== $content->weight_g() && $content->weight_g() > 0 ) {
-			$product->set_weight( wc_format_decimal( wc_get_weight( $content->weight_g(), get_option( 'woocommerce_weight_unit' ), 'g' ) ) );
+			$product->set_weight( wc_format_decimal( wc_get_weight( $content->weight_g(), $this->unit( $units, 'weight', 'woocommerce_weight_unit' ), 'g' ) ) );
 		}
 
 		$dimensions = [
@@ -225,9 +228,23 @@ final class Product_Writer {
 
 		foreach ( $dimensions as $name => $millimetres ) {
 			if ( null !== $millimetres && $millimetres > 0 ) {
-				$product->{'set_' . $name}( wc_format_decimal( wc_get_dimension( $millimetres, get_option( 'woocommerce_dimension_unit' ), 'mm' ) ) );
+				$product->{'set_' . $name}( wc_format_decimal( wc_get_dimension( $millimetres, $this->unit( $units, 'dimension', 'woocommerce_dimension_unit' ), 'mm' ) ) );
 			}
 		}
+	}
+
+	/**
+	 * Returns the unit a measure is stored in: the profile's own (the export reads the product's numbers in it), else the shop's.
+	 *
+	 * @param array<mixed> $units  The profile's `units` setting: `weight` and `dimension`.
+	 * @param string       $key    `weight` or `dimension`.
+	 * @param string       $option The shop's unit option.
+	 * @return string
+	 */
+	private function unit( array $units, string $key, string $option ): string {
+		$unit = isset( $units[ $key ] ) ? (string) $units[ $key ] : '';
+
+		return '' !== $unit ? $unit : (string) get_option( $option );
 	}
 
 	/**

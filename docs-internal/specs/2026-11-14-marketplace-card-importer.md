@@ -306,10 +306,14 @@ so the tail follows the switch as it is now.
 
 ## 3. Field mapping
 
-The **profile** of a card is found backwards through the mappings: the card's `remote_category()` → the first term-bound mapping
-(lowest id, v1's order) with that category → its `profile_id`. New read: `Wpdb_Mapping_Store::for_category( array $descriptor )`
-returning the mapping and its term ids. Import then writes each field **where that profile reads it on export**, so an imported
-product round-trips; with no mapping the built-in profile defaults apply (`Profile_Choices` defaults), which is v1's behaviour.
+The card's **categories** are found backwards through the mappings: the card's `remote_category()` → the first term-bound mapping
+(lowest id, v1's order) with that category → its term ids. New read: `Wpdb_Mapping_Store::for_category( array $descriptor )`
+returning the mapping and its term ids. The **profile** is a different lookup, made on the **saved product**: the mapping its stored
+categories and their ancestors point at, closest category first — the lookup the price and every later export make
+(`Import_Category::profile_id()`). One profile therefore governs the price and the fields, also when the card's own descriptor maps
+nowhere and its categories were created under a category the merchant mapped. Import writes each field **where that profile reads
+it on export**, so an imported product round-trips; only when nothing maps the product do the built-in profile defaults apply
+(`Profile_Choices` defaults, the shop's units), which is v1's behaviour.
 
 | Card | Target | Through |
 |---|---|---|
@@ -319,7 +323,7 @@ product round-trips; with no mapping the built-in profile defaults apply (`Profi
 | primary image | profile `primary_image_source`: featured image (default, downloaded — §2.8), or a meta key, which on export holds a link to the photo, so the card's URL is written there and nothing is downloaded | profile |
 | other images | profile `images_source`: gallery (default, downloaded), a meta key (the URLs are written, nothing is downloaded), or `none` → not imported | profile |
 | prices | regular and sale price by the **inverse of the price rule in force** (`Shop_Price_Writer`, the code `Price_Refresher` uses today). No markup → old price → regular, price → sale: v1's result. A currency the rule cannot resolve → no price, a note. **Worked out only after the category is stored** (§2.6, first save): the rule comes from `Price_Context::price_terms()`, which resolves the mapping through `Category_Ancestry::for_product()` → `wc_get_product_term_ids()`, i.e. the categories in the database, not those set on an unsaved object. Before the save, a profile-level markup would be missed and the first export would send the marketplace price times that markup | account / profile price rule |
-| weight, dimensions | `wc_get_weight( g )`, `wc_get_dimension( mm )` into the shop's units | — |
+| weight, dimensions | `wc_get_weight( g )`, `wc_get_dimension( mm )` into the **profile's units** (`units.weight`, `units.dimension`: the export reads the product's numbers in them) when it names them, else the shop's units | profile |
 | category | the mapping's terms; else, when «Создавать категории…» is on, `category_path()` created by name (an existing term with the same name and parent is reused); else none | mapping |
 | status | `publish` when «Сразу публиковать…» is on, else `draft` | setting |
 | type, visibility, stock | `simple`; WooCommerce defaults (visible, in stock, stock not managed) | — |

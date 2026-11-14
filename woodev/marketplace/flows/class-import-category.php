@@ -13,12 +13,12 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Finds where an imported card goes in the shop catalogue, and which export profile it then carries.
+ * Finds where an imported card goes in the shop catalogue, and which export profile then governs the product.
  *
  * The card's own category descriptor is looked up backwards through the mappings ({@see Wpdb_Mapping_Store::for_category()}): the
- * mapping's shop categories are the product's, and the mapping's profile says where each field of the card is written. With no
- * mapping, the card's category path is created by name when the merchant allows it (an existing category with the same name and
- * parent is reused), and no profile applies. `wp_insert_term()` has no capability check, so this works in a background job.
+ * mapping's shop categories are the product's. With no mapping, the card's category path is created by name when the merchant
+ * allows it (an existing category with the same name and parent is reused). The profile is found afterwards, from the saved
+ * product ({@see self::profile_id()}). `wp_insert_term()` has no capability check, so this works in a background job.
  *
  * @since 2.1.6
  */
@@ -42,28 +42,46 @@ final class Import_Category {
 	}
 
 	/**
-	 * Returns the shop categories and the profile of a card.
+	 * Returns the shop categories of a card: the mapping's, else the card's path created by name when allowed.
 	 *
 	 * @since 2.1.6
 	 *
 	 * @param Card_Content $content           The card.
 	 * @param bool         $create_categories Whether a card with no mapping gets its category path created.
-	 * @return array{term_ids:int[],profile_id:int|null} The profile is that of the card's mapping, null when it has none.
+	 * @return int[]
 	 */
-	public function resolve( Card_Content $content, bool $create_categories ): array {
+	public function term_ids( Card_Content $content, bool $create_categories ): array {
 		$mapped = $this->mappings->for_category( $content->remote_category() );
 
 		if ( null !== $mapped ) {
-			return [
-				'term_ids'   => $mapped['term_ids'],
-				'profile_id' => $mapped['mapping']['profile_id'],
-			];
+			return $mapped['term_ids'];
 		}
 
-		return [
-			'term_ids'   => $create_categories ? $this->created( $content->category_path() ) : [],
-			'profile_id' => null,
-		];
+		return $create_categories ? $this->created( $content->category_path() ) : [];
+	}
+
+	/**
+	 * Returns the profile that governs a saved product: the one of the mapping its stored categories point at, closest category
+	 * first and then their ancestors. This is the lookup the price and every later export make ({@see Link_Context_Resolver}), so
+	 * one profile governs the price and the fields of an imported product — also when the categories came from the card's path
+	 * under a category the merchant mapped, not from the card's own descriptor.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param \WC_Product $product A product whose categories are saved.
+	 * @return int|null Null when no mapping covers the product, or its mapping names no profile.
+	 */
+	public function profile_id( \WC_Product $product ): ?int {
+		foreach ( Category_Ancestry::for_product( $product ) as $term_id ) {
+			$mapping_id = $this->mappings->mapping_id_for_term( $term_id );
+			$mapping    = null === $mapping_id ? null : $this->mappings->find( $mapping_id );
+
+			if ( null !== $mapping ) {
+				return $mapping['profile_id'];
+			}
+		}
+
+		return null;
 	}
 
 	/**

@@ -245,6 +245,75 @@ class ProductWriterTest extends TestCase {
 	}
 
 	/**
+	 * One profile governs the price and the fields: a card whose own category is in no mapping, created under a category the
+	 * merchant mapped, is written with the profile of that ancestor — the profile the price and the first export read.
+	 */
+	public function test_the_profile_of_a_mapped_ancestor_governs_the_fields_as_well_as_the_price(): void {
+		$profile_id = $this->profiles->create(
+			'Краткое описание и наценка',
+			[
+				'description_source' => 'short_description',
+				'price_rule'         => [
+					'base'        => 'active',
+					'markup_kind' => 'percent',
+					'markup'      => '10',
+				],
+			]
+		);
+		$parent = $this->mapped_category( [ 'type_id' => 1 ], $profile_id, 'Электроника' );
+		$card   = $this->card(
+			[
+				'remote_category' => [ 'type_id' => 999 ],
+				'category_path'   => [ 'Электроника', 'Телефоны' ],
+				'description'     => 'Описание',
+			]
+		);
+
+		$result = $this->writer->write( $this->account(), $card, false, true, $this->renew() );
+		$loaded = wc_get_product( $result['product']->get_id() );
+		$leaf   = get_term( $loaded->get_category_ids()[0], 'product_cat' );
+
+		$this->assertSame( $parent, (int) $leaf->parent, 'the card sits under the mapped category' );
+		$this->assertSame( 'Описание', $loaded->get_short_description(), 'the ancestor profile reads the short description' );
+		$this->assertSame( '', $loaded->get_description() );
+		$this->assertEqualsWithDelta( 1000.0, (float) $loaded->get_regular_price(), 0.001, 'and the same profile gives the price its markup' );
+	}
+
+	/**
+	 * Weight and dimensions go into the profile's own units when it names them (the export reads the numbers in those), else
+	 * into the shop's.
+	 */
+	public function test_weight_and_dimensions_follow_the_units_of_the_profile(): void {
+		update_option( 'woocommerce_weight_unit', 'kg' );
+		update_option( 'woocommerce_dimension_unit', 'cm' );
+		$profile_id = $this->profiles->create(
+			'Граммы и миллиметры',
+			[
+				'units' => [
+					'weight'    => 'g',
+					'dimension' => 'mm',
+				],
+			]
+		);
+		$this->mapped_category( [ 'type_id' => 8 ], $profile_id );
+
+		$fields = [
+			'weight_g'  => 1500,
+			'length_mm' => 200,
+			'width_mm'  => 100,
+			'height_mm' => 50,
+		];
+		$own    = $this->writer->write( $this->account(), $this->card( array_merge( $fields, [ 'remote_category' => [ 'type_id' => 8 ] ] ) ), false, false, $this->renew() )['product'];
+		$shop   = $this->writer->write( $this->account(), $this->card( array_merge( $fields, [ 'offer_id' => 'ART-2' ] ) ), false, false, $this->renew() )['product'];
+
+		$this->assertEqualsWithDelta( 1500.0, (float) $own->get_weight(), 0.0001, 'grams, as the profile says' );
+		$this->assertEqualsWithDelta( 200.0, (float) $own->get_length(), 0.0001, 'millimetres, as the profile says' );
+		$this->assertEqualsWithDelta( 50.0, (float) $own->get_height(), 0.0001 );
+		$this->assertEqualsWithDelta( 1.5, (float) $shop->get_weight(), 0.0001, 'no profile: the shop kilograms' );
+		$this->assertEqualsWithDelta( 20.0, (float) $shop->get_length(), 0.0001, 'no profile: the shop centimetres' );
+	}
+
+	/**
 	 * A source that is a custom field gets the image links and downloads nothing; `none` leaves the gallery out.
 	 */
 	public function test_custom_field_sources_write_the_links_and_download_nothing(): void {
@@ -403,24 +472,24 @@ class ProductWriterTest extends TestCase {
 		$resolver = new Import_Category( $this->mappings );
 		$path     = $this->card( [ 'category_path' => [ 'Электроника', 'Телефоны' ] ] );
 
-		$this->assertSame( [], $resolver->resolve( $path, false )['term_ids'] );
+		$this->assertSame( [], $resolver->term_ids( $path, false ) );
 
-		$created = $resolver->resolve( $path, true )['term_ids'];
+		$created = $resolver->term_ids( $path, true );
 		$this->assertCount( 1, $created );
 		$leaf = get_term( $created[0], 'product_cat' );
 		$this->assertSame( 'Телефоны', $leaf->name );
 		$this->assertSame( 'Электроника', get_term( $leaf->parent, 'product_cat' )->name );
-		$this->assertSame( $created, $resolver->resolve( $path, true )['term_ids'], 'the second run reuses the categories' );
+		$this->assertSame( $created, $resolver->term_ids( $path, true ), 'the second run reuses the categories' );
 
 		$other  = wp_insert_term( 'Аксессуары', 'product_cat' );
 		$child  = wp_insert_term( 'Телефоны', 'product_cat', [ 'parent' => $other['term_id'] ] );
-		$again  = $resolver->resolve( $path, true )['term_ids'];
+		$again  = $resolver->term_ids( $path, true );
 		$this->assertSame( $created, $again, 'a same-named child of another parent is not reused' );
 		$this->assertNotSame( (int) $child['term_id'], $again[0] );
 
 		$mapped = $this->mapped_category( [ 'type_id' => 77 ], null );
 		$card   = $this->card( [ 'remote_category' => [ 'type_id' => 77 ], 'category_path' => [ 'Другое' ] ] );
-		$this->assertSame( [ $mapped ], $resolver->resolve( $card, true )['term_ids'] );
+		$this->assertSame( [ $mapped ], $resolver->term_ids( $card, true ) );
 	}
 
 	/**
@@ -441,10 +510,11 @@ class ProductWriterTest extends TestCase {
 	 *
 	 * @param array<string,mixed> $descriptor Remote category descriptor.
 	 * @param int|null            $profile_id Profile id.
+	 * @param string              $name       Category name, a generated one when empty.
 	 * @return int The product category's term id.
 	 */
-	private function mapped_category( array $descriptor, ?int $profile_id ): int {
-		$term       = wp_insert_term( 'Категория ' . wp_generate_password( 6, false ), 'product_cat' );
+	private function mapped_category( array $descriptor, ?int $profile_id, string $name = '' ): int {
+		$term       = wp_insert_term( '' !== $name ? $name : 'Категория ' . wp_generate_password( 6, false ), 'product_cat' );
 		$mapping_id = $this->mappings->create( 'Сопоставление', null, $descriptor, $profile_id, [] );
 		$this->mappings->link_term_if_absent( (int) $term['term_id'], $mapping_id );
 
