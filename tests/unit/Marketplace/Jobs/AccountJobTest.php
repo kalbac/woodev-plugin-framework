@@ -115,7 +115,7 @@ final class AccountJobTest extends Export_Test_Case {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private function ring_rows(): array {
-		return (array) $this->db->get_results( 'SELECT * FROM ' . Sqlite_Tables::table( 'api_errors' ), ARRAY_A );
+		return (array) $this->db->get_results( 'SELECT * FROM ' . Sqlite_Tables::table( 'api_errors' ), 'ARRAY_A' );
 	}
 
 	/**
