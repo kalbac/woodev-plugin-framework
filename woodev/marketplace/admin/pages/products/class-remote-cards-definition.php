@@ -26,6 +26,22 @@ final class Remote_Cards_Definition {
 	public const LINK_TO = 'link_to';
 
 	/**
+	 * Row action: import this one card as a shop product. The records engine keeps one id space for the row and the bulk actions, so
+	 * the bulk twin of this action has an id of its own ({@see self::IMPORT_SELECTED}); the server handles both alike.
+	 */
+	public const IMPORT = 'import';
+
+	/**
+	 * Bulk action: import the selected cards as shop products.
+	 */
+	public const IMPORT_SELECTED = 'import_selected';
+
+	/**
+	 * Most cards one import action takes: one page.
+	 */
+	public const MAX_IMPORT = 100;
+
+	/**
 	 * Row actions of the near-match report: «Это тот же товар» links the pair, «Нет, это разные» dismisses it.
 	 */
 	public const NEAR_CONFIRM = 'near_confirm';
@@ -53,9 +69,10 @@ final class Remote_Cards_Definition {
 	 *
 	 * @param array<int,array{value:string,label:string}> $accounts    Accounts the user may open: the account selector's options.
 	 * @param string                                      $marketplace Merchant-facing marketplace name.
+	 * @param bool                                        $importable  Whether the adapter can import cards: only then the table offers «Импортировать» and selects rows.
 	 * @return array<string,mixed>
 	 */
-	public static function build( array $accounts, string $marketplace ): array {
+	public static function build( array $accounts, string $marketplace, bool $importable = false ): array {
 		return [
 			'context'      => [
 				'label'   => __( 'Аккаунт', 'woodev-plugin-framework' ),
@@ -69,10 +86,10 @@ final class Remote_Cards_Definition {
 				'default_per_page' => 20,
 				'per_page_options' => [ 20, 50, 100 ],
 				'max_per_page'     => 100,
-				'max_selection'    => 1,
+				'max_selection'    => $importable ? self::MAX_IMPORT : 1,
 			],
-			'row_actions'  => [ self::link_to(), self::near_confirm(), self::near_dismiss() ],
-			'bulk_actions' => [ self::refresh( $marketplace ), Site_Products_Definition::link_by_article( __( 'Связывание идёт по всему магазину. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ) ) ],
+			'row_actions'  => self::row_actions( $importable ),
+			'bulk_actions' => self::bulk_actions( $marketplace, $importable ),
 			'activity'     => [
 				'refresh_ms'     => 10000,
 				'max_refresh_ms' => 60000,
@@ -82,6 +99,27 @@ final class Remote_Cards_Definition {
 			'messages'     => self::messages( $marketplace ),
 			'analytics'    => null,
 		];
+	}
+
+	/**
+	 * @param bool $importable Whether the adapter can import cards.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function row_actions( bool $importable ): array {
+		$actions = [ self::link_to(), self::near_confirm(), self::near_dismiss() ];
+
+		return $importable ? array_merge( [ self::import( self::IMPORT ) ], $actions ) : $actions;
+	}
+
+	/**
+	 * @param string $marketplace Marketplace name.
+	 * @param bool   $importable  Whether the adapter can import cards.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function bulk_actions( string $marketplace, bool $importable ): array {
+		$actions = [ self::refresh( $marketplace ), Site_Products_Definition::link_by_article( __( 'Связывание идёт по всему магазину. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ) ) ];
+
+		return $importable ? array_merge( [ self::import( self::IMPORT_SELECTED ) ], $actions ) : $actions;
 	}
 
 	/**
@@ -162,6 +200,27 @@ final class Remote_Cards_Definition {
 					],
 				],
 			],
+		];
+	}
+
+	/**
+	 * «Импортировать»: creates a shop product from each selected card, or links it to the product that already carries its article.
+	 * It starts a remote read and creates products, so it needs the same right as «Обновить список».
+	 *
+	 * @param string $id {@see self::IMPORT} or {@see self::IMPORT_SELECTED}.
+	 * @return array<string,mixed>
+	 */
+	private static function import( string $id ): array {
+		return [
+			'id'             => $id,
+			'label'          => __( 'Импортировать', 'woodev-plugin-framework' ),
+			'tone'           => 'primary',
+			'effect'         => 'mutate',
+			'interaction'    => 'dialog',
+			'scope'          => 'selection',
+			'capability'     => 'manage_woocommerce',
+			'scope_sentence' => __( 'Для выбранных карточек будут созданы товары на сайте; если товар с таким артикулом уже есть, карточка свяжется с ним. Импорт идёт в фоне. На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' ),
+			'confirm_label'  => __( 'Импортировать', 'woodev-plugin-framework' ),
 		];
 	}
 
@@ -272,6 +331,9 @@ final class Remote_Cards_Definition {
 				'retry'                  => __( 'Повторить', 'woodev-plugin-framework' ),
 				'reset_filters'          => __( 'Сбросить фильтры', 'woodev-plugin-framework' ),
 				'actions_column'         => __( 'Действия', 'woodev-plugin-framework' ),
+				'select_all'             => __( 'Выбрать все карточки на странице', 'woodev-plugin-framework' ),
+				'select_row'             => __( 'Выбрать', 'woodev-plugin-framework' ),
+				'selection_limit'        => __( 'Выбрано предельное число карточек. Выполните действие и выберите остальные.', 'woodev-plugin-framework' ),
 				'filter_any'             => __( 'Все карточки', 'woodev-plugin-framework' ),
 				'per_page'               => __( 'Карточек на странице', 'woodev-plugin-framework' ),
 				'action_planning'        => __( 'Проверяем…', 'woodev-plugin-framework' ),
