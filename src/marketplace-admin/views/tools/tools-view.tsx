@@ -1,5 +1,6 @@
 /**
- * The «Инструменты» page: pick an account, preview a tool, confirm it, read the result.
+ * The «Инструменты» page: preview a tool on an account, confirm it, read the result. The account is picked only when the
+ * plugin has two or more; a single account is chosen silently.
  *
  * Every sentence comes from the server's `messages`; a running background run on the account is read again every few
  * seconds until it ends, and disables the tools that take the claim.
@@ -12,7 +13,7 @@ import { Button, Notice, SelectControl, Spinner } from '@wordpress/components';
 import type { PageViewProps } from '../../types';
 import { errorLines } from '../mappings/api';
 import { createToolsApi } from './api';
-import { accountFor, canConfirm, canPreview, chooseAccount, isBusy } from './tool-state';
+import { canConfirm, canPreview, chooseAccount, isBusy, needsAccountChoice } from './tool-state';
 import type { ToolPreview, ToolRow, ToolsState } from './types';
 
 const POLL_MS = 5000;
@@ -70,24 +71,24 @@ export function ToolsView( { menu }: PageViewProps ) {
 	const { messages } = state;
 
 	const openPreview = ( tool: ToolRow ) => {
-		if ( ! canPreview( tool, accountId ) ) {
+		if ( accountId === null || ! canPreview( tool, accountId ) ) {
 			return;
 		}
 
 		setPending( true );
-		api.preview( tool.id, accountFor( tool, accountId ) )
+		api.preview( tool.id, accountId )
 			.then( setPreview )
 			.catch( ( error ) => setNotice( { status: 'error', lines: errorLines( error, messages.loadFailed ) } ) )
 			.finally( () => setPending( false ) );
 	};
 
 	const run = ( tool: ToolRow ) => {
-		if ( ! canPreview( tool, accountId ) ) {
+		if ( accountId === null || ! canPreview( tool, accountId ) ) {
 			return;
 		}
 
 		setPending( true );
-		api.run( tool.id, accountFor( tool, accountId ) )
+		api.run( tool.id, accountId )
 			.then( ( result ) => {
 				setNotice( { status: result.success ? 'success' : 'error', lines: [ result.message ] } );
 				setPreview( null );
@@ -110,15 +111,17 @@ export function ToolsView( { menu }: PageViewProps ) {
 				</Notice>
 			) }
 			{ isBusy( state.activity ) && <Notice status="warning" isDismissible={ false }>{ state.activity.text }</Notice> }
-			<SelectControl
-				label={ messages.accountLabel }
-				value={ accountId === null ? '' : String( accountId ) }
-				options={ accountOptions.length > 0 ? accountOptions : [ { label: messages.chooseAccount, value: '' } ] }
-				onChange={ ( value ) => {
-					setAccountId( value === '' ? null : Number( value ) );
-					setPreview( null );
-				} }
-			/>
+			{ needsAccountChoice( state.accounts ) && (
+				<SelectControl __next40pxDefaultSize
+					label={ messages.accountLabel }
+					value={ accountId === null ? '' : String( accountId ) }
+					options={ accountOptions }
+					onChange={ ( value ) => {
+						setAccountId( value === '' ? null : Number( value ) );
+						setPreview( null );
+					} }
+				/>
+			) }
 			{ accountId === null && <p>{ messages.chooseAccount }</p> }
 			{ state.tools.length === 0 && <p>{ messages.noTools }</p> }
 			{ state.tools.map( ( tool ) => (

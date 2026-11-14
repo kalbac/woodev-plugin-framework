@@ -24,7 +24,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * Every route runs the same order: the capability before anything is read; the body checked against a declared key list
  * (unknown keys → 400); the tool and the account resolved on this plugin's adapter (unknown → 404, switched off → 409);
- * only then the work. A site tool needs no account: its body may leave `account_id` out and it is not read.
+ * only then the work. Every tool runs on an account: a body without a valid `account_id` is refused. The `GET` carries the
+ * accounts to choose from; the page asks the merchant to choose only when there are two or more.
  * «Disabled» is one rule for the list, the preview and the run: a remote tool waits for the licence and the account pause,
  * a claim-taking tool for the background run ({@see Tool_Catalogue::state_for()}).
  * Results are `{status, success, message, activity}` so the page shows the sentence the tool gave, never a code.
@@ -202,7 +203,7 @@ final class Tools_Controller {
 	public static function messages(): array {
 		return [
 			'accountLabel'  => __( 'Аккаунт', 'woodev-plugin-framework' ),
-			'chooseAccount' => __( 'Выберите аккаунт, чтобы запускать инструменты.', 'woodev-plugin-framework' ),
+			'chooseAccount' => __( 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.', 'woodev-plugin-framework' ),
 			'noTools'       => __( 'Для этого маркетплейса пока нет инструментов.', 'woodev-plugin-framework' ),
 			'previewButton' => __( 'Проверить', 'woodev-plugin-framework' ),
 			'cancelButton'  => __( 'Отмена', 'woodev-plugin-framework' ),
@@ -287,7 +288,7 @@ final class Tools_Controller {
 	 * @since 2.1.5
 	 *
 	 * @param Tool $tool       Tool.
-	 * @param int  $account_id Account; 0 for a site tool.
+	 * @param int  $account_id Account.
 	 * @return array{disabled:bool,reason:string}
 	 */
 	private function state_of( Tool $tool, int $account_id ): array {
@@ -301,7 +302,7 @@ final class Tools_Controller {
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @param string[]         $allowed Keys the body may carry.
-	 * @return array{0:Tool,1:int}|\WP_Error The tool and its account id (0 for a site tool).
+	 * @return array{0:Tool,1:int}|\WP_Error The tool and its account id.
 	 */
 	private function resolve( \WP_REST_Request $request, array $allowed ) {
 		$body    = $request->get_json_params();
@@ -316,10 +317,6 @@ final class Tools_Controller {
 
 		if ( null === $tool ) {
 			return $this->error( 'woodev_tools_unknown_tool', __( 'Такого инструмента нет.', 'woodev-plugin-framework' ), 404 );
-		}
-
-		if ( $tool->is_site_wide() ) {
-			return [ $tool, 0 ];
 		}
 
 		$account_id = self::positive_int( $body['account_id'] ?? null );

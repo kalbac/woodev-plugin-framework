@@ -30,7 +30,6 @@ final class ToolTest extends TestCase {
 				'description' => 'Переносит данные заново.',
 				'button'      => 'Запустить',
 				'takes_claim' => true,
-				'scope'       => 'account',
 			],
 			$tool->describe()
 		);
@@ -38,31 +37,19 @@ final class ToolTest extends TestCase {
 		$this->assertTrue( $tool->takes_claim() );
 	}
 
-	public function test_a_tool_is_remote_and_account_scoped_unless_it_says_otherwise(): void {
-		$tool = $this->tool( [] );
-
-		$this->assertTrue( $tool->is_remote() );
-		$this->assertFalse( $tool->is_site_wide() );
-		$this->assertSame( 'account', $tool->describe()['scope'] );
+	public function test_a_tool_is_remote_unless_it_says_otherwise(): void {
+		$this->assertTrue( $this->tool( [] )->is_remote() );
 	}
 
 	public function test_a_local_tool_opts_out_of_the_remote_gate(): void {
 		$this->assertFalse( $this->tool( [ false, false ] )->is_remote() );
 	}
 
-	public function test_a_site_tool_is_site_wide_and_cannot_take_a_claim(): void {
-		$tool = $this->tool( [ true, false, Tool::SCOPE_SITE ] );
+	public function test_a_local_tool_can_still_take_the_claim(): void {
+		$tool = $this->tool( [ true, false ] );
 
-		$this->assertTrue( $tool->is_site_wide() );
-		$this->assertFalse( $tool->takes_claim() );
-		$this->assertSame( 'site', $tool->describe()['scope'] );
-	}
-
-	public function test_an_unknown_scope_is_an_account_tool(): void {
-		$tool = $this->tool( [ false, true, 'galaxy' ] );
-
-		$this->assertFalse( $tool->is_site_wide() );
-		$this->assertSame( 'account', $tool->describe()['scope'] );
+		$this->assertTrue( $tool->takes_claim() );
+		$this->assertFalse( $tool->is_remote() );
 	}
 
 	public function test_summary_and_run_pass_the_chosen_account_to_their_callbacks(): void {
@@ -94,7 +81,7 @@ final class ToolTest extends TestCase {
 	}
 
 	/**
-	 * A tool with the trailing `create()` arguments given: `[ takes_claim, remote, scope ]`.
+	 * A tool with the trailing `create()` arguments given: `[ takes_claim, remote ]`.
 	 *
 	 * @param array<int,mixed> $flags Arguments after the run callback.
 	 */

@@ -3178,7 +3178,7 @@ msgid "По аккаунту уже идёт фоновая работа. Зап
 msgstr ""
 
 #: marketplace/admin/pages/tools/class-tools-controller.php:205
-msgid "Выберите аккаунт, чтобы запускать инструменты."
+msgid "Добавьте аккаунт в настройках плагина, чтобы запускать инструменты."
 msgstr ""
 
 #: marketplace/admin/pages/tools/class-tools-controller.php:206
