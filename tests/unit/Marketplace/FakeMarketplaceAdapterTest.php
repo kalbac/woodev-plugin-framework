@@ -21,6 +21,7 @@ use Woodev\Framework\Marketplace\Catalog\Mapping;
 use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Governor\Bucket_Spec;
 use Woodev\Framework\Marketplace\Governor\Request_Governor;
+use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Ledger\Event_Ledger;
@@ -127,6 +128,7 @@ final class FakeMarketplaceAdapterTest extends TestCase {
 		$this->assertInstanceOf( Card_Exporter::class, $this->adapter->card_exporter() );
 		$this->assertContainsOnlyInstancesOf( Bucket_Spec::class, $this->adapter->bucket_specs() );
 		$this->assertNotEmpty( $this->adapter->support_sections( $this->account ) );
+		$this->assertInstanceOf( Card_Importer::class, $this->adapter );
 
 		$clock = $this->adapter->clock();
 		foreach ( array(

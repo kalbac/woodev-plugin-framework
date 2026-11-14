@@ -33,7 +33,10 @@ use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Intake\Push_Protocol;
 use Woodev\Framework\Marketplace\Flows\Card_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Export_Facts;
+use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Export_Gateway;
+use Woodev\Framework\Marketplace\Catalog\Card_Content;
+use Woodev\Framework\Marketplace\Ledger\Inbound_Event;
 use Woodev\Framework\Marketplace\Jobs\Error_Classifier;
 use Woodev\Framework\Marketplace\Ledger\Inbound_Decoder;
 use Woodev\Framework\Marketplace\Orders\Order_DTO;
@@ -76,7 +79,7 @@ use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Stock_Pusher
  * - no push, so `inbound_decoder()` is null and `PUSH_NOTIFICATIONS` is unsupported;
  * - a 4xx answer costs ten requests (`bucket_specs()`).
  */
-final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
+final class Fake_Marketplace_Adapter implements Marketplace_Adapter, Card_Importer {
 	/**
 	 * Clock shared by the parts.
 	 *
@@ -569,6 +572,47 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter {
 	 */
 	public function posting_handler(): ?\Woodev\Framework\Marketplace\Jobs\Posting_Handler {
 		return array_key_exists( 'posting_handler', $this->policies ) ? $this->policies['posting_handler'] : new Fake_Marketplace\Fake_Posting_Handler();
+	}
+
+	/**
+	 * Names the event type that announces a created or changed card.
+	 *
+	 * @return string[]
+	 */
+	public function import_event_types(): array {
+		return [ 'CARD_CHANGED' ];
+	}
+
+	/**
+	 * Returns the article an event carries in its payload, '' when the payload has none.
+	 *
+	 * @param Inbound_Event $event Event.
+	 * @return string
+	 */
+	public function imported_article( Inbound_Event $event ): string {
+		return (string) ( $event->payload()['offer_id'] ?? '' );
+	}
+
+	/**
+	 * Names the request path of the import.
+	 *
+	 * @return string
+	 */
+	public function import_path(): string {
+		return '/fake/cards/import';
+	}
+
+	/**
+	 * Reads no card: the fake marketplace answers for none.
+	 *
+	 * @param Account  $account   Account.
+	 * @param string   $context   Job hook.
+	 * @param string[] $offer_ids Articles.
+	 * @param callable $renew     Claim renewal.
+	 * @return array<string,Card_Content>
+	 */
+	public function read_cards( Account $account, string $context, array $offer_ids, callable $renew ): array {
+		return [];
 	}
 
 	/**
