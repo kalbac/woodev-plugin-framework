@@ -45,6 +45,14 @@ wp i18n update-po woodev/languages/woodev-plugin-framework.pot \
    in this branch, and in the merged file. The merged count must equal the union, not the sum.
 3. Rebuild the binary and gate it: `wp i18n make-mo`, then `npm run lint:i18n` and `npm run lint:mo`.
 
+## s230: it repeats after EVERY merge — merge parallel catalogue PRs back to back
+
+With F15 #1695, F13 #1693, F12b #1692, #1730 and #1733 in flight, each merge made the remaining PRs conflict again on
+`.pot` / `.po` / `class-map.php`: #1751 needed `git merge origin/main` twice. Rule: when several PRs touch the catalogue, merge them
+back to back and re-merge `origin/main` into each remaining PR **immediately** after each merge, rather than letting them age.
+A re-merge that goes through a reopened worker is the trap in
+[orchestration-send-to-a-released-dispatch-reopens-the-worker-in-a-new-terminal](orchestration-send-to-a-released-dispatch-reopens-the-worker-in-a-new-terminal.md).
+
 ## Related
 
 - [a-po-merge-that-drops-obsolete-entries-still-looks-well-formed](a-po-merge-that-drops-obsolete-entries-still-looks-well-formed.md) — why `update-po` loses the `#~` tail, and the count-in-and-out check this fix relies on

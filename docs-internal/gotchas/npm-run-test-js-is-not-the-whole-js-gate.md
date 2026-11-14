@@ -41,6 +41,12 @@ is **TypeScript** — `.ts`, or `.tsx` where there is JSX.
 conversion; you delete a line from it when you migrate one. Adding a line for a brand-new file
 defeats the gate instead of satisfying it, and the gate's own message says so.
 
+## s230: it still bites workers — the brief must say «new src files are `.tsx`»
+
+PR #1755 (#1730 settings layout): a Sonnet worker added two new `.js` files under `src/`, jest and everything local were green, and CI's
+`JS Tests` failed on the TypeScript-by-default gate (#542). The worker renamed them to `.tsx`. Every worker brief that may add a
+`src/` file carries the sentence «new `src/` files are `.tsx`, never add to `ts-baseline.txt`» — the gate is invisible to `test:js`.
+
 ## Related
 
 - [a-docs-gate-checks-links-not-listings](a-docs-gate-checks-links-not-listings.md) — the same shape

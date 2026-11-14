@@ -128,6 +128,15 @@ s182 (15.10.2026, #247): a change to `package.json` also counts as a build input
 breaking the rule above (CI's `assets` job was green, so no harm, but the catalogue gates were skipped). The brief template must
 carry the sha-push recipe; the coordinator follows it too.
 
+## s230: one src change, TWO bundles — `settings-page` is imported by `ui-kit-gallery`
+
+`src/ui-kit-gallery/app.js` imports `settings-page`, so a change under `src/settings-page/` also changes the `ui-kit-gallery` bundle.
+A worker that rebuilt and committed only the `settings-page` bundle left the pre-push hook refusing in the primary checkout too.
+Commit **both** bundles (or let the coordinator run the full `npm run build` there). A brief for a settings-page change names both.
+
+For the msgid side of the same restored-build trap, see
+[lint-i18n-sources-reads-the-built-bundle-so-a-restored-build-hides-missing-js-msgids](lint-i18n-sources-reads-the-built-bundle-so-a-restored-build-hides-missing-js-msgids.md).
+
 ## Related
 
 - [sharing-vendor-breaks-composer-autoload-in-a-worktree](sharing-vendor-breaks-composer-autoload-in-a-worktree.md) — the same symlink-resolution mechanism, one layer down: Composer bakes `$baseDir` and PHP resolves the link too
