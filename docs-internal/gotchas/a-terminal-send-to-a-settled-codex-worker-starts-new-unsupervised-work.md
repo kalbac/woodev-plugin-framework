@@ -31,6 +31,10 @@ dispatch. Consequences, all invisible from the orchestration side:
   usage limit resets». Match `hit your usage limit` / `Approaching rate limits` instead. A marker string
   you ask the worker to print also appears in YOUR prompt echoed in its tail — watch a file, not text.
 
+## s230
+
+The Claude-worker twin (a send to a released dispatch reopens the worker): [orchestration-send-to-a-released-dispatch-reopens-the-worker-in-a-new-terminal](orchestration-send-to-a-released-dispatch-reopens-the-worker-in-a-new-terminal.md).
+
 ## Related
 
 - [orchestration-mail-does-not-reach-a-busy-worker](orchestration-mail-does-not-reach-a-busy-worker.md)

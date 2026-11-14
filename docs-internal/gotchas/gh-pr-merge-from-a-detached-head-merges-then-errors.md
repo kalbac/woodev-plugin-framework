@@ -34,6 +34,12 @@ gh pr view 1066 -R kalbac/woodev-plugin-framework --json state,mergeCommit
 git ls-remote --exit-code origin <head-branch> && git push origin --delete <head-branch>   # if it survived
 ```
 
+## s230: the opposite lie — a merge REFUSED by a conflict, then a script that prints «MERGED» anyway
+
+`gh pr merge` refuses a PR that conflicts with `main`. A wrapper script that ran it and then echoed «MERGED» unconditionally reported
+a PR as merged that was still open. The exit text and the script's own echo are both unreliable in either direction: after every
+merge run `gh pr view N -R kalbac/woodev-plugin-framework --json state` and read `state` (`MERGED`), never the echo.
+
 ## Related
 
 - [git-checkout-ref-dot-overwrites-the-primary-checkout](git-checkout-ref-dot-overwrites-the-primary-checkout.md) — another way the primary checkout's state bites a merge flow

@@ -20,6 +20,12 @@ agent, and says nothing about the delivered result.
 ✅ Correct: first `check` the coordinator inbox (and `worker-list`) for a `worker_done` of that dispatch id; only a dispatch
 with no `worker_done` and a dead terminal is a relaunch.
 
+## s230 addendum
+
+`dispatch_inactive` is not the only outcome: for a Claude worker that was *released*, a send to its dispatch can reopen it in a new
+terminal — see
+[orchestration-send-to-a-released-dispatch-reopens-the-worker-in-a-new-terminal](orchestration-send-to-a-released-dispatch-reopens-the-worker-in-a-new-terminal.md).
+
 ## Related
 
 - [orchestration-mail-does-not-reach-a-busy-worker](orchestration-mail-does-not-reach-a-busy-worker.md) — `send --to dispatch:` is pull-only
