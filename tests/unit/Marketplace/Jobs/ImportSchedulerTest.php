@@ -84,6 +84,19 @@ final class ImportSchedulerTest extends TestCase {
 	}
 
 	/**
+	 * Numeric articles are queued as strings, so an int and its string are one chunk and not two.
+	 *
+	 * @return void
+	 */
+	public function test_articles_are_queued_as_strings(): void {
+		$this->scheduler->import( 3, [ 123, '123' ] );
+
+		$actions = array_values( $this->queue->of( $this->scheduler->hook() ) );
+		$this->assertCount( 1, $actions );
+		$this->assertSame( [ 3, [ '123' ], 0 ], $actions[0]['args'] );
+	}
+
+	/**
 	 * A queue that refuses the action throws, so the caller's retry applies.
 	 *
 	 * @return void
@@ -109,6 +122,21 @@ final class ImportSchedulerTest extends TestCase {
 	}
 
 	/**
+	 * A job that requeues its own unfinished chunk while that chunk is running still gets its work queued: the running action is
+	 * not a waiting one (gotcha `as-has-scheduled-action-matches-the-running-action`).
+	 *
+	 * @return void
+	 */
+	public function test_a_requeue_from_the_running_chunk_is_queued(): void {
+		$this->scheduler->import( 3, [ 'SKU-1' ] );
+		$this->queue->start_running( $this->scheduler->hook() );
+
+		$this->scheduler->retry( 3, [ 'SKU-1' ], 0, 0 );
+
+		$this->assertCount( 1, $this->queue->matching( $this->scheduler->hook(), [ 3, [ 'SKU-1' ], 0 ], 'pending' ) );
+	}
+
+	/**
 	 * The rows being imported are the articles of the account's pending or running import actions, and nothing of another account.
 	 *
 	 * @return void
@@ -131,7 +159,7 @@ final class ImportSchedulerTest extends TestCase {
 	}
 
 	/**
-	 * Builds a queue action as Action Scheduler returns it in the objects format.
+	 * Builds a queue action as Action Scheduler returns it to a query.
 	 *
 	 * @param array<int,mixed> $args Arguments.
 	 * @return object

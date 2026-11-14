@@ -69,13 +69,16 @@ final class Import_Scheduler {
 	 * @throws Persistence_Exception When Action Scheduler is not available or could not store an action.
 	 */
 	public function import( int $account_id, array $offer_ids ): void {
+		$offer_ids = array_map( 'strval', $offer_ids );
+
 		foreach ( array_chunk( array_values( array_unique( $offer_ids ) ), self::BATCH ) as $chunk ) {
 			$this->enqueue( [ $account_id, $chunk, 0 ], 0 );
 		}
 	}
 
 	/**
-	 * Schedules a chunk again after a failed attempt.
+	 * Schedules a chunk again after a failed attempt. Called from inside the running job, so a chunk that is still running is not
+	 * taken for a waiting one (see {@see self::is_waiting()}).
 	 *
 	 * @since 2.1.6
 	 *
@@ -87,7 +90,7 @@ final class Import_Scheduler {
 	 * @throws Persistence_Exception When Action Scheduler could not store the action.
 	 */
 	public function retry( int $account_id, array $offer_ids, int $attempt, int $delay ): void {
-		$this->enqueue( [ $account_id, array_values( $offer_ids ), $attempt ], $delay );
+		$this->enqueue( [ $account_id, array_values( array_map( 'strval', $offer_ids ) ), $attempt ], $delay );
 	}
 
 	/**
@@ -109,8 +112,7 @@ final class Import_Scheduler {
 				'group'    => $this->names->group(),
 				'status'   => [ 'pending', 'in-progress' ],
 				'per_page' => -1,
-			],
-			'objects'
+			]
 		);
 
 		$offer_ids = [];
@@ -130,7 +132,7 @@ final class Import_Scheduler {
 	}
 
 	/**
-	 * Schedules one import action, unless the same one is already waiting for a first attempt.
+	 * Schedules one import action. With no delay, a chunk already waiting with the same arguments is not queued twice.
 	 *
 	 * @param array<int,mixed> $args  Arguments: account id, articles, attempt.
 	 * @param int              $delay Seconds to wait.
@@ -142,12 +144,35 @@ final class Import_Scheduler {
 			throw Persistence_Exception::queue( 'the import of cards' );
 		}
 
-		if ( 0 === $delay && as_has_scheduled_action( $this->hook(), $args, $this->names->group() ) ) {
+		if ( 0 === $delay && $this->is_waiting( $args ) ) {
 			return;
 		}
 
 		if ( 0 === (int) as_schedule_single_action( time() + max( 0, $delay ), $this->hook(), $args, $this->names->group() ) ) {
 			throw Persistence_Exception::queue( 'the import of cards' );
 		}
+	}
+
+	/**
+	 * Tells whether a chunk with these arguments is waiting in the queue. Only PENDING counts. `as_has_scheduled_action()` also
+	 * counts the action running now, so a job that requeues its own unfinished cards would find itself and drop the work
+	 * (gotcha `as-has-scheduled-action-matches-the-running-action`).
+	 *
+	 * @param array<int,mixed> $args Arguments.
+	 * @return bool
+	 */
+	private function is_waiting( array $args ): bool {
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'     => $this->hook(),
+				'args'     => $args,
+				'group'    => $this->names->group(),
+				'status'   => 'pending',
+				'per_page' => 1,
+			],
+			'ids'
+		);
+
+		return is_array( $pending ) && [] !== $pending;
 	}
 }
