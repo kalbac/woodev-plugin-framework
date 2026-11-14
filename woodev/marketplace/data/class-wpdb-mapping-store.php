@@ -157,6 +157,44 @@ final class Wpdb_Mapping_Store {
 	}
 
 	/**
+	 * Finds the mapping a marketplace card belongs to, backwards from the card's category.
+	 *
+	 * Only term-bound mappings that own at least one shop category count (a mapping without one never covers a product). The
+	 * lowest mapping id wins, as in v1. The descriptor is compared as a value: the order of its keys and the type of its scalars
+	 * (`8126` or `'8126'`) do not matter, so the adapter's descriptor finds the one the merchant's mapping stored.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param array<string,mixed> $descriptor The adapter's category descriptor of the card.
+	 * @return array{mapping:array{mapping_id:int,name:string,wc_product_id:int|null,category:array<string,mixed>,profile_id:int|null,attributes:array<string,mixed>},term_ids:int[]}|null Null when the descriptor is empty or no mapping holds it.
+	 */
+	public function for_category( array $descriptor ): ?array {
+		if ( [] === $descriptor ) {
+			return null;
+		}
+
+		$wanted = self::canonical( $descriptor );
+		$rows   = $this->db->get_results( $this->db->prepare( 'SELECT m.mapping_id, m.category FROM %i m WHERE m.wc_product_id IS NULL AND EXISTS (SELECT 1 FROM %i t WHERE t.mapping_id = m.mapping_id) ORDER BY m.mapping_id ASC', $this->table, $this->terms_table ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared here.
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			if ( self::canonical( $this->decode( $row['category'] ?? null ) ) !== $wanted ) {
+				continue;
+			}
+
+			$mapping = $this->find( (int) $row['mapping_id'] );
+
+			if ( null !== $mapping ) {
+				return [
+					'mapping'  => $mapping,
+					'term_ids' => $this->terms_by_mapping()[ $mapping['mapping_id'] ] ?? [],
+				];
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Lists the term-bound mappings (the ones the «Сопоставление» page shows), by name.
 	 *
 	 * @return array<int,array{mapping_id:int,name:string,wc_product_id:int|null,category:array<string,mixed>,profile_id:int|null,attributes:array<string,mixed>}>
@@ -447,5 +485,23 @@ final class Wpdb_Mapping_Store {
 		$decoded = is_string( $value ) && '' !== $value ? json_decode( $value, true ) : null;
 
 		return is_array( $decoded ) ? $decoded : [];
+	}
+
+	/**
+	 * Puts a descriptor into a form two equal descriptors share: keys sorted at every level, scalars as strings.
+	 *
+	 * @param array<mixed> $value Descriptor or a part of it.
+	 * @return array<mixed>
+	 */
+	private static function canonical( array $value ): array {
+		foreach ( $value as $key => $item ) {
+			$value[ $key ] = is_array( $item ) ? self::canonical( $item ) : ( is_bool( $item ) ? ( $item ? '1' : '0' ) : (string) $item );
+		}
+
+		if ( array_keys( $value ) !== range( 0, count( $value ) - 1 ) ) {
+			ksort( $value );
+		}
+
+		return $value;
 	}
 }

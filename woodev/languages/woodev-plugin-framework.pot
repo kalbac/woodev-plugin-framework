@@ -10893,3 +10893,21 @@ msgstr ""
 msgid "Артикулы в этих парах отличаются только регистром или буквами, которые выглядят одинаково (например, русская «С» и латинская «C», буква «O» и ноль). Автоматически такие пары не связываются: подтвердите, что это один и тот же товар, или скажите, что товары разные."
 
 msgstr ""
+
+#: marketplace/flows/class-product-writer.php:266
+msgid "На маркетплейсе у карточки нет цены — цена товара не задана."
+msgstr ""
+
+#. translators: %s: why the price could not be worked out
+#: marketplace/flows/class-product-writer.php:274
+#, php-format
+msgid "Цена товара не задана: %s"
+msgstr ""
+
+#. translators: %d: number of images
+#: marketplace/flows/class-product-writer.php:307
+#, php-format
+msgid "Не удалось загрузить %d фото — товар создан без него."
+msgid_plural "Не удалось загрузить %d фото — товар создан без них."
+msgstr[0] ""
+msgstr[1] ""
