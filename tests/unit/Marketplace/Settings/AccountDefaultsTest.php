@@ -13,10 +13,12 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
+use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
+use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Export_Price_Policy;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
@@ -291,7 +293,90 @@ final class AccountDefaultsTest extends TestCase {
 			[ 'defaults_price_base', 'defaults_price_markup_kind', 'defaults_price_markup', 'defaults_price_rounding', 'defaults_price_old_price_rule', 'defaults_price_min_percent' ],
 			$groups[0]->get_setting_ids()
 		);
-		$this->assertSame( [ 'defaults_orders_enabled', 'defaults_import_enabled' ], $groups[1]->get_setting_ids() );
+		$this->assertSame( [ 'defaults_orders_enabled', 'defaults_import_enabled', 'defaults_import_publish', 'defaults_import_create_categories' ], $groups[1]->get_setting_ids() );
+	}
+
+	public function test_an_importing_adapter_gets_the_two_import_settings_in_the_orders_and_cards_card(): void {
+		[ $adapter, $store ] = $this->adapter_and_store( [ Capability::IMPORT_PRODUCTS ] );
+		$section             = new Defaults_Section( $adapter, $store, self::PLUGIN );
+
+		$this->assertTrue( $section->handles( 'defaults_import_publish' ) );
+		$this->assertTrue( $section->handles( 'defaults_import_create_categories' ) );
+		$this->assertSame(
+			[ 'defaults_orders_enabled', 'defaults_import_enabled', 'defaults_import_publish', 'defaults_import_create_categories' ],
+			$section->sections()[0]->get_groups()[1]->get_setting_ids()
+		);
+	}
+
+	public function test_the_import_defaults_are_draft_and_create_categories_and_the_saved_values_survive_a_reload(): void {
+		[ $adapter, $store ] = $this->adapter_and_store( [ Capability::IMPORT_PRODUCTS ] );
+		$section             = new Defaults_Section( $adapter, $store, self::PLUGIN );
+		$resolver            = Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID );
+
+		$this->assertFalse( $resolver->import_publish(), 'a new shop imports into drafts' );
+		$this->assertTrue( $resolver->import_create_categories() );
+		$this->assertFalse( $section->read( 'defaults_import_publish' ) );
+		$this->assertTrue( $section->read( 'defaults_import_create_categories' ) );
+
+		$section->write( 'defaults_import_publish', '1' );
+		$section->write( 'defaults_import_create_categories', false );
+
+		$reloaded = new Defaults_Section( $adapter, $store, self::PLUGIN ); // A fresh screen over the same option.
+		$this->assertTrue( $reloaded->read( 'defaults_import_publish' ) );
+		$this->assertFalse( $reloaded->read( 'defaults_import_create_categories' ) );
+		$this->assertTrue( $resolver->import_publish() );
+		$this->assertFalse( $resolver->import_create_categories() );
+	}
+
+	public function test_a_value_saved_by_a_v1_migration_is_kept_and_an_unsaved_one_falls_back_to_the_default(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( string $key, $default = false ) {
+				return Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ) === $key ? [ 'import_publish' => true ] : $default;
+			}
+		);
+		$resolver = Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID );
+
+		$this->assertTrue( $resolver->import_publish(), 'an upgraded v1 shop keeps its value' );
+		$this->assertTrue( $resolver->import_create_categories(), 'a key nobody saved uses the built-in default' );
+	}
+
+	public function test_the_import_toggles_are_registered_with_the_decided_defaults_only_for_an_importing_adapter(): void {
+		[ $adapter, $store ] = $this->adapter_and_store( [ Capability::IMPORT_PRODUCTS ] );
+		$handler             = new Settings_Handler( self::PLUGIN, [ new Defaults_Section( $adapter, $store, self::PLUGIN ) ], 'Fake Market' );
+
+		$this->assertFalse( $handler->get_setting( 'defaults_import_publish' )->get_value() );
+		$this->assertTrue( $handler->get_setting( 'defaults_import_create_categories' )->get_value() );
+
+		[ $plain, $plain_store ] = $this->adapter_and_store();
+		$plain_handler           = new Settings_Handler( self::PLUGIN, [ new Defaults_Section( $plain, $plain_store, self::PLUGIN ) ], 'Fake Market' );
+
+		$this->assertNull( $plain_handler->get_setting( 'defaults_import_publish' ) );
+		$this->assertNull( $plain_handler->get_setting( 'defaults_import_create_categories' ) );
+	}
+
+	public function test_import_settings_are_hidden_without_the_capability(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$section             = new Defaults_Section( $adapter, $store, self::PLUGIN );
+
+		$this->assertFalse( $section->handles( 'defaults_import_publish' ) );
+		$this->assertFalse( $section->handles( 'defaults_import_create_categories' ) );
+		$this->assertNotContains( 'defaults_import_publish', $section->sections()[0]->get_groups()[1]->get_setting_ids() );
+	}
+
+	public function test_import_settings_are_hidden_for_an_adapter_that_is_not_a_card_importer(): void {
+		$adapter = \Mockery::mock( Marketplace_Adapter::class );
+		$adapter->shouldReceive( 'id' )->andReturn( Sqlite_Tables::MARKETPLACE_ID );
+		$adapter->shouldReceive( 'supports' )->andReturn( true ); // Even one that claims the capability.
+		$adapter->shouldReceive( 'posting_handler' )->andReturn( null );
+		$adapter->shouldReceive( 'price_pusher' )->andReturn( null );
+		$adapter->shouldReceive( 'price_reader' )->andReturn( null );
+		$store   = $this->adapter_and_store()[1];
+		$section = new Defaults_Section( $adapter, $store, self::PLUGIN );
+
+		$this->assertFalse( $adapter instanceof Card_Importer );
+		$this->assertFalse( $section->handles( 'defaults_import_publish' ) );
+		$this->assertFalse( $section->handles( 'defaults_import_create_categories' ) );
+		$this->assertSame( [ 'defaults_import_enabled' ], array_values( array_filter( $section->sections()[0]->get_groups()[0]->get_setting_ids(), static function ( $id ) { return false !== strpos( $id, 'import' ); } ) ) );
 	}
 
 	public function test_saving_a_price_default_queues_only_the_accounts_that_follow_it(): void {
