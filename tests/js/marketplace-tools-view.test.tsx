@@ -24,7 +24,7 @@ const mocked = apiFetch as unknown as jest.Mock;
 const state = ( accounts: ToolsState[ 'accounts' ] ): ToolsState => ( {
 	messages: {
 		accountLabel: 'Аккаунт',
-		chooseAccount: 'Выберите аккаунт, чтобы запускать инструменты.',
+		chooseAccount: 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.',
 		noTools: 'Инструментов нет.',
 		previewButton: 'Проверить',
 		cancelButton: 'Отмена',
@@ -70,7 +70,7 @@ describe( 'the account selector', () => {
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Проверить' } ) ).toBeEnabled() );
 
 		expect( screen.queryByLabelText( 'Аккаунт' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Выберите аккаунт, чтобы запускать инструменты.' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.' ) ).not.toBeInTheDocument();
 
 		await act( async () => {
 			fireEvent.click( screen.getByRole( 'button', { name: 'Проверить' } ) );
@@ -99,7 +99,7 @@ describe( 'the account selector', () => {
 
 		render( <ToolsView page={ PAGE } menu={ MENU } query={ {} } /> );
 
-		await screen.findByText( 'Выберите аккаунт, чтобы запускать инструменты.' );
+		await screen.findByText( 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.' );
 
 		expect( screen.queryByLabelText( 'Аккаунт' ) ).not.toBeInTheDocument();
 		expect( screen.getByRole( 'button', { name: 'Проверить' } ) ).toBeDisabled();
