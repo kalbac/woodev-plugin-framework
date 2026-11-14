@@ -109,29 +109,6 @@ final class ToolRunnerTest extends TestCase {
 		$this->assertSame( [], $calls );
 	}
 
-	public function test_a_site_tool_runs_with_account_zero_and_never_takes_a_claim(): void {
-		$calls = [];
-		$tool  = Tool::create(
-			'migrate',
-			'Миграция',
-			'Описание',
-			'Запустить',
-			static fn ( int $account_id ): string => 'plan',
-			static function ( int $account_id ) use ( &$calls ): Tool_Result {
-				$calls[] = 'run:' . $account_id;
-
-				return Tool_Result::success();
-			},
-			true,
-			false,
-			Tool::SCOPE_SITE
-		);
-
-		$this->runner( [ $tool ], $calls, new Claim_Fence( 'wp_fake_accounts', 'token' ) )->run( 'migrate', 0 );
-
-		$this->assertSame( [ 'run:0' ], $calls );
-	}
-
 	public function test_the_claim_is_released_and_the_merchant_gets_a_sentence_when_the_tool_throws(): void {
 		$calls  = [];
 		$tool   = Tool::create(

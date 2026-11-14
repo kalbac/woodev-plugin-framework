@@ -70,24 +70,6 @@ final class ToolClaimTest extends TestCase {
 		$this->assertFalse( $catalog->state_for( $local, 3 )['disabled'] );
 	}
 
-	public function test_a_site_tool_asks_the_hold_with_account_zero(): void {
-		$asked   = [];
-		$site    = Tool::create( 'sweep', 'Чистка', 'Описание', 'Запустить', static fn ( int $id ): string => 'plan', static fn ( int $id ): Tool_Result => Tool_Result::success(), false, true, Tool::SCOPE_SITE );
-		$catalog = new Tool_Catalogue(
-			new Tool_Registry( [ $site ] ),
-			$this->activity( null ),
-			static function ( int $account_id ) use ( &$asked ): ?string {
-				$asked[] = $account_id;
-
-				return null;
-			}
-		);
-
-		$catalog->state_for( $site, 9 );
-
-		$this->assertSame( [ 0 ], $asked );
-	}
-
 	public function test_remote_hold_gives_the_framework_licence_sentence_when_the_licence_is_not_in_force(): void {
 		Functions\when( 'admin_url' )->alias( static fn ( string $path ): string => 'https://shop.test/wp-admin/' . $path );
 		$hold = Tools_Module::remote_hold( new License_Gate( static fn (): bool => false ), static fn ( int $account_id ): int => 0 );
@@ -98,7 +80,7 @@ final class ToolClaimTest extends TestCase {
 		$this->assertStringContainsString( 'page=woodev-licenses', (string) $reason );
 	}
 
-	public function test_remote_hold_holds_a_paused_account_but_not_a_site_tool(): void {
+	public function test_remote_hold_holds_a_paused_account_but_not_the_no_account_state(): void {
 		$hold = Tools_Module::remote_hold( new License_Gate( static fn (): bool => true ), static fn ( int $account_id ): int => 600 );
 
 		$this->assertStringContainsString( 'приостановлена', (string) $hold( 3 ) );

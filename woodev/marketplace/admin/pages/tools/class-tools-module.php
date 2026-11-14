@@ -112,8 +112,8 @@ final class Tools_Module {
 	 *
 	 * @param License_Gate $license    Licence gate.
 	 * @param callable     $pause_wait `function ( int $account_id ): int` — seconds the account's jobs still wait; 0 to go.
-	 * @return callable `function ( int $account_id ): ?string` — the sentence that holds the tool, or null. Account id 0 (a
-	 *                  site tool) has no pause to check.
+	 * @return callable `function ( int $account_id ): ?string` — the sentence that holds the tool, or null. Account id 0 (no
+	 *                  account chosen yet) has no pause to check.
 	 */
 	public static function remote_hold( License_Gate $license, callable $pause_wait ): callable {
 		return static function ( int $account_id ) use ( $license, $pause_wait ): ?string {

@@ -31,7 +31,7 @@ final class Tool_Catalogue {
 
 	/**
 	 * Tells why a new remote action may not start: `function ( int $account_id ): ?string`, null when it may. The account id
-	 * is 0 for a site tool, which has no account to pause.
+	 * is 0 while the page has no account chosen yet, which has no pause to check.
 	 *
 	 * @var callable
 	 */
@@ -88,11 +88,10 @@ final class Tool_Catalogue {
 	 * @since 2.1.5
 	 *
 	 * @param Tool $tool       Tool.
-	 * @param int  $account_id Account the merchant chose; 0 for a site tool or when none is chosen yet.
+	 * @param int  $account_id Account the merchant chose; 0 when none is chosen yet.
 	 * @return array{disabled:bool,reason:string}
 	 */
 	public function state_for( Tool $tool, int $account_id ): array {
-		$account_id  = $tool->is_site_wide() ? 0 : $account_id;
 		$remote_hold = $tool->is_remote() ? call_user_func( $this->remote_hold, $account_id ) : null;
 		$busy        = $tool->takes_claim() && $this->activity->claim_held( $account_id );
 
@@ -105,7 +104,7 @@ final class Tool_Catalogue {
 	 * @since 2.1.5
 	 *
 	 * @param int $account_id Account the merchant chose; 0 when none is chosen yet.
-	 * @return array<int,array{id:string,title:string,description:string,button:string,takes_claim:bool,scope:string,disabled:bool,disabled_reason:string}>
+	 * @return array<int,array{id:string,title:string,description:string,button:string,takes_claim:bool,disabled:bool,disabled_reason:string}>
 	 */
 	public function list( int $account_id ): array {
 		$rows = [];

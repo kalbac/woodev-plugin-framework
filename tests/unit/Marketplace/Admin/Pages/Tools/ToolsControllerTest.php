@@ -131,10 +131,10 @@ final class ToolsControllerTest extends TestCase {
 	public function test_a_local_tool_still_runs_while_the_licence_holds_remote_tools(): void {
 		$this->hold = 'Лицензия плагина не действует.';
 
-		$answer = $this->controller()->run( $this->request( 'migrate', [ 'confirmed' => true ] ) );
+		$answer = $this->controller()->run( $this->request( 'migrate', [ 'account_id' => 3, 'confirmed' => true ] ) );
 
 		$this->assertSame( 'done', $answer->get_data()['status'] );
-		$this->assertSame( [ 'migrate:0' ], $this->ran );
+		$this->assertSame( [ 'migrate:3' ], $this->ran );
 	}
 
 	public function test_a_claim_tool_is_refused_with_409_while_a_background_run_holds_the_account(): void {
@@ -146,13 +146,15 @@ final class ToolsControllerTest extends TestCase {
 		$this->assertSame( [], $this->ran );
 	}
 
-	public function test_a_site_tool_needs_no_account_and_still_needs_the_confirm_flag(): void {
-		$this->assertError( $this->controller()->run( $this->request( 'migrate', [] ) ), 'woodev_tools_not_confirmed', 400 );
+	public function test_every_tool_needs_an_account_even_a_local_one(): void {
+		$this->assertError( $this->controller()->run( $this->request( 'migrate', [ 'confirmed' => true ] ) ), 'woodev_tools_unknown_account', 404 );
+		$this->assertError( $this->controller()->preview( $this->request( 'migrate', [] ) ), 'woodev_tools_unknown_account', 404 );
+		$this->assertSame( [], $this->ran );
 
-		$answer = $this->controller()->run( $this->request( 'migrate', [ 'confirmed' => true ] ) );
+		$answer = $this->controller()->run( $this->request( 'migrate', [ 'account_id' => 3, 'confirmed' => true ] ) );
 
 		$this->assertSame( 'done', $answer->get_data()['status'] );
-		$this->assertSame( [ 'migrate:0' ], $this->ran );
+		$this->assertSame( [ 'migrate:3' ], $this->ran );
 	}
 
 	public function test_a_preview_changes_nothing_and_reports_the_hold(): void {
@@ -183,7 +185,13 @@ final class ToolsControllerTest extends TestCase {
 
 		$this->assertTrue( $by_id['push']['disabled'] );
 		$this->assertFalse( $by_id['migrate']['disabled'] );
-		$this->assertSame( 'site', $by_id['migrate']['scope'] );
+		$this->assertArrayNotHasKey( 'scope', $by_id['migrate'] );
+	}
+
+	public function test_the_state_lists_the_accounts_to_choose_from(): void {
+		$state = $this->controller()->get_state( $this->request( '', [] ) )->get_data();
+
+		$this->assertSame( [ [ 'id' => 3, 'name' => 'Главный' ] ], $state['accounts'] );
 	}
 
 	private function assertError( $answer, string $code, int $status ): void {
@@ -213,9 +221,9 @@ final class ToolsControllerTest extends TestCase {
 	private function controller(): Tools_Controller {
 		$registry = new Tool_Registry(
 			[
-				$this->tool( 'push', false, true, Tool::SCOPE_ACCOUNT ),
-				$this->tool( 'rerun', true, true, Tool::SCOPE_ACCOUNT ),
-				$this->tool( 'migrate', false, false, Tool::SCOPE_SITE ),
+				$this->tool( 'push', false, true ),
+				$this->tool( 'rerun', true, true ),
+				$this->tool( 'migrate', false, false ),
 			]
 		);
 
@@ -254,7 +262,7 @@ final class ToolsControllerTest extends TestCase {
 		return $store;
 	}
 
-	private function tool( string $id, bool $takes_claim, bool $remote, string $scope ): Tool {
+	private function tool( string $id, bool $takes_claim, bool $remote ): Tool {
 		return Tool::create(
 			$id,
 			$id,
@@ -267,8 +275,7 @@ final class ToolsControllerTest extends TestCase {
 				return Tool_Result::success( 'Готово.' );
 			},
 			$takes_claim,
-			$remote,
-			$scope
+			$remote
 		);
 	}
 }

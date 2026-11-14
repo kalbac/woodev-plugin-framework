@@ -21,24 +21,23 @@ export function chooseAccount( accounts: ToolAccount[], current: number | null )
 }
 
 /**
- * A tool's preview button: the tool is not disabled (a disabled tool shows its reason only) and either it is a site tool,
- * which needs no account, or an account is chosen.
+ * Whether the page asks the merchant to choose an account: only when there is more than one. With a single account the
+ * tools simply run on it; with none the page shows its empty state.
+ *
+ * @param accounts Accounts the server offered.
+ */
+export function needsAccountChoice( accounts: ToolAccount[] ): boolean {
+	return accounts.length > 1;
+}
+
+/**
+ * A tool's preview button: the tool is not disabled (a disabled tool shows its reason only) and an account is chosen.
  *
  * @param tool      The tool.
  * @param accountId The chosen account, or null.
  */
 export function canPreview( tool: ToolRow, accountId: number | null ): boolean {
-	return ! tool.disabled && ( tool.scope === 'site' || accountId !== null );
-}
-
-/**
- * The account a tool's request names: none for a site tool, else the chosen account.
- *
- * @param tool      The tool.
- * @param accountId The chosen account, or null.
- */
-export function accountFor( tool: ToolRow, accountId: number | null ): number | null {
-	return tool.scope === 'site' ? null : accountId;
+	return ! tool.disabled && accountId !== null;
 }
 
 /**
