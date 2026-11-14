@@ -257,6 +257,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Intake\\Tokenless_Seen' => 'woodev/marketplace/intake/class-tokenless-seen.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Webhook_Switches' => 'woodev/marketplace/intake/class-webhook-switches.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Webhook_Type' => 'woodev/marketplace/intake/class-webhook-type.php',
+	'Woodev\\Framework\\Marketplace\\Jobs\\Account_Job' => 'woodev/marketplace/jobs/class-account-job.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Account_Pause' => 'woodev/marketplace/jobs/class-account-pause.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Account_Run' => 'woodev/marketplace/jobs/class-account-run.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Backoff' => 'woodev/marketplace/jobs/class-backoff.php',
