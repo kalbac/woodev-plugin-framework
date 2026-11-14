@@ -292,7 +292,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 			self::setting_id( Effective_Settings::KEY_IMPORT_PUBLISH ),
 			__( 'Сразу публиковать импортированные товары', 'woodev-plugin-framework' ),
 			false,
-			__( 'Если выключено, товары, созданные из карточек, сохраняются как черновики: проверьте их и опубликуйте сами.', 'woodev-plugin-framework' )
+			__( 'Если выключено, товары, созданные из карточек, сохраняются как черновики: проверьте их и опубликуйте сами. Действует для всех аккаунтов.', 'woodev-plugin-framework' )
 		);
 
 		Field_Kit::add_toggle(
@@ -300,7 +300,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 			self::setting_id( Effective_Settings::KEY_IMPORT_CATEGORIES ),
 			__( 'Создавать категории для импортированных товаров', 'woodev-plugin-framework' ),
 			true,
-			__( 'Если для карточки нет подходящей категории на сайте, плагин создаст её. Если выключено, товар сохранится без категории.', 'woodev-plugin-framework' )
+			__( 'Если для карточки нет подходящей категории на сайте, плагин создаст её. Если выключено, товар сохранится без категории. Действует для всех аккаунтов.', 'woodev-plugin-framework' )
 		);
 	}
 

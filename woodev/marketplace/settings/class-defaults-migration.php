@@ -79,7 +79,11 @@ final class Defaults_Migration {
 
 		$defaults[ Effective_Settings::SEEDED_KEY ] = 1;
 
-		update_option( Effective_Settings::option_name( $this->adapter_id ), $defaults );
+		$option = Effective_Settings::option_name( $this->adapter_id );
+		$stored = get_option( $option, [] );
+
+		// Merge, never replace: a plugin migration may already have stored the shop-wide card-import values (v1 `product_status`, `create_new_category`).
+		update_option( $option, array_merge( is_array( $stored ) ? $stored : [], $defaults ) );
 
 		return true;
 	}

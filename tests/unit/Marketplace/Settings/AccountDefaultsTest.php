@@ -253,6 +253,22 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertSame( '30', Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID )->defaults()['markup'] );
 	}
 
+	public function test_the_first_fill_keeps_the_import_values_a_plugin_migration_stored_before_it(): void {
+		[ , $store ] = $this->adapter_and_store();
+		$option      = Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID );
+
+		$this->options[ $option ] = [ 'import_publish' => true, 'import_create_categories' => false ]; // What the v1 migration of the plugin wrote.
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'price_rule' => [ 'markup' => '12' ] ] ) );
+
+		$this->assertTrue( ( new Defaults_Migration( $store, Sqlite_Tables::MARKETPLACE_ID ) )->run() );
+
+		$resolver = Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID );
+		$this->assertTrue( $resolver->import_publish(), 'an upgraded v1 shop keeps its value' );
+		$this->assertFalse( $resolver->import_create_categories() );
+		$this->assertSame( '12', $resolver->defaults()['markup'], 'and the fill still happened' );
+		$this->assertTrue( $resolver->is_seeded() );
+	}
+
 	// «Общие» tab ---------------------------------------------------------------------------------------------------------
 
 	public function test_the_defaults_tab_reads_writes_and_validates(): void {
