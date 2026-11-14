@@ -152,6 +152,7 @@ CI workflows: `ci.yml` (jobs: `version`, `lint`, `compat`, `unit-tests`, `test-j
 | `specs/2026-11-04-tracking-v2-plugin-design.md` | «Отслеживание доставки» 2.0.0 on Framework v2 (`woocommerce-order-tracking-number`) — released 04.11.2026 | ✅ |
 | `specs/2026-11-04-1575-buyer-tracking-display-design.md` | #1575 — buyer-facing tracking display for v2 carriers (framework 2.0.25) | ✅ |
 | `specs/2026-11-05-range-shipping-v2-design.md` | «Стоимость доставки за расстояние» 2.0.0 (`woocommerce-range-shipping`, private) on Framework v2 | draft — plugin release pending |
+| `specs/2026-11-14-marketplace-card-importer.md` | Marketplace card importer (card → WooCommerce product): adapter contract, job, cards-tab action, field mapping through profiles; cards I1–I7 and O6 (ozon-seller#75, framework 2.1.6) | draft — not implemented |
 | `specs/2026-11-05-range-shipping-city-mode.md` | «Доставка в городе» — the list of places as the granularity of the checkout's settlement choice (framework part in 2.0.26) | draft — release pending |
 
 | Plan | Implements |
