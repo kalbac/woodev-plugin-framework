@@ -46,18 +46,17 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.1.0
  */
 final class Link_Jobs {
-	public const MAX_ATTEMPTS = 3;
+	public const MAX_ATTEMPTS = Account_Job::MAX_ATTEMPTS;
 
 	private const FAILURE_CODE = 'link_cards_failed';
 	private const RENEW_EVERY  = 100;
-	private const DEFAULT_WAIT = 60;
 
 	/**
-	 * Job gate.
+	 * The gate → claim → work → classify skeleton.
 	 *
-	 * @var Job_Gate
+	 * @var Account_Job
 	 */
-	private $gate;
+	private $job;
 
 	/**
 	 * Links.
@@ -116,27 +115,6 @@ final class Link_Jobs {
 	private $articles;
 
 	/**
-	 * Classifies a failed request.
-	 *
-	 * @var Error_Classifier
-	 */
-	private $classifier;
-
-	/**
-	 * Error ring.
-	 *
-	 * @var Api_Error_Ring
-	 */
-	private $ring;
-
-	/**
-	 * Writes a line to the error log: `function ( string $line ): void`.
-	 *
-	 * @var callable
-	 */
-	private $log_error;
-
-	/**
 	 * Unix time: `function (): int`.
 	 *
 	 * @var callable
@@ -171,7 +149,6 @@ final class Link_Jobs {
 	 * @param callable|null        $clock      `function (): int`; the system clock when null.
 	 */
 	public function __construct( Job_Gate $gate, Wpdb_Link_Store $links, Card_Linker $linker, callable $shop, Link_Report_Store $reports, Cards_Snapshot_Store $snapshots, Link_Scheduler $scheduler, Link_Resolver $resolver, Article_Policy $articles, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error, Link_Progress_Store $progress, ?callable $clock = null ) {
-		$this->gate          = $gate;
 		$this->links         = $links;
 		$this->linker        = $linker;
 		$this->shop_products = $shop;
@@ -180,11 +157,9 @@ final class Link_Jobs {
 		$this->scheduler     = $scheduler;
 		$this->resolver      = $resolver;
 		$this->articles      = $articles;
-		$this->classifier    = $classifier;
-		$this->ring          = $ring;
-		$this->log_error     = $log_error;
 		$this->progress      = $progress;
 		$this->clock         = $clock ?? 'time';
+		$this->job           = new Account_Job( $gate, $classifier, $ring, $log_error, $resolver->list_path(), self::FAILURE_CODE, [ Link_Resolve_Exception::class ] );
 	}
 
 	/**
@@ -214,7 +189,7 @@ final class Link_Jobs {
 		$category_id = (int) $category_id;
 		$attempt     = (int) $attempt;
 
-		$this->guarded(
+		$this->job->run(
 			$account_id,
 			$this->scheduler->link_hook(),
 			function ( int $delay, int $failures ) use ( $account_id, $category_id ): bool {
@@ -250,7 +225,7 @@ final class Link_Jobs {
 		$account_id = (int) $account_id;
 		$attempt    = (int) $attempt;
 
-		$this->guarded(
+		$this->job->run(
 			$account_id,
 			$this->scheduler->refresh_hook(),
 			function ( int $delay, int $failures ) use ( $account_id ): bool {
@@ -268,102 +243,6 @@ final class Link_Jobs {
 	}
 
 	/**
-	 * Applies the gate and the claim, runs the work and turns every failure into a retry or a recorded text.
-	 *
-	 * @param int      $account_id Account id.
-	 * @param string   $context    Hook name, for the client's context and the error ring.
-	 * @param callable $retry      `function ( int $delay, int $attempt ): bool`, schedules the job again.
-	 * @param callable $give_up    `function ( string $text ): void`, records the failure for the merchant.
-	 * @param int      $attempt    Failed attempts so far.
-	 * @param callable $work       `function ( Account, Claim_Fence ): void`.
-	 * @return void
-	 */
-	private function guarded( int $account_id, string $context, callable $retry, callable $give_up, int $attempt, callable $work ): void {
-		try {
-			list( $account, $wait ) = $this->gate->check( $account_id );
-
-			if ( null === $account ) {
-				$give_up( __( 'Аккаунт маркетплейса отключён или удалён.', 'woodev-plugin-framework' ) );
-				return;
-			}
-
-			if ( $wait > 0 ) {
-				$retry( $wait, $attempt );
-				return;
-			}
-
-			$fence = $this->gate->claim( $account_id );
-
-			if ( null === $fence ) {
-				$retry( Job_Gate::BUSY_DELAY, $attempt );
-				return;
-			}
-
-			try {
-				$work( $account, $fence );
-			} finally {
-				$this->gate->release( $account_id, $fence );
-			}
-		} catch ( Link_Resolve_Exception $exception ) {
-			$this->report( $account_id, $context, $exception->getMessage() );
-			$give_up( $exception->getMessage() );
-		} catch ( Claim_Lost $exception ) {
-			$this->report( $account_id, $context, 'The account claim was taken over during the run.' );
-			$retry( Job_Gate::BUSY_DELAY, $attempt );
-		} catch ( \Throwable $exception ) {
-			$error = $this->classifier->classify( $exception );
-
-			if ( null !== $error ) {
-				$this->after_failure( $account_id, $context, $exception, $error, $attempt, $retry, $give_up );
-				return;
-			}
-
-			$this->report( $account_id, $context, get_class( $exception ) . ': ' . $exception->getMessage() );
-			$give_up( sprintf( /* translators: %s: reason. */ __( 'Не удалось выполнить задачу: %s', 'woodev-plugin-framework' ), $exception->getMessage() ) );
-		}
-	}
-
-	/**
-	 * Applies the adapter's verdict on a refused request.
-	 *
-	 * @param int          $account_id Account id.
-	 * @param string       $context    Hook name.
-	 * @param \Throwable   $thrown     The refusal as thrown.
-	 * @param Remote_Error $error      What the classifier made of it.
-	 * @param int          $attempt    Failed attempts so far.
-	 * @param callable     $retry      Schedules the job again.
-	 * @param callable     $give_up    Records the failure.
-	 * @return void
-	 */
-	private function after_failure( int $account_id, string $context, \Throwable $thrown, Remote_Error $error, int $attempt, callable $retry, callable $give_up ): void {
-		$this->report( $account_id, $context, $error->describe() );
-
-		if ( $error->is( Remote_Error::PAUSE_ACCOUNT ) ) {
-			$account = $this->gate->check( $account_id )[0];
-
-			if ( null !== $account ) {
-				$this->gate->pause()->apply( $account, $error );
-			}
-
-			$give_up( $thrown->getMessage() );
-			return;
-		}
-
-		if ( $error->is( Remote_Error::THROTTLE ) ) {
-			// A wait is not a failed attempt.
-			$retry( max( 1, (int) ( $error->retry_after() ?? self::DEFAULT_WAIT ) ), $attempt );
-			return;
-		}
-
-		if ( $error->is( Remote_Error::RETRY ) && $attempt + 1 < self::MAX_ATTEMPTS ) {
-			$retry( $error->retry_after() ?? Backoff::seconds_after( $attempt + 1 ), $attempt + 1 );
-			return;
-		}
-
-		$give_up( $thrown->getMessage() );
-	}
-
-	/**
 	 * Links the cards of the cabinet that match the shop's products.
 	 *
 	 * @param Account     $account     Account.
@@ -376,7 +255,7 @@ final class Link_Jobs {
 		$account_id = $account->id();
 		$context    = $this->scheduler->link_hook();
 		$renew      = function () use ( $account_id, $fence ): void {
-			$this->hold( $account_id, $fence );
+			$this->job->hold( $account_id, $fence );
 		};
 		$record     = $this->progress->load( $account_id, Link_Progress_Store::KIND_LINK, (int) $category_id, (int) call_user_func( $this->clock ) );
 
@@ -585,7 +464,7 @@ final class Link_Jobs {
 				$account,
 				$this->scheduler->refresh_hook(),
 				function () use ( $account_id, $fence ): void {
-					$this->hold( $account_id, $fence );
+					$this->job->hold( $account_id, $fence );
 				},
 				$state
 			);
@@ -601,37 +480,5 @@ final class Link_Jobs {
 		if ( ! $this->snapshots->put( $account_id, $cards, (int) call_user_func( $this->clock ) ) ) {
 			$this->snapshots->fail( $account_id, __( 'Список карточек получен, но сохранить его не удалось: в нём слишком много товаров для просмотра на этой странице.', 'woodev-plugin-framework' ) );
 		}
-	}
-
-	/**
-	 * Extends the account claim, or stops the run.
-	 *
-	 * @param int         $account_id Account id.
-	 * @param Claim_Fence $fence      The run's claim.
-	 * @return void
-	 * @throws Claim_Lost When another run holds it now.
-	 */
-	private function hold( int $account_id, Claim_Fence $fence ): void {
-		if ( ! $this->gate->still_holds( $account_id, $fence ) ) {
-			throw new Claim_Lost( 'The account claim was taken over.' );
-		}
-	}
-
-	/**
-	 * Writes a failure to the error ring and the error log.
-	 *
-	 * @param int    $account_id Account id.
-	 * @param string $context    Hook name.
-	 * @param string $message    Failure text.
-	 * @return void
-	 */
-	private function report( int $account_id, string $context, string $message ): void {
-		try {
-			$this->ring->record( $account_id > 0 ? $account_id : null, $this->resolver->list_path(), 0, self::FAILURE_CODE, $message, '', $context );
-		} catch ( \Throwable $e ) {
-			unset( $e ); // The log line below still carries the failure.
-		}
-
-		call_user_func( $this->log_error, $context . ': account ' . $account_id . ': ' . $message );
 	}
 }
