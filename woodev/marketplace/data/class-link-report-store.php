@@ -25,9 +25,10 @@ defined( 'ABSPATH' ) || exit;
  * bounded by {@see self::MAX_ENTRIES}, oldest first.
  */
 final class Link_Report_Store {
-	public const NEAR_OPTION      = 'near_matches_';
-	public const DISMISSED_OPTION = 'near_dismissed_';
-	public const RUN_OPTION       = 'link_run_';
+	public const NEAR_OPTION         = 'near_matches_';
+	public const DISMISSED_OPTION    = 'near_dismissed_';
+	public const RUN_OPTION          = 'link_run_';
+	public const IMPORT_NOTES_OPTION = 'import_notes_';
 
 	/**
 	 * Most entries a report keeps. A shop with more look-alike pairs than this has a systematic problem a list cannot fix; the
@@ -54,7 +55,7 @@ final class Link_Report_Store {
 	}
 
 	/**
-	 * Removes the near-match report, the dismissed pairs and the last run summary of an account: the account is being deleted.
+	 * Removes the near-match report, the dismissed pairs, the import notes and the last run summary of an account: the account is being deleted.
 	 *
 	 * @since 2.1.5
 	 *
@@ -65,6 +66,7 @@ final class Link_Report_Store {
 		delete_option( $this->near_option( $account_id ) );
 		delete_option( $this->prefix . self::RUN_OPTION . $account_id );
 		delete_option( $this->prefix . self::DISMISSED_OPTION . $account_id );
+		delete_option( $this->prefix . self::IMPORT_NOTES_OPTION . $account_id );
 	}
 
 	/**
@@ -203,6 +205,103 @@ final class Link_Report_Store {
 		$stored = get_option( $this->prefix . self::RUN_OPTION . $account_id, null );
 
 		return is_array( $stored ) ? $stored : null;
+	}
+
+	/**
+	 * Records why a card was not imported, or what went wrong with it, for the merchant to read in the card's status cell. One note
+	 * per article: a note for the same article replaces the earlier one and moves to the newest end. Past {@see self::MAX_ENTRIES}
+	 * the oldest is dropped.
+	 *
+	 * The note keeps two fields apart: `text`, the sentence the merchant reads, and `detail`, the technical tail (exception class,
+	 * HTTP status), which may be empty. The store stores both as given and never reads the logging switch: the caller shows the
+	 * detail when it renders the row, so the switch decides what the merchant sees at that moment.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $offer_id   Article of the card.
+	 * @param string $text       The sentence the merchant reads.
+	 * @param string $detail     Technical tail, or ''.
+	 * @return void
+	 */
+	public function set_import_note( int $account_id, string $offer_id, string $text, string $detail = '' ): void {
+		$notes = array_values(
+			array_filter(
+				$this->import_notes( $account_id ),
+				static function ( array $note ) use ( $offer_id ): bool {
+					return $note['offer_id'] !== $offer_id;
+				}
+			)
+		);
+
+		$notes[] = [
+			'offer_id' => $offer_id,
+			'text'     => $text,
+			'detail'   => $detail,
+		];
+
+		update_option( $this->import_notes_option( $account_id ), array_slice( $notes, -self::MAX_ENTRIES ), false );
+	}
+
+	/**
+	 * Returns the import notes of an account, oldest first.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param int $account_id Account id.
+	 * @return array<int,array{offer_id:string,text:string,detail:string}>
+	 */
+	public function import_notes( int $account_id ): array {
+		$stored = get_option( $this->import_notes_option( $account_id ), [] );
+
+		$notes = [];
+		foreach ( is_array( $stored ) ? $stored : [] as $note ) {
+			if ( is_array( $note ) && isset( $note['offer_id'] ) ) {
+				$notes[] = [
+					'offer_id' => (string) $note['offer_id'],
+					'text'     => (string) ( $note['text'] ?? '' ),
+					'detail'   => (string) ( $note['detail'] ?? '' ),
+				];
+			}
+		}
+
+		return $notes;
+	}
+
+	/**
+	 * Removes the import note of one article, after a later import of it succeeded.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $offer_id   Article of the card.
+	 * @return void
+	 */
+	public function clear_import_note( int $account_id, string $offer_id ): void {
+		$notes = array_values(
+			array_filter(
+				$this->import_notes( $account_id ),
+				static function ( array $note ) use ( $offer_id ): bool {
+					return $note['offer_id'] !== $offer_id;
+				}
+			)
+		);
+
+		if ( [] === $notes ) {
+			delete_option( $this->import_notes_option( $account_id ) );
+		} else {
+			update_option( $this->import_notes_option( $account_id ), $notes, false );
+		}
+	}
+
+	/**
+	 * Names the option of an account's import notes.
+	 *
+	 * @param int $account_id Account id.
+	 * @return string
+	 */
+	private function import_notes_option( int $account_id ): string {
+		return $this->prefix . self::IMPORT_NOTES_OPTION . $account_id;
 	}
 
 	/**
