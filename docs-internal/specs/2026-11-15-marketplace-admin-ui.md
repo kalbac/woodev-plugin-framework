@@ -513,7 +513,8 @@ Acceptance (beyond common):
 - Jest: `presetRange()` / `matchPreset()` for every preset across a month, quarter and year boundary and a Sunday;
   `BulkActionSelect` (disabled states, blocked reason, account actions outside the select); `CountLinks` (sum, zero hidden,
   current kept, «Все» writes the «Любое» value); the records table renders the PHP empty text inside `EmptyCard`, whose
-  header keeps the search with the typed text; the search sits in the table header (`records-table.test.tsx`,
+  header keeps the search with the typed text and keyboard focus stays in the search box when the table swaps to or from
+  `EmptyCard` (focus restored after the remount; one jest assertion); the search sits in the table header (`records-table.test.tsx`,
   `admin-records-*.test.tsx` and the toolbar assertions of `marketplace-records-view.test.tsx` updated, not deleted).
 - PHPUnit: `Definition_Parser` accepts `views` only on a `select` and only once; the products provider's `state` facets sum to
   the unfiltered total (the partition holds); orders and remote cards facets.
