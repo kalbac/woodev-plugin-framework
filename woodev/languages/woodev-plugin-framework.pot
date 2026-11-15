@@ -11015,3 +11015,19 @@ msgstr ""
 #: marketplace/settings/class-defaults-section.php:303
 msgid "Если для карточки нет подходящей категории на сайте, плагин создаст её. Если выключено, товар сохранится без категории. Действует для всех аккаунтов."
 msgstr ""
+
+#: marketplace/flows/class-card-import.php:181
+msgid "К вариативному товару нельзя привязать карточку. Выберите один из его вариантов через «Связать с…»."
+msgstr ""
+
+#: marketplace/jobs/class-import-jobs.php:221
+msgid "Маркетплейс не вернул данные карточки. Обновите список карточек и попробуйте ещё раз."
+msgstr ""
+
+#: marketplace/jobs/class-import-jobs.php:233
+msgid "Не удалось создать товар из карточки."
+msgstr ""
+
+#: marketplace/jobs/class-import-jobs.php:248
+msgid "Не удалось импортировать карточку. Попробуйте ещё раз позже."
+msgstr ""
