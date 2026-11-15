@@ -337,6 +337,7 @@ final class Remote_Cards_Actions {
 		$reasons = [
 			Remote_Cards_Import_Plan::ON_SITE         => __( 'Уже на сайте', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::IMPORTING       => __( 'Уже импортируется — дождитесь результата', 'woodev-plugin-framework' ),
+			Remote_Cards_Import_Plan::GROUP_BUILDING  => __( 'Импорт другой карточки этой группы не завершён — сначала импортируйте её', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::VARIABLE_PARENT => __( 'Товар с таким артикулом — вариативный: выберите вариант через «Связать с…»', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::ARCHIVED        => __( 'Карточка в архиве — не импортируем', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::INCOMPLETE      => __( 'Нет полных данных — обновите список', 'woodev-plugin-framework' ),

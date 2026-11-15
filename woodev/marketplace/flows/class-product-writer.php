@@ -111,13 +111,14 @@ final class Product_Writer {
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param Account      $account           Account.
-	 * @param Card_Content $content           The card.
-	 * @param bool         $create_categories Whether a card with no mapping gets its category path created.
+	 * @param Account       $account           Account.
+	 * @param Card_Content  $content           The card.
+	 * @param bool          $create_categories Whether a card with no mapping gets its category path created.
+	 * @param callable|null $prepare           `function ( \WC_Product $product ): void`; called on the unsaved product, so that what it sets is stored by the **same** first save as the SKU and the marker (the group of the card: {@see Group_Assembler::mark()}).
 	 * @return \WC_Product The saved draft: found by its SKU, carrying the marker and the categories.
 	 * @throws \WC_Data_Exception When another product already has the SKU.
 	 */
-	public function start( Account $account, Card_Content $content, bool $create_categories ): \WC_Product {
+	public function start( Account $account, Card_Content $content, bool $create_categories, ?callable $prepare = null ): \WC_Product {
 		$article = (string) ( $content->card()['offer_id'] ?? '' );
 		$product = new \WC_Product_Simple();
 
@@ -126,6 +127,11 @@ final class Product_Writer {
 		$product->set_sku( $article );
 		$product->update_meta_data( self::marker_key( $account->adapter_id() ), '1' );
 		$product->set_category_ids( $this->categories->term_ids( $content, $create_categories ) );
+
+		if ( null !== $prepare ) {
+			call_user_func( $prepare, $product );
+		}
+
 		$product->save();
 
 		return $product;
@@ -140,7 +146,7 @@ final class Product_Writer {
 	 * @param Account       $account Account.
 	 * @param Card_Content  $content The card.
 	 * @param \WC_Product   $product The product {@see self::start()} saved.
-	 * @param bool          $publish Whether the finished product is published; it stays a draft otherwise.
+	 * @param bool          $publish Whether the finished product is published; it stays a draft otherwise, and a variation is switched off (`private`).
 	 * @param callable      $renew   `function (): void`; extends the run's claim, throws when it was lost.
 	 * @param callable|null $stored `function (): void`; called right after a new image was stored (a cached or failed one is no progress).
 	 * @return string[] Warnings for the merchant: what could not be set (the product exists).
@@ -164,11 +170,28 @@ final class Product_Writer {
 			$warnings[] = $warning;
 		}
 
-		$product->set_status( $publish ? 'publish' : 'draft' );
+		$product->set_status( self::final_status( $product, $publish ) );
 		$product->delete_meta_data( self::marker_key( $account->adapter_id() ) );
 		$product->save();
 
 		return $warnings;
+	}
+
+	/**
+	 * Returns the status the final save gives a product. A product that is not published is a draft. A variation cannot be
+	 * one — WooCommerce lists only the variations that are `publish` (switched on) or `private` (switched off) — so a variation
+	 * that is not published is switched off. The status goes in with the final save, never after it.
+	 *
+	 * @param \WC_Product $product Product or variation.
+	 * @param bool        $publish Whether it is published.
+	 * @return string
+	 */
+	private static function final_status( \WC_Product $product, bool $publish ): string {
+		if ( $publish ) {
+			return 'publish';
+		}
+
+		return $product->is_type( 'variation' ) ? 'private' : 'draft';
 	}
 
 	/**

@@ -37,13 +37,18 @@ defined( 'ABSPATH' ) || exit;
  * **Groups** ({@see Group_Assembler}). The cards of one marketplace group become one variable product, and the rows above stay as
  * they are — a card is still found by its article, which is the SKU of a simple product or of a variation:
  *
- * - row 5, the group has no product yet → the card is written as a simple product exactly like a card with no group; right
- *   after the writer's first save the product is marked as the group's, and once it is linked a product of a group of several
- *   cards becomes variable in place, the card being its first variation;
+ * - row 5, the group has no product yet → the card is written as a simple product exactly like a card with no group, the
+ *   writer's **first save** also storing the group's mark; then, **before the link**, the product of a group of several cards
+ *   becomes variable in place and the card is linked as its first variation ({@see Group_Assembler::place()}). A run cut anywhere
+ *   in between leaves the card unlinked, so its own retry meets row 4, row 3 or this row again and finishes;
  * - row 5, the group has a product → that product is made variable if it is not yet, and the card becomes one more variation:
- *   a first save with the SKU and the marker, then {@see Product_Writer::complete()}, then the link with the product as parent;
+ *   a first save with the SKU and the marker, then {@see Product_Writer::complete()} — whose final save also stores whether the
+ *   variation is switched on — then the link with the product as parent;
  * - row 4 on a marked variation → the same, from the second step; row 3 on a finished variation → linked with its parent id;
+ * - row 1 → nothing is imported, but a conversion of the card's product that was left open is finished
+ *   ({@see Group_Assembler::heal()});
  * - a group whose first product is still half-made (its own import was cut) is not built upon: the card is skipped with a note.
+ *   The preview of «Импортировать» makes the same decision ({@see Group_Assembler::group_of()}).
  *
  * What the merchant should know goes into an import note ({@see Link_Report_Store::set_import_note()}); a successful import
  * clears the card's note. This class never talks to the marketplace; the card is already read.
@@ -115,7 +120,7 @@ final class Card_Import {
 	 * @param Link_Report_Store  $notes    Import notes.
 	 * @param Effective_Settings $settings The shop's import settings.
 	 * @param Group_Assembler    $groups   Assembles the cards of one group into one variable product.
-	 * @param callable           $start    `function ( Account, Card_Content, bool $create_categories ): \WC_Product`, `Product_Writer::start()`.
+	 * @param callable           $start    `function ( Account, Card_Content, bool $create_categories, ?callable $prepare ): \WC_Product`, `Product_Writer::start()`; `$prepare` is called on the unsaved product.
 	 * @param callable           $complete `function ( Account, Card_Content, \WC_Product, bool $publish, callable $renew, ?callable $stored ): string[]`, `Product_Writer::complete()`.
 	 */
 	public function __construct( Wpdb_Link_Store $links, Card_Linker $linker, Link_Report_Store $notes, Effective_Settings $settings, Group_Assembler $groups, callable $start, callable $complete ) {
@@ -139,7 +144,7 @@ final class Card_Import {
 	 * @param callable      $renew   `function (): void`; extends the claim before each image and throws when it was lost or the run's time is spent.
 	 * @param callable|null $stored `function (): void`; called right after a new image was stored, for the run's budget.
 	 * @return string One of the outcome constants of this class.
-	 * @throws Claim_Lost When the link is refused because another run took the account claim.
+	 * @throws Claim_Lost When a link write is refused because another run took the account claim.
 	 * @throws \Throwable Whatever WooCommerce throws when it refuses a save; the caller notes it for this card.
 	 */
 	public function import( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored = null ): string {
@@ -150,7 +155,10 @@ final class Card_Import {
 			return self::SKIPPED;
 		}
 
-		if ( null !== $this->links->find_by_offer_id( $account->id(), $article ) ) {
+		$link = $this->links->find_by_offer_id( $account->id(), $article );
+
+		if ( null !== $link ) {
+			$this->groups->heal( $account, $content, $link, $fence );
 			$this->notes->clear_import_note( $account->id(), $article );
 
 			return self::ALREADY_LINKED;
@@ -187,7 +195,8 @@ final class Card_Import {
 	}
 
 	/**
-	 * Row 3: links the product that carries the article, leaving its content alone.
+	 * Row 3: links the product that carries the article, leaving its content alone. A product the importer itself made for the
+	 * card's group, cut before its link, first takes its place in the group.
 	 *
 	 * @param Account      $account Account.
 	 * @param Card_Content $content Card.
@@ -202,7 +211,7 @@ final class Card_Import {
 			return $this->skipped( $account, $article, __( 'К вариативному товару нельзя привязать карточку. Выберите один из его вариантов через «Связать с…».', 'woodev-plugin-framework' ) );
 		}
 
-		return $this->link( $account, $content, $product, $fence, self::LINKED_EXISTING, [] );
+		return $this->link( $account, $content, $this->groups->place( $account, $product, $content, $fence ), $fence, self::LINKED_EXISTING, [] );
 	}
 
 	/**
@@ -225,7 +234,8 @@ final class Card_Import {
 	}
 
 	/**
-	 * Row 5: creates the product, then links it. A card whose group already has a product becomes a variation of that product.
+	 * Row 5: creates the product, then links it. A card whose group already has a product becomes a variation of that product;
+	 * a card whose group's product is half-made waits.
 	 *
 	 * @param Account       $account Account.
 	 * @param Card_Content  $content Card.
@@ -235,20 +245,34 @@ final class Card_Import {
 	 * @return string
 	 */
 	private function create( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
-		$group_product = $this->groups->product_of( $account, $content );
+		$group = $this->groups->group_of( $account, $content );
 
-		if ( null !== $group_product ) {
-			return $this->join( $account, $content, $group_product, $fence, $renew, $stored );
+		if ( null !== $group['product'] && Group_Assembler::BUILDING === $group['state'] ) {
+			/* translators: %s: article of another card of the same group */
+			$text = sprintf( __( 'Импорт другой карточки этой группы (артикул %s) не завершён. Импортируйте сначала её, затем повторите.', 'woodev-plugin-framework' ), (string) $group['product']->get_sku( 'edit' ) );
+
+			return $this->skipped( $account, (string) $content->card()['offer_id'], $text );
 		}
 
-		$product = call_user_func( $this->start, $account, $content, $this->settings->import_create_categories() );
+		if ( null !== $group['product'] ) {
+			return $this->join( $account, $content, $group['product'], $fence, $renew, $stored );
+		}
+
+		$product = call_user_func(
+			$this->start,
+			$account,
+			$content,
+			$this->settings->import_create_categories(),
+			function ( \WC_Product $unsaved ) use ( $account, $content ): void {
+				$this->groups->mark( $account, $unsaved, $content );
+			}
+		);
 
 		return $this->finish( $account, $content, $product, $fence, $renew, $stored );
 	}
 
 	/**
-	 * Fills a started product of the card's own and links it. The group's mark goes in first, before the images: from then on a
-	 * later card of the group finds this product instead of making a second one.
+	 * Fills a started product of the card's own, gives it its place in the card's group and links the card.
 	 *
 	 * @param Account       $account Account.
 	 * @param Card_Content  $content Card.
@@ -259,15 +283,15 @@ final class Card_Import {
 	 * @return string
 	 */
 	private function finish( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
-		$this->groups->remember( $account, $product, $content );
-
 		$warnings = (array) call_user_func( $this->complete, $account, $content, $product, $this->settings->import_publish(), $renew, $stored );
 
-		return $this->link( $account, $content, $product, $fence, self::CREATED, $warnings );
+		return $this->link( $account, $content, $this->groups->place( $account, $product, $content, $fence ), $fence, self::CREATED, $warnings );
 	}
 
 	/**
-	 * Row 5 for a card whose group has a product: the product becomes variable when it is not yet, and the card joins it.
+	 * Row 5 for a card whose group has a product: the product becomes variable when it is not yet, and the card joins it. When
+	 * the conversion that is finished here was the card's own (it was cut before the card was linked), the card is the first
+	 * variation already and is only linked.
 	 *
 	 * @param Account       $account       Account.
 	 * @param Card_Content  $content       Card.
@@ -278,21 +302,23 @@ final class Card_Import {
 	 * @return string
 	 */
 	private function join( Account $account, Card_Content $content, \WC_Product $group_product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
-		if ( Product_Writer::is_marked( $group_product, $account->adapter_id() ) ) {
-			/* translators: %s: article of another card of the same group */
-			$text = sprintf( __( 'Импорт другой карточки этой группы (артикул %s) не завершён. Импортируйте сначала её, затем повторите.', 'woodev-plugin-framework' ), (string) $group_product->get_sku( 'edit' ) );
+		$this->groups->convert( $account, $group_product, $fence );
 
-			return $this->skipped( $account, (string) $content->card()['offer_id'], $text );
+		$own = $this->product_with_article( (string) $content->card()['offer_id'] );
+
+		if ( null !== $own ) {
+			return $this->link( $account, $content, $own, $fence, self::CREATED, [] );
 		}
 
-		$parent    = $this->groups->convert( $account, $group_product, $fence );
-		$variation = $this->groups->start_variation( $account, $parent, $content );
+		$variation = $this->groups->start_variation( $account, (int) $group_product->get_id(), $content );
 
 		return $this->finish_variation( $account, $content, $variation, $fence, $renew, $stored );
 	}
 
 	/**
-	 * Fills the variation of a card and links it, the variable product being the link's parent.
+	 * Fills the variation of a card and links it, the variable product being the link's parent. Whether the variation is
+	 * switched on is decided first, so the writer's final save stores it together with the removal of the marker: a variation
+	 * that must stay off is never stored switched on.
 	 *
 	 * @param Account       $account   Account.
 	 * @param Card_Content  $content   Card.
@@ -305,15 +331,14 @@ final class Card_Import {
 	private function finish_variation( Account $account, Card_Content $content, \WC_Product $variation, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
 		$this->groups->offer( $variation, $content );
 
-		// A variation is switched on or off, never a draft: the writer publishes it and the assembler holds it back when it must.
-		$warnings = (array) call_user_func( $this->complete, $account, Group_Assembler::variation_content( $content ), $variation, true, $renew, $stored );
-		$warnings = array_merge( $warnings, $this->groups->hold_back( $variation, $this->settings->import_publish() ) );
+		$switched_on = $this->groups->sells_at_once( $variation, $this->settings->import_publish() );
+		$warnings    = (array) call_user_func( $this->complete, $account, Group_Assembler::variation_content( $content ), $variation, $switched_on, $renew, $stored );
 
 		return $this->link( $account, $content, $variation, $fence, self::CREATED, $warnings );
 	}
 
 	/**
-	 * Writes the link and the note the merchant reads, then lets the product take its place in the card's group.
+	 * Writes the link and the note the merchant reads.
 	 *
 	 * @param Account      $account  Account.
 	 * @param Card_Content $content  Card.
@@ -336,13 +361,15 @@ final class Card_Import {
 			return $this->skipped( $account, $article, Card_Linker::message( $result ) );
 		}
 
+		$this->groups->parent_row( $account, $product, $content, $fence );
+
+		$warnings = array_merge( $warnings, $this->groups->notice( $account, $product, $content ) );
+
 		if ( [] === $warnings ) {
 			$this->notes->clear_import_note( $account->id(), $article );
 		} else {
 			$this->notes->set_import_note( $account->id(), $article, implode( ' ', $warnings ) );
 		}
-
-		$this->groups->settle( $account, $product, $content, $fence );
 
 		return $done;
 	}

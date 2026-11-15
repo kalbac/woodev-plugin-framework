@@ -229,6 +229,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Flows\\Label_Exception' => 'woodev/marketplace/flows/class-label-exception.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Label_Provider' => 'woodev/marketplace/flows/interface-label-provider.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Label_Service' => 'woodev/marketplace/flows/class-label-service.php',
+	'Woodev\\Framework\\Marketplace\\Flows\\Legacy_Order_Lines' => 'woodev/marketplace/flows/class-legacy-order-lines.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Link_Context_Resolver' => 'woodev/marketplace/flows/class-link-context-resolver.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Link_Detacher' => 'woodev/marketplace/flows/class-link-detacher.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Link_Resolve_Exception' => 'woodev/marketplace/flows/class-link-resolve-exception.php',

@@ -19,6 +19,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Rows;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
@@ -71,18 +72,18 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	protected $sku_kinds = [];
 
 	/**
-	 * The product a group already has on the site, by `{account id}:{group key}`; a group not listed has none.
+	 * What a group has on the site, by `{account id}:{group key}`: one of the `Group_Assembler` states; a group not listed has nothing.
 	 *
-	 * @var array<string,int>
+	 * @var array<string,string>
 	 */
-	protected $group_products = [];
+	protected $group_states = [];
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->importable = false;
 		$this->sku_kinds  = [];
-		$this->group_products = [];
+		$this->group_states = [];
 
 		// The queue as the import scheduler reads it: the pending and running actions of a hook, as objects with their arguments.
 		Functions\when( 'as_get_scheduled_actions' )->alias(
@@ -332,7 +333,7 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	}
 
 	/**
-	 * The import plan over the harness' shop: {@see self::$sku_kinds} answers the SKU lookup, {@see self::$group_products} the group lookup.
+	 * The import plan over the harness' shop: {@see self::$sku_kinds} answers the SKU lookup, {@see self::$group_states} the group lookup.
 	 *
 	 * @return Remote_Cards_Import_Plan
 	 */
@@ -341,8 +342,8 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 			function ( string $sku ): string {
 				return $this->sku_kinds[ $sku ] ?? Remote_Cards_Import_Plan::SKU_NONE;
 			},
-			function ( int $account_id, string $key ): int {
-				return $this->group_products[ $account_id . ':' . $key ] ?? 0;
+			function ( int $account_id, string $key ): string {
+				return $this->group_states[ $account_id . ':' . $key ] ?? Group_Assembler::NONE;
 			}
 		);
 	}

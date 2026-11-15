@@ -23,21 +23,28 @@ defined( 'ABSPATH' ) || exit;
  * shop product per group, whatever the order and the number of runs its cards arrive in:
  *
  * - the first card of a group is written as a simple product by {@see Product_Writer}, exactly like a card with no group, and
- *   {@see self::remember()} marks that product as the group's;
+ *   {@see self::mark()} marks that product as the group's **in the writer's first save**;
  * - when the group has several cards, or a second card of the group arrives later, {@see self::convert()} turns the product into
  *   a variable one **in place**: the product keeps its id, its content and its orders, and the card it was made from becomes its
- *   first variation;
+ *   first variation. {@see self::place()} does it **before the card is linked**, so a card whose conversion was cut is still not
+ *   linked and its own retry finishes it;
  * - every further card becomes one more variation ({@see self::start_variation()}), filled by {@see Product_Writer::complete()}.
  *
  * So the red card today and the black card a week later give the same product as both at once. Only products the importer made
  * are ever assembled: a product the merchant linked by hand carries no group mark and is never converted.
  *
- * Two product meta keep the state, both written with the importer's own saves:
+ * {@see self::group_of()} is the one decision about a group — nothing on the site yet, a half-made product nothing is built upon,
+ * or a product a card can join — and the preview of «Импортировать» asks the same one through {@see self::lookup()}.
+ *
+ * Three product meta keep the state, all written with the importer's own saves:
  *
  * - {@see self::group_key()}: `{account id}:{group key}`, on the product of the group for good — how a later card finds it;
  * - {@see self::variant_key()}: the aspects of the card a simple product was made from and, during a conversion, what the
  *   product gives up to its first variation. It is on the product from its first save until its conversion is complete, so a
- *   conversion that was cut short is finished by the next card of the group.
+ *   conversion that was cut short is finished by the next card of the group, or by the retry of the same card;
+ * - {@see self::first_variation_key()}: on a converted product for good, the id of the variation its own card became. An order
+ *   line made while the product was simple names the product and no variation; {@see Legacy_Order_Lines} resolves it to that
+ *   variation, which holds the stock the line was sold from.
  *
  * The conversion runs in the order that never meets a duplicate SKU or a unique index of the links table: (1) the product
  * becomes `variable` and gives up its SKU; the SKU, the price, the stock and the measures are kept in the meta in that same
@@ -54,6 +61,21 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.1.6
  */
 final class Group_Assembler {
+	/**
+	 * The group has no product on the site.
+	 */
+	public const NONE = 'none';
+
+	/**
+	 * The group's product is half-made: its own import was cut short. Nothing is built upon it until that card is imported.
+	 */
+	public const BUILDING = 'building';
+
+	/**
+	 * The group has a product a card can join.
+	 */
+	public const READY = 'ready';
+
 	/**
 	 * What a simple product holds that belongs to a variation once the product is variable.
 	 *
@@ -117,69 +139,132 @@ final class Group_Assembler {
 	}
 
 	/**
-	 * Returns the lookup of the product a group already has on the site. A read; nothing is written.
+	 * Returns the meta key that names the first variation of a product the importer converted: the card the product itself
+	 * was until then. {@see Legacy_Order_Lines} reads it for the order lines made while the product was simple.
 	 *
 	 * @since 2.1.6
 	 *
 	 * @param string $marketplace_id The adapter's id.
-	 * @return callable `function ( int $account_id, string $key ): int`, the product id, 0 when the group has no product yet.
+	 * @return string
+	 */
+	public static function first_variation_key( string $marketplace_id ): string {
+		return '_woodev_' . $marketplace_id . '_import_first_variation';
+	}
+
+	/**
+	 * Returns the lookup of what a group has on the site. A read; nothing is written. The preview of «Импортировать» asks it,
+	 * and the job asks the same question through {@see self::group_of()}.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param string $marketplace_id The adapter's id.
+	 * @return callable `function ( int $account_id, string $key ): string`, {@see self::NONE}, {@see self::BUILDING} or {@see self::READY}.
 	 */
 	public static function lookup( string $marketplace_id ): callable {
-		return static function ( int $account_id, string $key ) use ( $marketplace_id ): int {
-			return self::find( $marketplace_id, $account_id, $key );
+		return static function ( int $account_id, string $key ) use ( $marketplace_id ): string {
+			return self::resolve( $marketplace_id, $account_id, $key )['state'];
 		};
 	}
 
 	/**
-	 * Returns the product the card's group already has, null when the card stands alone or is the first of its group to arrive.
+	 * Tells what the card's group has on the site: nothing yet ({@see self::NONE}, also for a card that stands alone), a
+	 * product whose own import is not finished ({@see self::BUILDING}: it must not be built upon), or a product a card can
+	 * join ({@see self::READY}).
 	 *
 	 * @since 2.1.6
 	 *
 	 * @param Account      $account Account.
 	 * @param Card_Content $content The card.
-	 * @return \WC_Product|null
+	 * @return array{state:string,product:\WC_Product|null}
 	 */
-	public function product_of( Account $account, Card_Content $content ): ?\WC_Product {
-		$key = self::key_of( $content->group() );
-
-		if ( '' === $key ) {
-			return null;
-		}
-
-		$id      = self::find( $account->adapter_id(), $account->id(), $key );
-		$product = $id > 0 ? wc_get_product( $id ) : null;
-
-		return $product instanceof \WC_Product ? $product : null;
+	public function group_of( Account $account, Card_Content $content ): array {
+		return self::resolve( $account->adapter_id(), $account->id(), self::key_of( $content->group() ) );
 	}
 
 	/**
-	 * Marks a product the importer has just started as the product of its card's group, and keeps the card's aspects for the
-	 * day the product becomes variable. Nothing happens for a card with no group, or a product that is marked already.
+	 * Marks an **unsaved** product as the product of its card's group and keeps the card's aspects for the day the product
+	 * becomes variable. {@see Product_Writer::start()} calls it before its first save, so the group is stored together with the
+	 * SKU and the marker: a run cut right after that save has not lost it, and a later card of the group finds this product
+	 * instead of making a second one. Nothing happens for a card with no group.
 	 *
 	 * @since 2.1.6
 	 *
 	 * @param Account      $account Account.
-	 * @param \WC_Product  $product The product {@see Product_Writer::start()} saved.
+	 * @param \WC_Product  $product The product, not saved yet.
 	 * @param Card_Content $content The card.
 	 * @return void
 	 */
-	public function remember( Account $account, \WC_Product $product, Card_Content $content ): void {
-		$key  = self::key_of( $content->group() );
-		$meta = self::group_key( $account->adapter_id() );
+	public function mark( Account $account, \WC_Product $product, Card_Content $content ): void {
+		$key = self::key_of( $content->group() );
 
-		if ( '' === $key || '' !== (string) $product->get_meta( $meta ) ) {
+		if ( '' === $key ) {
 			return;
 		}
 
-		$product->update_meta_data( $meta, $account->id() . ':' . $key );
+		$product->update_meta_data( self::group_key( $account->adapter_id() ), $account->id() . ':' . $key );
 		$product->update_meta_data( self::variant_key( $account->adapter_id() ), [ 'aspects' => self::aspects( $content ) ] );
-		$product->save();
 	}
 
 	/**
-	 * Called once the card's own product is linked: the product of a group of several cards becomes variable at once, so a lone
-	 * card of such a group is already the variation its siblings will join. A product that is not the importer's product of this
-	 * group (the merchant's own, linked by its article) is left as it is.
+	 * Gives a card's product its place in the card's group **before the card is linked**, and returns the product the card
+	 * belongs to from then on. The product of a group of several cards becomes variable and the card is its first variation; a
+	 * conversion an earlier run left open is finished. Because this comes before the link, a card whose conversion was cut is
+	 * still not linked, and its own retry — from the cards tab or the queue — arrives here again.
+	 *
+	 * A product that is not the importer's product of this group (the merchant's own, linked by its article), the only card of
+	 * its group and a card with no group are returned as they are.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param Account      $account Account.
+	 * @param \WC_Product  $product The product that carries the card's article.
+	 * @param Card_Content $content The card.
+	 * @param Claim_Fence  $fence   The run's account claim.
+	 * @return \WC_Product The product to link the card to.
+	 * @throws Claim_Lost When another run took the account claim before the links were moved.
+	 */
+	public function place( Account $account, \WC_Product $product, Card_Content $content, Claim_Fence $fence ): \WC_Product {
+		$group = $this->group_of( $account, $content );
+		$owner = $group['product'];
+
+		if ( null === $owner || self::READY !== $group['state'] || ! in_array( (int) $owner->get_id(), [ (int) $product->get_id(), (int) $product->get_parent_id() ], true ) ) {
+			return $product;
+		}
+
+		if ( ! $owner->is_type( 'variable' ) && $content->group()['size'] < 2 ) {
+			return $product;
+		}
+
+		$first = $this->convert( $account, $owner, $fence );
+
+		return null !== $first && (int) $owner->get_id() === (int) $product->get_id() ? $first : $product;
+	}
+
+	/**
+	 * Row 1 of the importer for a card of a group: the card is linked, so nothing is imported, but a conversion of its product
+	 * that an earlier run left open is finished, and a product that was made for the only card of a group becomes variable now
+	 * that the group has several.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param Account      $account Account.
+	 * @param Card_Content $content The card.
+	 * @param Link_Record  $link    The card's link.
+	 * @param Claim_Fence  $fence   The run's account claim.
+	 * @return void
+	 * @throws Claim_Lost When another run took the account claim before the links were moved.
+	 */
+	public function heal( Account $account, Card_Content $content, Link_Record $link, Claim_Fence $fence ): void {
+		$product = '' === self::key_of( $content->group() ) ? null : wc_get_product( $link->wc_product_id() );
+
+		if ( $product instanceof \WC_Product ) {
+			$this->parent_row( $account, $this->place( $account, $product, $content, $fence ), $content, $fence );
+		}
+	}
+
+	/**
+	 * Called once a card of a group is linked to a variation of the importer's product: makes sure the account has the
+	 * product's row of kind `parent`, so the variable product itself is never taken for a card.
 	 *
 	 * @since 2.1.6
 	 *
@@ -188,40 +273,38 @@ final class Group_Assembler {
 	 * @param Card_Content $content The card.
 	 * @param Claim_Fence  $fence   The run's account claim.
 	 * @return void
-	 * @throws Claim_Lost When another run took the account claim before the links were moved.
+	 * @throws Claim_Lost When another run took the account claim.
 	 */
-	public function settle( Account $account, \WC_Product $product, Card_Content $content, Claim_Fence $fence ): void {
-		$group = $content->group();
-		$key   = self::key_of( $group );
+	public function parent_row( Account $account, \WC_Product $product, Card_Content $content, Claim_Fence $fence ): void {
+		$parent_id = '' === self::key_of( $content->group() ) ? 0 : (int) $product->get_parent_id();
+		$parent    = $parent_id > 0 && null === $this->links->find( $account->id(), $parent_id ) ? wc_get_product( $parent_id ) : null;
 
-		if ( '' === $key || $group['size'] < 2 ) {
+		if ( ! $parent instanceof \WC_Product || '' === (string) $parent->get_meta( self::group_key( $account->adapter_id() ) ) ) {
 			return;
 		}
 
-		$owned = $account->id() . ':' . $key === (string) $product->get_meta( self::group_key( $account->adapter_id() ) );
-
-		if ( $owned && is_array( $product->get_meta( self::variant_key( $account->adapter_id() ) ) ) ) {
-			$this->convert( $account, $product, $fence );
+		if ( Wpdb_Link_Store::FENCED_OUT === $this->links->insert_card( Link_Record::parent_row( $account->id(), $parent_id ), '', $fence ) ) {
+			$this->require_claim( $account, $fence );
 		}
 	}
 
 	/**
 	 * Turns the product of a group into a variable product whose first variation is the card the product was made from. In
-	 * place: the product keeps its id. A product that is variable already, with nothing left to finish, is returned as it is.
+	 * place: the product keeps its id. Also finishes a conversion an earlier run left open.
 	 *
 	 * @since 2.1.6
 	 *
 	 * @param Account     $account Account.
 	 * @param \WC_Product $product The product of the group.
 	 * @param Claim_Fence $fence   The run's account claim.
-	 * @return \WC_Product The variable product.
+	 * @return \WC_Product|null The first variation, null when the product is variable already with nothing left to finish.
 	 * @throws Claim_Lost When another run took the account claim before the links were moved.
 	 */
-	public function convert( Account $account, \WC_Product $product, Claim_Fence $fence ): \WC_Product {
+	public function convert( Account $account, \WC_Product $product, Claim_Fence $fence ): ?\WC_Product {
 		$pending = $product->get_meta( self::variant_key( $account->adapter_id() ) );
 
 		if ( ! is_array( $pending ) && $product->is_type( 'variable' ) ) {
-			return $product;
+			return null;
 		}
 
 		// The price only moves from the product to its variation: nothing for the marketplace's price push to react to.
@@ -232,8 +315,9 @@ final class Group_Assembler {
 				$variation = $this->first_variation( $parent, (array) $parent->get_meta( self::variant_key( $account->adapter_id() ) ) );
 
 				$this->move_links( $account, (int) $parent->get_id(), (int) $variation->get_id(), $fence );
+				$this->finish_parent( $account, $parent, (int) $variation->get_id() );
 
-				return $this->finish_parent( $account, $parent );
+				return $variation;
 			}
 		);
 	}
@@ -244,16 +328,16 @@ final class Group_Assembler {
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param Account      $account Account.
-	 * @param \WC_Product  $parent  The variable product of the group.
-	 * @param Card_Content $content The card.
+	 * @param Account      $account   Account.
+	 * @param int          $parent_id The variable product of the group.
+	 * @param Card_Content $content   The card.
 	 * @return \WC_Product The saved variation.
 	 * @throws \WC_Data_Exception When another product already has the SKU.
 	 */
-	public function start_variation( Account $account, \WC_Product $parent, Card_Content $content ): \WC_Product {
+	public function start_variation( Account $account, int $parent_id, Card_Content $content ): \WC_Product {
 		$variation = wc_get_product_object( 'variation' );
 
-		$variation->set_parent_id( (int) $parent->get_id() );
+		$variation->set_parent_id( $parent_id );
 		$variation->set_status( 'private' );
 		$variation->set_sku( (string) ( $content->card()['offer_id'] ?? '' ) );
 		$variation->set_attributes( self::variation_attributes( self::aspects( $content ) ) );
@@ -311,27 +395,68 @@ final class Group_Assembler {
 	}
 
 	/**
-	 * Decides whether a finished variation may sell at once. A variation of a product that is not published sells with the
-	 * product, when the merchant publishes it. A variation that joins a **published** product would be on sale the moment it is
-	 * saved, so unless the shop publishes imported products at once it is switched off and the merchant is told.
+	 * Decides, **before a variation is finished**, whether it is switched on. A variation of a product that is not published
+	 * sells with the product, when the merchant publishes it. A variation that joins a **published** product would be on sale
+	 * the moment it is saved, so unless the shop publishes imported products at once it is finished switched off: the writer
+	 * stores that status in its final save, together with the removal of the marker.
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param \WC_Product $variation The finished variation.
+	 * @param \WC_Product $variation The variation, not finished yet.
 	 * @param bool        $publish   Whether the shop publishes imported products at once.
-	 * @return string[] Warnings for the merchant.
+	 * @return bool
 	 */
-	public function hold_back( \WC_Product $variation, bool $publish ): array {
+	public function sells_at_once( \WC_Product $variation, bool $publish ): bool {
 		$parent = $publish ? null : wc_get_product( (int) $variation->get_parent_id() );
 
-		if ( ! $parent instanceof \WC_Product || 'publish' !== $parent->get_status() ) {
+		return ! $parent instanceof \WC_Product || 'publish' !== $parent->get_status();
+	}
+
+	/**
+	 * Tells the merchant about a variation of the importer's product that is switched off inside a published product. Read
+	 * from what is stored, so a retry that only links a finished variation says it too.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param Account      $account Account.
+	 * @param \WC_Product  $product The product the card is linked to.
+	 * @param Card_Content $content The card.
+	 * @return string[] Warnings for the merchant.
+	 */
+	public function notice( Account $account, \WC_Product $product, Card_Content $content ): array {
+		$off    = '' !== self::key_of( $content->group() ) && $product->get_parent_id() > 0 && 'private' === $product->get_status();
+		$parent = $off ? wc_get_product( (int) $product->get_parent_id() ) : null;
+
+		if ( ! $parent instanceof \WC_Product || 'publish' !== $parent->get_status() || '' === (string) $parent->get_meta( self::group_key( $account->adapter_id() ) ) ) {
 			return [];
 		}
 
-		$variation->set_status( 'private' );
-		$variation->save();
-
 		return [ __( 'Вариант добавлен в опубликованный товар выключенным. Проверьте его и включите в карточке товара.', 'woodev-plugin-framework' ) ];
+	}
+
+	/**
+	 * Resolves a group to its product and to what may be done with it — the one group decision behind the job and the preview.
+	 *
+	 * @param string $marketplace_id The adapter's id.
+	 * @param int    $account_id     Account id.
+	 * @param string $key            Group key, '' for a card that stands alone.
+	 * @return array{state:string,product:\WC_Product|null}
+	 */
+	private static function resolve( string $marketplace_id, int $account_id, string $key ): array {
+		$id      = '' === $key ? 0 : self::find( $marketplace_id, $account_id, $key );
+		$product = $id > 0 ? wc_get_product( $id ) : null;
+
+		if ( ! $product instanceof \WC_Product ) {
+			return [
+				'state'   => self::NONE,
+				'product' => null,
+			];
+		}
+
+		return [
+			'state'   => Product_Writer::is_marked( $product, $marketplace_id ) ? self::BUILDING : self::READY,
+			'product' => $product,
+		];
 	}
 
 	/**
@@ -492,22 +617,23 @@ final class Group_Assembler {
 	}
 
 	/**
-	 * Closes the conversion: the variable product manages no stock of its own, and nothing is left to finish. The product is
-	 * read again first, so that it knows the variation it has now.
+	 * Closes the conversion: the variable product manages no stock of its own, names its first variation for the order lines
+	 * that were made while it was simple, and has nothing left to finish. The product is read again first, so that it knows the
+	 * variation it has now.
 	 *
-	 * @param Account     $account Account.
-	 * @param \WC_Product $parent  The variable product.
-	 * @return \WC_Product The variable product, as stored.
+	 * @param Account     $account      Account.
+	 * @param \WC_Product $parent       The variable product.
+	 * @param int         $variation_id Its first variation.
+	 * @return void
 	 */
-	private function finish_parent( Account $account, \WC_Product $parent ): \WC_Product {
+	private function finish_parent( Account $account, \WC_Product $parent, int $variation_id ): void {
 		$stored = wc_get_product( (int) $parent->get_id() );
 		$parent = $stored instanceof \WC_Product ? $stored : $parent;
 
 		$parent->set_manage_stock( false );
+		$parent->update_meta_data( self::first_variation_key( $account->adapter_id() ), $variation_id );
 		$parent->delete_meta_data( self::variant_key( $account->adapter_id() ) );
 		$parent->save();
-
-		return $parent;
 	}
 
 	/**

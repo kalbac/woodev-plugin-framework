@@ -171,6 +171,57 @@ class ProductWriterTest extends TestCase {
 	}
 
 	/**
+	 * What `$prepare` sets on the unsaved product is stored by the same first save as the SKU and the marker: a run cut right
+	 * after that save has not lost it. The importer puts the group of the card there.
+	 */
+	public function test_the_first_save_also_stores_what_the_caller_prepared(): void {
+		$this->writer->start(
+			$this->account(),
+			$this->card( [ 'offer_id' => 'ART-PREP' ] ),
+			false,
+			static function ( \WC_Product $product ): void {
+				$product->update_meta_data( '_itest_prepared', 'group-7' );
+			}
+		);
+
+		// The run is cut here.
+		$product = wc_get_product( wc_get_product_id_by_sku( 'ART-PREP' ) );
+
+		$this->assertSame( 'group-7', $product->get_meta( '_itest_prepared' ) );
+		$this->assertTrue( Product_Writer::is_marked( $product, self::MARKETPLACE ) );
+	}
+
+	/**
+	 * A variation is never a draft — WooCommerce lists only the ones that are switched on or off — so the final save of a
+	 * variation that is not published stores `private`, in the same save that removes the marker.
+	 */
+	public function test_a_variation_that_is_not_published_is_finished_switched_off(): void {
+		$parent = new \WC_Product_Variable();
+		$parent->set_name( 'Родитель' );
+		$parent->set_status( 'publish' );
+		$parent->save();
+
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id( $parent->get_id() );
+		$variation->set_status( 'private' );
+		$variation->set_sku( 'ART-VAR' );
+		$variation->update_meta_data( Product_Writer::marker_key( self::MARKETPLACE ), '1' );
+		$variation->save();
+
+		$this->writer->complete( $this->account(), $this->card( [ 'offer_id' => 'ART-VAR' ] ), $variation, false, $this->renew() );
+
+		$stored = wc_get_product( $variation->get_id() );
+
+		$this->assertSame( 'private', $stored->get_status() );
+		$this->assertFalse( Product_Writer::is_marked( $stored, self::MARKETPLACE ) );
+		$this->assertEqualsWithDelta( 1100.0, (float) $stored->get_regular_price(), 0.001 );
+
+		$this->writer->complete( $this->account(), $this->card( [ 'offer_id' => 'ART-VAR' ] ), $stored, true, $this->renew() );
+
+		$this->assertSame( 'publish', wc_get_product( $variation->get_id() )->get_status() );
+	}
+
+	/**
 	 * The price is worked out after the categories are stored: the mapping's profile carries +10 %, the account none, so the
 	 * shop's regular price is the card's price divided by 1.1. A shop price rule worked out before the save would be the account's.
 	 */

@@ -9,6 +9,7 @@ namespace Woodev\Tests\Unit\Marketplace\Flows;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Import_Plan;
 use Woodev\Framework\Marketplace\Catalog\Card_Content;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
@@ -16,6 +17,7 @@ use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
+use Woodev\Framework\Marketplace\Flows\Legacy_Order_Lines;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Jobs\Claim_Lost;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -108,8 +110,8 @@ final class GroupImportTest extends Export_Test_Case {
 				}
 			),
 			new Group_Assembler( $this->links() ),
-			function ( Account $account, Card_Content $content, bool $create_categories ): \WC_Product {
-				return $this->start( $content );
+			function ( Account $account, Card_Content $content, bool $create_categories, ?callable $prepare = null ): \WC_Product {
+				return $this->start( $content, $prepare );
 			},
 			function ( Account $account, Card_Content $content, \WC_Product $product, bool $publish, callable $renew ): array {
 				return $this->complete( $content, $product, $publish );
@@ -118,12 +120,13 @@ final class GroupImportTest extends Export_Test_Case {
 	}
 
 	/**
-	 * Plays `Product_Writer::start()`: a draft with the name, the SKU and the marker, in one save.
+	 * Plays `Product_Writer::start()`: a draft with the name, the SKU, the marker and what `$prepare` sets, in one save.
 	 *
-	 * @param Card_Content $content Card.
+	 * @param Card_Content  $content Card.
+	 * @param callable|null $prepare Called on the unsaved product.
 	 * @return \WC_Product
 	 */
-	private function start( Card_Content $content ): \WC_Product {
+	private function start( Card_Content $content, ?callable $prepare ): \WC_Product {
 		$article       = (string) $content->card()['offer_id'];
 		$this->calls[] = [ 'start', $article ];
 		$product       = $this->shop->product( 'simple' );
@@ -132,6 +135,11 @@ final class GroupImportTest extends Export_Test_Case {
 		$product->set_status( 'draft' );
 		$product->set_sku( $article );
 		$product->update_meta_data( $this->marker(), '1' );
+
+		if ( null !== $prepare ) {
+			$prepare( $product );
+		}
+
 		$product->save();
 
 		return $product;
@@ -139,6 +147,7 @@ final class GroupImportTest extends Export_Test_Case {
 
 	/**
 	 * Plays `Product_Writer::complete()`: the price and the image, then the final save with the status and without the marker.
+	 * A variation that is not published is switched off, as the writer's final save stores it.
 	 *
 	 * @param Card_Content $content Card.
 	 * @param \WC_Product  $product The started product or variation.
@@ -158,7 +167,7 @@ final class GroupImportTest extends Export_Test_Case {
 
 		$product->set_regular_price( (string) ( 100 + strlen( $article ) ) );
 		$product->set_image_id( crc32( $content->primary_image() ) % 1000 + 1 );
-		$product->set_status( $publish ? 'publish' : 'draft' );
+		$product->set_status( $publish ? 'publish' : ( $product->is_type( 'variation' ) ? 'private' : 'draft' ) );
 		$product->delete_meta_data( $this->marker() );
 		$product->save();
 
@@ -665,6 +674,222 @@ final class GroupImportTest extends Export_Test_Case {
 		$this->import( $this->card( 'CUP', 'белый', 2, [], 'model-8' ) );
 
 		$this->assertCount( 2, $this->products() );
+		$this->assertCount( 1, $this->shop->variations( 900 ) );
+	}
+
+	/**
+	 * Critic round 1, finding 1: the group's mark is part of the product's first save, so a run cut right after that save
+	 * cannot lose it and a sibling cannot start a second product for the group.
+	 */
+	public function test_a_run_cut_right_after_the_first_save_has_stored_the_group_and_no_second_product_is_made(): void {
+		$this->shop->fail_save_at = 2;
+
+		try {
+			$this->import( $this->card( 'RED', 'красный', 2 ) );
+			$this->fail( 'The run is cut at its second save.' );
+		} catch ( \RuntimeException $cut ) {
+			$this->assertSame( 1, $this->shop->saves - 1, 'only the first save was stored' );
+			$this->assertSame( $this->account_id . ':' . self::GROUP, $this->by_sku( 'RED' )['meta'][ Group_Assembler::group_key( Sqlite_Tables::MARKETPLACE_ID ) ] ?? null, 'and it carries the group' );
+		}
+
+		$this->import( $this->card( 'BLACK', 'чёрный', 2 ) );
+		$this->import( $this->card( 'RED', 'красный', 2 ) );
+		$this->import( $this->card( 'BLACK', 'чёрный', 2 ) );
+
+		$this->assertCount( 1, $this->products(), 'one product for the group, whatever was cut' );
+		$this->assertSame( [ 'BLACK', 'RED' ], array_keys( $this->shape()[0]['variations'] ) );
+	}
+
+	/**
+	 * Critic round 1, finding 2: the first card of a group of several, cut at any of its saves or at its link, is finished by
+	 * the retry of that same card — no sibling is needed.
+	 */
+	public function test_the_first_card_of_a_group_of_several_cut_anywhere_is_finished_by_its_own_retry(): void {
+		$this->import( $this->card( 'RED', 'красный', 2 ) );
+
+		$whole = $this->shape();
+		$saves = $this->shop->saves;
+
+		for ( $save = 1; $save <= $saves; $save++ ) {
+			$this->empty_shop();
+			$this->shop->fail_save_at = $save;
+
+			try {
+				$this->import( $this->card( 'RED', 'красный', 2 ) );
+				$this->fail( 'The run is cut at save ' . $save . '.' );
+			} catch ( \RuntimeException $cut ) {
+				$this->assertSame( $save, $this->shop->saves );
+			}
+
+			$this->import( $this->card( 'RED', 'красный', 2 ) );
+
+			$this->assertSame( $whole, $this->shape(), 'cut at save ' . $save . ', the retry of the same card finishes the product' );
+		}
+
+		// The same when the run loses its claim: whatever was written, the retry ends in the same product.
+		$this->empty_shop();
+
+		try {
+			$this->import( $this->card( 'RED', 'красный', 2 ), new Claim_Fence( Sqlite_Tables::table( 'accounts' ), 'a-token-another-run-replaced' ) );
+			$this->fail( 'A lost claim stops the run.' );
+		} catch ( Claim_Lost $lost ) {
+			$this->assertNull( $this->links()->find_by_offer_id( $this->account_id, 'RED' ) );
+		}
+
+		$this->import( $this->card( 'RED', 'красный', 2 ) );
+
+		$this->assertSame( $whole, $this->shape() );
+	}
+
+	/**
+	 * Critic round 1, finding 3: with «Сразу публиковать…» off, a variation that joins a published product is never stored
+	 * switched on — not for a moment, and not after a cut at any save of its import.
+	 */
+	public function test_a_variation_of_a_published_product_is_never_stored_on_sale_when_the_shop_does_not_publish(): void {
+		$prepare = function (): void {
+			$this->empty_shop();
+			$this->import( $this->card( 'RED', 'красный', 1 ) );
+
+			$product = $this->shop->product( 'simple', 900 );
+			$product->set_status( 'publish' );
+			$product->save();
+		};
+
+		$prepare();
+		$before = $this->shop->saves;
+		$this->import( $this->card( 'BLACK', 'чёрный', 2 ) );
+		$saves = $this->shop->saves - $before;
+
+		for ( $save = 1; $save <= $saves; $save++ ) {
+			$prepare();
+			$this->shop->fail_save_at = $this->shop->saves + $save;
+
+			try {
+				$this->import( $this->card( 'BLACK', 'чёрный', 2 ) );
+				$this->fail( 'The run is cut at save ' . $save . '.' );
+			} catch ( \RuntimeException $cut ) {
+				$stored = $this->shop->id_by_sku( 'BLACK' );
+
+				$this->assertNotSame( 'publish', 0 === $stored ? 'none' : $this->shop->stored[ $stored ]['props']['status'], 'cut at save ' . $save . ': nothing on sale is stored' );
+			}
+
+			$this->import( $this->card( 'BLACK', 'чёрный', 2 ) );
+
+			$this->assertSame( 'private', $this->by_sku( 'BLACK' )['props']['status'], 'cut at save ' . $save . ': the retry leaves the variation switched off' );
+			$this->assertStringContainsString( 'выключен', (string) $this->note( 'BLACK' ), 'and the merchant is told' );
+			$this->assertNotNull( $this->links()->find_by_offer_id( $this->account_id, 'BLACK' ) );
+		}
+	}
+
+	/**
+	 * Critic round 1, finding 5: the preview and the job make one decision about a group whose first product is half-made.
+	 */
+	public function test_the_preview_and_the_job_agree_about_a_half_made_group(): void {
+		$this->cut['RED'] = new \RuntimeException( 'time limit during images' );
+
+		try {
+			$this->import( $this->card( 'RED', 'красный', 2 ) );
+		} catch ( \RuntimeException $cut ) {
+			unset( $cut );
+		}
+
+		$plan  = new Remote_Cards_Import_Plan(
+			function ( string $sku ): string {
+				return 0 === $this->shop->id_by_sku( $sku ) ? Remote_Cards_Import_Plan::SKU_NONE : Remote_Cards_Import_Plan::SKU_MARKED;
+			},
+			Group_Assembler::lookup( Sqlite_Tables::MARKETPLACE_ID )
+		);
+		$black = [
+			'offer_id'   => 'BLACK',
+			'details_ok' => true,
+			'group'      => [
+				'key'  => self::GROUP,
+				'size' => 2,
+			],
+		];
+		$red   = array_merge( $black, [ 'offer_id' => 'RED' ] );
+
+		$alone = $plan->build( [ $black ], [], [], $this->account_id );
+
+		$this->assertSame( [], $alone[ Remote_Cards_Import_Plan::CREATE ], 'the preview does not promise what the job will not do' );
+		$this->assertSame( [ 'BLACK' ], $alone['skipped'][ Remote_Cards_Import_Plan::GROUP_BUILDING ] ?? null );
+		$this->assertSame( Card_Import::SKIPPED, $this->import( $this->card( 'BLACK', 'чёрный', 2 ) ), 'and the job skips it' );
+
+		// Selected together, the half-made card goes first, whatever the order of the selection, and the other one joins it.
+		$both = $plan->build( [ $black, $red ], [], [], $this->account_id );
+
+		$this->assertSame( [ 'RED', 'BLACK' ], $both[ Remote_Cards_Import_Plan::CREATE ] );
+		$this->assertSame( [ 1, 0, [] ], [ $both['products'], $both['joined'], $both['skipped'] ] );
+
+		foreach ( $both[ Remote_Cards_Import_Plan::CREATE ] as $article ) {
+			$this->assertSame( Card_Import::CREATED, $this->import( $this->card( $article, 'RED' === $article ? 'красный' : 'чёрный', 2 ) ) );
+		}
+
+		$this->assertCount( 1, $this->products() );
+		$this->assertCount( 2, $this->shop->variations( 900 ) );
+	}
+
+	/**
+	 * Critic round 1, finding 4: an order line made while the product was simple names the product and no variation. After
+	 * the conversion it is the line of the product's first variation, which holds the stock the line was sold from.
+	 */
+	public function test_an_order_line_of_the_simple_product_resolves_to_its_first_variation_after_the_conversion(): void {
+		$this->import( $this->card( 'RED', 'красный', 1 ) );
+		$this->import( $this->card( 'BLACK', 'чёрный', 2 ) );
+
+		$lines  = new Legacy_Order_Lines( Sqlite_Tables::MARKETPLACE_ID );
+		$parent = $this->shop->product( 'variable', 900 );
+		$line   = function ( int $variation_id ) {
+			$item = \Mockery::mock( 'WC_Order_Item_Product' );
+			$item->shouldReceive( 'get_variation_id' )->andReturn( $variation_id );
+
+			return $item;
+		};
+
+		$this->assertSame( $this->by_sku( 'RED' )['id'], $lines->resolve( $parent, $line( 0 ) )->get_id(), 'the old line is the red variation\'s' );
+		$this->assertSame( 900, $lines->resolve( $parent, $line( $this->by_sku( 'BLACK' )['id'] ) )->get_id(), 'a line that names a variation is left alone' );
+
+		$other = $this->shop->product( 'variable' );
+		$other->save();
+
+		$this->assertSame( $other->get_id(), $lines->resolve( $other, $line( 0 ) )->get_id(), 'a variable product the importer did not convert is left alone' );
+		$this->assertFalse( $lines->resolve( false, $line( 0 ) ), 'and so is a product that is gone' );
+	}
+
+	/**
+	 * Row 1 for a card of a group: nothing is imported, but the card's product is put right — a conversion another card left
+	 * open is finished, and the product of what was a group of one becomes variable once the group has several.
+	 */
+	public function test_a_linked_card_finishes_what_is_open_on_its_product(): void {
+		$this->import( $this->card( 'RED', 'красный', 1 ) );
+
+		// The black card's run converts the red product and is cut after the product became variable: no variation yet.
+		$this->shop->fail_save_at = $this->shop->saves + 2;
+
+		try {
+			$this->import( $this->card( 'BLACK', 'чёрный', 2 ) );
+			$this->fail( 'The run is cut.' );
+		} catch ( \RuntimeException $cut ) {
+			$this->assertSame( [ 'variable', 0 ], [ $this->shop->stored[900]['type'], count( $this->shop->variations( 900 ) ) ] );
+		}
+
+		$this->assertSame( Card_Import::ALREADY_LINKED, $this->import( $this->card( 'RED', 'красный', 2 ) ) );
+
+		$red = $this->by_sku( 'RED' );
+
+		$this->assertSame( [ 'variation', 900 ], [ $red['type'], $red['props']['parent_id'] ], 'the red card is sellable again, as the first variation' );
+		$this->assertFalse( $this->shape()[0]['pending'] );
+		$this->assertSame( $red['id'], $this->links()->find_by_offer_id( $this->account_id, 'RED' )->wc_product_id() );
+		$this->assertFalse( $this->links()->find( $this->account_id, 900 )->is_offer() );
+
+		// A group of one that grew: the linked card's product becomes variable when the card is seen again.
+		$this->empty_shop();
+		$this->import( $this->card( 'RED', 'красный', 1 ) );
+
+		$this->assertSame( 'simple', $this->by_sku( 'RED' )['type'] );
+		$this->assertSame( Card_Import::ALREADY_LINKED, $this->import( $this->card( 'RED', 'красный', 2 ) ) );
+		$this->assertSame( 'variation', $this->by_sku( 'RED' )['type'] );
+		$this->assertSame( Card_Import::ALREADY_LINKED, $this->import( $this->card( 'RED', 'красный', 2 ) ), 'and a third look changes nothing' );
 		$this->assertCount( 1, $this->shop->variations( 900 ) );
 	}
 }

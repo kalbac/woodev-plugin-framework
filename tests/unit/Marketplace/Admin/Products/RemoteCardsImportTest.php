@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Row_Normalizer;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Import_Plan;
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 
 require_once dirname( __DIR__, 3 ) . '/Shipping/Rest_Api/wp-rest-controller-stub.php';
 
@@ -236,7 +237,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_card_whose_group_has_a_product_on_the_site_adds_no_product(): void {
-		$this->group_products[ $this->account_id . ':model-7' ] = 900;
+		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::READY;
 		$this->put_snapshot( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
 
 		$plan = $this->preview( 'import_selected', [ 'BLACK', 'GREEN', 'SOLO' ] );
@@ -250,6 +251,28 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$this->assertTrue( $joining['can_apply'] );
 		$this->assertStringNotContainsString( 'Будет создано', $joining['scope']['sentence'] );
 		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 1.', $joining['scope']['sentence'] );
+	}
+
+	public function test_a_card_whose_group_is_half_made_is_left_out_unless_the_half_made_card_is_selected_too(): void {
+		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::BUILDING;
+		$this->sku_kinds['RED']                               = Remote_Cards_Import_Plan::SKU_MARKED;
+		$this->put_snapshot( [ $this->colour( 'RED' ), $this->colour( 'BLACK' ), $this->colour( 'GREEN' ) ] );
+
+		$alone = $this->preview( 'import_selected', [ 'BLACK', 'GREEN' ] );
+
+		$this->assertSame( [ 2, 0, 2 ], [ $alone['requested'], $alone['eligible'], $alone['skipped'] ], 'the job would skip both' );
+		$this->assertFalse( $alone['can_apply'] );
+		$this->assertSame( [ 'Импорт другой карточки этой группы не завершён — сначала импортируйте её' => 2 ], $this->groups( $alone ) );
+
+		$together = $this->preview( 'import_selected', [ 'BLACK', 'GREEN', 'RED' ] );
+
+		$this->assertSame( [ 3, 3, 0 ], [ $together['requested'], $together['eligible'], $together['skipped'] ] );
+		$this->assertStringContainsString( 'Будет создано товаров: 1.', $together['scope']['sentence'] );
+		$this->assertStringContainsString( 'Карточки одной группы станут вариантами одного товара.', $together['scope']['sentence'] );
+
+		$this->apply( 'import_selected', [ 'BLACK', 'GREEN', 'RED' ] );
+
+		$this->assertSame( [ 'RED', 'BLACK', 'GREEN' ], $this->queued_offers(), 'the half-made card is queued first, so the job finishes it before the others join' );
 	}
 
 	public function test_only_the_cards_the_import_takes_are_counted_in_a_group(): void {

@@ -11074,3 +11074,7 @@ msgstr ""
 #, php-format
 msgid "Станут вариантами уже импортированных товаров: %d."
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:346
+msgid "Импорт другой карточки этой группы не завершён — сначала импортируйте её"
+msgstr ""

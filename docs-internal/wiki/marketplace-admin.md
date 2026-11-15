@@ -802,28 +802,40 @@ What to remember:
   and a technical `detail`; the give-up path never puts an exception message into `text`.
   `Remote_Cards_Rows` applies the «Логирование» switch to `detail` when it draws the row.
 - **Groups become one variable product** (`Card_Content::group()`: `key`, `size`, `aspects`). The
-  first card of a group is written as a simple product by the unchanged writer, so every cut
-  point above holds for it; `Group_Assembler::remember()` marks the product as the group's right
-  after the writer's first save. A group of several cards, or a second card arriving later,
-  converts that product **in place** — it keeps its id and its orders, its card becomes the first
-  variation, its offer row is moved (`Wpdb_Link_Store::move_offer()`) and the product gets a
-  `parent` row with no article. Further cards become variations: a first save with the SKU and
-  the marker, then `Product_Writer::complete()`.
+  first card of a group is written as a simple product by the writer, whose **first save also
+  stores the group's mark** (`start()`'s `$prepare` → `Group_Assembler::mark()`), so a sibling
+  that arrives next finds the product instead of making a second one. A group of several cards,
+  or a second card arriving later, converts that product **in place** — it keeps its id and its
+  orders, its card becomes the first variation, its offer row is moved
+  (`Wpdb_Link_Store::move_offer()`) and the product gets a `parent` row with no article. Further
+  cards become variations: a first save with the SKU and the marker, then
+  `Product_Writer::complete()`.
+- **Convert first, link last** (`Group_Assembler::place()`). Row 1 ends the import of a linked
+  card and the cards tab does not offer it again, so a card linked before its conversion could be
+  left broken with no retry reaching it. Converted first, a card whose run was cut is still not
+  linked and its own retry finishes the job. Row 1 calls `heal()` for the one case left: a
+  conversion another card's run left open on the linked card's product.
+- **Orders made before a conversion** name the product and no variation; `Legacy_Order_Lines`
+  resolves such a line to the first variation on `woocommerce_order_item_product`, or paying,
+  cancelling and refunding the old order would stop moving the card's stock.
 - **A variable product is not a simple one with a new type.** WooCommerce reads a variable
   product's own price as empty and recomputes its stock status from its variations, so the
   conversion reads the price, the stock and the measures from the **simple** object and keeps
   them in the product's meta in the same save that changes the type. A variation is `publish`
-  or `private`, never `draft` (WooCommerce does not list a draft variation), so the writer is
-  told to publish it and `Group_Assembler::hold_back()` switches it off when it joins a
-  published product while «Сразу публиковать…» is off.
+  or `private`, never `draft` (WooCommerce does not list a draft variation): the writer's final
+  save stores `private` for a variation that is not published, and
+  `Group_Assembler::sells_at_once()` decides it **before** the writer runs — a variation that
+  joins a published product while «Сразу публиковать…» is off is never stored switched on.
 - **Only the importer's own products are assembled.** A product the merchant linked by its
   article has no group mark and is never converted; its sibling cards make a product of their
   own. A linked card is never moved when its group changes on the marketplace.
 - **A group whose first product is half-made is not built upon**: the sibling card is skipped
   with a note naming the article to import first. This is what a burst of notifications for one
   new group can leave when the first card's run was cut by the budget.
-- **The preview counts products, not cards**: `Remote_Cards_Import_Plan` asks the same
-  `Group_Assembler::key_of()` and the same lookup of the group's product as the job. An adapter
+- **The preview counts products, not cards, and makes the job's decision**:
+  `Remote_Cards_Import_Plan` asks the same `Group_Assembler::key_of()` and the same group state
+  (`NONE` / `BUILDING` / `READY`) as the job. A card of a half-made group is left out of the
+  preview, unless the card that resumes the group is selected too — then that one is queued first. An adapter
   that imports groups puts `group` (`key`, `size`) into its **snapshot** cards too — without it
   the preview counts every card as a product, while the job still assembles them.
 

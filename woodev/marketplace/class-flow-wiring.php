@@ -32,6 +32,7 @@ use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Import_Category;
 use Woodev\Framework\Marketplace\Flows\Label_Download;
+use Woodev\Framework\Marketplace\Flows\Legacy_Order_Lines;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
@@ -469,6 +470,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$import    = new Card_Import( $this->links, new Card_Linker( $this->links ), $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links ), [ $writer, 'start' ], [ $writer, 'complete' ] );
 
 			( new Import_Jobs( $this->gate, $adapter, $import, $notes, $scheduler, $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
+			( new Legacy_Order_Lines( $adapter->id() ) )->register();
 
 			$this->importer = $adapter;
 			$this->imports  = $scheduler;

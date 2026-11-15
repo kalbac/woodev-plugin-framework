@@ -4,8 +4,9 @@
  *
  * What the unit suite cannot show: that WooCommerce really turns a stored simple product into a variable one in place; that the
  * first variation takes the SKU without a duplicate-SKU refusal and the price a variable product no longer answers for; that a
- * variation made from a card's aspects is the one the shop finds for that colour; and that the unique indexes of the links table
- * accept the moved offer row and the new parent row. Images are served from a local file through `pre_http_request`.
+ * variation made from a card's aspects is the one the shop finds for that colour; that the unique indexes of the links table
+ * accept the moved offer row and the new parent row; and that an order made while the product was simple still reduces and
+ * restores the stock of its card through WooCommerce's own stock functions. Images are served from a local file through `pre_http_request`.
  *
  * Like ProductWriterTest, the test creates real tables of its own before the WordPress test case opens its transaction (a DDL
  * statement commits) and drops them after the rollback. A link write runs in a transaction of its own, which ends the test
@@ -39,6 +40,7 @@ use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Facts;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Import_Category;
+use Woodev\Framework\Marketplace\Flows\Legacy_Order_Lines;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Price\Money;
@@ -103,6 +105,20 @@ class GroupAssemblerTest extends TestCase {
 	private $articles = [];
 
 	/**
+	 * Orders the test made.
+	 *
+	 * @var int[]
+	 */
+	private $orders = [];
+
+	/**
+	 * The resolver of the order lines made before a conversion, hooked as the wiring hooks it.
+	 *
+	 * @var Legacy_Order_Lines
+	 */
+	private $lines;
+
+	/**
 	 * Creates real tables, lets the WordPress test case open its transaction, and wires the importer.
 	 */
 	protected function setUp(): void {
@@ -152,6 +168,9 @@ class GroupAssemblerTest extends TestCase {
 			[ $writer, 'complete' ]
 		);
 
+		$this->lines = new Legacy_Order_Lines( self::MARKETPLACE );
+		$this->lines->register();
+
 		wp_set_current_user( 0 ); // A background job has no user.
 		add_filter( 'pre_http_request', [ $this, 'serve_image' ], 10, 3 );
 	}
@@ -161,6 +180,7 @@ class GroupAssemblerTest extends TestCase {
 	 */
 	protected function tearDown(): void {
 		remove_filter( 'pre_http_request', [ $this, 'serve_image' ], 10 );
+		remove_filter( 'woocommerce_order_item_product', [ $this->lines, 'resolve' ], 10 );
 		$this->delete_what_was_stored();
 		parent::tearDown();
 
@@ -273,6 +293,43 @@ class GroupAssemblerTest extends TestCase {
 	}
 
 	/**
+	 * An order made while the product was simple names the product and no variation. After the conversion WooCommerce's own
+	 * stock functions still reach the card's stock, now on the first variation: paying an order that was unpaid reduces it,
+	 * cancelling one that was paid restores it.
+	 */
+	public function test_an_order_made_before_the_conversion_still_moves_the_stock_of_its_card(): void {
+		$this->import( $this->card( 'E-RED', 'красный', 'g3', 1, '1100' ) );
+
+		$product_id = wc_get_product_id_by_sku( 'E-RED' );
+		$simple     = wc_get_product( $product_id );
+		$simple->set_status( 'publish' );
+		$simple->set_manage_stock( true );
+		$simple->set_stock_quantity( 10 );
+		$simple->save();
+
+		$paid   = $this->order( $product_id, 2 );
+		$unpaid = $this->order( $product_id, 3 );
+
+		wc_get_order( $paid )->update_status( 'processing' );
+		$this->assertEquals( 8, wc_get_product( $product_id )->get_stock_quantity(), 'the paid order took two from the simple product' );
+
+		$this->import( $this->card( 'E-BLACK', 'чёрный', 'g3', 2, '1300' ) );
+
+		$red_id = wc_get_product_id_by_sku( 'E-RED' );
+
+		$this->assertNotSame( $product_id, $red_id );
+		$this->assertEquals( 8, wc_get_product( $red_id )->get_stock_quantity(), 'the stock moved to the first variation' );
+		$this->assertFalse( wc_get_product( $product_id )->get_manage_stock() );
+		$this->assertSame( $red_id, array_values( wc_get_order( $unpaid )->get_items() )[0]->get_product()->get_id(), 'the old line is the red variation\'s' );
+
+		wc_get_order( $unpaid )->update_status( 'processing' );
+		$this->assertEquals( 5, wc_get_product( $red_id )->get_stock_quantity(), 'paying an order made before the conversion reduces the card\'s stock' );
+
+		wc_get_order( $paid )->update_status( 'cancelled' );
+		$this->assertEquals( 7, wc_get_product( $red_id )->get_stock_quantity(), 'cancelling one restores it' );
+	}
+
+	/**
 	 * A lone card of a group of several is already a variable product with one variation; the product takes every image of
 	 * its first card, and a later variation one image only.
 	 */
@@ -318,6 +375,24 @@ class GroupAssemblerTest extends TestCase {
 	 */
 	private function import( Card_Content $content ): string {
 		return $this->import->import( $this->account, $content, $this->fence, static function (): void {} );
+	}
+
+	/**
+	 * Makes an unpaid order for a product, as the shop's checkout does.
+	 *
+	 * @param int $product_id Product id.
+	 * @param int $quantity   Quantity.
+	 * @return int Order id.
+	 */
+	private function order( int $product_id, int $quantity ): int {
+		$order = wc_create_order();
+		$order->add_product( wc_get_product( $product_id ), $quantity );
+		$order->calculate_totals();
+		$order->save();
+
+		$this->orders[] = $order->get_id();
+
+		return $order->get_id();
 	}
 
 	/**
@@ -401,12 +476,21 @@ class GroupAssemblerTest extends TestCase {
 	}
 
 	/**
-	 * Deletes the products, the images and the notes of the test, and commits: the test case's rollback would bring them back.
+	 * Deletes the products, the orders, the images and the notes of the test, and commits: the test case's rollback would
+	 * bring them back.
 	 *
 	 * @return void
 	 */
 	private function delete_what_was_stored(): void {
 		global $wpdb;
+
+		foreach ( $this->orders as $order_id ) {
+			$order = wc_get_order( $order_id );
+
+			if ( $order ) {
+				$order->delete( true );
+			}
+		}
 
 		foreach ( array_unique( $this->articles ) as $article ) {
 			$product = wc_get_product( wc_get_product_id_by_sku( $article ) );
