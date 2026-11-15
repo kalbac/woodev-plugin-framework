@@ -234,6 +234,26 @@ class SettingsSectionTest extends TestCase {
 		$this->assertFalse( $with->is_tools(), 'still an ordinary section' );
 	}
 
+	public function test_actions_layout_is_empty_unless_the_row_is_asked_for_and_a_copy_keeps_it(): void {
+		$tool    = $this->make_tool( 'sync' );
+		$section = Settings_Section::create( 'export', 'Выгрузка', [] );
+		$row     = $section->with_actions( [ $tool ], Settings_Section::ACTIONS_ROW );
+
+		$this->assertSame( '', $section->get_actions_layout() );
+		$this->assertSame( '', $section->with_actions( [ $tool ] )->get_actions_layout() );
+		$this->assertSame( '', $section->with_actions( [ $tool ], 'columns' )->get_actions_layout() );
+		$this->assertSame( 'row', $row->get_actions_layout() );
+		$this->assertSame( 'row', $row->stacked( 'x' )->get_actions_layout(), 'later copies keep the layout' );
+	}
+
+	public function test_a_group_footnote_is_set_on_a_copy(): void {
+		$plain = Settings_Group::create( 'prices', 'Цены' );
+		$noted = $plain->with_footnote( '<p>Пример</p>' );
+
+		$this->assertSame( '', $plain->get_footnote() );
+		$this->assertSame( '<p>Пример</p>', $noted->get_footnote() );
+	}
+
 	public function test_with_actions_drops_a_non_conforming_entry_with_a_notice(): void {
 		Functions\expect( '_doing_it_wrong' )->once();
 

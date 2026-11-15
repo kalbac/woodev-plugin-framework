@@ -56,6 +56,11 @@ final class Settings_Group {
 	private ?Settings_Table $table = null;
 
 	/**
+	 * @var string optional HTML shown after the fields and before the actions (constrained at the schema boundary).
+	 */
+	private string $footnote = '';
+
+	/**
 	 * Use {@see self::create()} instead.
 	 *
 	 * @since 2.0.2
@@ -126,6 +131,30 @@ final class Settings_Group {
 		$copy->notice = $notice;
 
 		return $copy;
+	}
+
+	/**
+	 * A copy with a footnote drawn after the group's fields and before its buttons — a worked example of the
+	 * fields above it, say.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param string $footnote HTML; the registry passes it through `wp_kses_post()`.
+	 * @return self
+	 */
+	public function with_footnote( string $footnote ): self {
+		$copy           = clone $this;
+		$copy->footnote = $footnote;
+
+		return $copy;
+	}
+
+	/**
+	 * @since 2.1.6
+	 * @return string
+	 */
+	public function get_footnote(): string {
+		return $this->footnote;
 	}
 
 	/**

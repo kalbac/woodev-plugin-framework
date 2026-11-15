@@ -73,6 +73,7 @@ final class Diagnostics_Controller {
 	 */
 	public static function messages(): array {
 		return [
+			'loggingHeading'  => __( 'Логирование', 'woodev-plugin-framework' ),
 			'enableLogging'   => __( 'Включить логирование', 'woodev-plugin-framework' ),
 			'disableLogging'  => __( 'Выключить логирование', 'woodev-plugin-framework' ),
 			'loggingOn'       => __( 'Логирование включено: ниже подробная диагностика и отчёт для поддержки.', 'woodev-plugin-framework' ),

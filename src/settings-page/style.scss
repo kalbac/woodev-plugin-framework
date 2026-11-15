@@ -429,24 +429,138 @@ $settings-label-col: 200px;
 	}
 }
 
-// A tab of sections drawn one after another, each under its own heading (stacked-view.tsx).
+// A tab of sections drawn one after another, each in its own card (stacked-view.tsx); the heading is the card's first child.
 .woodev-stacked {
 	display: flex;
 	flex-direction: column;
 	gap: wd.$gap-lg * 2;
+}
 
-	&__title {
+.woodev-settings__card-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: wd.$gap-sm wd.$gap;
+	margin: 0 0 wd.$gap;
+	font-size: 16px;
+}
+
+.woodev-settings__card-subtitle {
+	color: wd.$muted;
+	font-size: 13px;
+	font-weight: 400;
+}
+
+// A worked example closing a group's card (Settings_Group::with_footnote()).
+.woodev-group__footnote {
+	margin-top: wd.$gap;
+	color: wd.$muted;
+	font-size: 13px;
+	line-height: 1.5;
+
+	p {
+		margin: 0;
+	}
+}
+
+// One account's operations as a single row of buttons (Settings_Section::ACTIONS_ROW, tools-block.js).
+.woodev-tools-row {
+	margin-top: wd.$gap-lg;
+
+	&__buttons {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: baseline;
-		gap: wd.$gap-sm wd.$gap;
-		margin: 0 0 wd.$gap;
-		font-size: 16px;
+		align-items: center;
+		gap: wd.$gap-sm;
+
+		// A button's name never wraps.
+		.components-button {
+			white-space: nowrap;
+		}
 	}
 
-	&__subtitle {
+	&__note {
+		margin: wd.$gap-xs 0 0;
 		color: wd.$muted;
 		font-size: 13px;
-		font-weight: 400;
 	}
+
+	// One result line for the whole row — the last clicked button's. Same tints as `.woodev-group__result`.
+	&__result {
+		margin-top: wd.$gap;
+		padding: wd.$gap-sm wd.$gap;
+		border-radius: wd.$radius-sm;
+		font-size: 13px;
+		line-height: 1.5;
+
+		&.is-ok {
+			color: wd.$ok-text;
+			background: rgba( 0, 163, 42, 0.12 );
+		}
+
+		&.is-error {
+			color: wd.$error-text;
+			background: rgba( 214, 54, 56, 0.12 );
+		}
+	}
+}
+
+// Read-only facts as label | value lines, with the same label column as a settings row (`.woodev-settings .woodev-field`).
+// Rows are separated by rhythm only, like the settings fields; long values wrap.
+.woodev-facts {
+	margin: 0;
+
+	dt {
+		margin: wd.$gap 0 0;
+		font-weight: 500;
+	}
+
+	dd {
+		margin: 0;
+		min-width: 0;
+		overflow-wrap: anywhere;
+		line-height: 1.5;
+	}
+
+	@media ( min-width: 783px ) {
+		display: grid;
+		grid-template-columns: $settings-label-col minmax( 0, 1fr );
+		column-gap: wd.$gap-lg;
+
+		// The first line of a value sits level with its label, like a settings row.
+		dt,
+		dd {
+			margin: 0;
+			padding: calc( #{ wd.$gap } + 6px ) 0 wd.$gap;
+		}
+	}
+}
+
+// The marketplace «Инструменты» and «Диагностика» pages: cards one under another, like the settings tabs.
+.woodev-tools-view,
+.woodev-diagnostics-view {
+	display: flex;
+	flex-direction: column;
+	gap: wd.$gap-lg;
+
+	// A card never grows past its content's width inside the flex column.
+	.woodev-settings__card {
+		min-width: 0;
+	}
+
+	// The column's gap spaces the notices; the settings page's own auto margin would shrink them to their text here.
+	.components-notice {
+		margin: 0;
+	}
+}
+
+// The preview of a tool sits inside its card, under the first button.
+.woodev-tools-view__preview {
+	margin: wd.$gap 0 0;
+}
+
+.woodev-diagnostics-view__report {
+	display: block;
+	width: 100%;
+	margin-top: wd.$gap;
 }

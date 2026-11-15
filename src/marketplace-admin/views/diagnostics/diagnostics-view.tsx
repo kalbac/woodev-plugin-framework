@@ -2,11 +2,13 @@
  * The «Диагностика» page: the operational state always, and the diagnostic sections and the support report while
  * «Логирование» is on.
  *
+ * Every section is a card of the settings page's look: the heading inside, the lines as `dl.woodev-facts`.
+ *
  * @package woodev-plugin-framework
  */
 
-import { useEffect, useMemo, useState } from '@wordpress/element';
-import { Button, Notice, Spinner } from '@wordpress/components';
+import { Fragment, useEffect, useMemo, useState } from '@wordpress/element';
+import { Button, Card, CardBody, Notice, Spinner } from '@wordpress/components';
 import type { PageViewProps } from '../../types';
 import { errorLines } from '../mappings/api';
 import { createDiagnosticsApi } from './api';
@@ -74,31 +76,40 @@ export function DiagnosticsView( { menu }: PageViewProps ) {
 	};
 
 	return (
-		<div className="woodev-diagnostics-view" style={ { paddingRight: 20 } }>
+		<div className="woodev-settings woodev-diagnostics-view">
 			{ notice && (
 				<Notice status={ notice.status } onRemove={ () => setNotice( null ) }>
 					{ notice.lines.join( ' ' ) }
 				</Notice>
 			) }
-			<p>{ enabled ? messages.loggingOn : messages.loggingOff }</p>
-			<Button variant={ enabled ? 'secondary' : 'primary' } onClick={ toggle }>
-				{ loggingSwitchLabel( enabled, messages ) }
-			</Button>
+			<Card className="woodev-settings__card">
+				<CardBody>
+					<h3 className="woodev-group__title">{ messages.loggingHeading }</h3>
+					<p className="woodev-group__desc">{ enabled ? messages.loggingOn : messages.loggingOff }</p>
+					<Button variant={ enabled ? 'secondary' : 'primary' } onClick={ toggle }>
+						{ loggingSwitchLabel( enabled, messages ) }
+					</Button>
+				</CardBody>
+			</Card>
 			<Sections sections={ state.operational } />
 			{ enabled && report && (
 				<>
 					<Sections sections={ report.diagnostic } />
-					<h2>{ messages.reportHeading }</h2>
-					<p>{ messages.reportHint }</p>
-					<Button variant="primary" onClick={ copy }>
-						{ messages.copyReport }
-					</Button>
-					<textarea
-						className="large-text code"
-						rows={ 18 }
-						readOnly
-						value={ report.report }
-					/>
+					<Card className="woodev-settings__card">
+						<CardBody>
+							<h3 className="woodev-group__title">{ messages.reportHeading }</h3>
+							<p className="woodev-group__desc">{ messages.reportHint }</p>
+							<Button variant="primary" onClick={ copy }>
+								{ messages.copyReport }
+							</Button>
+							<textarea
+								className="large-text code woodev-diagnostics-view__report"
+								rows={ 18 }
+								readOnly
+								value={ report.report }
+							/>
+						</CardBody>
+					</Card>
 				</>
 			) }
 		</div>
@@ -109,21 +120,19 @@ function Sections( { sections }: { sections: DiagnosticsSection[] } ) {
 	return (
 		<>
 			{ sections.map( ( section ) => (
-				<section key={ section.title }>
-					<h2>{ section.title }</h2>
-					<table className="widefat striped" style={ { maxWidth: 960 } }>
-						<tbody>
+				<Card key={ section.title } className="woodev-settings__card">
+					<CardBody>
+						<h3 className="woodev-group__title">{ section.title }</h3>
+						<dl className="woodev-facts">
 							{ section.lines.map( ( line ) => (
-								<tr key={ line.label }>
-									<th scope="row" style={ { width: '30%' } }>
-										{ line.label }
-									</th>
-									<td>{ line.value }</td>
-								</tr>
+								<Fragment key={ line.label }>
+									<dt>{ line.label }</dt>
+									<dd>{ line.value }</dd>
+								</Fragment>
 							) ) }
-						</tbody>
-					</table>
-				</section>
+						</dl>
+					</CardBody>
+				</Card>
 			) ) }
 		</>
 	);
