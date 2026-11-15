@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -24,6 +25,11 @@ defined( 'ABSPATH' ) || exit;
  *
  * Before those, a card the list does not hold, a card whose details did not agree with the list ({@see self::INCOMPLETE}) and a card
  * that is already being imported ({@see self::IMPORTING}) are left out.
+ *
+ * **Groups.** The cards of one marketplace group become one variable product ({@see Group_Assembler}), so the plan also counts
+ * the products behind the cards to create: a snapshot card names its group in `group` (`key`, '' or absent when it stands alone
+ * — the member {@see \Woodev\Framework\Marketplace\Catalog\Card_Content::group()} has), three colour cards of one group are
+ * **one** product, and a card whose group already has a product on the site adds none: it joins that product as a variation.
  *
  * @since 2.1.6
  */
@@ -73,14 +79,23 @@ final class Remote_Cards_Import_Plan {
 	private $sku_kind;
 
 	/**
+	 * Finds the product a group already has on the site: `function ( int $account_id, string $key ): int`, 0 when it has none.
+	 *
+	 * @var callable
+	 */
+	private $group_product;
+
+	/**
 	 * Creates the plan builder.
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param callable $sku_kind `function ( string $sku ): string`, one of the `SKU_*` kinds; {@see self::woocommerce_lookup()} in production.
+	 * @param callable $sku_kind      `function ( string $sku ): string`, one of the `SKU_*` kinds; {@see self::woocommerce_lookup()} in production.
+	 * @param callable $group_product `function ( int $account_id, string $key ): int`, the product a group already has, 0 for none; {@see Group_Assembler::lookup()} in production.
 	 */
-	public function __construct( callable $sku_kind ) {
-		$this->sku_kind = $sku_kind;
+	public function __construct( callable $sku_kind, callable $group_product ) {
+		$this->sku_kind      = $sku_kind;
+		$this->group_product = $group_product;
 	}
 
 	/**
@@ -112,18 +127,20 @@ final class Remote_Cards_Import_Plan {
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param array<int,array<string,mixed>|null> $cards     The snapshot's card of each selected row, null where the list no longer holds it, in the selection's order.
-	 * @param array<string,int>                   $linked    Product id by the article of every card that has a link.
-	 * @param string[]                            $importing Articles that have a pending or running import.
-	 * @return array{create:string[],link:string[],skipped:array<string,string[]>} Articles to create, articles to link, and the left-out articles by reason; a card the list no longer holds has no article and is an empty string under {@see self::NOT_IN_LIST}.
+	 * @param array<int,array<string,mixed>|null> $cards      The snapshot's card of each selected row, null where the list no longer holds it, in the selection's order.
+	 * @param array<string,int>                   $linked     Product id by the article of every card that has a link.
+	 * @param string[]                            $importing  Articles that have a pending or running import.
+	 * @param int                                 $account_id The account the cards belong to: a group is looked up among its products.
+	 * @return array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int} Articles to create, articles to link, and the left-out articles by reason; a card the list no longer holds has no article and is an empty string under {@see self::NOT_IN_LIST}. `products` is how many products the `create` articles make — the cards of one group make one — and `joined` how many of them become variations of products that are on the site already.
 	 */
-	public function build( array $cards, array $linked, array $importing ): array {
-		$plan = [
+	public function build( array $cards, array $linked, array $importing, int $account_id ): array {
+		$plan   = [
 			self::CREATE => [],
 			self::LINK   => [],
 			'skipped'    => [],
 		];
-		$seen = [];
+		$seen   = [];
+		$groups = [];
 
 		foreach ( $cards as $card ) {
 			$offer_id = null === $card ? '' : (string) $card['offer_id'];
@@ -135,6 +152,10 @@ final class Remote_Cards_Import_Plan {
 			$seen[ $offer_id ] = true;
 			$outcome           = null === $card ? self::NOT_IN_LIST : $this->outcome( $card, $linked, $importing );
 
+			if ( self::CREATE === $outcome ) {
+				$groups[] = Group_Assembler::key_of( (array) ( $card['group'] ?? [] ) );
+			}
+
 			if ( in_array( $outcome, [ self::CREATE, self::LINK ], true ) ) {
 				$plan[ $outcome ][] = $offer_id;
 			} else {
@@ -142,7 +163,45 @@ final class Remote_Cards_Import_Plan {
 			}
 		}
 
-		return $plan;
+		return array_merge( $plan, $this->products( $groups, $account_id ) );
+	}
+
+	/**
+	 * Counts the products the cards to create make. A card with no group makes one; the cards of one group make one between
+	 * them; a card whose group has a product on the site makes none and joins that product as a variation. The same group
+	 * decision as the job's ({@see Group_Assembler::key_of()} and the group's product lookup).
+	 *
+	 * @param string[] $groups     Group key of each card to create, '' for a card with no group.
+	 * @param int      $account_id Account id.
+	 * @return array{products:int,joined:int}
+	 */
+	private function products( array $groups, int $account_id ): array {
+		$count = [
+			'products' => 0,
+			'joined'   => 0,
+		];
+		$known = [];
+
+		foreach ( $groups as $key ) {
+			if ( '' === $key ) {
+				++$count['products'];
+				continue;
+			}
+
+			if ( ! isset( $known[ $key ] ) ) {
+				$known[ $key ] = (int) call_user_func( $this->group_product, $account_id, $key ) > 0 ? 'joined' : 'products';
+
+				if ( 'products' === $known[ $key ] ) {
+					++$count['products'];
+				}
+			}
+
+			if ( 'joined' === $known[ $key ] ) {
+				++$count['joined'];
+			}
+		}
+
+		return $count;
 	}
 
 	/**

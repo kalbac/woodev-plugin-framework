@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Jobs\Account_Job;
 use Woodev\Framework\Marketplace\Jobs\Backoff;
 use Woodev\Framework\Marketplace\Jobs\Import_Jobs;
@@ -219,8 +220,9 @@ final class ImportJobsTest extends Export_Test_Case {
 			new Card_Linker( $this->links() ),
 			$notes,
 			new Effective_Settings( Sqlite_Tables::MARKETPLACE_ID, [ $this, 'read_option' ] ),
-			function ( Account $account, Card_Content $content, bool $publish, bool $create_categories, callable $renew, ?callable $stored = null ): array {
-				return $this->write( (string) $content->card()['offer_id'], $renew, $stored );
+			new Group_Assembler( $this->links() ),
+			function ( Account $account, Card_Content $content, bool $create_categories ): \WC_Product {
+				return $this->start( (string) $content->card()['offer_id'] );
 			},
 			function ( Account $account, Card_Content $content, \WC_Product $product, bool $publish, callable $renew, ?callable $stored = null ): array {
 				$this->load_images( (string) $content->card()['offer_id'], $renew, $stored );
@@ -257,14 +259,13 @@ final class ImportJobsTest extends Export_Test_Case {
 	}
 
 	/**
-	 * Plays the product writer: the first save (the product, marked), then the images, then the final save (the marker goes).
+	 * Plays the first save of the product writer: the product exists, marked. The images and the final save (the marker goes)
+	 * are the writer's second half, which the importer calls next.
 	 *
-	 * @param string        $article Article.
-	 * @param callable      $renew   Claim renewal and budget check before an image.
-	 * @param callable|null $stored  Called after a new image was stored.
-	 * @return array{product:\WC_Product,warnings:string[]}
+	 * @param string $article Article.
+	 * @return \WC_Product
 	 */
-	private function write( string $article, callable $renew, ?callable $stored ): array {
+	private function start( string $article ): \WC_Product {
 		if ( isset( $this->refused[ $article ] ) ) {
 			throw new \RuntimeException( $this->refused[ $article ] );
 		}
@@ -284,14 +285,7 @@ final class ImportJobsTest extends Export_Test_Case {
 		$this->by_sku[ $article ] = $id;
 		$this->marked[ $id ]      = true;
 
-		$this->load_images( $article, $renew, $stored );
-
-		$this->marked[ $id ] = false;
-
-		return [
-			'product'  => $product,
-			'warnings' => [],
-		];
+		return $product;
 	}
 
 	/**

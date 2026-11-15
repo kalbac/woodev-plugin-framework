@@ -22,8 +22,8 @@ defined( 'ABSPATH' ) || exit;
  *   `is_created`, `archived`, `failed`, `status_text`, `oversize`), handed to `Card_Linker::link()` as it is;
  * - `$fields`: `name`, `description` (raw, the writer sanitises it), `prices` (Price_Pair|null), `weight_g`, `length_mm`,
  *   `width_mm`, `height_mm` (int|null), `primary_image` (string), `images` (string[]), `remote_category` (the descriptor
- *   `Mapping::remote_category()` stores), `category_path` (string[], root first) and `group` (reserved for groups: `key`, `size`,
- *   `aspects`). A missing member reads as unknown: '' for text, null for a number or price, [] for a list.
+ *   `Mapping::remote_category()` stores), `category_path` (string[], root first) and `group` (`key`, `size`, `aspects`:
+ *   {@see self::group()}). A missing member reads as unknown: '' for text, null for a number or price, [] for a list.
  *
  * @since 2.1.6
  */
@@ -190,7 +190,9 @@ final class Card_Content {
 	}
 
 	/**
-	 * Returns the group the card belongs to. Reserved for groups (card I7); the importer ignores it until then.
+	 * Returns the group the card belongs to: `key` names it ('' when the card stands alone), `size` is how many cards the marketplace
+	 * says it has, and `aspects` (name => value, e.g. `Цвет => красный`) is what tells this card apart inside it. The cards of one
+	 * group become one variable product ({@see \Woodev\Framework\Marketplace\Flows\Group_Assembler}).
 	 *
 	 * @since 2.1.6
 	 *

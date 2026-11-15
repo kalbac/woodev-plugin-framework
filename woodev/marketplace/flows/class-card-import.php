@@ -34,6 +34,17 @@ defined( 'ABSPATH' ) || exit;
  * product (row 4); cut between the final save and the link, the SKU has no marker and the next run links it (row 3); a link
  * refused because the claim was lost stops the run with {@see Claim_Lost}, and the retry meets row 3.
  *
+ * **Groups** ({@see Group_Assembler}). The cards of one marketplace group become one variable product, and the rows above stay as
+ * they are — a card is still found by its article, which is the SKU of a simple product or of a variation:
+ *
+ * - row 5, the group has no product yet → the card is written as a simple product exactly like a card with no group; right
+ *   after the writer's first save the product is marked as the group's, and once it is linked a product of a group of several
+ *   cards becomes variable in place, the card being its first variation;
+ * - row 5, the group has a product → that product is made variable if it is not yet, and the card becomes one more variation:
+ *   a first save with the SKU and the marker, then {@see Product_Writer::complete()}, then the link with the product as parent;
+ * - row 4 on a marked variation → the same, from the second step; row 3 on a finished variation → linked with its parent id;
+ * - a group whose first product is still half-made (its own import was cut) is not built upon: the card is skipped with a note.
+ *
  * What the merchant should know goes into an import note ({@see Link_Report_Store::set_import_note()}); a successful import
  * clears the card's note. This class never talks to the marketplace; the card is already read.
  *
@@ -74,18 +85,25 @@ final class Card_Import {
 	private $settings;
 
 	/**
-	 * Creates a product: {@see Product_Writer::write()}.
+	 * Groups of cards.
 	 *
-	 * @var callable
+	 * @var Group_Assembler
 	 */
-	private $write;
+	private $groups;
 
 	/**
-	 * Finishes a product an earlier run started: {@see Product_Writer::complete()}.
+	 * Makes the first save of a new product: {@see Product_Writer::start()}.
 	 *
 	 * @var callable
 	 */
-	private $resume;
+	private $start;
+
+	/**
+	 * Fills a started product and saves it for good: {@see Product_Writer::complete()}.
+	 *
+	 * @var callable
+	 */
+	private $complete;
 
 	/**
 	 * Creates the importer.
@@ -96,16 +114,18 @@ final class Card_Import {
 	 * @param Card_Linker        $linker   Linker.
 	 * @param Link_Report_Store  $notes    Import notes.
 	 * @param Effective_Settings $settings The shop's import settings.
-	 * @param callable           $write    `function ( Account, Card_Content, bool $publish, bool $create_categories, callable $renew, ?callable $stored ): array{product:\WC_Product,warnings:string[]}`, `Product_Writer::write()`.
-	 * @param callable           $resume   `function ( Account, Card_Content, \WC_Product, bool $publish, callable $renew, ?callable $stored ): string[]`, `Product_Writer::complete()`.
+	 * @param Group_Assembler    $groups   Assembles the cards of one group into one variable product.
+	 * @param callable           $start    `function ( Account, Card_Content, bool $create_categories ): \WC_Product`, `Product_Writer::start()`.
+	 * @param callable           $complete `function ( Account, Card_Content, \WC_Product, bool $publish, callable $renew, ?callable $stored ): string[]`, `Product_Writer::complete()`.
 	 */
-	public function __construct( Wpdb_Link_Store $links, Card_Linker $linker, Link_Report_Store $notes, Effective_Settings $settings, callable $write, callable $resume ) {
+	public function __construct( Wpdb_Link_Store $links, Card_Linker $linker, Link_Report_Store $notes, Effective_Settings $settings, Group_Assembler $groups, callable $start, callable $complete ) {
 		$this->links    = $links;
 		$this->linker   = $linker;
 		$this->notes    = $notes;
 		$this->settings = $settings;
-		$this->write    = $write;
-		$this->resume   = $resume;
+		$this->groups   = $groups;
+		$this->start    = $start;
+		$this->complete = $complete;
 	}
 
 	/**
@@ -186,7 +206,7 @@ final class Card_Import {
 	}
 
 	/**
-	 * Row 4: finishes the product an earlier run started, then links it.
+	 * Row 4: finishes the product an earlier run started, then links it. A marked variation is a card that was joining its group.
 	 *
 	 * @param Account       $account Account.
 	 * @param Card_Content  $content Card.
@@ -197,13 +217,15 @@ final class Card_Import {
 	 * @return string
 	 */
 	private function resume( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
-		$warnings = (array) call_user_func( $this->resume, $account, $content, $product, $this->settings->import_publish(), $renew, $stored );
+		if ( $product->get_parent_id() > 0 ) {
+			return $this->finish_variation( $account, $content, $product, $fence, $renew, $stored );
+		}
 
-		return $this->link( $account, $content, $product, $fence, self::CREATED, $warnings );
+		return $this->finish( $account, $content, $product, $fence, $renew, $stored );
 	}
 
 	/**
-	 * Row 5: creates the product, then links it.
+	 * Row 5: creates the product, then links it. A card whose group already has a product becomes a variation of that product.
 	 *
 	 * @param Account       $account Account.
 	 * @param Card_Content  $content Card.
@@ -213,13 +235,85 @@ final class Card_Import {
 	 * @return string
 	 */
 	private function create( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
-		$written = call_user_func( $this->write, $account, $content, $this->settings->import_publish(), $this->settings->import_create_categories(), $renew, $stored );
+		$group_product = $this->groups->product_of( $account, $content );
 
-		return $this->link( $account, $content, $written['product'], $fence, self::CREATED, (array) $written['warnings'] );
+		if ( null !== $group_product ) {
+			return $this->join( $account, $content, $group_product, $fence, $renew, $stored );
+		}
+
+		$product = call_user_func( $this->start, $account, $content, $this->settings->import_create_categories() );
+
+		return $this->finish( $account, $content, $product, $fence, $renew, $stored );
 	}
 
 	/**
-	 * Writes the link and the note the merchant reads.
+	 * Fills a started product of the card's own and links it. The group's mark goes in first, before the images: from then on a
+	 * later card of the group finds this product instead of making a second one.
+	 *
+	 * @param Account       $account Account.
+	 * @param Card_Content  $content Card.
+	 * @param \WC_Product   $product The started product.
+	 * @param Claim_Fence   $fence   The run's claim.
+	 * @param callable      $renew   Extends the claim.
+	 * @param callable|null $stored Called when a new image was stored.
+	 * @return string
+	 */
+	private function finish( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
+		$this->groups->remember( $account, $product, $content );
+
+		$warnings = (array) call_user_func( $this->complete, $account, $content, $product, $this->settings->import_publish(), $renew, $stored );
+
+		return $this->link( $account, $content, $product, $fence, self::CREATED, $warnings );
+	}
+
+	/**
+	 * Row 5 for a card whose group has a product: the product becomes variable when it is not yet, and the card joins it.
+	 *
+	 * @param Account       $account       Account.
+	 * @param Card_Content  $content       Card.
+	 * @param \WC_Product   $group_product The product of the card's group.
+	 * @param Claim_Fence   $fence         The run's claim.
+	 * @param callable      $renew         Extends the claim.
+	 * @param callable|null $stored        Called when a new image was stored.
+	 * @return string
+	 */
+	private function join( Account $account, Card_Content $content, \WC_Product $group_product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
+		if ( Product_Writer::is_marked( $group_product, $account->adapter_id() ) ) {
+			/* translators: %s: article of another card of the same group */
+			$text = sprintf( __( 'Импорт другой карточки этой группы (артикул %s) не завершён. Импортируйте сначала её, затем повторите.', 'woodev-plugin-framework' ), (string) $group_product->get_sku( 'edit' ) );
+
+			return $this->skipped( $account, (string) $content->card()['offer_id'], $text );
+		}
+
+		$parent    = $this->groups->convert( $account, $group_product, $fence );
+		$variation = $this->groups->start_variation( $account, $parent, $content );
+
+		return $this->finish_variation( $account, $content, $variation, $fence, $renew, $stored );
+	}
+
+	/**
+	 * Fills the variation of a card and links it, the variable product being the link's parent.
+	 *
+	 * @param Account       $account   Account.
+	 * @param Card_Content  $content   Card.
+	 * @param \WC_Product   $variation The started variation.
+	 * @param Claim_Fence   $fence     The run's claim.
+	 * @param callable      $renew     Extends the claim.
+	 * @param callable|null $stored    Called when a new image was stored.
+	 * @return string
+	 */
+	private function finish_variation( Account $account, Card_Content $content, \WC_Product $variation, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
+		$this->groups->offer( $variation, $content );
+
+		// A variation is switched on or off, never a draft: the writer publishes it and the assembler holds it back when it must.
+		$warnings = (array) call_user_func( $this->complete, $account, Group_Assembler::variation_content( $content ), $variation, true, $renew, $stored );
+		$warnings = array_merge( $warnings, $this->groups->hold_back( $variation, $this->settings->import_publish() ) );
+
+		return $this->link( $account, $content, $variation, $fence, self::CREATED, $warnings );
+	}
+
+	/**
+	 * Writes the link and the note the merchant reads, then lets the product take its place in the card's group.
 	 *
 	 * @param Account      $account  Account.
 	 * @param Card_Content $content  Card.
@@ -247,6 +341,8 @@ final class Card_Import {
 		} else {
 			$this->notes->set_import_note( $account->id(), $article, implode( ' ', $warnings ) );
 		}
+
+		$this->groups->settle( $account, $product, $content, $fence );
 
 		return $done;
 	}

@@ -70,11 +70,19 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	 */
 	protected $sku_kinds = [];
 
+	/**
+	 * The product a group already has on the site, by `{account id}:{group key}`; a group not listed has none.
+	 *
+	 * @var array<string,int>
+	 */
+	protected $group_products = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->importable = false;
 		$this->sku_kinds  = [];
+		$this->group_products = [];
 
 		// The queue as the import scheduler reads it: the pending and running actions of a hook, as objects with their arguments.
 		Functions\when( 'as_get_scheduled_actions' )->alias(
@@ -324,7 +332,7 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	}
 
 	/**
-	 * The import plan over the harness' shop: {@see self::$sku_kinds} answers the SKU lookup.
+	 * The import plan over the harness' shop: {@see self::$sku_kinds} answers the SKU lookup, {@see self::$group_products} the group lookup.
 	 *
 	 * @return Remote_Cards_Import_Plan
 	 */
@@ -332,6 +340,9 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 		return new Remote_Cards_Import_Plan(
 			function ( string $sku ): string {
 				return $this->sku_kinds[ $sku ] ?? Remote_Cards_Import_Plan::SKU_NONE;
+			},
+			function ( int $account_id, string $key ): int {
+				return $this->group_products[ $account_id . ':' . $key ] ?? 0;
 			}
 		);
 	}

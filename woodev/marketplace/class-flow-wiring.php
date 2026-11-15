@@ -29,6 +29,7 @@ use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
+use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Import_Category;
 use Woodev\Framework\Marketplace\Flows\Label_Download;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
@@ -465,7 +466,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 				new Wpdb_Profile_Store( $this->db, $this->table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
 				new Shop_Price_Writer( $this->contexts )
 			);
-			$import    = new Card_Import( $this->links, new Card_Linker( $this->links ), $notes, Effective_Settings::for_adapter( $adapter->id() ), [ $writer, 'write' ], [ $writer, 'complete' ] );
+			$import    = new Card_Import( $this->links, new Card_Linker( $this->links ), $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links ), [ $writer, 'start' ], [ $writer, 'complete' ] );
 
 			( new Import_Jobs( $this->gate, $adapter, $import, $notes, $scheduler, $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
 

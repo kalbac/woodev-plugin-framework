@@ -195,6 +195,88 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$this->assertNull( $this->links()->find_by_offer_id( $this->account_id, 'NEW-1' ), 'A preview writes no link.' );
 	}
 
+	/**
+	 * A snapshot card of the colour group.
+	 *
+	 * @param string              $offer_id Article.
+	 * @param array<string,mixed> $more     Keys to override.
+	 * @return array<string,mixed>
+	 */
+	private function colour( string $offer_id, array $more = [] ): array {
+		$group = [
+			'key'  => 'model-7',
+			'size' => 3,
+		];
+
+		return $this->card( $offer_id, '', array_merge( [ 'group' => $group ], $more ) );
+	}
+
+	public function test_the_preview_counts_the_cards_of_one_group_as_one_product(): void {
+		$this->put_snapshot( [ $this->colour( 'RED' ), $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
+
+		$plan = $this->preview( 'import_selected', [ 'RED', 'BLACK', 'GREEN' ] );
+
+		$this->assertSame( [ 3, 3, 0 ], [ $plan['requested'], $plan['eligible'], $plan['skipped'] ], 'three cards are imported' );
+		$this->assertStringContainsString( 'Будет создано товаров: 1.', $plan['scope']['sentence'], 'as one product' );
+		$this->assertStringContainsString( 'Карточки одной группы станут вариантами одного товара.', $plan['scope']['sentence'] );
+
+		$mixed = $this->preview( 'import_selected', [ 'RED', 'SOLO', 'BLACK', 'GREEN' ] );
+
+		$this->assertStringContainsString( 'Будет создано товаров: 2.', $mixed['scope']['sentence'], 'a card with no group is a product of its own' );
+
+		$one = $this->preview( 'import', [ 'RED' ] );
+
+		$this->assertStringContainsString( 'Будет создано товаров: 1.', $one['scope']['sentence'] );
+		$this->assertStringNotContainsString( 'вариантами', $one['scope']['sentence'], 'one card of a group is simply one product' );
+
+		$body = $this->apply( 'import_selected', [ 'RED', 'BLACK', 'GREEN' ] );
+
+		$this->assertSame( 3, $body['accepted'] );
+		$this->assertSame( [ 'RED', 'BLACK', 'GREEN' ], $this->queued_offers(), 'every card of the group is queued: the job assembles them' );
+	}
+
+	public function test_a_card_whose_group_has_a_product_on_the_site_adds_no_product(): void {
+		$this->group_products[ $this->account_id . ':model-7' ] = 900;
+		$this->put_snapshot( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
+
+		$plan = $this->preview( 'import_selected', [ 'BLACK', 'GREEN', 'SOLO' ] );
+
+		$this->assertSame( 3, $plan['eligible'] );
+		$this->assertStringContainsString( 'Будет создано товаров: 1.', $plan['scope']['sentence'], 'only the card with no group makes a product' );
+		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 2.', $plan['scope']['sentence'] );
+
+		$joining = $this->preview( 'import', [ 'BLACK' ] );
+
+		$this->assertTrue( $joining['can_apply'] );
+		$this->assertStringNotContainsString( 'Будет создано', $joining['scope']['sentence'] );
+		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 1.', $joining['scope']['sentence'] );
+	}
+
+	public function test_only_the_cards_the_import_takes_are_counted_in_a_group(): void {
+		$this->add_link( $this->add_product( [ 'id' => 41, 'sku' => 'RED' ] ), Link_Record::STATE_CREATED, [ 'offer_id' => 'RED' ] );
+		$this->put_snapshot(
+			[
+				$this->colour( 'RED' ),
+				$this->colour( 'BLACK' ),
+				$this->colour( 'OLD', [ 'archived' => true, 'state' => 'archived' ] ),
+				$this->colour( 'CUP', [ 'group' => [ 'key' => 'model-8', 'size' => 2 ] ] ),
+			]
+		);
+
+		$plan = $this->preview( 'import_selected', [ 'RED', 'BLACK', 'OLD', 'CUP' ] );
+
+		$this->assertSame( [ 4, 2, 2 ], [ $plan['requested'], $plan['eligible'], $plan['skipped'] ] );
+		$this->assertStringContainsString( 'Будет создано товаров: 2.', $plan['scope']['sentence'], 'the black card and the card of another group: one product each' );
+		$this->assertStringNotContainsString( 'вариантами', $plan['scope']['sentence'] );
+		$this->assertSame(
+			[
+				'Уже на сайте'                       => 1,
+				'Карточка в архиве — не импортируем' => 1,
+			],
+			$this->groups( $plan )
+		);
+	}
+
 	public function test_a_card_the_list_no_longer_holds_is_left_out_with_its_reason(): void {
 		$this->put_snapshot( [ $this->card( 'NEW-1' ) ] );
 

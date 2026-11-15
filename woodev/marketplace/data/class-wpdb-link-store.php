@@ -1055,6 +1055,37 @@ final class Wpdb_Link_Store implements Link_Store {
 	}
 
 	/**
+	 * Moves an offer row to another product, whole: its card, its identifiers, its switches and its overrides stay as they are.
+	 * The import uses it when a simple product becomes a variable one and its card is from then on the product's first variation
+	 * ({@see \Woodev\Framework\Marketplace\Flows\Group_Assembler}). Nothing is sent to the marketplace.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param int              $link_id       Link id of an offer row.
+	 * @param int              $wc_product_id Product or variation the row belongs to from now on; it must have no row in that account.
+	 * @param int              $wc_parent_id  Its parent product id, 0 for a simple product.
+	 * @param Claim_Fence|null $fence         The account claim the run holds, or null for a row of an account the run does not hold.
+	 * @return bool False when no row was moved: the claim was lost, or the row is gone or is not an offer row.
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function move_offer( int $link_id, int $wc_product_id, int $wc_parent_id, ?Claim_Fence $fence = null ): bool {
+		list( $fence_sql, $fence_args ) = $this->fence_clause( $fence );
+
+		$changed = $this->db->query(
+			$this->db->prepare(
+				'UPDATE %i SET wc_product_id = %d, wc_parent_id = %d, updated_at = %s WHERE link_id = %d AND kind = %s' . $fence_sql, // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge( [ $this->table, $wc_product_id, $wc_parent_id, $this->format_time( $this->now() ), $link_id, Link_Record::KIND_OFFER ], $fence_args )
+			)
+		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above; own table.
+
+		if ( false === $changed ) {
+			throw new \RuntimeException( 'A link could not be moved to another product: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		return 1 === $changed;
+	}
+
+	/**
 	 * Stores the per-product settings of the product tab. Only these columns can be written here: the two switches, the oversize
 	 * flag, the warehouse override and the explicit mapping. The price override has its own writer ({@see self::set_price_override()}).
 	 *
