@@ -1,5 +1,6 @@
 /**
- * «Check the products of this category»: runs the batches and prints the server's sentences.
+ * «Check the products of this category»: a card of its own under the mapping form; runs the batches and prints the
+ * server's sentences.
  *
  * @package woodev-plugin-framework
  */
@@ -7,6 +8,7 @@
 import { useState } from '@wordpress/element';
 import { Button } from '@wordpress/components';
 import { errorLines, type MappingsApi } from './api';
+import { FormCard } from './form-parts';
 import type { Messages } from './types';
 
 interface Props {
@@ -51,21 +53,23 @@ export function CheckReport( { api, messages, mappingId }: Props ) {
 	};
 
 	return (
-		<div>
-			<Button variant="secondary" onClick={ run } disabled={ running } isBusy={ running }>
+		<FormCard title={ messages.checkHeading } className="woodev-mapping-check">
+			<p className="woodev-group__desc">{ messages.checkHelp }</p>
+			<Button __next40pxDefaultSize variant="secondary" onClick={ run } disabled={ running } isBusy={ running }>
 				{ running ? messages.checking : messages.check }
 			</Button>
-			<p className="description">{ messages.checkHelp }</p>
 			{ report && (
-				<div role="status">
+				<div className="woodev-mapping-check__report" role="status">
 					<p>{ report.text }</p>
-					<ul>
-						{ report.groups.map( ( group ) => (
-							<li key={ group.text }>{ group.text }</li>
-						) ) }
-					</ul>
+					{ report.groups.length > 0 && (
+						<ul>
+							{ report.groups.map( ( group ) => (
+								<li key={ group.text }>{ group.text }</li>
+							) ) }
+						</ul>
+					) }
 				</div>
 			) }
-		</div>
+		</FormCard>
 	);
 }

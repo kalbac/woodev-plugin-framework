@@ -11109,6 +11109,74 @@ msgstr ""
 
 #: marketplace/admin/pages/products/class-remote-cards-definition.php:343
 msgid "Карточек"
+
+#: marketplace/admin/pages/mappings/class-profile-choices.php:140
+msgid "Описание"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-choices.php:141
+msgid "Главное фото"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-choices.php:142
+msgid "Дополнительные фото"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:149
+msgid "← Все сопоставления"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:150
+msgid "← Все профили"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:151
+msgid "Новое сопоставление"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:152
+msgid "Новый профиль"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:156
+msgid "Профиль"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:182
+msgid "Категории"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:211
+msgid "Проверка товаров"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:230
+msgid "Размеры (Ш × В × Г)"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:266
+msgid "мм"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:267
+msgid "см"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:268
+msgid "м"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:269
+msgid "кг"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:270
+msgid "г"
+msgstr ""
+
+#. translators: %s: unit of measure the shop uses, e.g. «см» or «кг».
+#: marketplace/admin/pages/mappings/class-view-config.php:275
+msgid "как в магазине (%s)"
 msgstr ""
 
 #. translators: %s: article of another card of the same group

@@ -1,30 +1,32 @@
 /**
- * The «Сопоставление» page: two tabs (mappings, profiles), each a list beside its editor.
+ * The «Сопоставление» page: two tabs (mappings, profiles). Each shows its list; opening a record, or adding one,
+ * replaces the list with the record's form, and «← Все …» brings the list back. Where the page is lives in the URL
+ * ({@see ./route}).
+ *
+ * The page looks like the settings: folder tabs, white cards, the settings stylesheet (`.woodev-settings`).
  *
  * @package woodev-plugin-framework
  */
 
+import './style.scss';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
-import { Button, Spinner, TabPanel } from '@wordpress/components';
+import { Button, Spinner } from '@wordpress/components';
+import { FolderTabs } from '../../../components/folder-tabs';
 import type { PageViewProps } from '../../types';
-import { createApi, errorLines, type MappingsApi } from './api';
+import { createApi, errorLines } from './api';
 import { MappingEditor } from './mapping-editor';
+import { MappingsList, ProfilesList } from './mapping-lists';
 import { Notices, type NoticeState } from './notices';
 import { ProfileEditor } from './profile-editor';
+import { selectionArgument, useRoute, type Selection } from './route';
 import type { MappingsState } from './types';
 
-/** `null` is a new record; a number is a saved one; `undefined` is nothing chosen yet. */
-type Selection = number | null | undefined;
-
-const SIDEBAR_WIDTH = 320;
-
-export function MappingsView( { menu }: PageViewProps ) {
+export function MappingsView( { page, menu, query }: PageViewProps ) {
 	const api = useMemo( () => createApi( menu.pluginId ), [ menu.pluginId ] );
+	const route = useRoute( query );
 	const [ state, setState ] = useState< MappingsState | null >( null );
 	const [ failure, setFailure ] = useState< NoticeState | null >( null );
 	const [ notice, setNotice ] = useState< NoticeState | null >( null );
-	const [ mapping, setMapping ] = useState< Selection >( undefined );
-	const [ profile, setProfile ] = useState< Selection >( undefined );
 
 	const load = useCallback( () => {
 		api.state()
@@ -43,167 +45,97 @@ export function MappingsView( { menu }: PageViewProps ) {
 	}
 
 	const { messages } = state;
+	const { tab, mapping, profile, go } = route;
 	const done = ( sentence: string, extra: string[] = [] ) => {
 		setNotice( { status: 'success', lines: [ sentence, ...extra ] } );
 		load();
 	};
+	/** A move the merchant made by hand: what the last action said is no longer news. */
+	const open = ( patch: Record< string, string | undefined > ) => {
+		setNotice( null );
+		go( patch );
+	};
 
-	const tabs = [
-		{ name: 'mappings', title: messages.tabMappings },
-		{ name: 'profiles', title: messages.tabProfiles },
-	];
+	const pickMapping = ( selection: Selection ) => open( { mapping: selectionArgument( selection ) } );
+	const pickProfile = ( selection: Selection ) => open( { profile: selectionArgument( selection ) } );
 
 	return (
-		<div className="woodev-mappings-view" style={ { paddingRight: 20 } }>
+		<div className="woodev-mappings-view woodev-settings">
 			<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
-			<TabPanel tabs={ tabs } onSelect={ () => setNotice( null ) }>
-				{ ( tab ) =>
-					tab.name === 'mappings' ? (
-						<MappingsTab
-							api={ api }
-							state={ state }
-							selection={ mapping }
-							onSelect={ setMapping }
-							onSaved={ ( id, notices ) => {
-								setMapping( id );
-								done( messages.savedMapping, notices );
-							} }
-							onCopied={ ( id ) => {
-								setMapping( id );
-								done( messages.copiedMapping );
-							} }
-							onDeleted={ () => {
-								setMapping( undefined );
-								done( messages.deletedMapping );
-							} }
-						/>
+			<FolderTabs
+				label={ page.title }
+				tabs={ [
+					{ id: 'mappings', label: messages.tabMappings },
+					{ id: 'profiles', label: messages.tabProfiles },
+				] }
+				active={ tab }
+				// The other tab starts from its list, whatever was open here.
+				onSelect={ ( id ) => open( { tab: id === 'profiles' ? 'profiles' : undefined, mapping: undefined, profile: undefined } ) }
+			/>
+			<div className="woodev-mappings-body">
+				{ tab === 'mappings' ? (
+					mapping === undefined ? (
+						<MappingsList state={ state } onOpen={ pickMapping } />
 					) : (
-						<ProfilesTab
+						<>
+							<Back label={ messages.backToMappings } onClick={ () => pickMapping( undefined ) } />
+							<MappingEditor
+								key={ mapping ?? 'new' }
+								api={ api }
+								state={ state }
+								mappingId={ mapping }
+								onSaved={ ( id, notices ) => {
+									// A new record's «new» entry is replaced, so Back from the saved form is the list; a saved one stays put.
+									if ( id !== mapping ) {
+										go( { mapping: String( id ) }, mapping === null );
+									}
+									done( messages.savedMapping, notices );
+								} }
+								onCopied={ ( id ) => {
+									go( { mapping: String( id ) } );
+									done( messages.copiedMapping );
+								} }
+								onDeleted={ () => {
+									go( { mapping: undefined }, true );
+									done( messages.deletedMapping );
+								} }
+							/>
+						</>
+					)
+				) : profile === undefined ? (
+					<ProfilesList state={ state } onOpen={ pickProfile } />
+				) : (
+					<>
+						<Back label={ messages.backToProfiles } onClick={ () => pickProfile( undefined ) } />
+						<ProfileEditor
+							key={ profile ?? 'new' }
 							api={ api }
 							state={ state }
-							selection={ profile }
-							onSelect={ setProfile }
+							profileId={ profile }
 							onSaved={ ( id ) => {
-								setProfile( id );
+								if ( id !== profile ) {
+									go( { profile: String( id ) }, profile === null );
+								}
 								done( messages.savedProfile );
 							} }
 							onDeleted={ () => {
-								setProfile( undefined );
+								go( { profile: undefined }, true );
 								done( messages.deletedProfile );
 							} }
 						/>
-					)
-				}
-			</TabPanel>
-		</div>
-	);
-}
-
-interface MappingsTabProps {
-	api: MappingsApi;
-	state: MappingsState;
-	selection: Selection;
-	onSelect: ( selection: Selection ) => void;
-	onSaved: ( id: number, notices: string[] ) => void;
-	onCopied: ( id: number ) => void;
-	onDeleted: () => void;
-}
-
-function MappingsTab( { api, state, selection, onSelect, onSaved, onCopied, onDeleted }: MappingsTabProps ) {
-	const { messages, mappings } = state;
-
-	return (
-		<div style={ { display: 'flex', gap: 24, alignItems: 'flex-start', marginTop: 16 } }>
-			<div style={ { width: SIDEBAR_WIDTH, flexShrink: 0 } }>
-				<Button variant="primary" onClick={ () => onSelect( null ) }>
-					{ messages.addMapping }
-				</Button>
-				{ mappings.length === 0 && <p className="description">{ messages.emptyMappings }</p> }
-				<ul>
-					{ mappings.map( ( item ) => (
-						<li key={ item.id }>
-							<Button
-								variant="link"
-								aria-current={ selection === item.id }
-								onClick={ () => onSelect( item.id ) }
-							>
-								{ item.name }
-							</Button>
-							<div className="description">
-								{ `${ item.category_label || messages.noCategory } · ` +
-									`${ messages.columnProducts }: ${ item.products }` }
-							</div>
-						</li>
-					) ) }
-				</ul>
-			</div>
-			<div style={ { flex: 1, minWidth: 0 } }>
-				{ selection === undefined ? (
-					<p className="description">{ messages.chooseMapping }</p>
-				) : (
-					<MappingEditor
-						key={ selection ?? 'new' }
-						api={ api }
-						state={ state }
-						mappingId={ selection }
-						onSaved={ onSaved }
-						onCopied={ onCopied }
-						onDeleted={ onDeleted }
-					/>
+					</>
 				) }
 			</div>
 		</div>
 	);
 }
 
-interface ProfilesTabProps {
-	api: MappingsApi;
-	state: MappingsState;
-	selection: Selection;
-	onSelect: ( selection: Selection ) => void;
-	onSaved: ( id: number ) => void;
-	onDeleted: () => void;
-}
-
-function ProfilesTab( { api, state, selection, onSelect, onSaved, onDeleted }: ProfilesTabProps ) {
-	const { messages, profiles } = state;
-
+function Back( { label, onClick }: { label: string; onClick: () => void } ) {
 	return (
-		<div style={ { display: 'flex', gap: 24, alignItems: 'flex-start', marginTop: 16 } }>
-			<div style={ { width: SIDEBAR_WIDTH, flexShrink: 0 } }>
-				<Button variant="primary" onClick={ () => onSelect( null ) }>
-					{ messages.addProfile }
-				</Button>
-				{ profiles.length === 0 && <p className="description">{ messages.emptyProfiles }</p> }
-				<ul>
-					{ profiles.map( ( item ) => (
-						<li key={ item.id }>
-							<Button
-								variant="link"
-								aria-current={ selection === item.id }
-								onClick={ () => onSelect( item.id ) }
-							>
-								{ item.name }
-							</Button>
-							<div className="description">{ `${ messages.columnMappings }: ${ item.mappings }` }</div>
-						</li>
-					) ) }
-				</ul>
-			</div>
-			<div style={ { flex: 1, minWidth: 0 } }>
-				{ selection === undefined ? (
-					<p className="description">{ messages.chooseProfile }</p>
-				) : (
-					<ProfileEditor
-						key={ selection ?? 'new' }
-						api={ api }
-						state={ state }
-						profileId={ selection }
-						onSaved={ onSaved }
-						onDeleted={ onDeleted }
-					/>
-				) }
-			</div>
-		</div>
+		<p className="woodev-mappings-back">
+			<Button variant="link" onClick={ onClick }>
+				{ label }
+			</Button>
+		</p>
 	);
 }

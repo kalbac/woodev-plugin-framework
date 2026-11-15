@@ -2,20 +2,20 @@
  * Records view: every manifest page of `kind: records` renders the generic records shell (`src/admin-records/`) over
  * one of the page's tables, owned by the page's marketplace plugin.
  *
- * A page that declares several tables (the products page: the shop's products and the marketplace's cards) shows a
- * switch between them. The labels come from PHP (`tableLabels`); the active table is a URL argument, accepted only when
- * it names one of the page's own tables; and a switch starts the other table from scratch — its own filters, page and
+ * A page that declares several tables (the products page: the shop's products and the marketplace's cards) shows the
+ * folder tabs of the settings between them. The labels come from PHP (`tableLabels`); the active table is a URL argument,
+ * accepted only when it names one of the page's own tables; and a switch starts the other table from scratch — its own filters, page and
  * sort, no expanded row, no selection, no open dialog — so nothing of the table that was left leaks into the new one.
  *
  * @package woodev-plugin-framework
  */
 
-import { Button } from '@wordpress/components';
 import { useMemo } from '@wordpress/element';
 import { addFilter } from '@wordpress/hooks';
 import { RecordsTable, useActionExtensions } from '../../../admin-records';
 import { createActivityExtensions } from '../../../admin-records/activity';
 import { getNavigate } from '../../../admin-records/wc-runtime';
+import { FolderTabs } from '../../../components/folder-tabs';
 import { PAGE_VIEW_FILTER } from '../../page-view';
 import type { ManifestPage, PageView, PageViewProps } from '../../types';
 
@@ -27,10 +27,6 @@ export const TABLE_ARGUMENT = 'table';
  * the table argument itself. Every other argument is the left table's (its filters, page, sort, search).
  */
 const SURVIVING_ARGUMENTS = [ 'page', 'path', 'account', TABLE_ARGUMENT ];
-
-const STYLES = {
-	switcher: { display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '0 0 16px' },
-} as const;
 
 /**
  * The table the URL asks for, when the page has it; the page's first table for anything else (an argument that names no
@@ -87,25 +83,17 @@ function TableView( { page, menu, query, table }: PageViewProps & { table: strin
 	);
 }
 
+/** The folder tabs of the settings, one per table; a click writes the table to the URL (see {@see switchPatch}). */
 function TableSwitcher( { page, query, active }: { page: ManifestPage; query: Record< string, string >; active: string } ) {
 	return (
-		<nav className="woodev-marketplace-tables" aria-label={ page.title } style={ STYLES.switcher }>
-			{ page.tables.map( ( table ) => (
-				<Button
-					key={ table }
-					variant={ table === active ? 'primary' : 'secondary' }
-					aria-current={ table === active ? 'page' : undefined }
-					data-table={ table }
-					onClick={ () => {
-						if ( table !== active ) {
-							getNavigate()?.( switchPatch( page, query, table ) );
-						}
-					} }
-				>
-					{ page.tableLabels?.[ table ] ?? table }
-				</Button>
-			) ) }
-		</nav>
+		<div style={ { marginBottom: 16 } }>
+			<FolderTabs
+				label={ page.title }
+				tabs={ page.tables.map( ( table ) => ( { id: table, label: page.tableLabels?.[ table ] ?? table } ) ) }
+				active={ active }
+				onSelect={ ( table ) => getNavigate()?.( switchPatch( page, query, table ) ) }
+			/>
+		</div>
 	);
 }
 
