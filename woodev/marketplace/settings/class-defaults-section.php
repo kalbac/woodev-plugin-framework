@@ -25,6 +25,9 @@ defined( 'ABSPATH' ) || exit;
  * The values are one option, {@see Effective_Settings::option_name()}, that {@see Effective_Settings} reads at runtime; this class is
  * only the screen over it. Setting ids are `defaults_{field}` (`defaults_price_base`, `defaults_orders_enabled`, …).
  *
+ * An adapter that implements {@see Settings_Extension} adds its own cards after these ({@see Extension_Defaults}); the tab is then listed
+ * even when the adapter has no price rule or exchange switch.
+ *
  * Saving a price field queues the price recompute of every account that follows the defaults, through the same
  * `account_price_rules_changed` hook an account's own rule fires.
  *
@@ -56,6 +59,13 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	private $price_rules_changed_hook;
 
 	/**
+	 * The adapter's own default fields, when it implements {@see Settings_Extension}.
+	 *
+	 * @var Extension_Defaults|null
+	 */
+	private $extension;
+
+	/**
 	 * Accounts whose recompute was already queued in this request.
 	 *
 	 * @var array<int,true>
@@ -67,11 +77,13 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param Marketplace_Adapter $adapter   Adapter.
-	 * @param Account_Store       $accounts  Account store.
-	 * @param string              $plugin_id Plugin id (drives the `Job_Names` hook).
+	 * @param Marketplace_Adapter     $adapter   Adapter.
+	 * @param Account_Store           $accounts  Account store.
+	 * @param string                  $plugin_id Plugin id (drives the `Job_Names` hook).
+	 * @param Settings_Extension|null $extension The adapter's extension (`$adapter` itself when it implements the interface), null for none (2.1.7).
 	 */
-	public function __construct( Marketplace_Adapter $adapter, Account_Store $accounts, string $plugin_id ) {
+	public function __construct( Marketplace_Adapter $adapter, Account_Store $accounts, string $plugin_id, ?Settings_Extension $extension = null ) {
+		$this->extension                = null === $extension ? null : new Extension_Defaults( $extension, $adapter->id() );
 		$this->adapter                  = $adapter;
 		$this->accounts                 = $accounts;
 		$this->price_rules_changed_hook = ( new Job_Names( $plugin_id ) )->hook( 'account_price_rules_changed' );
@@ -108,6 +120,10 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 
 		Shared_Fields::register_exchange( $handler, $id_for, $this->adapter );
 		$this->register_import_fields( $handler );
+
+		if ( null !== $this->extension ) {
+			$this->extension->register( $handler );
+		}
 	}
 
 	/**
@@ -118,7 +134,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 * @return bool
 	 */
 	public function has_fields(): bool {
-		return [] !== $this->price_fields() || [] !== $this->exchange_fields();
+		return [] !== $this->price_fields() || [] !== $this->exchange_fields() || $this->has_extension_fields();
 	}
 
 	/**
@@ -131,6 +147,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	public function sections(): array {
 		$price_ids    = array_map( [ self::class, 'setting_id' ], $this->price_fields() );
 		$exchange_ids = array_map( [ self::class, 'setting_id' ], $this->exchange_fields() );
+		$extra_ids    = null === $this->extension ? [] : $this->extension->setting_ids();
 		$groups       = [];
 
 		if ( [] !== $price_ids ) {
@@ -141,6 +158,10 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 			$groups[] = Settings_Group::create( 'defaults_exchange', __( 'Заказы и карточки', 'woodev-plugin-framework' ) )->with_fields( $exchange_ids );
 		}
 
+		if ( null !== $this->extension ) {
+			$groups = array_merge( $groups, $this->extension->groups() );
+		}
+
 		if ( [] === $groups ) {
 			return [];
 		}
@@ -149,7 +170,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 			Settings_Section::create(
 				self::SECTION_ID,
 				__( 'Общие', 'woodev-plugin-framework' ),
-				array_merge( $price_ids, $exchange_ids ),
+				array_merge( $price_ids, $exchange_ids, $extra_ids ),
 				'<p>' . esc_html__( 'Значения по умолчанию для всех аккаунтов. На вкладке «Параметры» каждый аккаунт может использовать их или задать свои.', 'woodev-plugin-framework' ) . '</p>'
 			)->with_groups( $groups ),
 		];
@@ -164,7 +185,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 * @return bool
 	 */
 	public function handles( string $setting_id ): bool {
-		return null !== $this->field_of( $setting_id );
+		return null !== $this->field_of( $setting_id ) || ( null !== $this->extension && $this->extension->handles( $setting_id ) );
 	}
 
 	/**
@@ -176,6 +197,10 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 * @return mixed
 	 */
 	public function read( string $setting_id ) {
+		if ( null !== $this->extension && $this->extension->handles( $setting_id ) ) {
+			return $this->extension->read( $setting_id );
+		}
+
 		$field = $this->field_of( $setting_id );
 
 		if ( null === $field ) {
@@ -201,6 +226,12 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 * @return void
 	 */
 	public function write( string $setting_id, $value ): void {
+		if ( null !== $this->extension && $this->extension->handles( $setting_id ) ) {
+			$this->extension->write( $setting_id, $value );
+
+			return;
+		}
+
 		$field = $this->field_of( $setting_id );
 
 		if ( null === $field ) {
@@ -239,6 +270,15 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 		$stored = Effective_Settings::for_adapter( $this->adapter->id() )->defaults();
 
 		return Shared_Fields::validate_price_rule( $stored, $values, [ self::class, 'setting_id' ] );
+	}
+
+	/**
+	 * Whether the adapter's {@see Settings_Extension} adds a default field.
+	 *
+	 * @return bool
+	 */
+	private function has_extension_fields(): bool {
+		return null !== $this->extension && $this->extension->has_fields();
 	}
 
 	/**

@@ -122,6 +122,28 @@ final class Screen_Names {
 	}
 
 	/**
+	 * Returns the posted array of the fields an adapter adds to the product tab (`FIELD ID => value`), apart from the per-account one.
+	 *
+	 * @since 2.1.7
+	 *
+	 * @return string
+	 */
+	public function extension_key(): string {
+		return 'woodev_' . $this->marketplace_id . '_ext';
+	}
+
+	/**
+	 * Returns the posted array of the fields an adapter adds to the variation panel (`LOOP => FIELD ID => value`).
+	 *
+	 * @since 2.1.7
+	 *
+	 * @return string
+	 */
+	public function extension_variation_key(): string {
+		return 'woodev_' . $this->marketplace_id . '_ext_variation';
+	}
+
+	/**
 	 * Returns the posted array of the variation panel (`LOOP => ACCOUNT => fields`).
 	 *
 	 * @since 2.1.2

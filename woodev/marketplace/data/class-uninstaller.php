@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Data;
 
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
+use Woodev\Framework\Marketplace\Settings\Extension_Field;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -85,6 +86,9 @@ final class Uninstaller {
 
 		// The articles chosen on the product tab live on the products; they go with the plugin.
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE %s", $wpdb->esc_like( Pinned_Offer_Id::meta_prefix( $schema->marketplace_id() ) ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		// So do the values of the fields an adapter added to the product tab (`Settings_Extension`, 2.1.7).
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE %s", $wpdb->esc_like( Extension_Field::product_meta_key( $schema->marketplace_id(), '' ) ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$family = $wpdb->esc_like( self::option_prefix( $plugin_id ) ) . '%';
 		$names  = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s", $family, '\\_transient\\_' . $family, '\\_transient\\_timeout\\_' . $family ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching

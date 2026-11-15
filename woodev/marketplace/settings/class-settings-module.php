@@ -70,7 +70,7 @@ final class Settings_Module {
 		}
 
 		$accounts_sections = new Accounts_Sections( $accounts, $adapter, $status, $warehouses, $plugin_id, $on_connected, new Account_Deletion_Progress( Uninstaller::option_prefix( $plugin_id ) ) );
-		$defaults          = new Defaults_Section( $adapter, $accounts, $plugin_id );
+		$defaults          = new Defaults_Section( $adapter, $accounts, $plugin_id, $adapter instanceof Settings_Extension ? $adapter : null );
 		$advanced          = new Advanced_Section();
 
 		$section_providers = [ $accounts_sections, $defaults ];

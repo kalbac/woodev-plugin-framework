@@ -883,6 +883,75 @@ What to remember:
   that imports groups puts `group` (`key`, `size`) into its **snapshot** cards too — without it
   the preview counts every card as a product, while the job still assembles them.
 
+## Plugin fields on «Общие» and the product tab (framework 2.1.7)
+
+A plugin sometimes has one setting the framework cannot know (Ozon's «Купить на Ozon» button: a shop-wide choice and a per-product
+choice). The framework gives it one optional adapter interface, `Settings\Settings_Extension`, in the pattern of `Flows\Card_Importer`:
+the framework checks `instanceof`, and an adapter that does not implement it boots and prints exactly what it printed before
+(`Settings_Module::handler_for()` and `Embedded_Screens` pass `null`). Nothing in delivery code is touched (B3).
+
+```php
+final class Ozon_Adapter implements Marketplace_Adapter, Settings_Extension {
+	public function default_groups(): array { // «Общие»: one card per group.
+		return [
+			new Extension_Group( 'buy_button', __( 'Кнопка «Купить на Ozon»', 'my-plugin' ), [
+				Extension_Field::select( 'buy_button', __( 'Показывать кнопку', 'my-plugin' ), [
+					'never'  => __( 'Нигде', 'my-plugin' ),
+					'always' => __( 'Всегда', 'my-plugin' ),
+					'stock'  => __( 'Только при наличии на складе', 'my-plugin' ),
+				], 'never' ),
+			] ),
+		];
+	}
+
+	public function product_groups(): array { // The product tab: selects only.
+		return [
+			new Extension_Group( 'buy_button', __( 'Кнопка «Купить на Ozon»', 'my-plugin' ), [
+				Extension_Field::select( 'buy_button', __( 'Показывать кнопку', 'my-plugin' ), [
+					''       => __( 'Как в общих настройках', 'my-plugin' ), // The empty value stores nothing.
+					'never'  => __( 'Нигде', 'my-plugin' ),
+					'always' => __( 'Всегда', 'my-plugin' ),
+				] ),
+			] ),
+		];
+	}
+}
+
+// At runtime, on the storefront (no remote call):
+$mode = Effective_Settings::for_adapter( 'ozon' )->product_extra( $product, 'buy_button', 'never' );
+```
+
+What is settled:
+
+- **One description of a field, drawn twice.** `Extension_Field` (`select()` or `toggle()`; id `[a-z0-9_]+`) and `Extension_Group` are plain
+  value objects. «Общие» registers them through `Field_Kit` and a `Settings_Group` card, so they are drawn, validated and saved by the
+  existing settings machinery (a select refuses a value it does not list; there is no second renderer). The product tab prints the same
+  field with `Panel_View::row()`.
+- **«Общие».** `Defaults_Section` takes an optional `Settings_Extension` and delegates to `Extension_Defaults`. Setting ids are
+  `defaults_ext_{field id}`; the cards follow «Цены и наценка» / «Заказы и карточки». The values live in the **same defaults option**
+  (`woodev_{adapter id}_account_defaults`) in a sub-array `extra`, so a field of an adapter can never shadow a key of the framework, and
+  saving one does not set `_seeded` (that mark belongs to the price/exchange defaults, which an adapter's field must not block). An adapter
+  with nothing else to default still gets the tab. Read with `Effective_Settings::extra( $field_id, $default )`.
+- **Product tab.** `Product_Extension` (built by `Embedded_Screens::product_tab()`, passed to `Product_Tab`) hands `Panel_View` an
+  `extension` key of the screen and saves the posted `woodev_{id}_ext[{field id}]` (`Screen_Names::extension_key()`). The group is printed
+  **once, after the account blocks**, only when the tab has accounts.
+- **Why product meta and not the link row.** The setting is «for this product»; a product linked to two accounts has two link rows and
+  would have two answers, and a product with no link row has none (`Link_Settings_Writer` creates a row only for settings that need one).
+  The meta is `_woodev_{adapter id}_ext_{field id}` (`Extension_Field::product_meta_key()`), written through the product's CRUD
+  (`update_meta_data()` + `save_meta_data()`). A field that is per account would need the link row and a later card.
+- **Variations.** The same select is printed in each variation's panel (`woodev_{id}_ext_variation[LOOP][field id]`,
+  `Screen_Names::extension_variation_key()`), saved under the parent's `edit_product` like the rest of the variation form. A variation left
+  on the empty option follows its parent, then «Общие»: `product_extra()` walks variation → parent → shop-wide → `$default`.
+- **Selects only on the tab.** A switch has no «as in the shop settings» state; the empty-value option is that state, and choosing it deletes
+  the meta. `Effective_Settings::product_extra( $product, $field_id, $default )` returns the product's own value, else the shop-wide
+  `extra()` of the **same field id**, else `$default`.
+- **Guards.** The same nonce field and `edit_product` as the account blocks (`Admin_Guard::check_request()` with no account); a value that
+  is not an option is refused with a sentence on the next screen and nothing is written. A field the form did not post keeps its value.
+- **Removal.** The values are not part of the account-deletion step `product_meta` (they are shop data, not account data); the uninstaller
+  deletes them with the chosen articles (`_woodev_{adapter id}_ext_%`) when «Удалять данные при удалении плагина» is on.
+- **Readers do not normalise.** `extra()` and `product_extra()` return what is stored; the screens show an option the adapter has dropped as the
+  default, the readers do not — check the value against your own options.
+
 ## Verification
 
 Implementation evidence: PHP 7.4 syntax/static analysis, unit and contract tests, Jest

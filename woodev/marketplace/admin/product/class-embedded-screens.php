@@ -32,6 +32,7 @@ use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
+use Woodev\Framework\Marketplace\Settings\Settings_Extension;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
@@ -223,7 +224,8 @@ final class Embedded_Screens {
 				'assets'   => $assets_url,
 			],
 			$plugin->get_version(),
-			$adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ 'export', 'link' ]
+			$adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ 'export', 'link' ],
+			$adapter instanceof Settings_Extension ? new Product_Extension( $adapter, $names ) : null
 		);
 	}
 }

@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Admin\Product\Link_Form_Input;
 use Woodev\Framework\Marketplace\Admin\Product\Link_Settings_Writer;
 use Woodev\Framework\Marketplace\Admin\Product\Panel_Reader;
 use Woodev\Framework\Marketplace\Admin\Product\Panel_View;
+use Woodev\Framework\Marketplace\Admin\Product\Product_Extension;
 use Woodev\Framework\Marketplace\Admin\Product\Product_Tab;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
@@ -22,6 +23,7 @@ use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Json_Answer;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Article_Policy;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Settings_Extension;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
 
 /**
@@ -206,6 +208,63 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 		$this->assertNull( $this->links()->find( $this->account_id, $id ) );
 	}
 
+	public function test_the_fields_an_adapter_added_are_saved_with_the_tab_nonce_and_the_product_capability(): void {
+		$id                            = $this->tab_product( 'ART-20', 5020, false );
+		$_POST['woodev_fake_ext']      = [ 'buy_button' => 'always' ];
+		$_REQUEST['woodev_fake_nonce'] = 'ok:woodev_fake_product_save';
+		$this->products[ $id ]->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_fake_ext_buy_button', 'always' );
+		$this->products[ $id ]->shouldReceive( 'save_meta_data' )->once();
+
+		$this->tab( [], true )->save_product( $id );
+
+		$this->assertTrue( true ); // The `once()` expectations above are the assertions.
+	}
+
+	public function test_the_fields_an_adapter_added_are_not_saved_without_the_nonce_or_the_capability(): void {
+		$id                       = $this->tab_product( 'ART-21', 5021, false );
+		$_POST['woodev_fake_ext'] = [ 'buy_button' => 'always' ];
+		$this->products[ $id ]->shouldReceive( 'update_meta_data' )->never();
+
+		$_REQUEST['woodev_fake_nonce'] = 'forged';
+		$this->tab( [], true )->save_product( $id );
+
+		$this->caps                    = [];
+		$_REQUEST['woodev_fake_nonce'] = 'ok:woodev_fake_product_save';
+		$this->tab( [], true )->save_product( $id );
+
+		$this->assertTrue( true ); // The `never()` expectations above are the assertions.
+	}
+
+	public function test_a_value_that_is_not_an_option_is_not_saved_and_a_tab_without_the_extension_ignores_the_post(): void {
+		$id                            = $this->tab_product( 'ART-22', 5022, false );
+		$_REQUEST['woodev_fake_nonce'] = 'ok:woodev_fake_product_save';
+		$this->products[ $id ]->shouldReceive( 'update_meta_data' )->never();
+
+		$_POST['woodev_fake_ext'] = [ 'buy_button' => 'sometimes' ];
+		$this->tab( [], true )->save_product( $id );
+
+		$_POST['woodev_fake_ext'] = [ 'buy_button' => 'always' ];
+		$this->tab()->save_product( $id );
+
+		$this->assertTrue( true ); // The `never()` expectation above is the assertion.
+	}
+
+	public function test_a_variations_own_choice_is_saved_by_its_loop_and_refused_without_the_nonce(): void {
+		$id                                 = $this->tab_product( 'ART-23', 5023, false, 7000 );
+		$_POST['woodev_fake_ext_variation'] = [ 3 => [ 'buy_button' => 'none' ] ];
+		$this->products[ $id ]->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_fake_ext_buy_button', 'none' );
+		$this->products[ $id ]->shouldReceive( 'save_meta_data' )->once();
+
+		$_REQUEST['woodev_fake_nonce'] = 'forged';
+		$this->tab( [], true )->save_variation( $id, 3 );
+
+		$_REQUEST['woodev_fake_nonce'] = 'ok:woodev_fake_product_save';
+		$this->tab( [], true )->save_variation( $id, 4 ); // Another loop: nothing posted for it.
+		$this->tab( [], true )->save_variation( $id, 3 );
+
+		$this->assertTrue( true ); // The `once()` expectations above are the assertions.
+	}
+
 	public function test_a_variation_save_is_checked_against_its_parent_and_nonce(): void {
 		$id                                   = $this->tab_product( 'ART-11', 5011, false, 7000 );
 		$_POST['woodev_fake_variation']       = [ 3 => [ (string) $this->account_id => [ 'sync_stock' => '0' ] ] ];
@@ -282,10 +341,11 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 	/**
 	 * Builds the tab over the real stores, with the collaborators the refused requests never reach left bare.
 	 *
-	 * @param string[] $withheld Operations the marketplace cannot serve.
+	 * @param string[] $withheld  Operations the marketplace cannot serve.
+	 * @param bool     $extended  Whether the adapter added fields to the tab.
 	 * @return Product_Tab
 	 */
-	private function tab( array $withheld = [] ): Product_Tab {
+	private function tab( array $withheld = [], bool $extended = false ): Product_Tab {
 		$names  = new Screen_Names( 'fake', 'Fake' );
 		$pinned = new Pinned_Offer_Id( 'fake', new Fake_Article_Policy() );
 		$gate   = new License_Gate(
@@ -314,7 +374,8 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 				'assets'   => 'https://example.test/assets/',
 			],
 			'1.0',
-			$withheld
+			$withheld,
+			$extended ? new Product_Extension( new Fake_Settings_Extension(), $names ) : null
 		);
 	}
 
