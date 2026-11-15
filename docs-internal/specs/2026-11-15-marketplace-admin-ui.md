@@ -1,6 +1,8 @@
 # Marketplace admin UI — the pages look like the delivery plugins (#1776)
 
 **Status:** decided — operator approved every item of #1776 on 15.11.2026; this spec is the design, cards C1–C3 implement it.
+r2 folds in the r1 critic of PR #1777: the empty state without `emptyMessage`, the merge order and owners of the shared
+files, C2's strings and stylesheet, the held store categories, and three smaller edits.
 **Date:** 2026-11-15. **Target:** framework 2.1.x (next release after #1767), first consumer Ozon Seller 2.0.0.
 
 **Evidence labels:** **READ** — code read for this spec; **SEEN** — rig screenshot of 15.11.2026 (1440 px, Ozon Seller
@@ -50,7 +52,7 @@ Ozon edits are limited to wording (§5, §6 ozon#58 list).
 
 | Need | Existing piece | Note |
 |---|---|---|
-| Table card, sort headers, pagination, header `actions` slot, `emptyMessage`, footer `summary` | WooCommerce runtime `TableCard` via `getTableCard()` (`src/admin-records/wc-runtime.ts`) | The delivery page uses the same props (`fw:src/shipping-orders-page/app.tsx:2842-2880`). |
+| Table card, sort headers, pagination, header `actions` slot, `hasSearch`, footer `summary` | WooCommerce runtime `TableCard` via `getTableCard()` (`src/admin-records/wc-runtime.ts`) | The delivery page uses the same props (`fw:src/shipping-orders-page/app.tsx:2842-2880`). `actions`, `summary`, `hasSearch` exist in WC 7.0 (the oldest WooCommerce a plugin of ours declares); C1 adds them to `TableCardProps`. **`emptyMessage` does not exist in 7.0** (Q3 note in `wc-runtime.ts:9-10`, `states.tsx:4-5`), so it is never passed — see «Empty result» in §3.1. |
 | Label-left field rows | `FieldRow` (`src/components/field-row.js`) inside a `.woodev-settings` root | The grid is `.woodev-settings .woodev-field` in `src/settings-page/style.scss:64`. |
 | Titled block inside a card | the `.woodev-group` / `__title` / `__desc` markup (`src/components/_group.scss`) | Markup only. Do not import `GroupCard`: it pulls the settings REST client into the marketplace bundle. |
 | White card | `@wordpress/components` `Card` + `CardBody` with class `woodev-settings__card`, as the settings app uses | |
@@ -60,8 +62,8 @@ Ozon edits are limited to wording (§5, §6 ozon#58 list).
 **The settings stylesheet is already on every marketplace page.** `Settings_Page_Registry::enqueue_bundle()` enqueues
 `woodev-settings-page` (`style-index.css` + `wp-components`) on every wc-admin screen once a marketplace plugin places a
 provider (`fw:woodev/settings-page/class-settings-page-registry.php:842-868`, READ). A marketplace plugin always does. So the
-classes above style the mappings, tools and diagnostics views without a new stylesheet. Cards C2/C3 write this dependency
-into the wiki (§6).
+classes above style the mappings, tools and diagnostics views without a new stylesheet. C2 writes this dependency into
+the wiki (§6; C2 is the wiki's only owner).
 
 ### 2.2 Delivery-only pieces and how they are shared
 
@@ -120,8 +122,14 @@ buttons on three rows, the empty text in a bare box.
                                          Товаров на странице [20 ▾]
 ```
 
-Empty result: the same card with its headers and `emptyMessage` (the PHP `empty` / `empty_filtered` text) in the body —
-never a bare box instead of the card. A failed read keeps today's `ErrorState` with «Повторить».
+**Empty result (decided).** `TableCard`'s `emptyMessage` does not exist in WC 7.0, which hard-codes «No data to display»
+there, so the shell keeps drawing its own empty state, now in a card frame: a new `EmptyCard` in
+`src/admin-records/states.tsx` built from `@wordpress/components` `Card` / `CardHeader` / `CardBody` (what `TableCard` itself
+is made of). The header carries the same title and the same `actions` node (bulk group + search) as the table, so a search
+that found nothing can still be edited or cleared. The body is today's `EmptyState` with the PHP `empty` / `empty_filtered`
+text. It is never a bare box instead of the card. C1 matches the header's DOM and spacing to `TableCard`'s on the rig
+(WC 11.3). A failed read keeps today's `ErrorState` with «Повторить». The Q3 notes in `wc-runtime.ts` and `states.tsx` stay
+true and need no change.
 
 Rules:
 
@@ -148,7 +156,7 @@ Rules:
   `period()`), merged by each definition: `bulk_placeholder` «Выберите действие», `bulk_apply` «Применить», `bulk_label`
   «Массовые действия», `views_all` «Все», `summary_label` («Товаров» / «Карточек» / «Заказов»), period labels (§3.3).
 
-Files (C1): `src/admin-records/{records-table.tsx,filters.tsx,styles.ts,messages.ts,types.ts,query.ts,states.tsx}`,
+Files (C1): `src/admin-records/{records-table.tsx,filters.tsx,styles.ts,messages.ts,types.ts,query.ts,states.tsx,wc-runtime.ts}`,
 `src/admin-records/actions/{bulk-toolbar.tsx,styles.ts}`, new `src/admin-records/style.scss` (imported by `records-table.tsx`:
 the records engine is bundled by the marketplace bundle only, and `Admin_Collector` already enqueues `style-index.css` when it
 exists — `fw:woodev/marketplace/admin/class-admin-collector.php:328`), the new `src/components/*` of §2.2;
@@ -206,10 +214,13 @@ Today (SEEN `ozon-04`, `ozon-06`): underline tabs, a 320 px sidebar with a butto
  Профили: Название │ Сопоставлений                      [Добавить профиль]
 ```
 
-`TableCard` with all rows on one page (`rowsPerPage = max(rows, 1)`, `showMenu = false`, client-side sort by name); the name
-is a link button that opens the form. Empty: the card with `emptyMessage` = `emptyMappings` / `emptyProfiles` and the
-«Добавить…» button in the header. If WooCommerce draws a pagination bar for a single page, hide it with a rule scoped to
-`.woodev-mappings-list`.
+`TableCard` (through `getTableCard()`; C2 does not edit `wc-runtime.ts`, which C1 owns, and types the extra `actions`
+prop with a local intersection type until it rebases onto C1) with all rows on one page (`rowsPerPage = max(rows, 1)`,
+`showMenu = false`, client-side sort by name); the name
+is a link button that opens the form. Empty (no `emptyMessage`, see §2.1): instead of the `TableCard`, a
+`Card` / `CardHeader` (title + «Добавить…») / `CardBody` with `emptyMappings` / `emptyProfiles`. C2 writes this card itself
+and does not import C1's `EmptyCard`, so the two cards stay independent. If WooCommerce draws a pagination bar for a single
+page, hide it with a rule scoped to `.woodev-mappings-list` in C2's stylesheet (§4.4).
 
 ### 3.5 Сопоставление / Профиль — forms (C2), see §4
 
@@ -360,7 +371,7 @@ side-by-side layout of today is what pushed the form right of an empty column.
 │ Название                 [______________________]            │ ← FieldRow + TextControl (label hidden from vision)
 │ ┌ Категории ───────────────────────────────────────────────┐ │ ← .woodev-group
 │ │ Категории магазина     [Футболки, Майки        ▾]        │ │ ← SelectField multi (search + checklist popover)
-│ │                         Действует и на вложенные…  Категории из других сопоставлений в списке не показаны. │
+│ │                         Сопоставление действует и на вложенные категории…  │
 │ │ Категория маркетплейса [Начните вводить название……]      │ │ ← CategoryPicker, results in a bordered list
 │ │ Профиль выгрузки       [— не выбран —          ▾]        │ │
 │ └───────────────────────────────────────────────────────────┘ │
@@ -373,8 +384,12 @@ side-by-side layout of today is what pushed the form right of an empty column.
 ```
 
 - **Store categories.** `SelectField multi` (the settings dropdown with search) replaces the filter box + checkbox wall.
-  Options = the shop categories that are free or already this mapping's; a category held by another mapping is left out, and
-  one muted line under the field says so (`messages.shopCategoriesTaken`). The selected ones show as the trigger's summary.
+  The options are every shop category. A category held by another mapping stays in the list with today's suffix
+  «Футболки — Уже входит в сопоставление: Летнее» (`shopCategoryTaken` + the holder's name, as `mapping-editor.tsx:232-234`
+  builds it now). So a search for it still finds it and names the mapping to open. `SelectField` has no per-option
+  `disabled` and stays unchanged (it is shared with delivery). The editor's `onChange` drops the ids of held categories
+  before it updates the draft, so ticking one changes nothing; the server's own «one category, one mapping» check stays.
+  The selected categories show as the trigger's summary; `shopCategoriesHelp` is the row's description.
 - **Marketplace category.** `CategoryPicker` keeps its logic. Look: the input has the placeholder visible; results are a bordered
   list with hover rows (not a column of tertiary buttons); the chosen category shows as text with «Изменить» as a link
   button on the same line.
@@ -417,9 +432,38 @@ side-by-side layout of today is what pushed the form right of an empty column.
 - VAT moves into «Цена» (it is a price property); the «Валюта цены» select drops its duplicate legend.
 - Delete is a tertiary destructive button at the right end of the action row; its two-step confirm stays.
 
+### 4.4 New strings and the stylesheet (C2)
+
+Every new visible string is a PHP message (Rule 9) in `View_Config`'s message lists
+(`fw:woodev/marketplace/admin/pages/mappings/class-view-config.php:141-234`, READ). React never calls `__()` for these and
+never reuses a key with a different meaning.
+
+| Key | Text |
+|---|---|
+| `backToMappings` | «← Все сопоставления» |
+| `backToProfiles` | «← Все профили» |
+| `newMapping` | «Новое сопоставление» |
+| `newProfile` | «Новый профиль» |
+| `groupCategories` | «Категории» |
+| `groupPrice` | «Цена» |
+| `fallbackDimensions` | «Размеры (Ш × В × Г)» |
+| `unitDefaultDimension` | «как в магазине (%s)» with the shop's dimension unit filled in by PHP, e.g. «как в магазине (см)» |
+| `unitDefaultWeight` | the same for the weight unit, e.g. «как в магазине (кг)» |
+| `columnProfile` | «Профиль» (list column) |
+
+`unitDefault` («— как в магазине —») is replaced by the two unit-specific keys and removed. Retired keys (`chooseMapping`,
+`chooseProfile`) are removed with the sidebar. The short source labels (Артикул, Штрихкод, Описание, Главное фото,
+Дополнительные фото) are `Profile_Choices::titles()`.
+
+C2's stylesheet is `src/marketplace-admin/views/mappings/style.scss`, imported by `mappings-view.tsx`. It lands in the
+marketplace bundle's `style-index.css`, which `Admin_Collector` already enqueues. It holds the single-page pagination rule
+(`.woodev-mappings-list`), the `CategoryPicker` result rows (border, `:hover`), and the size row (80 px inputs, the `×`
+separators, the unit select inline).
+
 Files (C2): `src/components/folder-tabs.tsx` (new), `src/marketplace-admin/views/records/index.tsx` (switcher only),
 `src/marketplace-admin/views/mappings/{mappings-view.tsx,mapping-editor.tsx,profile-editor.tsx,category-picker.tsx,check-report.tsx,types.ts}`,
-PHP `woodev/marketplace/admin/pages/mappings/{class-mapping-messages.php,class-profile-choices.php}`.
+new `src/marketplace-admin/views/mappings/style.scss`,
+PHP `woodev/marketplace/admin/pages/mappings/{class-view-config.php,class-profile-choices.php}`.
 
 ## 5. Small items of #1776
 
@@ -427,24 +471,39 @@ PHP `woodev/marketplace/admin/pages/mappings/{class-mapping-messages.php,class-p
 |---|---|---|---|
 | Price example at the end of «Цены и наценка» | `fw:…/class-accounts-sections.php:822,926` | §3.8 footnote | C3 |
 | «С сайта на Ozon: …» cut off | `fw:…/class-accounts-sections.php:1457` | §3.8 short labels | C3 |
-| A new account starts switched off | `fw:…/class-accounts-sections.php:1065` defaults a pending account to on, so the cause is elsewhere (**UNVERIFIED**) | C3 reproduces on the rig (add an account, save) and fixes the cause: a new account comes out switched on | C3 |
+| A new account starts switched off | `fw:…/class-accounts-sections.php:650-656`: the add form's «Аккаунт включён» toggle defaults to `self::NEW_KEY !== $key`, i.e. off for the new-account form (since #1728, no stated reason; the rig's add form shows it off) | the default becomes `true`; a PHPUnit test pins it | C3 |
 | «OZON Seller» in the menu vs «Ozon Seller» in the heading | `ozon:includes/class-plugin.php:172` | menu title «Ozon Seller» | ozon#58 |
 
 The card filed all four under ozon#58; three are framework code, so they ride with C3. The coordinator updates ozon#58.
 
 ## 6. Implementation cards
 
-All three run in parallel: their file sets are disjoint (lists in §3–§4). Tier: **Sonnet 5.5** (`claude-sonnet-5-5`) each;
-a critic of another lineage on each PR. Every brief carries: the worker's own worktree path for Serena `activate_project`
-(PHP is read and edited through Serena; `tests/**` with Read/Edit), the delivery-untouched check
-`git diff --name-only origin/main...HEAD -- src/shipping-orders-page woodev/shipping-method` printing nothing, «bundles are
-built by the coordinator in the primary checkout, never committed by a worker», and the rig rule (probes and screenshots in
-the scratchpad only, no settings or branch change in the primary checkout; helper `ui-probe/lib.js`).
+**Run in parallel, merge in a fixed order: C1 → C3 → C2.** The source files of §3–§4 are disjoint. Exactly three
+places are shared, and each has one rule:
+
+| Shared place | Rule |
+|---|---|
+| Translation catalogue `woodev/languages/woodev-plugin-framework.pot`, `woodev-plugin-framework-ru_RU.po` (+ the compiled `.mo`) — every card adds PHP msgids, and `lint:i18n-sources` requires each in both files | Each card adds only its own entries. The first card merges as is. Each later card rebases on `main` before its merge, resolves the catalogue conflict by keeping both sides' entries, recompiles the `.mo`, and reruns `lint:i18n-sources`, `lint:i18n` and `lint:mo`. |
+| `tests/js/marketplace-records-view.test.tsx` | C1 owns the bulk-toolbar assertions (today lines 75 and 84: `toolbar` → buttons become the select + «Применить»). C2 owns the switcher assertions (lines 118-131: `navigation` + `aria-current` become `tablist` / `tab` + `aria-selected`). C2 merges last and rebases onto C1's version of the file. |
+| `docs-internal/wiki/marketplace-admin.md` | C2 only. It writes the «Admin UI as built (#1776)» subsection for all three cards after C1 and C3 have merged. |
+
+Tier: **Sonnet 5.5** (`claude-sonnet-5-5`) each; a critic of another lineage on each PR. Every brief carries:
+
+- the worker's own worktree path for Serena `activate_project` (PHP is read and edited through Serena; `tests/**` with
+  Read/Edit);
+- the delivery-untouched checks, both printing nothing:
+  `git diff --name-only origin/main...HEAD -- src/shipping-orders-page woodev/shipping-method` and
+  `git diff --name-only --diff-filter=M origin/main...HEAD -- src/components` (new files in `src/components/` are allowed;
+  changes to existing ones are not);
+- «bundles are built by the coordinator in the primary checkout, never committed by a worker»;
+- the rig rule: probes and screenshots in the scratchpad only, no settings or branch change in the primary checkout; helper
+  `ui-probe/lib.js`.
 
 **Common acceptance** for every card: `npm run test:js` green (run from bash), `npm run lint:i18n-sources` green,
 `npm run lint:docs` green, PHP unit tests of the touched classes green (`rm -f .phpunit.result.cache` first), phpcs green on
-touched PHP, then after the coordinator's build: rig screenshots at 1440 px and 390 px of every screen the card touches, next
-to the delivery reference shot (no horizontal scroll at 390 px).
+touched PHP. Then, after the coordinator's build: rig screenshots at 1440 px and 390 px of every screen the card touches,
+next to the delivery reference shot. At 390 px the page has no horizontal scroll; a table may scroll inside its card, as
+«Заказы доставки» does.
 
 ### C1 — Tables: card header, counts, period (L)
 
@@ -453,8 +512,9 @@ Acceptance (beyond common):
 
 - Jest: `presetRange()` / `matchPreset()` for every preset across a month, quarter and year boundary and a Sunday;
   `BulkActionSelect` (disabled states, blocked reason, account actions outside the select); `CountLinks` (sum, zero hidden,
-  current kept, «Все» writes the «Любое» value); the records table renders the empty message inside the card and the search
-  in the header (`records-table.test.tsx`, `admin-records-*.test.tsx` updated, not deleted).
+  current kept, «Все» writes the «Любое» value); the records table renders the PHP empty text inside `EmptyCard`, whose
+  header keeps the search with the typed text; the search sits in the table header (`records-table.test.tsx`,
+  `admin-records-*.test.tsx` and the toolbar assertions of `marketplace-records-view.test.tsx` updated, not deleted).
 - PHPUnit: `Definition_Parser` accepts `views` only on a `select` and only once; the products provider's `state` facets sum to
   the unfiltered total (the partition holds); orders and remote cards facets.
 - Rig: «Товары» both tabs and «Заказы» with ≥ 1 row and empty, a bulk action through preview to confirm, a period preset and a
@@ -465,13 +525,15 @@ Acceptance (beyond common):
 Scope: §2.3, the tab bar of §3.1/§3.2, §3.4, §4.
 Acceptance (beyond common):
 
-- Jest: `FolderTabs` (aria, active, `onSelect` not called for the active tab); `marketplace-records-view.test.tsx` switch
-  still clears the left table's arguments; `marketplace-mappings-view.test.tsx` — list → form → back via the URL, save/copy/
-  delete flows unchanged, held categories left out of the options, the size row's accessible labels.
+- Jest: `FolderTabs` (aria, active, `onSelect` not called for the active tab); `marketplace-records-view.test.tsx`
+  (switcher assertions only) — the switch still clears the left table's arguments; `marketplace-mappings-view.test.tsx`:
+  list → form → back via the URL; save/copy/delete flows unchanged; a held category is listed with the holder's name and
+  ticking it changes nothing; the size row's accessible labels.
 - Rig: both mapping tabs (empty and with one mapping + one profile), both forms new and edit, the tab look of «Товары»,
   «Сопоставление» and «Настройки» in one screenshot row — identical folder tabs.
-- Wiki: `docs-internal/wiki/marketplace-admin.md` gets an «Admin UI as built (#1776)» subsection: the reuse of the settings
-  stylesheet (§2.1) and the shared components (§2.2–2.3).
+- Wiki (C2 is the only owner, written after C1 and C3 merged): `docs-internal/wiki/marketplace-admin.md` gets an «Admin UI
+  as built (#1776)» subsection. It covers the reuse of the settings stylesheet (§2.1), the shared components (§2.2–2.3),
+  C1's `views` flag and `EmptyCard`, and C3's `actions_layout` and group `footnote`.
 
 ### C3 — Settings, tools, diagnostics (M)
 
@@ -495,15 +557,17 @@ Acceptance (beyond common):
 
 ## 7. Not verified
 
-- WooCommerce `TableCard` with `emptyMessage` on zero rows draws the card with headers on the rig's WC 11.3 (the delivery page
-  relies on it, READ) — not checked against the framework's declared WooCommerce minimum. C1 checks both.
+- That `EmptyCard`'s header can match `TableCard`'s header DOM and spacing closely enough on WC 7.0 and 11.3. C1 compares on
+  the rig (11.3); 7.0 is not on the rig.
 - That WooCommerce's pagination bar collapses for a single page (§3.4) — C2 checks; the scoped rule is the fallback.
 - That TabPanel's class names alone reproduce the folder look outside a real `TabPanel` (wp-components 6.9 may style the
   item through emotion as well). C2 compares screenshots; fallback: a real `TabPanel` remounted by `key` on URL change.
 - The cost of the extra facet `COUNT` queries on a large shop (about seven per products read, two per orders read) — not
   measured; C1 measures one read on the rig and states the numbers in its PR.
 - The `Remote_Cards_Query` storage shape for the `on_site` counts — not read.
-- Why a new account starts switched off (§5) — not reproduced; and my reading that it is a defect.
+- That a switched-off start for a new account (§5) is a defect and not a choice nobody recorded. #1728 gives no reason;
+  the card lists it among the defects.
+- Whether `State_Groups` is a true partition of the products. C1's PHPUnit sum test proves it or fails.
 - The 390 px layout of every new screen — drawn here, not probed.
 
 ## Related
