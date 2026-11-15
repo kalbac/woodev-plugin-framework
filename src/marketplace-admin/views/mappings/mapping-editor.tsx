@@ -5,13 +5,16 @@
  */
 
 import { useEffect, useRef, useState } from '@wordpress/element';
-import { Button, CheckboxControl, SelectControl, Spinner, TextControl } from '@wordpress/components';
+import { Button, SelectControl, Spinner, TextControl } from '@wordpress/components';
+import FieldRow from '../../../components/field-row';
+import SelectField from '../../../components/select-field';
 import { errorLines, type MappingsApi } from './api';
 import { AttributeTable } from './attribute-table';
 import { CategoryPicker } from './category-picker';
 import { CheckReport } from './check-report';
+import { FormActions, FormCard, Group } from './form-parts';
 import { Notices, type NoticeState } from './notices';
-import type { AttributeRow, MappingCategory, MappingsState } from './types';
+import type { AttributeRow, MappingCategory, MappingsState, ShopCategory } from './types';
 
 interface Props {
 	api: MappingsApi;
@@ -36,6 +39,11 @@ interface Draft {
 type LoadState = 'loading' | 'loaded' | 'failed';
 
 const EMPTY: Draft = { name: '', terms: [], profileId: '', category: null, attributes: [] };
+
+/** A category another mapping holds: one category belongs to one mapping, so it cannot be ticked here. */
+function isHeld( category: ShopCategory, mappingId: number | null ): boolean {
+	return category.mapping_id !== null && category.mapping_id !== mappingId;
+}
 
 /** The body the server reads; rows with no source are left out. */
 function toBody( draft: Draft ): Record< string, unknown > {
@@ -70,7 +78,8 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 	const [ busy, setBusy ] = useState( false );
 	const [ confirming, setConfirming ] = useState( false );
 	const [ notice, setNotice ] = useState< NoticeState | null >( null );
-	const [ filter, setFilter ] = useState( '' );
+	/** The name the mapping has in the shop: the title does not follow what is being typed. */
+	const [ savedName, setSavedName ] = useState( '' );
 
 	useEffect( () => {
 		setNotice( null );
@@ -92,6 +101,7 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 				if ( ! current ) {
 					return;
 				}
+				setSavedName( detail.name );
 				setDraft( {
 					name: detail.name,
 					terms: detail.terms,
@@ -148,11 +158,12 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 			} );
 	};
 
-	const toggleTerm = ( id: number, on: boolean ) =>
-		setDraft( ( previous ) => ( {
-			...previous,
-			terms: on ? [ ...previous.terms, id ] : previous.terms.filter( ( term ) => term !== id ),
-		} ) );
+	/** The picker reports the whole choice; a held category in it is dropped, so ticking one changes nothing. */
+	const setTerms = ( chosen: string[] ) => {
+		const held = new Set( state.shop_categories.filter( ( category ) => isHeld( category, mappingId ) ).map( ( category ) => category.id ) );
+
+		setDraft( ( previous ) => ( { ...previous, terms: chosen.map( Number ).filter( ( id ) => ! held.has( id ) ) } ) );
+	};
 
 	const act = async ( work: () => Promise< void > ) => {
 		setBusy( true );
@@ -168,6 +179,7 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 	const save = () =>
 		act( async () => {
 			const result = await api.saveMapping( mappingId, toBody( draft ) );
+			setSavedName( draft.name );
 			onSaved( result.id, result.notices );
 		} );
 
@@ -187,127 +199,96 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 		return <Spinner />;
 	}
 
+	const listed = state.mappings.find( ( mapping ) => mapping.id === mappingId )?.name;
+	const title = mappingId === null ? messages.newMapping : `«${ savedName || listed || messages.mappingName }»`;
+
 	// An existing mapping that could not be read is not edited: a blank form saved over it would erase it.
 	if ( loadState === 'failed' ) {
 		return (
-			<div className="woodev-mapping-editor">
+			<FormCard title={ title } className="woodev-mapping-editor">
 				<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
-				<Button variant="secondary" onClick={ () => setReload( reload + 1 ) }>
+				<Button __next40pxDefaultSize variant="secondary" onClick={ () => setReload( reload + 1 ) }>
 					{ messages.retry }
 				</Button>
-			</div>
+			</FormCard>
 		);
 	}
 
 	// Saving waits for the table of the category chosen now.
 	const tableReady = draft.category === null || draft.attributes !== null;
 
-	const needle = filter.trim().toLowerCase();
-	const categories = state.shop_categories.filter(
-		( category ) => needle === '' || category.label.toLowerCase().includes( needle )
-	);
+	const categoryOptions = state.shop_categories.map( ( category ) => ( {
+		value: String( category.id ),
+		label: isHeld( category, mappingId ) ? `${ category.label } — ${ messages.shopCategoryTaken }: ${ category.mapping_name }` : category.label,
+	} ) );
 
 	return (
-		<div className="woodev-mapping-editor">
-			<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
+		<>
+			<FormCard title={ title } className="woodev-mapping-editor">
+				<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
 
-			<TextControl __next40pxDefaultSize
-				label={ messages.mappingName }
-				value={ draft.name }
-				onChange={ ( name ) => setDraft( { ...draft, name } ) }
-			/>
+				<FieldRow label={ messages.mappingName }>
+					<TextControl
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+						label={ messages.mappingName }
+						hideLabelFromVision
+						value={ draft.name }
+						onChange={ ( name ) => setDraft( { ...draft, name } ) }
+					/>
+				</FieldRow>
 
-			<fieldset>
-				<legend>{ messages.shopCategories }</legend>
-				<p className="description">{ messages.shopCategoriesHelp }</p>
-				<TextControl __next40pxDefaultSize
-					__nextHasNoMarginBottom
-					label={ messages.shopCategories }
-					hideLabelFromVision
-					value={ filter }
-					onChange={ setFilter }
-				/>
-				<div style={ { maxHeight: 220, overflowY: 'auto' } }>
-					{ categories.map( ( category ) => {
-						const heldByOther = category.mapping_id !== null && category.mapping_id !== mappingId;
-						const taken = `${ messages.shopCategoryTaken }: ${ category.mapping_name }`;
-						const label = heldByOther ? `${ category.label } — ${ taken }` : category.label;
+				<Group title={ messages.groupCategories }>
+					<FieldRow label={ messages.shopCategories } description={ messages.shopCategoriesHelp }>
+						<SelectField multi value={ draft.terms.map( String ) } options={ categoryOptions } onChange={ setTerms } />
+					</FieldRow>
+					<FieldRow label={ messages.marketplaceCategory }>
+						<CategoryPicker api={ api } messages={ messages } value={ draft.category } onChange={ chooseCategory } />
+					</FieldRow>
+					<FieldRow label={ messages.profile }>
+						<SelectControl
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+							label={ messages.profile }
+							hideLabelFromVision
+							value={ draft.profileId }
+							options={ [
+								{ value: '', label: messages.profileNone },
+								...state.profiles.map( ( profile ) => ( { value: String( profile.id ), label: profile.name } ) ),
+							] }
+							onChange={ ( profileId ) => setDraft( { ...draft, profileId } ) }
+						/>
+					</FieldRow>
+				</Group>
 
-						return (
-							<CheckboxControl
-								__nextHasNoMarginBottom
-								key={ category.id }
-								label={ label }
-								checked={ draft.terms.includes( category.id ) }
-								disabled={ heldByOther }
-								onChange={ ( on ) => toggleTerm( category.id, on ) }
-							/>
-						);
-					} ) }
-				</div>
-			</fieldset>
+				<Group title={ messages.attributes }>
+					{ loadingTable && <p className="woodev-group__desc">{ messages.attributesLoading }</p> }
+					{ ! loadingTable && draft.category === null && <p className="woodev-group__desc">{ messages.attributesEmpty }</p> }
+					{ ! loadingTable && draft.category !== null && draft.attributes !== null && draft.attributes.length > 0 && (
+						<AttributeTable
+							api={ api }
+							messages={ messages }
+							categoryKey={ draft.category.key }
+							productFields={ state.product_fields }
+							rows={ draft.attributes }
+							onChange={ ( attributes ) => setDraft( { ...draft, attributes } ) }
+						/>
+					) }
+				</Group>
 
-			<fieldset>
-				<legend>{ messages.marketplaceCategory }</legend>
-				<CategoryPicker
-					api={ api }
+				<FormActions
 					messages={ messages }
-					value={ draft.category }
-					onChange={ chooseCategory }
+					busy={ busy }
+					saveDisabled={ loadingTable || ! tableReady }
+					onSave={ save }
+					onCopy={ mappingId === null ? undefined : copy }
+					onDelete={ mappingId === null ? undefined : remove }
+					confirming={ confirming }
+					onConfirming={ setConfirming }
 				/>
-			</fieldset>
-
-			<SelectControl __next40pxDefaultSize
-				label={ messages.profile }
-				value={ draft.profileId }
-				options={ [
-					{ value: '', label: messages.profileNone },
-					...state.profiles.map( ( profile ) => ( { value: String( profile.id ), label: profile.name } ) ),
-				] }
-				onChange={ ( profileId ) => setDraft( { ...draft, profileId } ) }
-			/>
-
-			<h3>{ messages.attributes }</h3>
-			{ loadingTable && <p>{ messages.attributesLoading }</p> }
-			{ ! loadingTable && draft.category === null && <p className="description">{ messages.attributesEmpty }</p> }
-			{ ! loadingTable && draft.category !== null && draft.attributes !== null && draft.attributes.length > 0 && (
-				<AttributeTable
-					api={ api }
-					messages={ messages }
-					categoryKey={ draft.category.key }
-					productFields={ state.product_fields }
-					rows={ draft.attributes }
-					onChange={ ( attributes ) => setDraft( { ...draft, attributes } ) }
-				/>
-			) }
-
-			<p style={ { display: 'flex', gap: 8, alignItems: 'center' } }>
-				<Button variant="primary" onClick={ save } disabled={ busy || loadingTable || ! tableReady } isBusy={ busy }>
-					{ busy ? messages.saving : messages.save }
-				</Button>
-				{ mappingId !== null && (
-					<Button variant="secondary" onClick={ copy } disabled={ busy }>
-						{ messages.copy }
-					</Button>
-				) }
-				{ mappingId !== null && ! confirming && (
-					<Button variant="tertiary" isDestructive onClick={ () => setConfirming( true ) } disabled={ busy }>
-						{ messages.delete }
-					</Button>
-				) }
-				{ mappingId !== null && confirming && (
-					<>
-						<Button variant="primary" isDestructive onClick={ remove } disabled={ busy }>
-							{ messages.confirmDelete }
-						</Button>
-						<Button variant="tertiary" onClick={ () => setConfirming( false ) }>
-							{ messages.cancel }
-						</Button>
-					</>
-				) }
-			</p>
+			</FormCard>
 
 			{ mappingId !== null && <CheckReport api={ api } messages={ messages } mappingId={ mappingId } /> }
-		</div>
+		</>
 	);
 }

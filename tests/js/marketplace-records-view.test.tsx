@@ -111,7 +111,7 @@ describe( 'a page with several tables', () => {
 		render( <Single page={ PAGE } menu={ MENU } query={ {} } /> );
 		await screen.findByRole( 'table', { name: 'Товары' } );
 
-		expect( screen.queryByRole( 'navigation' ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'tablist' ) ).not.toBeInTheDocument();
 	} );
 
 	test( 'the switch names the tables with the labels PHP sent and opens on the first one', async () => {
@@ -120,9 +120,9 @@ describe( 'a page with several tables', () => {
 		render( <Page page={ TWO } menu={ MENU } query={ {} } /> );
 		await screen.findByRole( 'table', { name: 'Товары сайта' } );
 
-		const switcher = screen.getByRole( 'navigation', { name: 'Товары' } );
-		expect( within( switcher ).getByRole( 'button', { name: 'Товары сайта' } ) ).toHaveAttribute( 'aria-current', 'page' );
-		expect( within( switcher ).getByRole( 'button', { name: 'Карточки на маркетплейсе' } ) ).not.toHaveAttribute( 'aria-current' );
+		const switcher = screen.getByRole( 'tablist', { name: 'Товары' } );
+		expect( within( switcher ).getByRole( 'tab', { name: 'Товары сайта' } ) ).toHaveAttribute( 'aria-selected', 'true' );
+		expect( within( switcher ).getByRole( 'tab', { name: 'Карточки на маркетплейсе' } ) ).toHaveAttribute( 'aria-selected', 'false' );
 		expect( reads().every( ( route ) => route.includes( '/shop/items' ) ) ).toBe( true );
 	} );
 
@@ -133,7 +133,7 @@ describe( 'a page with several tables', () => {
 		await screen.findByRole( 'table', { name: 'Карточки на маркетплейсе' } );
 
 		expect( reads().every( ( route ) => route.includes( '/shop/cards' ) ) ).toBe( true );
-		expect( screen.getByRole( 'button', { name: 'Карточки на маркетплейсе' } ) ).toHaveAttribute( 'aria-current', 'page' );
+		expect( screen.getByRole( 'tab', { name: 'Карточки на маркетплейсе' } ) ).toHaveAttribute( 'aria-selected', 'true' );
 	} );
 
 	test.each( [ 'orders', '../items', 'items/children', '', 'CARDS' ] )( 'a URL asking for "%s", which is not one of the page tables, shows the first table', async ( asked ) => {
@@ -159,7 +159,7 @@ describe( 'a page with several tables', () => {
 			/>
 		);
 		await screen.findByRole( 'table', { name: 'Товары сайта' } );
-		fireEvent.click( screen.getByRole( 'button', { name: 'Карточки на маркетплейсе' } ) );
+		fireEvent.click( screen.getByRole( 'tab', { name: 'Карточки на маркетплейсе' } ) );
 
 		expect( update ).toHaveBeenCalledTimes( 1 );
 		expect( update ).toHaveBeenCalledWith( {
@@ -178,10 +178,10 @@ describe( 'a page with several tables', () => {
 
 		render( <Page page={ TWO } menu={ MENU } query={ { table: 'cards', paged: '2' } } /> );
 		await screen.findByRole( 'table', { name: 'Карточки на маркетплейсе' } );
-		fireEvent.click( screen.getByRole( 'button', { name: 'Карточки на маркетплейсе' } ) );
+		fireEvent.click( screen.getByRole( 'tab', { name: 'Карточки на маркетплейсе' } ) );
 		expect( update ).not.toHaveBeenCalled();
 
-		fireEvent.click( screen.getByRole( 'button', { name: 'Товары сайта' } ) );
+		fireEvent.click( screen.getByRole( 'tab', { name: 'Товары сайта' } ) );
 		expect( update ).toHaveBeenCalledWith( { table: undefined, paged: undefined } );
 	} );
 

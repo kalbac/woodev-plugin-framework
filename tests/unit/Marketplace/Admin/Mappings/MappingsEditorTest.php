@@ -516,6 +516,11 @@ final class MappingsEditorTest extends TestCase {
 	public function test_state_carries_everything_the_first_paint_needs(): void {
 		Functions\when( 'get_term_children' )->justReturn( [] );
 		Functions\when( 'get_terms' )->justReturn( [ self::term( 5, 0, 'Одежда' ), self::term( 6, 5, 'Платья' ) ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( string $name, $default = false ) {
+				return $default;
+			}
+		);
 		$this->h->editor->save( null, $this->body() );
 
 		$this->h->schema->calls = [];

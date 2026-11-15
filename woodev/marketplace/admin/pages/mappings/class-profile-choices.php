@@ -135,11 +135,11 @@ final class Profile_Choices {
 				'0.2'  => '20%',
 			],
 			[
-				'offer_id_source'      => __( 'Откуда брать артикул', 'woodev-plugin-framework' ),
-				'barcode_source'       => __( 'Откуда брать штрихкод', 'woodev-plugin-framework' ),
-				'description_source'   => __( 'Откуда брать описание', 'woodev-plugin-framework' ),
-				'primary_image_source' => __( 'Откуда брать главное фото', 'woodev-plugin-framework' ),
-				'images_source'        => __( 'Откуда брать дополнительные фото', 'woodev-plugin-framework' ),
+				'offer_id_source'      => __( 'Артикул', 'woodev-plugin-framework' ),
+				'barcode_source'       => __( 'Штрихкод', 'woodev-plugin-framework' ),
+				'description_source'   => __( 'Описание', 'woodev-plugin-framework' ),
+				'primary_image_source' => __( 'Главное фото', 'woodev-plugin-framework' ),
+				'images_source'        => __( 'Дополнительные фото', 'woodev-plugin-framework' ),
 			]
 		);
 	}

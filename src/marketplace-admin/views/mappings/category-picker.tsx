@@ -59,18 +59,20 @@ export function CategoryPicker( { api, messages, value, onChange }: Props ) {
 
 	if ( value && ! searching ) {
 		return (
-			<div>
-				<strong>{ value.label }</strong>{ ' ' }
-				<Button variant="link" onClick={ () => setSearching( true ) }>
-					{ messages.categoryChange }
-				</Button>
-				{ ! value.available && <p className="description">{ messages.categoryUnavailable }</p> }
+			<div className="woodev-category-picker">
+				<div className="woodev-category-picker__chosen">
+					<span className="woodev-category-picker__value">{ value.label }</span>
+					<Button variant="link" onClick={ () => setSearching( true ) }>
+						{ messages.categoryChange }
+					</Button>
+				</div>
+				{ ! value.available && <p className="woodev-category-picker__note">{ messages.categoryUnavailable }</p> }
 			</div>
 		);
 	}
 
 	return (
-		<div>
+		<div className="woodev-category-picker">
 			<TextControl __next40pxDefaultSize
 				__nextHasNoMarginBottom
 				label={ messages.marketplaceCategory }
@@ -83,16 +85,18 @@ export function CategoryPicker( { api, messages, value, onChange }: Props ) {
 				notice={ failure ? { status: 'error', lines: failure } : null }
 				onDismiss={ () => setFailure( null ) }
 			/>
-			{ results !== null && results.length === 0 && <p className="description">{ messages.noResults }</p> }
-			<ul style={ { margin: 0, maxHeight: 220, overflowY: 'auto' } }>
-				{ ( results ?? [] ).map( ( choice ) => (
-					<li key={ choice.key }>
-						<Button variant="tertiary" onClick={ () => choose( choice ) }>
-							{ choice.label }
-						</Button>
-					</li>
-				) ) }
-			</ul>
+			{ results !== null && results.length === 0 && <p className="woodev-category-picker__note">{ messages.noResults }</p> }
+			{ ( results ?? [] ).length > 0 && (
+				<ul className="woodev-category-picker__results">
+					{ ( results ?? [] ).map( ( choice ) => (
+						<li key={ choice.key }>
+							<button type="button" className="woodev-category-picker__option" onClick={ () => choose( choice ) }>
+								{ choice.label }
+							</button>
+						</li>
+					) ) }
+				</ul>
+			) }
 		</div>
 	);
 }

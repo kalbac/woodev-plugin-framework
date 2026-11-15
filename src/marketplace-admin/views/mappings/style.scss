@@ -1,0 +1,177 @@
+/**
+ * The «Сопоставление» page: only what the settings stylesheet (`.woodev-settings`, `.woodev-field`, `.woodev-group`,
+ * the folder tabs — already on every marketplace page) does not draw by itself.
+ *
+ * @package woodev-plugin-framework
+ */
+
+@use '../../../components/tokens' as wd;
+
+.woodev-mappings-view {
+	// Buttons never wrap, whatever the translation.
+	.components-button {
+		white-space: nowrap;
+	}
+
+	.woodev-mappings-body {
+		margin-top: wd.$gap-lg;
+	}
+}
+
+.woodev-mappings-back {
+	margin: 0 0 wd.$gap;
+}
+
+// --- The two lists --------------------------------------------------------------------------------------------
+
+.woodev-mappings-list {
+	// Every row is on one page: whatever pagination bar WooCommerce draws for it is noise.
+	.woocommerce-pagination,
+	.woocommerce-table__pagination {
+		display: none;
+	}
+
+	&__title {
+		margin: 0;
+		font-size: 16px;
+		font-weight: 600;
+	}
+
+	&__empty {
+		margin: 0;
+		color: wd.$muted;
+	}
+
+	&--empty .components-card__header {
+		justify-content: space-between;
+	}
+}
+
+// --- The forms ------------------------------------------------------------------------------------------------
+
+.woodev-mappings-card {
+	margin-bottom: wd.$gap-lg;
+
+	&__title {
+		margin: 0 0 wd.$gap;
+		font-size: 16px;
+		font-weight: 600;
+	}
+}
+
+.woodev-settings .woodev-mappings-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: wd.$gap-sm;
+
+	&__end {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		margin-left: auto;
+	}
+}
+
+// A row that belongs to the row above (the field a «custom field» choice asks for): its label is set in.
+.woodev-settings .woodev-mappings-nested .woodev-field__label {
+	padding-left: wd.$gap-lg;
+}
+
+// Width, height and depth with the unit: one row, number boxes of 80px, the unit select as wide as its text needs.
+.woodev-mappings-size {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: wd.$gap-sm;
+
+	.components-base-control {
+		width: 80px;
+	}
+
+	.components-base-control:has( select ) {
+		flex: 1 1 180px;
+		width: auto;
+		max-width: 240px;
+	}
+
+	> span {
+		color: wd.$muted;
+	}
+}
+
+// The marketplace category: a text box, then what the server found as one bordered list.
+.woodev-category-picker {
+	&__chosen {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: wd.$gap-sm;
+		min-height: 40px;
+	}
+
+	&__value {
+		font-weight: 500;
+	}
+
+	&__note {
+		margin: wd.$gap-xs 0 0;
+		color: wd.$muted;
+		font-size: 13px;
+	}
+
+	&__results {
+		margin: wd.$gap-xs 0 0;
+		padding: 0;
+		max-height: 240px;
+		overflow-y: auto;
+		list-style: none;
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
+		background: wd.$surface;
+
+		li {
+			margin: 0;
+
+			& + li {
+				border-top: 1px solid wd.$divider;
+			}
+		}
+	}
+
+	&__option {
+		display: block;
+		width: 100%;
+		padding: 8px 12px;
+		border: 0;
+		background: transparent;
+		color: wd.$ink;
+		font-size: 13px;
+		text-align: left;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: wd.$accent-soft;
+			color: wd.$accent-ink;
+		}
+	}
+}
+
+// The product check under a saved mapping.
+.woodev-mapping-check {
+	&__report {
+		margin-top: wd.$gap;
+		font-size: 13px;
+
+		p {
+			margin: 0 0 wd.$gap-xs;
+		}
+
+		ul {
+			margin: 0;
+			padding-left: 1.25em;
+			list-style: disc;
+		}
+	}
+}
