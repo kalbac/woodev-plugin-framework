@@ -21,6 +21,9 @@ interface Props {
 	onDeleted: () => void;
 }
 
+/** The unit select of a size row: it takes the room the boxes leave. */
+const UNIT_CLASS = 'woodev-mappings-size__unit';
+
 /** The form of a profile that does not exist yet: the server's defaults. */
 function emptyValues( state: MappingsState ): ProfileValues {
 	const values: ProfileValues = {
@@ -161,12 +164,13 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 			onChange={ ( value ) => set( key, value ) }
 		/>
 	);
-	const dropdown = ( key: string, label: string, options: Option[], blank?: string ) => (
+	const dropdown = ( key: string, label: string, options: Option[], blank?: string, className?: string ) => (
 		<SelectControl
 			__next40pxDefaultSize
 			__nextHasNoMarginBottom
 			hideLabelFromVision
 			key={ key }
+			className={ className }
 			label={ label }
 			value={ text( key ) }
 			options={ blank === undefined ? options : [ { value: '', label: blank }, ...options ] }
@@ -205,22 +209,26 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 			</Group>
 
 			<Group title={ messages.fallbacksHeading } description={ messages.fallbacksHelp }>
-				<FieldRow label={ messages.fallbackDimensions }>
-					<div className="woodev-mappings-size">
-						{ input( 'fallback_width', messages.fallbackWidth ) }
-						<span aria-hidden="true">×</span>
-						{ input( 'fallback_height', messages.fallbackHeight ) }
-						<span aria-hidden="true">×</span>
-						{ input( 'fallback_depth', messages.fallbackDepth ) }
-						{ dropdown( 'unit_dimension', messages.unitDimension, form.dimension_units, messages.unitDefaultDimension ) }
-					</div>
-				</FieldRow>
-				<FieldRow label={ messages.fallbackWeight }>
-					<div className="woodev-mappings-size">
-						{ input( 'fallback_weight', messages.fallbackWeight ) }
-						{ dropdown( 'unit_weight', messages.unitWeight, form.weight_units, messages.unitDefaultWeight ) }
-					</div>
-				</FieldRow>
+				<div className="woodev-mappings-wide">
+					<FieldRow label={ messages.fallbackDimensions }>
+						<div className="woodev-mappings-size">
+							{ input( 'fallback_width', messages.fallbackWidth ) }
+							<span aria-hidden="true">×</span>
+							{ input( 'fallback_height', messages.fallbackHeight ) }
+							<span aria-hidden="true">×</span>
+							{ input( 'fallback_depth', messages.fallbackDepth ) }
+							{ dropdown( 'unit_dimension', messages.unitDimension, form.dimension_units, messages.unitDefaultDimension, UNIT_CLASS ) }
+						</div>
+					</FieldRow>
+				</div>
+				<div className="woodev-mappings-wide">
+					<FieldRow label={ messages.fallbackWeight }>
+						<div className="woodev-mappings-size">
+							{ input( 'fallback_weight', messages.fallbackWeight ) }
+							{ dropdown( 'unit_weight', messages.unitWeight, form.weight_units, messages.unitDefaultWeight, UNIT_CLASS ) }
+						</div>
+					</FieldRow>
+				</div>
 			</Group>
 
 			<Group title={ messages.groupPrice }>

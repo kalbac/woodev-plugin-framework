@@ -94,6 +94,7 @@ const MESSAGES: Record< string, string > = {
 	checking: 'Проверяем…',
 	checkHelp: 'Проверка сохранённого',
 	savedMapping: 'Сопоставление сохранено.',
+	copiedMapping: 'Копия создана.',
 	savedProfile: 'Профиль сохранён.',
 	deletedMapping: 'Сопоставление удалено.',
 	deletedProfile: 'Профиль удалён.',
@@ -239,22 +240,36 @@ function openView( query: Query = {} ) {
  */
 function openViewWithUrl( start: Query = {} ) {
 	const history: Query[] = [ start ];
+	const paths: Array< Record< string, string | undefined > > = [];
 	let view: ReturnType< typeof render >;
 	const show = ( query: Query ) => <MappingsView page={ PAGE } menu={ MENU } query={ query } />;
 
-	( window as unknown as { wc: Record< string, unknown > } ).wc.navigation = {
-		updateQueryString: ( patch: Record< string, string | undefined > ) => {
-			const next: Query = { ...history[ history.length - 1 ] };
-			Object.entries( patch ).forEach( ( [ key, value ] ) => {
-				if ( value === undefined ) {
-					delete next[ key ];
-				} else {
-					next[ key ] = value;
-				}
-			} );
+	const apply = ( patch: Record< string, string | undefined >, replace: boolean ) => {
+		const next: Query = { ...history[ history.length - 1 ] };
+		Object.entries( patch ).forEach( ( [ key, value ] ) => {
+			if ( value === undefined ) {
+				delete next[ key ];
+			} else {
+				next[ key ] = value;
+			}
+		} );
+		if ( replace ) {
+			history[ history.length - 1 ] = next;
+		} else {
 			history.push( next );
-			act( () => view.rerender( show( next ) ) );
+		}
+		act( () => view.rerender( show( next ) ) );
+	};
+
+	( window as unknown as { wc: Record< string, unknown > } ).wc.navigation = {
+		updateQueryString: ( patch: Record< string, string | undefined > ) => apply( patch, false ),
+		// wc-admin's way to rewrite the current entry: the path carries the patch (an `undefined` removes a key), the history applies it.
+		getNewPath: ( patch: Record< string, string | undefined > ) => {
+			paths.push( patch );
+
+			return `/path/${ paths.length - 1 }`;
 		},
+		getHistory: () => ( { replace: ( path: string ) => apply( paths[ Number( path.split( '/' ).pop() ) ], true ) } ),
 	};
 	view = render( show( start ) );
 
@@ -367,6 +382,13 @@ describe( 'lists', () => {
 		expect( await screen.findByRole( 'table', { name: 'Сопоставления' } ) ).toBeInTheDocument();
 		await userEvent.click( screen.getByRole( 'tab', { name: 'Профили' } ) );
 		expect( history[ history.length - 1 ] ).toEqual( { tab: 'profiles' } );
+	} );
+
+	test( 'the tab list is named after the page', async () => {
+		serve( { 'GET ': STATE } );
+		openView();
+
+		expect( await screen.findByRole( 'tablist', { name: 'Сопоставление' } ) ).toBeInTheDocument();
 	} );
 
 	test( 'a failed first load shows the server sentence and nothing else', async () => {
@@ -673,6 +695,59 @@ describe( 'mapping editor', () => {
 		expect( calls.filter( ( call ) => call.method === 'DELETE' ) ).toHaveLength( 1 );
 	} );
 
+	test( 'a copy opens the copy: the URL moves to the new id, the copied sentence shows, the form reads mapping 2', async () => {
+		const calls = serve( {
+			'GET ': STATE,
+			'GET /mappings/1': { id: 1, name: 'Платья', terms: [ 5 ], profile_id: null, category: null, attributes: [] },
+			'POST /mappings/1/copy': { id: 2, notices: [] },
+			'GET /mappings/2': { id: 2, name: 'Платья (копия)', terms: [], profile_id: null, category: null, attributes: [] },
+		} );
+		const { history } = openViewWithUrl( { mapping: '1' } );
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Сделать копию' } ) );
+
+		expect( history[ history.length - 1 ] ).toEqual( { mapping: '2' } );
+		expect( ( await screen.findAllByText( /Копия создана/ ) ).length ).toBeGreaterThan( 0 );
+		expect( await screen.findByLabelText( 'Название сопоставления' ) ).toHaveValue( 'Платья (копия)' );
+		expect( calls.filter( ( call ) => call.method === 'POST' ).map( ( call ) => call.path ) ).toEqual( [ `${ BASE }/mappings/1/copy` ] );
+	} );
+
+	test( 'saving a new mapping replaces «new» with its id in the history, so Back is the list', async () => {
+		serve( {
+			'GET ': STATE,
+			'POST /mappings': { id: 9, notices: [] },
+			'GET /mappings/9': { id: 9, name: 'Новое', terms: [], profile_id: null, category: null, attributes: [] },
+		} );
+		const { history } = openViewWithUrl();
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Добавить сопоставление' } ) );
+		await userEvent.type( await screen.findByLabelText( 'Название сопоставления' ), 'Новое' );
+		await userEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+
+		expect( await screen.findByRole( 'heading', { name: '«Новое»' } ) ).toBeInTheDocument();
+		expect( history ).toEqual( [ {}, { mapping: '9' } ] );
+	} );
+
+	test( 'saving a saved mapping and deleting it: the save adds nothing to the history, the delete leaves no way back to it', async () => {
+		serve( {
+			'GET ': STATE,
+			'GET /mappings/1': { id: 1, name: 'Платья', terms: [ 5 ], profile_id: null, category: null, attributes: [] },
+			'POST /mappings/1': { id: 1, notices: [] },
+			'DELETE /mappings/1': { id: 1, notices: [] },
+		} );
+		const { history } = openViewWithUrl( { mapping: '1' } );
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Сохранить' } ) );
+		await screen.findAllByText( 'Сопоставление сохранено.' );
+		expect( history[ history.length - 1 ] ).toEqual( { mapping: '1' } );
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Удалить' } ) );
+		await userEvent.click( screen.getByRole( 'button', { name: 'Да, удалить' } ) );
+		expect( await screen.findByRole( 'table', { name: 'Сопоставления' } ) ).toBeInTheDocument();
+		// The entry of the deleted mapping was rewritten into the list, so Back never reopens it.
+		expect( history ).toEqual( [ {} ] );
+	} );
+
 	test( 'the product check runs batch after batch and prints the server text', async () => {
 		let batch = 0;
 		serve( {
@@ -786,6 +861,8 @@ describe( 'profile editor', () => {
 		expect( within( sizes ).getByRole( 'combobox', { name: 'Единица размеров' } ) ).toHaveDisplayValue( 'как в магазине (см)' );
 		expect( within( sizes ).getByRole( 'combobox', { name: 'Единица веса' } ) ).toHaveDisplayValue( 'как в магазине (кг)' );
 		expect( sizes.querySelectorAll( '.woodev-mappings-size' ) ).toHaveLength( 2 );
+		// The two size rows get the wider control column, so the boxes and the unit stay on one line.
+		expect( sizes.querySelectorAll( '.woodev-mappings-wide .woodev-mappings-size' ) ).toHaveLength( 2 );
 	} );
 
 	test( 'the VAT rate and the currency are in the price group; the own price rule opens its rows', async () => {

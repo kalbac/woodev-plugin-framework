@@ -21,7 +21,7 @@ import { ProfileEditor } from './profile-editor';
 import { selectionArgument, useRoute, type Selection } from './route';
 import type { MappingsState } from './types';
 
-export function MappingsView( { menu, query }: PageViewProps ) {
+export function MappingsView( { page, menu, query }: PageViewProps ) {
 	const api = useMemo( () => createApi( menu.pluginId ), [ menu.pluginId ] );
 	const route = useRoute( query );
 	const [ state, setState ] = useState< MappingsState | null >( null );
@@ -63,6 +63,7 @@ export function MappingsView( { menu, query }: PageViewProps ) {
 		<div className="woodev-mappings-view woodev-settings">
 			<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
 			<FolderTabs
+				label={ page.title }
 				tabs={ [
 					{ id: 'mappings', label: messages.tabMappings },
 					{ id: 'profiles', label: messages.tabProfiles },
@@ -84,7 +85,10 @@ export function MappingsView( { menu, query }: PageViewProps ) {
 								state={ state }
 								mappingId={ mapping }
 								onSaved={ ( id, notices ) => {
-									go( { mapping: String( id ) } );
+									// A new record's «new» entry is replaced, so Back from the saved form is the list; a saved one stays put.
+									if ( id !== mapping ) {
+										go( { mapping: String( id ) }, mapping === null );
+									}
 									done( messages.savedMapping, notices );
 								} }
 								onCopied={ ( id ) => {
@@ -92,7 +96,7 @@ export function MappingsView( { menu, query }: PageViewProps ) {
 									done( messages.copiedMapping );
 								} }
 								onDeleted={ () => {
-									go( { mapping: undefined } );
+									go( { mapping: undefined }, true );
 									done( messages.deletedMapping );
 								} }
 							/>
@@ -109,11 +113,13 @@ export function MappingsView( { menu, query }: PageViewProps ) {
 							state={ state }
 							profileId={ profile }
 							onSaved={ ( id ) => {
-								go( { profile: String( id ) } );
+								if ( id !== profile ) {
+									go( { profile: String( id ) }, profile === null );
+								}
 								done( messages.savedProfile );
 							} }
 							onDeleted={ () => {
-								go( { profile: undefined } );
+								go( { profile: undefined }, true );
 								done( messages.deletedProfile );
 							} }
 						/>

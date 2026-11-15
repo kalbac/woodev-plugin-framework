@@ -78,7 +78,13 @@
 	padding-left: wd.$gap-lg;
 }
 
-// Width, height and depth with the unit: one row, number boxes of 80px, the unit select as wide as its text needs.
+// Width, height and depth with the unit: ONE row. The settings control column is at most 425px, which cannot hold three
+// 80px boxes, two « × », the gaps and a unit select that reads «как в магазине (см)» (about 480px), so the two size rows
+// get a wider control column. The row still wraps below ~540px, which is what keeps a phone free of a horizontal scroll.
+.woodev-settings .woodev-mappings-wide .woodev-field {
+	grid-template-columns: 200px minmax( 0, 540px );
+}
+
 .woodev-mappings-size {
 	display: flex;
 	flex-wrap: wrap;
@@ -89,7 +95,7 @@
 		width: 80px;
 	}
 
-	.components-base-control:has( select ) {
+	.components-base-control.woodev-mappings-size__unit {
 		flex: 1 1 180px;
 		width: auto;
 		max-width: 240px;

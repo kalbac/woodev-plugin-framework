@@ -799,11 +799,14 @@ C2 tabs and the mapping/profile forms. Delivery code was not touched (invariant 
   «Добавить…» in the header; an empty list is a plain card because there is no `emptyMessage`). Opening a record, or «Добавить…»,
   **replaces the list with the form**; «← Все сопоставления» / «← Все профили» brings it back. The place is in the URL — `tab=profiles`,
   `mapping=new|<id>`, `profile=new|<id>` (`views/mappings/route.ts`, through `wc.navigation`) — so Back, Forward and a bookmark work.
+  Saving a new record or deleting one rewrites the history entry (`wc.navigation.getHistory().replace`, pushing where the runtime lacks it), so Back
+  never lands on an empty «new» form or a deleted id.
   A form is a settings card (`FormCard`) of `FieldRow`s inside titled `Group`s (`views/mappings/form-parts.tsx`). Why not a form under
   the list: the mapping form holds the attribute table, which needs the full width, and the profile form is ~20 rows long.
   Store categories are a `SelectField multi` (search + checklist popover). A category another mapping holds stays in the list with
   «— Уже входит в сопоставление: <name>»; the editor drops its id from the draft, so ticking it changes nothing (the server's
-  «one category, one mapping» check stays). The size row is three 80 px boxes with `×` and the unit select in one `FieldRow`; the default
+  «one category, one mapping» check stays). The size row is three 80 px boxes with `×` and the unit select in one `FieldRow` whose control column is widened to 540 px (the settings
+  column, 425 px, cannot hold it on one line); the default
   unit option names the shop's unit («как в магазине (см)», read by PHP in `View_Config::shop_unit_label()`). VAT moved into «Цена».
   Every new word is a `View_Config` message; `chooseMapping`, `chooseProfile` and `unitDefault` are gone.
 
