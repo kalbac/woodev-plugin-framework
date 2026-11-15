@@ -269,7 +269,8 @@ final class Effective_Settings {
 	 *
 	 * @param string $field_id Field id.
 	 * @param mixed  $default  Returned when the merchant has not saved the field (pass the field's own default).
-	 * @return mixed A select's value is a string, a toggle's a bool.
+	 * @return mixed A select's value is a string, a toggle's a bool. The stored value is returned unchecked: an option the adapter
+	 *               has since dropped comes back as it was saved, so normalise it against your own options.
 	 */
 	public function extra( string $field_id, $default = null ) {
 		$stored = call_user_func( $this->get_option, self::option_name( $this->adapter_id ), [] );
@@ -288,7 +289,8 @@ final class Effective_Settings {
 	 * @param \WC_Product $product  Product.
 	 * @param string      $field_id Field id.
 	 * @param mixed       $default  Returned when neither the product nor «Общие» holds a value.
-	 * @return mixed
+	 * @return mixed The stored value, unchecked: an option the adapter has since dropped comes back as it was saved, so normalise it
+	 *               against your own options.
 	 */
 	public function product_extra( \WC_Product $product, string $field_id, $default = null ) {
 		$own = $this->own_product_value( $product, $field_id );

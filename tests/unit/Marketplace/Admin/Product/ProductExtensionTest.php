@@ -149,6 +149,24 @@ final class ProductExtensionTest extends TestCase {
 		$this->assertStringContainsString( '<option value="none" selected="selected">Не показывать</option>', $html );
 	}
 
+	public function test_a_variation_panel_without_an_extension_prints_nothing_of_it(): void {
+		ob_start();
+		( new Panel_View( new Screen_Names( 'fake', 'Fake' ) ) )->render_variation(
+			[
+				'blocks'       => [ $this->block() ],
+				'nonce'        => 'save-nonce',
+				'loop'         => 4,
+				'settings_url' => 'https://example.test/settings',
+				'mappings_url' => 'https://example.test/mappings',
+			]
+		);
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'woodev_fake_variation[4][3][sync_price]', $html );
+		$this->assertStringNotContainsString( '_ext', $html );
+		$this->assertStringNotContainsString( 'woodev-mp-ext', $html );
+	}
+
 	public function test_a_variation_follows_its_parent_and_then_the_shop(): void {
 		$parent_meta = new \ArrayObject();
 		$parent      = $this->product( $parent_meta );

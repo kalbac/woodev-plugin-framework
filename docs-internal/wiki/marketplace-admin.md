@@ -947,8 +947,10 @@ What is settled:
   `extra()` of the **same field id**, else `$default`.
 - **Guards.** The same nonce field and `edit_product` as the account blocks (`Admin_Guard::check_request()` with no account); a value that
   is not an option is refused with a sentence on the next screen and nothing is written. A field the form did not post keeps its value.
-- **Not covered.** The values are not part of the account-deletion step `product_meta` (they are shop data, not account data) and are not
-  removed by the uninstaller.
+- **Removal.** The values are not part of the account-deletion step `product_meta` (they are shop data, not account data); the uninstaller
+  deletes them with the chosen articles (`_woodev_{adapter id}_ext_%`) when «Удалять данные при удалении плагина» is on.
+- **Readers do not normalise.** `extra()` and `product_extra()` return what is stored; the screens show an option the adapter has dropped as the
+  default, the readers do not — check the value against your own options.
 
 ## Verification
 

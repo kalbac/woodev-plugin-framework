@@ -194,7 +194,8 @@ final class UninstallerTest extends TestCase {
 	}
 
 	/**
-	 * The articles chosen on the product tab are product meta of this marketplace; deleting the plugin deletes them, and only them.
+	 * The articles chosen on the product tab, and the values of the fields an adapter added to it, are product meta of this
+	 * marketplace; deleting the plugin deletes them, and only them.
 	 *
 	 * @return void
 	 */
@@ -203,8 +204,10 @@ final class UninstallerTest extends TestCase {
 
 		$deletes = array_values( array_filter( $this->db->queries, static fn( string $sql ): bool => 0 === strpos( $sql, 'DELETE FROM wp_postmeta' ) ) );
 
-		$this->assertCount( 1, $deletes );
+		$this->assertCount( 2, $deletes );
 		$this->assertStringContainsString( '\\_woodev\\_fake\\_offer\\_id\\_%', $deletes[0] );
+		$this->assertStringContainsString( '\\_woodev\\_fake\\_ext\\_%', $deletes[1] );
+		$this->assertStringNotContainsString( 'other', $deletes[1] );
 	}
 
 	/**
