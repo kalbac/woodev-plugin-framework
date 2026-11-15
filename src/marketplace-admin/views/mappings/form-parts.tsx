@@ -41,6 +41,11 @@ export function Group( { title, description, children }: { title: string; descri
 	);
 }
 
+/** A row that sits between groups, inset like the group's own content so its input shares the groups' left edge. */
+export function Inset( { children }: { children: ReactNode } ) {
+	return <div className="woodev-mappings-inset">{ children }</div>;
+}
+
 /** A row that belongs to the row above it (the field a «custom field» choice asks for). */
 export function NestedRow( { children }: { children: ReactNode } ) {
 	return <div className="woodev-mappings-nested">{ children }</div>;

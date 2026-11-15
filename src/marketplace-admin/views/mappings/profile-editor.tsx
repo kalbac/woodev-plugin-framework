@@ -8,7 +8,7 @@ import { Fragment, useEffect, useState } from '@wordpress/element';
 import { Button, FormToggle, SelectControl, Spinner, TextControl } from '@wordpress/components';
 import FieldRow from '../../../components/field-row';
 import { errorLines, type MappingsApi } from './api';
-import { FormActions, FormCard, Group, NestedRow } from './form-parts';
+import { FormActions, FormCard, Group, Inset, NestedRow } from './form-parts';
 import { Notices, type NoticeState } from './notices';
 import type { MappingsState, Option, ProfileValues } from './types';
 
@@ -195,7 +195,7 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 	return (
 		<FormCard title={ title } className="woodev-profile-editor">
 			<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
-			{ fieldRow( 'name', messages.profileName ) }
+			<Inset>{ fieldRow( 'name', messages.profileName ) }</Inset>
 
 			<Group title={ messages.sourcesHeading }>
 				{ form.sources.map( ( source ) => (

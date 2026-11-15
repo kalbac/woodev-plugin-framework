@@ -12,7 +12,7 @@ import { errorLines, type MappingsApi } from './api';
 import { AttributeTable } from './attribute-table';
 import { CategoryPicker } from './category-picker';
 import { CheckReport } from './check-report';
-import { FormActions, FormCard, Group } from './form-parts';
+import { FormActions, FormCard, Group, Inset } from './form-parts';
 import { Notices, type NoticeState } from './notices';
 import type { AttributeRow, MappingCategory, MappingsState, ShopCategory } from './types';
 
@@ -227,16 +227,18 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 			<FormCard title={ title } className="woodev-mapping-editor">
 				<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
 
-				<FieldRow label={ messages.mappingName }>
-					<TextControl
-						__next40pxDefaultSize
-						__nextHasNoMarginBottom
-						label={ messages.mappingName }
-						hideLabelFromVision
-						value={ draft.name }
-						onChange={ ( name ) => setDraft( { ...draft, name } ) }
-					/>
-				</FieldRow>
+				<Inset>
+					<FieldRow label={ messages.mappingName }>
+						<TextControl
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+							label={ messages.mappingName }
+							hideLabelFromVision
+							value={ draft.name }
+							onChange={ ( name ) => setDraft( { ...draft, name } ) }
+						/>
+					</FieldRow>
+				</Inset>
 
 				<Group title={ messages.groupCategories }>
 					<FieldRow label={ messages.shopCategories } description={ messages.shopCategoriesHelp }>

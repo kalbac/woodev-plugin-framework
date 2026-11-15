@@ -73,6 +73,12 @@
 	}
 }
 
+// The name row sits between the group cards: it gets the cards' own inset (1px border + the group padding), so its label and
+// its input start where the fields inside the cards start.
+.woodev-mappings-inset {
+	padding: 0 calc( #{ wd.$gap-lg } + 1px );
+}
+
 // A row that belongs to the row above (the field a «custom field» choice asks for): its label is set in.
 .woodev-settings .woodev-mappings-nested .woodev-field__label {
 	padding-left: wd.$gap-lg;
