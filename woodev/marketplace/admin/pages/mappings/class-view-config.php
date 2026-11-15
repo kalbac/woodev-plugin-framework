@@ -138,33 +138,36 @@ final class View_Config {
 	 */
 	private static function list_messages(): array {
 		return [
-			'tabMappings'     => __( 'Сопоставления', 'woodev-plugin-framework' ),
-			'tabProfiles'     => __( 'Профили', 'woodev-plugin-framework' ),
-			'loading'         => __( 'Загрузка…', 'woodev-plugin-framework' ),
-			'requestFailed'   => __( 'Не удалось выполнить запрос. Обновите страницу и повторите.', 'woodev-plugin-framework' ),
-			'addMapping'      => __( 'Добавить сопоставление', 'woodev-plugin-framework' ),
-			'addProfile'      => __( 'Добавить профиль', 'woodev-plugin-framework' ),
-			'emptyMappings'   => __( 'Сопоставлений пока нет. Добавьте первое — оно задаёт, какой категории маркетплейса соответствуют категории вашего магазина.', 'woodev-plugin-framework' ),
-			'emptyProfiles'   => __( 'Профилей пока нет. Профиль задаёт общие правила выгрузки: откуда брать данные, запасные размеры, цену.', 'woodev-plugin-framework' ),
-			'chooseMapping'   => __( 'Выберите сопоставление слева или добавьте новое.', 'woodev-plugin-framework' ),
-			'chooseProfile'   => __( 'Выберите профиль слева или добавьте новый.', 'woodev-plugin-framework' ),
-			'columnName'      => __( 'Название', 'woodev-plugin-framework' ),
-			'columnCategory'  => __( 'Категория маркетплейса', 'woodev-plugin-framework' ),
-			'columnShop'      => __( 'Категорий магазина', 'woodev-plugin-framework' ),
-			'columnProducts'  => __( 'Товаров', 'woodev-plugin-framework' ),
-			'columnMappings'  => __( 'Сопоставлений', 'woodev-plugin-framework' ),
-			'noCategory'      => __( 'Не выбрана', 'woodev-plugin-framework' ),
-			'save'            => __( 'Сохранить', 'woodev-plugin-framework' ),
-			'saving'          => __( 'Сохраняем…', 'woodev-plugin-framework' ),
-			'delete'          => __( 'Удалить', 'woodev-plugin-framework' ),
-			'confirmDelete'   => __( 'Да, удалить', 'woodev-plugin-framework' ),
-			'cancel'          => __( 'Отмена', 'woodev-plugin-framework' ),
-			'retry'           => __( 'Повторить', 'woodev-plugin-framework' ),
-			'savedMapping'    => __( 'Сопоставление сохранено.', 'woodev-plugin-framework' ),
-			'savedProfile'    => __( 'Профиль сохранён.', 'woodev-plugin-framework' ),
-			'deletedMapping'  => __( 'Сопоставление удалено.', 'woodev-plugin-framework' ),
-			'deletedProfile'  => __( 'Профиль удалён.', 'woodev-plugin-framework' ),
-			'copiedMapping'   => __( 'Копия создана. Выберите для неё категории магазина — одна категория не может быть в двух сопоставлениях.', 'woodev-plugin-framework' ),
+			'tabMappings'    => __( 'Сопоставления', 'woodev-plugin-framework' ),
+			'tabProfiles'    => __( 'Профили', 'woodev-plugin-framework' ),
+			'loading'        => __( 'Загрузка…', 'woodev-plugin-framework' ),
+			'requestFailed'  => __( 'Не удалось выполнить запрос. Обновите страницу и повторите.', 'woodev-plugin-framework' ),
+			'addMapping'     => __( 'Добавить сопоставление', 'woodev-plugin-framework' ),
+			'addProfile'     => __( 'Добавить профиль', 'woodev-plugin-framework' ),
+			'emptyMappings'  => __( 'Сопоставлений пока нет. Добавьте первое — оно задаёт, какой категории маркетплейса соответствуют категории вашего магазина.', 'woodev-plugin-framework' ),
+			'emptyProfiles'  => __( 'Профилей пока нет. Профиль задаёт общие правила выгрузки: откуда брать данные, запасные размеры, цену.', 'woodev-plugin-framework' ),
+			'backToMappings' => __( '← Все сопоставления', 'woodev-plugin-framework' ),
+			'backToProfiles' => __( '← Все профили', 'woodev-plugin-framework' ),
+			'newMapping'     => __( 'Новое сопоставление', 'woodev-plugin-framework' ),
+			'newProfile'     => __( 'Новый профиль', 'woodev-plugin-framework' ),
+			'columnName'     => __( 'Название', 'woodev-plugin-framework' ),
+			'columnCategory' => __( 'Категория маркетплейса', 'woodev-plugin-framework' ),
+			'columnShop'     => __( 'Категорий магазина', 'woodev-plugin-framework' ),
+			'columnProfile'  => __( 'Профиль', 'woodev-plugin-framework' ),
+			'columnProducts' => __( 'Товаров', 'woodev-plugin-framework' ),
+			'columnMappings' => __( 'Сопоставлений', 'woodev-plugin-framework' ),
+			'noCategory'     => __( 'Не выбрана', 'woodev-plugin-framework' ),
+			'save'           => __( 'Сохранить', 'woodev-plugin-framework' ),
+			'saving'         => __( 'Сохраняем…', 'woodev-plugin-framework' ),
+			'delete'         => __( 'Удалить', 'woodev-plugin-framework' ),
+			'confirmDelete'  => __( 'Да, удалить', 'woodev-plugin-framework' ),
+			'cancel'         => __( 'Отмена', 'woodev-plugin-framework' ),
+			'retry'          => __( 'Повторить', 'woodev-plugin-framework' ),
+			'savedMapping'   => __( 'Сопоставление сохранено.', 'woodev-plugin-framework' ),
+			'savedProfile'   => __( 'Профиль сохранён.', 'woodev-plugin-framework' ),
+			'deletedMapping' => __( 'Сопоставление удалено.', 'woodev-plugin-framework' ),
+			'deletedProfile' => __( 'Профиль удалён.', 'woodev-plugin-framework' ),
+			'copiedMapping'  => __( 'Копия создана. Выберите для неё категории магазина — одна категория не может быть в двух сопоставлениях.', 'woodev-plugin-framework' ),
 		];
 	}
 
@@ -176,6 +179,7 @@ final class View_Config {
 	private static function mapping_messages(): array {
 		return [
 			'mappingName'         => __( 'Название сопоставления', 'woodev-plugin-framework' ),
+			'groupCategories'     => __( 'Категории', 'woodev-plugin-framework' ),
 			'shopCategories'      => __( 'Категории вашего магазина', 'woodev-plugin-framework' ),
 			'shopCategoriesHelp'  => __( 'Сопоставление действует и на вложенные категории, если у них нет своего. Одна категория может входить только в одно сопоставление.', 'woodev-plugin-framework' ),
 			'shopCategoryTaken'   => __( 'Уже входит в сопоставление', 'woodev-plugin-framework' ),
@@ -204,6 +208,7 @@ final class View_Config {
 			'fixedValue'          => __( 'Значение', 'woodev-plugin-framework' ),
 			'dictionarySearch'    => __( 'Введите не меньше двух букв и выберите значение', 'woodev-plugin-framework' ),
 			'copy'                => __( 'Сделать копию', 'woodev-plugin-framework' ),
+			'checkHeading'        => __( 'Проверка товаров', 'woodev-plugin-framework' ),
 			'check'               => __( 'Проверить товары этой категории', 'woodev-plugin-framework' ),
 			'checking'            => __( 'Проверяем товары…', 'woodev-plugin-framework' ),
 			'checkHelp'           => __( 'Проверка сохранённого сопоставления: что помешает выгрузке его товаров.', 'woodev-plugin-framework' ),
@@ -217,32 +222,56 @@ final class View_Config {
 	 */
 	private static function profile_messages(): array {
 		return [
-			'profileName'      => __( 'Название профиля', 'woodev-plugin-framework' ),
-			'sourcesHeading'   => __( 'Откуда брать данные', 'woodev-plugin-framework' ),
-			'customFieldKey'   => __( 'Название поля', 'woodev-plugin-framework' ),
-			'fallbacksHeading' => __( 'Запасные размеры и вес', 'woodev-plugin-framework' ),
-			'fallbacksHelp'    => __( 'Применяются к товарам, у которых размеры или вес не заполнены. Оставьте пустым, если запасного значения не нужно.', 'woodev-plugin-framework' ),
-			'fallbackWidth'    => __( 'Ширина', 'woodev-plugin-framework' ),
-			'fallbackHeight'   => __( 'Высота', 'woodev-plugin-framework' ),
-			'fallbackDepth'    => __( 'Глубина', 'woodev-plugin-framework' ),
-			'fallbackWeight'   => __( 'Вес', 'woodev-plugin-framework' ),
-			'unitWeight'       => __( 'Единица веса', 'woodev-plugin-framework' ),
-			'unitDimension'    => __( 'Единица размеров', 'woodev-plugin-framework' ),
-			'unitDefault'      => __( '— как в магазине —', 'woodev-plugin-framework' ),
-			'vatRate'          => __( 'Ставка НДС', 'woodev-plugin-framework' ),
-			'currencyHeading'  => __( 'Валюта цены', 'woodev-plugin-framework' ),
-			'currencyAccount'  => __( 'Как в личном кабинете', 'woodev-plugin-framework' ),
-			'currencyRate'     => __( 'Пересчитать по курсу', 'woodev-plugin-framework' ),
-			'currencyRateInput' => __( 'Курс', 'woodev-plugin-framework' ),
-			'currencyFixed'    => __( 'Фиксированная валюта (сохранена раньше, форма её не меняет)', 'woodev-plugin-framework' ),
-			'currencyFieldKey' => __( 'Название поля товара', 'woodev-plugin-framework' ),
-			'priceOverride'    => __( 'Своё правило цены для этого профиля', 'woodev-plugin-framework' ),
-			'priceBase'        => __( 'Какую цену брать', 'woodev-plugin-framework' ),
-			'priceMarkupKind'  => __( 'Наценка', 'woodev-plugin-framework' ),
-			'priceMarkup'      => __( 'Размер наценки', 'woodev-plugin-framework' ),
-			'priceRounding'    => __( 'Округление', 'woodev-plugin-framework' ),
-			'priceOldPrice'    => __( 'Старая цена', 'woodev-plugin-framework' ),
-			'priceMinPercent'  => __( 'Минимальная цена, % от обычной', 'woodev-plugin-framework' ),
+			'profileName'          => __( 'Название профиля', 'woodev-plugin-framework' ),
+			'sourcesHeading'       => __( 'Откуда брать данные', 'woodev-plugin-framework' ),
+			'customFieldKey'       => __( 'Название поля', 'woodev-plugin-framework' ),
+			'fallbacksHeading'     => __( 'Запасные размеры и вес', 'woodev-plugin-framework' ),
+			'fallbacksHelp'        => __( 'Применяются к товарам, у которых размеры или вес не заполнены. Оставьте пустым, если запасного значения не нужно.', 'woodev-plugin-framework' ),
+			'fallbackDimensions'   => __( 'Размеры (Ш × В × Г)', 'woodev-plugin-framework' ),
+			'fallbackWidth'        => __( 'Ширина', 'woodev-plugin-framework' ),
+			'fallbackHeight'       => __( 'Высота', 'woodev-plugin-framework' ),
+			'fallbackDepth'        => __( 'Глубина', 'woodev-plugin-framework' ),
+			'fallbackWeight'       => __( 'Вес', 'woodev-plugin-framework' ),
+			'unitWeight'           => __( 'Единица веса', 'woodev-plugin-framework' ),
+			'unitDimension'        => __( 'Единица размеров', 'woodev-plugin-framework' ),
+			'unitDefaultDimension' => self::shop_unit_label( 'woocommerce_dimension_unit', 'cm' ),
+			'unitDefaultWeight'    => self::shop_unit_label( 'woocommerce_weight_unit', 'kg' ),
+			'groupPrice'           => __( 'Цена', 'woodev-plugin-framework' ),
+			'vatRate'              => __( 'Ставка НДС', 'woodev-plugin-framework' ),
+			'currencyHeading'      => __( 'Валюта цены', 'woodev-plugin-framework' ),
+			'currencyAccount'      => __( 'Как в личном кабинете', 'woodev-plugin-framework' ),
+			'currencyRate'         => __( 'Пересчитать по курсу', 'woodev-plugin-framework' ),
+			'currencyRateInput'    => __( 'Курс', 'woodev-plugin-framework' ),
+			'currencyFixed'        => __( 'Фиксированная валюта (сохранена раньше, форма её не меняет)', 'woodev-plugin-framework' ),
+			'currencyFieldKey'     => __( 'Название поля товара', 'woodev-plugin-framework' ),
+			'priceOverride'        => __( 'Своё правило цены для этого профиля', 'woodev-plugin-framework' ),
+			'priceBase'            => __( 'Какую цену брать', 'woodev-plugin-framework' ),
+			'priceMarkupKind'      => __( 'Наценка', 'woodev-plugin-framework' ),
+			'priceMarkup'          => __( 'Размер наценки', 'woodev-plugin-framework' ),
+			'priceRounding'        => __( 'Округление', 'woodev-plugin-framework' ),
+			'priceOldPrice'        => __( 'Старая цена', 'woodev-plugin-framework' ),
+			'priceMinPercent'      => __( 'Минимальная цена, % от обычной', 'woodev-plugin-framework' ),
 		];
+	}
+
+	/**
+	 * The «use the shop's unit» choice of a size or weight select, naming the unit the shop has.
+	 *
+	 * @param string $option   WooCommerce option that holds the unit.
+	 * @param string $fallback Unit to name when the option is empty.
+	 * @return string E.g. «как в магазине (см)».
+	 */
+	private static function shop_unit_label( string $option, string $fallback ): string {
+		$names = [
+			'mm' => __( 'мм', 'woodev-plugin-framework' ),
+			'cm' => __( 'см', 'woodev-plugin-framework' ),
+			'm'  => __( 'м', 'woodev-plugin-framework' ),
+			'kg' => __( 'кг', 'woodev-plugin-framework' ),
+			'g'  => __( 'г', 'woodev-plugin-framework' ),
+		];
+		$unit  = (string) get_option( $option, $fallback );
+
+		/* translators: %s: unit of measure the shop uses, e.g. «см» or «кг». */
+		return sprintf( __( 'как в магазине (%s)', 'woodev-plugin-framework' ), $names[ $unit ] ?? $unit );
 	}
 }

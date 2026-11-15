@@ -4,9 +4,11 @@
  * @package woodev-plugin-framework
  */
 
-import { useEffect, useState } from '@wordpress/element';
-import { Button, SelectControl, Spinner, TextControl, ToggleControl } from '@wordpress/components';
+import { Fragment, useEffect, useState } from '@wordpress/element';
+import { Button, FormToggle, SelectControl, Spinner, TextControl } from '@wordpress/components';
+import FieldRow from '../../../components/field-row';
 import { errorLines, type MappingsApi } from './api';
+import { FormActions, FormCard, Group, Inset, NestedRow } from './form-parts';
 import { Notices, type NoticeState } from './notices';
 import type { MappingsState, Option, ProfileValues } from './types';
 
@@ -18,6 +20,9 @@ interface Props {
 	onSaved: ( id: number ) => void;
 	onDeleted: () => void;
 }
+
+/** The unit select of a size row: it takes the room the boxes leave. */
+const UNIT_CLASS = 'woodev-mappings-size__unit';
 
 /** The form of a profile that does not exist yet: the server's defaults. */
 function emptyValues( state: MappingsState ): ProfileValues {
@@ -65,6 +70,8 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 	const [ busy, setBusy ] = useState( false );
 	const [ confirming, setConfirming ] = useState( false );
 	const [ notice, setNotice ] = useState< NoticeState | null >( null );
+	/** The name the profile has in the shop: the title does not follow what is being typed. */
+	const [ savedName, setSavedName ] = useState( '' );
 
 	useEffect( () => {
 		setNotice( null );
@@ -117,6 +124,7 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 	const save = () =>
 		act( async () => {
 			const result = await api.saveProfile( profileId, toBody( values ) );
+			setSavedName( text( 'name' ) );
 			onSaved( result.id );
 		} );
 
@@ -130,35 +138,50 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 		return <Spinner />;
 	}
 
+	const listed = state.profiles.find( ( profile ) => profile.id === profileId )?.name;
+	const title = profileId === null ? messages.newProfile : `«${ savedName || listed || messages.profileName }»`;
+
 	// An existing profile that could not be read is not edited: a blank form saved over it would reset its settings.
 	if ( loadState === 'failed' ) {
 		return (
-			<div className="woodev-profile-editor">
+			<FormCard title={ title } className="woodev-profile-editor">
 				<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
-				<Button variant="secondary" onClick={ () => setReload( reload + 1 ) }>
+				<Button __next40pxDefaultSize variant="secondary" onClick={ () => setReload( reload + 1 ) }>
 					{ messages.retry }
 				</Button>
-			</div>
+			</FormCard>
 		);
 	}
 
-	const field = ( key: string, label: string ) => (
+	const input = ( key: string, label: string ) => (
 		<TextControl
 			__next40pxDefaultSize
+			__nextHasNoMarginBottom
+			hideLabelFromVision
 			key={ key }
 			label={ label }
 			value={ text( key ) }
 			onChange={ ( value ) => set( key, value ) }
 		/>
 	);
-	const select = ( key: string, label: string, options: Option[], blank?: string ) => (
-		<SelectControl __next40pxDefaultSize
+	const dropdown = ( key: string, label: string, options: Option[], blank?: string, className?: string ) => (
+		<SelectControl
+			__next40pxDefaultSize
+			__nextHasNoMarginBottom
+			hideLabelFromVision
 			key={ key }
+			className={ className }
 			label={ label }
 			value={ text( key ) }
 			options={ blank === undefined ? options : [ { value: '', label: blank }, ...options ] }
 			onChange={ ( value ) => set( key, value ) }
 		/>
+	);
+	const fieldRow = ( key: string, label: string ) => (
+		<FieldRow label={ label }>{ input( key, label ) }</FieldRow>
+	);
+	const selectRow = ( key: string, label: string, options: Option[] ) => (
+		<FieldRow label={ label }>{ dropdown( key, label, options ) }</FieldRow>
 	);
 
 	const fixedLabel = `${ messages.currencyFixed }: ${ text( 'currency_code' ) }`;
@@ -170,77 +193,76 @@ export function ProfileEditor( { api, state, profileId, onSaved, onDeleted }: Pr
 	];
 
 	return (
-		<div className="woodev-profile-editor">
+		<FormCard title={ title } className="woodev-profile-editor">
 			<Notices notice={ notice } onDismiss={ () => setNotice( null ) } />
-			{ field( 'name', messages.profileName ) }
+			<Inset>{ fieldRow( 'name', messages.profileName ) }</Inset>
 
-			<fieldset>
-				<legend>{ messages.sourcesHeading }</legend>
+			<Group title={ messages.sourcesHeading }>
 				{ form.sources.map( ( source ) => (
-					<div key={ source.setting }>
-						{ select( source.setting, source.title, source.kinds ) }
-						{ text( source.setting ) === source.custom &&
-							field( `${ source.setting }_key`, messages.customFieldKey ) }
-					</div>
+					<Fragment key={ source.setting }>
+						{ selectRow( source.setting, source.title, source.kinds ) }
+						{ text( source.setting ) === source.custom && (
+							<NestedRow>{ fieldRow( `${ source.setting }_key`, messages.customFieldKey ) }</NestedRow>
+						) }
+					</Fragment>
 				) ) }
-			</fieldset>
+			</Group>
 
-			<fieldset>
-				<legend>{ messages.fallbacksHeading }</legend>
-				<p className="description">{ messages.fallbacksHelp }</p>
-				{ field( 'fallback_width', messages.fallbackWidth ) }
-				{ field( 'fallback_height', messages.fallbackHeight ) }
-				{ field( 'fallback_depth', messages.fallbackDepth ) }
-				{ field( 'fallback_weight', messages.fallbackWeight ) }
-				{ select( 'unit_dimension', messages.unitDimension, form.dimension_units, messages.unitDefault ) }
-				{ select( 'unit_weight', messages.unitWeight, form.weight_units, messages.unitDefault ) }
-			</fieldset>
+			<Group title={ messages.fallbacksHeading } description={ messages.fallbacksHelp }>
+				<div className="woodev-mappings-wide">
+					<FieldRow label={ messages.fallbackDimensions }>
+						<div className="woodev-mappings-size">
+							{ input( 'fallback_width', messages.fallbackWidth ) }
+							<span aria-hidden="true">×</span>
+							{ input( 'fallback_height', messages.fallbackHeight ) }
+							<span aria-hidden="true">×</span>
+							{ input( 'fallback_depth', messages.fallbackDepth ) }
+							{ dropdown( 'unit_dimension', messages.unitDimension, form.dimension_units, messages.unitDefaultDimension, UNIT_CLASS ) }
+						</div>
+					</FieldRow>
+				</div>
+				<div className="woodev-mappings-wide">
+					<FieldRow label={ messages.fallbackWeight }>
+						<div className="woodev-mappings-size">
+							{ input( 'fallback_weight', messages.fallbackWeight ) }
+							{ dropdown( 'unit_weight', messages.unitWeight, form.weight_units, messages.unitDefaultWeight, UNIT_CLASS ) }
+						</div>
+					</FieldRow>
+				</div>
+			</Group>
 
-			{ select( 'vat_rate', messages.vatRate, form.vat_rates ) }
-
-			<fieldset>
-				<legend>{ messages.currencyHeading }</legend>
-				{ select( 'currency_kind', messages.currencyHeading, currencyOptions ) }
-				{ text( 'currency_kind' ) === 'rate' && field( 'currency_rate', messages.currencyRateInput ) }
-				{ text( 'currency_kind' ) === 'field' && field( 'currency_field', messages.currencyFieldKey ) }
-			</fieldset>
-
-			<ToggleControl
-				label={ messages.priceOverride }
-				checked={ values.price_override === true }
-				onChange={ ( on ) => set( 'price_override', on ) }
-			/>
-			{ values.price_override === true && (
-				<fieldset>
-					{ select( 'price_base', messages.priceBase, form.price.base ) }
-					{ select( 'price_markup_kind', messages.priceMarkupKind, form.price.markup_kind ) }
-					{ field( 'price_markup', messages.priceMarkup ) }
-					{ select( 'price_rounding', messages.priceRounding, form.price.rounding ) }
-					{ select( 'price_old_price_rule', messages.priceOldPrice, form.price.old_price_rule ) }
-					{ field( 'price_min_percent', messages.priceMinPercent ) }
-				</fieldset>
-			) }
-
-			<p style={ { display: 'flex', gap: 8, alignItems: 'center' } }>
-				<Button variant="primary" onClick={ save } disabled={ busy } isBusy={ busy }>
-					{ busy ? messages.saving : messages.save }
-				</Button>
-				{ profileId !== null && ! confirming && (
-					<Button variant="tertiary" isDestructive onClick={ () => setConfirming( true ) } disabled={ busy }>
-						{ messages.delete }
-					</Button>
-				) }
-				{ profileId !== null && confirming && (
+			<Group title={ messages.groupPrice }>
+				{ selectRow( 'vat_rate', messages.vatRate, form.vat_rates ) }
+				{ selectRow( 'currency_kind', messages.currencyHeading, currencyOptions ) }
+				{ text( 'currency_kind' ) === 'rate' && <NestedRow>{ fieldRow( 'currency_rate', messages.currencyRateInput ) }</NestedRow> }
+				{ text( 'currency_kind' ) === 'field' && <NestedRow>{ fieldRow( 'currency_field', messages.currencyFieldKey ) }</NestedRow> }
+				<FieldRow label={ messages.priceOverride }>
+					<FormToggle
+						checked={ values.price_override === true }
+						aria-label={ messages.priceOverride }
+						onChange={ ( event ) => set( 'price_override', event.target.checked ) }
+					/>
+				</FieldRow>
+				{ values.price_override === true && (
 					<>
-						<Button variant="primary" isDestructive onClick={ remove } disabled={ busy }>
-							{ messages.confirmDelete }
-						</Button>
-						<Button variant="tertiary" onClick={ () => setConfirming( false ) }>
-							{ messages.cancel }
-						</Button>
+						{ selectRow( 'price_base', messages.priceBase, form.price.base ) }
+						{ selectRow( 'price_markup_kind', messages.priceMarkupKind, form.price.markup_kind ) }
+						{ fieldRow( 'price_markup', messages.priceMarkup ) }
+						{ selectRow( 'price_rounding', messages.priceRounding, form.price.rounding ) }
+						{ selectRow( 'price_old_price_rule', messages.priceOldPrice, form.price.old_price_rule ) }
+						{ fieldRow( 'price_min_percent', messages.priceMinPercent ) }
 					</>
 				) }
-			</p>
-		</div>
+			</Group>
+
+			<FormActions
+				messages={ messages }
+				busy={ busy }
+				onSave={ save }
+				onDelete={ profileId === null ? undefined : remove }
+				confirming={ confirming }
+				onConfirming={ setConfirming }
+			/>
+		</FormCard>
 	);
 }

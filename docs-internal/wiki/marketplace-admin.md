@@ -509,7 +509,7 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
 - **«Параметры»** is one section per account, **stacked** one after another under the account's name with its identifier in muted text
   (`Settings_Section::stacked()`, `src/settings-page/stacked-view.tsx`; no sub-tabs). With none, a notice «Подключите аккаунт на вкладке „Подключение“».
   **«Уведомления»** is stacked too (`Settings_Tab` with `$stacked = true`): the five switches, then a block per account with its address
-  and «Зарегистрировать URL».
+  and «Зарегистрировать адрес».
   Stock, warehouse, oversize warehouse and the price direction are always the account's own.
 - **«Общие» and the switch.** `Effective_Settings` is the ONE resolver of `price_rule`, `orders_enabled` and `import_enabled`. Two groups
   («Цены и наценка», «Заказы и карточки») each have a «как в Общих / свои» select on the account (`override_prices`, `override_exchange`),
@@ -766,6 +766,50 @@ floor to that version.
 Nothing renames installed v1 contracts: the v1 webhook route, v1 tables read by the migration,
 v1 option names and the v1 admin URLs above keep working. New admin REST routes are additive.
 
+## Admin UI as built (#1776)
+
+Design: [the UI spec](../specs/2026-11-15-marketplace-admin-ui.md) (decided 15.11.2026). Every marketplace page now looks like the
+delivery plugins' pages («Заказы доставки», the Woodev settings). Three cards built it: C1 tables, C3 settings/tools/diagnostics,
+C2 tabs and the mapping/profile forms. Delivery code was not touched (invariant B3); the new shared pieces are new files.
+
+- **The settings stylesheet is already on every marketplace page.** `Settings_Page_Registry::enqueue_bundle()` enqueues
+  `woodev-settings-page` (`style-index.css` + `wp-components`) on every wc-admin screen once a marketplace plugin places a
+  provider, and a marketplace plugin always does. So a marketplace view gets the settings look by markup alone: a `.woodev-settings`
+  root (the label-left grid `.woodev-settings .woodev-field`), `Card.woodev-settings__card`, `.woodev-group` / `__title` / `__desc`
+  for titled blocks, `.woodev-tabs` for folder tabs. Write the markup, not a second stylesheet. A view's own stylesheet only holds
+  what the settings one does not draw (e.g. `views/mappings/style.scss`) and lands in the marketplace bundle's `style-index.css`,
+  which `Admin_Collector` enqueues. `GroupCard` is not imported by marketplace views: it pulls the settings REST client in.
+- **Shared components** (`src/components/`, prop-driven, every string a prop so Rule 9 holds; modelled on the delivery page,
+  never importing it): `bulk-action-select.tsx`, `count-links.tsx`, `period-picker/` and `_table-chrome.scss` (C1);
+  `folder-tabs.tsx` (C2). A follow-up card, on the operator's word, moves «Заказы доставки» onto them and deletes the private copies.
+- **`FolderTabs`** is a controlled tab bar that draws `TabPanel`'s own markup (`div.woodev-tabs > div.components-tab-panel__tabs[role=tablist]
+  > button.components-tab-panel__tabs-item[role=tab]`, `is-active`, `aria-selected`) so the folder look of `_wp-recolor.scss` applies unchanged.
+  It is controlled because the records page keeps the active table in the URL: an uncontrolled `TabPanel` would show the old tab after
+  Back/Forward. The records page uses it for its table switch (`switchPatch` unchanged), the mappings page for its two tabs.
+- **Records tables (C1).** A `select` filter may declare `'views' => true` (one per definition, only on a filter whose options partition
+  the rows); `CountLinks` draws it from the provider's `facets` («Все (120) | Не связан (80)») and «Все» writes what the select's «Любое»
+  writes, so the URL semantics do not change. The bulk select and the search sit in the `TableCard` header (`actions`, `hasSearch`, footer
+  `summary`). `EmptyCard` (`src/admin-records/states.tsx`) is the empty result: WooCommerce 7.0 has no `emptyMessage`, so the shell draws
+  a card with the same header, keeping the search editable. A `date_range` filter is a `PeriodPicker`; the URL stays `from~to`.
+- **Settings, tools, diagnostics (C3).** A stacked tab's card heading is inside the card (`woodev-settings__card-title`);
+  `Settings_Group::with_footnote()` puts the price example after the fields; `Settings_Section` has an `actions_layout` flag
+  (`ACTIONS_ROW`, serialised only when set) that `SectionView` draws with `ToolsRow` (one primary button, the rest secondary); the
+  diagnostics lines are `dl.woodev-facts`.
+- **Mappings and profiles (C2).** The page is two folder tabs. Each shows a `TableCard` list (all rows on one page, client-side sort,
+  «Добавить…» in the header; an empty list is a plain card because there is no `emptyMessage`). Opening a record, or «Добавить…»,
+  **replaces the list with the form**; «← Все сопоставления» / «← Все профили» brings it back. The place is in the URL — `tab=profiles`,
+  `mapping=new|<id>`, `profile=new|<id>` (`views/mappings/route.ts`, through `wc.navigation`) — so Back, Forward and a bookmark work.
+  Saving a new record or deleting one rewrites the history entry (`wc.navigation.getHistory().replace`, pushing where the runtime lacks it), so Back
+  never lands on an empty «new» form or a deleted id.
+  A form is a settings card (`FormCard`) of `FieldRow`s inside titled `Group`s (`views/mappings/form-parts.tsx`). Why not a form under
+  the list: the mapping form holds the attribute table, which needs the full width, and the profile form is ~20 rows long.
+  Store categories are a `SelectField multi` (search + checklist popover). A category another mapping holds stays in the list with
+  «— Уже входит в сопоставление: <name>»; the editor drops its id from the draft, so ticking it changes nothing (the server's
+  «one category, one mapping» check stays). The size row is three 80 px boxes with `×` and the unit select in one `FieldRow` whose control column is widened to 540 px (the settings
+  column, 425 px, cannot hold it on one line); the default
+  unit option names the shop's unit («как в магазине (см)», read by PHP in `View_Config::shop_unit_label()`). VAT moved into «Цена».
+  Every new word is a `View_Config` message; `chooseMapping`, `chooseProfile` and `unitDefault` are gone.
+
 ## Card importer (framework 2.1.6)
 
 A marketplace card becomes a WooCommerce product through one job, started two ways. The design
@@ -881,6 +925,7 @@ B6.
 
 - [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md) — ownership decision
 - [Marketplace card importer spec](../specs/2026-11-14-marketplace-card-importer.md) — the importer's design (I1–I7, O6)
+- [Marketplace admin UI spec](../specs/2026-11-15-marketplace-admin-ui.md) — the delivery-look redesign (#1776), C1–C3
 - [Architecture](architecture.md) — current module and settings responsibilities
 - [Agent rules](../AGENT-RULES.md) — Rule 9 and preservation rules
 - [ADR-007](../adr/007-react-admin-stack-wordpress-scripts.md) — runtime/build conventions
