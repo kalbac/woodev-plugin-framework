@@ -25,11 +25,15 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
+use Woodev\Framework\Marketplace\Flows\Card_Import;
+use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
+use Woodev\Framework\Marketplace\Flows\Import_Category;
 use Woodev\Framework\Marketplace\Flows\Label_Download;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
+use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Intake;
@@ -39,12 +43,15 @@ use Woodev\Framework\Marketplace\Intake\Sender_Network;
 use Woodev\Framework\Marketplace\Intake\Tokenless_Seen;
 use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
+use Woodev\Framework\Marketplace\Jobs\Card_Event_Handler;
 use Woodev\Framework\Marketplace\Jobs\Drain_Events_Runner;
 use Woodev\Framework\Marketplace\Jobs\Drain_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Event_Handler_Registry;
 use Woodev\Framework\Marketplace\Jobs\Export_Batch_Runner;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Flush_Sync_Runner;
+use Woodev\Framework\Marketplace\Jobs\Import_Jobs;
+use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\Label_Jobs;
@@ -68,6 +75,7 @@ use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Price_Refresher;
+use Woodev\Framework\Marketplace\Sync\Shop_Price_Writer;
 use Woodev\Framework\Marketplace\Sync\Stock_Flusher;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
 
@@ -205,6 +213,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		private $contexts;
 
 		/**
+		 * The adapter's importer part, set when the plugin imports cards.
+		 *
+		 * @var Card_Importer|null
+		 */
+		private $importer;
+
+		/**
+		 * Scheduler of the import job, set when the plugin imports cards.
+		 *
+		 * @var Import_Scheduler|null
+		 */
+		private $imports;
+
+		/**
 		 * Creates the wiring of one plugin.
 		 *
 		 * @since 2.1.0
@@ -258,6 +280,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->stock_and_price( $sync_state_store );
 			$this->export( $sync_state_store );
 			$this->links_and_catalog();
+			$this->import();
 			$this->postings();
 			$this->labels();
 			$this->intake();
@@ -423,6 +446,60 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		}
 
 		/**
+		 * The job that imports cards as shop products. Wired only for an adapter that is a {@see Card_Importer} and reports
+		 * {@see Capability::IMPORT_PRODUCTS}; any other adapter gets no job, no handler and no hook.
+		 *
+		 * @return void
+		 */
+		private function import(): void {
+			$adapter = $this->adapter;
+
+			if ( ! $adapter instanceof Card_Importer || ! $adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+				return;
+			}
+
+			$notes     = new Link_Report_Store( Uninstaller::option_prefix( $this->plugin_id ) );
+			$scheduler = new Import_Scheduler( $this->names );
+			$writer    = new Product_Writer(
+				new Import_Category( new Wpdb_Mapping_Store( $this->db, $this->table( 'mappings' ), $this->table( 'mapping_terms' ) ) ),
+				new Wpdb_Profile_Store( $this->db, $this->table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
+				new Shop_Price_Writer( $this->contexts )
+			);
+			$import    = new Card_Import( $this->links, new Card_Linker( $this->links ), $notes, Effective_Settings::for_adapter( $adapter->id() ), [ $writer, 'write' ], [ $writer, 'complete' ] );
+
+			( new Import_Jobs( $this->gate, $adapter, $import, $notes, $scheduler, $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
+
+			$this->importer = $adapter;
+			$this->imports  = $scheduler;
+		}
+
+		/**
+		 * The handler of the «card created or changed» events, registered before the plugin's own filter runs so that the plugin
+		 * can still replace it.
+		 *
+		 * @param Event_Handler_Registry $handlers The registry the drain reads.
+		 * @return void
+		 */
+		private function register_card_handler( Event_Handler_Registry $handlers ): void {
+			if ( null === $this->importer || null === $this->imports ) {
+				return;
+			}
+
+			$handler = new Card_Event_Handler(
+				$this->importer,
+				$this->accounts,
+				$this->links,
+				Effective_Settings::for_adapter( $this->adapter->id() ),
+				$this->imports,
+				null !== $this->adapter->price_reader() ? new Price_Scheduler( $this->names ) : null
+			);
+
+			foreach ( $this->importer->import_event_types() as $type ) {
+				$handlers->register( (string) $type, $handler );
+			}
+		}
+
+		/**
 		 * The posting refresh and the recurring poll of postings.
 		 *
 		 * @return void
@@ -487,6 +564,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$reader    = new Notification_Account_Reader( $this->db, $this->table( 'accounts' ), Effective_Settings::for_adapter( $this->adapter->id() ) );
 			$scheduler = new Drain_Scheduler( $this->names );
 			$handlers  = new Event_Handler_Registry();
+
+			$this->register_card_handler( $handlers );
 
 			do_action( $this->names->hook( 'event_handlers' ), $handlers ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores,WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Job_Names builds `woodev_{plugin id}_…` in snake case.
 

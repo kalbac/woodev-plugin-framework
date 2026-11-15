@@ -12,10 +12,14 @@ use Brain\Monkey\Filters;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
+use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flow_Wiring;
+use Woodev\Framework\Marketplace\Flows\Card_Importer;
+use Woodev\Framework\Marketplace\Jobs\Card_Event_Handler;
 use Woodev\Framework\Marketplace\Jobs\Event_Handler_Registry;
+use Woodev\Framework\Marketplace\Jobs\Noop_Event_Handler;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Account\Account_Store;
@@ -74,6 +78,7 @@ final class FlowWiringTest extends TestCase {
 		'woodev_%s_export_batch'                  => 1,
 		'woodev_%s_poll_task'                     => 2,
 		'woodev_%s_link_cards'                    => 1,
+		'woodev_%s_import_cards'                  => 1,
 		'woodev_%s_refresh_cards'                 => 1,
 		'woodev_%s_refresh_catalog'               => 1,
 		'woodev_%s_refresh_posting'               => 1,
@@ -156,7 +161,7 @@ final class FlowWiringTest extends TestCase {
 		);
 	}
 
-	private function wiring( string $plugin_id, ?Fake_Marketplace_Adapter $adapter = null, ?callable $write_gate = null ): Flow_Wiring {
+	private function wiring( string $plugin_id, ?Marketplace_Adapter $adapter = null, ?callable $write_gate = null ): Flow_Wiring {
 		$adapter  = $adapter ?? $this->adapter();
 		$accounts = Wpdb_Account_Store::for_adapter( $this->db, ( new Schema( $adapter->id() ) )->table_name( 'accounts', 'wp_' ), new Secret_Cipher( 'test-salt' ), $adapter );
 
@@ -287,6 +292,7 @@ final class FlowWiringTest extends TestCase {
 		Actions\expectAdded( 'woodev_fake_seller_drain_events' )->never();
 		Actions\expectAdded( 'woodev_fake_seller_export_batch' )->never();
 		Actions\expectAdded( 'woodev_fake_seller_link_cards' )->never();
+		Actions\expectAdded( 'woodev_fake_seller_import_cards' )->never();
 		Actions\expectAdded( 'woodev_fake_seller_refresh_catalog' )->never();
 		Actions\expectAdded( 'woodev_fake_seller_refresh_prices' )->never();
 		Actions\expectAdded( 'woodev_fake_seller_poll_postings' )->never();
@@ -308,6 +314,77 @@ final class FlowWiringTest extends TestCase {
 		$this->wiring( self::PLUGIN )->register();
 
 		$this->assertInstanceOf( Event_Handler_Registry::class, $seen );
+	}
+
+	public function test_the_card_handler_is_registered_for_the_importers_event_types_before_the_plugin_filter_runs(): void {
+		$seen = null;
+
+		Actions\expectDone( 'woodev_fake_seller_event_handlers' )->once()->whenHappen(
+			static function ( $registry ) use ( &$seen ): void {
+				$seen = $registry;
+			}
+		);
+
+		$this->wiring( self::PLUGIN )->register();
+
+		$this->assertInstanceOf( Card_Event_Handler::class, $seen->for_type( 'CARD_CHANGED' ), 'the plugin finds the framework handler in place and may replace it' );
+		$this->assertInstanceOf( Noop_Event_Handler::class, $seen->for_type( 'ORDER_CHANGED' ), 'and no other type got it' );
+	}
+
+	/**
+	 * An adapter that claims the capability but does not implement {@see Card_Importer}: the registry, the hooks and the job stay as
+	 * they were.
+	 *
+	 * @return Marketplace_Adapter
+	 */
+	private function adapter_that_claims_import_but_is_not_an_importer(): Marketplace_Adapter {
+		$fake   = $this->adapter();
+		$mirror = \Mockery::mock( Marketplace_Adapter::class );
+
+		foreach ( get_class_methods( Marketplace_Adapter::class ) as $method ) {
+			$mirror->shouldReceive( $method )->andReturnUsing( [ $fake, $method ] );
+		}
+
+		return $mirror;
+	}
+
+	public function test_an_adapter_that_is_not_a_card_importer_gets_no_job_and_no_handler(): void {
+		$adapter = $this->adapter_that_claims_import_but_is_not_an_importer();
+		$seen    = null;
+
+		$this->assertTrue( $adapter->supports( Capability::IMPORT_PRODUCTS ), 'it claims the capability' );
+		$this->assertNotInstanceOf( Card_Importer::class, $adapter );
+
+		Actions\expectAdded( 'woodev_fake_seller_import_cards' )->never();
+		Actions\expectDone( 'woodev_fake_seller_event_handlers' )->once()->whenHappen(
+			static function ( $registry ) use ( &$seen ): void {
+				$seen = $registry;
+			}
+		);
+
+		$this->assertTrue( $this->wiring( self::PLUGIN, $adapter )->register() );
+		$this->assertInstanceOf( Noop_Event_Handler::class, $seen->for_type( 'CARD_CHANGED' ) );
+	}
+
+	public function test_an_importer_without_the_capability_gets_no_job_and_no_handler(): void {
+		$seen = null;
+
+		Actions\expectAdded( 'woodev_fake_seller_import_cards' )->never();
+		Actions\expectDone( 'woodev_fake_seller_event_handlers' )->once()->whenHappen(
+			static function ( $registry ) use ( &$seen ): void {
+				$seen = $registry;
+			}
+		);
+
+		$this->assertTrue( $this->wiring( self::PLUGIN, $this->adapter( [ 'capabilities' => [ Capability::PUSH_NOTIFICATIONS ] ] ) )->register() );
+		$this->assertInstanceOf( Noop_Event_Handler::class, $seen->for_type( 'CARD_CHANGED' ) );
+	}
+
+	public function test_the_import_job_does_not_need_push(): void {
+		Actions\expectAdded( 'woodev_fake_seller_import_cards' )->once();
+		Actions\expectAdded( 'woodev_fake_seller_drain_events' )->never();
+
+		$this->assertTrue( $this->wiring( self::PLUGIN, $this->adapter( [ 'capabilities' => [ Capability::IMPORT_PRODUCTS ], 'inbound_decoder' => null, 'push_protocol' => null ] ) )->register() );
 	}
 
 	public function test_registering_makes_no_remote_call_and_reads_no_table(): void {

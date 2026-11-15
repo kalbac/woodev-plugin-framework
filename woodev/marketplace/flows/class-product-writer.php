@@ -24,7 +24,8 @@ defined( 'ABSPATH' ) || exit;
  * 2. {@see self::complete()}: the fields (description, weight, dimensions) and then the price, whose rule is resolved from the
  *    product's *stored* categories, so a profile-level markup is seen.
  * 3. The images, one at a time, each reused by its source URL. The run's `$renew` is called before each image and a throw from
- *    it stops the writer; one image that cannot be loaded does not fail the product.
+ *    it stops the writer; one image that cannot be loaded does not fail the product. The optional `$stored` is called right after a
+ *    **new** image was stored — a cached or failed one never calls it — so the caller can count real progress.
  * 4. The **final save**: the status and the marker removed.
  *
  * Each field goes where the profile reads it on export, so an imported product round-trips. One profile governs the price and the
@@ -136,14 +137,15 @@ final class Product_Writer {
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param Account      $account Account.
-	 * @param Card_Content $content The card.
-	 * @param \WC_Product  $product The product {@see self::start()} saved.
-	 * @param bool         $publish Whether the finished product is published; it stays a draft otherwise.
-	 * @param callable     $renew   `function (): void`; extends the run's claim, throws when it was lost.
+	 * @param Account       $account Account.
+	 * @param Card_Content  $content The card.
+	 * @param \WC_Product   $product The product {@see self::start()} saved.
+	 * @param bool          $publish Whether the finished product is published; it stays a draft otherwise.
+	 * @param callable      $renew   `function (): void`; extends the run's claim, throws when it was lost.
+	 * @param callable|null $stored `function (): void`; called right after a new image was stored (a cached or failed one is no progress).
 	 * @return string[] Warnings for the merchant: what could not be set (the product exists).
 	 */
-	public function complete( Account $account, Card_Content $content, \WC_Product $product, bool $publish, callable $renew ): array {
+	public function complete( Account $account, Card_Content $content, \WC_Product $product, bool $publish, callable $renew, ?callable $stored = null ): array {
 		$profile  = $this->profile( $this->categories->profile_id( $product ) );
 		$warnings = [];
 
@@ -156,7 +158,7 @@ final class Product_Writer {
 			$warnings[] = $warning;
 		}
 
-		$warning = $this->images( $content, $product, $profile, $renew );
+		$warning = $this->images( $content, $product, $profile, $renew, $stored );
 
 		if ( '' !== $warning ) {
 			$warnings[] = $warning;
@@ -174,20 +176,21 @@ final class Product_Writer {
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param Account      $account           Account.
-	 * @param Card_Content $content           The card.
-	 * @param bool         $publish           Whether the finished product is published.
-	 * @param bool         $create_categories Whether a card with no mapping gets its category path created.
-	 * @param callable     $renew             `function (): void`; extends the run's claim, throws when it was lost.
+	 * @param Account       $account           Account.
+	 * @param Card_Content  $content           The card.
+	 * @param bool          $publish           Whether the finished product is published.
+	 * @param bool          $create_categories Whether a card with no mapping gets its category path created.
+	 * @param callable      $renew             `function (): void`; extends the run's claim, throws when it was lost.
+	 * @param callable|null $stored `function (): void`; called right after a new image was stored (a cached or failed one is no progress).
 	 * @return array{product:\WC_Product,warnings:string[]}
 	 * @throws \WC_Data_Exception When another product already has the SKU.
 	 */
-	public function write( Account $account, Card_Content $content, bool $publish, bool $create_categories, callable $renew ): array {
+	public function write( Account $account, Card_Content $content, bool $publish, bool $create_categories, callable $renew, ?callable $stored = null ): array {
 		$product = $this->start( $account, $content, $create_categories );
 
 		return [
 			'product'  => $product,
-			'warnings' => $this->complete( $account, $content, $product, $publish, $renew ),
+			'warnings' => $this->complete( $account, $content, $product, $publish, $renew, $stored ),
 		];
 	}
 
@@ -299,22 +302,23 @@ final class Product_Writer {
 	/**
 	 * Loads the images where the profile reads them (step 3).
 	 *
-	 * @param Card_Content $content Card.
-	 * @param \WC_Product  $product Product.
-	 * @param Profile      $profile Profile.
-	 * @param callable     $renew   Extends the claim or throws.
+	 * @param Card_Content  $content Card.
+	 * @param \WC_Product   $product Product.
+	 * @param Profile       $profile Profile.
+	 * @param callable      $renew   Extends the claim or throws.
+	 * @param callable|null $stored `function (): void`; called right after a new image was stored (a cached or failed one is no progress).
 	 * @return string The warning, '' when every image is in.
 	 */
-	private function images( Card_Content $content, \WC_Product $product, Profile $profile, callable $renew ): string {
+	private function images( Card_Content $content, \WC_Product $product, Profile $profile, callable $renew, ?callable $stored = null ): string {
 		$failed  = 0;
 		$primary = (string) $profile->setting( 'primary_image_source', 'featured' );
 		$others  = (string) $profile->setting( 'images_source', 'gallery' );
 
 		if ( '' !== $content->primary_image() ) {
-			$failed += $this->primary( $content->primary_image(), $product, $primary, $renew );
+			$failed += $this->primary( $content->primary_image(), $product, $primary, $renew, $stored );
 		}
 
-		$failed += $this->gallery( $content->images(), $product, $others, $renew );
+		$failed += $this->gallery( $content->images(), $product, $others, $renew, $stored );
 
 		if ( 0 === $failed ) {
 			return '';
@@ -327,13 +331,14 @@ final class Product_Writer {
 	/**
 	 * Sets the main image: downloaded as the featured image, or its link written to the profile's custom field.
 	 *
-	 * @param string      $url     Image URL.
-	 * @param \WC_Product $product Product.
-	 * @param string      $source  `featured` or `meta:{key}`.
-	 * @param callable    $renew   Extends the claim or throws.
+	 * @param string        $url     Image URL.
+	 * @param \WC_Product   $product Product.
+	 * @param string        $source  `featured` or `meta:{key}`.
+	 * @param callable      $renew   Extends the claim or throws.
+	 * @param callable|null $stored `function (): void`; called right after a new image was stored (a cached or failed one is no progress).
 	 * @return int Images that could not be loaded.
 	 */
-	private function primary( string $url, \WC_Product $product, string $source, callable $renew ): int {
+	private function primary( string $url, \WC_Product $product, string $source, callable $renew, ?callable $stored = null ): int {
 		$key = self::meta_key( $source );
 
 		if ( '' !== $key ) {
@@ -342,7 +347,7 @@ final class Product_Writer {
 			return 0;
 		}
 
-		$attachment_id = $this->attachment( $url, $product, $renew );
+		$attachment_id = $this->attachment( $url, $product, $renew, $stored );
 
 		if ( 0 === $attachment_id ) {
 			return 1;
@@ -356,13 +361,14 @@ final class Product_Writer {
 	/**
 	 * Sets the other images: downloaded into the gallery, their links written to the profile's custom field, or left out.
 	 *
-	 * @param string[]    $urls    Image URLs.
-	 * @param \WC_Product $product Product.
-	 * @param string      $source  `gallery`, `none` or `meta:{key}`.
-	 * @param callable    $renew   Extends the claim or throws.
+	 * @param string[]      $urls    Image URLs.
+	 * @param \WC_Product   $product Product.
+	 * @param string        $source  `gallery`, `none` or `meta:{key}`.
+	 * @param callable      $renew   Extends the claim or throws.
+	 * @param callable|null $stored `function (): void`; called right after a new image was stored (a cached or failed one is no progress).
 	 * @return int Images that could not be loaded.
 	 */
-	private function gallery( array $urls, \WC_Product $product, string $source, callable $renew ): int {
+	private function gallery( array $urls, \WC_Product $product, string $source, callable $renew, ?callable $stored = null ): int {
 		$key = self::meta_key( $source );
 
 		if ( 'none' === $source || [] === $urls ) {
@@ -379,7 +385,7 @@ final class Product_Writer {
 		$failed = 0;
 
 		foreach ( $urls as $url ) {
-			$attachment_id = $this->attachment( $url, $product, $renew );
+			$attachment_id = $this->attachment( $url, $product, $renew, $stored );
 
 			if ( $attachment_id > 0 ) {
 				$ids[] = $attachment_id;
@@ -397,12 +403,13 @@ final class Product_Writer {
 	 * Returns the attachment of an image: the one an earlier run (or WooCommerce's own importer) made from the same URL, else a
 	 * new download. The claim is renewed first, so a lost claim stops the run before it spends 30 seconds on a download.
 	 *
-	 * @param string      $url      Image URL.
-	 * @param \WC_Product $product  Product the attachment is made for.
-	 * @param callable    $renew    Extends the claim or throws.
+	 * @param string        $url      Image URL.
+	 * @param \WC_Product   $product  Product the attachment is made for.
+	 * @param callable      $renew    Extends the claim or throws.
+	 * @param callable|null $stored `function (): void`; called right after a new image was stored (a cached or failed one is no progress).
 	 * @return int Attachment id, 0 when the image could not be loaded.
 	 */
-	private function attachment( string $url, \WC_Product $product, callable $renew ): int {
+	private function attachment( string $url, \WC_Product $product, callable $renew, ?callable $stored = null ): int {
 		call_user_func( $renew );
 
 		$url   = esc_url_raw( $url );
@@ -425,6 +432,10 @@ final class Product_Writer {
 		}
 
 		update_post_meta( $attachment_id, self::SOURCE_META, $url );
+
+		if ( null !== $stored ) {
+			call_user_func( $stored );
+		}
 
 		return $attachment_id;
 	}

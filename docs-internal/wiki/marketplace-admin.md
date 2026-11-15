@@ -766,6 +766,43 @@ floor to that version.
 Nothing renames installed v1 contracts: the v1 webhook route, v1 tables read by the migration,
 v1 option names and the v1 admin URLs above keep working. New admin REST routes are additive.
 
+## Card importer (framework 2.1.6)
+
+A marketplace card becomes a WooCommerce product through one job, started two ways. The design
+is [the importer spec](../specs/2026-11-14-marketplace-card-importer.md); this section says where
+the pieces live and what is easy to get wrong. The adapter implements the optional
+`Flows\Card_Importer` and reports `Capability::IMPORT_PRODUCTS`; with either missing,
+`Flow_Wiring::import()` registers no job, no handler and no hook, and the cards tab shows no
+«Импортировать».
+
+| Piece | Class | Does |
+|---|---|---|
+| Trigger: notification | `Jobs\Card_Event_Handler` | registered by `Flow_Wiring::intake()` for each `import_event_types()` **before** the plugin's `woodev_{plugin id}_event_handlers` filter, so a plugin can replace it. Only queues; no remote call |
+| Trigger: cards tab | `Jobs\Import_Scheduler` | the bulk and row action queue chunks of ten articles |
+| Job | `Jobs\Import_Jobs` | `import_cards( account_id, offer_ids[≤10], attempt )` through `Account_Job`: one `read_cards()` for the batch, then one `Card_Import` per card |
+| One card | `Flows\Card_Import` | the five rows of the spec's §2.6, over `Product_Writer` and `Card_Linker` |
+| Run clock | `Jobs\Import_Budget` | `Import_Jobs::BUDGET_SECONDS` (20), checked before every card and image |
+
+What to remember:
+
+- **The claim is extended before every card and every image**; a lost claim throws `Claim_Lost`
+  and the whole batch retries. The budget stops a run only after it has made progress — a card
+  finished or a **new** image stored (`Product_Writer`'s `$stored` callback) — then requeues the
+  current card and the rest with the attempt unchanged. A cached or failed image is no progress,
+  so a slow `read_cards()` cannot make the requeue repeat for ever, and a card with many images
+  is cut mid-card and resumed by its marker.
+- **A variable parent with the card's SKU is never linked**: `Card_Linker` refuses a parent only
+  when it already has a row, so `Card_Import` refuses it first and notes why. A variation is
+  linked with its real parent id.
+- **Four cut points are safe** because the writer's first save stores the SKU, the marker and the
+  categories together: a cut before it leaves nothing, a cut between the saves is resumed by the
+  marker, a cut before the link is linked by its SKU, a refused link is retried.
+- **Notes**: a card's note (`Link_Report_Store::set_import_note()`) has a fixed Russian `text`
+  and a technical `detail`; the give-up path never puts an exception message into `text`.
+  `Remote_Cards_Rows` applies the «Логирование» switch to `detail` when it draws the row.
+- The job imports every card as a simple product and leaves `Card_Content::group()` alone —
+  groups become variable products in card I7.
+
 ## Verification
 
 Implementation evidence: PHP 7.4 syntax/static analysis, unit and contract tests, Jest
@@ -843,6 +880,7 @@ B6.
 ## Related
 
 - [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md) — ownership decision
+- [Marketplace card importer spec](../specs/2026-11-14-marketplace-card-importer.md) — the importer's design (I1–I7, O6)
 - [Architecture](architecture.md) — current module and settings responsibilities
 - [Agent rules](../AGENT-RULES.md) — Rule 9 and preservation rules
 - [ADR-007](../adr/007-react-admin-stack-wordpress-scripts.md) — runtime/build conventions
