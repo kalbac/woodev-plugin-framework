@@ -85,6 +85,9 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( [ [ 'value' => (string) $this->account_id, 'label' => 'Основной' ] ], $definition['context']['options'] );
 		$this->assertNotNull( $definition['children'] );
 		$this->assertNull( $definition['analytics'] );
+		$this->assertSame( [ 'state' ], array_column( array_filter( $definition['filters'], static fn( array $filter ): bool => ! empty( $filter['views'] ) ), 'id' ), 'The state is the counted row.' );
+		$this->assertSame( 'Товаров', $definition['messages']['summary_label'] );
+		$this->assertSame( 'Выберите действие', $definition['messages']['bulk_placeholder'] );
 	}
 
 	public function test_the_warehouse_action_asks_for_a_warehouse_from_a_local_list(): void {
@@ -115,7 +118,34 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 
 		$this->assertSame( 3, $body['total'] );
 		$this->assertSame( [ $this->row_id( 10 ), $this->row_id( 30 ), $this->row_id( 20 ) ], array_column( $body['rows'], 'id' ) );
-		$this->assertStringContainsString( '3', $body['messages']['summary'] );
+		$this->assertArrayNotHasKey( 'summary', $body['messages'], 'The card footer counts the rows; no sentence repeats it.' );
+	}
+
+	public function test_the_state_facets_count_each_group_as_the_list_filtered_by_it_would(): void {
+		$facets = array_column( $this->list_body()['facets']['state'], 'count', 'value' );
+
+		$this->assertSame( array_keys( State_Groups::labels() ), array_keys( $facets ), 'One count per group, in the filter\'s own order.' );
+
+		foreach ( $facets as $group => $count ) {
+			$this->assertSame( $count, $this->list_body( [ 'filters' => [ 'state' => $group ] ] )['total'], "The count of $group is the total of that view." );
+		}
+	}
+
+	public function test_the_state_facets_are_not_a_partition_when_a_variable_product_has_variations_in_two_groups(): void {
+		$body   = $this->list_body();
+		$facets = array_column( $body['facets']['state'], 'count', 'value' );
+
+		// Product 20 has an errored variation and an unlinked one: it is listed under both groups, so the groups add up to one
+		// more than the products. «Все» therefore shows the real total, not the sum.
+		$this->assertSame( $body['total'] + 1, array_sum( $facets ) );
+		$this->assertSame( 1, $facets[ State_Groups::ERROR ] );
+	}
+
+	public function test_the_state_facets_keep_every_other_filter_and_ignore_the_state_itself(): void {
+		$searched = array_column( $this->list_body( [ 'filters' => [ 'state' => State_Groups::CREATED, 'q' => 'B-30' ] ] )['facets']['state'], 'count', 'value' );
+
+		$this->assertSame( 0, $searched[ State_Groups::CREATED ], 'The search narrows the counts…' );
+		$this->assertGreaterThan( 0, array_sum( $searched ), '…and the chosen state does not: its siblings still show their numbers.' );
 	}
 
 	public function test_a_variable_product_is_a_parent_row_that_sums_its_variations(): void {

@@ -128,13 +128,14 @@ final class Definition_Parser {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private static function filters( $raw ): array {
-		$list = self::list( $raw, 'definition.filters', 0, Records_Definition::MAX_FILTERS );
-		$out  = [];
+		$list        = self::list( $raw, 'definition.filters', 0, Records_Definition::MAX_FILTERS );
+		$out         = [];
+		$views_count = 0;
 
 		foreach ( $list as $i => $filter ) {
 			$path   = "definition.filters[$i]";
 			$filter = self::map( $filter, $path );
-			self::allow_keys( $filter, [ 'id', 'label', 'type', 'options', 'options_source', 'default' ], $path );
+			self::allow_keys( $filter, [ 'id', 'label', 'type', 'options', 'options_source', 'default', 'views' ], $path );
 
 			$entry = [
 				'id'             => self::slug( $filter, 'id', $path ),
@@ -146,6 +147,11 @@ final class Definition_Parser {
 
 			$entry = self::filter_options( $entry, $filter, $path );
 
+			if ( self::filter_views( $filter, $entry['type'], $path ) ) {
+				$entry['views'] = true;
+				++$views_count;
+			}
+
 			if ( array_key_exists( 'default', $filter ) ) {
 				$default = Query_Validator::normalize_filter_value( $entry, $filter['default'] );
 				if ( null === $default ) {
@@ -155,6 +161,10 @@ final class Definition_Parser {
 			}
 
 			$out[] = $entry;
+		}
+
+		if ( $views_count > 1 ) {
+			throw new \InvalidArgumentException( 'definition.filters: at most one filter may declare views.' );
 		}
 
 		self::unique_ids( $out, 'definition.filters' );
@@ -189,6 +199,24 @@ final class Definition_Parser {
 		$entry['options'] = $has_inline ? self::options( $filter['options'], "$path.options" ) : [];
 
 		return $entry;
+	}
+
+	/**
+	 * Whether the filter is the table's counted view row (`views`): only a single-value `select` can be one, because the
+	 * row writes the value «all» clears and each link writes one option.
+	 *
+	 * @param array<string,mixed> $filter Raw filter.
+	 * @param string              $type   The filter's validated type.
+	 * @param string              $path   Error path.
+	 */
+	private static function filter_views( array $filter, string $type, string $path ): bool {
+		$views = self::flag( $filter, 'views', $path, false );
+
+		if ( $views && 'select' !== $type ) {
+			throw new \InvalidArgumentException( "$path.views: only a select filter can be the counted view row." );
+		}
+
+		return $views;
 	}
 
 	/**

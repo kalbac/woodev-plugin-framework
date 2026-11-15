@@ -56,6 +56,8 @@ function FakeTableCard( props: TableCardProps ) {
 	}
 
 	return (
+		<>
+			<div className="fake-card-header">{ props.actions }</div>
 		<table aria-label={ props.title }>
 			<tbody>
 				{ props.rows.map( ( row, index ) => (
@@ -67,6 +69,7 @@ function FakeTableCard( props: TableCardProps ) {
 				) ) }
 			</tbody>
 		</table>
+		</>
 	);
 }
 

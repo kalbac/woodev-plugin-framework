@@ -129,6 +129,21 @@ final class Site_Products_Filter {
 	}
 
 	/**
+	 * The same filter with another state group: the base of the counts the view row shows next to each group.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param string $state State group; anything but a group means any.
+	 * @return self
+	 */
+	public function with_state( string $state ): self {
+		$copy        = clone $this;
+		$copy->state = State_Groups::is_group( $state ) ? $state : '';
+
+		return $copy;
+	}
+
+	/**
 	 * @since 2.1.4
 	 *
 	 * @return int Category term id, 0 for any.

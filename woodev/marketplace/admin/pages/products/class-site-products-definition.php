@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
+use Woodev\Framework\Admin\Records\Standard_Messages;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -54,6 +56,7 @@ final class Site_Products_Definition {
 				'label'   => __( 'Состояние', 'woodev-plugin-framework' ),
 				'type'    => 'select',
 				'options' => $state_options,
+				'views'   => true,
 			],
 			[
 				'id'    => 'only_errors',
@@ -282,7 +285,7 @@ final class Site_Products_Definition {
 	 * @return array<string,string>
 	 */
 	private static function messages(): array {
-		return array_merge( self::shell_messages(), self::action_messages() );
+		return array_merge( self::shell_messages(), Standard_Messages::bulk(), Standard_Messages::views(), self::action_messages() );
 	}
 
 	/**
@@ -308,6 +311,7 @@ final class Site_Products_Definition {
 			'selection_limit'       => __( 'Выбрано предельное число товаров. Выполните действие и выберите остальные.', 'woodev-plugin-framework' ),
 			'filter_any'            => __( 'Любое', 'woodev-plugin-framework' ),
 			'per_page'              => __( 'Товаров на странице', 'woodev-plugin-framework' ),
+			'summary_label'         => __( 'Товаров', 'woodev-plugin-framework' ),
 			'activity_stale'        => __( 'Данные о ходе работы устарели: обновляем.', 'woodev-plugin-framework' ),
 			'activity_failed'       => __( 'Не удаётся получить ход работы. Попробуем ещё раз.', 'woodev-plugin-framework' ),
 		];

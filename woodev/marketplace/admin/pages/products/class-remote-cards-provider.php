@@ -185,14 +185,10 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 
 		$snapshot = $this->snapshots->get( $account->id() );
 		$state    = $this->import_state( $account->id() );
-		$page     = Remote_Cards_Query::page(
-			null === $snapshot ? [] : $snapshot['cards'],
-			$this->linked_offers( $account->id() ),
-			(string) ( $filters['on_site'] ?? '' ),
-			(string) ( $filters['q'] ?? $query['search'] ?? '' ),
-			(int) $query['page'],
-			(int) $query['per_page']
-		);
+		$cards    = null === $snapshot ? [] : $snapshot['cards'];
+		$linked   = $this->linked_offers( $account->id() );
+		$search   = (string) ( $filters['q'] ?? $query['search'] ?? '' );
+		$page     = Remote_Cards_Query::page( $cards, $linked, (string) ( $filters['on_site'] ?? '' ), $search, (int) $query['page'], (int) $query['per_page'] );
 
 		return [
 			'rows'             => array_map(
@@ -202,8 +198,30 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 				$page['cards']
 			),
 			'total'            => $page['total'],
+			'facets'           => [ 'on_site' => $this->on_site_facets( Remote_Cards_Query::on_site_counts( $cards, $linked, $search ) ) ],
 			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
 			'messages'         => [ 'summary' => $this->summary( $account->id(), $snapshot ) ],
+		];
+	}
+
+	/**
+	 * The numbers of the «На сайте» view row.
+	 *
+	 * @param array<string,int> $counts {@see Remote_Cards_Query::on_site_counts()}.
+	 * @return array<int,array{value:string,label:string,count:int}>
+	 */
+	private function on_site_facets( array $counts ): array {
+		return [
+			[
+				'value' => Remote_Cards_Query::NOT_ON_SITE,
+				'label' => __( 'Нет на сайте', 'woodev-plugin-framework' ),
+				'count' => $counts[ Remote_Cards_Query::NOT_ON_SITE ],
+			],
+			[
+				'value' => Remote_Cards_Query::ON_SITE,
+				'label' => __( 'Уже на сайте', 'woodev-plugin-framework' ),
+				'count' => $counts[ Remote_Cards_Query::ON_SITE ],
+			],
 		];
 	}
 

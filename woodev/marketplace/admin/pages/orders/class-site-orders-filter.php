@@ -149,6 +149,20 @@ final class Site_Orders_Filter {
 	}
 
 	/**
+	 * The same filter with no posting state: the base of the counts the view row shows next to each state.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @return self
+	 */
+	public function without_state(): self {
+		$copy        = clone $this;
+		$copy->state = '';
+
+		return $copy;
+	}
+
+	/**
 	 * @since 2.1.5
 	 *
 	 * @return string WooCommerce status, empty for any.

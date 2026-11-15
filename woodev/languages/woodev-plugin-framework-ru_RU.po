@@ -11118,3 +11118,11 @@ msgstr ""
 #: marketplace/settings/class-notifications-section.php:465
 msgid "Возобновить уведомления"
 msgstr ""
+
+#: admin/records/class-standard-messages.php:75
+msgid "Применить период"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:343
+msgid "Карточек"
+msgstr ""

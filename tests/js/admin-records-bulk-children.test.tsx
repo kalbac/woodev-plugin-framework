@@ -12,6 +12,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import { RecordsTable, useActionExtensions } from '../../src/admin-records';
+import { bulkButton } from './bulk-actions';
 import { createActivityExtensions, type ActivityExtensions } from '../../src/admin-records/activity';
 import {
 	fixtureDefinition,
@@ -87,6 +88,8 @@ function FakeTableCard( props: TableCardProps ) {
 	}
 
 	return (
+		<>
+			<div className="fake-card-header">{ props.actions }</div>
 		<table aria-label={ props.title }>
 			<tbody>
 				{ props.rows.map( ( row, index ) => (
@@ -98,6 +101,7 @@ function FakeTableCard( props: TableCardProps ) {
 				) ) }
 			</tbody>
 		</table>
+		</>
 	);
 }
 
@@ -125,7 +129,7 @@ async function renderExpanded( activity?: ActivityExtensions ) {
 }
 
 function toolbarButton(): HTMLElement {
-	return screen.getByRole( 'button', { name: 'Выгрузить выбранные' } );
+	return bulkButton( 'Выгрузить выбранные' );
 }
 
 beforeEach( () => {

@@ -7,7 +7,8 @@
  * @package woodev-plugin-framework
  */
 
-import { Button, Spinner } from '@wordpress/components';
+import type { ReactNode } from 'react';
+import { Button, Card, CardBody, CardHeader, Spinner } from '@wordpress/components';
 import { STYLES } from './styles';
 
 export interface ErrorStateProps {
@@ -31,11 +32,32 @@ export function ErrorState( { text, retryLabel, onRetry }: ErrorStateProps ) {
 	);
 }
 
-export function EmptyState( { text }: { text: string } ) {
+export interface EmptyCardProps {
+	/** The card title: the one the table would have. */
+	title: string;
+	/** The table header's own controls (bulk group, search), so a search that found nothing can still be edited or cleared. */
+	actions: ReactNode;
+	/** PHP's sentence for an empty (or empty filtered) table. */
+	text: string;
+}
+
+/**
+ * The empty result in the frame of the table it stands for: `TableCard` has no `emptyMessage` in the oldest WooCommerce
+ * we support, so the card is built from what `TableCard` itself is made of. Never a bare box instead of the card.
+ */
+export function EmptyCard( { title, actions, text }: EmptyCardProps ) {
 	return (
-		<div className="woodev-records__state is-empty" style={ STYLES.state } role="status">
-			<p>{ text }</p>
-		</div>
+		<Card className="woodev-records__empty-card">
+			<CardHeader className="woodev-records__empty-header">
+				<h2 className="woodev-records__empty-title">{ title }</h2>
+				{ actions }
+			</CardHeader>
+			<CardBody>
+				<div className="woodev-records__state is-empty" role="status">
+					<p>{ text }</p>
+				</div>
+			</CardBody>
+		</Card>
 	);
 }
 

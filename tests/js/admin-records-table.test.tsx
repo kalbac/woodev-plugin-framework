@@ -35,6 +35,9 @@ const TABLE_CARD_PROPS_IN_EVERY_VERSION = [
 	'headers',
 	'rows',
 	'rowKey',
+	'actions',
+	'hasSearch',
+	'summary',
 	'rowHeader',
 	'rowsPerPage',
 	'totalRows',
@@ -83,6 +86,7 @@ function FakeTableCard( props: TableCardProps ) {
 
 	return (
 		<div>
+			<div className="fake-card-header">{ props.actions }</div>
 			<table aria-label={ props.title }>
 				<thead>
 					<tr>
@@ -154,6 +158,14 @@ function FakeTableCard( props: TableCardProps ) {
 			) ) }
 		</div>
 	);
+}
+
+/** Opens the period picker and its custom range; without the WooCommerce calendar the range is two native inputs. */
+async function openCustomPeriod(): Promise< void > {
+	fireEvent.click( screen.getByRole( 'button', { name: /Всё время|—/ } ) );
+	// The popover places itself after it opens; let that settle inside this test.
+	await act( async () => {} );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Произвольный период' } ) );
 }
 
 interface Deferred< T > {
@@ -465,8 +477,7 @@ describe( 'URL round trip', () => {
 		expect( screen.getByRole( 'searchbox', { name: 'Поиск по товарам' } ) ).toHaveValue( 'кружка' );
 		expect( screen.getByRole( 'combobox', { name: 'Состояние' } ) ).toHaveValue( 'draft' );
 		expect( screen.getByRole( 'checkbox', { name: 'Только в наличии' } ) ).toBeChecked();
-		expect( screen.getByLabelText( 'Период обновления: С' ) ).toHaveValue( '2026-11-01' );
-		expect( screen.getByLabelText( 'Период обновления: По' ) ).toHaveValue( '' );
+		expect( screen.getByRole( 'button', { name: '01.11.2026 — …' } ) ).toBeInTheDocument();
 	} );
 
 	test( 'sorting writes the sort key of the column, not its id, and returns to page one', async () => {
@@ -599,7 +610,9 @@ describe( 'URL round trip', () => {
 		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Только в наличии' } ) );
 		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { filter_in_stock: '1' } ) );
 
+		await openCustomPeriod();
 		fireEvent.change( screen.getByLabelText( 'Период обновления: По' ), { target: { value: '2026-11-09' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить период' } ) );
 		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { filter_updated: ',2026-11-09' } ) );
 	} );
 
@@ -659,8 +672,11 @@ describe( 'URL round trip', () => {
 	test( 'a date range that would end before it starts is not written', async () => {
 		const { navigate } = await renderTable( { query: { filter_updated: '2026-11-05,' } } );
 
+		await openCustomPeriod();
 		fireEvent.change( screen.getByLabelText( 'Период обновления: По' ), { target: { value: '2026-11-01' } } );
 
+		expect( screen.getByRole( 'button', { name: 'Применить период' } ) ).toBeDisabled();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить период' } ) );
 		expect( navigate ).not.toHaveBeenCalled();
 	} );
 
@@ -1240,8 +1256,7 @@ describe( 'keyboard access', () => {
 			screen.getByRole( 'combobox', { name: 'Состояние' } ),
 			screen.getByRole( 'listbox', { name: 'Бренд' } ),
 			screen.getByRole( 'checkbox', { name: 'Только в наличии' } ),
-			screen.getByLabelText( 'Период обновления: С' ),
-			screen.getByLabelText( 'Период обновления: По' ),
+			screen.getByRole( 'button', { name: 'Всё время' } ),
 			screen.getByRole( 'button', { name: 'Сбросить фильтры' } ),
 		];
 

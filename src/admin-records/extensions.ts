@@ -50,8 +50,13 @@ export interface SelectionHandle {
 export interface RecordsExtensions {
 	/** F6 — runs a row action the merchant activated. Without it row actions render disabled. */
 	onRowAction?: ( action: ActionDescriptor, row: AdminRecord, table: TableHandle ) => void;
-	/** F6 — the bulk toolbar. The selection column exists only when this is set and PHP declares bulk actions. */
+	/**
+	 * F6 — the select of the selection actions, drawn in the table card's header. The selection column exists only when
+	 * this is set and PHP declares bulk actions.
+	 */
 	renderBulkActions?: ( selection: SelectionHandle, table: TableHandle ) => ReactNode;
+	/** F6 — the account-wide actions: buttons above the filters. */
+	renderAccountActions?: ( selection: SelectionHandle, table: TableHandle ) => ReactNode;
 	/** F6 — always mounted, bulk actions or not: the host of the action dialog that a row action opens. */
 	renderActions?: ( table: TableHandle ) => ReactNode;
 	/** F7 — why an action PHP enabled is blocked right now (a lock, a running process); empty when it is not. */

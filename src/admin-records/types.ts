@@ -55,6 +55,8 @@ export interface Filter {
 	/** Options come with the list response (`facets`) instead of the definition. */
 	options_source: boolean;
 	default?: FilterValue;
+	/** A `select` whose options partition the rows: it is drawn as the counted row above the table, not as a select. */
+	views?: boolean;
 }
 
 export interface Sorts {

@@ -93,6 +93,32 @@ final class Site_Orders_Reader {
 	}
 
 	/**
+	 * How many orders each posting state holds under every other filter of the read (the state itself is not applied): the counts
+	 * of the view row. One query.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param Site_Orders_Filter $filter Filters; the state is ignored.
+	 * @return array{open:int,finished:int}
+	 */
+	public function state_counts( Site_Orders_Filter $filter ): array {
+		$rows = $this->db->get_results(
+			'SELECT pg.is_terminal AS finished, COUNT(*) AS total FROM ' . $this->from_sql() . ' WHERE ' . $this->where( $filter->without_state() ) . ' GROUP BY pg.is_terminal', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Every fragment is prepared or fixed.
+			'ARRAY_A'
+		);
+		$out  = [
+			Site_Orders_Filter::STATE_OPEN     => 0,
+			Site_Orders_Filter::STATE_FINISHED => 0,
+		];
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$out[ 1 === (int) $row['finished'] ? Site_Orders_Filter::STATE_FINISHED : Site_Orders_Filter::STATE_OPEN ] = (int) $row['total'];
+		}
+
+		return $out;
+	}
+
+	/**
 	 * Reads the registry rows of orders named by id. An order that is not an order of the account, or is gone, is absent.
 	 *
 	 * @since 2.1.5

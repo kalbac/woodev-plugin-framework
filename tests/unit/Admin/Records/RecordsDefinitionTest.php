@@ -58,6 +58,11 @@ class RecordsDefinitionTest extends TestCase {
 			'boolean filter with options'      => [ [ 'filters' => [ [ 'id' => 'x', 'label' => 'X', 'type' => 'boolean', 'options' => [ [ 'value' => 'a', 'label' => 'A' ] ] ] ] ] ],
 			'filter default outside options'   => [ [ 'filters' => [ array_merge( $filters[1], [ 'default' => 'nope' ] ) ] ] ],
 			'duplicate option values'          => [ [ 'filters' => [ array_merge( $filters[1], [ 'options' => [ [ 'value' => 'a', 'label' => 'A' ], [ 'value' => 'a', 'label' => 'B' ] ] ] ) ] ] ],
+			'views on a multi_select'          => [ [ 'filters' => [ array_merge( $filters[2], [ 'views' => true ] ) ] ] ],
+			'views on a boolean'               => [ [ 'filters' => [ array_merge( $filters[3], [ 'views' => true ] ) ] ] ],
+			'views on a search'                => [ [ 'filters' => [ array_merge( $filters[0], [ 'views' => true ] ) ] ] ],
+			'views that is not a flag'         => [ [ 'filters' => [ array_merge( $filters[1], [ 'views' => 'yes' ] ) ] ] ],
+			'two views filters'                => [ [ 'filters' => [ array_merge( $filters[1], [ 'views' => true ] ), array_merge( $filters[1], [ 'id' => 'other', 'views' => true ] ) ] ] ],
 			'sort default is not a sort key'   => [ [ 'sorts' => [ 'keys' => [ 'name' ], 'default' => [ 'key' => 'price', 'direction' => 'asc' ] ] ] ],
 			'sort keys without default'        => [ [ 'sorts' => [ 'keys' => [ 'name' ] ] ] ],
 			'per page above the ceiling'       => [ [ 'pagination' => [ 'default_per_page' => 20, 'per_page_options' => [ 20, 500 ], 'max_per_page' => 500, 'max_selection' => 10 ] ] ],
@@ -111,6 +116,20 @@ class RecordsDefinitionTest extends TestCase {
 
 		$this->assertTrue( $definition->get_action( 'link' )['fields'][0]['searchable'] );
 		$this->assertFalse( $definition->get_action( 'send' )['fields'][0]['searchable'], 'an existing field stays what it was' );
+	}
+
+	public function test_a_select_can_be_the_counted_view_row_and_the_flag_is_only_sent_when_it_is_set(): void {
+		$filters = Records_Definitions::standard()['filters'];
+		$plain   = Records_Definition::from_array( Records_Definitions::standard() )->to_array()['filters'];
+
+		$definition = Records_Definition::from_array(
+			Records_Definitions::standard( [ 'filters' => [ $filters[0], array_merge( $filters[1], [ 'views' => true ] ), $filters[3] ] ] )
+		)->to_array()['filters'];
+
+		$this->assertTrue( $definition[1]['views'] );
+		$this->assertArrayNotHasKey( 'views', $definition[0] );
+		$this->assertArrayNotHasKey( 'views', $definition[2] );
+		$this->assertArrayNotHasKey( 'views', $plain[1], 'a filter that does not ask for it keeps its old shape' );
 	}
 
 	public function test_a_skipping_row_action_is_allowed_when_the_definition_says_so(): void {

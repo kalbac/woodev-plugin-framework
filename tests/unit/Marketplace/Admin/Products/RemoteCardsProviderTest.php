@@ -91,6 +91,8 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertSame( 'search', $filters['q']['type'] );
 		$this->assertSame( Remote_Cards_Query::NOT_ON_SITE, $filters['on_site']['default'] );
 		$this->assertSame( [ 'no', 'yes' ], array_column( $filters['on_site']['options'], 'value' ) );
+		$this->assertTrue( $filters['on_site']['views'], '«На сайте» is the counted row above the table.' );
+		$this->assertArrayNotHasKey( 'views', $filters['show'] );
 	}
 
 	public function test_the_account_selector_offers_the_enabled_accounts(): void {
@@ -139,6 +141,24 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertSame( 1, $this->list_body( [ 'on_site' => 'yes' ] )['total'] );
 		$this->assertSame( 3, $this->list_body()['total'], 'Cleared: every card.' );
 		$this->assertSame( 1, $this->list_body( [], 'c-3' )['total'] );
+	}
+
+	public function test_the_on_site_facets_count_the_cards_whatever_the_view_and_follow_the_search(): void {
+		$product = $this->add_product( [ 'id' => 41, 'sku' => 'B-2' ] );
+		$this->add_link( $product, Link_Record::STATE_CREATED, [ 'offer_id' => 'B-2' ] );
+		$this->put_snapshot( [ $this->card( 'A-1' ), $this->card( 'B-2' ), $this->card( 'C-3' ) ] );
+
+		$counts = function ( array $filters, string $search = '' ): array {
+			return array_column( $this->list_body( $filters, $search )['facets']['on_site'], 'count', 'value' );
+		};
+
+		$this->assertSame( [ 'no' => 2, 'yes' => 1 ], $counts( [ 'on_site' => 'no' ] ) );
+		$this->assertSame( [ 'no' => 2, 'yes' => 1 ], $counts( [ 'on_site' => 'yes' ] ), 'The chosen view does not change the numbers.' );
+		$this->assertSame( [ 'no' => 1, 'yes' => 0 ], $counts( [ 'on_site' => 'no' ], 'c-3' ), 'The search does.' );
+	}
+
+	public function test_a_table_without_a_snapshot_counts_zero_cards(): void {
+		$this->assertSame( [ 'no' => 0, 'yes' => 0 ], array_column( $this->list_body( [ 'on_site' => 'no' ] )['facets']['on_site'], 'count', 'value' ) );
 	}
 
 	public function test_a_card_whose_details_did_not_come_has_no_state_and_cannot_be_linked(): void {

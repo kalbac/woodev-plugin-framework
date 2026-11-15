@@ -11,16 +11,18 @@
  * @package woodev-plugin-framework
  */
 
+import type { MutableRefObject, ReactNode } from 'react';
 import { SelectControl } from '@wordpress/components';
 import { useMemo, useRef, useState } from '@wordpress/element';
 import { createRecordsApi } from './api';
 import type { RecordsExtensions, TableHandle } from './extensions';
-import { FiltersBar, isNarrowed } from './filters';
+import { FiltersBar, SearchBox, ViewsRow, isNarrowed } from './filters';
 import { MESSAGE_KEYS, firstMessage, message } from './messages';
-import { changeQuery, writeQuery } from './query';
+import { changeQuery, searchFilter, writeQuery } from './query';
 import { RowActions } from './row-actions';
 import { useSelection, type Selection } from './selection';
-import { EmptyState, ErrorState, LoadingState } from './states';
+import { EmptyCard, ErrorState, LoadingState } from './states';
+import './style.scss';
 import { HIDE_VENDOR_PAGE_SIZE, STYLES } from './styles';
 import { buildHeaders, buildLines, visibleRowIds, type TableModelInput } from './table-model';
 import type { AdminRecord, Definition, Direction, Messages, RecordsQuery, RouteQuery } from './types';
@@ -65,6 +67,8 @@ function useRoute( route: RouteQuery, navigate?: Navigate ): [ RouteQuery, Navig
 
 interface TableBodyProps {
 	title: string;
+	/** The card header's own controls, bulk group and search; `null` when the table has neither. */
+	headerActions: ReactNode;
 	definition: Definition;
 	messages: Messages;
 	query: RecordsQuery;
@@ -82,6 +86,7 @@ function sortedColumnId( definition: Definition, query: RecordsQuery ): string |
 /** The card: WooCommerce's table, sort headers and pagination around the shell's lines. */
 function TableBody( {
 	title,
+	headerActions,
 	definition,
 	messages,
 	query,
@@ -93,6 +98,7 @@ function TableBody( {
 }: TableBodyProps ) {
 	const TableCard = getTableCard();
 	const data = records.list.data;
+	const summaryLabel = message( messages, MESSAGE_KEYS.summaryLabel );
 	// WooCommerce reports one page-size choice as two callbacks (size, then the page clamped to the new size). Both are
 	// computed from the query that was on screen, so the second would write the old size back: every change starts from
 	// the query the previous callback of the same event produced.
@@ -205,6 +211,9 @@ function TableBody( {
 					per_page: query.perPage,
 				} }
 				isLoading={ records.list.status === 'loading' }
+				actions={ headerActions ? [ headerActions ] : undefined }
+				hasSearch={ searchFilter( definition ) !== undefined }
+				summary={ summaryLabel !== '' && data ? [ { label: summaryLabel, value: data.total } ] : undefined }
 				showMenu={ definition.columns.some( ( column ) => ! column.required ) }
 				onSort={ sortBy }
 				onPageChange={ changePage }
@@ -251,10 +260,50 @@ function Result( props: ResultProps ) {
 			? [ MESSAGE_KEYS.emptyFiltered, MESSAGE_KEYS.empty ]
 			: [ MESSAGE_KEYS.empty ];
 
-		return <EmptyState text={ firstMessage( messages, keys ) } />;
+		return <EmptyCard title={ props.title } actions={ props.headerActions } text={ firstMessage( messages, keys ) } />;
 	}
 
 	return <TableBody { ...props } />;
+}
+
+interface HeaderActionsProps {
+	definition: Definition;
+	query: RecordsQuery;
+	selection: Selection;
+	handle: TableHandle;
+	extensions: RecordsExtensions;
+	hasBulk: boolean;
+	restoreFocus: MutableRefObject< boolean >;
+	onChange: ( query: RecordsQuery ) => void;
+}
+
+/**
+ * The card header's controls in one element: the card gives each entry of `actions` its own full-width slot, so two
+ * entries would be two stacked controls. Bulk group first, search after it and filling the rest of the row.
+ */
+function HeaderActions( { definition, query, selection, handle, extensions, hasBulk, restoreFocus, onChange }: HeaderActionsProps ) {
+	const search = searchFilter( definition );
+
+	return (
+		<div className="woodev-table-toolbar">
+			{ hasBulk && extensions.renderBulkActions?.( { selectedIds: selection.selectedIds, clear: selection.clear }, handle ) }
+			{ search && (
+				<SearchBox
+					filter={ search }
+					value={ query.search }
+					restoreFocus={ restoreFocus }
+					onSearch={ ( text ) => onChange( changeQuery( query, { search: text } ) ) }
+				/>
+			) }
+		</div>
+	);
+}
+
+/** Whether the keyboard focus is inside the table header's search box right now. */
+function searchHasFocus(): boolean {
+	const active = document.activeElement;
+
+	return active instanceof Element && active.closest( '.woodev-records__search' ) !== null;
 }
 
 export function RecordsTable( {
@@ -274,6 +323,15 @@ export function RecordsTable( {
 	const hasBulk =
 		definition !== null && definition.bulk_actions.length > 0 && extensions.renderBulkActions !== undefined;
 	const selection = useSelection( definition?.pagination.max_selection ?? 0, records.epoch );
+	// The table and its empty card are two elements with a header each, so the search box is made again when a search
+	// finds nothing — and the merchant who is still typing must keep the keyboard. Read before the swap reaches the DOM.
+	const isEmpty = records.list.status === 'ready' && records.list.data?.total === 0;
+	const wasEmpty = useRef( isEmpty );
+	const restoreFocus = useRef( false );
+	if ( wasEmpty.current !== isEmpty ) {
+		restoreFocus.current = searchHasFocus();
+		wasEmpty.current = isEmpty;
+	}
 
 	if ( ! envelope || ! definition || ! records.query ) {
 		if ( records.definition.status !== 'error' ) {
@@ -314,9 +372,30 @@ export function RecordsTable( {
 	};
 	const summary = message( messages, MESSAGE_KEYS.summary );
 	const limitNote = selection.limitReached ? message( messages, MESSAGE_KEYS.selectionLimit ) : '';
+	const headerActions = (
+		<HeaderActions
+			key="toolbar"
+			definition={ definition }
+			query={ query }
+			selection={ selection }
+			handle={ handle }
+			extensions={ extensions }
+			hasBulk={ hasBulk }
+			restoreFocus={ restoreFocus }
+			onChange={ change }
+		/>
+	);
 
 	return (
 		<div className="woodev-records" data-owner={ owner } data-table={ table }>
+			{ hasBulk &&
+				extensions.renderAccountActions?.(
+					{
+						selectedIds: selection.selectedIds,
+						clear: selection.clear,
+					},
+					handle
+				) }
 			<FiltersBar
 				definition={ definition }
 				account={ envelope.context.account_id }
@@ -327,14 +406,14 @@ export function RecordsTable( {
 			/>
 			{ extensions.renderActivity?.( handle ) }
 			{ extensions.renderActions?.( handle ) }
-			{ hasBulk &&
-				extensions.renderBulkActions?.(
-					{
-						selectedIds: selection.selectedIds,
-						clear: selection.clear,
-					},
-					handle
-				) }
+			<ViewsRow
+				definition={ definition }
+				query={ query }
+				facets={ records.list.data?.facets ?? {} }
+				messages={ messages }
+				total={ records.list.data?.total }
+				onChange={ change }
+			/>
 			{ limitNote !== '' && <p role="status">{ limitNote }</p> }
 			{ summary !== '' && records.list.status === 'ready' && (
 				<p className="woodev-records__summary" style={ STYLES.summary }>
@@ -343,6 +422,7 @@ export function RecordsTable( {
 			) }
 			<Result
 				title={ title }
+				headerActions={ headerActions }
 				definition={ definition }
 				messages={ messages }
 				query={ query }

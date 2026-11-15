@@ -1,0 +1,74 @@
+// The records table's own rules — the part of its look that inline styles cannot say (descendant selectors, :hover,
+// media queries). Bundled with the marketplace bundle, whose `style-index.css` `Admin_Collector` already enqueues.
+//
+// @package woodev-plugin-framework
+
+@use '../components/tokens' as wd;
+@use '../components/table-chrome';
+
+.woodev-records {
+	// The filter labels of «Заказы доставки» and the settings: sentence case, never upper case.
+	.components-base-control__label {
+		font-size: 13px;
+		font-weight: 500;
+		text-transform: none;
+	}
+
+	// The boolean filter has no label above it: a box as tall as the selects' controls keeps the row on one baseline.
+	&__boolean {
+		align-items: center;
+		display: flex;
+		min-height: 40px;
+	}
+
+	// The empty result, in the frame of the table it stands for: what `TableCard` itself is made of.
+	&__empty-card {
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
+		box-shadow: none;
+	}
+
+	&__empty-header.components-card__header {
+		align-items: center;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 16px;
+		padding: 16px 24px;
+	}
+
+	&__empty-title {
+		font-size: 16px;
+		font-weight: 600;
+		line-height: 1.4;
+		margin: 0;
+	}
+
+	&__state.is-empty {
+		color: wd.$muted;
+		padding: wd.$gap-lg 0;
+		text-align: center;
+
+		p {
+			margin: 0;
+		}
+	}
+
+	// The search sits in the card header and takes the rest of the row, so its placeholder is never cut.
+	&__search {
+		flex: 1 1 240px;
+		min-width: 0;
+
+		.components-search-control {
+			min-width: 0;
+			width: 100%;
+		}
+	}
+
+	// Below 782px the search goes first and the bulk group under it (the delivery rule): the form is the flex child.
+	@media ( max-width: 782px ) {
+		&__search {
+			flex-basis: 100%;
+			order: -1;
+		}
+	}
+}

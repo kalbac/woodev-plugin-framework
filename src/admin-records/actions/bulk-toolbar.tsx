@@ -1,6 +1,7 @@
 /**
- * The bulk toolbar: one button per bulk action PHP declared for this user. A selection action waits for a
- * selection; an account-wide action does not need one, and its dialog says how far it reaches before anything runs.
+ * The bulk actions PHP declared for this user, in two places. A selection action waits for a selection and sits in the
+ * table card's header as a select with «Применить» ({@link BulkToolbar}); an account-wide action does not need one and
+ * is a button above the filters ({@link AccountActions}), and its dialog says how far it reaches before anything runs.
  *
  * When the page has an activity part, a bulk action is also off — with the reason written beside it — while the
  * account line blocks it or a selected row's lock does. A selected row is a top-level row or an expanded child (a
@@ -11,10 +12,12 @@
  */
 
 import { Button } from '@wordpress/components';
-import { Fragment } from '@wordpress/element';
+import { Fragment, useState } from '@wordpress/element';
+import { BulkActionSelect } from '../../components/bulk-action-select';
 import { accountBlockedReason, createActivityState, useActivityState, type ActivityExtensions } from '../activity';
 import type { ActivityHealth } from '../activity';
 import type { SelectionHandle, TableHandle } from '../extensions';
+import { MESSAGE_KEYS, message } from '../messages';
 import type { ActionDescriptor } from '../types';
 import { STYLES } from './styles';
 import type { ActionFlow } from './use-action-flow';
@@ -51,18 +54,53 @@ function blockedReason(
 	return locked?.activity?.reason ?? '';
 }
 
+/** A link is plain navigation; it has no bulk form. */
+function formActions( table: TableHandle, scope: ActionDescriptor[ 'scope' ] ): ActionDescriptor[] {
+	return table.definition.bulk_actions.filter( ( action ) => action.interaction !== 'link' && action.scope === scope );
+}
+
+/** The select of the selection actions, for the table card's header. */
 export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarProps ) {
 	const health = useActivityState( activity?.state ?? NO_ACTIVITY );
-	// A link is plain navigation; it has no bulk form.
-	const actions = table.definition.bulk_actions.filter( ( action ) => action.interaction !== 'link' );
+	const [ chosen, setChosen ] = useState( '' );
+	const actions = formActions( table, 'selection' );
+	const action = actions.find( ( candidate ) => candidate.id === chosen );
+
 	if ( actions.length === 0 ) {
 		return null;
 	}
 
 	return (
-		<div className="woodev-records__bulk" role="toolbar" style={ STYLES.bulk }>
+		<BulkActionSelect
+			actions={ actions.map( ( entry ) => ( { value: entry.id, label: entry.label } ) ) }
+			value={ action ? action.id : '' }
+			onChange={ setChosen }
+			onApply={ () =>
+				action && flow.begin( action, selection.selectedIds, '', table, { onApplied: selection.clear } )
+			}
+			disabled={ selection.selectedIds.length === 0 }
+			disabledReason={ action ? blockedReason( action, selection.selectedIds, table, health ) : '' }
+			labels={ {
+				placeholder: message( table.messages, MESSAGE_KEYS.bulkPlaceholder ),
+				apply: message( table.messages, MESSAGE_KEYS.bulkApply ),
+				label: message( table.messages, MESSAGE_KEYS.bulkLabel ),
+			} }
+		/>
+	);
+}
+
+/** The account-wide actions, as secondary buttons above the filters; a blocked one says why under the row. */
+export function AccountActions( { flow, selection, table, activity }: BulkToolbarProps ) {
+	const health = useActivityState( activity?.state ?? NO_ACTIVITY );
+	const actions = formActions( table, 'account' );
+
+	if ( actions.length === 0 ) {
+		return null;
+	}
+
+	return (
+		<div className="woodev-records__account-actions" style={ STYLES.bulk }>
 			{ actions.map( ( action ) => {
-				const idle = action.scope === 'selection' && selection.selectedIds.length === 0;
 				const reason = blockedReason( action, selection.selectedIds, table, health );
 				const reasonId = `woodev-records-bulk-reason-${ action.id }`;
 
@@ -71,15 +109,11 @@ export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarPr
 						<Button
 							variant="secondary"
 							isDestructive={ action.tone === 'danger' }
-							disabled={ idle || reason !== '' }
+							disabled={ reason !== '' }
 							accessibleWhenDisabled
 							aria-describedby={ reason === '' ? undefined : reasonId }
 							data-action={ action.id }
-							onClick={ () =>
-								flow.begin( action, action.scope === 'account' ? [] : selection.selectedIds, '', table, {
-									onApplied: selection.clear,
-								} )
-							}
+							onClick={ () => flow.begin( action, [], '', table, { onApplied: selection.clear } ) }
 						>
 							{ action.label }
 						</Button>
