@@ -8,7 +8,7 @@
  * (`…/table/{index,table}.tsx`, `types.ts`), read from the `woocommerce/woocommerce` repository on 10.11.2026:
  *
  * - `emptyMessage` and `tablePreface` are missing in 7.0, so the shell draws its own empty state and notices and
- *   never passes either.
+ *   never passes either. `actions`, `hasSearch` and `summary` exist in both (the delivery orders page uses them).
  * - A header's `visible` exists in both: 7.0's `getShowCols( headers )` keeps a column only when `visible` is
  *   undefined or truthy, so a column PHP hides by default is hidden there too (checked against the 7.0.0 tag).
  * - Trunk keeps the visible-column list in `useState( initial )`, so headers that change after the first render
@@ -69,6 +69,12 @@ export interface TableCardProps {
 	/** Index of the column whose cells are the row headers. */
 	rowHeader: number | false;
 	rowKey: ( row: TableCell[], index: number ) => string;
+	/** Nodes in the card header, beside the title. Exists in 7.0 and trunk (the delivery orders page passes it too). */
+	actions?: ReactNode[];
+	/** Styles the search control inside `actions`. */
+	hasSearch?: boolean;
+	/** The footer's counts, «120 Товаров». */
+	summary?: Array< { label: string; value: string | number } >;
 	onSort: ( key: string, direction: string ) => void;
 	onPageChange: ( page: number ) => void;
 	onQueryChange: ( param: string ) => ( value: string | number ) => void;

@@ -15,7 +15,7 @@
 import type { ActivityExtensions } from '../activity';
 import type { RecordsExtensions } from '../extensions';
 import { ActionDialog } from './action-dialog';
-import { BulkToolbar } from './bulk-toolbar';
+import { AccountActions, BulkToolbar } from './bulk-toolbar';
 import { useActionFlow } from './use-action-flow';
 
 /**
@@ -28,6 +28,9 @@ export function useActionExtensions( activity?: ActivityExtensions ): RecordsExt
 	return {
 		onRowAction: ( action, row, table ) => flow.begin( action, [ row.id ], row.id, table ),
 		renderBulkActions: ( selection, table ) => <BulkToolbar flow={ flow } selection={ selection } table={ table } activity={ activity } />,
+		renderAccountActions: ( selection, table ) => (
+			<AccountActions flow={ flow } selection={ selection } table={ table } activity={ activity } />
+		),
 		renderActions: ( table ) => <ActionDialog flow={ flow } table={ table } />,
 	};
 }

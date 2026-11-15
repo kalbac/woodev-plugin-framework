@@ -105,6 +105,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->meta      = new Fake_Order_Meta();
 		$this->canceller = new Fake_Order_Canceller();
 
+		Functions\when( 'wp_date' )->justReturn( '2026-11-15' );
 		Functions\when( 'get_transient' )->alias(
 			function ( string $key ) {
 				return $this->transients[ $key ] ?? false;
@@ -358,6 +359,10 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( [ 'key' => 'date', 'direction' => 'desc' ], $definition['sorts']['default'] );
 		$this->assertSame( [ 'q', 'state', 'wc_status', 'date' ], array_column( $definition['filters'], 'id' ) );
 		$this->assertSame( 'date_range', $definition['filters'][3]['type'] );
+		$this->assertTrue( $definition['filters'][1]['views'], 'The posting state is the counted row.' );
+		$this->assertSame( 'Всё время', $definition['messages']['period_all'], 'The date range is the period picker, which needs its words.' );
+		$this->assertSame( 'Заказов', $definition['messages']['summary_label'] );
+		$this->assertSame( '2026-11-15', $definition['filters'][3]['today'], 'The period picker counts «Сегодня» from the site\'s day.' );
 		$this->assertSame( [ [ 'value' => (string) $this->account_id, 'label' => 'Основной' ] ], $definition['context']['options'] );
 		$this->assertNull( $definition['children'] );
 		$this->assertNull( $definition['analytics'] );
@@ -399,7 +404,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 
 		$this->assertSame( 4, $body['total'] );
 		$this->assertSame( [ $this->row_id( 104 ), $this->row_id( 103 ), $this->row_id( 102 ), $this->row_id( 101 ) ], array_column( $body['rows'], 'id' ) );
-		$this->assertStringContainsString( '4', $body['messages']['summary'] );
+		$this->assertArrayNotHasKey( 'summary', $body['messages'] ?? [], 'The card footer counts the rows; no sentence repeats it.' );
 
 		$cells = $rows[ $this->row_id( 104 ) ]['cells'];
 
@@ -417,6 +422,27 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( 'Борис Лебедев', $rows[ $this->row_id( 102 ) ]['cells']['customer'] );
 		$this->assertSame( 'danger', $rows[ $this->row_id( 103 ) ]['cells']['status'][0]['value']['tone'] );
 		$this->assertFalse( $rows[ $this->row_id( 104 ) ]['selectable'] );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
+	public function test_the_state_facets_split_the_orders_into_open_and_finished_under_every_other_filter( bool $hpos ): void {
+		$this->stock( $hpos );
+
+		$counts = function ( array $query ): array {
+			return array_column( $this->list_body( $query )['facets']['state'], 'count', 'value' );
+		};
+		$all    = $counts( [] );
+
+		$this->assertSame( [ 'open', 'finished' ], array_keys( $all ) );
+		$this->assertSame( 4, array_sum( $all ), 'A posting is open or finished, so the two add up to every order.' );
+		$this->assertSame( $all, $counts( [ 'filters' => [ 'state' => 'open' ] ] ), 'The chosen state does not change the counts.' );
+
+		$processing = $counts( [ 'filters' => [ 'wc_status' => 'wc-processing' ] ] );
+
+		$this->assertSame( 2, array_sum( $processing ), 'Another filter does.' );
+		$this->assertSame( $this->list_body( [ 'filters' => [ 'wc_status' => 'wc-processing', 'state' => 'open' ] ] )['total'], $processing['open'] );
 	}
 
 	/**

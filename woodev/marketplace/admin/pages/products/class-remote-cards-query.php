@@ -64,6 +64,33 @@ final class Remote_Cards_Query {
 	}
 
 	/**
+	 * How many cards are not on the site and how many are, under the search text: the numbers of the «На сайте» view row.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param array<int,array<string,mixed>> $cards  Snapshot cards.
+	 * @param array<string,int>              $linked Product id by article, for every article a link row carries.
+	 * @param string                         $search Text looked for in the article and the name; empty for none.
+	 * @return array{no:int,yes:int} Keyed by the values of the filter.
+	 */
+	public static function on_site_counts( array $cards, array $linked, string $search ): array {
+		$counts = [
+			self::NOT_ON_SITE => 0,
+			self::ON_SITE     => 0,
+		];
+
+		foreach ( $cards as $card ) {
+			$product_id = (int) ( $linked[ (string) ( $card['offer_id'] ?? '' ) ] ?? 0 );
+
+			if ( self::wanted( $card, $product_id, '', $search ) ) {
+				++$counts[ $product_id > 0 ? self::ON_SITE : self::NOT_ON_SITE ];
+			}
+		}
+
+		return $counts;
+	}
+
+	/**
 	 * Finds a card by the key of its article.
 	 *
 	 * @since 2.1.5

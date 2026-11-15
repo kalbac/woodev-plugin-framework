@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
+use Woodev\Framework\Admin\Records\Standard_Messages;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 
 defined( 'ABSPATH' ) || exit;
@@ -188,6 +189,7 @@ final class Remote_Cards_Definition {
 					],
 				],
 				'default' => Remote_Cards_Query::NOT_ON_SITE,
+				'views'   => true,
 			],
 			[
 				'id'      => self::SHOW_FILTER,
@@ -323,6 +325,8 @@ final class Remote_Cards_Definition {
 	private static function messages( string $marketplace ): array {
 		return array_merge(
 			Site_Products_Definition::action_messages(),
+			Standard_Messages::bulk(),
+			Standard_Messages::views(),
 			[
 				'empty'                  => __( 'Карточек не найдено. Нажмите «Обновить список» или измените фильтры.', 'woodev-plugin-framework' ),
 				'empty_filtered'         => __( 'По этим фильтрам карточек нет.', 'woodev-plugin-framework' ),
@@ -336,6 +340,7 @@ final class Remote_Cards_Definition {
 				'selection_limit'        => __( 'Выбрано предельное число карточек. Выполните действие и выберите остальные.', 'woodev-plugin-framework' ),
 				'filter_any'             => __( 'Все карточки', 'woodev-plugin-framework' ),
 				'per_page'               => __( 'Карточек на странице', 'woodev-plugin-framework' ),
+				'summary_label'          => __( 'Карточек', 'woodev-plugin-framework' ),
 				'action_planning'        => __( 'Проверяем…', 'woodev-plugin-framework' ),
 				'action_recovery'        => __( 'Ответа нет: действие могло выполниться. Мы обновили таблицу — проверьте её.', 'woodev-plugin-framework' ),
 				'action_options_loading' => __( 'Ищем товары…', 'woodev-plugin-framework' ),

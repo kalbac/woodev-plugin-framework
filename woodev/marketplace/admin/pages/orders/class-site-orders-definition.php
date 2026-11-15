@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Admin\Records\Standard_Messages;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -158,6 +160,7 @@ final class Site_Orders_Definition {
 				'id'      => 'state',
 				'label'   => __( 'Состояние отправления', 'woodev-plugin-framework' ),
 				'type'    => 'select',
+				'views'   => true,
 				'options' => [
 					[
 						'value' => Site_Orders_Filter::STATE_OPEN,
@@ -184,6 +187,8 @@ final class Site_Orders_Definition {
 			'id'    => 'date',
 			'label' => __( 'Дата заказа', 'woodev-plugin-framework' ),
 			'type'  => 'date_range',
+			// The period picker counts «Сегодня» and the rest from the site's day, which is the day the server reads the range in.
+			'today' => wp_date( 'Y-m-d' ),
 		];
 
 		return $filters;
@@ -247,7 +252,21 @@ final class Site_Orders_Definition {
 	 * @return array<string,string>
 	 */
 	private static function messages(): array {
+		return array_merge(
+			Standard_Messages::views(),
+			Standard_Messages::period(),
+			self::own_messages()
+		);
+	}
+
+	/**
+	 * The sentences of this table and of its dialog.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function own_messages(): array {
 		return [
+			'summary_label'          => __( 'Заказов', 'woodev-plugin-framework' ),
 			'empty'                  => __( 'Заказов не найдено. Заказы появятся здесь, когда маркетплейс пришлёт их на сайт.', 'woodev-plugin-framework' ),
 			'empty_filtered'         => __( 'По этим фильтрам заказов нет.', 'woodev-plugin-framework' ),
 			'error'                  => __( 'Не удалось загрузить заказы. Повторите чуть позже.', 'woodev-plugin-framework' ),

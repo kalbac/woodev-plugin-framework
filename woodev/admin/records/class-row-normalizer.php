@@ -450,7 +450,8 @@ final class Row_Normalizer {
 	}
 
 	/**
-	 * Per-filter option counts: `[ filter id => [ [ value, label, count ], … ] ]`.
+	 * Per-filter option counts: `[ filter id => [ [ value, label, count ], … ] ]`. An entry with the empty value is the count with
+	 * that filter left out — what a counted view row shows as «Все» when the options overlap.
 	 *
 	 * @param Records_Definition $definition Definition.
 	 * @param mixed              $facets     Provider facets.
@@ -479,7 +480,8 @@ final class Row_Normalizer {
 	 * @return array{value:string,label:string,count:int}
 	 */
 	private static function facet( $entry ): array {
-		if ( ! is_array( $entry ) || ! is_string( $entry['value'] ?? null ) || 1 !== preg_match( Records_Definition::VALUE_PATTERN, $entry['value'] )
+		// The empty value is the entry for «no value chosen»: the count with the filter itself left out.
+		if ( ! is_array( $entry ) || ! is_string( $entry['value'] ?? null ) || ( '' !== $entry['value'] && 1 !== preg_match( Records_Definition::VALUE_PATTERN, $entry['value'] ) )
 			|| ! is_string( $entry['label'] ?? null ) || ! is_int( $entry['count'] ?? null ) || $entry['count'] < 0 ) {
 			throw new \UnexpectedValueException( 'a facet is a value, a label and a count.' );
 		}

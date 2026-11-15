@@ -7,17 +7,19 @@
  * @package woodev-plugin-framework
  */
 
-import type { ComponentType, FormEvent } from 'react';
+import type { ComponentType, FormEvent, MutableRefObject } from 'react';
 import { Button, CheckboxControl, SearchControl, SelectControl } from '@wordpress/components';
-import { useEffect, useState } from '@wordpress/element';
-import { MESSAGE_KEYS, joinLabel, message } from './messages';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { CountLinks, withAllEntry } from '../components/count-links';
+import { PeriodPicker, type PeriodLabels } from '../components/period-picker/period-picker';
+import { PRESET_IDS, type PresetId } from '../components/period-picker/presets';
+import { MESSAGE_KEYS, PERIOD_KEYS, joinLabel, message } from './messages';
 import {
 	MAX_MULTI_VALUES,
 	changeFilter,
 	changeQuery,
 	isSearchText,
 	sameFilterValue,
-	searchFilter,
 	valueFilters,
 } from './query';
 import { STYLES } from './styles';
@@ -98,47 +100,81 @@ function MultiSelectFilter( { filter, value, facets, onChange }: FilterControlPr
 /** Ticked sends `true`; unticked sends nothing at all, which is not the same request as `false`. */
 function BooleanFilter( { filter, value, onChange }: FilterControlProps ) {
 	return (
-		<CheckboxControl
-			__nextHasNoMarginBottom
-			label={ filter.label }
-			checked={ value === true }
-			onChange={ ( checked: boolean ) => onChange( checked ? true : undefined ) }
-		/>
+		<div className="woodev-records__boolean">
+			<CheckboxControl
+				__nextHasNoMarginBottom
+				label={ filter.label }
+				checked={ value === true }
+				onChange={ ( checked: boolean ) => onChange( checked ? true : undefined ) }
+			/>
+		</div>
 	);
 }
 
-function DateRangeFilter( { filter, value, messages, onChange }: FilterControlProps ) {
-	const range = ( typeof value === 'object' && ! Array.isArray( value ) ? value : {} ) as DateRange;
-	const ends: Array< { end: keyof DateRange; label: string } > = [
-		{ end: 'from', label: message( messages, MESSAGE_KEYS.dateFrom ) },
-		{ end: 'to', label: message( messages, MESSAGE_KEYS.dateTo ) },
-	];
+/**
+ * How many days the site's day is ahead of (positive) or behind the browser's own, from the `YYYY-MM-DD` PHP sent when the
+ * page loaded; `undefined` when PHP sent none. Kept as a difference, not as a date, so a tab left open past midnight still
+ * rolls over — on the site's day, not the browser's.
+ *
+ * @param day `YYYY-MM-DD`.
+ */
+function siteDayShift( day: string | undefined ): number | undefined {
+	const match = day === undefined ? null : /^(\d{4})-(\d{2})-(\d{2})$/.exec( day );
 
-	const change = ( end: keyof DateRange, day: string ) => {
-		const next: DateRange = { ...range, [ end ]: day };
-		if ( day === '' ) {
-			delete next[ end ];
-		}
+	if ( ! match ) {
+		return undefined;
+	}
 
-		const isBackwards = next.from !== undefined && next.to !== undefined && next.from > next.to;
-		if ( ! isBackwards ) {
-			onChange( Object.keys( next ).length === 0 ? undefined : next );
-		}
+	const now = new Date();
+	const site = Date.UTC( Number( match[ 1 ] ), Number( match[ 2 ] ) - 1, Number( match[ 3 ] ) );
+	const here = Date.UTC( now.getFullYear(), now.getMonth(), now.getDate() );
+
+	return Math.round( ( site - here ) / 86400000 );
+}
+
+/** The site's day as a local date at midnight: the browser's day moved by the load-time difference. */
+function siteToday( shift: number | undefined ): Date | undefined {
+	if ( shift === undefined ) {
+		return undefined;
+	}
+
+	const now = new Date();
+
+	return new Date( now.getFullYear(), now.getMonth(), now.getDate() + shift );
+}
+
+function periodLabels( filter: Filter, messages: Messages ): PeriodLabels {
+	const text = ( key: string ) => messages[ key ] ?? '';
+	const presets = Object.fromEntries(
+		PRESET_IDS.map( ( preset ) => [ preset, text( PERIOD_KEYS.preset( preset ) ) ] )
+	) as Record< PresetId, string >;
+
+	return {
+		label: text( PERIOD_KEYS.label ) || filter.label,
+		legend: text( PERIOD_KEYS.legend ),
+		all: text( PERIOD_KEYS.all ),
+		presets,
+		custom: text( PERIOD_KEYS.custom ),
+		back: text( PERIOD_KEYS.back ),
+		apply: text( PERIOD_KEYS.apply ),
+		from: joinLabel( filter.label, message( messages, MESSAGE_KEYS.dateFrom ) ),
+		to: joinLabel( filter.label, message( messages, MESSAGE_KEYS.dateTo ) ),
 	};
+}
+
+/** Every `date_range` filter is the period picker: the URL keeps `from~to` days, the control offers named periods. */
+function PeriodFilter( { filter, value, messages, onChange }: FilterControlProps ) {
+	const range = ( typeof value === 'object' && ! Array.isArray( value ) ? value : {} ) as DateRange;
+	// Taken once per definition, applied on every render: the days roll over, the offset to the site's day stays.
+	const shift = useMemo( () => siteDayShift( filter.today ), [ filter.today ] );
 
 	return (
-		<fieldset className="woodev-records__date-range" style={ STYLES.dateRange }>
-			<legend>{ filter.label }</legend>
-			{ ends.map( ( { end, label } ) => (
-				<input
-					key={ end }
-					type="date"
-					aria-label={ joinLabel( filter.label, label ) }
-					value={ range[ end ] ?? '' }
-					onChange={ ( event ) => change( end, event.target.value ) }
-				/>
-			) ) }
-		</fieldset>
+		<PeriodPicker
+			value={ range }
+			today={ siteToday( shift ) }
+			labels={ periodLabels( filter, messages ) }
+			onChange={ ( next ) => onChange( Object.keys( next ).length === 0 ? undefined : next ) }
+		/>
 	);
 }
 
@@ -146,20 +182,33 @@ const FILTER_CONTROLS: Partial< Record< Filter[ 'type' ], ComponentType< FilterC
 	select: SelectFilter,
 	multi_select: MultiSelectFilter,
 	boolean: BooleanFilter,
-	date_range: DateRangeFilter,
+	date_range: PeriodFilter,
 };
 
-interface SearchBoxProps {
+export interface SearchBoxProps {
 	filter: Filter;
 	value: string;
 	onSearch: ( text: string ) => void;
+	/**
+	 * Set by the table when the box had keyboard focus as the table swapped between its rows and its empty card — the
+	 * two are different elements, so the box is created again. The new box takes the focus and clears the flag.
+	 */
+	restoreFocus?: MutableRefObject< boolean >;
 }
 
 /** Searches on Enter, and at once when the box is cleared; typing alone reads nothing. */
-function SearchBox( { filter, value, onSearch }: SearchBoxProps ) {
+export function SearchBox( { filter, value, onSearch, restoreFocus }: SearchBoxProps ) {
 	const [ text, setText ] = useState( value );
+	const form = useRef< HTMLFormElement >( null );
 
 	useEffect( () => setText( value ), [ value ] );
+
+	useEffect( () => {
+		if ( restoreFocus?.current ) {
+			restoreFocus.current = false;
+			form.current?.querySelector( 'input' )?.focus();
+		}
+	}, [ restoreFocus ] );
 
 	const submit = ( event: FormEvent ) => {
 		event.preventDefault();
@@ -179,7 +228,7 @@ function SearchBox( { filter, value, onSearch }: SearchBoxProps ) {
 	};
 
 	return (
-		<form role="search" onSubmit={ submit }>
+		<form ref={ form } role="search" className="woodev-records__search" onSubmit={ submit }>
 			<SearchControl
 				__nextHasNoMarginBottom
 				label={ filter.label }
@@ -247,11 +296,16 @@ export interface FiltersBarProps {
 	onChange: ( query: RecordsQuery ) => void;
 }
 
+/** The select that is drawn as the counted row above the table, if the definition declares one. */
+export function viewsFilter( definition: Definition ): Filter | undefined {
+	return definition.filters.find( ( filter ) => filter.type === 'select' && filter.views === true );
+}
+
 export function FiltersBar( { definition, account, query, facets, messages, onChange }: FiltersBarProps ) {
-	const search = searchFilter( definition );
 	const resetLabel = message( messages, MESSAGE_KEYS.resetFilters );
 	const canReset = resetLabel !== '' && isNarrowed( definition, query );
 	const reset = () => onChange( changeQuery( query, { search: '', filters: defaultFilters( definition ) } ) );
+	const counted = viewsFilter( definition );
 
 	return (
 		<div className="woodev-records__toolbar" style={ STYLES.toolbar }>
@@ -260,32 +314,67 @@ export function FiltersBar( { definition, account, query, facets, messages, onCh
 				account={ account }
 				onChange={ ( next ) => onChange( changeQuery( query, { account: next } ) ) }
 			/>
-			{ search && (
-				<SearchBox
-					filter={ search }
-					value={ query.search }
-					onSearch={ ( text ) => onChange( changeQuery( query, { search: text } ) ) }
-				/>
-			) }
-			{ valueFilters( definition ).map( ( filter ) => {
-				const Control = FILTER_CONTROLS[ filter.type ];
+			{ valueFilters( definition )
+				.filter( ( filter ) => filter !== counted )
+				.map( ( filter ) => {
+					const Control = FILTER_CONTROLS[ filter.type ];
 
-				return Control ? (
-					<Control
-						key={ filter.id }
-						filter={ filter }
-						value={ query.filters[ filter.id ] }
-						facets={ facets[ filter.id ] ?? [] }
-						messages={ messages }
-						onChange={ ( value ) => onChange( changeFilter( query, filter.id, value ) ) }
-					/>
-				) : null;
-			} ) }
+					return Control ? (
+						<Control
+							key={ filter.id }
+							filter={ filter }
+							value={ query.filters[ filter.id ] }
+							facets={ facets[ filter.id ] ?? [] }
+							messages={ messages }
+							onChange={ ( value ) => onChange( changeFilter( query, filter.id, value ) ) }
+						/>
+					) : null;
+				} ) }
 			{ canReset && (
 				<Button __next40pxDefaultSize variant="tertiary" onClick={ reset }>
 					{ resetLabel }
 				</Button>
 			) }
 		</div>
+	);
+}
+
+export interface ViewsRowProps {
+	definition: Definition;
+	query: RecordsQuery;
+	facets: Record< string, Facet[] >;
+	messages: Messages;
+	/** The list's total, which is exactly «all» while no view is chosen. */
+	total: number | undefined;
+	onChange: ( query: RecordsQuery ) => void;
+}
+
+/**
+ * The counted row of the definition's `views` filter: «Все» (clears the filter) and one link per option with its count
+ * from the facets. Nothing until the server has sent the counts.
+ */
+export function ViewsRow( { definition, query, facets, messages, total, onChange }: ViewsRowProps ) {
+	const filter = viewsFilter( definition );
+	const facet = filter ? facets[ filter.id ] ?? [] : [];
+	const counts = facet.filter( ( entry ) => entry.value !== ANY );
+
+	if ( ! filter || counts.length === 0 ) {
+		return null;
+	}
+
+	const value = query.filters[ filter.id ];
+	const current = typeof value === 'string' ? value : ANY;
+	// The options may overlap (a variable product can sit in several states at once), so the sum of the counts can exceed
+	// the rows. PHP then sends the real number as the entry with the empty value; the list's own total is the same number
+	// while no view is chosen; the sum is the last resort, exact for options that partition the rows.
+	const allTotal = facet.find( ( entry ) => entry.value === ANY )?.count ?? ( current === ANY ? total : undefined );
+
+	return (
+		<CountLinks
+			label={ filter.label }
+			entries={ withAllEntry( counts, message( messages, MESSAGE_KEYS.viewsAll ), allTotal ) }
+			current={ current }
+			onSelect={ ( next ) => onChange( changeFilter( query, filter.id, next === ANY ? undefined : next ) ) }
+		/>
 	);
 }

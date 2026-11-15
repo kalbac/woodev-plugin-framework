@@ -53,6 +53,25 @@ export const MESSAGE_KEYS = {
 	dateFrom: 'date_from',
 	/** End of a date range. */
 	dateTo: 'date_to',
+	/** The select of the bulk actions: its empty entry, its button and its accessible name. */
+	bulkPlaceholder: 'bulk_placeholder',
+	bulkApply: 'bulk_apply',
+	bulkLabel: 'bulk_label',
+	/** The counted row's entry that clears the filter. */
+	viewsAll: 'views_all',
+	/** Label of the count in the card footer («Товаров»). */
+	summaryLabel: 'summary_label',
+} as const;
+
+/** The period picker's keys: its label and legend, «all time», the custom range, its buttons, and one per preset. */
+export const PERIOD_KEYS = {
+	label: 'period_label',
+	legend: 'period_legend',
+	all: 'period_all',
+	custom: 'period_custom',
+	back: 'period_back',
+	apply: 'period_apply',
+	preset: ( preset: string ) => `period_${ preset }`,
 } as const;
 
 export type MessageKey = ( typeof MESSAGE_KEYS )[ keyof typeof MESSAGE_KEYS ];

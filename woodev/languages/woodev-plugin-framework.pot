@@ -2413,13 +2413,6 @@ msgid "Маркетплейс не смог подготовить этикет�
 msgstr ""
 
 #. translators: %d: number of orders.
-#: marketplace/admin/pages/orders/class-site-orders-provider.php:236
-#, php-format
-msgid "Найден %d заказ"
-msgid_plural "Найдено заказов: %d"
-msgstr[0] ""
-msgstr[1] ""
-
 #: marketplace/admin/pages/orders/class-site-orders-provider.php:389
 msgid "Это действие недоступно для заказов этого маркетплейса."
 msgstr ""
@@ -3085,13 +3078,6 @@ msgid "Ответа нет: действие могло выполниться. 
 msgstr ""
 
 #. translators: %d: number of products.
-#: marketplace/admin/pages/products/class-site-products-provider.php:207
-#, php-format
-msgid "Найден %d товар"
-msgid_plural "Найдено товаров: %d"
-msgstr[0] ""
-msgstr[1] ""
-
 #: marketplace/admin/pages/products/class-site-products-provider.php:321
 msgid "По умолчанию (склад аккаунта)"
 msgstr ""
@@ -11094,4 +11080,12 @@ msgstr ""
 
 #: marketplace/settings/class-notifications-section.php:465
 msgid "Возобновить уведомления"
+msgstr ""
+
+#: admin/records/class-standard-messages.php:75
+msgid "Применить период"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:343
+msgid "Карточек"
 msgstr ""

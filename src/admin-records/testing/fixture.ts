@@ -7,6 +7,26 @@
 
 import type { ActionDescriptor, AdminRecord, Definition, DefinitionEnvelope, ListEnvelope } from '../types';
 
+/** The period picker's words, as `Standard_Messages::period()` sends them. */
+export const PERIOD_MESSAGES: Record< string, string > = {
+	period_label: 'Период',
+	period_legend: 'Выберите период',
+	period_all: 'Всё время',
+	period_today: 'Сегодня',
+	period_yesterday: 'Вчера',
+	period_week: 'С начала недели',
+	period_last_week: 'Прошлая неделя',
+	period_month: 'С начала месяца',
+	period_last_month: 'Прошлый месяц',
+	period_quarter: 'С начала квартала',
+	period_last_quarter: 'Прошлый квартал',
+	period_year: 'С начала года',
+	period_last_year: 'Прошлый год',
+	period_custom: 'Произвольный период',
+	period_back: 'Назад',
+	period_apply: 'Применить период',
+};
+
 function action( id: string, label: string, overrides: Partial< ActionDescriptor > = {} ): ActionDescriptor {
 	return {
 		id,
@@ -155,6 +175,12 @@ export function fixtureDefinition( overrides: Partial< Definition > = {} ): Defi
 			per_page: 'Строк на странице',
 			date_from: 'С',
 			date_to: 'По',
+			bulk_placeholder: 'Выберите действие',
+			bulk_apply: 'Применить',
+			bulk_label: 'Массовые действия',
+			views_all: 'Все',
+			summary_label: 'Товаров',
+			...PERIOD_MESSAGES,
 		},
 		analytics: null,
 		...overrides,
