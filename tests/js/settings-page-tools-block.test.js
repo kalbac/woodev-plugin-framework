@@ -12,7 +12,7 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
-import ToolsBlock from '../../src/settings-page/tools-block';
+import ToolsBlock, { ToolsRow } from '../../src/settings-page/tools-block';
 import { runTool } from '../../src/settings-page/rest';
 
 jest.mock( '../../src/settings-page/rest', () => ( {
@@ -225,4 +225,56 @@ test( 'a disabled tool renders its status text and a disabled button', () => {
 	expect(
 		screen.getByText( 'Недоступно: ни один провайдер не поддерживает эту операцию.' )
 	).toBeInTheDocument();
+} );
+
+describe( 'ToolsRow: one account\'s operations as one row of buttons (Settings_Section::ACTIONS_ROW)', () => {
+	const tool = ( id, button, extra = {} ) => ( { id, name: button, desc: `Описание ${ button }`, button, disabled: false, status_text: '', ...extra } );
+	const tools = [ tool( 'register', 'Зарегистрировать адрес' ), tool( 'check', 'Проверить связь' ), tool( 'types', 'Обновить типы событий' ) ];
+
+	test( 'the first button is primary, the rest secondary, all in one row', () => {
+		const { container } = render( createElement( ToolsRow, { providerId: 'ozon', tools } ) );
+
+		const buttons = container.querySelectorAll( '.woodev-tools-row__buttons button' );
+		expect( [ ...buttons ].map( ( button ) => button.textContent ) ).toEqual( [ 'Зарегистрировать адрес', 'Проверить связь', 'Обновить типы событий' ] );
+		expect( buttons[ 0 ] ).toHaveClass( 'is-primary' );
+		expect( buttons[ 1 ] ).toHaveClass( 'is-secondary' );
+		expect( buttons[ 2 ] ).toHaveClass( 'is-secondary' );
+		expect( container.querySelector( '.woodev-tool' ) ).toBeNull(); // no card per tool
+	} );
+
+	test( 'a tool\'s description is the accessible description of its button', () => {
+		render( createElement( ToolsRow, { providerId: 'ozon', tools } ) );
+
+		expect( screen.getByRole( 'button', { name: 'Проверить связь' } ) ).toHaveAccessibleDescription( 'Описание Проверить связь' );
+	} );
+
+	test( 'one result line sits under the row and belongs to the last clicked button', async () => {
+		runTool
+			.mockResolvedValueOnce( { success: true, message: 'Адрес зарегистрирован' } )
+			.mockResolvedValueOnce( { success: false, message: 'Связи нет' } );
+
+		const { container } = render( createElement( ToolsRow, { providerId: 'ozon', tools } ) );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Зарегистрировать адрес' } ) );
+		expect( runTool ).toHaveBeenCalledWith( 'ozon', 'register', {} );
+		await waitFor( () => expect( screen.getByText( 'Адрес зарегистрирован' ) ).toBeInTheDocument() );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Проверить связь' } ) );
+		await waitFor( () => expect( screen.getByText( 'Связи нет' ) ).toBeInTheDocument() );
+
+		expect( screen.queryByText( 'Адрес зарегистрирован' ) ).not.toBeInTheDocument();
+		expect( container.querySelectorAll( '.woodev-tools-row__result' ) ).toHaveLength( 1 );
+		expect( container.querySelector( '.woodev-tools-row__result' ) ).toHaveClass( 'is-error' );
+		// The result comes after the row of buttons, never above it.
+		expect( container.querySelector( '.woodev-tools-row__buttons' ).nextElementSibling ).toBe( container.querySelector( '.woodev-tools-row__result' ) );
+	} );
+
+	test( 'every button waits while one runs', () => {
+		runTool.mockReturnValue( new Promise( () => {} ) );
+
+		render( createElement( ToolsRow, { providerId: 'ozon', tools } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Зарегистрировать адрес' } ) );
+
+		expect( screen.getByRole( 'button', { name: 'Проверить связь' } ) ).toBeDisabled();
+	} );
 } );

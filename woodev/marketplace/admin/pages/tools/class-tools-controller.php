@@ -205,7 +205,6 @@ final class Tools_Controller {
 			'accountLabel'  => __( 'Аккаунт', 'woodev-plugin-framework' ),
 			'chooseAccount' => __( 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.', 'woodev-plugin-framework' ),
 			'noTools'       => __( 'Для этого маркетплейса пока нет инструментов.', 'woodev-plugin-framework' ),
-			'previewButton' => __( 'Проверить', 'woodev-plugin-framework' ),
 			'cancelButton'  => __( 'Отмена', 'woodev-plugin-framework' ),
 			'running'       => __( 'Выполняется…', 'woodev-plugin-framework' ),
 			'loadFailed'    => __( 'Не удалось загрузить инструменты. Обновите страницу.', 'woodev-plugin-framework' ),

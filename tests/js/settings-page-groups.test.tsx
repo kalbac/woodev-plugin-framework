@@ -161,6 +161,54 @@ describe( 'SectionView with groups', () => {
 	} );
 } );
 
+describe( 'group footnote and the row layout of a section\'s actions', () => {
+	it( 'draws a group\'s footnote after its fields and before its buttons', () => {
+		const { container } = renderSection( {
+			fields: { token: field( 'Токен' ) },
+			actions: [ action( 'on', 'Подключить' ) ],
+			groups: [ group( 'prices', [ 'token' ], [ 'on' ], { footnote: '<p>Пример: 1000 RUB</p>' } ) ],
+		} );
+
+		const card = container.querySelector( '.woodev-group' )!;
+		const footnote = card.querySelector( '.woodev-group__footnote' )!;
+
+		expect( footnote ).toHaveTextContent( 'Пример: 1000 RUB' );
+		expect( footnote.compareDocumentPosition( card.querySelector( '.woodev-field' )! ) & Node.DOCUMENT_POSITION_PRECEDING ).toBeTruthy();
+		expect( footnote.compareDocumentPosition( card.querySelector( '.woodev-group__actions' )! ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+	} );
+
+	it( 'draws no footnote element for a group without one', () => {
+		const { container } = renderSection( { fields: { token: field( 'Токен' ) }, groups: [ group( 'g', [ 'token' ] ) ] } );
+
+		expect( container.querySelector( '.woodev-group__footnote' ) ).toBeNull();
+	} );
+
+	it( 'draws the ungrouped actions as ONE row, the first primary, when the section asks for the row layout', () => {
+		const { container } = renderSection( {
+			fields: {},
+			actions_layout: 'row',
+			actions: [ action( 'register', 'Зарегистрировать адрес' ), action( 'check', 'Проверить связь' ) ],
+		} );
+
+		const buttons = container.querySelectorAll( '.woodev-tools-row__buttons button' );
+
+		expect( buttons ).toHaveLength( 2 );
+		expect( buttons[ 0 ] ).toHaveClass( 'is-primary' );
+		expect( buttons[ 1 ] ).toHaveClass( 'is-secondary' );
+		expect( container.querySelector( '.woodev-tool' ) ).toBeNull();
+	} );
+
+	it( 'keeps one card per action without the layout flag (the delivery tool cards)', () => {
+		const { container } = renderSection( {
+			fields: {},
+			actions: [ action( 'sync', 'Обновить' ), action( 'check', 'Проверить' ) ],
+		} );
+
+		expect( container.querySelectorAll( '.woodev-tool' ) ).toHaveLength( 2 );
+		expect( container.querySelector( '.woodev-tools-row' ) ).toBeNull();
+	} );
+} );
+
 describe( 'sectionHasSaveButton', () => {
 	it( 'is true for a section that owns fields', () => {
 		expect( sectionHasSaveButton( { fields: { a: {} } } ) ).toBe( true );

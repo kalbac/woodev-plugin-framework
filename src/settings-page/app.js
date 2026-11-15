@@ -411,7 +411,8 @@ export default function App( { bootstrap = null } ) {
 			.catch( () => {} );
 	};
 
-	const renderSection = ( tab, sectionId ) => {
+	// `heading` ({ title, subtitle }) comes only from a stacked tab: the title opens the card, as its first child.
+	const renderSection = ( tab, sectionId, heading ) => {
 		const section = tab.sections.find( ( s ) => s.id === sectionId ) || tab.sections[ 0 ];
 		const values = edits[ tab.id ] || {};
 		// #515: Save must reflect edits of the OPEN SECTION only — a sibling
@@ -443,6 +444,12 @@ export default function App( { bootstrap = null } ) {
 		return (
 			<Card className="woodev-settings__card">
 				<CardBody>
+					{ heading && (
+						<h3 className="woodev-settings__card-title">
+							{ heading.title }
+							{ heading.subtitle && <span className="woodev-settings__card-subtitle">{ heading.subtitle }</span> }
+						</h3>
+					) }
 					{ showNotices && saveError && '' === saving && (
 						<Notice status="error" onRemove={ () => setSaveError( '' ) }>
 							{ saveError }

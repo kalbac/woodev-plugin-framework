@@ -26,14 +26,13 @@ const state = ( accounts: ToolsState[ 'accounts' ] ): ToolsState => ( {
 		accountLabel: 'Аккаунт',
 		chooseAccount: 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.',
 		noTools: 'Инструментов нет.',
-		previewButton: 'Проверить',
 		cancelButton: 'Отмена',
 		running: 'Выполняется…',
 		loadFailed: 'Не удалось загрузить.',
 		runFailed: 'Не выполнен.',
 	},
 	accounts,
-	tools: [ { id: 'rerun', title: 'Перенос данных', description: 'Переносит данные.', button: 'Запустить', takes_claim: false, disabled: false, disabled_reason: '' } ],
+	tools: [ { id: 'rerun', title: 'Перенос данных', description: 'Переносит данные.', button: 'Пробный запуск', takes_claim: false, disabled: false, disabled_reason: '' } ],
 	activity: { active: false, text: '', blocked_actions: [], observed_at: '2026-11-14T00:00:00Z' },
 } );
 
@@ -67,17 +66,37 @@ describe( 'the account selector', () => {
 		render( <ToolsView page={ PAGE } menu={ MENU } query={ {} } /> );
 
 		await screen.findByText( 'Перенос данных' );
-		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Проверить' } ) ).toBeEnabled() );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Пробный запуск' } ) ).toBeEnabled() );
 
 		expect( screen.queryByLabelText( 'Аккаунт' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.' ) ).not.toBeInTheDocument();
 
 		await act( async () => {
-			fireEvent.click( screen.getByRole( 'button', { name: 'Проверить' } ) );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Пробный запуск' } ) );
 		} );
 
 		await screen.findByText( 'Будет перенесено 3.' );
 		expect( calls.find( ( call ) => call.path.endsWith( '/preview' ) )?.data ).toEqual( { account_id: 3 } );
+	} );
+
+	test( 'the first button shows the tool\'s own label, previews first, and nothing runs before the confirm', async () => {
+		const calls = serve( [ { id: 3, name: 'Главный' } ] );
+
+		const { container } = render( <ToolsView page={ PAGE } menu={ MENU } query={ {} } /> );
+
+		await screen.findByText( 'Перенос данных' );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Пробный запуск' } ) ).toBeEnabled() );
+
+		// Each tool is a settings-page card with its title inside.
+		expect( container.querySelector( '.woodev-settings__card .woodev-group__title' ) ).toHaveTextContent( 'Перенос данных' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Пробный запуск' } ) );
+		} );
+		await screen.findByText( 'Будет перенесено 3.' );
+
+		expect( calls.some( ( call ) => call.method === 'POST' && ! call.path.endsWith( '/preview' ) ) ).toBe( false );
+		expect( screen.getByRole( 'button', { name: 'Запустить' } ) ).toBeInTheDocument(); // the preview's confirm_label
 	} );
 
 	test( 'is shown with two accounts, the first one chosen', async () => {
@@ -102,7 +121,7 @@ describe( 'the account selector', () => {
 		await screen.findByText( 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.' );
 
 		expect( screen.queryByLabelText( 'Аккаунт' ) ).not.toBeInTheDocument();
-		expect( screen.getByRole( 'button', { name: 'Проверить' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Пробный запуск' } ) ).toBeDisabled();
 		expect( mocked ).toHaveBeenCalledWith( { path: BASE } );
 	} );
 } );

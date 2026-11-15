@@ -315,6 +315,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$parsed = $this->parse( $setting_id );
 
 		if ( null === $parsed || self::NEW_KEY === $parsed['key'] ) {
+			// The add form starts blank, except that a new account is switched on (what `write_new_block()` saves when the switch is untouched).
+			if ( null !== $parsed && 'enabled' === $parsed['field'] ) {
+				return true;
+			}
+
 			return null !== $parsed && $this->is_boolean_field( $parsed['field'] ) ? false : '';
 		}
 
@@ -651,7 +656,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			$handler,
 			self::setting_id( $key, 'enabled' ),
 			__( 'Аккаунт включён', 'woodev-plugin-framework' ),
-			self::NEW_KEY !== $key,
+			true,
 			__( 'Выключенный аккаунт не отправляет изменения и не принимает новые заказы.', 'woodev-plugin-framework' )
 		);
 	}
@@ -703,7 +708,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				self::setting_id( $key, 'price_direction' ),
 				__( 'Цены', 'woodev-plugin-framework' ),
 				$price_options,
-				__( 'В какую сторону передаются цены.', 'woodev-plugin-framework' )
+				$this->price_direction_tooltip( $marketplace )
 			);
 			$this->register_override_switch( $handler, $key, self::OVERRIDE_PRICES, __( 'Правило цены', 'woodev-plugin-framework' ) );
 			Shared_Fields::register_price_rule( $handler, $id_for, $this->adapter, $this->shown_when_own( $key, self::OVERRIDE_PRICES ) );
@@ -804,7 +809,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			);
 
 			$all_ids  = array_merge( $all_ids, $price_ids );
-			$groups[] = Settings_Group::create( 'prices_' . $key, __( 'Цены и наценка', 'woodev-plugin-framework' ) )->with_fields( $price_ids );
+			$prices = Settings_Group::create( 'prices_' . $key, __( 'Цены и наценка', 'woodev-plugin-framework' ) )->with_fields( $price_ids );
+
+			// The worked example closes the price card, under the rule it explains (it used to head the whole tab).
+			$groups[] = $has_push ? $prices->with_footnote( $this->price_example_html( $account ) ) : $prices;
 		}
 
 		$exchange_names = Shared_Fields::exchange_field_names( $this->adapter );
@@ -818,8 +826,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return Settings_Section::create(
 			self::params_section_id( $account->id() ),
 			$this->account_title( $account ),
-			$all_ids,
-			$has_push ? $this->price_example_html( $account ) : ''
+			$all_ids
 		)->with_groups( $groups )->stacked( $this->identifier_line( $account ) );
 	}
 
@@ -1435,12 +1442,6 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return $pairs;
 	}
 
-	/**
-	 * Builds the capability-gated `price_direction` option list.
-	 *
-	 * @param string $marketplace Marketplace name.
-	 * @return array<int,array{value:string,label:string}>
-	 */
 	private function price_direction_options( string $marketplace ): array {
 		$has_pusher = null !== $this->adapter->price_pusher();
 		$has_reader = null !== $this->adapter->price_reader();
@@ -1449,19 +1450,20 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			return [];
 		}
 
+		// Short labels: a long one is cut off in the select. What each direction means is in the field's tooltip.
 		$options = [];
 		if ( $has_pusher ) {
 			$options[] = Field_Kit::option(
 				Wpdb_Account_Store::PRICE_TO_MARKETPLACE,
 				/* translators: %s: marketplace name. */
-				sprintf( __( 'С сайта на %1$s: цены на %2$s считаются от цен сайта', 'woodev-plugin-framework' ), $marketplace, $marketplace )
+				sprintf( __( 'С сайта на %s', 'woodev-plugin-framework' ), $marketplace )
 			);
 		}
 		if ( $has_reader ) {
 			$options[] = Field_Kit::option(
 				Wpdb_Account_Store::PRICE_FROM_MARKETPLACE,
 				/* translators: %s: marketplace name. */
-				sprintf( __( 'С %1$s на сайт: цены сайта берутся с %2$s', 'woodev-plugin-framework' ), $marketplace, $marketplace )
+				sprintf( __( 'С %s на сайт', 'woodev-plugin-framework' ), $marketplace )
 			);
 		}
 		$options[] = Field_Kit::option(
@@ -1470,6 +1472,27 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		);
 
 		return $options;
+	}
+
+	/**
+	 * The tooltip of the price direction: the general line, then what each offered direction does.
+	 *
+	 * @param string $marketplace Marketplace name.
+	 * @return string
+	 */
+	private function price_direction_tooltip( string $marketplace ): string {
+		$lines = [ __( 'В какую сторону передаются цены.', 'woodev-plugin-framework' ) ];
+
+		if ( null !== $this->adapter->price_pusher() ) {
+			/* translators: %s: marketplace name. */
+			$lines[] = sprintf( __( 'С сайта на %1$s: цены на %1$s считаются от цен сайта.', 'woodev-plugin-framework' ), $marketplace );
+		}
+		if ( null !== $this->adapter->price_reader() ) {
+			/* translators: %s: marketplace name. */
+			$lines[] = sprintf( __( 'С %1$s на сайт: цены сайта берутся с %1$s.', 'woodev-plugin-framework' ), $marketplace );
+		}
+
+		return implode( ' ', $lines );
 	}
 
 	/**

@@ -2,6 +2,9 @@
  * The «Инструменты» page: preview a tool on an account, confirm it, read the result. The account is picked only when the
  * plugin has two or more; a single account is chosen silently.
  *
+ * Each tool is a card of the settings page's look: its title, its description and its button. The button shows the tool's
+ * own label and still opens the preview first; nothing runs before the confirm.
+ *
  * Every sentence comes from the server's `messages`; a running background run on the account is read again every few
  * seconds until it ends, and disables the tools that take the claim.
  *
@@ -9,7 +12,8 @@
  */
 
 import { useEffect, useMemo, useState } from '@wordpress/element';
-import { Button, Notice, SelectControl, Spinner } from '@wordpress/components';
+import { Button, Card, CardBody, Notice, SelectControl, Spinner } from '@wordpress/components';
+import FieldRow from '../../../components/field-row';
 import type { PageViewProps } from '../../types';
 import { errorLines } from '../mappings/api';
 import { createToolsApi } from './api';
@@ -104,7 +108,7 @@ export function ToolsView( { menu }: PageViewProps ) {
 	const accountOptions = state.accounts.map( ( account ) => ( { label: account.name, value: String( account.id ) } ) );
 
 	return (
-		<div className="woodev-tools-view" style={ { paddingRight: 20 } }>
+		<div className="woodev-settings woodev-tools-view">
 			{ notice && (
 				<Notice status={ notice.status } onRemove={ () => setNotice( null ) }>
 					{ notice.lines.join( ' ' ) }
@@ -112,38 +116,46 @@ export function ToolsView( { menu }: PageViewProps ) {
 			) }
 			{ isBusy( state.activity ) && <Notice status="warning" isDismissible={ false }>{ state.activity.text }</Notice> }
 			{ needsAccountChoice( state.accounts ) && (
-				<SelectControl __next40pxDefaultSize
-					label={ messages.accountLabel }
-					value={ accountId === null ? '' : String( accountId ) }
-					options={ accountOptions }
-					onChange={ ( value ) => {
-						setAccountId( value === '' ? null : Number( value ) );
-						setPreview( null );
-					} }
-				/>
+				<FieldRow label={ messages.accountLabel }>
+					<SelectControl
+						__next40pxDefaultSize
+						label={ messages.accountLabel }
+						hideLabelFromVision
+						value={ accountId === null ? '' : String( accountId ) }
+						options={ accountOptions }
+						onChange={ ( value ) => {
+							setAccountId( value === '' ? null : Number( value ) );
+							setPreview( null );
+						} }
+					/>
+				</FieldRow>
 			) }
 			{ accountId === null && <p>{ messages.chooseAccount }</p> }
 			{ state.tools.length === 0 && <p>{ messages.noTools }</p> }
 			{ state.tools.map( ( tool ) => (
-				<section key={ tool.id } className="woodev-tools-view__tool" data-tool={ tool.id }>
-					<h3>{ tool.title }</h3>
-					<p>{ tool.description }</p>
-					{ tool.disabled && <Notice status="warning" isDismissible={ false }>{ tool.disabled_reason }</Notice> }
-					<Button variant="secondary" disabled={ ! canPreview( tool, accountId ) || pending } onClick={ () => openPreview( tool ) }>
-						{ messages.previewButton }
-					</Button>
-					{ preview?.tool === tool.id && (
-						<div className="woodev-tools-view__preview">
-							<p>{ preview.summary }</p>
-							<Button variant="primary" disabled={ ! canConfirm( preview, tool ) || pending } onClick={ () => run( tool ) }>
-								{ pending ? messages.running : preview.confirm_label }
-							</Button>{ ' ' }
-							<Button variant="tertiary" onClick={ () => setPreview( null ) }>
-								{ messages.cancelButton }
-							</Button>
-						</div>
-					) }
-				</section>
+				<Card key={ tool.id } className="woodev-settings__card woodev-tools-view__tool" data-tool={ tool.id }>
+					<CardBody>
+						<h3 className="woodev-group__title">{ tool.title }</h3>
+						<p className="woodev-group__desc">{ tool.description }</p>
+						{ tool.disabled && <Notice status="warning" isDismissible={ false }>{ tool.disabled_reason }</Notice> }
+						<Button variant="secondary" disabled={ ! canPreview( tool, accountId ) || pending } onClick={ () => openPreview( tool ) }>
+							{ tool.button }
+						</Button>
+						{ preview?.tool === tool.id && (
+							<div className="woodev-group woodev-tools-view__preview">
+								<p>{ preview.summary }</p>
+								<div className="woodev-group__actions">
+									<Button variant="primary" disabled={ ! canConfirm( preview, tool ) || pending } onClick={ () => run( tool ) }>
+										{ pending ? messages.running : preview.confirm_label }
+									</Button>
+									<Button variant="tertiary" onClick={ () => setPreview( null ) }>
+										{ messages.cancelButton }
+									</Button>
+								</div>
+							</div>
+						) }
+					</CardBody>
+				</Card>
 			) ) }
 		</div>
 	);

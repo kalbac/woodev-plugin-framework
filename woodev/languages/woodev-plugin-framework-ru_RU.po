@@ -11054,3 +11054,67 @@ msgstr ""
 #: marketplace/jobs/class-import-jobs.php:248
 msgid "Не удалось импортировать карточку. Попробуйте ещё раз позже."
 msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:1459
+#, php-format
+msgid "С сайта на %s"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:1466
+#, php-format
+msgid "С %s на сайт"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:1488
+#, php-format
+msgid "С сайта на %1$s: цены на %1$s считаются от цен сайта."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-accounts-sections.php:1492
+#, php-format
+msgid "С %1$s на сайт: цены сайта берутся с %1$s."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:228
+msgid "Адрес сайта для уведомлений показан в карточках аккаунтов ниже; кнопка «Зарегистрировать адрес» сама передаёт его в личный кабинет, вписывать его вручную не нужно."
+msgstr ""
+
+#. translators: 1: names of notification types in quotes, 2: place in the marketplace cabinet.
+#: marketplace/settings/class-notifications-section.php:261
+#, php-format
+msgid "Где указать адрес для %1$s: %2$s."
+msgstr ""
+
+#. translators: 1: registration state, 2: the latest notification received.
+#: marketplace/settings/class-notifications-section.php:336
+#, php-format
+msgid "%1$s · последнее: %2$s"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:407
+msgid "Зарегистрировать адрес"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:414
+msgid "Маркетплейс отключил отправку уведомлений на этот адрес. Нажмите «Возобновить уведомления»."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:425
+msgid "Проверить связь"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:447
+msgid "Обновить типы событий"
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:454
+msgid "Адрес ещё не зарегистрирован — сначала нажмите «Зарегистрировать адрес»."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:465
+msgid "Возобновить уведомления"
+msgstr ""

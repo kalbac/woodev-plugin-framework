@@ -323,6 +323,11 @@ final class Settings_Page_Registry {
 					},
 					$actions
 				);
+
+				// Only a non-default layout is serialised, so a section that never asked for one keeps its schema as it was.
+				if ( '' !== $section->get_actions_layout() ) {
+					$entry['actions_layout'] = $section->get_actions_layout();
+				}
 			}
 
 			// Titled cards gathering some of those fields and actions (Settings_Section::with_groups()).
@@ -406,6 +411,10 @@ final class Settings_Page_Registry {
 				'fields'      => $fields,
 				'actions'     => $actions,
 			];
+
+			if ( '' !== $group->get_footnote() ) {
+				$entry['footnote'] = wp_kses_post( $group->get_footnote() );
+			}
 
 			if ( null !== $group->get_table() ) {
 				$entry['table'] = self::build_table( $group->get_table(), $field_ids, $handler );

@@ -132,6 +132,83 @@ function ToolCard( { providerId, tool } ) {
 	);
 }
 
+/**
+ * The tools as ONE row of buttons: the first is primary, the rest secondary, and the result line of the
+ * last clicked one sits under the row. A tool's `desc` is the button's accessible description. Used for a
+ * section whose actions are one account's operations (`Settings_Section::ACTIONS_ROW`); the default layout
+ * stays one card per tool ({@see ToolsBlock}).
+ *
+ * @param {Object}   props
+ * @param {string}   props.providerId the settings tab id.
+ * @param {Object[]} props.tools      `Shipping_Tool::to_array()` rows.
+ */
+export function ToolsRow( { providerId, tools } ) {
+	const [ busyId, setBusyId ] = useState( '' );
+	const [ result, setResult ] = useState( null );
+	// Each selector-backed tool keeps its own selected value, like a ToolCard does.
+	const [ selected, setSelected ] = useState( {} );
+	const selectedOf = ( tool ) => ( tool.id in selected ? selected[ tool.id ] : selectorDefault( tool.selector ) );
+	const notes = tools
+		.filter( ( tool ) => tool.disabled && tool.status_text )
+		.map( ( tool ) => tool.status_text )
+		.filter( ( line, index, all ) => all.indexOf( line ) === index );
+
+	const run = ( tool ) => {
+		// Busy + result-clear before the request starts, like ToolCard — a live call takes seconds.
+		setBusyId( tool.id );
+		setResult( null );
+
+		runTool( providerId, tool.id, toolArgs( tool.selector || null, selectedOf( tool ) ) )
+			.then( ( res ) => setResult( res ) )
+			.catch( ( err ) =>
+				setResult( {
+					success: false,
+					message: ( err && err.message ) || __( 'Ошибка выполнения.', 'woodev-plugin-framework' ),
+				} )
+			)
+			.finally( () => setBusyId( '' ) );
+	};
+
+	return (
+		<div className="woodev-tools-row">
+			{ tools.filter( ( tool ) => tool.selector ).map( ( tool ) => (
+				<ToolSelector
+					key={ `selector:${ tool.id }` }
+					selector={ tool.selector }
+					value={ selectedOf( tool ) }
+					onChange={ ( next ) => {
+						setResult( null );
+						setSelected( ( prev ) => ( { ...prev, [ tool.id ]: next } ) );
+					} }
+					disabled={ tool.disabled || '' !== busyId }
+				/>
+			) ) }
+			<div className="woodev-tools-row__buttons">
+				{ tools.map( ( tool, index ) => (
+					<Button
+						key={ tool.id }
+						variant={ 0 === index ? 'primary' : 'secondary' }
+						isBusy={ busyId === tool.id }
+						disabled={ '' !== busyId || tool.disabled }
+						describedBy={ tool.desc || undefined }
+						onClick={ () => run( tool ) }
+					>
+						{ tool.button }
+					</Button>
+				) ) }
+			</div>
+			{ notes.map( ( line ) => (
+				<p key={ line } className="woodev-tools-row__note">{ line }</p>
+			) ) }
+			{ result && (
+				<div className={ `woodev-tools-row__result is-${ result.success ? 'ok' : 'error' }` }>
+					{ result.message }
+				</div>
+			) }
+		</div>
+	);
+}
+
 export default function ToolsBlock( { providerId, section } ) {
 	return (
 		<div className="woodev-tools">

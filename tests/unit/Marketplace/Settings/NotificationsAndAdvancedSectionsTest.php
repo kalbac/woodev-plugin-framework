@@ -317,9 +317,10 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 
 		$this->assertCount( 1, $sections );
 		$this->assertSame( [ 'webhook_new_order', 'webhook_stocks' ], $sections[0]->get_setting_ids() );
-		$this->assertStringContainsString( 'Сообщает сайту о новом заказе сразу.', $sections[0]->get_description() );
-		$this->assertStringContainsString( 'Где указать адрес: Кабинет → Интеграции.', $sections[0]->get_description() );
-		$this->assertStringNotContainsString( 'Где указать адрес: .', $sections[0]->get_description(), 'no empty cabinet location' );
+		$this->assertStringNotContainsString( '<ul>', $sections[0]->get_description(), 'the per-type list is gone: a type\'s purpose is its switch\'s tooltip' );
+		$this->assertStringNotContainsString( 'Сообщает сайту о новом заказе сразу.', $sections[0]->get_description() );
+		$this->assertStringContainsString( 'Где указать адрес для «Новый заказ»: Кабинет → Интеграции.', $sections[0]->get_description(), 'only one type names a place, so the sentence names it' );
+		$this->assertStringNotContainsString( 'Остатки', $sections[0]->get_description(), 'a type without a place is not named' );
 
 		$handler->get_setting( 'webhook_stocks' )->set_value( true );
 		$handler->save();
@@ -341,8 +342,102 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$sections = $notif->sections();
 
 		$this->assertStringContainsString( 'Скопируйте адрес сайта для уведомлений', $sections[0]->get_description() );
-		$this->assertStringNotContainsString( 'Зарегистрировать URL', $sections[0]->get_description() );
+		$this->assertStringNotContainsString( 'Зарегистрировать адрес', $sections[0]->get_description() );
 		$this->assertStringContainsString( '/notifications/', $sections[1]->get_description(), 'the address to copy is in the account card' );
+	}
+
+	public function test_types_that_share_one_cabinet_location_get_ONE_location_sentence(): void {
+		$types = [
+			new Webhook_Type( 'new_order', 'Новый заказ', 'Сообщает о новом заказе.', 'Настройки → Уведомления' ),
+			new Webhook_Type( 'status', 'Смена статуса', 'Сообщает о смене статуса.', 'Настройки → Уведомления' ),
+			new Webhook_Type( 'cancel', 'Отмена', 'Сообщает об отмене.', 'Настройки → Уведомления' ),
+		];
+
+		$description = $this->push_section( new Fake_Push_Protocol( '203.0.113.0/24', $types ) )->sections()[0]->get_description();
+
+		$this->assertSame( 1, substr_count( $description, 'Где указать адрес' ), 'the place is told once for all the types' );
+		$this->assertStringContainsString( 'Где указать адрес: Настройки → Уведомления.', $description );
+		$this->assertStringNotContainsString( '«Новый заказ»', $description, 'no per-type naming when the place is shared' );
+	}
+
+	public function test_types_with_different_cabinet_locations_get_one_sentence_per_location_naming_its_types(): void {
+		$types = [
+			new Webhook_Type( 'new_order', 'Новый заказ', 'p1', 'Раздел А' ),
+			new Webhook_Type( 'status', 'Смена статуса', 'p2', 'Раздел А' ),
+			new Webhook_Type( 'stocks', 'Остатки', 'p3', 'Раздел Б' ),
+		];
+
+		$description = $this->push_section( new Fake_Push_Protocol( '203.0.113.0/24', $types ) )->sections()[0]->get_description();
+
+		$this->assertSame( 2, substr_count( $description, 'Где указать адрес' ) );
+		$this->assertStringContainsString( 'Где указать адрес для «Новый заказ», «Смена статуса»: Раздел А.', $description );
+		$this->assertStringContainsString( 'Где указать адрес для «Остатки»: Раздел Б.', $description );
+	}
+
+	public function test_types_that_name_no_location_get_no_location_sentence(): void {
+		$types = [ new Webhook_Type( 'stocks', 'Остатки', 'p', '' ) ];
+
+		$description = $this->push_section( new Fake_Push_Protocol( '203.0.113.0/24', $types ) )->sections()[0]->get_description();
+
+		$this->assertStringNotContainsString( 'Где указать адрес', $description );
+	}
+
+	public function test_an_account_block_is_a_facts_list_with_one_state_line_and_a_row_of_buttons(): void {
+		$fields     = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
+		$descriptor = new Fake_Settings_Descriptor( $fields, 'PushMarket' );
+		$adapter    = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => [ Capability::PUSH_NOTIFICATIONS ],
+				'credential_fields'   => $fields,
+				'settings_descriptor' => $descriptor,
+				'push_protocol'       => new Fake_Push_Protocol(),
+			]
+		);
+		$store      = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-2' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Основной', true, [ 'cabinet_id' => '4180680', 'api_token' => 't1' ] ) );
+
+		$notif = new Notifications_Section(
+			$adapter,
+			new Notification_Account_Reader( $this->db, $this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ) ),
+			new Last_Notification_Reader( $this->db, $this->schema->table_name( 'events', Sqlite_Tables::PREFIX ) ),
+			new License_Gate(
+				static function (): bool {
+					return true;
+				}
+			),
+			'fake_mp',
+			static function (): int {
+				return self::NOW;
+			}
+		);
+
+		$block       = $notif->sections()[1];
+		$description = $block->get_description();
+
+		$this->assertStringStartsWith( '<dl class="woodev-facts">', $description );
+		$this->assertStringNotContainsString( '<strong>', $description, 'no bold-label paragraphs any more' );
+		$this->assertSame( 3, substr_count( $description, '<dt>' ), 'address, state, wanted events' );
+		$this->assertStringContainsString( '<dt>Состояние</dt><dd>ещё не проверялось · последнее: пока не поступало</dd>', $description, 'registration state and the last notification are ONE line' );
+		$this->assertSame( \Woodev\Framework\Settings\Settings_Section::ACTIONS_ROW, $block->get_actions_layout() );
+		$this->assertSame(
+			[ 'Зарегистрировать адрес', 'Проверить связь', 'Обновить типы событий', 'Возобновить уведомления' ],
+			array_map(
+				static function ( $tool ): string {
+					return $tool->to_array()['button'];
+				},
+				$block->get_actions()
+			)
+		);
 	}
 
 	public function test_an_adapter_without_notification_types_gets_no_switches_card(): void {

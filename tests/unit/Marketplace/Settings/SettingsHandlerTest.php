@@ -458,6 +458,75 @@ final class SettingsHandlerTest extends TestCase {
 		$this->assertSame( 'Склад А', $options->for_account( 5, true )['1'] );
 	}
 
+	public function test_the_add_account_form_starts_with_the_account_switched_on(): void {
+		[ $handler ] = $this->stock_mode_handler( [] );
+
+		$this->assertTrue( $handler->get_value( 'account_new_enabled' ), 'a new account works as soon as it is connected' );
+	}
+
+	public function test_the_price_example_closes_the_price_card_and_no_longer_heads_the_tab(): void {
+		$fields     = new Credential_Fields( 'merchant_uid', [ 'access_token' ] );
+		$descriptor = new Fake_Settings_Descriptor( $fields, 'Acme', [ 'merchant_uid' => new Credential_Field_Spec( 'UID', '' ), 'access_token' => new Credential_Field_Spec( 'Токен', '' ) ] );
+		$adapter    = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => [],
+				'credential_fields'   => $fields,
+				'settings_descriptor' => $descriptor,
+			]
+		);
+		$store      = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-1' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', true, [ 'merchant_uid' => '1', 'access_token' => 't' ] ) );
+
+		$accounts = new Accounts_Sections( $store, $adapter, new Account_Status( $store, $adapter ), new Warehouse_Options( $this->cache ), 'fake_mp' );
+		$params   = array_values(
+			array_filter(
+				$accounts->sections(),
+				static function ( $section ): bool {
+					return 0 === strpos( $section->get_id(), 'account_params_' );
+				}
+			)
+		)[0];
+		$prices   = array_values(
+			array_filter(
+				$params->get_groups(),
+				static function ( $group ): bool {
+					return 0 === strpos( $group->get_id(), 'prices_' );
+				}
+			)
+		);
+
+		$this->assertNotSame( [], $prices, 'the fake adapter prices, so the card exists' );
+		$this->assertStringContainsString( 'Пример по текущему правилу', $prices[0]->get_footnote(), 'the example is the card\'s footnote' );
+		$this->assertStringNotContainsString( 'Пример по текущему правилу', $params->get_description(), 'and no longer the head of the whole tab' );
+	}
+
+	public function test_the_price_direction_options_are_short_and_the_explanations_sit_in_the_tooltip(): void {
+		[ $handler, , $acc_id ] = $this->stock_mode_handler( [] );
+
+		$schema  = Field_Schema::from_handler( $handler );
+		$options = $schema[ "account_{$acc_id}_price_direction" ]['options'] ?? [];
+
+		$this->assertNotSame( [], $options );
+		$this->assertContains( 'С сайта на Acme', array_column( $options, 'label' ), 'short enough not to be cut off in the select' );
+		$this->assertContains( 'Не синхронизировать цены', array_column( $options, 'label' ) );
+
+		foreach ( array_column( $options, 'label' ) as $label ) {
+			$this->assertStringNotContainsString( 'считаются от цен сайта', $label );
+		}
+
+		$this->assertStringContainsString( 'цены на Acme считаются от цен сайта', $schema[ "account_{$acc_id}_price_direction" ]['tooltip'] ?? '' );
+	}
+
 	/**
 	 * Builds a handler over one saved account whose adapter declares only the given capabilities.
 	 *

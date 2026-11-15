@@ -1,5 +1,5 @@
 /**
- * A tab whose sections are drawn one after another, each under its own heading, instead of as sub-tabs.
+ * A tab whose sections are drawn one after another, each card opening with its own heading, instead of as sub-tabs.
  *
  * Sections flagged `stacked` (`Settings_Section::stacked()`) belong to tabs that list one block per account: «Параметры»
  * (an account's settings under its name) and «Уведомления» (the switches, then a row per account). The sections keep their
@@ -24,12 +24,18 @@ export function isStackedTab( tab: AccountsTab ): boolean {
 interface StackedViewProps {
 	/** The stacked tab. */
 	tab: AccountsTab;
-	/** The card of one section. */
-	renderSection: ( tab: AccountsTab, sectionId: string ) => ReactNode;
+	/** The card of one section; the heading is drawn INSIDE it, as the card's first child. */
+	renderSection: ( tab: AccountsTab, sectionId: string, heading?: StackedHeading ) => ReactNode;
+}
+
+/** What opens a stacked section's card: the section label and its muted line. */
+export interface StackedHeading {
+	title: string;
+	subtitle?: string;
 }
 
 /**
- * The tab's sections one after another, each under its own heading.
+ * The tab's sections one after another, each card opening with its own heading.
  *
  * @param {StackedViewProps} props the view props.
  */
@@ -38,11 +44,7 @@ export default function StackedView( { tab, renderSection }: StackedViewProps ) 
 		<div className="woodev-stacked">
 			{ ( tab.sections || [] ).map( ( section ) => (
 				<section key={ section.id } className="woodev-stacked__section">
-					<h3 className="woodev-stacked__title">
-						{ section.label }
-						{ section.subtitle && <span className="woodev-stacked__subtitle">{ section.subtitle }</span> }
-					</h3>
-					{ renderSection( tab, section.id ) }
+					{ renderSection( tab, section.id, { title: section.label ?? '', subtitle: section.subtitle } ) }
 				</section>
 			) ) }
 		</div>

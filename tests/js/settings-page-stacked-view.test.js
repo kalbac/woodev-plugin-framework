@@ -1,36 +1,48 @@
 import '@testing-library/jest-dom';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
 import TabsNav from '../../src/components/tabs-nav';
 import StackedView, { isStackedTab } from '../../src/settings-page/stacked-view';
 
 const section = ( id, label, extra = {} ) => ( { id, label, fields: {}, ...extra } );
 
-const view = ( sections ) => render( createElement( StackedView, {
-	tab: { id: 'tab', sections },
-	renderSection: ( tab, id ) => createElement( 'div', { 'data-testid': `block-${ id }` } ),
-} ) );
+// The stacked view draws no heading itself: it hands each section's title and subtitle to `renderSection`, which draws
+// them INSIDE the section's card (src/settings-page/app.js). The stub records what it was given.
+const view = ( sections ) => {
+	const headings = {};
+
+	render( createElement( StackedView, {
+		tab: { id: 'tab', sections },
+		renderSection: ( tab, id, heading ) => {
+			headings[ id ] = heading;
+
+			return createElement( 'div', { 'data-testid': `block-${ id }` } );
+		},
+	} ) );
+
+	return headings;
+};
 
 test( 'a tab is stacked when a section is flagged', () => {
 	expect( isStackedTab( { sections: [ section( 'a', 'A', { stacked: true } ) ] } ) ).toBe( true );
 	expect( isStackedTab( { sections: [ section( 'a', 'A' ) ] } ) ).toBe( false );
 } );
 
-test( 'two accounts are two separate blocks, each under its name with the identifier beside it', () => {
-	view( [
+test( 'two accounts are two separate blocks, each handed its name and the identifier beside it', () => {
+	const headings = view( [
 		section( 'account_params_1', 'Shop one', { stacked: true, subtitle: 'Client-Id: 4180001' } ),
 		section( 'account_params_2', 'Shop two', { stacked: true, subtitle: 'Client-Id: 4180002' } ),
 	] );
 
-	const headings = screen.getAllByRole( 'heading', { level: 3 } );
-
-	expect( headings.map( ( h ) => h.firstChild.textContent ) ).toEqual( [ 'Shop one', 'Shop two' ] );
-	expect( within( headings[ 0 ] ).getByText( 'Client-Id: 4180001' ) ).toBeInTheDocument();
-	expect( within( headings[ 1 ] ).getByText( 'Client-Id: 4180002' ) ).toBeInTheDocument();
+	expect( headings ).toEqual( {
+		account_params_1: { title: 'Shop one', subtitle: 'Client-Id: 4180001' },
+		account_params_2: { title: 'Shop two', subtitle: 'Client-Id: 4180002' },
+	} );
+	expect( screen.queryByRole( 'heading' ) ).toBeNull(); // the heading belongs to the card, not to this wrapper
 
 	const blocks = screen.getAllByTestId( /^block-/ );
 	expect( blocks.map( ( b ) => b.dataset.testid ) ).toEqual( [ 'block-account_params_1', 'block-account_params_2' ] );
-	expect( headings[ 0 ].closest( 'section' ) ).not.toBe( headings[ 1 ].closest( 'section' ) );
+	expect( blocks[ 0 ].closest( 'section' ) ).not.toBe( blocks[ 1 ].closest( 'section' ) );
 } );
 
 test( 'the notifications tab is the switches and then a row per account, with no sub-tabs', async () => {
@@ -50,7 +62,7 @@ test( 'the notifications tab is the switches and then a row per account, with no
 		} ),
 	} ) );
 
-	expect( await screen.findAllByRole( 'heading', { level: 3 } ) ).toHaveLength( 2 );
+	expect( await screen.findAllByTestId( /^block-/ ) ).toHaveLength( 2 );
 	expect( container.querySelector( '.woodev-subtabs' ) ).toBeNull();
 	expect( screen.getByTestId( 'block-notifications_webhooks' ) ).toBeInTheDocument();
 	expect( screen.getByTestId( 'block-notifications_account_1' ) ).toBeInTheDocument();
