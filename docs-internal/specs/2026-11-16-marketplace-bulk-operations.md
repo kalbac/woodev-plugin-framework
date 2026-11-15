@@ -1,43 +1,48 @@
 # Marketplace bulk operations for large catalogues (#1786)
 
-**Status:** draft — items A, B and C are operator decisions of 16.11.2026 (#1786, s231); item D is a proposal for the operator,
-and every choice in this spec that is not in the card is marked **(proposal)**.
+**Status:** decided — items A, B and C are operator decisions of 16.11.2026 (#1786, s231); item D was decided by the operator the
+same day «по рекомендациям» (comment on #1786). Every remaining choice of this spec that is in neither is marked **(proposal)**.
+r2 folds in the r1 critic of PR #1787 (two Must, six Should).
 **Date:** 2026-11-16. **Target:** framework 2.1.x, consumed by Ozon Seller 2.0.0 before its release.
 
-**Evidence labels:** **READ** — code read for this spec; **UNVERIFIED** — not read or not run, the named card proves it.
-`fw:` = this repo at `46ca13f7` (origin/main); `ozon:` = `kalbac/woocommerce-ozon-seller` `main` at `3d68c88`;
+**Evidence labels:** **READ** — code read for this spec or by its critic; **UNVERIFIED** — not read or not run, the named card
+proves it. `fw:` = this repo at `46ca13f7` (origin/main); `ozon:` = `kalbac/woocommerce-ozon-seller` `main` at `3d68c88`;
 `v1:` = the same repo at tag `v1.1.7`, read with `git show v1.1.7:<path>`.
 
 ## 0. The merchant and the decisions
 
 The merchant is a WooCommerce shop with 1 000–50 000 products that already sells on Ozon. They want the two catalogues joined and
-synchronised with as few clicks as possible. v1 lost at least two customers because mass operations were missing or clumsy.
+synchronised with as few clicks as possible. v1 lost at least two customers because mass operations were missing or clumsy. This
+module is also the reference for a future Wildberries plugin, so nothing below is Ozon-specific unless it says so.
 
 | # | Operator decision (#1786) | Section |
 |---|---|---|
 | A | Every bulk action of «Товары сайта» applies to the ticked rows OR to every product under the current filter (category, state, the whole catalogue); it runs in the background in parts; the preview says «будет затронуто N товаров». | §2 |
 | B | An account setting «Включать синхронизацию остатков и цен сразу после связывания», on by default. | §3 |
 | C | «Связать по артикулу»: the whole shop or one category. | §4 |
-| D | Work out which further bulk operations are needed and propose a list. | §5 |
+| D | Further bulk operations — decided «по рекомендациям»: now / after 2.0 / no as listed in §5. | §5 |
 
 ## 1. What exists today (READ)
 
 | Fact | Where |
 |---|---|
 | Twelve bulk actions, all `scope: selection`; `max_selection` 200 rows | `fw: woodev/marketplace/admin/pages/products/class-site-products-definition.php:212-250` |
-| A selection expands to offers (simple products and variations); more than 500 offers is refused whole | `class-site-products-selection.php:24` (`MAX_OFFERS`), refusal in `class-site-products-provider.php` `prepare()` |
+| A selection expands to offers (simple products and variations); a parent expands to all its variations; more than 500 offers is refused whole | `class-site-products-selection.php:24` (`MAX_OFFERS`), `resolve()`; refusal in `class-site-products-provider.php` `prepare()` |
 | Background actions: export, link by article, send stock, send price, archive; the rest (sync flags, warehouse, detach, reset) run inside the request | `class-site-products-bulk.php:66` (`BACKGROUND`) |
 | «Связать по артикулу» is `scope: account` and always queues the whole shop | `class-site-products-definition.php` `link_by_article()`, `class-site-products-bulk.php` `run_linking()` → `Link_Scheduler::link_by_article( $account_id )` |
 | The link job already accepts a category and reads its subtree; a category run keeps the near-match entries of other categories | `jobs/class-link-scheduler.php:80`, `flows/class-shop-sku-source.php` `products()` (`get_term_children`), `jobs/class-link-jobs.php` `near_entries_outside()` |
 | The link row's `sync_stock` / `sync_price` default to 0 | `data/class-schema.php:221-222` |
-| `Card_Linker` is the one writer of a link from a card: the link job, «Связать с…», the near-match confirmation and the import all call it, and it leaves both switches off | `flows/class-card-linker.php` (class doc), callers in `class-link-jobs.php`, `class-remote-cards-actions.php` (two calls), `class-card-import.php` |
+| `Card_Linker` is the one writer of a link from a card: the link job, «Связать с…», the near-match confirmation and the import all call it, and it leaves both switches off; the adoption SQL does not take the switches | `flows/class-card-linker.php` (class doc), callers in `class-link-jobs.php`, `class-remote-cards-actions.php` (two calls), `class-card-import.php`; `data/class-wpdb-link-store.php` `adopt_card()` |
 | Export creates its row with both switches on; the product tab creates rows with both on | `flows/class-export-service.php:281-285`, `admin/product/class-link-settings-writer.php:291-295` |
 | Switching sync on in the product tab records a first send (stock and price intent); the bulk «Включить синхронизацию …» only flips the column and records nothing | `class-link-settings-writer.php` `save_offer_extras()`; `class-site-products-bulk.php` `run_flags()` → `Wpdb_Link_Store::set_sync_flag()` |
-| Remote cards: import takes at most 100 selected cards; the queue is Action Scheduler chunks of 10 articles | `class-remote-cards-definition.php:43` (`MAX_IMPORT`), `jobs/class-import-scheduler.php:28` (`BATCH`) |
-| Remote cards read from one transient snapshot of the whole cabinet, TTL 600 s | `data/class-cards-snapshot-store.php` |
-| The products filter: account, state group, category (with descendants), «только с ошибками», search; the reader builds the WHERE clause in SQL over `wp_posts` | `class-site-products-filter.php`, `class-site-products-reader.php` `where()`, `category_clause()` |
-| The records engine sends `ids` with every action; `scope: account` must send none | `fw: woodev/admin/records/class-action-request.php` `targets()`, `src/admin-records/actions/api.ts` |
-| The shell's selection is an id list capped at `max_selection` and dropped on every list read | `src/admin-records/selection.ts` |
+| `Stock_Intents::record_stock()` records nothing unless the account's stock mode is «сайт», a warehouse is known and the product manages a quantity | `sync/class-stock-intents.php:202-219` |
+| `Price_Refresher::refresh()` does nothing unless the account's `price_direction` is `from_marketplace`, and skips links with `sync_price` off | `sync/class-price-refresher.php` `refresh()`, `eligible()` |
+| An imported product's price is written through `Shop_Price_Writer::restore()`, which undoes the account price rule | `flows/class-product-writer.php` `price()`, `sync/class-shop-price-writer.php` |
+| Remote cards: import takes at most 100 selected cards; the queue is Action Scheduler chunks of 10 articles; the import plan loads every planned article's WC product | `class-remote-cards-definition.php:43` (`MAX_IMPORT`), `jobs/class-import-scheduler.php:28` (`BATCH`), `class-remote-cards-import-plan.php` `woocommerce_lookup()` |
+| Remote cards read from one transient snapshot of the whole cabinet, TTL 600 s; the «На сайте» filter is an in-memory pass over it plus one identity-map read | `data/class-cards-snapshot-store.php`, `class-remote-cards-query.php` |
+| The products filter: account, state group, category (with descendants), «только с ошибками», search; the reader builds the WHERE clause in SQL over `wp_posts`, listing parents only (`post_type = product`) | `class-site-products-filter.php`, `class-site-products-reader.php` `where()`, `category_clause()` |
+| The records engine sends `ids` with every action; `scope: account` must send none; an apply answer is rebuilt from a whitelist and carries at most 50 groups of at most 5 examples | `fw: woodev/admin/records/class-action-request.php` `targets()`, `class-action-response.php` (`MAX_GROUPS`, `MAX_EXAMPLES`, `apply()`), `src/admin-records/actions/api.ts` |
+| The shell's selection is an id list capped at `max_selection` and dropped on every list read; the activity view draws the account line as text with an optional progress bar | `src/admin-records/selection.ts`, `src/admin-records/activity/views.tsx` |
 | Account-level knobs with «Общие» defaults: groups `prices` and `exchange`, read through `Effective_Settings` | `settings/class-effective-settings.php` |
 
 v1 (READ): «Инструменты» had four tools, each for all products or one category: link / unlink by SKU
@@ -65,10 +70,10 @@ The shell keeps today's selection and adds one mode on top, the pattern of Gmail
 ```
 
 - The bar shows only when the header checkbox selected the whole page AND the table total is larger than the page. The number is
-  the table's own `total`, so it matches the count above the table.
+  the table's own `total` — parent products, the unit of the table — so it matches the count above the table.
 - In the «все по фильтру» mode every visible row shows ticked; unticking any row, changing a filter, the search, the page or the
   account drops back to no selection (the list read already resets the selection, `selection.ts`).
-- The bulk select lists only the actions that support the mode (§2.4); the others disappear from the list while the mode is on.
+- The bulk select lists only the actions that support the mode (§2.6); the others disappear from the list while the mode is on.
 - The bar names the active filters in words, so the merchant sees what «все» means before choosing an action. «Все» with no
   filter reads «Выбраны все 12 345 товаров магазина».
 - The `max_selection` cap and the 500-offer refusal stay for the ticked mode; the matching mode has no count cap.
@@ -83,111 +88,169 @@ The records engine gains a second target kind. Nothing marketplace-specific goes
 | Action descriptor | `all_matching: bool` (default false) on a `scope: selection` action. `Definition_Parser` accepts it; an `account` action may not set it. |
 | Request body | Preview and apply accept `matching: { filters, search }` instead of `ids`. Exactly one of the two: `ids` non-empty or `matching` present → 400 otherwise. `matching` is validated by the same `Query_Validator` rules as the list read (declared filters, their option values, search length); page, per page and sort are not part of it. |
 | Provider | A new optional interface `Applies_To_Matching` (like `Provides_Field_Options`): `preview_matching( context, action, query, payload )` and `apply_matching( context, action, query, payload )`. A `matching` request to a provider without it, or for an action without `all_matching`, → 400. Authorisation of a `matching` call is the action's capability only; there are no ids to authorise. |
-| Apply answer | Same shape as today; `queued: true` and a `run` block `{ id, total }` (§2.3). |
-| Account activity | `Activity_Normalizer::account()` gains an optional `stop: { action, label }`. The shell renders it as a secondary button on the account line, calling that account action with an empty body. |
-| Shell | `selection.ts` gets the mode (`matching: boolean`, the frozen query of the click); `table-model.tsx` renders the bar; `bulk-toolbar.tsx` filters actions and sends `matching`; `actions/api.ts` sends either body; new message keys (`select_all_matching`, `selected_all_matching`, `selected_page`, `clear_selection`) with Russian defaults in `Standard_Messages`. |
+| Apply answer | Same shape as today plus a `run` block `{ id, products_total }`; `Action_Response::apply()` keeps it (today's whitelist would drop it). |
+| Account activity | `Activity_Normalizer::account()` gains optional `actions: [ { action, label } ]` (at most two). The activity view renders them as secondary buttons on the account line; each runs the named account action through the normal action flow: the account context, `ids: []`, `payload: {}`, and for a mutating action `confirmed: true` after its own dialog — the existing authenticated write contract, not an empty HTTP body. |
+| Shell | `selection.ts` gets the mode (`matching: boolean`, the frozen query of the click); `table-model.tsx` renders the bar; `bulk-toolbar.tsx` filters actions and sends `matching`; `actions/api.ts` sends either body; `activity/types.ts` + `views.tsx` render the line's buttons; new message keys (`select_all_matching`, `selected_all_matching`, `selected_page`, `clear_selection`) with Russian defaults in `Standard_Messages`. |
 
-### 2.3 The server: a bulk run (marketplace)
+### 2.3 The run and its lifecycle (marketplace)
 
 A matching apply never processes products inside the request. It stores a **run** and queues its first tick.
 
-**The run** — one non-autoloaded option per account, `woodev_{plugin id}_bulk_run_{account id}` **(proposal: an option, not a new
-table — one row per account, bounded size)**:
+**Storage — one row per account in a new table** `{prefix}woodev_{marketplace id}_bulk_runs` **(proposal: a table, not an option —
+options cannot be updated conditionally, and every transition below is a conditional `UPDATE`)**. Created by `Schema` with the other
+marketplace tables, dropped by the uninstaller.
 
-| Field | Meaning |
+| Column | Meaning |
 |---|---|
-| `id` | random token; the tick checks it, so a run started after a cancelled one never meets the old tick |
-| `action`, `payload` | the action id and its validated fields (warehouse) |
-| `filter` | the `Site_Products_Filter` values (state, category, only errors, search) — **not** a list of ids |
+| `account_id` (PK) | one row per account: the active run, or the last finished one |
+| `run_id` | random token of this run |
+| `version` | increases by one on every write a tick makes; a tick's write names the version it read |
+| `state` | `running`, `done`, `cancelled`, `stopped` |
+| `cancel` | 0 / 1 — written only by «Остановить», never by a tick, so a progress write cannot erase it |
+| `action`, `payload`, `filter` | the action id, its validated fields, the `Site_Products_Filter` values — **not** a list of ids |
 | `user_id` | who started it |
-| `cursor` | the last product id processed (`p.ID`, ascending) |
-| `total` | the count at apply time, for the progress line only |
-| `processed`, `accepted`, `skipped`, `failed` | running counts in offers |
-| `groups` | reasons with counts and at most five examples each (`Site_Products_Bulk::EXAMPLES`), merged chunk by chunk |
-| `state` | `running` → `done` / `cancelled` / `stopped` (licence, pause, lost user right) |
+| `cursor` | JSON position: `{ parent, child }` (§2.4); for the remote-cards run its own position (§2.7) |
+| `counts` | JSON: `products_total`, `products_done` (parent products) and `offers_accepted`, `offers_skipped`, `offers_failed` |
+| `report` | JSON groups, bounded (§2.5) |
 | `started_at`, `heartbeat_at`, `finished_at` | times |
+
+**Transitions**, each one SQL statement whose affected-row count decides who won:
+
+| Transition | Condition | Effect |
+|---|---|---|
+| Start, no row | `INSERT` (the PK refuses a second) | a new `running` run |
+| Start over a finished run | `UPDATE … WHERE account_id = %d AND run_id = <read> AND state <> 'running'` | replaced at once: a finished run never blocks the next for a day; its result is overwritten by the new run's |
+| Take over a stale run | `UPDATE … WHERE account_id = %d AND run_id = <read> AND state = 'running' AND heartbeat_at = <read>` — with `heartbeat_at` older than 15 minutes **(proposal)** | one of two admins wins; the new `run_id` makes every tick of the old run exit at its next write, whether or not one is still queued |
+| Tick claims its turn | `UPDATE … SET version = version + 1, heartbeat_at = now WHERE run_id = <arg> AND version = <read> AND state = 'running'` | a duplicate tick loses here and exits before touching a product |
+| Tick saves a chunk | `UPDATE … SET cursor, counts, report, version = version + 1, heartbeat_at = now WHERE run_id = <arg> AND version = <claimed>` | a stale writer saves nothing and exits; `cancel` is not in the `SET` list |
+| Tick finishes | same condition, `state = done` (or `cancelled` when it read `cancel = 1` after its save) | terminal |
+| Cancel | `UPDATE … SET cancel = 1 WHERE run_id = <shown> AND state = 'running'` | the next claim sees it; the chunk in progress commits first |
+| Stop (licence, pause, lost right) | the save condition, `state = stopped`, the sentence in `report` | terminal |
+
+A start while a run is `running` and fresh is refused: «Уже выполняется «Отправить остатки» по фильтру — дождитесь окончания или
+остановите его». Runs on two accounts are independent. Selection-mode actions stay allowed during a run; their row-level guards (open
+export tasks, the account claim, the activity locks) already keep the two from writing the same row at once.
+
+**Recovery of an interrupted run.** A tick saves its chunk and only then queues the next tick, so a crash between the two leaves a
+`running` row with no pending action. The account line's activity read (polled every 10 s while the page is open) and the existing
+recovery sweep pattern (`Export_Scheduler::SWEEP_INTERVAL`, 900 s) both check: `running`, `heartbeat_at` older than 2 minutes and no
+pending `bulk_run( account, run_id )` action → queue one. A duplicate this creates loses the claim. The 15-minute takeover never
+assumes that no tick is queued; it relies on the new `run_id` alone.
 
 **The tick** — Action Scheduler action `woodev_{plugin id}_bulk_run( account_id, run_id )`:
 
-1. Load the run; stop if the id differs or `state` is not `running`; stop with `cancelled` if the cancel flag is set.
+1. Claim (above); exit when the claim fails. Read `cancel`: set → finish `cancelled`.
 2. Gates: account enabled and of this adapter; for an action that leads to a remote write (export, send stock, send price,
    archive) `License_Gate::refusal_for()` and the account pause — a refusal ends the run `stopped` with that sentence. The remote
    writes themselves still pass `Job_Gate` in their own runners; this check only stops queueing new work.
 3. `wp_set_current_user( user_id )`; if that user no longer has the action's capability → `stopped`
-   («у пользователя, запустившего действие, больше нет прав»). Per-product `edit_product` checks then work as in the request.
-4. **Re-evaluate the filter now**: `Site_Products_Reader::ids_after( $filter, $cursor, $limit )` — the same `where()` as the list,
-   plus `p.ID > cursor ORDER BY p.ID ASC LIMIT n`. Sort is ignored: the id order is what makes the cursor stable.
-5. Expand to offers with `Site_Products_Selection` rules, stopping the chunk before `MAX_OFFERS` (500) offers or the per-action
-   size below, and plan + run the chunk with the same `Site_Products_Bulk` code the selection mode uses (it already replans from
-   the stored links and never trusts a preview).
-6. Merge counts and groups, advance `cursor`, write `heartbeat_at`, `wp_cache_flush_runtime()` so the WooCommerce object cache does
-   not grow across chunks, and repeat until the 20-second budget (`Import_Jobs::BUDGET_SECONDS`) is spent; then queue the next tick
-   with no delay. An empty read ends the run `done`.
+   («у пользователя, запустившего действие, больше нет прав»). Per-product `edit_product` checks then work as in the request,
+   always on the parent for a variation (the existing `editable` rule of `Site_Products_Selection`).
+4. Read the next part (§2.4), plan and run it with the same `Site_Products_Bulk` code the selection mode uses (it already replans
+   from the stored links and never trusts a preview), merge counts and report, save.
+5. `wp_cache_flush_runtime()` so the WooCommerce object cache does not grow across parts; repeat 4 until the 20-second budget
+   (`Import_Jobs::BUDGET_SECONDS`) is spent; then queue the next tick with no delay. A read that returns nothing finishes `done`.
 
-Chunk sizes **(proposal; the scale card measures and may change them)**: export 100 offers (one `export_batch`,
-`Export_Scheduler::BATCH_SIZE`, because the validator builds the whole card); send stock / price 500; flags, warehouse, reset 500;
-detach 200 (the detacher takes the account claim; a busy answer re-queues the same chunk after `Job_Gate::BUSY_DELAY` instead of
-reporting a failure).
+Part sizes **(proposal; E2 measures and may change them)**: export 100 offers (one `export_batch`, `Export_Scheduler::BATCH_SIZE`,
+because the validator builds the whole card); send stock / price 500; flags, warehouse, reset 500; detach 200 (the detacher takes
+the account claim; a busy answer saves nothing and re-queues the tick after `Job_Gate::BUSY_DELAY` instead of reporting a failure).
 
-**What happens to rows that change mid-run.** The filter is read again at every chunk, so a product is taken as it is when its chunk
-comes:
+### 2.4 The cursor: a position inside a parent
 
-- it left the filter before its chunk → not processed, not counted;
+The cursor is `{ parent, child }`, both product ids, ascending; `child = 0` means «this parent's variations not started».
+
+1. If `child > 0` or the current parent is variable and not finished: read its next variations,
+   `Site_Products_Reader::variation_ids_after( $parent, $child, $limit )` (`post_parent = parent`, `ID > child`, published or
+   private, `ORDER BY ID LIMIT n`), with `n` the room left in the part. Process them; `child` = the last id read. A read shorter than
+   `n` means the parent is finished: `child = 0` and `parent` stays as the last finished parent.
+2. Otherwise read the next parents: `Site_Products_Reader::ids_after( $filter, $parent, $limit )` — the list's own `where()` plus
+   `p.ID > parent ORDER BY p.ID ASC LIMIT n`. A simple product is one offer and finishes at once; a variable product enters step 1.
+
+So a part never holds more than its size, a variable product of any size — 101 or 501 variations — is processed over as many parts
+as it needs, and the parent cursor advances only after its last variation. Each offer is reached once: a variation belongs to one
+parent and the `(parent, child)` order is monotonic. A parent deleted before its variations are read yields an empty read and
+finishes; a variation deleted between two reads is simply absent from the next one.
+
+**What happens to rows that change mid-run.** The filter is read again for every new parent, so a product is taken as it is when
+its turn comes:
+
+- it left the filter before its turn → not processed, not counted;
 - it entered the filter with an id above the cursor → processed; with an id below → not processed (the run moved past it);
 - an action that moves a product out of the filter (export moves «Не связан» to «В очереди») cannot repeat it: the cursor is the id,
   not an offset;
-- `total` is therefore an estimate; the result says how many were really processed.
+- a variable parent already entered is finished even if it leaves the filter half way (its membership was decided when it entered).
 
-**Locks.** One run per account: the apply creates the option with `add_option()` (atomic — a second apply finds it and is refused:
-«Уже выполняется «Отправить остатки» по фильтру — дождитесь окончания или остановите его»). A `running` run whose `heartbeat_at` is
-older than 15 minutes is taken over by the next apply **(proposal)**. Runs on two accounts are independent. Selection-mode actions
-stay allowed during a run; their row-level guards (open export tasks, the account claim, the activity locks) already keep the two
-from writing the same row at once.
+### 2.5 Counts, progress and the report
 
-**Progress, cancel, result.** The account line (`Site_Products_Activity::account()`) shows the run:
-«Выполняется «Включить синхронизацию остатков» по фильтру: обработано 3 400 из ~12 345» with `stop` → «Остановить». While a run
-is active every `all_matching` action is blocked on that account with this sentence. «Остановить» sets the cancel flag; the chunk
-in progress finishes; work already queued (export batches, stock and price intents) is not withdrawn, and the stop sentence says
-so. After the run the line shows its result for 24 hours **(proposal)**: «Готово: обработано 12 000, пропущено 300, не удалось 45 —
-Подробнее», and «Подробнее» opens the existing report dialog (`actions/report.tsx`) with the merged groups.
+- **Two units, never mixed.** `products_total` (the apply-time `COUNT`, the table's unit) and `products_done` count parent products;
+  `offers_*` count offers (simple products and variations). The account line reads:
+  «Выполняется «Включить синхронизацию остатков» по фильтру: товаров 3 400 из ~12 345 (обработано вариантов и простых товаров: 7 900)».
+  `products_total` is an estimate (§2.4); `products_done` may end above or below it.
+- **The report is bounded.** Groups by reason, each with a count and at most five examples (`Action_Response::MAX_EXAMPLES`). At most
+  49 distinct reasons are kept; a 50th and later merge into one group «Другие причины» whose count is the sum of the merged ones — so
+  the report always fits `Action_Response::MAX_GROUPS` (50) and its counts add up to `offers_skipped + offers_failed`. Summaries are
+  cut to the response's short-text limit. The validator's per-field reasons (`Bulk_Validation_Report::groups()`) are what makes the
+  overflow real on a heterogeneous catalogue.
+- **Delivery of the report.** The account line's second button «Подробнее» runs a read-only account action `bulk_report`
+  (`effect: read`): its preview answer carries the stored groups through the existing preview contract and the dialog
+  (`actions/report.tsx`) shows them. No new response shape.
+- **Wording of a finished run** depends on what the action does:
+  - flags, warehouse, reset, detach finish inside the run → «Готово: товаров 12 000; изменено 17 500, пропущено 300, не удалось 45»;
+  - export, send stock, send price, archive only prepare and queue remote work → «Подготовлено и поставлено в очередь: 17 500;
+    пропущено 300. Отправка идёт в фоне — её ход виден в столбце «Состояние», ошибки — в фильтре «только с ошибками»». The run
+    never reports a remote outcome: later failures of an `export_batch` land on the link and the task, which carry no run id;
+  - the remote-cards import → «Поставлено в очередь на импорт: 12 000 карточек; пропущено 300. Результат каждой карточки — в её
+    строке».
+- The finished row stays until the next run replaces it; the account line shows its result for 24 hours after `finished_at`
+  **(proposal)**, with «Подробнее».
+- While a run is `running` the line's buttons are «Остановить» (`bulk_stop`) and «Подробнее»; every `all_matching` action is blocked on
+  that account with the running sentence. «Остановить» says: «Обработка остановится после текущей части. То, что уже поставлено в
+  очередь, будет отправлено».
 
-**Licence and account gates at apply.** The matching apply runs the same `prepare()` checks as today (account enabled, licence for
-remote actions) before it stores the run.
-
-### 2.4 Which actions support the mode, and the preview text
+### 2.6 Which actions support the mode, and the preview text
 
 All twelve. The four that run inside the request in the ticked mode (flags, warehouse, reset, detach) run as a background run in the
 matching mode. «Связать по артикулу» is an account action, not part of A (it is C).
 
 The matching preview costs one `COUNT` (the same as the table total) plus, for every action, one sentence. It does not plan every
-product: planning 50 000 offers is the work the run spreads over chunks. Skip reasons arrive in the result.
+product: planning 50 000 offers is the work the run spreads over parts. Skip reasons arrive in the report.
 
 | Action | Preview sentence in the matching mode (after «Будет затронуто N товаров по фильтру.») |
 |---|---|
 | Экспортировать / Обновить карточку | «Каждый товар будет проверен перед отправкой; прошедшие проверку уйдут в очередь частями по 100. Товары с ошибками останутся как есть — список причин будет в итоге.» |
-| Отправить остатки / Отправить цены | «Текущие остатки (цены) с сайта будут отправлены на {маркетплейс} для всех связанных товаров по фильтру. Несвязанные и выключенные пропустим.» |
-| Включить / Выключить синхронизацию остатков / цен | «Переключатель изменится у всех связанных товаров по фильтру. Включение сразу отправит текущие остатки (цены) с сайта.» (see §5, item 1) |
+| Отправить остатки / Отправить цены | «Текущие остатки (цены) с сайта будут поставлены в очередь на отправку на {маркетплейс} для всех связанных товаров по фильтру. Несвязанные и выключенные пропустим.» |
+| Включить / Выключить синхронизацию остатков / цен | «Переключатель изменится у всех связанных товаров по фильтру. Включение сразу поставит в очередь отправку текущих остатков (цен) с сайта.» (§5, D1) |
 | Выбрать склад | «Остатки всех связанных товаров по фильтру будут отправляться на выбранный склад.» |
 | Архивировать | «Остаток на {маркетплейс} станет нулевым, затем карточки уйдут в архив. Товары на сайте не меняются.» — tone `danger`, confirm label «Архивировать N товаров» |
 | Снять связь | «Сайт забудет карточки всех товаров по фильтру. Карточки на {маркетплейс} не меняются.» — tone `danger`, confirm label «Снять связь у N товаров» |
 | Сбросить состояние | «Товары снова станут «Не связан». На {маркетплейс} ничего не меняется.» |
+| Сбросить свою цену для {маркетплейс} (D2) | «У всех связанных товаров по фильтру своя цена будет удалена: цена снова считается по правилу аккаунта.» |
+| Загрузить цены с {маркетплейс} (D3) | «Цены созданных карточек будут прочитаны с {маркетплейс} и записаны в товары сайта.» |
 
 Every matching preview ends with: «Действие выполняется в фоне частями; товары, изменившиеся за это время, обрабатываются такими,
 какими они будут в момент обработки. Ход работы — в строке аккаунта над таблицей.»
 
-### 2.5 Remote cards: «Импортировать все по фильтру»
+### 2.7 Remote cards: «Импортировать все по фильтру»
 
 The remote-cards table (`Remote_Cards_Definition`, cap 100) gets the same mode for «Импортировать» only, with the filters it has
-(«На сайте», search). «Похожие артикулы» (the near-match report) is excluded: it is a report the merchant decides row by row.
+(«На сайте», search). «Похожие артикулы» (the near-match report) is excluded: it is a report the merchant decides row by row. It
+shares the run table, the lock and the account line of §2.3 (one run per account, whichever table started it).
 
-The source of the rows is the snapshot, not SQL, so the run differs in one point: **at apply time** the provider evaluates the
-filter over the current snapshot, runs `Remote_Cards_Import_Plan` over all matching cards (the plan is already an in-memory pass over
-the snapshot) and freezes the eligible articles (create + link) into the run option. A snapshot older than its TTL refuses the apply
-with «Список карточек устарел — нажмите «Обновить список» и повторите». The tick does not import: it feeds `Import_Scheduler::import()`
-100 articles at a time (ten Action Scheduler actions), so a 50 000-card apply never inserts 5 000 actions in one request. The import
-job re-checks every card (`Card_Import` order: already linked → nothing). Preview: «Будет импортировано N карточек, связано с уже
-существующими товарами M. Картинки загружаются по одной — импорт тысяч карточек займёт несколько часов.» The run, its lock and the
-account line are shared with §2.3 (one run per account, whichever table started it).
+The rows come from the snapshot, not SQL, and the import plan loads a WC product per article, so the request does neither at scale:
+
+1. **Apply** checks the snapshot is present and younger than its TTL (else «Список карточек устарел — нажмите «Обновить список» и
+   повторите»), counts the matching cards with the in-memory filter the page already uses, and stores the run with the filter and
+   the snapshot's `fetched_at`. No plan, no article list in the request.
+2. **Freeze** (first ticks): copy the matching articles — strings only — from the snapshot into a run-owned row of the same table
+   **(proposal: a second `kind` of row, keyed by run)**, paging over the snapshot's index; if `fetched_at` changes before the freeze
+   ends, the run stops: «Список карточек обновился во время подготовки — запустите импорт ещё раз». After the freeze the snapshot
+   may expire freely.
+3. **Plan and feed** (later ticks): take the next 100 frozen articles, run `Remote_Cards_Import_Plan` over them (its WC lookups are
+   now bounded by the part), and hand the eligible ones to `Import_Scheduler::import()` — ten actions per part. The import job
+   re-checks every card (`Card_Import` order: already linked → nothing).
+
+Preview: «Будет импортировано до N карточек: часть из них свяжется с уже существующими товарами. Картинки загружаются по одной —
+импорт тысяч карточек займёт несколько часов.»
 
 ## 3. B — sync on right after linking
 
@@ -198,16 +261,17 @@ account line are shared with §2.3 (one run per account, whichever table started
 | Key | `sync_on_link`, in the `exchange` group of `Effective_Settings` (beside `orders_enabled`, `import_enabled`), so it has a «Общие» default and a per-account «свои» value like the rest of the group **(proposal: that group)** |
 | Built-in default | `true` (operator decision) |
 | Label | «Включать синхронизацию остатков и цен сразу после связывания» |
-| Help | «Когда товар связывается с карточкой — по артикулу, вручную, при импорте или подтверждении похожего артикула, — у него сразу включается синхронизация, и текущие остаток и цена с сайта уходят на {маркетплейс}, заменяя те, что там сейчас. Выключите, если хотите сначала проверить связанные товары и включать синхронизацию сами.» |
+| Help | «Когда товар связывается с карточкой — по артикулу, вручную, при импорте или подтверждении похожего артикула, — у него сразу включается синхронизация. Если в настройках аккаунта остатки и цены отправляются с сайта, текущие остаток и цена сразу уйдут на {маркетплейс} и заменят те, что там сейчас. Выключите, если хотите сначала проверить связанные товары и включать синхронизацию сами.» |
 | Reader | `Effective_Settings::sync_on_link( Account )`; an account whose `settings` JSON has no value gets the default — the same «no flag» rule the group already has |
 
 What «sync on» achieves still depends on the account: the stock goes only when the account's stock mode is «Главный — сайт»
-(`Stock_Mode::is_site()`), the price only when the account pushes prices (`Price_Intents::pushes()`). The setting switches the
-per-link permission, never the account's direction.
+(`Stock_Mode::is_site()`, checked inside `record_stock()`), the price only when the account pushes prices (`Price_Intents::pushes()`).
+The setting switches the per-link permission, never the account's direction.
 
 ### 3.2 Which link paths honour it
 
-All of them through one place: `Card_Linker` receives a decision `function ( int $account_id ): bool` and a «sync starter».
+All of them through one place: `Card_Linker` receives the decision `function ( int $account_id ): bool` and the two first-send
+recorders (callables over `Stock_Intents::record_stock()` and `Price_Intents::record_for_link()`), injected where it is built.
 
 | Path | Today (READ) | With the setting on |
 |---|---|---|
@@ -215,15 +279,15 @@ All of them through one place: `Card_Linker` receives a decision `function ( int
 | «Связать с…» on the remote-cards table | same | same |
 | Near-match «Это тот же товар» | same | same |
 | Import, card linked to an existing product (`LINKED_EXISTING`) | same | switches 1, first send |
-| Import, product created from the card (`CREATED`) | same | switches 1, first **stock** send only **(proposal)** — the price came from the card; sending it back through the account's markup would change the price on the marketplace the moment it was imported |
+| Import, product created from the card (`CREATED`) | same | switches 1, first **stock** send only **(proposal)** — the price was just written from the card through `Shop_Price_Writer::restore()`; sending it straight back is at best a no-op and at worst a rounding change |
 | Export | creates the row with switches 1 | unchanged: the site made the card, the site is the source |
 | Product tab | creates rows with switches 1 | unchanged |
 
-Insert writes `sync_stock = sync_price = 1`. Adoption of an existing identity-less row writes both to 1 as well; with the setting off
-adoption leaves the row's switches as they are (today's behaviour). The first send is `Stock_Intents::record_stock()` and
-`Price_Intents::record_for_link()` on the fresh row of a **created** card — the same calls the product tab makes on switch-on, so
-the flushers, their gates and the v1 write gate (`First_Remote_Write`) apply unchanged. A product without managed stock (every
-imported product: `Product_Writer` writes no stock — READ) records nothing.
+Insert writes `sync_stock = sync_price = 1`. Adoption of an existing identity-less row writes both to 1 as well — `adopt_card()`
+gains the two columns; with the setting off adoption leaves the row's switches as they are (today's behaviour). The first send runs
+on the fresh row of a **created** card — the same calls the product tab makes on switch-on, so the flushers, their gates and the v1
+write gate (`First_Remote_Write`) apply unchanged. A product without managed stock (every imported product: `Product_Writer` writes no
+stock) records nothing, and so does an account whose stock mode is «Главный — маркетплейс» or «Не синхронизировать».
 
 ### 3.3 Existing shops and v1
 
@@ -235,7 +299,7 @@ the global `enable_sync_prices`, default `no`.
 
 Migration: the v2 migration already carries both per-product flags as they were (`ozon: includes/migration/class-link-row-builder.php:68-69`)
 and maps the global price switch (`class-v1-settings-mapper.php:69`). Nothing is rewritten. The new key is absent on a migrated
-account, so it reads the default — on — and affects only links made after the upgrade. **(proposal)** No other shop runs v2 Ozon in
+account, so it reads the default — on — and affects only links made after the upgrade **(proposal)**. No other shop runs v2 Ozon in
 production yet (Ozon 2.0 is unreleased), so no data migration exists for v2 rows.
 
 ## 4. C — link by article: whole shop or one category
@@ -263,17 +327,17 @@ The «Связать по артикулу» dialog (both tables share `Site_Pro
 - Apply: `Link_Scheduler::link_by_article( $account_id, $category_id )` — the job already supports it.
 - The remote read is the same either way: the job reads the whole cabinet and restricts only the shop side. The sentence says so,
   so the merchant does not expect a category run to be faster on the marketplace side.
-- The run summary already stores `category_id`; the tools/activity line that shows the last run names the category.
+- The run summary already stores `category_id`; the line that shows the last run names the category.
 
-## 5. D — further bulk operations (proposal for the operator)
+## 5. D — further bulk operations (operator decision, 16.11.2026)
 
 Researched by code: the v1 tools and list tables (§1), the twelve v2 actions, the per-product settings of a link
 (`sync_stock`, `sync_price`, `warehouse_id`, `is_oversize`, `price_rule_override`, `mapping_id` — `data/class-schema.php`) and the
 Ozon endpoints the v2 client already lists (`ozon: includes/ozon/api/class-ozon-client.php`, among them `/v1/product/archive`,
 `/v1/product/unarchive`, `/v2/products/stocks`, `/v1/product/import/prices`, `/v5/product/info/prices`,
-`/v2/product/info/stocks-by-warehouse/fbs`).
+`/v2/product/info/stocks-by-warehouse/fbs`). The operator accepted the recommendations as they stood (comment on #1786).
 
-Four of the examples on the card need no new action once A exists — they are a filter plus an existing action:
+Covered by A — a filter plus an existing action, no new code:
 
 | Example | Is A + |
 |---|---|
@@ -282,71 +346,107 @@ Four of the examples on the card need no new action once A exists — they are a
 | «Пересчитать и отправить все цены / остатки сейчас» | no filter + «Отправить цены» / «Отправить остатки» |
 | «Повторить все с ошибками»; export the unlinked of a category | «только с ошибками» (or state «Не связан» + category) + «Экспортировать»; the mapping is the category's own |
 
-The real additions:
+Decided list:
 
-| # | Merchant problem | Scope | Cost | Recommendation |
+| # | Merchant problem | Scope | Cost | Decision |
 |---|---|---|---|---|
-| 1 | «Я включил синхронизацию у 3 000 товаров, а остатки на Ozon не поменялись» — bulk switch-on records no first send, the product tab does | `run_flags()`: after a switch-on, record the stock / price intent of each switched created card, as `Link_Settings_Writer` does | S | **now** — it is a defect, and A makes it a 50 000-product defect |
-| 2 | «В v1 я задал цены для Ozon по категории, теперь хочу считать их по правилу аккаунта» — migrated per-product overrides cannot be cleared in bulk | new action «Сбросить цену для {маркетплейс}»: `set_price_override( null )` + `Price_Intents::change_override()` | S | **now** — v1 shops arrive with overrides from «Изменить цены» |
-| 3 | «На Ozon цены правильные, на сайте устарели» — v1 had «Load prices from OZON» | new action «Загрузить цены с {маркетплейс}»: `Price_Scheduler::queue_refresh()` for created cards; the `refresh_prices` job and `Price_Refresher` exist | S | **now** — the counterweight to B's default-on first send for the shop that already sells on Ozon |
-| 4 | Same for stock — v1 had «Load stocks from OZON» | new adapter answer (read stock per article) + a runner writing WC stock; Ozon declares no `INBOUND_STOCK` | M | after 2.0 |
-| 5 | «Верните карточки из архива» | action «Вернуть из архива» + a capability; the Ozon client already lists `/v1/product/unarchive`; v1 had none | M | after 2.0 |
-| 6 | «У меня артикулы на сайте не совпадают с Ozon» — 5 000 pairs by hand | CSV export of links (offer id ↔ product) and import of a filled file into `Card_Linker` | L | after 2.0; the near-match report and «Связать с…» cover small differences |
-| 7 | «Все товары категории — крупногабарит» | action «Крупногабарит: да / нет» over `is_oversize` (Ozon declares `OVERSIZE_WAREHOUSE`) | S | after 2.0 |
-| 8 | v1 «Изменить цены» — a fixed or percent price for a category | per-product override in bulk | S | **no** — the account price rule (markup, rounding, old price) is the group tool; per product stays in the tab |
-| 9 | Explicit mapping for a group | action «Выбрать сопоставление» over `mapping_id` | S | **no** — mapping is already by category with inheritance (Ozon spec A14) |
+| D1 | «Я включил синхронизацию у 3 000 товаров, а остатки на Ozon не поменялись» — bulk switch-on records no first send, the product tab does | `run_flags()`: after a switch-on, record the stock / price intent of each switched created card, as `Link_Settings_Writer` does | S | **now** (in E2) |
+| D2 | «В v1 я задал цены для Ozon по категории, теперь хочу считать их по правилу аккаунта» — migrated per-product overrides cannot be cleared in bulk | action «Сбросить свою цену для {маркетплейс}»: `set_price_override( null )` + `Price_Intents::change_override()`; rows without an override are skipped «своей цены нет» | S | **now** (card D) |
+| D3 | «На Ozon цены правильные, на сайте устарели» — v1 had «Load prices from OZON» | action «Загрузить цены с {маркетплейс}»: a **one-time pull** for created cards, see §5.1 | M | **now** (card D) |
+| D4 | Same for stock — v1 had «Load stocks from OZON» | new adapter answer (read stock per article) + a runner writing WC stock; Ozon declares no `INBOUND_STOCK` | M | after 2.0 |
+| D5 | «Верните карточки из архива» | action «Вернуть из архива» + a capability; the Ozon client already lists `/v1/product/unarchive`; v1 had none | M | after 2.0 |
+| D6 | «У меня артикулы на сайте не совпадают с Ozon» — 5 000 pairs by hand | CSV export of links (offer id ↔ product) and import of a filled file into `Card_Linker` | L | after 2.0 |
+| D7 | «Все товары категории — крупногабарит» | action «Крупногабарит: да / нет» over `is_oversize` (Ozon declares `OVERSIZE_WAREHOUSE`) | S | after 2.0 |
+| D8 | v1 «Изменить цены» — a fixed or percent price for a category | per-product override in bulk | S | **no** — the account price rule is the group tool; per product stays in the tab |
+| D9 | Explicit mapping for a group | action «Выбрать сопоставление» over `mapping_id` | S | **no** — mapping is already by category with inheritance (Ozon spec A14) |
+
+The after-2.0 items get backlog cards (priority «После v2») when this spec merges.
+
+### 5.1 D3 — the one-time price pull
+
+The existing `refresh_prices` job cannot be reused as it is: `Price_Refresher::refresh()` does nothing unless the account's
+`price_direction` is `from_marketplace`, and it skips links with `sync_price` off. A shop on the default `to_marketplace` would press
+the button and nothing would change. D3 is therefore a separate mode:
+
+- `Price_Refresher::pull_once( Account, offer_ids )` — the same reader and the same `Shop_Price_Writer::restore()`, without the
+  direction check and without the `sync_price` check (the merchant asked explicitly); only `created` cards; a price the writer cannot
+  restore is skipped with the writer's own sentence.
+- Its job is the existing `refresh_prices` hook with a mode argument, ≤ 100 articles per action (`Price_Scheduler::REFRESH_BATCH`),
+  read-only on the marketplace, so it takes no account claim; the licence gate still applies to queueing it.
+- **No echo.** On a `to_marketplace` account the price write fires the shop's price hooks, and `Price_Intents` would queue the
+  restored price straight back. The pull records, for each written link, the read price as `last_pushed_price` and suppresses
+  `Price_Intents` for the products it is writing (a scope the writer opens and closes); a later real change of the price is sent as
+  usual.
+- Available on every account direction; on `from_marketplace` it is the same read the push job does, run now.
 
 ## 6. Implementation cards
 
 Tier: Sonnet 5.5 for every card (`claude-sonnet-5-5`); none needs Fable — each has a reference pattern in this tree (the import
-and link jobs, `Link_Progress_Store`, the existing provider/definition pair). Critic: Codex. Every brief carries the worker's own
-worktree path for Serena and says that `tests/**` is Serena-ignored. Settings live on the marketplace settings page, never WC
-Integrations.
+and link jobs, the claim fence of the accounts table, `Link_Progress_Store`, the existing provider/definition pair). Critic: Codex.
+Every brief carries the worker's own worktree path for Serena and says that `tests/**` is Serena-ignored. Settings live on the
+marketplace settings page, never WC Integrations.
 
-| Card | Files (disjoint by wave) | Size | Wave |
+**File ownership rule.** `woodev/class-map.php` and the development classmap in `composer.json` change only in a card that adds a PHP
+file, and only one such card runs per wave. B and C add no file.
+
+| Card | Files | Size | Wave / depends on |
 |---|---|---|---|
-| **E1 — records engine: matching target** | `woodev/admin/records/` (`class-action-request.php`, `class-action-rest-handler.php`, `class-definition-parser.php`, `class-activity-normalizer.php`, `class-standard-messages.php`, new `interface-applies-to-matching.php`), `src/admin-records/` (`selection.ts`, `table-model.tsx`, `records-table.tsx`, `actions/bulk-toolbar.tsx`, `actions/api.ts`, `actions/types.ts`, `types.ts`, `messages.ts`), `woodev/class-map.php`, tests `tests/unit/Admin/Records/`, `tests/js/admin-records-*` | M | 1 |
-| **B — sync on link** | `woodev/marketplace/settings/class-effective-settings.php`, `class-defaults-section.php`, `class-accounts-sections.php` (the per-account field), `flows/class-card-linker.php`, new `flows/class-link-sync-starter.php`, `class-flow-wiring.php`, `admin/pages/products/class-site-products-module.php` (only the `Card_Linker` construction), `flows/class-card-import.php` (CREATED: stock only), class map, tests | M | 1 |
-| **C — link by category** | `class-site-products-definition.php` (`link_by_article()` fields), `class-site-products-bulk.php` (`plan_linking()`, `run_linking()`, preview sentence), `class-site-products-provider.php` (`get_field_options()` for the category), `class-site-products-module.php` (`link_candidates`), `class-remote-cards-definition.php` (sentence), tests | S | 1 — merge after B (both touch `class-site-products-module.php`, different hunks) |
-| **E2 — bulk run for «Товары сайта»** | new `jobs/class-bulk-run-scheduler.php`, `jobs/class-bulk-run-runner.php`, `data/class-bulk-run-store.php`; `class-site-products-reader.php` (`ids_after()`), `class-site-products-bulk.php` (chunk entry point; D1 first send in `run_flags()`), `class-site-products-provider.php` (`Applies_To_Matching`), `class-site-products-definition.php` (`all_matching`, sentences, stop action), `class-site-products-activity.php` (run line), `class-site-products-module.php` (wiring), uninstaller (the option), class map, tests | L | 2 (after E1, B, C) |
-| **E3 — remote cards: import all by filter** | `class-remote-cards-actions.php`, `class-remote-cards-provider.php`, `class-remote-cards-definition.php`, `class-remote-cards-import-plan.php` (all-matching entry), the bulk-run runner's import feeder (a strategy class `jobs/class-bulk-import-feeder.php`), tests | M | 3 (after E2) |
-| **D2+D3 — clear price override, load prices** | `class-site-products-bulk.php`, `class-site-products-definition.php`, `class-site-products-provider.php` (licence phrase), tests | S | 3 (parallel with E3: disjoint files) |
-| **Ozon (ozon repo)** | composer bump to the framework release; the adapter's withheld list if an action must stay off for Ozon; merchant docs (bulk by filter, the new setting, link by category); release notes. No Ozon code is needed for A–C | S | after a framework release with E2 |
+| **E1 — records engine: matching target and account-line actions** | `woodev/admin/records/` (`class-action-request.php`, `class-action-rest-handler.php`, `class-action-response.php`, `class-definition-parser.php`, `class-activity-normalizer.php`, `class-standard-messages.php`, new `interface-applies-to-matching.php`), `src/admin-records/` (`selection.ts`, `table-model.tsx`, `records-table.tsx`, `actions/bulk-toolbar.tsx`, `actions/api.ts`, `actions/types.ts`, `activity/types.ts`, `activity/views.tsx`, `types.ts`, `messages.ts`), `woodev/class-map.php`, `composer.json` classmap, tests `tests/unit/Admin/Records/`, `tests/js/admin-records-*` | M | 1 |
+| **B — sync on link** | `woodev/marketplace/settings/class-effective-settings.php`, `class-defaults-section.php`, `class-accounts-sections.php` (the per-account field), `flows/class-card-linker.php` (decision + first-send recorders, no new class), `data/class-wpdb-link-store.php` (`adopt_card()` takes the switches), `flows/class-card-import.php` (CREATED: stock only), `class-flow-wiring.php`, `admin/pages/products/class-site-products-module.php` (only the `Card_Linker` construction), tests | M | 1 |
+| **C — link by category** | `class-site-products-definition.php` (`link_by_article()` fields), `class-site-products-bulk.php` (`plan_linking()`, `run_linking()`, preview sentence), `class-site-products-provider.php` (`get_field_options()` for the category), `class-site-products-module.php` (`link_candidates`), `class-remote-cards-definition.php` (sentence), tests | S | 1b — **depends on B** (shares `class-site-products-module.php`); starts after B merges |
+| **E2 — bulk run for «Товары сайта», with D1** | new `jobs/class-bulk-run-scheduler.php`, `jobs/class-bulk-run-runner.php`, `data/class-bulk-run-store.php`; `data/class-schema.php` (the table), `data/class-uninstaller.php`, `class-site-products-reader.php` (`ids_after()`, `variation_ids_after()`), `class-site-products-bulk.php` (part entry point; D1 in `run_flags()`), `class-site-products-provider.php` (`Applies_To_Matching`, `bulk_stop`, `bulk_report`), `class-site-products-definition.php` (`all_matching`, sentences), `class-site-products-activity.php` (run line, recovery check), `class-site-products-module.php` (wiring), `woodev/class-map.php`, `composer.json` classmap, tests | L | 2 — after E1, B, C |
+| **E3 — remote cards: import all by filter** | `class-remote-cards-actions.php`, `class-remote-cards-provider.php`, `class-remote-cards-definition.php`, `class-remote-cards-import-plan.php` (part entry point), new `jobs/class-bulk-import-feeder.php` (freeze + plan + feed strategy of the run runner), `data/class-bulk-run-store.php` (the frozen-articles row), `woodev/class-map.php`, `composer.json` classmap, tests | M | 3 — after E2 |
+| **D — «Сбросить свою цену», «Загрузить цены»** | `class-site-products-bulk.php`, `class-site-products-definition.php`, `class-site-products-provider.php` (licence phrase), `sync/class-price-refresher.php` (`pull_once()`), `sync/class-price-intents.php` (suppression scope), `jobs/class-price-refresh-runner.php`, `jobs/class-price-scheduler.php` (mode argument), tests — no new PHP file | M | 3 — after E2; parallel with E3 (disjoint files) |
+| **Ozon (ozon repo)** | composer bump to the framework release; the adapter's withheld list if an action must stay off for Ozon; merchant docs (bulk by filter, the new setting, link by category, the two price actions); release notes. No Ozon code is needed for A–C and D1–D3 (UNVERIFIED for the daily card limit, §7) | S | after a framework release with E2, E3, D |
 
 ### Acceptance (every card: phpunit, jest, phpcs, `lint:i18n`, `lint:docs` green)
 
-- **E1:** a `matching` request with `ids` → 400; to a provider without the interface → 400; an undeclared filter → 400; jest: the
-  bar appears only on a full page with `total > rows`, unticking a row leaves the mode, a filter change clears it, the toolbar
-  hides actions without `all_matching`, the request body carries `matching` and no `ids`.
-- **B:** a unit test per path of §3.2 with the setting on and off (switches and first-send calls), CREATED records stock only, a
-  migrated account with no key reads on, export and tab unchanged.
+- **E1:** a `matching` request with `ids` → 400; to a provider without the interface → 400; an undeclared filter → 400; an apply
+  answer keeps `run { id, products_total }`; jest: the bar appears only on a full page with `total > rows`, unticking a row leaves the
+  mode, a filter change clears it, the toolbar hides actions without `all_matching`, the request body carries `matching` and no
+  `ids`; an account line with `actions` renders the buttons and one of them sends the account context, `ids: []`, `payload: {}` and
+  `confirmed: true`.
+- **B:** a unit test per path of §3.2 with the setting on and off (switches and first-send calls); CREATED records stock only;
+  adoption writes the switches; first send records nothing on stock mode `marketplace` and `off` and for a product without managed
+  stock; a migrated account with no key reads on; export and tab unchanged.
 - **C:** preview count for a category with subcategories equals `Shop_Sku_Source::products( $id )` minus linked; a bad term → 422;
   the queued action has `[ account, category, 0 ]`.
-- **E2:** unit tests of the cursor rules of §2.3 (a product leaving the filter, one entering above and below the cursor, export
-  moving the state), the `add_option` lock and its stale takeover, cancel, licence refusal mid-run, lost user capability, detach busy
-  → re-queue. **Scale test on the rig: a generated fixture of 10 000 products (a WP-CLI script under the scratchpad, 20 % variable
-  with 5 variations), runs of «Включить синхронизацию остатков», «Выбрать склад» and «Экспортировать» by filter driven with
-  `wp action-scheduler run`; the PR states per tick: wall time, peak memory (`memory_get_peak_usage`), query count, offers
-  processed; acceptance — every tick under the 20 s budget, peak memory flat across ticks (no growth beyond the first chunk), the
-  final counts equal the fixture.**
-- **E3:** 2 000 snapshot cards fixture: the apply stores the frozen list, the tick never queues more than ten actions, a stale
-  snapshot refuses, near rows are never imported.
-- **D2+D3:** clear writes `null` and records the price intent; load queues `refresh_prices` batches of ≤ 100 created articles.
+- **E2:**
+  - cursor: a product leaving the filter, one entering above and below the cursor, export moving the state; a variable product with
+    101 and one with 501 variations finished over several parts with every variation reached once; a variation deleted between two
+    reads; a parent deleted before its variations are read;
+  - lifecycle: a second start while running is refused; a start right after a finished run succeeds at once; two admins taking over
+    one stale run — exactly one wins; a stale tick's save writes nothing; cancel during a save survives the save; a save followed by a
+    lost enqueue is recovered by the activity check and by the sweep; a duplicate tick loses the claim; licence refusal mid-run;
+    lost user capability; detach busy → re-queue;
+  - report: 60 distinct reasons → 49 groups + «Другие причины», counts conserved; a 50 000-offer failing run keeps the stored report
+    under 64 KB **(proposal for the bound)**;
+  - **scale on the rig:** a generated fixture (a WP-CLI script under the scratchpad) of **10 000 parent products = 8 000 simple +
+    1 998 variable × 5 variations + 1 variable × 101 + 1 variable × 501 → 18 592 offers**; link rows for the first 6 000 simple
+    products and every variation (16 592 linked `created` offers with both switches off), 2 000 simple unlinked. Runs driven with
+    `wp action-scheduler run`: «Включить синхронизацию остатков» by no filter must end with products 10 000, accepted 16 592,
+    skipped 2 000 («не отправлялся на маркетплейс»), failed 0; «Выбрать склад» the same partition; «Экспортировать» with the state
+    «Не связан» must reach exactly the 2 000 unlinked. The PR states per tick: wall time, peak memory (`memory_get_peak_usage`),
+    query count, offers processed; every tick under the 20 s budget, peak memory flat across ticks.
+- **E3:** a 50 000-card snapshot fixture: the apply request's time, peak memory and stored bytes stated in the PR (no plan, no article
+  list in the request); the freeze stops when `fetched_at` changes; a part never queues more than ten import actions; near rows are
+  never imported; the stored frozen list's size stated.
+- **D:** «Сбросить свою цену» writes `null` and records the price intent, skips rows without an override; «Загрузить цены» on a
+  `to_marketplace` account writes the restored price into the product and records **no** price intent, on `from_marketplace` the
+  same; a link with `sync_price` off is still pulled; a non-created card is skipped.
 
 ## 7. Not verified
 
-- Whether Ozon's daily limit on created / updated cards (`/v4/product/info/limit`, read by the credential health check) is handled
-  by the export runner when an export by filter queues thousands of batches — not read; E2 reads `Export_Batch_Runner` and states
-  in its PR what happens past the limit, and the export preview gains a sentence if work is deferred to the next day.
-- `Stock_Intents::record_stock()` returning false for a product without managed stock — inferred from the bulk planner's reason
-  text and its fallback, not read in the intent class.
-- Whether `Price_Refresher` writes the marketplace price into the product as is or reverses the account markup — not read; D3 must
-  say which before its preview text is final.
+- Whether Ozon's daily limit on created / updated cards (`/v4/product/info/limit`, read by the credential health check) is respected
+  when an export by filter queues thousands of batches. The critic of r1 read `Ozon_Buckets`, `Ozon_Error_Classifier`,
+  `Ozon_Export_Gateway` and `Export_Batch_Runner`: per-item throttling and rescheduling exist, daily-quota admission does not appear.
+  E2 states in its PR what happens past the limit; until then «No Ozon code is needed» is not established for export.
+- That the D3 suppression scope covers every price hook WooCommerce fires on a product save (`Price_Intents` hooks not read in full).
 - Action Scheduler throughput on a real host: the scale test runs the queue by hand; on a shop with little traffic WP-Cron fires
   less often and a 50 000-product run takes longer. Not measured.
 - The size of the snapshot transient for a 50 000-card cabinet (E3 depends on reading it whole) — not measured; the refresh job
   already reports a refused write.
-- The 390 px layout of the selection bar — drawn here, not probed.
+- The 390 px layout of the selection bar and the account-line buttons — drawn here, not probed.
 
 ## Related
 
