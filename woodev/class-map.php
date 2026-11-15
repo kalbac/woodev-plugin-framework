@@ -26,6 +26,7 @@ return [
 	'Woodev\\Framework\\Admin\\Records\\Records_Registry' => 'woodev/admin/records/class-records-registry.php',
 	'Woodev\\Framework\\Admin\\Records\\Records_Rest_Controller' => 'woodev/admin/records/class-records-rest-controller.php',
 	'Woodev\\Framework\\Admin\\Records\\Row_Normalizer' => 'woodev/admin/records/class-row-normalizer.php',
+	'Woodev\\Framework\\Admin\\Records\\Standard_Messages' => 'woodev/admin/records/class-standard-messages.php',
 	'Woodev\\Framework\\Admin\\Ui_Kit_Gallery_Page' => 'woodev/admin/class-ui-kit-gallery-page.php',
 	'Woodev\\Framework\\Competitor\\Admin_Notice_Renderer' => 'woodev/competitor/class-admin-notice-renderer.php',
 	'Woodev\\Framework\\Competitor\\Carrier_Catalogue' => 'woodev/competitor/class-carrier-catalogue.php',

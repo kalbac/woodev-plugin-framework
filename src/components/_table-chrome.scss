@@ -1,0 +1,233 @@
+// The chrome around a table card: the toolbar row in the card header, the bulk-action group, the counted view row and
+// the period picker. Modelled on the delivery orders page (`src/shipping-orders-page/style.scss`) — same measurements,
+// same class anatomy — under `woodev-table-*` names, so a page that is not the delivery page can use them without
+// importing it. Every colour and size is a token of `./tokens`.
+//
+// @package woodev-plugin-framework
+
+@use './tokens' as wd;
+
+// --- The row that fills the card header ------------------------------------------------------------------------------
+// Handed to `TableCard` as ONE `actions` entry: its slot stretches every entry to the full row, so two entries would be
+// two full-width stacked controls. On a narrow screen the search goes first and the bulk group under it (find, then
+// act) — `order` does that without a second markup path.
+.woodev-table-toolbar {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: wd.$gap-sm;
+	width: 100%;
+
+	.components-search-control {
+		flex: 1 1 240px;
+		min-width: 0;
+	}
+
+	.components-base-control {
+		margin-bottom: 0;
+	}
+
+	@media ( max-width: 782px ) {
+		.components-search-control {
+			flex-basis: 100%;
+			order: -1;
+		}
+	}
+}
+
+// --- Bulk action: a select and a button in one frame ------------------------------------------------------------------
+.woodev-table-bulk-row {
+	align-items: center;
+	// WooCommerce's `.woocommerce-table__actions` grows its direct children: size to content and let the search field be
+	// the one that stretches.
+	flex: 0 0 auto;
+	display: flex;
+	flex-wrap: wrap;
+	gap: wd.$gap-sm;
+}
+
+.woodev-table-bulk {
+	align-items: stretch;
+	border: 1px solid wd.$border;
+	border-radius: wd.$radius-sm;
+	display: inline-flex;
+	flex-wrap: nowrap;
+	overflow: hidden;
+
+	.components-base-control,
+	.components-base-control__field {
+		margin-bottom: 0;
+	}
+
+	.components-input-control__backdrop,
+	.components-select-control__input {
+		border: 0 !important;
+		border-radius: 0 !important;
+		box-shadow: none !important;
+	}
+
+	.components-select-control {
+		min-width: 190px;
+	}
+
+	&__apply.components-button {
+		// The divider between the select and the button; disabled, it is the group's own grey.
+		border-left: 1px solid wd.$border;
+		// The button's outer corners follow the group's INNER curve (the group clips with `overflow: hidden`).
+		border-radius: 0 calc( #{ wd.$radius-sm } - 1px ) calc( #{ wd.$radius-sm } - 1px ) 0;
+		height: auto;
+		white-space: nowrap;
+
+		// Enabled, the secondary button draws a blue frame on three sides; the divider takes its colour so the button
+		// reads as one closed box.
+		&:not( :disabled, [aria-disabled='true'] ) {
+			border-left-color: currentColor;
+		}
+
+		// WP draws focus as an OUTSIDE ring and the group clips everything outside it: draw it inside the button.
+		&:focus-visible {
+			box-shadow: inset 0 0 0 var( --wp-admin-border-width-focus, 2px ) var( --wp-admin-theme-color, currentColor );
+			outline: 2px solid transparent;
+			outline-offset: -2px;
+		}
+	}
+
+	&__reason {
+		color: wd.$muted;
+		font-size: 12px;
+	}
+}
+
+// --- Counted view row: «Все (120) | Не связан (80)» --------------------------------------------------------------------
+// WordPress's own counted-scope row. The «|» is drawn here and not written into the markup, so a screen reader hears
+// links and not a stray pipe. Not WordPress's `.subsubsub`: its float/margin geometry fights a wc-admin card.
+.woodev-table-views {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	font-size: 13px;
+	line-height: 1.5;
+	list-style: none;
+	margin: wd.$gap 0 wd.$gap-sm;
+	padding: 0;
+
+	&__item {
+		margin: 0;
+
+		& + & {
+			&::before {
+				color: wd.$line;
+				content: '|';
+				margin: 0 6px;
+			}
+		}
+	}
+
+	// `a` is coloured by wc-admin with the WP blue, which would make EVERY entry read as "not the current one".
+	&__link {
+		color: wd.$muted;
+		text-decoration: none;
+
+		&:hover,
+		&:focus {
+			color: wd.$accent-strong;
+			text-decoration: underline;
+		}
+
+		&.current {
+			color: wd.$ink;
+			font-weight: 600;
+		}
+	}
+
+	// The number is the reason the row exists; $muted is 5.74:1 on white — a de-emphasis, not a whisper.
+	&__count {
+		color: wd.$muted;
+		font-weight: 400;
+	}
+}
+
+// --- Period picker -------------------------------------------------------------------------------------------------------
+// WooCommerce gives `.woocommerce-filters-filter` a FIXED 430px (docs-internal/gotchas/woocommerce-gives-its-filter-picker-a-fixed-430px.md).
+// That is far more than «Всё время» or a date range needs, and it breaks any filter row: bound it here only.
+.woodev-table-period.woocommerce-filters-filter {
+	flex: 0 1 auto;
+	margin: 0;
+	max-width: 430px;
+	min-width: 200px;
+	width: auto;
+}
+
+.woodev-table-period {
+	display: flex;
+	flex-direction: column;
+
+	// The label of the other filters of the row (`.woodev-records` draws theirs the same way): sentence case, 13px, medium, the
+	// same line height and the same gap above the control, so the two labels sit on one line.
+	&__label {
+		font-size: 13px;
+		font-weight: 500;
+		line-height: 1.4;
+		padding-bottom: wd.$gap-sm;
+	}
+
+	// The same height as the selects beside it: WooCommerce's dropdown button is about 50px tall, with its own padding.
+	&.woocommerce-filters-filter .woocommerce-dropdown-button {
+		align-items: center;
+		box-sizing: border-box;
+		height: 40px;
+		min-height: 40px;
+		padding-bottom: 0;
+		padding-top: 0;
+		width: 100%;
+	}
+}
+
+.woodev-table-period__content {
+	// react-dates draws `.CalendarMonth` at a FIXED 300px inside a 320px popover; any horizontal padding on the wrapper
+	// squeezes the month table until it overflows. WooCommerce gives its calendar the whole width — so does this.
+	.woodev-table-period__custom {
+		padding: 0;
+	}
+
+	.woodev-table-period__native {
+		display: flex;
+		flex-direction: column;
+		gap: wd.$gap-sm;
+		padding: wd.$gap;
+	}
+
+	// «Всё время» above the grid and «Произвольный период» below it: the same fill, hover and height as the ten pills,
+	// the text centred. WooCommerce draws the grid's divider and rules by CHILD PARITY, so the wide rows stay OUTSIDE the
+	// container — a wide row inside it would shift every following item by one.
+	.woodev-table-period__wide {
+		.woocommerce-segmented-selection__label {
+			cursor: pointer;
+			text-align: center;
+		}
+
+		button.woocommerce-segmented-selection__label {
+			appearance: none;
+			border: 0;
+			border-radius: 0;
+			color: inherit;
+			font: inherit;
+			margin: 0;
+			width: 100%;
+		}
+	}
+
+	// Their component declares no cursor at all.
+	.woocommerce-segmented-selection__label {
+		cursor: pointer;
+	}
+
+	// «Назад» left, «Применить период» right: leave / commit, the commit on the side the eye ends on.
+	.woodev-table-period__actions {
+		display: flex;
+		gap: wd.$gap-sm;
+		justify-content: space-between;
+		margin-top: wd.$gap;
+		padding: 0 16px 16px;
+	}
+}

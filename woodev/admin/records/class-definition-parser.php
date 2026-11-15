@@ -128,13 +128,14 @@ final class Definition_Parser {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private static function filters( $raw ): array {
-		$list = self::list( $raw, 'definition.filters', 0, Records_Definition::MAX_FILTERS );
-		$out  = [];
+		$list        = self::list( $raw, 'definition.filters', 0, Records_Definition::MAX_FILTERS );
+		$out         = [];
+		$views_count = 0;
 
 		foreach ( $list as $i => $filter ) {
 			$path   = "definition.filters[$i]";
 			$filter = self::map( $filter, $path );
-			self::allow_keys( $filter, [ 'id', 'label', 'type', 'options', 'options_source', 'default' ], $path );
+			self::allow_keys( $filter, [ 'id', 'label', 'type', 'options', 'options_source', 'default', 'views', 'today' ], $path );
 
 			$entry = [
 				'id'             => self::slug( $filter, 'id', $path ),
@@ -146,6 +147,16 @@ final class Definition_Parser {
 
 			$entry = self::filter_options( $entry, $filter, $path );
 
+			if ( self::filter_views( $filter, $entry['type'], $path ) ) {
+				$entry['views'] = true;
+				++$views_count;
+			}
+
+			$today = self::filter_today( $filter, $entry['type'], $path );
+			if ( null !== $today ) {
+				$entry['today'] = $today;
+			}
+
 			if ( array_key_exists( 'default', $filter ) ) {
 				$default = Query_Validator::normalize_filter_value( $entry, $filter['default'] );
 				if ( null === $default ) {
@@ -155,6 +166,10 @@ final class Definition_Parser {
 			}
 
 			$out[] = $entry;
+		}
+
+		if ( $views_count > 1 ) {
+			throw new \InvalidArgumentException( 'definition.filters: at most one filter may declare views.' );
 		}
 
 		self::unique_ids( $out, 'definition.filters' );
@@ -189,6 +204,53 @@ final class Definition_Parser {
 		$entry['options'] = $has_inline ? self::options( $filter['options'], "$path.options" ) : [];
 
 		return $entry;
+	}
+
+	/**
+	 * The site's current day on a `date_range` filter: the period picker counts «Сегодня» and the other named periods from it, so they
+	 * mean the same day the server reads `from~to` in.
+	 *
+	 * @param array<string,mixed> $filter Raw filter.
+	 * @param string              $type   The filter's validated type.
+	 * @param string              $path   Error path.
+	 * @return string|null `YYYY-MM-DD`, or null when the filter declares none.
+	 */
+	private static function filter_today( array $filter, string $type, string $path ): ?string {
+		if ( ! array_key_exists( 'today', $filter ) ) {
+			return null;
+		}
+
+		$day = $filter['today'];
+
+		if ( 'date_range' !== $type ) {
+			throw new \InvalidArgumentException( "$path.today: only a date_range filter has a current day." );
+		}
+
+		$parsed = is_string( $day ) ? \DateTimeImmutable::createFromFormat( '!Y-m-d', $day ) : false;
+
+		if ( false === $parsed || $parsed->format( 'Y-m-d' ) !== $day ) {
+			throw new \InvalidArgumentException( "$path.today must be a calendar day (YYYY-MM-DD)." );
+		}
+
+		return $day;
+	}
+
+	/**
+	 * Whether the filter is the table's counted view row (`views`): only a single-value `select` can be one, because the
+	 * row writes the value «all» clears and each link writes one option.
+	 *
+	 * @param array<string,mixed> $filter Raw filter.
+	 * @param string              $type   The filter's validated type.
+	 * @param string              $path   Error path.
+	 */
+	private static function filter_views( array $filter, string $type, string $path ): bool {
+		$views = self::flag( $filter, 'views', $path, false );
+
+		if ( $views && 'select' !== $type ) {
+			throw new \InvalidArgumentException( "$path.views: only a select filter can be the counted view row." );
+		}
+
+		return $views;
 	}
 
 	/**

@@ -139,9 +139,14 @@ Rules:
   `flow.begin()` and the preview/confirm dialog are unchanged.
 - **Account actions** (`scope: account`, e.g. «Связать по артикулу», «Обновить список») are secondary buttons above the filter
   row, the place of «Создать заказ» on the delivery page. Their blocked reason is written under them, as today.
-- **Counts row.** A `select` filter may declare `'views' => true` (at most one per definition, only on a filter whose options
-  partition the rows). It is not drawn in the filter row; `CountLinks` draws it: «Все» (sum of the facet counts) then every
-  option with its facet count. «Все» writes what the select's «Любое» writes today, so the URL semantics do not change. The
+- **Counts row.** A `select` filter may declare `'views' => true` (at most one per definition). It is not drawn in the filter
+  row; `CountLinks` draws it: «Все» then every option with its facet count. «Все» writes what the select's «Любое» writes
+  today, so the URL semantics do not change. **What «Все» counts:** the options need not partition the rows — a variable product
+  with variations in two state groups is listed under both — so the provider may send the real number as a facet entry with the
+  empty value (`''`, «the filter itself left out»); «Все» shows it. Without that entry «Все» is the list total while no view is
+  chosen and the sum of the facet counts otherwise, which is exact only for options that partition the rows (orders' open /
+  finished, remote cards' on the site or not). The products provider sends the entry: the list total while no state is chosen,
+  one more `COUNT` otherwise. The
   provider returns `facets[filter id]`: one count per option with every other filter applied (the engine already carries
   facets: `Row_Normalizer::facets()`, `Records_Rest_Controller` line 420, READ). Declared on: site products `state`
   (`State_Groups`), orders `state` (В работе / Завершены), remote cards `on_site`.
@@ -190,7 +195,9 @@ Today (SEEN `ozon-03`): upper-case two-line label «СОСТОЯНИЕ ОТПР�
 ```
 
 Every `date_range` filter renders as `PeriodPicker` (only orders' `date` declares one). The URL stays `date=from~to`
-(`query.ts` codec unchanged, no PHP query change): a preset writes its dates computed in the browser's local day; the button
+(`query.ts` codec unchanged, no PHP query change): a preset writes its dates counted from the site's day — the `date_range`
+filter carries `today` (`wp_date( 'Y-m-d' )`, validated by `Definition_Parser`), which is the day the server reads `from~to`
+in; without it the browser's local day; the button
 shows the preset's name while the dates still match it today, else «01.11.2026 — 15.11.2026», empty = «Всё время».
 Accepted limitation: a bookmarked «Сегодня» is a fixed day the next morning. Period messages: `period_label` «Период»,
 `period_all` «Всё время», the ten preset labels (the delivery page's own wording: «Сегодня», «Вчера», «С начала недели»,
@@ -516,8 +523,9 @@ Acceptance (beyond common):
   header keeps the search with the typed text and keyboard focus stays in the search box when the table swaps to or from
   `EmptyCard` (focus restored after the remount; one jest assertion); the search sits in the table header (`records-table.test.tsx`,
   `admin-records-*.test.tsx` and the toolbar assertions of `marketplace-records-view.test.tsx` updated, not deleted).
-- PHPUnit: `Definition_Parser` accepts `views` only on a `select` and only once; the products provider's `state` facets sum to
-  the unfiltered total (the partition holds); orders and remote cards facets.
+- PHPUnit: `Definition_Parser` accepts `views` only on a `select` and only once; the products provider's `state` facets are the
+  totals of the list filtered by each group, the groups are not a partition (a variable product with two states is in both) and
+  the empty-value entry is the real number of products, with or without a chosen state; orders and remote cards facets.
 - Rig: «Товары» both tabs and «Заказы» with ≥ 1 row and empty, a bulk action through preview to confirm, a period preset and a
   custom range, Back/Forward.
 
@@ -568,7 +576,8 @@ Acceptance (beyond common):
 - The `Remote_Cards_Query` storage shape for the `on_site` counts — not read.
 - That a switched-off start for a new account (§5) is a defect and not a choice nobody recorded. #1728 gives no reason;
   the card lists it among the defects.
-- Whether `State_Groups` is a true partition of the products. C1's PHPUnit sum test proves it or fails.
+- ~~Whether `State_Groups` is a true partition of the products.~~ Resolved by C1: it is not (a variable product with variations in
+  two groups is counted in both), hence the empty-value facet entry for «Все» in §3.1.
 - The 390 px layout of every new screen — drawn here, not probed.
 
 ## Related

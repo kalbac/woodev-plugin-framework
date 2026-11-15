@@ -195,18 +195,45 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			];
 		}
 
-		$page  = $this->reader->page( Site_Products_Filter::from_query( $account->id(), $query ), (int) $query['page'], (int) $query['per_page'] );
-		$total = $page['total'];
+		$filter = Site_Products_Filter::from_query( $account->id(), $query );
+		$page   = $this->reader->page( $filter, (int) $query['page'], (int) $query['per_page'] );
 
 		return [
 			'rows'             => $this->parent_rows( $account, $page['ids'] ),
-			'total'            => $total,
+			'total'            => $page['total'],
+			'facets'           => [ 'state' => $this->state_facets( $filter, $page['total'] ) ],
 			'account_activity' => $this->activity->account( $account->id() ),
-			'messages'         => [
-				/* translators: %d: number of products. */
-				'summary' => sprintf( _n( 'Найден %d товар', 'Найдено товаров: %d', $total, 'woodev-plugin-framework' ), $total ),
+		];
+	}
+
+	/**
+	 * One count per state group under every other filter: the numbers of the view row. A variable product with variations in two
+	 * groups is counted in both, so the entry with the empty value carries the real number of products, for «Все». While no state
+	 * is chosen that is the total of the read itself; otherwise it costs one more `COUNT`.
+	 *
+	 * @param Site_Products_Filter $filter The filters of the read.
+	 * @param int                  $total  The total of the read.
+	 * @return array<int,array{value:string,label:string,count:int}>
+	 */
+	private function state_facets( Site_Products_Filter $filter, int $total ): array {
+		$counts = $this->reader->state_counts( $filter );
+		$facets = [
+			[
+				'value' => '',
+				'label' => '',
+				'count' => '' === $filter->state() ? $total : $this->reader->count_without_state( $filter ),
 			],
 		];
+
+		foreach ( State_Groups::labels() as $group => $label ) {
+			$facets[] = [
+				'value' => $group,
+				'label' => $label,
+				'count' => $counts[ $group ] ?? 0,
+			];
+		}
+
+		return $facets;
 	}
 
 	/**

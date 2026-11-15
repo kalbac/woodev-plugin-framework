@@ -13,6 +13,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import { RecordsTable, useActionExtensions } from '../../src/admin-records';
+import { accountButton, bulkButton } from './bulk-actions';
 import {
 	fixtureDefinition,
 	fixtureDefinitionEnvelope,
@@ -48,6 +49,8 @@ function FakeTableCard( props: TableCardProps ) {
 	}
 
 	return (
+		<>
+			<div className="fake-card-header">{ props.actions }</div>
 		<table aria-label={ props.title }>
 			<tbody>
 				{ props.rows.map( ( row, index ) => (
@@ -59,6 +62,7 @@ function FakeTableCard( props: TableCardProps ) {
 				) ) }
 			</tbody>
 		</table>
+		</>
 	);
 }
 
@@ -124,13 +128,13 @@ describe( 'selection at a cap of 100', () => {
 		await screen.findByRole( 'table', { name: 'Карточки' } );
 
 		// A disabled toolbar button stays focusable, so it says so with `aria-disabled`.
-		expect( screen.getByRole( 'button', { name: 'Импортировать' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
-		expect( screen.getByRole( 'button', { name: 'Обновить список' } ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+		expect( bulkButton( 'Импортировать' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( accountButton( 'Обновить список' ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
 
 		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
 		fireEvent.click( screen.getByRole( 'checkbox', { name: /Футболка/ } ) );
 
-		expect( screen.getByRole( 'button', { name: 'Импортировать' } ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+		expect( bulkButton( 'Импортировать' ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
 		expect( screen.getByRole( 'checkbox', { name: /Кружка/ } ) ).toBeChecked();
 		expect( screen.getByRole( 'checkbox', { name: /Футболка/ } ) ).toBeChecked();
 	} );

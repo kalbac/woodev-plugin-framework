@@ -163,6 +163,10 @@ class RowNormalizerTest extends TestCase {
 		$ok = $this->page( [], 20, [ 'facets' => [ 'state' => [ [ 'value' => 'ok', 'label' => 'Готово', 'count' => 3 ] ] ] ] );
 		$this->assertSame( 3, $ok['facets']['state'][0]['count'] );
 
+		$all = $this->page( [], 20, [ 'facets' => [ 'state' => [ [ 'value' => '', 'label' => '', 'count' => 9 ], [ 'value' => 'ok', 'label' => 'Готово', 'count' => 3 ] ] ] ] );
+		$this->assertSame( [ 9, 3 ], array_column( $all['facets']['state'], 'count' ), 'An empty value is the entry for the filter left out.' );
+
+		$this->assertContractBroken( $this->page( [], 20, [ 'facets' => [ 'state' => [ [ 'value' => ' bad ', 'label' => 'x', 'count' => 1 ] ] ] ] ) );
 		$this->assertContractBroken( $this->page( [], 20, [ 'facets' => [ 'ghost' => [] ] ] ) );
 		$this->assertContractBroken( $this->page( [], 20, [ 'facets' => [ 'state' => [ [ 'value' => 'ok', 'label' => 'x', 'count' => -1 ] ] ] ] ) );
 	}

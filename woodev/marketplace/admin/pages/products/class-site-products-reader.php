@@ -87,7 +87,7 @@ final class Site_Products_Reader {
 	 */
 	public function page( Site_Products_Filter $filter, int $page, int $per_page ): array {
 		$where = $this->where( $filter );
-		$total = (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . $this->db->prepare( '%i AS p', $this->db->posts ) . ' WHERE ' . $where ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Every fragment is prepared.
+		$total = $this->count_matching( $where );
 
 		if ( 0 === $total ) {
 			return [
@@ -105,6 +105,46 @@ final class Site_Products_Reader {
 			'ids'   => array_map( 'intval', $ids ),
 			'total' => $total,
 		];
+	}
+
+	/**
+	 * How many products each state group holds under every other filter of the read (the state itself is not applied): the counts of
+	 * the view row. One `COUNT` per group.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param Site_Products_Filter $filter Filters; the state is ignored.
+	 * @return array<string,int> Count by group.
+	 */
+	public function state_counts( Site_Products_Filter $filter ): array {
+		$counts = [];
+
+		foreach ( array_keys( State_Groups::labels() ) as $group ) {
+			$counts[ $group ] = $this->count_matching( $this->where( $filter->with_state( $group ) ) );
+		}
+
+		return $counts;
+	}
+
+	/**
+	 * How many products pass every filter of the read except the state. A variable product can sit in several state groups, so the
+	 * groups may add up to more than this.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param Site_Products_Filter $filter Filters; the state is ignored.
+	 * @return int
+	 */
+	public function count_without_state( Site_Products_Filter $filter ): int {
+		return $this->count_matching( $this->where( $filter->with_state( '' ) ) );
+	}
+
+	/**
+	 * @param string $where Prepared WHERE clause over the alias `p`.
+	 * @return int
+	 */
+	private function count_matching( string $where ): int {
+		return (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . $this->db->prepare( '%i AS p', $this->db->posts ) . ' WHERE ' . $where ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Every fragment is prepared.
 	}
 
 	/**

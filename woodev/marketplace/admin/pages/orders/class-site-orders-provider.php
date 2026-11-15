@@ -225,15 +225,35 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			];
 		}
 
-		$page  = $this->reader->page( Site_Orders_Filter::from_query( $account->id(), $query ), (int) $query['page'], (int) $query['per_page'] );
-		$total = $page['total'];
+		$filter = Site_Orders_Filter::from_query( $account->id(), $query );
+		$page   = $this->reader->page( $filter, (int) $query['page'], (int) $query['per_page'] );
 
 		return [
-			'rows'     => $this->build_rows( $account, $page['items'] ),
-			'total'    => $total,
-			'messages' => [
-				/* translators: %d: number of orders. */
-				'summary' => sprintf( _n( 'Найден %d заказ', 'Найдено заказов: %d', $total, 'woodev-plugin-framework' ), $total ),
+			'rows'   => $this->build_rows( $account, $page['items'] ),
+			'total'  => $page['total'],
+			'facets' => [ 'state' => $this->state_facets( $filter ) ],
+		];
+	}
+
+	/**
+	 * One count per posting state under every other filter: the numbers of the view row.
+	 *
+	 * @param Site_Orders_Filter $filter The filters of the read.
+	 * @return array<int,array{value:string,label:string,count:int}>
+	 */
+	private function state_facets( Site_Orders_Filter $filter ): array {
+		$counts = $this->reader->state_counts( $filter );
+
+		return [
+			[
+				'value' => Site_Orders_Filter::STATE_OPEN,
+				'label' => __( 'В работе', 'woodev-plugin-framework' ),
+				'count' => $counts[ Site_Orders_Filter::STATE_OPEN ],
+			],
+			[
+				'value' => Site_Orders_Filter::STATE_FINISHED,
+				'label' => __( 'Завершены', 'woodev-plugin-framework' ),
+				'count' => $counts[ Site_Orders_Filter::STATE_FINISHED ],
 			],
 		];
 	}

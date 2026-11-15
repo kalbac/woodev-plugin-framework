@@ -33,6 +33,8 @@ function FakeTableCard( props: TableCardProps ) {
 	}
 
 	return (
+		<>
+			<div className="fake-card-header">{ props.actions }</div>
 		<table aria-label={ props.title }>
 			<tbody>
 				{ props.rows.map( ( row, index ) => (
@@ -44,6 +46,7 @@ function FakeTableCard( props: TableCardProps ) {
 				) ) }
 			</tbody>
 		</table>
+		</>
 	);
 }
 
@@ -72,7 +75,9 @@ test( 'the records view renders the selection column and the bulk toolbar the de
 	await screen.findByRole( 'table', { name: 'Товары' } );
 
 	expect( screen.getByRole( 'checkbox', { name: /Кружка/ } ) ).toBeInTheDocument();
-	expect( within( screen.getByRole( 'toolbar' ) ).getByRole( 'button', { name: 'Выгрузить выбранные' } ) ).toBeInTheDocument();
+	// A selection action is a choice in the select of the card header, run by «Применить».
+	expect( within( screen.getByRole( 'combobox', { name: 'Массовые действия' } ) ).getByRole( 'option', { name: 'Выгрузить выбранные' } ) ).toBeInTheDocument();
+	expect( screen.getByRole( 'button', { name: 'Применить' } ) ).toBeInTheDocument();
 } );
 
 test( 'a row action is no longer disabled for want of a runner', async () => {

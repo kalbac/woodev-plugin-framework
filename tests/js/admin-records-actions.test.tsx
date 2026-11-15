@@ -13,6 +13,7 @@ import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import { RecordsTable, useActionExtensions } from '../../src/admin-records';
+import { bulkButton } from './bulk-actions';
 import { createActivityExtensions, type ActivityExtensions } from '../../src/admin-records/activity';
 import {
 	fixtureDefinition,
@@ -248,6 +249,8 @@ function FakeTableCard( props: TableCardProps ) {
 	}
 
 	return (
+		<>
+			<div className="fake-card-header">{ props.actions }</div>
 		<table aria-label={ props.title }>
 			<thead>
 				<tr>
@@ -266,6 +269,7 @@ function FakeTableCard( props: TableCardProps ) {
 				) ) }
 			</tbody>
 		</table>
+		</>
 	);
 }
 
@@ -309,7 +313,7 @@ async function openRowAction( key: string, name: string ): Promise< HTMLElement 
 }
 
 function toolbarButton( name: string ): HTMLElement {
-	return within( screen.getByRole( 'toolbar' ) ).getByRole( 'button', { name } );
+	return bulkButton( name );
 }
 
 beforeEach( () => {
