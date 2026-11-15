@@ -1,6 +1,100 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.6] — 2026-11-15
+### Bug Fixes
+- **marketplace**: Tools empty-state sentence matches the no-selector view (#1759)
+
+- **marketplace**: Import scheduler dedups pending chunks only (#1764)
+
+- **marketplace**: One profile governs an imported product's price and fields; profile units (#1766)
+
+- **marketplace**: A manual link clears the card's stale import note (#1769)
+
+- **marketplace**: Importer I6 critic fixes (#1769)
+
+- **marketplace**: Keep stored import values on the first defaults fill; I7 owns the plan; toggle text (#1767)
+
+- **marketplace**: An image is no budget progress; neutral per-card failure note (#1768)
+
+- **marketplace**: Only a freshly stored image counts as budget progress (#1768)
+
+- **marketplace**: Group import survives every cut; critic round 1 (#1778)
+
+- **marketplace-admin**: Critic and rig findings of PR #1780 (#1776, C1)
+
+- **marketplace-admin**: Label rule beats emotion's &&& label, one label line, site day rolls over (#1776, C1 r3)
+
+- **marketplace**: A resumed variation of a finished group joins it in the preview (#1778)
+
+- **marketplace-admin**: Size row on one line, copy/new-save URL tests, Back after save, named tab list (#1776, C2 critic)
+
+- **marketplace-admin**: The name row shares the group cards' left edge (#1776, C2 rig check)
+
+
+### Documentation
+- **s230**: Session save
+
+- **s230**: Record operator answers in the s231 handoff
+
+- **s230**: Trim the handoff under the 16 KB gate
+
+- **spec**: Marketplace card importer design (ozon-seller#75)
+
+- **spec**: Card importer r2 — fold the critic's eight findings (#1763)
+
+- **spec**: Marketplace card importer r3 — operator decisions of 15.11.2026 (#1767)
+
+- **spec**: Marketplace admin UI — pages look like the delivery plugins (#1776)
+
+- **spec**: Marketplace admin UI r2 — critic findings of PR #1777 (#1776)
+
+- **spec**: C1 keeps search focus across the EmptyCard swap (critic r2, #1776)
+
+- **marketplace**: Restore docblocks, fix stale button names, pin disabled account (critic of #1779)
+
+
+### Features
+- **marketplace**: Tools work on an account; the account is chosen only with 2+ accounts (#1759)
+
+- **marketplace**: Card importer contract, card value, import scheduler, import notes (#1764)
+
+- **marketplace**: Product writer, import category, shop price writer, mapping for_category (#1766)
+
+- **marketplace**: «Импортировать» on the marketplace cards tab (#1769)
+
+- **marketplace**: Import settings on «Общие» (#1767)
+
+- **marketplace**: One-card import, import job, event handler, wiring (#1768)
+
+- **marketplace**: Cards of one group become one variable product (#1778)
+
+- **marketplace**: Settings, tools and diagnostics in the delivery look (#1776, C3)
+
+- **marketplace-admin**: Table card header, counted views and period picker (#1776, C1)
+
+- **marketplace-admin**: Folder tabs and the mapping/profile forms in the settings look (#1776, C2)
+
+
+### Refactoring
+- **marketplace**: Extract Account_Job from Link_Jobs (#1765)
+
+
+### Tests
+- **marketplace**: Pass 'ARRAY_A' as a string in AccountJobTest (#1765)
+
+
+### Build
+- **marketplace**: Rebuild admin bundle for #1759
+
+- **marketplace-admin**: Rebuild bundles for #1776 C3
+
+- **marketplace-admin**: Rebuild bundles for #1776 C1
+
+- **marketplace-admin**: Rebuild bundles for #1776 C2
+
+
+
 ## [2.1.5] — 2026-11-12
 ### Bug Fixes
 - **marketplace**: F15 tools — licence/pause gate, claim fence, site scope, controller tests (#1695)
