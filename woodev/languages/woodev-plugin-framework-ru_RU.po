@@ -11048,7 +11048,7 @@ msgid "Маркетплейс не вернул данные карточки. �
 msgstr ""
 
 #: marketplace/jobs/class-import-jobs.php:233
-msgid "Не удалось создать товар из карточки."
+msgid "Не удалось импортировать карточку."
 msgstr ""
 
 #: marketplace/jobs/class-import-jobs.php:248

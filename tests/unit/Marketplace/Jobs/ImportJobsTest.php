@@ -395,7 +395,7 @@ final class ImportJobsTest extends Export_Test_Case {
 		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2', 'A-3' ], 0 );
 
 		$this->assertSame( [ 'A-1', 'A-3' ], $this->linked() );
-		$this->assertSame( 'Не удалось создать товар из карточки.', $this->note( 'A-2' )['text'] );
+		$this->assertSame( 'Не удалось импортировать карточку.', $this->note( 'A-2' )['text'] );
 		$this->assertSame( 'RuntimeException: Неверный или повторяющийся артикул.', $this->note( 'A-2' )['detail'] );
 		$this->assertStringContainsString( 'A-2', implode( "\n", $this->log ) );
 		$this->assertSame( [], $this->scheduler->of( self::HOOK ) );
@@ -489,27 +489,28 @@ final class ImportJobsTest extends Export_Test_Case {
 	}
 
 	/**
-	 * The budget is checked before every image: the card in hand goes back with the cards after it.
+	 * The budget is checked before every image: once a card is finished, the card in hand goes back with the cards after it.
 	 *
 	 * @return void
 	 */
 	public function test_the_budget_is_checked_before_every_image(): void {
-		$this->images        = [ 'A-1' => 5 ];
+		$this->images        = [ 'A-2' => 5 ];
 		$this->image_seconds = 10.0;
 
-		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2' ], 0 );
+		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2', 'A-3' ], 0 );
 
 		$this->assertSame( 2, $this->downloaded, 'two images fit in twenty seconds; the third is refused before it starts' );
-		$this->assertSame( [], $this->linked(), 'the card in hand is not linked yet' );
+		$this->assertSame( [ 'A-1' ], $this->linked(), 'the card in hand is not linked yet' );
 
 		$retry = $this->scheduler->of( self::HOOK );
 
 		$this->assertCount( 1, $retry );
-		$this->assertSame( [ $this->account_id, [ 'A-1', 'A-2' ], 0 ], $retry[0]['args'], 'the current card is included' );
+		$this->assertSame( [ $this->account_id, [ 'A-2', 'A-3' ], 0 ], $retry[0]['args'], 'the current card is included' );
 	}
 
 	/**
-	 * A read that used the whole budget by itself still ends with one card finished, so the requeue cannot repeat for ever.
+	 * A read that used the whole budget by itself still ends with one card finished — the images of that card are not cut,
+	 * because an image the check let through may be cached or fail and is no progress.
 	 *
 	 * @return void
 	 */
@@ -517,28 +518,66 @@ final class ImportJobsTest extends Export_Test_Case {
 		$this->importer->after_read = function (): void {
 			$this->mono += 100.0;
 		};
+		$this->images = [ 'A-1' => 3 ];
 
 		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2', 'A-3' ], 0 );
 
 		$this->assertSame( [ 'A-1' ], $this->linked(), 'one card was finished' );
+		$this->assertSame( 3, $this->downloaded, 'with all its images' );
 		$this->assertSame( [ $this->account_id, [ 'A-2', 'A-3' ], 0 ], $this->scheduler->of( self::HOOK )[0]['args'] );
 	}
 
 	/**
-	 * The same read, a card with images: one image is loaded, then the run stops and the card comes back.
+	 * Run after run with the same slow read, every requeue finishes a card: the batch drains and the attempt never grows.
 	 *
 	 * @return void
 	 */
-	public function test_a_read_that_used_the_whole_budget_still_loads_one_image(): void {
+	public function test_a_requeue_after_a_slow_read_drains_the_batch_run_after_run(): void {
 		$this->importer->after_read = function (): void {
 			$this->mono += 100.0;
 		};
-		$this->images = [ 'A-1' => 3 ];
+		$this->images = [
+			'A-1' => 3,
+			'A-2' => 3,
+			'A-3' => 3,
+		];
+
+		$args = [ $this->account_id, [ 'A-1', 'A-2', 'A-3' ], 0 ];
+
+		for ( $run = 1; $run <= 3; $run++ ) {
+			$this->scheduler->actions = [];
+			$this->jobs()->import_cards( ...$args );
+
+			$this->assertCount( $run, $this->linked(), 'run ' . $run . ' finished one card' );
+
+			$retry = $this->scheduler->of( self::HOOK );
+
+			if ( $run < 3 ) {
+				$this->assertCount( 1, $retry );
+				$args = $retry[0]['args'];
+				$this->assertSame( 0, $args[2], 'the attempt did not grow' );
+			} else {
+				$this->assertSame( [], $retry, 'the last run leaves nothing' );
+			}
+		}
+
+		$this->assertSame( 9, $this->downloaded );
+	}
+
+	/**
+	 * An image that fails is no progress either: the card still finishes, without it.
+	 *
+	 * @return void
+	 */
+	public function test_a_slow_image_never_stops_the_first_card_of_a_run(): void {
+		$this->images        = [ 'A-1' => 3 ];
+		$this->image_seconds = 30.0;
 
 		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2' ], 0 );
 
-		$this->assertSame( 1, $this->downloaded );
-		$this->assertSame( [ $this->account_id, [ 'A-1', 'A-2' ], 0 ], $this->scheduler->of( self::HOOK )[0]['args'] );
+		$this->assertSame( [ 'A-1' ], $this->linked() );
+		$this->assertSame( 3, $this->downloaded );
+		$this->assertSame( [ $this->account_id, [ 'A-2' ], 0 ], $this->scheduler->of( self::HOOK )[0]['args'] );
 	}
 
 	/**

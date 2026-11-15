@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  *    that fails on its own (WooCommerce refused the save) gets a note and the batch goes on.
  * 3. **The claim** is extended before every card and before every image; a lost claim stops the run.
  * 4. **The budget** ({@see self::BUDGET_SECONDS}) is checked before every card and every image. Once it is spent, the run puts the
- *    cards it has not finished — the current one included — back in the queue with the attempt unchanged. A run always advances
+ *    cards it has not finished — the current one included — back in the queue with the attempt unchanged. A run finishes one card
  *    first ({@see Import_Budget}), so that a requeue cannot repeat for ever.
  * 5. When the run gives up, every card of the batch gets a note: a fixed Russian sentence for the merchant, and the technical
  *    reason kept apart in the note's `detail`.
@@ -187,13 +187,13 @@ final class Import_Jobs {
 		$cards  = $this->adapter->read_cards( $account, $this->scheduler->hook(), $offer_ids, $hold );
 		$renew  = static function () use ( $hold, $budget ): void {
 			$hold();
-			$budget->before_image();
+			$budget->check();
 		};
 
 		foreach ( $offer_ids as $index => $offer_id ) {
 			try {
 				$hold();
-				$budget->before_card();
+				$budget->check();
 				$this->import_card( $account, $fence, $offer_id, $cards[ $offer_id ] ?? null, $renew );
 				$budget->card_finished();
 			} catch ( Budget_Spent $spent ) {
@@ -230,7 +230,7 @@ final class Import_Jobs {
 		} catch ( \Throwable $failure ) {
 			$detail = get_class( $failure ) . ': ' . $failure->getMessage();
 
-			$this->notes->set_import_note( $account->id(), $offer_id, __( 'Не удалось создать товар из карточки.', 'woodev-plugin-framework' ), $detail );
+			$this->notes->set_import_note( $account->id(), $offer_id, __( 'Не удалось импортировать карточку.', 'woodev-plugin-framework' ), $detail );
 			call_user_func( $this->log_error, $this->scheduler->hook() . ': account ' . $account->id() . ': ' . $offer_id . ': ' . $detail );
 		}
 	}

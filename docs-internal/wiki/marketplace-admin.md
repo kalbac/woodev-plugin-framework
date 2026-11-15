@@ -786,9 +786,10 @@ the pieces live and what is easy to get wrong. The adapter implements the option
 What to remember:
 
 - **The claim is extended before every card and every image**; a lost claim throws `Claim_Lost`
-  and the whole batch retries. The budget stops a run only after it has finished a card or let
-  one image through, then requeues the current card and the rest with the attempt unchanged — a
-  slow `read_cards()` cannot make the requeue repeat for ever.
+  and the whole batch retries. The budget stops a run only after it has finished a card, then
+  requeues the current card and the rest with the attempt unchanged — a slow `read_cards()`
+  cannot make the requeue repeat for ever. An image that passed the check is not progress (it may
+  be cached or fail), so a lone card always finishes whole.
 - **A variable parent with the card's SKU is never linked**: `Card_Linker` refuses a parent only
   when it already has a row, so `Card_Import` refuses it first and notes why. A variation is
   linked with its real parent id.
