@@ -275,6 +275,27 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [ 'RED', 'BLACK', 'GREEN' ], $this->queued_offers(), 'the half-made card is queued first, so the job finishes it before the others join' );
 	}
 
+	/**
+	 * Critic round 2: a card that resumes its own half-made **variation** in a group whose product is finished makes no new
+	 * product — like its new sibling, it becomes a variation of the product that is on the site.
+	 */
+	public function test_a_resumed_variation_of_a_finished_group_is_counted_as_joining_not_as_a_new_product(): void {
+		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::READY;
+		$this->sku_kinds['BLACK']                             = Remote_Cards_Import_Plan::SKU_MARKED;
+		$this->put_snapshot( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ) ] );
+
+		$both = $this->preview( 'import_selected', [ 'GREEN', 'BLACK' ] );
+
+		$this->assertSame( [ 2, 2, 0 ], [ $both['requested'], $both['eligible'], $both['skipped'] ] );
+		$this->assertStringNotContainsString( 'Будет создано', $both['scope']['sentence'], 'no product is created' );
+		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 2.', $both['scope']['sentence'] );
+
+		$alone = $this->preview( 'import', [ 'BLACK' ] );
+
+		$this->assertStringNotContainsString( 'Будет создано', $alone['scope']['sentence'] );
+		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 1.', $alone['scope']['sentence'] );
+	}
+
 	public function test_only_the_cards_the_import_takes_are_counted_in_a_group(): void {
 		$this->add_link( $this->add_product( [ 'id' => 41, 'sku' => 'RED' ] ), Link_Record::STATE_CREATED, [ 'offer_id' => 'RED' ] );
 		$this->put_snapshot(

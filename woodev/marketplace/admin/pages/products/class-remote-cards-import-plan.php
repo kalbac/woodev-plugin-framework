@@ -185,8 +185,9 @@ final class Remote_Cards_Import_Plan {
 	/**
 	 * Lists the cards to create and counts the products they make. A card with no group makes one; the cards of one group make
 	 * one between them; a card whose group has a product on the site makes none and joins that product as a variation; a card
-	 * whose group's product is half-made is left out, unless a card of this selection resumes that product. The same group
-	 * decision as the job's ({@see Group_Assembler::key_of()} and {@see Group_Assembler::lookup()}).
+	 * whose group's product is half-made is left out, unless a card of this selection resumes that product. A card that resumes
+	 * is counted by what it resumes: the group's half-made product is a product, a half-made variation of a finished group joins
+	 * it. The same group decision as the job's ({@see Group_Assembler::key_of()} and {@see Group_Assembler::lookup()}).
 	 *
 	 * @param array{create:string[],link:string[],skipped:array<string,string[]>} $plan       The plan so far.
 	 * @param array<int,array{0:string,1:string}>                                 $resumed    Article and group key of each card that resumes its own half-made product.
@@ -196,11 +197,28 @@ final class Remote_Cards_Import_Plan {
 	 */
 	private function with_products( array $plan, array $resumed, array $fresh, int $account_id ): array {
 		$plan[ self::CREATE ] = array_column( $resumed, 0 );
-		$plan['products']     = count( $resumed );
+		$plan['products']     = 0;
 		$plan['joined']       = 0;
+		$states               = [];
 
-		// A group whose half-made product is resumed by this selection: that product is counted, its other cards join it.
-		$states = array_fill_keys( array_filter( array_column( $resumed, 1 ), 'strlen' ), Group_Assembler::NONE );
+		foreach ( $resumed as list( , $group ) ) {
+			$known = '' !== $group && isset( $states[ $group ] );
+			$state = '' === $group ? Group_Assembler::NONE : ( $states[ $group ] ?? (string) call_user_func( $this->group_state, $account_id, $group ) );
+
+			if ( Group_Assembler::READY === $state ) {
+				// A half-made variation of a group whose product is finished: it joins that product, like a new sibling.
+				$states[ $group ] = Group_Assembler::READY;
+				++$plan['joined'];
+				continue;
+			}
+
+			// Its own half-made product — for a group, the group's: that product is counted once, its other cards join it.
+			$plan['products'] += $known ? 0 : 1;
+
+			if ( '' !== $group ) {
+				$states[ $group ] = Group_Assembler::NONE;
+			}
+		}
 
 		foreach ( $fresh as list( $offer_id, $group ) ) {
 			if ( '' !== $group && ! isset( $states[ $group ] ) ) {
