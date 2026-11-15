@@ -25,6 +25,8 @@ export interface GroupSchema {
 	title: string;
 	description: string;
 	notice: string;
+	/** HTML drawn after the fields and before the buttons (`Settings_Group::with_footnote()`). */
+	footnote?: string;
 	fields: string[];
 	actions: string[];
 	/** A fixed-rows table drawn in place of the member fields' own rows (`Settings_Group::with_table()`). */
@@ -168,6 +170,9 @@ export default function GroupCard( { providerId, group, actions, children, onRun
 				<div className="woodev-group__desc"><RawHTML>{ group.description }</RawHTML></div>
 			) }
 			{ children }
+			{ group.footnote && (
+				<div className="woodev-group__footnote"><RawHTML>{ group.footnote }</RawHTML></div>
+			) }
 			{ actions.filter( ( action ) => action.selector ).map( ( action ) => (
 				<ToolSelector
 					key={ `selector:${ action.id }` }

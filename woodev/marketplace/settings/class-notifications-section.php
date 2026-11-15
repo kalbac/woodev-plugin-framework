@@ -215,7 +215,8 @@ final class Notifications_Section implements Settings_Section_Provider {
 	}
 
 	/**
-	 * Explains the switches: what every notification is for and where in the marketplace cabinet its address goes.
+	 * Explains the switches: the intro sentence, where in the marketplace cabinet the address goes, and whether the
+	 * adapter registers the address itself or the merchant copies it.
 	 *
 	 * @param Webhook_Type[] $types       Types.
 	 * @param string         $marketplace Marketplace name.
@@ -227,26 +228,53 @@ final class Notifications_Section implements Settings_Section_Provider {
 			return '';
 		}
 
-		$items = '';
-
-		foreach ( $types as $type ) {
-			$items .= sprintf(
-				'<li><strong>%1$s</strong> — %2$s %3$s</li>',
-				esc_html( $type->label() ),
-				esc_html( $type->purpose() ),
-				'' === $type->cabinet_location() ? '' : '<em>' . esc_html( sprintf( /* translators: %s: place in the marketplace cabinet. */ __( 'Где указать адрес: %s.', 'woodev-plugin-framework' ), $type->cabinet_location() ) ) . '</em>'
-			);
-		}
-
 		return sprintf(
-			'<p>%1$s</p><ul>%2$s</ul><p>%3$s</p>',
+			'<p>%1$s</p>%2$s<p>%3$s</p>',
 			/* translators: %s: marketplace name. */
 			esc_html( sprintf( __( 'Включите уведомления, которые вам нужны: %s сообщит о них сайту сразу, а выключенные сайт не станет принимать.', 'woodev-plugin-framework' ), $marketplace ) ),
-			$items,
+			$this->location_sentences( $types ),
 			$registers
-				? esc_html__( 'Адрес сайта для уведомлений показан в карточках аккаунтов ниже; кнопка «Зарегистрировать URL» сама передаёт его в личный кабинет, вписывать его вручную не нужно.', 'woodev-plugin-framework' )
+				? esc_html__( 'Адрес сайта для уведомлений показан в карточках аккаунтов ниже; кнопка «Зарегистрировать адрес» сама передаёт его в личный кабинет, вписывать его вручную не нужно.', 'woodev-plugin-framework' )
 				: esc_html__( 'Скопируйте адрес сайта для уведомлений из карточки аккаунта ниже и впишите его в личном кабинете там, где это указано выше.', 'woodev-plugin-framework' )
 		);
+	}
+
+	/**
+	 * Says where in the cabinet the address goes: ONE sentence when every type shares the place, otherwise one per place naming its types.
+	 *
+	 * What a type is for sits in its switch's tooltip, so nothing is repeated here.
+	 *
+	 * @param Webhook_Type[] $types Types.
+	 * @return string HTML paragraphs, '' when no type names a place.
+	 */
+	private function location_sentences( array $types ): string {
+		$by_location = [];
+
+		foreach ( $types as $type ) {
+			if ( '' !== $type->cabinet_location() ) {
+				$by_location[ $type->cabinet_location() ][] = $type->label();
+			}
+		}
+
+		if ( 1 === count( $by_location ) && count( $types ) === count( reset( $by_location ) ) ) {
+			/* translators: %s: place in the marketplace cabinet. */
+			return '<p>' . esc_html( sprintf( __( 'Где указать адрес: %s.', 'woodev-plugin-framework' ), (string) key( $by_location ) ) ) . '</p>';
+		}
+
+		$html = '';
+
+		foreach ( $by_location as $location => $labels ) {
+			$html .= '<p>' . esc_html(
+				sprintf(
+					/* translators: 1: names of notification types in quotes, 2: place in the marketplace cabinet. */
+					__( 'Где указать адрес для %1$s: %2$s.', 'woodev-plugin-framework' ),
+					'«' . implode( '», «', $labels ) . '»',
+					(string) $location
+				)
+			) . '</p>';
+		}
+
+		return $html;
 	}
 
 	/**
@@ -310,24 +338,37 @@ final class Notifications_Section implements Settings_Section_Provider {
 			? __( 'по текущим настройкам аккаунта push-события не требуются', 'woodev-plugin-framework' )
 			: implode( ', ', $wanted );
 
-		$html = sprintf(
-			'<p><strong>%1$s:</strong> <code>%2$s</code></p><p><strong>%3$s:</strong> %4$s</p><p><strong>%5$s:</strong> %6$s</p><p><strong>%7$s:</strong> %8$s</p>',
-			esc_html__( 'Адрес для приёма уведомлений', 'woodev-plugin-framework' ),
-			esc_html( $url ),
-			esc_html__( 'Нужные события', 'woodev-plugin-framework' ),
-			esc_html( $wanted_text ),
-			esc_html__( 'Состояние регистрации', 'woodev-plugin-framework' ),
-			esc_html( $state_text ),
-			esc_html__( 'Последнее уведомление', 'woodev-plugin-framework' ),
-			esc_html( $latest_text )
-		);
+		$facts = [
+			__( 'Адрес', 'woodev-plugin-framework' )         => '<code>' . esc_html( $url ) . '</code>',
+			__( 'Состояние', 'woodev-plugin-framework' )     => esc_html(
+				/* translators: 1: registration state, 2: the latest notification received. */
+				sprintf( __( '%1$s · последнее: %2$s', 'woodev-plugin-framework' ), $state_text, $latest_text )
+			),
+			__( 'Нужные события', 'woodev-plugin-framework' ) => esc_html( $wanted_text ),
+		];
 
 		return Settings_Section::create(
 			'notifications_account_' . $id,
 			$this->account_title( $account ),
 			[],
-			$html
-		)->stacked( $this->identifier_line( $account ) )->with_actions( $this->tools_for_account( $id ) );
+			$this->facts_html( $facts )
+		)->stacked( $this->identifier_line( $account ) )->with_actions( $this->tools_for_account( $id ), Settings_Section::ACTIONS_ROW );
+	}
+
+	/**
+	 * One `dl.woodev-facts` of label → value lines, the settings page's own look for read-only facts.
+	 *
+	 * @param array<string,string> $facts Label (plain text) → value (HTML, already escaped).
+	 * @return string
+	 */
+	private function facts_html( array $facts ): string {
+		$html = '';
+
+		foreach ( $facts as $label => $value ) {
+			$html .= sprintf( '<dt>%1$s</dt><dd>%2$s</dd>', esc_html( (string) $label ), $value );
+		}
+
+		return '<dl class="woodev-facts">' . $html . '</dl>';
 	}
 
 	/**
@@ -372,51 +413,16 @@ final class Notifications_Section implements Settings_Section_Provider {
 				$this->tool_id( $account_id, 'register' ),
 				__( 'Регистрация адреса', 'woodev-plugin-framework' ),
 				__( 'Передать адрес приёма уведомлений в кабинет маркетплейса', 'woodev-plugin-framework' ),
-				__( 'Зарегистрировать URL', 'woodev-plugin-framework' ),
+				__( 'Зарегистрировать адрес', 'woodev-plugin-framework' ),
 				function () use ( $account_id ): Tool_Result {
 					return $this->run_action(
 						$account_id,
 						static function ( Push_Admin $admin, Notification_Account $account, string $url ): Tool_Result {
 							$outcome = $admin->register( $account, $url );
 							if ( Push_Admin::DISABLED === $outcome ) {
-								return Tool_Result::failure( __( 'Маркетплейс отключил отправку уведомлений на этот адрес. Нажмите «Включить уведомления».', 'woodev-plugin-framework' ) );
+								return Tool_Result::failure( __( 'Маркетплейс отключил отправку уведомлений на этот адрес. Нажмите «Возобновить уведомления».', 'woodev-plugin-framework' ) );
 							}
 							return Tool_Result::success( __( 'Адрес уведомлений зарегистрирован.', 'woodev-plugin-framework' ) );
-						}
-					);
-				}
-			),
-			Shipping_Tool::create(
-				$this->tool_id( $account_id, 'update_types' ),
-				__( 'Типы событий', 'woodev-plugin-framework' ),
-				__( 'Привести список типов событий в соответствие с настройками аккаунта', 'woodev-plugin-framework' ),
-				__( 'Обновить типы', 'woodev-plugin-framework' ),
-				function () use ( $account_id ): Tool_Result {
-					return $this->run_action(
-						$account_id,
-						static function ( Push_Admin $admin, Notification_Account $account, string $url ): Tool_Result {
-							$outcome = $admin->update_types( $account, $url );
-							if ( Push_Admin::NOT_REGISTERED === $outcome ) {
-								return Tool_Result::failure( __( 'Адрес ещё не зарегистрирован — сначала нажмите «Зарегистрировать URL».', 'woodev-plugin-framework' ) );
-							}
-							return Tool_Result::success( __( 'Список типов уведомлений актуален.', 'woodev-plugin-framework' ) );
-						}
-					);
-				}
-			),
-			Shipping_Tool::create(
-				$this->tool_id( $account_id, 'enable' ),
-				__( 'Доставка уведомлений', 'woodev-plugin-framework' ),
-				__( 'Возобновить доставку уведомлений после автоматического отключения', 'woodev-plugin-framework' ),
-				__( 'Включить уведомления', 'woodev-plugin-framework' ),
-				function () use ( $account_id ): Tool_Result {
-					return $this->run_action(
-						$account_id,
-						static function ( Push_Admin $admin, Notification_Account $account, string $url ): Tool_Result {
-							if ( ! $admin->enable( $account, $url ) ) {
-								return Tool_Result::failure( __( 'Адрес ещё не зарегистрирован — сначала нажмите «Зарегистрировать URL».', 'woodev-plugin-framework' ) );
-							}
-							return Tool_Result::success( __( 'Доставка уведомлений включена.', 'woodev-plugin-framework' ) );
 						}
 					);
 				}
@@ -425,7 +431,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 				$this->tool_id( $account_id, 'check' ),
 				__( 'Проверка связи', 'woodev-plugin-framework' ),
 				__( 'Попросить маркетплейс отправить проверочный запрос на адрес сайта', 'woodev-plugin-framework' ),
-				__( 'Проверить', 'woodev-plugin-framework' ),
+				__( 'Проверить связь', 'woodev-plugin-framework' ),
 				function () use ( $account_id ): Tool_Result {
 					return $this->run_action(
 						$account_id,
@@ -439,6 +445,41 @@ final class Notifications_Section implements Settings_Section_Provider {
 								return Tool_Result::failure( $msg );
 							}
 							return Tool_Result::success( __( 'Проверка прошла успешно — маркетплейс достучался до сайта.', 'woodev-plugin-framework' ) );
+						}
+					);
+				}
+			),
+			Shipping_Tool::create(
+				$this->tool_id( $account_id, 'update_types' ),
+				__( 'Типы событий', 'woodev-plugin-framework' ),
+				__( 'Привести список типов событий в соответствие с настройками аккаунта', 'woodev-plugin-framework' ),
+				__( 'Обновить типы событий', 'woodev-plugin-framework' ),
+				function () use ( $account_id ): Tool_Result {
+					return $this->run_action(
+						$account_id,
+						static function ( Push_Admin $admin, Notification_Account $account, string $url ): Tool_Result {
+							$outcome = $admin->update_types( $account, $url );
+							if ( Push_Admin::NOT_REGISTERED === $outcome ) {
+								return Tool_Result::failure( __( 'Адрес ещё не зарегистрирован — сначала нажмите «Зарегистрировать адрес».', 'woodev-plugin-framework' ) );
+							}
+							return Tool_Result::success( __( 'Список типов уведомлений актуален.', 'woodev-plugin-framework' ) );
+						}
+					);
+				}
+			),
+			Shipping_Tool::create(
+				$this->tool_id( $account_id, 'enable' ),
+				__( 'Доставка уведомлений', 'woodev-plugin-framework' ),
+				__( 'Возобновить доставку уведомлений после автоматического отключения', 'woodev-plugin-framework' ),
+				__( 'Возобновить уведомления', 'woodev-plugin-framework' ),
+				function () use ( $account_id ): Tool_Result {
+					return $this->run_action(
+						$account_id,
+						static function ( Push_Admin $admin, Notification_Account $account, string $url ): Tool_Result {
+							if ( ! $admin->enable( $account, $url ) ) {
+								return Tool_Result::failure( __( 'Адрес ещё не зарегистрирован — сначала нажмите «Зарегистрировать адрес».', 'woodev-plugin-framework' ) );
+							}
+							return Tool_Result::success( __( 'Доставка уведомлений включена.', 'woodev-plugin-framework' ) );
 						}
 					);
 				}

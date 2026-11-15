@@ -18,6 +18,12 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Settings_Section {
 	/**
+	 * Layout flag of {@see self::with_actions()}: the buttons sit in one row, the first primary, the rest secondary,
+	 * with the result line under the row — instead of one card per button.
+	 */
+	public const ACTIONS_ROW = 'row';
+
+	/**
 	 * @var string section id.
 	 */
 	private string $id;
@@ -71,6 +77,13 @@ final class Settings_Section {
 	 * @var array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool>
 	 */
 	private array $actions = [];
+
+	/**
+	 * How the client lays the actions out: empty for the default (one card per button), {@see self::ACTIONS_ROW} for a row.
+	 *
+	 * @var string
+	 */
+	private string $actions_layout = '';
 
 	/**
 	 * Titled cards that gather some of this section's fields and actions — see {@see self::with_groups()}.
@@ -241,17 +254,19 @@ final class Settings_Section {
 	 * @since 2.0.2
 	 *
 	 * @param array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool> $actions the action tools.
+	 * @param string                                                        $layout  optional, {@see self::ACTIONS_ROW} draws one row of buttons; anything else keeps the default layout.
 	 * @return self
 	 */
-	public function with_actions( array $actions ): self {
+	public function with_actions( array $actions, string $layout = '' ): self {
 		if ( $this->is_connection || $this->is_tools ) {
 			_doing_it_wrong( __METHOD__, 'Only an ordinary Settings_Section can carry actions; the call was ignored.', '2.0.2' );
 
 			return $this;
 		}
 
-		$copy          = clone $this;
-		$copy->actions = [];
+		$copy                 = clone $this;
+		$copy->actions        = [];
+		$copy->actions_layout = self::ACTIONS_ROW === $layout ? self::ACTIONS_ROW : '';
 
 		foreach ( $actions as $action ) {
 			if ( ! $action instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool ) {
@@ -281,6 +296,17 @@ final class Settings_Section {
 				}
 			)
 		);
+	}
+
+	/**
+	 * How the client lays the actions out: `''` (the default) or {@see self::ACTIONS_ROW}.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @return string
+	 */
+	public function get_actions_layout(): string {
+		return $this->actions_layout;
 	}
 
 	/**

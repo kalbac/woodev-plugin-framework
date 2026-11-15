@@ -709,6 +709,51 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertArrayNotHasKey( 'stacked', $sections[2] );
 	}
 
+	public function test_build_sections_serialises_actions_layout_only_when_a_section_asks_for_the_row(): void {
+		$tool     = Shipping_Tool::create( 'sync', 'Статусы', '', 'Обновить', static fn( array $args ): Tool_Result => Tool_Result::success() );
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$this->make_connection_handler(),
+			[
+				Settings_Section::create( 'row', 'Row', [ 'token' ] )->with_actions( [ $tool ], Settings_Section::ACTIONS_ROW ),
+				Settings_Section::create( 'default', 'Default', [ 'token' ] )->with_actions( [ $tool ] ),
+				Settings_Section::create( 'unknown', 'Unknown', [ 'token' ] )->with_actions( [ $tool ], 'columns' ),
+			]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertSame( 'row', $sections[0]['actions_layout'] );
+		$this->assertArrayNotHasKey( 'actions_layout', $sections[1], 'the default layout is not serialised: the delivery schema stays as it was' );
+		$this->assertArrayNotHasKey( 'actions_layout', $sections[2], 'a layout the client does not know is dropped' );
+	}
+
+	public function test_build_sections_serialises_a_group_footnote_through_wp_kses_post_and_only_when_set(): void {
+		Functions\when( 'wp_kses_post' )->alias(
+			static function ( string $html ): string {
+				return str_replace( '<script>', '', $html );
+			}
+		);
+
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$this->make_connection_handler(),
+			[
+				Settings_Section::create( 'prices', 'Цены', [ 'token' ] )->with_groups(
+					[ Settings_Group::create( 'p', 'Цены и наценка' )->with_fields( [ 'token' ] )->with_footnote( '<p>Пример: 1000</p><script>' ) ]
+				),
+				Settings_Section::create( 'plain', 'Plain', [ 'token' ] )->with_groups( [ Settings_Group::create( 'g', 'G' )->with_fields( [ 'token' ] ) ] ),
+			]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertSame( '<p>Пример: 1000</p>', $sections[0]['groups'][0]['footnote'] );
+		$this->assertArrayNotHasKey( 'footnote', $sections[1]['groups'][0] );
+	}
+
 	public function test_build_sections_omits_the_groups_key_when_none_are_declared(): void {
 		$tool     = Shipping_Tool::create( 'sync', 'Статусы', '', 'Обновить', static fn( array $args ): Tool_Result => Tool_Result::success() );
 		$provider = Settings_Provider::create( 'cdek', 'СДЭК', $this->make_connection_handler(), [ Settings_Section::create( 'general', 'Общие', [ 'token' ] )->with_actions( [ $tool ] ) ] );

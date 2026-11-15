@@ -10,7 +10,7 @@
 import CarrierBoxesTable from '../components/carrier-boxes-table';
 import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
-import ToolsBlock from './tools-block';
+import ToolsBlock, { ToolsRow } from './tools-block';
 import FieldsTable from './fields-table';
 import GroupCard, { arrangeFields } from './group-card';
 import { isFieldVisible } from '../components/validate';
@@ -118,7 +118,9 @@ export default function SectionView( { providerId, section, tabFields, values, c
 			{ renderBoxTable( visibleBoxFields ) }
 			{ /* Buttons under the fields (Settings_Section::with_actions()) — «Обновить статусы сейчас» and alike. */ }
 			{ ungroupedActions.length > 0 && (
-				<ToolsBlock providerId={ providerId } section={ { tools: ungroupedActions } } />
+				'row' === section.actions_layout
+					? <ToolsRow providerId={ providerId } tools={ ungroupedActions } />
+					: <ToolsBlock providerId={ providerId } section={ { tools: ungroupedActions } } />
 			) }
 		</div>
 	);

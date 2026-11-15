@@ -233,3 +233,44 @@ describe( 'on a stacked tab only the saving section\'s Save spins (#1730)', () =
 		await waitFor( () => expect( saveA ).not.toHaveClass( 'is-busy' ) );
 	} );
 } );
+
+/**
+ * Item 5 of #1776: a stacked section's heading is the FIRST child of its card, not a line above it; a tab that is not
+ * stacked draws none.
+ */
+describe( 'the heading of a stacked section sits inside its card (#1776)', () => {
+	beforeEach( () => {
+		jest.clearAllMocks();
+	} );
+
+	it( 'draws the title and the muted subtitle as the first child of the card', async () => {
+		const tab = tabWithTwoFieldSections();
+		tab.sections.forEach( ( section ) => {
+			section.stacked = true;
+		} );
+		tab.sections[ 0 ].subtitle = 'Client-Id: 4180680';
+		fetchSchema.mockResolvedValue( { tabs: [ tab ] } );
+
+		const { container } = render( <App /> );
+		await waitFor( () => expect( screen.getAllByRole( 'textbox' ) ).toHaveLength( 2 ) );
+
+		const cards = container.querySelectorAll( '.woodev-settings__card' );
+		expect( cards ).toHaveLength( 2 );
+
+		const title = cards[ 0 ].querySelector( '.components-card__body' ).firstElementChild;
+		expect( title ).toHaveClass( 'woodev-settings__card-title' );
+		expect( title ).toHaveTextContent( 'Раздел A' );
+		expect( title.querySelector( '.woodev-settings__card-subtitle' ) ).toHaveTextContent( 'Client-Id: 4180680' );
+		expect( cards[ 1 ].querySelector( '.woodev-settings__card-title' ) ).toHaveTextContent( 'Раздел B' );
+		expect( container.querySelector( '.woodev-stacked > section > h3' ) ).toBeNull(); // no heading above a card any more
+	} );
+
+	it( 'draws no card title on a tab that is not stacked', async () => {
+		fetchSchema.mockResolvedValue( { tabs: [ tabWithTwoFieldSections() ] } );
+
+		const { container } = render( <App /> );
+		await waitFor( () => expect( screen.getAllByRole( 'textbox' ).length ).toBeGreaterThan( 0 ) );
+
+		expect( container.querySelector( '.woodev-settings__card-title' ) ).toBeNull();
+	} );
+} );

@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Extends {@see Push_Registrar} with the four remote registration actions offered on the notifications settings tab
- * («Зарегистрировать URL», «Обновить типы», «Включить уведомления», «Проверить») and the marketplace's interpretation
+ * («Зарегистрировать адрес», «Проверить связь», «Обновить типы событий», «Возобновить уведомления») and the marketplace's interpretation
  * of wanted event types and stored registration health.
  *
  * Only marketplaces that declare {@see \Woodev\Framework\Marketplace\Capabilities\Capability::PUSH_NOTIFICATIONS}
