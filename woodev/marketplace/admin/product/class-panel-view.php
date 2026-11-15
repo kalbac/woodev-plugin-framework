@@ -64,7 +64,8 @@ final class Panel_View {
 	 * Prints the whole tab.
 	 *
 	 * Keys of `$screen`: `blocks` (one per account, from {@see Panel_Reader}), `nonce` (save nonce), `ops` (`op` => nonce of that action),
-	 * `link_scope`, `settings_url`, `mappings_url`.
+	 * `link_scope`, `settings_url`, `mappings_url`, and optionally `extension` (from {@see Product_Extension::screen()}: the adapter's own
+	 * fields, printed once after the account blocks; without the key nothing is added).
 	 *
 	 * @since 2.1.2
 	 *
@@ -87,13 +88,16 @@ final class Panel_View {
 			$this->block( $block, $screen );
 		}
 
+		$this->extension_groups( $screen['extension'] ?? null, 'h3' );
+
 		echo '</div>';
 	}
 
 	/**
 	 * Prints the marketplace fields inside one variation (WooCommerce prints this after the variation's own attributes).
 	 *
-	 * Keys of `$screen`: `blocks`, `nonce`, `loop` (position of the variation in the form), `settings_url`, `mappings_url`.
+	 * Keys of `$screen`: `blocks`, `nonce`, `loop` (position of the variation in the form), `settings_url`, `mappings_url`, and optionally
+	 * `extension` (from {@see Product_Extension::screen()} with the loop: the adapter's own fields of the variation).
 	 *
 	 * @since 2.1.2
 	 *
@@ -122,7 +126,36 @@ final class Panel_View {
 			echo '</div>';
 		}
 
+		$this->extension_groups( $screen['extension'] ?? null, 'h4' );
+
 		echo '</div>';
+	}
+
+	/**
+	 * Prints the fields an adapter added to the tab ({@see Product_Extension}): a titled block per group, a select per field.
+	 *
+	 * @param array{groups:\Woodev\Framework\Marketplace\Settings\Extension_Group[],values:array<string,string>,base:string,id:string}|null $extension What {@see Product_Extension::screen()} built, null for none.
+	 * @param string                                                                                                                        $heading Tag of the group title.
+	 * @return void
+	 */
+	private function extension_groups( ?array $extension, string $heading ): void {
+		foreach ( $extension['groups'] ?? [] as $group ) {
+			echo '<div class="options_group ' . esc_attr( self::WRAPPER_CLASS ) . ' woodev-mp-ext">';
+			printf( '<%1$s class="woodev-mp-block__title">%2$s</%1$s>', esc_attr( $heading ), esc_html( $group->title() ) );
+
+			foreach ( $group->fields() as $field ) {
+				$id      = $extension['id'] . '_' . $field->id();
+				$options = '';
+
+				foreach ( $field->options() as $value => $label ) {
+					$options .= sprintf( '<option value="%1$s"%2$s>%3$s</option>', esc_attr( (string) $value ), selected( (string) ( $extension['values'][ $field->id() ] ?? '' ), (string) $value, false ), esc_html( $label ) );
+				}
+
+				$this->row( $id, $field->label(), sprintf( '<select id="%1$s" name="%2$s" class="select short woodev-mp-wide">%3$s</select>', esc_attr( $id ), esc_attr( $extension['base'] . '[' . $field->id() . ']' ), $options ), $field->tooltip() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
+			}
+
+			echo '</div>';
+		}
 	}
 
 	/**

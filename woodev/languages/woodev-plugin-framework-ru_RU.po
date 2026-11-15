@@ -9377,6 +9377,18 @@ msgstr ""
 msgid "Настройки «%s» не сохранены: страница устарела или у вас нет прав. Обновите страницу и повторите."
 msgstr ""
 
+#. translators: %s: name of the field.
+#: marketplace/admin/product/class-product-extension.php:127
+#, php-format
+msgid "«%s»: выберите значение из списка."
+msgstr ""
+
+#. translators: 1: marketplace name, 2: what went wrong.
+#: marketplace/admin/product/class-product-tab.php:513
+#, php-format
+msgid "Настройки «%1$s»: %2$s"
+msgstr ""
+
 #. translators: %s: marketplace name.
 #: marketplace/admin/product/class-product-tab.php:466
 #, php-format

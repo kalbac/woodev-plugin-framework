@@ -44,6 +44,14 @@ final class Effective_Settings {
 	public const KEY_IMPORT_CATEGORIES = 'import_create_categories';
 
 	/**
+	 * Key of the defaults option that holds the values of an adapter's own fields ({@see Settings_Extension}): a sub-array of its own,
+	 * so a field of an adapter never meets a key of the framework.
+	 *
+	 * @since 2.1.7
+	 */
+	public const EXTRA_KEY = 'extra';
+
+	/**
 	 * Key of the defaults option that marks «already filled from the first account» (see {@see Defaults_Migration}).
 	 */
 	public const SEEDED_KEY = '_seeded';
@@ -252,6 +260,58 @@ final class Effective_Settings {
 	 */
 	public function import_create_categories(): bool {
 		return (bool) $this->defaults()[ self::KEY_IMPORT_CATEGORIES ];
+	}
+
+	/**
+	 * The shop-wide value of a field an adapter added to «Общие» ({@see Settings_Extension::default_groups()}).
+	 *
+	 * @since 2.1.7
+	 *
+	 * @param string $field_id Field id.
+	 * @param mixed  $default  Returned when the merchant has not saved the field (pass the field's own default).
+	 * @return mixed A select's value is a string, a toggle's a bool.
+	 */
+	public function extra( string $field_id, $default = null ) {
+		$stored = call_user_func( $this->get_option, self::option_name( $this->adapter_id ), [] );
+		$extra  = is_array( $stored ) && isset( $stored[ self::EXTRA_KEY ] ) && is_array( $stored[ self::EXTRA_KEY ] ) ? $stored[ self::EXTRA_KEY ] : [];
+
+		return array_key_exists( $field_id, $extra ) ? $extra[ $field_id ] : $default;
+	}
+
+	/**
+	 * The value in force for a product: what the merchant chose on the product's tab for a field of
+	 * {@see Settings_Extension::product_groups()}, or, when the product holds none, the shop-wide value of the field with the same id
+	 * ({@see self::extra()}). A variation with no value of its own follows its parent product first.
+	 *
+	 * @since 2.1.7
+	 *
+	 * @param \WC_Product $product  Product.
+	 * @param string      $field_id Field id.
+	 * @param mixed       $default  Returned when neither the product nor «Общие» holds a value.
+	 * @return mixed
+	 */
+	public function product_extra( \WC_Product $product, string $field_id, $default = null ) {
+		$own = $this->own_product_value( $product, $field_id );
+
+		if ( '' === $own && $product->get_parent_id() > 0 ) {
+			$parent = wc_get_product( (int) $product->get_parent_id() );
+			$own    = $parent instanceof \WC_Product ? $this->own_product_value( $parent, $field_id ) : '';
+		}
+
+		return '' !== $own ? $own : $this->extra( $field_id, $default );
+	}
+
+	/**
+	 * The value a product itself holds for an adapter's field.
+	 *
+	 * @param \WC_Product $product  Product or variation.
+	 * @param string      $field_id Field id.
+	 * @return string '' when it holds none.
+	 */
+	private function own_product_value( \WC_Product $product, string $field_id ): string {
+		$own = $product->get_meta( Extension_Field::product_meta_key( $this->adapter_id, $field_id ), true );
+
+		return is_string( $own ) ? $own : '';
 	}
 
 	/**

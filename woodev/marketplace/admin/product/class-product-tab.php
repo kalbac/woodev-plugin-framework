@@ -170,28 +170,36 @@ final class Product_Tab {
 	private $withheld;
 
 	/**
+	 * The fields the adapter added to the tab, when it implements {@see \Woodev\Framework\Marketplace\Settings\Settings_Extension}.
+	 *
+	 * @var Product_Extension|null
+	 */
+	private $extension;
+
+	/**
 	 * Creates the tab.
 	 *
 	 * @since 2.1.2
 	 *
-	 * @param Admin_Guard          $guard     Authorisation (built with {@see Admin_Guard::for_store()}).
-	 * @param Wpdb_Account_Store   $accounts  Accounts.
-	 * @param Wpdb_Link_Store      $links     Links.
-	 * @param Panel_Reader         $reader    Read side.
-	 * @param Panel_View           $view      Markup.
-	 * @param Link_Settings_Writer $writer    Write side.
-	 * @param Link_Form_Input      $input     Parses the posted body.
-	 * @param Export_Service       $export    Export.
-	 * @param Link_Scheduler       $scheduler Linking jobs.
-	 * @param License_Gate         $license   Licence.
-	 * @param Link_Detacher        $detacher  Detaches a card.
-	 * @param Stock_Intents        $stock     Stock and archive intents.
-	 * @param Screen_Names         $names     Names.
-	 * @param array<string,string> $urls      `settings`, `mappings`, `assets`.
-	 * @param string               $version   Plugin version.
-	 * @param string[]             $withheld  Operations the marketplace cannot serve (`export`, `link`): no button, and the AJAX refuses them.
+	 * @param Admin_Guard            $guard     Authorisation (built with {@see Admin_Guard::for_store()}).
+	 * @param Wpdb_Account_Store     $accounts  Accounts.
+	 * @param Wpdb_Link_Store        $links     Links.
+	 * @param Panel_Reader           $reader    Read side.
+	 * @param Panel_View             $view      Markup.
+	 * @param Link_Settings_Writer   $writer    Write side.
+	 * @param Link_Form_Input        $input     Parses the posted body.
+	 * @param Export_Service         $export    Export.
+	 * @param Link_Scheduler         $scheduler Linking jobs.
+	 * @param License_Gate           $license   Licence.
+	 * @param Link_Detacher          $detacher  Detaches a card.
+	 * @param Stock_Intents          $stock     Stock and archive intents.
+	 * @param Screen_Names           $names     Names.
+	 * @param array<string,string>   $urls      `settings`, `mappings`, `assets`.
+	 * @param string                 $version   Plugin version.
+	 * @param string[]               $withheld  Operations the marketplace cannot serve (`export`, `link`): no button, and the AJAX refuses them.
+	 * @param Product_Extension|null $extension The adapter's own fields of the tab, null for none (2.1.7).
 	 */
-	public function __construct( Admin_Guard $guard, Wpdb_Account_Store $accounts, Wpdb_Link_Store $links, Panel_Reader $reader, Panel_View $view, Link_Settings_Writer $writer, Link_Form_Input $input, Export_Service $export, Link_Scheduler $scheduler, License_Gate $license, Link_Detacher $detacher, Stock_Intents $stock, Screen_Names $names, array $urls, string $version, array $withheld = [] ) {
+	public function __construct( Admin_Guard $guard, Wpdb_Account_Store $accounts, Wpdb_Link_Store $links, Panel_Reader $reader, Panel_View $view, Link_Settings_Writer $writer, Link_Form_Input $input, Export_Service $export, Link_Scheduler $scheduler, License_Gate $license, Link_Detacher $detacher, Stock_Intents $stock, Screen_Names $names, array $urls, string $version, array $withheld = [], ?Product_Extension $extension = null ) {
 		$this->guard     = $guard;
 		$this->accounts  = $accounts;
 		$this->links     = $links;
@@ -208,6 +216,7 @@ final class Product_Tab {
 		$this->urls      = $urls;
 		$this->version   = $version;
 		$this->withheld  = $withheld;
+		$this->extension = $extension;
 	}
 
 	/**
@@ -267,16 +276,20 @@ final class Product_Tab {
 			$blocks[] = $product->is_type( 'variable' ) ? $this->reader->parent_block( $account, $product ) : $this->reader->offer_block( $account, $product );
 		}
 
-		$this->view->render_tab(
-			[
-				'blocks'       => $blocks,
-				'nonce'        => wp_create_nonce( $this->names->save_nonce() ),
-				'ops'          => $this->op_nonces(),
-				'link_scope'   => $this->link_scope_name( $product ),
-				'settings_url' => $this->urls['settings'],
-				'mappings_url' => $this->urls['mappings'],
-			]
-		);
+		$screen = [
+			'blocks'       => $blocks,
+			'nonce'        => wp_create_nonce( $this->names->save_nonce() ),
+			'ops'          => $this->op_nonces(),
+			'link_scope'   => $this->link_scope_name( $product ),
+			'settings_url' => $this->urls['settings'],
+			'mappings_url' => $this->urls['mappings'],
+		];
+
+		if ( null !== $this->extension ) {
+			$screen['extension'] = $this->extension->screen( $product );
+		}
+
+		$this->view->render_tab( $screen );
 	}
 
 	/**
@@ -302,15 +315,19 @@ final class Product_Tab {
 			$blocks[] = $this->reader->offer_block( $account, $product );
 		}
 
-		$this->view->render_variation(
-			[
-				'blocks'       => $blocks,
-				'nonce'        => wp_create_nonce( $this->names->save_nonce() ),
-				'loop'         => (int) $loop,
-				'settings_url' => $this->urls['settings'],
-				'mappings_url' => $this->urls['mappings'],
-			]
-		);
+		$screen = [
+			'blocks'       => $blocks,
+			'nonce'        => wp_create_nonce( $this->names->save_nonce() ),
+			'loop'         => (int) $loop,
+			'settings_url' => $this->urls['settings'],
+			'mappings_url' => $this->urls['mappings'],
+		];
+
+		if ( null !== $this->extension ) {
+			$screen['extension'] = $this->extension->screen( $product, (int) $loop );
+		}
+
+		$this->view->render_variation( $screen );
 	}
 
 	/**
@@ -327,6 +344,10 @@ final class Product_Tab {
 
 		if ( $product instanceof \WC_Product && [] !== $posted ) {
 			$this->save_blocks( $product, (int) $product->get_id(), $posted );
+		}
+
+		if ( $product instanceof \WC_Product ) {
+			$this->save_extension( $product, (int) $product->get_id(), $this->posted( $this->names->extension_key() ) );
 		}
 	}
 
@@ -346,6 +367,12 @@ final class Product_Tab {
 
 		if ( $variation instanceof \WC_Product && [] !== $blocks ) {
 			$this->save_blocks( $variation, (int) $variation->get_parent_id(), $blocks );
+		}
+
+		if ( $variation instanceof \WC_Product ) {
+			$own = $this->posted( $this->names->extension_variation_key() );
+
+			$this->save_extension( $variation, (int) $variation->get_parent_id(), isset( $own[ (int) $loop ] ) && is_array( $own[ (int) $loop ] ) ? $own[ (int) $loop ] : [] );
 		}
 	}
 
@@ -470,6 +497,30 @@ final class Product_Tab {
 			foreach ( $errors as $error ) {
 				$this->report_save_problem( sprintf( /* translators: 1: marketplace name, 2: account name, 3: what went wrong. */ __( '%1$s, аккаунт «%2$s»: %3$s', 'woodev-plugin-framework' ), $this->names->name(), $account->name(), $error ) );
 			}
+		}
+	}
+
+	/**
+	 * Saves the fields the adapter added to the tab: the same nonce and capability as the blocks, no account.
+	 *
+	 * @param \WC_Product  $product   Product or variation being saved.
+	 * @param int          $object_id Product the capability is checked on: the product, or a variation's parent.
+	 * @param array<mixed> $posted    `field id => value` of this product.
+	 * @return void
+	 */
+	private function save_extension( \WC_Product $product, int $object_id, array $posted ): void {
+		if ( null === $this->extension || [] === $posted ) {
+			return;
+		}
+
+		if ( ! $this->guard->check_request( self::CAPABILITY, $this->names->save_nonce(), $object_id, null, $this->names->nonce_field() ) ) {
+			$this->report_save_problem( sprintf( /* translators: %s: marketplace name. */ __( 'Настройки «%s» не сохранены: страница устарела или у вас нет прав. Обновите страницу и повторите.', 'woodev-plugin-framework' ), $this->names->name() ) );
+
+			return;
+		}
+
+		foreach ( $this->extension->save( $product, $posted ) as $error ) {
+			$this->report_save_problem( sprintf( /* translators: 1: marketplace name, 2: what went wrong. */ __( 'Настройки «%1$s»: %2$s', 'woodev-plugin-framework' ), $this->names->name(), $error ) );
 		}
 	}
 
