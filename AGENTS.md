@@ -239,6 +239,7 @@ without it (Codex) says so once and proceeds with git/shell inspection — stall
 | Settings label | **Short essence, not a full sentence; three layers share the work** (operator, 31.08.2026). Full rule, its worked example and the generalisation he REJECTED: `AGENT-RULES.md` Rule 10a. |
 | Settings help text | **`tooltip`/`desc_tip` and `description` COEXIST** — the second is not an alternative to the first (operator, 25.08.2026, corrected 31.08.2026). When each earns its place: `AGENT-RULES.md` Rule 10b. |
 | Merchant-facing vocabulary | **No jargon in anything a merchant reads** (operator, 31.08.2026) — «чекаут» and «фреймворк» specifically. The two replacements and the scope: `AGENT-RULES.md` Rule 10c. |
+| Screenshots for docs and publications | **Collapse the WordPress admin sidebar** (Collapse menu) before every shot, so the page gets the width (operator, 16.11.2026). Exception: the shot is meant to show a menu item. Mask personal data (a fake phone on the rig customer) in every frame. Applies to every plugin. |
 | Git | Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) |
 | Version | Stored in `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) |
 | `@since` | Planned release is `composer.json` → `extra.woodev.planned-release`, currently `2.1.7` (released `VERSION` is `2.1.6`); semver rule in `AGENT-RULES.md` Rule 5, gated by `SinceTagCeilingTest`. Raising `VERSION` on `main` publishes a release (#285). |
