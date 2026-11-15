@@ -1442,6 +1442,12 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return $pairs;
 	}
 
+	/**
+	 * Builds the capability-gated `price_direction` option list.
+	 *
+	 * @param string $marketplace Marketplace name.
+	 * @return array<int,array{value:string,label:string}>
+	 */
 	private function price_direction_options( string $marketplace ): array {
 		$has_pusher = null !== $this->adapter->price_pusher();
 		$has_reader = null !== $this->adapter->price_reader();

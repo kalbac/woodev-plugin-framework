@@ -462,6 +462,10 @@ final class SettingsHandlerTest extends TestCase {
 		[ $handler ] = $this->stock_mode_handler( [] );
 
 		$this->assertTrue( $handler->get_value( 'account_new_enabled' ), 'a new account works as soon as it is connected' );
+
+		// Only the blank form starts on: a saved account that was switched off still reads off (and Save must not turn it on).
+		[ $off_handler, , $off_id ] = $this->stock_mode_handler( [], '9', false );
+		$this->assertFalse( $off_handler->get_value( "account_{$off_id}_enabled" ), 'an existing disabled account stays off' );
 	}
 
 	public function test_the_price_example_closes_the_price_card_and_no_longer_heads_the_tab(): void {
@@ -532,9 +536,10 @@ final class SettingsHandlerTest extends TestCase {
 	 *
 	 * @param string[] $capabilities Capabilities the fake adapter declares.
 	 * @param string   $uid          Merchant identifier (unique per account in one test).
+	 * @param bool     $enabled      Whether the saved account is switched on.
 	 * @return array{0:Settings_Handler,1:Wpdb_Account_Store,2:int}
 	 */
-	private function stock_mode_handler( array $capabilities, string $uid = '1' ): array {
+	private function stock_mode_handler( array $capabilities, string $uid = '1', bool $enabled = true ): array {
 		$fields     = new Credential_Fields( 'merchant_uid', [ 'access_token' ] );
 		$descriptor = new Fake_Settings_Descriptor(
 			$fields,
@@ -563,7 +568,7 @@ final class SettingsHandlerTest extends TestCase {
 			}
 		);
 		$acc_id     = $store->save(
-			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', true, [ 'merchant_uid' => $uid, 'access_token' => 'token-1' ] )
+			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', $enabled, [ 'merchant_uid' => $uid, 'access_token' => 'token-1' ] )
 		);
 
 		return [ $this->build_handler( $adapter, $store ), $store, $acc_id ];

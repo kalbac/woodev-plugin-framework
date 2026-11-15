@@ -214,6 +214,15 @@ final class Notifications_Section implements Settings_Section_Provider {
 		return null === $protocol ? [] : $protocol->webhook_types();
 	}
 
+	/**
+	 * Explains the switches: the intro sentence, where in the marketplace cabinet the address goes, and whether the
+	 * adapter registers the address itself or the merchant copies it.
+	 *
+	 * @param Webhook_Type[] $types       Types.
+	 * @param string         $marketplace Marketplace name.
+	 * @param bool           $registers   Whether the adapter registers the address in the cabinet by itself.
+	 * @return string
+	 */
 	private function webhooks_html( array $types, string $marketplace, bool $registers ): string {
 		if ( [] === $types ) {
 			return '';
