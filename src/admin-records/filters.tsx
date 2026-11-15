@@ -9,7 +9,7 @@
 
 import type { ComponentType, FormEvent, MutableRefObject } from 'react';
 import { Button, CheckboxControl, SearchControl, SelectControl } from '@wordpress/components';
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { CountLinks, withAllEntry } from '../components/count-links';
 import { PeriodPicker, type PeriodLabels } from '../components/period-picker/period-picker';
 import { PRESET_IDS, type PresetId } from '../components/period-picker/presets';
@@ -112,15 +112,35 @@ function BooleanFilter( { filter, value, onChange }: FilterControlProps ) {
 }
 
 /**
- * The site's day as a local date at midnight, so the named periods are the days the server reads `from~to` in; the browser's
- * own day when PHP sent none.
+ * How many days the site's day is ahead of (positive) or behind the browser's own, from the `YYYY-MM-DD` PHP sent when the
+ * page loaded; `undefined` when PHP sent none. Kept as a difference, not as a date, so a tab left open past midnight still
+ * rolls over — on the site's day, not the browser's.
  *
  * @param day `YYYY-MM-DD`.
  */
-function siteDay( day: string | undefined ): Date | undefined {
+function siteDayShift( day: string | undefined ): number | undefined {
 	const match = day === undefined ? null : /^(\d{4})-(\d{2})-(\d{2})$/.exec( day );
 
-	return match ? new Date( Number( match[ 1 ] ), Number( match[ 2 ] ) - 1, Number( match[ 3 ] ) ) : undefined;
+	if ( ! match ) {
+		return undefined;
+	}
+
+	const now = new Date();
+	const site = Date.UTC( Number( match[ 1 ] ), Number( match[ 2 ] ) - 1, Number( match[ 3 ] ) );
+	const here = Date.UTC( now.getFullYear(), now.getMonth(), now.getDate() );
+
+	return Math.round( ( site - here ) / 86400000 );
+}
+
+/** The site's day as a local date at midnight: the browser's day moved by the load-time difference. */
+function siteToday( shift: number | undefined ): Date | undefined {
+	if ( shift === undefined ) {
+		return undefined;
+	}
+
+	const now = new Date();
+
+	return new Date( now.getFullYear(), now.getMonth(), now.getDate() + shift );
 }
 
 function periodLabels( filter: Filter, messages: Messages ): PeriodLabels {
@@ -145,11 +165,13 @@ function periodLabels( filter: Filter, messages: Messages ): PeriodLabels {
 /** Every `date_range` filter is the period picker: the URL keeps `from~to` days, the control offers named periods. */
 function PeriodFilter( { filter, value, messages, onChange }: FilterControlProps ) {
 	const range = ( typeof value === 'object' && ! Array.isArray( value ) ? value : {} ) as DateRange;
+	// Taken once per definition, applied on every render: the days roll over, the offset to the site's day stays.
+	const shift = useMemo( () => siteDayShift( filter.today ), [ filter.today ] );
 
 	return (
 		<PeriodPicker
 			value={ range }
-			today={ siteDay( filter.today ) }
+			today={ siteToday( shift ) }
 			labels={ periodLabels( filter, messages ) }
 			onChange={ ( next ) => onChange( Object.keys( next ).length === 0 ? undefined : next ) }
 		/>

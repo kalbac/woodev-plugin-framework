@@ -243,6 +243,39 @@ describe( 'the period filter', () => {
 		// 15.11.2026 is a Sunday: «С начала недели» is Monday the 9th to that day.
 		expect( screen.getByRole( 'button', { name: 'Период: С начала недели' } ) ).toBeInTheDocument();
 	} );
+
+	test( 'keeps the site\'s offset from the browser\'s day while the days roll over in a tab left open', async () => {
+		// Only the clock is faked: every timer stays real, so the async queries still resolve.
+		jest.useFakeTimers( {
+			now: new Date( 2026, 10, 14, 23, 0 ),
+			doNotFake: [ 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask' ],
+		} );
+
+		try {
+			const base = definition();
+			serve(
+				() => fixtureList( [ mug ] ),
+				{
+					...base,
+					// The site is a day ahead of the browser: it is 15.11 there while the browser still says 14.11.
+					filters: base.filters.map( ( filter ) => ( filter.id === 'updated' ? { ...filter, today: '2026-11-15' } : filter ) ),
+				}
+			);
+			const query = { filter_updated: '2026-11-09,2026-11-15' };
+			const view = render( <Page query={ query } /> );
+			await screen.findByRole( 'table', { name: 'Товары' } );
+
+			expect( screen.getByRole( 'button', { name: 'Период: С начала недели' } ) ).toBeInTheDocument();
+
+			// The browser's next day: the site's day moves with it, to Monday the 16th, so the week-to-date is that day alone.
+			jest.setSystemTime( new Date( 2026, 10, 15, 1, 0 ) );
+			view.rerender( <Page query={ { ...query } } /> );
+
+			expect( screen.queryByRole( 'button', { name: 'Период: С начала недели' } ) ).not.toBeInTheDocument();
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
 } );
 
 describe( 'an empty result', () => {

@@ -166,8 +166,11 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 	public function test_the_state_facets_keep_every_other_filter_and_ignore_the_state_itself(): void {
 		$searched = $this->state_facets( [ 'filters' => [ 'state' => State_Groups::CREATED, 'q' => 'B-30' ] ] );
 
+		// «Все» is a separate count (`count_without_state()`); it must not stand in for the siblings' own numbers.
+		unset( $searched[''] );
+
 		$this->assertSame( 0, $searched[ State_Groups::CREATED ], 'The search narrows the counts…' );
-		$this->assertGreaterThan( 0, $searched[''], '…and the chosen state does not: its siblings still show their numbers.' );
+		$this->assertGreaterThan( 0, array_sum( $searched ), '…and the chosen state does not: its siblings still show their numbers.' );
 	}
 
 	public function test_a_variable_product_is_a_parent_row_that_sums_its_variations(): void {
