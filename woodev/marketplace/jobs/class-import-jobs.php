@@ -29,8 +29,8 @@ defined( 'ABSPATH' ) || exit;
  *    that fails on its own (WooCommerce refused the save) gets a note and the batch goes on.
  * 3. **The claim** is extended before every card and before every image; a lost claim stops the run.
  * 4. **The budget** ({@see self::BUDGET_SECONDS}) is checked before every card and every image. Once it is spent, the run puts the
- *    cards it has not finished — the current one included — back in the queue with the attempt unchanged. A run finishes one card
- *    first ({@see Import_Budget}), so that a requeue cannot repeat for ever.
+ *    cards it has not finished — the current one included — back in the queue with the attempt unchanged. A run makes progress (a card
+ *    finished or a new image stored) first ({@see Import_Budget}), so that a requeue cannot repeat for ever.
  * 5. When the run gives up, every card of the batch gets a note: a fixed Russian sentence for the merchant, and the technical
  *    reason kept apart in the note's `detail`.
  *
@@ -189,12 +189,15 @@ final class Import_Jobs {
 			$hold();
 			$budget->check();
 		};
+		$stored = static function () use ( $budget ): void {
+			$budget->image_stored();
+		};
 
 		foreach ( $offer_ids as $index => $offer_id ) {
 			try {
 				$hold();
 				$budget->check();
-				$this->import_card( $account, $fence, $offer_id, $cards[ $offer_id ] ?? null, $renew );
+				$this->import_card( $account, $fence, $offer_id, $cards[ $offer_id ] ?? null, $renew, $stored );
 				$budget->card_finished();
 			} catch ( Budget_Spent $spent ) {
 				$this->scheduler->retry( $account->id(), array_slice( $offer_ids, $index ), $attempt, 0 );
@@ -212,11 +215,12 @@ final class Import_Jobs {
 	 * @param string            $offer_id Article.
 	 * @param Card_Content|null $content  The card, null when the marketplace did not answer for it.
 	 * @param callable          $renew    Extends the claim and checks the budget before an image.
+	 * @param callable          $stored   Counts a new image the writer stored as the run's progress.
 	 * @return void
 	 * @throws Claim_Lost    When another run took the account claim.
 	 * @throws Budget_Spent  When the run's time is spent.
 	 */
-	private function import_card( Account $account, Claim_Fence $fence, string $offer_id, ?Card_Content $content, callable $renew ): void {
+	private function import_card( Account $account, Claim_Fence $fence, string $offer_id, ?Card_Content $content, callable $renew, callable $stored ): void {
 		if ( null === $content ) {
 			$this->notes->set_import_note( $account->id(), $offer_id, __( 'Маркетплейс не вернул данные карточки. Обновите список карточек и попробуйте ещё раз.', 'woodev-plugin-framework' ) );
 
@@ -224,7 +228,7 @@ final class Import_Jobs {
 		}
 
 		try {
-			$this->import->import( $account, $content, $fence, $renew );
+			$this->import->import( $account, $content, $fence, $renew, $stored );
 		} catch ( Claim_Lost | Budget_Spent $stop ) {
 			throw $stop;
 		} catch ( \Throwable $failure ) {

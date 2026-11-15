@@ -11,10 +11,10 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * A run's clock. It is checked before every card and before every image, and it stops the run with {@see Budget_Spent} once the
- * time is spent — but **only after the run has finished a card**. An image that passed the check is not progress: the writer asks
- * before it looks for a cached copy, and a download may fail, so counting it would let a requeue repeat for ever (a slow read plus
- * a card of several images, or an image that times out). A slow read of the cards that eats the whole budget by itself therefore
- * still ends with one card finished, and a requeue that keeps its attempt always moves the batch forward.
+ * time is spent — but **only after the run has made progress**: a card finished, or a **new** image stored. A cached image and a
+ * failed download are no progress: the writer asks before it looks for a cached copy, and a download may time out, so counting
+ * them would let a requeue repeat for ever. Each run therefore stores at least one new image or finishes a card, and that work is
+ * kept, so the batch always moves forward; the run lasts about the budget plus one image.
  *
  * @since 2.1.6
  */
@@ -41,7 +41,7 @@ final class Import_Budget {
 	private $seconds;
 
 	/**
-	 * Whether the run has finished a card.
+	 * Whether the run has finished a card or stored a new image.
 	 *
 	 * @var bool
 	 */
@@ -67,12 +67,23 @@ final class Import_Budget {
 	 * @since 2.1.6
 	 *
 	 * @return void
-	 * @throws Budget_Spent When the time is spent and the run has finished a card.
+	 * @throws Budget_Spent When the time is spent and the run has made progress.
 	 */
 	public function check(): void {
 		if ( $this->advanced && $this->spent() ) {
 			throw new Budget_Spent( 'The import run used its time.' );
 		}
+	}
+
+	/**
+	 * Records a new image the writer stored.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @return void
+	 */
+	public function image_stored(): void {
+		$this->advanced = true;
 	}
 
 	/**

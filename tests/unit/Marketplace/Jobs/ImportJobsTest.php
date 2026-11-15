@@ -94,6 +94,34 @@ final class ImportJobsTest extends Export_Test_Case {
 	private $downloaded = 0;
 
 	/**
+	 * Images already stored, as `article:index`: the next run finds them by their source URL and downloads nothing.
+	 *
+	 * @var array<string,true>
+	 */
+	private $cached = [];
+
+	/**
+	 * Images whose download fails, as `article:index`.
+	 *
+	 * @var array<string,true>
+	 */
+	private $failing = [];
+
+	/**
+	 * Whether a product is an unfinished import, by product id.
+	 *
+	 * @var array<int,bool>
+	 */
+	private $marked = [];
+
+	/**
+	 * Products the writer created, by article.
+	 *
+	 * @var int
+	 */
+	private $products_made = 0;
+
+	/**
 	 * Articles the writer refuses, with the message.
 	 *
 	 * @var array<string,string>
@@ -123,6 +151,10 @@ final class ImportJobsTest extends Export_Test_Case {
 		$this->images        = [];
 		$this->downloaded    = 0;
 		$this->refused       = [];
+		$this->cached        = [];
+		$this->failing       = [];
+		$this->marked        = [];
+		$this->products_made       = 0;
 		$this->next_id       = 900;
 		$this->importer      = new Scripted_Card_Importer();
 
@@ -187,10 +219,13 @@ final class ImportJobsTest extends Export_Test_Case {
 			new Card_Linker( $this->links() ),
 			$notes,
 			new Effective_Settings( Sqlite_Tables::MARKETPLACE_ID, [ $this, 'read_option' ] ),
-			function ( Account $account, Card_Content $content, bool $publish, bool $create_categories, callable $renew ): array {
-				return $this->write( (string) $content->card()['offer_id'], $renew );
+			function ( Account $account, Card_Content $content, bool $publish, bool $create_categories, callable $renew, ?callable $stored = null ): array {
+				return $this->write( (string) $content->card()['offer_id'], $renew, $stored );
 			},
-			static function (): array {
+			function ( Account $account, Card_Content $content, \WC_Product $product, bool $publish, callable $renew, ?callable $stored = null ): array {
+				$this->load_images( (string) $content->card()['offer_id'], $renew, $stored );
+				$this->marked[ (int) $product->get_id() ] = false;
+
 				return [];
 			}
 		);
@@ -222,13 +257,14 @@ final class ImportJobsTest extends Export_Test_Case {
 	}
 
 	/**
-	 * Plays the product writer: the product, then its images, each one after the run was asked for permission.
+	 * Plays the product writer: the first save (the product, marked), then the images, then the final save (the marker goes).
 	 *
-	 * @param string   $article Article.
-	 * @param callable $renew   Claim renewal and budget check before an image.
+	 * @param string        $article Article.
+	 * @param callable      $renew   Claim renewal and budget check before an image.
+	 * @param callable|null $stored  Called after a new image was stored.
 	 * @return array{product:\WC_Product,warnings:string[]}
 	 */
-	private function write( string $article, callable $renew ): array {
+	private function write( string $article, callable $renew, ?callable $stored ): array {
 		if ( isset( $this->refused[ $article ] ) ) {
 			throw new \RuntimeException( $this->refused[ $article ] );
 		}
@@ -237,23 +273,61 @@ final class ImportJobsTest extends Export_Test_Case {
 		$product = \Mockery::mock( 'WC_Product' );
 		$product->shouldReceive( 'get_id' )->andReturn( $id );
 		$product->shouldReceive( 'get_parent_id' )->andReturn( 0 );
+		$product->shouldReceive( 'get_meta' )->andReturnUsing(
+			function () use ( $id ): string {
+				return ! empty( $this->marked[ $id ] ) ? '1' : '';
+			}
+		);
 
-		$this->products[ $id ]   = $product;
+		++$this->products_made;
+		$this->products[ $id ]    = $product;
 		$this->by_sku[ $article ] = $id;
+		$this->marked[ $id ]      = true;
 
-		for ( $image = 0; $image < ( $this->images[ $article ] ?? 0 ); $image++ ) {
-			$renew();
+		$this->load_images( $article, $renew, $stored );
 
-			++$this->downloaded;
-			$this->mono += $this->image_seconds;
-		}
-
-		$this->mono += $this->card_seconds;
+		$this->marked[ $id ] = false;
 
 		return [
 			'product'  => $product,
 			'warnings' => [],
 		];
+	}
+
+	/**
+	 * Plays the image loop of the writer: ask before each image, find a stored one by its URL, else download it; only a new
+	 * image that was stored is reported.
+	 *
+	 * @param string        $article Article.
+	 * @param callable      $renew   Claim renewal and budget check.
+	 * @param callable|null $stored  Called after a new image was stored.
+	 * @return void
+	 */
+	private function load_images( string $article, callable $renew, ?callable $stored ): void {
+		for ( $image = 0; $image < ( $this->images[ $article ] ?? 0 ); $image++ ) {
+			$renew();
+
+			$key = $article . ':' . $image;
+
+			if ( isset( $this->cached[ $key ] ) ) {
+				continue;
+			}
+
+			++$this->downloaded;
+			$this->mono += $this->image_seconds;
+
+			if ( isset( $this->failing[ $key ] ) ) {
+				continue;
+			}
+
+			$this->cached[ $key ] = true;
+
+			if ( null !== $stored ) {
+				$stored();
+			}
+		}
+
+		$this->mono += $this->card_seconds;
 	}
 
 	/**
@@ -489,28 +563,44 @@ final class ImportJobsTest extends Export_Test_Case {
 	}
 
 	/**
-	 * The budget is checked before every image: once a card is finished, the card in hand goes back with the cards after it.
+	 * The budget is checked before every image: a card of new images is cut in the middle, the card in hand goes back with the
+	 * cards after it, and the next run resumes it by its marker without a second product.
 	 *
 	 * @return void
 	 */
-	public function test_the_budget_is_checked_before_every_image(): void {
-		$this->images        = [ 'A-2' => 5 ];
+	public function test_a_card_of_new_images_is_cut_by_the_budget_and_resumed_without_a_duplicate(): void {
+		$this->images        = [ 'A-1' => 5 ];
 		$this->image_seconds = 10.0;
 
-		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2', 'A-3' ], 0 );
+		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2' ], 0 );
 
-		$this->assertSame( 2, $this->downloaded, 'two images fit in twenty seconds; the third is refused before it starts' );
-		$this->assertSame( [ 'A-1' ], $this->linked(), 'the card in hand is not linked yet' );
+		$this->assertSame( 2, $this->downloaded, 'two new images fit in twenty seconds; the third is refused before it starts' );
+		$this->assertSame( [], $this->linked(), 'the card in hand is not linked yet' );
 
 		$retry = $this->scheduler->of( self::HOOK );
 
 		$this->assertCount( 1, $retry );
-		$this->assertSame( [ $this->account_id, [ 'A-2', 'A-3' ], 0 ], $retry[0]['args'], 'the current card is included' );
+		$this->assertSame( [ $this->account_id, [ 'A-1', 'A-2' ], 0 ], $retry[0]['args'], 'the current card is included, the attempt is unchanged' );
+
+		$this->scheduler->actions = [];
+		$this->jobs()->import_cards( ...$retry[0]['args'] );
+
+		$this->assertSame( 4, $this->downloaded, 'the stored images are found, two new ones are loaded' );
+		$this->assertSame( 1, $this->products_made, 'the same product is resumed' );
+		$this->assertSame( [], $this->linked() );
+
+		$retry = $this->scheduler->of( self::HOOK );
+		$this->scheduler->actions = [];
+		$this->jobs()->import_cards( ...$retry[0]['args'] );
+
+		$this->assertSame( 5, $this->downloaded, 'the last image' );
+		$this->assertSame( 2, $this->products_made, 'one product for each of the two cards, none twice' );
+		$this->assertSame( [ 'A-1', 'A-2' ], $this->linked(), 'the card is linked and the next one is imported' );
+		$this->assertSame( [], $this->scheduler->of( self::HOOK ) );
 	}
 
 	/**
-	 * A read that used the whole budget by itself still ends with one card finished — the images of that card are not cut,
-	 * because an image the check let through may be cached or fail and is no progress.
+	 * A read that used the whole budget by itself still ends with progress: a card without images is finished.
 	 *
 	 * @return void
 	 */
@@ -518,13 +608,63 @@ final class ImportJobsTest extends Export_Test_Case {
 		$this->importer->after_read = function (): void {
 			$this->mono += 100.0;
 		};
-		$this->images = [ 'A-1' => 3 ];
 
 		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2', 'A-3' ], 0 );
 
 		$this->assertSame( [ 'A-1' ], $this->linked(), 'one card was finished' );
-		$this->assertSame( 3, $this->downloaded, 'with all its images' );
 		$this->assertSame( [ $this->account_id, [ 'A-2', 'A-3' ], 0 ], $this->scheduler->of( self::HOOK )[0]['args'] );
+	}
+
+	/**
+	 * A read that used the whole budget still stores one new image, then the card goes back.
+	 *
+	 * @return void
+	 */
+	public function test_a_read_that_used_the_whole_budget_still_stores_one_image(): void {
+		$this->importer->after_read = function (): void {
+			$this->mono += 100.0;
+		};
+		$this->images = [ 'A-1' => 3 ];
+
+		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2' ], 0 );
+
+		$this->assertSame( 1, $this->downloaded );
+		$this->assertSame( [ $this->account_id, [ 'A-1', 'A-2' ], 0 ], $this->scheduler->of( self::HOOK )[0]['args'] );
+	}
+
+	/**
+	 * The r1 loop: a slow read and a card of several images. A stored image is not progress the next time (it is found, not
+	 * loaded), so every run must load a new one: one more image per run, the attempt never grows, and the card ends.
+	 *
+	 * @return void
+	 */
+	public function test_a_requeue_after_a_slow_read_stores_one_more_image_every_run(): void {
+		$this->importer->after_read = function (): void {
+			$this->mono += 100.0;
+		};
+		$this->images = [ 'A-1' => 4 ];
+
+		$args = [ $this->account_id, [ 'A-1' ], 0 ];
+
+		for ( $run = 1; $run <= 4; $run++ ) {
+			$this->scheduler->actions = [];
+			$this->jobs()->import_cards( ...$args );
+
+			$this->assertSame( $run, $this->downloaded, 'run ' . $run . ' loaded exactly one new image' );
+
+			$retry = $this->scheduler->of( self::HOOK );
+
+			if ( $run < 4 ) {
+				$this->assertCount( 1, $retry );
+				$args = $retry[0]['args'];
+				$this->assertSame( 0, $args[2], 'the attempt did not grow' );
+			} else {
+				$this->assertSame( [], $retry, 'the fourth image finishes the card' );
+			}
+		}
+
+		$this->assertSame( [ 'A-1' ], $this->linked() );
+		$this->assertSame( 1, $this->products_made );
 	}
 
 	/**
@@ -536,11 +676,6 @@ final class ImportJobsTest extends Export_Test_Case {
 		$this->importer->after_read = function (): void {
 			$this->mono += 100.0;
 		};
-		$this->images = [
-			'A-1' => 3,
-			'A-2' => 3,
-			'A-3' => 3,
-		];
 
 		$args = [ $this->account_id, [ 'A-1', 'A-2', 'A-3' ], 0 ];
 
@@ -560,23 +695,26 @@ final class ImportJobsTest extends Export_Test_Case {
 				$this->assertSame( [], $retry, 'the last run leaves nothing' );
 			}
 		}
-
-		$this->assertSame( 9, $this->downloaded );
 	}
 
 	/**
-	 * An image that fails is no progress either: the card still finishes, without it.
+	 * An image that fails is no progress: the run is not cut by a failure, and the card finishes without it.
 	 *
 	 * @return void
 	 */
-	public function test_a_slow_image_never_stops_the_first_card_of_a_run(): void {
+	public function test_a_failing_image_is_no_progress_and_never_cuts_the_run(): void {
 		$this->images        = [ 'A-1' => 3 ];
 		$this->image_seconds = 30.0;
+		$this->failing       = [
+			'A-1:0' => true,
+			'A-1:1' => true,
+			'A-1:2' => true,
+		];
 
 		$this->jobs()->import_cards( $this->account_id, [ 'A-1', 'A-2' ], 0 );
 
-		$this->assertSame( [ 'A-1' ], $this->linked() );
-		$this->assertSame( 3, $this->downloaded );
+		$this->assertSame( [ 'A-1' ], $this->linked(), 'the card finished without its images' );
+		$this->assertSame( 3, $this->downloaded, 'all three were tried' );
 		$this->assertSame( [ $this->account_id, [ 'A-2' ], 0 ], $this->scheduler->of( self::HOOK )[0]['args'] );
 	}
 

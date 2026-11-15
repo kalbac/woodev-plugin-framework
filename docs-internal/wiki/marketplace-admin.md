@@ -786,10 +786,11 @@ the pieces live and what is easy to get wrong. The adapter implements the option
 What to remember:
 
 - **The claim is extended before every card and every image**; a lost claim throws `Claim_Lost`
-  and the whole batch retries. The budget stops a run only after it has finished a card, then
-  requeues the current card and the rest with the attempt unchanged — a slow `read_cards()`
-  cannot make the requeue repeat for ever. An image that passed the check is not progress (it may
-  be cached or fail), so a lone card always finishes whole.
+  and the whole batch retries. The budget stops a run only after it has made progress — a card
+  finished or a **new** image stored (`Product_Writer`'s `$stored` callback) — then requeues the
+  current card and the rest with the attempt unchanged. A cached or failed image is no progress,
+  so a slow `read_cards()` cannot make the requeue repeat for ever, and a card with many images
+  is cut mid-card and resumed by its marker.
 - **A variable parent with the card's SKU is never linked**: `Card_Linker` refuses a parent only
   when it already has a row, so `Card_Import` refuses it first and notes why. A variation is
   linked with its real parent id.

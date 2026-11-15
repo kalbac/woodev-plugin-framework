@@ -96,8 +96,8 @@ final class Card_Import {
 	 * @param Card_Linker        $linker   Linker.
 	 * @param Link_Report_Store  $notes    Import notes.
 	 * @param Effective_Settings $settings The shop's import settings.
-	 * @param callable           $write    `function ( Account, Card_Content, bool $publish, bool $create_categories, callable $renew ): array{product:\WC_Product,warnings:string[]}`, `Product_Writer::write()`.
-	 * @param callable           $resume   `function ( Account, Card_Content, \WC_Product, bool $publish, callable $renew ): string[]`, `Product_Writer::complete()`.
+	 * @param callable           $write    `function ( Account, Card_Content, bool $publish, bool $create_categories, callable $renew, ?callable $stored ): array{product:\WC_Product,warnings:string[]}`, `Product_Writer::write()`.
+	 * @param callable           $resume   `function ( Account, Card_Content, \WC_Product, bool $publish, callable $renew, ?callable $stored ): string[]`, `Product_Writer::complete()`.
 	 */
 	public function __construct( Wpdb_Link_Store $links, Card_Linker $linker, Link_Report_Store $notes, Effective_Settings $settings, callable $write, callable $resume ) {
 		$this->links    = $links;
@@ -113,15 +113,16 @@ final class Card_Import {
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param Account      $account Account.
-	 * @param Card_Content $content The card, read whole.
-	 * @param Claim_Fence  $fence   The run's account claim.
-	 * @param callable     $renew   `function (): void`; extends the claim before each image and throws when it was lost or the run's time is spent.
+	 * @param Account       $account Account.
+	 * @param Card_Content  $content The card, read whole.
+	 * @param Claim_Fence   $fence   The run's account claim.
+	 * @param callable      $renew   `function (): void`; extends the claim before each image and throws when it was lost or the run's time is spent.
+	 * @param callable|null $stored `function (): void`; called right after a new image was stored, for the run's budget.
 	 * @return string One of the outcome constants of this class.
 	 * @throws Claim_Lost When the link is refused because another run took the account claim.
 	 * @throws \Throwable Whatever WooCommerce throws when it refuses a save; the caller notes it for this card.
 	 */
-	public function import( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew ): string {
+	public function import( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored = null ): string {
 		$card    = $content->card();
 		$article = (string) ( $card['offer_id'] ?? '' );
 
@@ -142,11 +143,11 @@ final class Card_Import {
 		$product = $this->product_with_article( $article );
 
 		if ( null === $product ) {
-			return $this->create( $account, $content, $fence, $renew );
+			return $this->create( $account, $content, $fence, $renew, $stored );
 		}
 
 		if ( Product_Writer::is_marked( $product, $account->adapter_id() ) ) {
-			return $this->resume( $account, $content, $product, $fence, $renew );
+			return $this->resume( $account, $content, $product, $fence, $renew, $stored );
 		}
 
 		return $this->link_existing( $account, $content, $product, $fence );
@@ -187,15 +188,16 @@ final class Card_Import {
 	/**
 	 * Row 4: finishes the product an earlier run started, then links it.
 	 *
-	 * @param Account      $account Account.
-	 * @param Card_Content $content Card.
-	 * @param \WC_Product  $product The half-made product.
-	 * @param Claim_Fence  $fence   The run's claim.
-	 * @param callable     $renew   Extends the claim.
+	 * @param Account       $account Account.
+	 * @param Card_Content  $content Card.
+	 * @param \WC_Product   $product The half-made product.
+	 * @param Claim_Fence   $fence   The run's claim.
+	 * @param callable      $renew   Extends the claim.
+	 * @param callable|null $stored Called when a new image was stored.
 	 * @return string
 	 */
-	private function resume( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, callable $renew ): string {
-		$warnings = (array) call_user_func( $this->resume, $account, $content, $product, $this->settings->import_publish(), $renew );
+	private function resume( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
+		$warnings = (array) call_user_func( $this->resume, $account, $content, $product, $this->settings->import_publish(), $renew, $stored );
 
 		return $this->link( $account, $content, $product, $fence, self::CREATED, $warnings );
 	}
@@ -203,14 +205,15 @@ final class Card_Import {
 	/**
 	 * Row 5: creates the product, then links it.
 	 *
-	 * @param Account      $account Account.
-	 * @param Card_Content $content Card.
-	 * @param Claim_Fence  $fence   The run's claim.
-	 * @param callable     $renew   Extends the claim.
+	 * @param Account       $account Account.
+	 * @param Card_Content  $content Card.
+	 * @param Claim_Fence   $fence   The run's claim.
+	 * @param callable      $renew   Extends the claim.
+	 * @param callable|null $stored Called when a new image was stored.
 	 * @return string
 	 */
-	private function create( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew ): string {
-		$written = call_user_func( $this->write, $account, $content, $this->settings->import_publish(), $this->settings->import_create_categories(), $renew );
+	private function create( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
+		$written = call_user_func( $this->write, $account, $content, $this->settings->import_publish(), $this->settings->import_create_categories(), $renew, $stored );
 
 		return $this->link( $account, $content, $written['product'], $fence, self::CREATED, (array) $written['warnings'] );
 	}
