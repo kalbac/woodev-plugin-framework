@@ -7,8 +7,26 @@
 @use '../components/table-chrome';
 
 .woodev-records {
-	// The filter labels of «Заказы доставки» and the settings: sentence case, never upper case.
-	.components-base-control__label {
+	// The filter labels of «Заказы доставки» and the settings: sentence case, never upper case. A labelled `SelectControl`
+	// draws its label with the InputControl's own (emotion) class, `components-input-control__label`, which is upper case at
+	// 11px; the other controls use `components-base-control__label`. One rule for every label of the filter row, with the
+	// same line height and the same gap above the control, so the labels sit on one line whatever the control below is.
+	// Every control of that row is 40px tall — the selects (`__next40pxDefaultSize`), the period button and the boolean
+	// filter's box — and the inline `align-items: flex-end` of the row puts them on one bottom edge.
+	&__toolbar {
+		.components-base-control__label,
+		.components-input-control__label {
+			display: block;
+			font-size: 13px;
+			font-weight: 500;
+			line-height: 1.4;
+			padding-bottom: wd.$gap-sm;
+			text-transform: none;
+		}
+	}
+
+	// The page-size select's label sits beside it, but is the same emotion label: no upper case there either.
+	&__page-size .components-input-control__label {
 		font-size: 13px;
 		font-weight: 500;
 		text-transform: none;
@@ -17,8 +35,9 @@
 	// The boolean filter has no label above it: a box as tall as the selects' controls keeps the row on one baseline.
 	&__boolean {
 		align-items: center;
+		box-sizing: border-box;
 		display: flex;
-		min-height: 40px;
+		height: 40px;
 	}
 
 	// The empty result, in the frame of the table it stands for: what `TableCard` itself is made of.

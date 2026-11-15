@@ -111,6 +111,18 @@ function BooleanFilter( { filter, value, onChange }: FilterControlProps ) {
 	);
 }
 
+/**
+ * The site's day as a local date at midnight, so the named periods are the days the server reads `from~to` in; the browser's
+ * own day when PHP sent none.
+ *
+ * @param day `YYYY-MM-DD`.
+ */
+function siteDay( day: string | undefined ): Date | undefined {
+	const match = day === undefined ? null : /^(\d{4})-(\d{2})-(\d{2})$/.exec( day );
+
+	return match ? new Date( Number( match[ 1 ] ), Number( match[ 2 ] ) - 1, Number( match[ 3 ] ) ) : undefined;
+}
+
 function periodLabels( filter: Filter, messages: Messages ): PeriodLabels {
 	const text = ( key: string ) => messages[ key ] ?? '';
 	const presets = Object.fromEntries(
@@ -137,6 +149,7 @@ function PeriodFilter( { filter, value, messages, onChange }: FilterControlProps
 	return (
 		<PeriodPicker
 			value={ range }
+			today={ siteDay( filter.today ) }
 			labels={ periodLabels( filter, messages ) }
 			onChange={ ( next ) => onChange( Object.keys( next ).length === 0 ? undefined : next ) }
 		/>
@@ -320,7 +333,8 @@ export interface ViewsRowProps {
  */
 export function ViewsRow( { definition, query, facets, messages, total, onChange }: ViewsRowProps ) {
 	const filter = viewsFilter( definition );
-	const counts = filter ? facets[ filter.id ] ?? [] : [];
+	const facet = filter ? facets[ filter.id ] ?? [] : [];
+	const counts = facet.filter( ( entry ) => entry.value !== ANY );
 
 	if ( ! filter || counts.length === 0 ) {
 		return null;
@@ -328,9 +342,10 @@ export function ViewsRow( { definition, query, facets, messages, total, onChange
 
 	const value = query.filters[ filter.id ];
 	const current = typeof value === 'string' ? value : ANY;
-	// A variable product can sit in several states at once, so the sum of the counts may exceed the rows: while no view is
-	// chosen the real total is known, and «all» shows that.
-	const allTotal = current === ANY ? total : undefined;
+	// The options may overlap (a variable product can sit in several states at once), so the sum of the counts can exceed
+	// the rows. PHP then sends the real number as the entry with the empty value; the list's own total is the same number
+	// while no view is chosen; the sum is the last resort, exact for options that partition the rows.
+	const allTotal = facet.find( ( entry ) => entry.value === ANY )?.count ?? ( current === ANY ? total : undefined );
 
 	return (
 		<CountLinks

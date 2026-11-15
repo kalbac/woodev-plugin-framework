@@ -162,7 +162,7 @@ function FakeTableCard( props: TableCardProps ) {
 
 /** Opens the period picker and its custom range; without the WooCommerce calendar the range is two native inputs. */
 async function openCustomPeriod(): Promise< void > {
-	fireEvent.click( screen.getByRole( 'button', { name: /Всё время|—/ } ) );
+	fireEvent.click( screen.getByRole( 'button', { name: /^Период: / } ) );
 	// The popover places itself after it opens; let that settle inside this test.
 	await act( async () => {} );
 	fireEvent.click( screen.getByRole( 'button', { name: 'Произвольный период' } ) );
@@ -477,7 +477,7 @@ describe( 'URL round trip', () => {
 		expect( screen.getByRole( 'searchbox', { name: 'Поиск по товарам' } ) ).toHaveValue( 'кружка' );
 		expect( screen.getByRole( 'combobox', { name: 'Состояние' } ) ).toHaveValue( 'draft' );
 		expect( screen.getByRole( 'checkbox', { name: 'Только в наличии' } ) ).toBeChecked();
-		expect( screen.getByRole( 'button', { name: '01.11.2026 — …' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Период: 01.11.2026 — …' } ) ).toBeInTheDocument();
 	} );
 
 	test( 'sorting writes the sort key of the column, not its id, and returns to page one', async () => {
@@ -1256,7 +1256,7 @@ describe( 'keyboard access', () => {
 			screen.getByRole( 'combobox', { name: 'Состояние' } ),
 			screen.getByRole( 'listbox', { name: 'Бренд' } ),
 			screen.getByRole( 'checkbox', { name: 'Только в наличии' } ),
-			screen.getByRole( 'button', { name: 'Всё время' } ),
+			screen.getByRole( 'button', { name: 'Период: Всё время' } ),
 			screen.getByRole( 'button', { name: 'Сбросить фильтры' } ),
 		];
 

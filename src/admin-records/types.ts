@@ -55,8 +55,13 @@ export interface Filter {
 	/** Options come with the list response (`facets`) instead of the definition. */
 	options_source: boolean;
 	default?: FilterValue;
-	/** A `select` whose options partition the rows: it is drawn as the counted row above the table, not as a select. */
+	/**
+	 * A `select` drawn as the counted row above the table, not as a select. Its options need not partition the rows: when they
+	 * overlap, the provider's facets carry an entry with the empty value — the real count for «Все».
+	 */
 	views?: boolean;
+	/** On a `date_range`: the site's current day (`YYYY-MM-DD`), which the named periods are counted from. */
+	today?: string;
 }
 
 export interface Sorts {
@@ -169,6 +174,7 @@ export interface AdminRecord {
 }
 
 export interface Facet {
+	/** Empty for the count with the filter itself left out (see {@link Filter.views}). */
 	value: string;
 	label: string;
 	count: number;

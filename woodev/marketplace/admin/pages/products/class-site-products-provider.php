@@ -201,20 +201,29 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 		return [
 			'rows'             => $this->parent_rows( $account, $page['ids'] ),
 			'total'            => $page['total'],
-			'facets'           => [ 'state' => $this->state_facets( $filter ) ],
+			'facets'           => [ 'state' => $this->state_facets( $filter, $page['total'] ) ],
 			'account_activity' => $this->activity->account( $account->id() ),
 		];
 	}
 
 	/**
-	 * One count per state group under every other filter: the numbers of the view row.
+	 * One count per state group under every other filter: the numbers of the view row. A variable product with variations in two
+	 * groups is counted in both, so the entry with the empty value carries the real number of products, for «Все». While no state
+	 * is chosen that is the total of the read itself; otherwise it costs one more `COUNT`.
 	 *
 	 * @param Site_Products_Filter $filter The filters of the read.
+	 * @param int                  $total  The total of the read.
 	 * @return array<int,array{value:string,label:string,count:int}>
 	 */
-	private function state_facets( Site_Products_Filter $filter ): array {
+	private function state_facets( Site_Products_Filter $filter, int $total ): array {
 		$counts = $this->reader->state_counts( $filter );
-		$facets = [];
+		$facets = [
+			[
+				'value' => '',
+				'label' => '',
+				'count' => '' === $filter->state() ? $total : $this->reader->count_without_state( $filter ),
+			],
+		];
 
 		foreach ( State_Groups::labels() as $group => $label ) {
 			$facets[] = [

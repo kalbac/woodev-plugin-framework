@@ -127,6 +127,19 @@ final class Site_Products_Reader {
 	}
 
 	/**
+	 * How many products pass every filter of the read except the state. A variable product can sit in several state groups, so the
+	 * groups may add up to more than this.
+	 *
+	 * @since 2.1.6
+	 *
+	 * @param Site_Products_Filter $filter Filters; the state is ignored.
+	 * @return int
+	 */
+	public function count_without_state( Site_Products_Filter $filter ): int {
+		return $this->count_matching( $this->where( $filter->with_state( '' ) ) );
+	}
+
+	/**
 	 * @param string $where Prepared WHERE clause over the alias `p`.
 	 * @return int
 	 */

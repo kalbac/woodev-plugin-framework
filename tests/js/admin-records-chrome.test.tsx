@@ -201,12 +201,47 @@ describe( 'the counted view row', () => {
 		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { filter_state: 'linked', paged: undefined } ) );
 	} );
 
+	test( '«Все» is the entry PHP sends for «the filter left out», whatever view is chosen: the options may overlap', async () => {
+		// One product sits in two states, so the counts add up to 11 for 10 products.
+		const overlapping = [ { value: '', label: '', count: 10 }, ...COUNTS ];
+		serve( () => fixtureList( [ mug ], { total: 8, facets: { state: overlapping } } ) );
+		const { unmount } = render( <Page query={ { filter_state: 'draft' } } /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		expect( screen.getByRole( 'link', { name: 'Все (10)' } ) ).toBeInTheDocument();
+		expect( within( screen.getByRole( 'list', { name: 'Состояние' } ) ).getAllByRole( 'link' ).map( ( link ) => link.textContent ) ).toEqual( [
+			'Все (10)',
+			'Черновик (8)',
+			'Связан (3)',
+		] );
+
+		unmount();
+	} );
+
 	test( 'without counts from the server there is no row', async () => {
 		serve( () => fixtureList( [ mug ], { facets: {} } ) );
 		render( <Page /> );
 		await screen.findByRole( 'table', { name: 'Товары' } );
 
 		expect( document.querySelector( '.woodev-table-views' ) ).toBeNull();
+	} );
+} );
+
+describe( 'the period filter', () => {
+	test( 'counts its named periods from the site\'s day that PHP sends, not the browser\'s', async () => {
+		const base = definition();
+		serve(
+			() => fixtureList( [ mug ] ),
+			{
+				...base,
+				filters: base.filters.map( ( filter ) => ( filter.id === 'updated' ? { ...filter, today: '2026-11-15' } : filter ) ),
+			}
+		);
+		render( <Page query={ { filter_updated: '2026-11-09,2026-11-15' } } /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		// 15.11.2026 is a Sunday: «С начала недели» is Monday the 9th to that day.
+		expect( screen.getByRole( 'button', { name: 'Период: С начала недели' } ) ).toBeInTheDocument();
 	} );
 } );
 

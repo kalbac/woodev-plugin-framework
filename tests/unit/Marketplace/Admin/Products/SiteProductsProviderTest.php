@@ -121,8 +121,18 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertArrayNotHasKey( 'summary', $body['messages'], 'The card footer counts the rows; no sentence repeats it.' );
 	}
 
+	/**
+	 * @param array<string,mixed> $query Query as the engine validates it.
+	 * @return array<string,int> Count by state group; the empty key is the count with the state itself left out.
+	 */
+	private function state_facets( array $query = [] ): array {
+		return array_column( $this->list_body( $query )['facets']['state'], 'count', 'value' );
+	}
+
 	public function test_the_state_facets_count_each_group_as_the_list_filtered_by_it_would(): void {
-		$facets = array_column( $this->list_body()['facets']['state'], 'count', 'value' );
+		$facets = $this->state_facets();
+
+		unset( $facets[''] );
 
 		$this->assertSame( array_keys( State_Groups::labels() ), array_keys( $facets ), 'One count per group, in the filter\'s own order.' );
 
@@ -133,19 +143,31 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 
 	public function test_the_state_facets_are_not_a_partition_when_a_variable_product_has_variations_in_two_groups(): void {
 		$body   = $this->list_body();
-		$facets = array_column( $body['facets']['state'], 'count', 'value' );
+		$facets = $this->state_facets();
+		$all    = $facets[''];
+
+		unset( $facets[''] );
 
 		// Product 20 has an errored variation and an unlinked one: it is listed under both groups, so the groups add up to one
-		// more than the products. «Все» therefore shows the real total, not the sum.
+		// more than the products.
 		$this->assertSame( $body['total'] + 1, array_sum( $facets ) );
 		$this->assertSame( 1, $facets[ State_Groups::ERROR ] );
+		$this->assertSame( $body['total'], $all, 'The entry with the empty value is the real number of products.' );
+	}
+
+	public function test_the_empty_value_facet_is_the_product_count_without_the_state_whichever_state_is_chosen(): void {
+		$every = $this->list_body()['total'];
+
+		$this->assertSame( $every, $this->state_facets( [ 'filters' => [ 'state' => State_Groups::ERROR ] ] )[''], 'A chosen view does not change «Все».' );
+		$this->assertSame( 1, $this->state_facets( [ 'filters' => [ 'q' => 'B-30' ] ] )[''], 'Another filter does.' );
+		$this->assertSame( 1, $this->state_facets( [ 'filters' => [ 'q' => 'B-30', 'state' => State_Groups::ERROR ] ] )[''] );
 	}
 
 	public function test_the_state_facets_keep_every_other_filter_and_ignore_the_state_itself(): void {
-		$searched = array_column( $this->list_body( [ 'filters' => [ 'state' => State_Groups::CREATED, 'q' => 'B-30' ] ] )['facets']['state'], 'count', 'value' );
+		$searched = $this->state_facets( [ 'filters' => [ 'state' => State_Groups::CREATED, 'q' => 'B-30' ] ] );
 
 		$this->assertSame( 0, $searched[ State_Groups::CREATED ], 'The search narrows the counts…' );
-		$this->assertGreaterThan( 0, array_sum( $searched ), '…and the chosen state does not: its siblings still show their numbers.' );
+		$this->assertGreaterThan( 0, $searched[''], '…and the chosen state does not: its siblings still show their numbers.' );
 	}
 
 	public function test_a_variable_product_is_a_parent_row_that_sums_its_variations(): void {

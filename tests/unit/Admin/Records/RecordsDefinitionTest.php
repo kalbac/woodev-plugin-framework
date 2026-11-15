@@ -63,6 +63,9 @@ class RecordsDefinitionTest extends TestCase {
 			'views on a search'                => [ [ 'filters' => [ array_merge( $filters[0], [ 'views' => true ] ) ] ] ],
 			'views that is not a flag'         => [ [ 'filters' => [ array_merge( $filters[1], [ 'views' => 'yes' ] ) ] ] ],
 			'two views filters'                => [ [ 'filters' => [ array_merge( $filters[1], [ 'views' => true ] ), array_merge( $filters[1], [ 'id' => 'other', 'views' => true ] ) ] ] ],
+			'today on a select'                => [ [ 'filters' => [ array_merge( $filters[1], [ 'today' => '2026-11-15' ] ) ] ] ],
+			'today that is not a day'          => [ [ 'filters' => [ array_merge( $filters[4], [ 'today' => '2026-02-30' ] ) ] ] ],
+			'today that is not a string'       => [ [ 'filters' => [ array_merge( $filters[4], [ 'today' => 20261115 ] ) ] ] ],
 			'sort default is not a sort key'   => [ [ 'sorts' => [ 'keys' => [ 'name' ], 'default' => [ 'key' => 'price', 'direction' => 'asc' ] ] ] ],
 			'sort keys without default'        => [ [ 'sorts' => [ 'keys' => [ 'name' ] ] ] ],
 			'per page above the ceiling'       => [ [ 'pagination' => [ 'default_per_page' => 20, 'per_page_options' => [ 20, 500 ], 'max_per_page' => 500, 'max_selection' => 10 ] ] ],
@@ -130,6 +133,15 @@ class RecordsDefinitionTest extends TestCase {
 		$this->assertArrayNotHasKey( 'views', $definition[0] );
 		$this->assertArrayNotHasKey( 'views', $definition[2] );
 		$this->assertArrayNotHasKey( 'views', $plain[1], 'a filter that does not ask for it keeps its old shape' );
+	}
+
+	public function test_a_date_range_can_carry_the_sites_current_day(): void {
+		$filters = Records_Definitions::standard()['filters'];
+
+		$definition = Records_Definition::from_array( Records_Definitions::standard( [ 'filters' => [ array_merge( $filters[4], [ 'today' => '2026-11-15' ] ), $filters[3] ] ] ) )->to_array()['filters'];
+
+		$this->assertSame( '2026-11-15', $definition[0]['today'] );
+		$this->assertArrayNotHasKey( 'today', $definition[1] );
 	}
 
 	public function test_a_skipping_row_action_is_allowed_when_the_definition_says_so(): void {

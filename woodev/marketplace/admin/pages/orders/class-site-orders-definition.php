@@ -187,6 +187,8 @@ final class Site_Orders_Definition {
 			'id'    => 'date',
 			'label' => __( 'Дата заказа', 'woodev-plugin-framework' ),
 			'type'  => 'date_range',
+			// The period picker counts «Сегодня» and the rest from the site's day, which is the day the server reads the range in.
+			'today' => wp_date( 'Y-m-d' ),
 		];
 
 		return $filters;

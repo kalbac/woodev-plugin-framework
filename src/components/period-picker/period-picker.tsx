@@ -285,6 +285,8 @@ export function PeriodPicker( { value, onChange, labels, today }: PeriodPickerPr
 				renderToggle={ ( { isOpen, onToggle }: { isOpen: boolean; onToggle: () => void } ) => (
 					<Button
 						className={ 'woocommerce-dropdown-button' + ( isOpen ? ' is-open' : '' ) }
+						// The label above the button is plain text: name the button with it, or a screen reader says only the value.
+						aria-label={ `${ labels.label }: ${ periodButtonLabel( value, labels, day ) }` }
 						aria-expanded={ isOpen }
 						onClick={ onToggle }
 					>

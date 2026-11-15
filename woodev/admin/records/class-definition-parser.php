@@ -135,7 +135,7 @@ final class Definition_Parser {
 		foreach ( $list as $i => $filter ) {
 			$path   = "definition.filters[$i]";
 			$filter = self::map( $filter, $path );
-			self::allow_keys( $filter, [ 'id', 'label', 'type', 'options', 'options_source', 'default', 'views' ], $path );
+			self::allow_keys( $filter, [ 'id', 'label', 'type', 'options', 'options_source', 'default', 'views', 'today' ], $path );
 
 			$entry = [
 				'id'             => self::slug( $filter, 'id', $path ),
@@ -150,6 +150,11 @@ final class Definition_Parser {
 			if ( self::filter_views( $filter, $entry['type'], $path ) ) {
 				$entry['views'] = true;
 				++$views_count;
+			}
+
+			$today = self::filter_today( $filter, $entry['type'], $path );
+			if ( null !== $today ) {
+				$entry['today'] = $today;
 			}
 
 			if ( array_key_exists( 'default', $filter ) ) {
@@ -199,6 +204,35 @@ final class Definition_Parser {
 		$entry['options'] = $has_inline ? self::options( $filter['options'], "$path.options" ) : [];
 
 		return $entry;
+	}
+
+	/**
+	 * The site's current day on a `date_range` filter: the period picker counts «Сегодня» and the other named periods from it, so they
+	 * mean the same day the server reads `from~to` in.
+	 *
+	 * @param array<string,mixed> $filter Raw filter.
+	 * @param string              $type   The filter's validated type.
+	 * @param string              $path   Error path.
+	 * @return string|null `YYYY-MM-DD`, or null when the filter declares none.
+	 */
+	private static function filter_today( array $filter, string $type, string $path ): ?string {
+		if ( ! array_key_exists( 'today', $filter ) ) {
+			return null;
+		}
+
+		$day = $filter['today'];
+
+		if ( 'date_range' !== $type ) {
+			throw new \InvalidArgumentException( "$path.today: only a date_range filter has a current day." );
+		}
+
+		$parsed = is_string( $day ) ? \DateTimeImmutable::createFromFormat( '!Y-m-d', $day ) : false;
+
+		if ( false === $parsed || $parsed->format( 'Y-m-d' ) !== $day ) {
+			throw new \InvalidArgumentException( "$path.today must be a calendar day (YYYY-MM-DD)." );
+		}
+
+		return $day;
 	}
 
 	/**

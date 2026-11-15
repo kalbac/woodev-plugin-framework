@@ -161,7 +161,7 @@ describe( 'PeriodPicker', () => {
 		const onChange = jest.fn();
 		render( <PeriodPicker value={ value } onChange={ onChange } labels={ LABELS } today={ SUNDAY } /> );
 
-		fireEvent.click( screen.getByRole( 'button', { name: periodButtonLabel( value, LABELS, SUNDAY ) } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: `Период: ${ periodButtonLabel( value, LABELS, SUNDAY ) }` } ) );
 		// The popover places itself once it is open; let that happen inside the test.
 		await act( async () => {} );
 
@@ -173,6 +173,12 @@ describe( 'PeriodPicker', () => {
 		expect( periodButtonLabel( { from: '2026-11-09', to: '2026-11-15' }, LABELS, SUNDAY ) ).toBe( 'С начала недели' );
 		expect( periodButtonLabel( { from: '2026-11-01', to: '2026-11-09' }, LABELS, SUNDAY ) ).toBe( '01.11.2026 — 09.11.2026' );
 		expect( periodButtonLabel( { from: '2026-11-01' }, LABELS, SUNDAY ) ).toBe( '01.11.2026 — …' );
+	} );
+
+	test( 'the button is named with the label above it, so a screen reader says what the value is for', () => {
+		render( <PeriodPicker value={ {} } onChange={ jest.fn() } labels={ LABELS } today={ SUNDAY } /> );
+
+		expect( screen.getByRole( 'button', { name: 'Период: Всё время' } ) ).toBeInTheDocument();
 	} );
 
 	test( 'lists «all time», the ten periods and the custom range', async () => {
