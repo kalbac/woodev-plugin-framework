@@ -28,6 +28,7 @@ use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
+use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
@@ -203,7 +204,7 @@ final class Site_Products_Module {
 		$options  = Uninstaller::option_prefix( $plugin->get_id() );
 		$store    = new Cards_Snapshot_Store( $options );
 		$reports  = new Link_Report_Store( $options );
-		$plan     = null === $importer ? null : new Remote_Cards_Import_Plan( Remote_Cards_Import_Plan::woocommerce_lookup( Product_Writer::marker_key( $adapter->id() ) ) );
+		$plan     = null === $importer ? null : new Remote_Cards_Import_Plan( Remote_Cards_Import_Plan::woocommerce_lookup( Product_Writer::marker_key( $adapter->id() ) ), Group_Assembler::lookup( $adapter->id() ) );
 		$actions  = new Remote_Cards_Actions(
 			$store,
 			$links,

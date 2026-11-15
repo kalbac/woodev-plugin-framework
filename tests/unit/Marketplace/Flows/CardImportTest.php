@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Jobs\Claim_Lost;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -78,6 +79,13 @@ final class CardImportTest extends Export_Test_Case {
 	private $next_id = 900;
 
 	/**
+	 * Products the writer's first save made and its second half has not seen yet, by id.
+	 *
+	 * @var array<int,bool>
+	 */
+	private $started = [];
+
+	/**
 	 * Stubs the options, the SKU lookup and the writer's world.
 	 *
 	 * @return void
@@ -92,6 +100,7 @@ final class CardImportTest extends Export_Test_Case {
 		$this->cut_after_first_save  = null;
 		$this->cut_before_first_save = null;
 		$this->next_id               = 900;
+		$this->started               = [];
 
 		Functions\when( 'get_option' )->alias(
 			function ( string $name, $fallback = false ) {
@@ -135,30 +144,26 @@ final class CardImportTest extends Export_Test_Case {
 					return $this->options[ $name ] ?? $fallback;
 				}
 			),
-			function ( Account $account, Card_Content $content, bool $publish, bool $create_categories, callable $renew ): array {
-				return $this->write( $account, $content, $publish, $create_categories, $renew );
+			new Group_Assembler( $this->links() ),
+			function ( Account $account, Card_Content $content, bool $create_categories ): \WC_Product {
+				return $this->start( $content, $create_categories );
 			},
 			function ( Account $account, Card_Content $content, \WC_Product $product, bool $publish, callable $renew ): array {
-				$this->writes[] = [ 'resume', (string) $content->card()['offer_id'], $publish, null ];
-
-				return $this->warnings;
+				return $this->complete( $content, $product, $publish );
 			}
 		);
 	}
 
 	/**
-	 * Plays the writer: first save (the SKU and the marker), then the rest.
+	 * Plays the writer's first save: the product exists, with the article as its SKU.
 	 *
-	 * @param Account      $account           Account.
 	 * @param Card_Content $content           Card.
-	 * @param bool         $publish           Publish at once.
 	 * @param bool         $create_categories Create categories.
-	 * @param callable     $renew             Claim renewal.
-	 * @return array{product:\WC_Product,warnings:string[]}
+	 * @return \WC_Product
 	 */
-	private function write( Account $account, Card_Content $content, bool $publish, bool $create_categories, callable $renew ): array {
+	private function start( Card_Content $content, bool $create_categories ): \WC_Product {
 		$article        = (string) $content->card()['offer_id'];
-		$this->writes[] = [ 'write', $article, $publish, $create_categories ];
+		$this->writes[] = [ 'write', $article, null, $create_categories ];
 
 		if ( null !== $this->cut_before_first_save ) {
 			throw $this->cut_before_first_save;
@@ -166,16 +171,39 @@ final class CardImportTest extends Export_Test_Case {
 
 		$product = $this->shop_product( $this->next_id++, [ 'sku' => $article ] );
 
+		$this->started[ (int) $product->get_id() ] = true;
+
+		return $product;
+	}
+
+	/**
+	 * Plays the rest of the writer. On the product the same call started it is the second half of a write; on any other
+	 * product it is the resume of a run that was cut short.
+	 *
+	 * @param Card_Content $content Card.
+	 * @param \WC_Product  $product The started product.
+	 * @param bool         $publish Publish at once.
+	 * @return string[]
+	 */
+	private function complete( Card_Content $content, \WC_Product $product, bool $publish ): array {
+		$id = (int) $product->get_id();
+
+		if ( empty( $this->started[ $id ] ) ) {
+			$this->writes[] = [ 'resume', (string) $content->card()['offer_id'], $publish, null ];
+
+			return $this->warnings;
+		}
+
+		unset( $this->started[ $id ] );
+		$this->writes[ count( $this->writes ) - 1 ][2] = $publish;
+
 		if ( null !== $this->cut_after_first_save ) {
 			$this->mark( $product );
 
 			throw $this->cut_after_first_save;
 		}
 
-		return [
-			'product'  => $product,
-			'warnings' => $this->warnings,
-		];
+		return $this->warnings;
 	}
 
 	/**

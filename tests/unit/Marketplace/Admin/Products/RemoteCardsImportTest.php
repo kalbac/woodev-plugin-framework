@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Row_Normalizer;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Import_Plan;
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 
 require_once dirname( __DIR__, 3 ) . '/Shipping/Rest_Api/wp-rest-controller-stub.php';
 
@@ -193,6 +194,131 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [], $this->scheduler->actions, 'A preview queues nothing.' );
 		$this->assertSame( [], $this->adapter->link_resolver()->reads, 'A preview calls no marketplace.' );
 		$this->assertNull( $this->links()->find_by_offer_id( $this->account_id, 'NEW-1' ), 'A preview writes no link.' );
+	}
+
+	/**
+	 * A snapshot card of the colour group.
+	 *
+	 * @param string              $offer_id Article.
+	 * @param array<string,mixed> $more     Keys to override.
+	 * @return array<string,mixed>
+	 */
+	private function colour( string $offer_id, array $more = [] ): array {
+		$group = [
+			'key'  => 'model-7',
+			'size' => 3,
+		];
+
+		return $this->card( $offer_id, '', array_merge( [ 'group' => $group ], $more ) );
+	}
+
+	public function test_the_preview_counts_the_cards_of_one_group_as_one_product(): void {
+		$this->put_snapshot( [ $this->colour( 'RED' ), $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
+
+		$plan = $this->preview( 'import_selected', [ 'RED', 'BLACK', 'GREEN' ] );
+
+		$this->assertSame( [ 3, 3, 0 ], [ $plan['requested'], $plan['eligible'], $plan['skipped'] ], 'three cards are imported' );
+		$this->assertStringContainsString( 'Будет создано товаров: 1.', $plan['scope']['sentence'], 'as one product' );
+		$this->assertStringContainsString( 'Карточки одной группы станут вариантами одного товара.', $plan['scope']['sentence'] );
+
+		$mixed = $this->preview( 'import_selected', [ 'RED', 'SOLO', 'BLACK', 'GREEN' ] );
+
+		$this->assertStringContainsString( 'Будет создано товаров: 2.', $mixed['scope']['sentence'], 'a card with no group is a product of its own' );
+
+		$one = $this->preview( 'import', [ 'RED' ] );
+
+		$this->assertStringContainsString( 'Будет создано товаров: 1.', $one['scope']['sentence'] );
+		$this->assertStringNotContainsString( 'вариантами', $one['scope']['sentence'], 'one card of a group is simply one product' );
+
+		$body = $this->apply( 'import_selected', [ 'RED', 'BLACK', 'GREEN' ] );
+
+		$this->assertSame( 3, $body['accepted'] );
+		$this->assertSame( [ 'RED', 'BLACK', 'GREEN' ], $this->queued_offers(), 'every card of the group is queued: the job assembles them' );
+	}
+
+	public function test_a_card_whose_group_has_a_product_on_the_site_adds_no_product(): void {
+		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::READY;
+		$this->put_snapshot( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
+
+		$plan = $this->preview( 'import_selected', [ 'BLACK', 'GREEN', 'SOLO' ] );
+
+		$this->assertSame( 3, $plan['eligible'] );
+		$this->assertStringContainsString( 'Будет создано товаров: 1.', $plan['scope']['sentence'], 'only the card with no group makes a product' );
+		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 2.', $plan['scope']['sentence'] );
+
+		$joining = $this->preview( 'import', [ 'BLACK' ] );
+
+		$this->assertTrue( $joining['can_apply'] );
+		$this->assertStringNotContainsString( 'Будет создано', $joining['scope']['sentence'] );
+		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 1.', $joining['scope']['sentence'] );
+	}
+
+	public function test_a_card_whose_group_is_half_made_is_left_out_unless_the_half_made_card_is_selected_too(): void {
+		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::BUILDING;
+		$this->sku_kinds['RED']                               = Remote_Cards_Import_Plan::SKU_MARKED;
+		$this->put_snapshot( [ $this->colour( 'RED' ), $this->colour( 'BLACK' ), $this->colour( 'GREEN' ) ] );
+
+		$alone = $this->preview( 'import_selected', [ 'BLACK', 'GREEN' ] );
+
+		$this->assertSame( [ 2, 0, 2 ], [ $alone['requested'], $alone['eligible'], $alone['skipped'] ], 'the job would skip both' );
+		$this->assertFalse( $alone['can_apply'] );
+		$this->assertSame( [ 'Импорт другой карточки этой группы не завершён — сначала импортируйте её' => 2 ], $this->groups( $alone ) );
+
+		$together = $this->preview( 'import_selected', [ 'BLACK', 'GREEN', 'RED' ] );
+
+		$this->assertSame( [ 3, 3, 0 ], [ $together['requested'], $together['eligible'], $together['skipped'] ] );
+		$this->assertStringContainsString( 'Будет создано товаров: 1.', $together['scope']['sentence'] );
+		$this->assertStringContainsString( 'Карточки одной группы станут вариантами одного товара.', $together['scope']['sentence'] );
+
+		$this->apply( 'import_selected', [ 'BLACK', 'GREEN', 'RED' ] );
+
+		$this->assertSame( [ 'RED', 'BLACK', 'GREEN' ], $this->queued_offers(), 'the half-made card is queued first, so the job finishes it before the others join' );
+	}
+
+	/**
+	 * Critic round 2: a card that resumes its own half-made **variation** in a group whose product is finished makes no new
+	 * product — like its new sibling, it becomes a variation of the product that is on the site.
+	 */
+	public function test_a_resumed_variation_of_a_finished_group_is_counted_as_joining_not_as_a_new_product(): void {
+		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::READY;
+		$this->sku_kinds['BLACK']                             = Remote_Cards_Import_Plan::SKU_MARKED;
+		$this->put_snapshot( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ) ] );
+
+		$both = $this->preview( 'import_selected', [ 'GREEN', 'BLACK' ] );
+
+		$this->assertSame( [ 2, 2, 0 ], [ $both['requested'], $both['eligible'], $both['skipped'] ] );
+		$this->assertStringNotContainsString( 'Будет создано', $both['scope']['sentence'], 'no product is created' );
+		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 2.', $both['scope']['sentence'] );
+
+		$alone = $this->preview( 'import', [ 'BLACK' ] );
+
+		$this->assertStringNotContainsString( 'Будет создано', $alone['scope']['sentence'] );
+		$this->assertStringContainsString( 'Станут вариантами уже импортированных товаров: 1.', $alone['scope']['sentence'] );
+	}
+
+	public function test_only_the_cards_the_import_takes_are_counted_in_a_group(): void {
+		$this->add_link( $this->add_product( [ 'id' => 41, 'sku' => 'RED' ] ), Link_Record::STATE_CREATED, [ 'offer_id' => 'RED' ] );
+		$this->put_snapshot(
+			[
+				$this->colour( 'RED' ),
+				$this->colour( 'BLACK' ),
+				$this->colour( 'OLD', [ 'archived' => true, 'state' => 'archived' ] ),
+				$this->colour( 'CUP', [ 'group' => [ 'key' => 'model-8', 'size' => 2 ] ] ),
+			]
+		);
+
+		$plan = $this->preview( 'import_selected', [ 'RED', 'BLACK', 'OLD', 'CUP' ] );
+
+		$this->assertSame( [ 4, 2, 2 ], [ $plan['requested'], $plan['eligible'], $plan['skipped'] ] );
+		$this->assertStringContainsString( 'Будет создано товаров: 2.', $plan['scope']['sentence'], 'the black card and the card of another group: one product each' );
+		$this->assertStringNotContainsString( 'вариантами', $plan['scope']['sentence'] );
+		$this->assertSame(
+			[
+				'Уже на сайте'                       => 1,
+				'Карточка в архиве — не импортируем' => 1,
+			],
+			$this->groups( $plan )
+		);
 	}
 
 	public function test_a_card_the_list_no_longer_holds_is_left_out_with_its_reason(): void {

@@ -271,7 +271,7 @@ final class Remote_Cards_Actions {
 	 *
 	 * @param Account  $account Account.
 	 * @param string[] $ids     Row ids.
-	 * @return array{create:string[],link:string[],skipped:array<string,string[]>}
+	 * @return array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int}
 	 */
 	private function import_plan( Account $account, array $ids ): array {
 		$snapshot = $this->snapshots->get( $account->id() );
@@ -282,11 +282,11 @@ final class Remote_Cards_Actions {
 			$cards[] = null === $key || null === $snapshot ? null : Remote_Cards_Query::find( $snapshot['cards'], $key );
 		}
 
-		return $this->plan->build( $cards, Remote_Cards_Query::linked_offers( $this->links->identity_map( $account->id() ) ), $this->importer->pending_offer_ids( $account->id() ) );
+		return $this->plan->build( $cards, Remote_Cards_Query::linked_offers( $this->links->identity_map( $account->id() ) ), $this->importer->pending_offer_ids( $account->id() ), $account->id() );
 	}
 
 	/**
-	 * @param array{create:string[],link:string[],skipped:array<string,string[]>} $plan Plan.
+	 * @param array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int} $plan Plan.
 	 * @return int
 	 */
 	private function skipped_count( array $plan ): int {
@@ -294,17 +294,27 @@ final class Remote_Cards_Actions {
 	}
 
 	/**
-	 * «Будет создано товаров: N. Товар с таким артикулом уже есть, свяжем: M.»
+	 * «Будет создано товаров: N. Товар с таким артикулом уже есть, свяжем: M.» The cards of one group are counted as the one
+	 * variable product they become, by the plan's own count.
 	 *
-	 * @param array{create:string[],link:string[],skipped:array<string,string[]>} $plan Plan.
+	 * @param array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int} $plan Plan.
 	 * @return string
 	 */
 	private function import_sentence( array $plan ): string {
 		$parts = [];
 
-		if ( [] !== $plan[ Remote_Cards_Import_Plan::CREATE ] ) {
+		if ( $plan['products'] > 0 ) {
 			/* translators: %d: number of products that will be created. */
-			$parts[] = sprintf( __( 'Будет создано товаров: %d.', 'woodev-plugin-framework' ), count( $plan[ Remote_Cards_Import_Plan::CREATE ] ) );
+			$parts[] = sprintf( __( 'Будет создано товаров: %d.', 'woodev-plugin-framework' ), $plan['products'] );
+		}
+
+		if ( count( $plan[ Remote_Cards_Import_Plan::CREATE ] ) > $plan['products'] + $plan['joined'] ) {
+			$parts[] = __( 'Карточки одной группы станут вариантами одного товара.', 'woodev-plugin-framework' );
+		}
+
+		if ( $plan['joined'] > 0 ) {
+			/* translators: %d: number of cards that will become variations of products that are on the site already. */
+			$parts[] = sprintf( __( 'Станут вариантами уже импортированных товаров: %d.', 'woodev-plugin-framework' ), $plan['joined'] );
 		}
 
 		if ( [] !== $plan[ Remote_Cards_Import_Plan::LINK ] ) {
@@ -320,13 +330,14 @@ final class Remote_Cards_Actions {
 	/**
 	 * The cards the import leaves out, one group per reason.
 	 *
-	 * @param array{create:string[],link:string[],skipped:array<string,string[]>} $plan Plan.
+	 * @param array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int} $plan Plan.
 	 * @return array<int,array<string,mixed>>
 	 */
 	private function import_groups( array $plan ): array {
 		$reasons = [
 			Remote_Cards_Import_Plan::ON_SITE         => __( 'Уже на сайте', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::IMPORTING       => __( 'Уже импортируется — дождитесь результата', 'woodev-plugin-framework' ),
+			Remote_Cards_Import_Plan::GROUP_BUILDING  => __( 'Импорт другой карточки этой группы не завершён — сначала импортируйте её', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::VARIABLE_PARENT => __( 'Товар с таким артикулом — вариативный: выберите вариант через «Связать с…»', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::ARCHIVED        => __( 'Карточка в архиве — не импортируем', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::INCOMPLETE      => __( 'Нет полных данных — обновите список', 'woodev-plugin-framework' ),

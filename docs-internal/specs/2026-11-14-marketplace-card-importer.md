@@ -1,7 +1,8 @@
 # Marketplace card importer (marketplace card → WooCommerce product) — design
 
-**Date:** 2026-11-14. **Status:** draft r3 — written for `kalbac/woocommerce-ozon-seller#75`; r2 folded in the eight findings of the
-r1 critic (Claude Opus, PR #1763); r3 records the operator's answers to the three questions of §6 (15.11.2026), see the
+**Date:** 2026-11-14. **Status:** draft r6 — written for `kalbac/woocommerce-ozon-seller#75`; r2 folded in the eight findings of the
+r1 critic (Claude Opus, PR #1763); r3 records the operator's answers to the three questions of §6 (15.11.2026); r4 records the
+group design as card I7 built it (§2.6.1); r5 folds in the five findings of the I7 critic (Codex, PR #1781), see the
 [revision log](#revision-log). No question is open.
 **Target:** framework **2.1.6** (cards I1–I7 below); first consumer Ozon Seller 2.0.0 (card O6).
 
@@ -125,7 +126,7 @@ interface Card_Importer {
 | `primary_image(): string`, `images(): string[]` | absolute URLs |
 | `remote_category(): array` | the descriptor `Mapping::remote_category()` stores; `[]` when unknown |
 | `category_path(): string[]` | category names from the root down, for creating shop categories; `[]` when unknown |
-| `group(): array` | the Ozon group of the card, read by I7: `key` (string, '' = stands alone), `size` (int), `aspects` (name => value). I1–I6 carry it and ignore it |
+| `group(): array` | the group of the card: `key` (string, '' = stands alone), `size` (int, how many cards the marketplace says the group has), `aspects` (name => value: what tells this card apart inside the group). Read by `Group_Assembler` (§2.6.1). A **snapshot** card of `Link_Resolver::snapshot()` may carry the same `group` (`key`, `size`), which is all the preview knows of a group (§2.4) |
 
 Ozon (card O6): `Ozon_Adapter implements Card_Importer`, delegating to a new `Ozon_Card_Reader` that reads the card's summary,
 attributes and description and builds `Card_Content`. `import_event_types()` = `Ozon_Push_Types::item_types()`;
@@ -148,7 +149,11 @@ attributes and description and builds `Card_Content`. `import_event_types()` = `
 | `jobs/class-import-jobs.php` | `Jobs\Import_Jobs` | the `import_cards` job | I5 |
 | `jobs/class-card-event-handler.php` | `Jobs\Card_Event_Handler` | the item notification | I5 |
 | `class-flow-wiring.php` (changed) | `Flow_Wiring::import()` | builds and registers the above | I5 |
-| `flows/class-group-assembler.php`, `flows/class-card-import.php` (changed) | `Flows\Group_Assembler` | cards of one group → one variable product | I7 |
+| `flows/class-group-assembler.php`, `flows/class-card-import.php` (changed) | `Flows\Group_Assembler` | cards of one group → one variable product (§2.6.1) | I7 |
+| `data/class-wpdb-link-store.php` (changed) | `Wpdb_Link_Store::move_offer()` | moves an offer row to the first variation of a converted product | I7 |
+| `flows/class-legacy-order-lines.php` | `Flows\Legacy_Order_Lines` | an order line made while a product was simple resolves to its first variation (§2.6.1) | I7 |
+| `flows/class-product-writer.php` (changed) | `Product_Writer::start()`, `::complete()` | `start()` takes `$prepare`, called on the unsaved product (the group's mark goes into the first save); the final save of a variation that is not published stores `private` | I7 |
+| `admin/pages/products/class-remote-cards-import-plan.php`, `class-remote-cards-actions.php`, `class-site-products-module.php`, `class-flow-wiring.php` (changed) | — | the preview counts a group as one product; the module and the wiring hand the assembler and its lookup over | I7 |
 | `admin/pages/products/class-remote-cards-{definition,actions,rows,provider}.php`, `class-site-products-module.php` (changed) | — | «Импортировать», notes, activity; the module builds the three classes and hands them the scheduler, the notes store and `Logging` | I6 |
 
 Client code: **none expected.** The cards tab is the generic records view (`src/marketplace-admin/views/records/`); a new action, a
@@ -183,7 +188,14 @@ adapter that imports (I6, built).
   `wc_get_product_id_by_sku()`, and groups the selection — «будет создано товаров: N», «уже на сайте: K», «товар с таким
   артикулом уже есть, свяжем: M», «товар с таким артикулом — вариативный, выберите вариант через „Связать с…“»,
   «карточка в архиве — не импортируем», «нет полных данных — обновите список» (`details_ok` false), «нет в загруженном
-  списке». The plan uses the same decision as the job (§2.6), so the two cannot disagree; from I7 on that decision includes groups, and the cards of one group count as one product.
+  списке». The plan uses the same decision as the job (§2.6), so the two cannot disagree. That decision includes groups
+  (§2.6.1): «будет создано товаров» counts **products** — the cards of one group that has no product yet count once, with
+  «Карточки одной группы станут вариантами одного товара» beside it — and the cards whose group already has a product on
+  the site are counted apart, «Станут вариантами уже импортированных товаров: V». The plan reads a card's group from the
+  snapshot card's `group` and asks the job's own decision about the group (`Group_Assembler::lookup()` → `NONE`, `BUILDING`,
+  `READY`); every eligible card is still queued. A card whose group's product is half-made is left out — «Импорт другой
+  карточки этой группы не завершён — сначала импортируйте её» — because the job would skip it, unless the selection also
+  holds the card that resumes that product; that card is then queued **first**, so the job finishes it before the others join.
 - **Apply** replans, requires the licence (`License_Gate::refusal_for( 'импортировать карточки с маркетплейса' )`), queues the
   eligible articles in batches of `Import_Scheduler::BATCH` and answers 202 «Импорт поставлен в очередь…».
 - **Activity.** A row whose article is in a pending or running `import_cards` action is `locked` with «Импортируется» and blocks
@@ -258,6 +270,96 @@ Two runs cannot create the same product at once. Every run holds the account cla
 (§2.5). `set_sku()` throws when another product already has the SKU, so even a run that lost its claim unnoticed gets a refused
 save (a note), not a second product. The unique `(account_id, offer_id)` index is the last guard for the link. Matching is **exact**
 SKU only; look-alike articles stay the business of «Связать по артикулу» and its report.
+
+### 2.6.1 Groups → one variable product (card I7)
+
+`Card_Content::group()` names the group. A card with an empty `key` is imported exactly as above. For the others the five rows
+stay as they are — a card is still found by its article, the SKU of a simple product **or of a variation** — and
+`Flows\Group_Assembler` adds to them. One decision, `Group_Assembler::group_of()`, says what the card's group has on the site:
+nothing (`NONE`), a half-made product (`BUILDING`: it carries the import marker) or a product a card can join (`READY`).
+
+| Card arrives, no product has its article | Action |
+|---|---|
+| `NONE` | row 5: `Product_Writer::start()`, whose **first save also stores the group's mark** (its `$prepare` callback → `Group_Assembler::mark()`), → `complete()`. Then, **before the link**, `Group_Assembler::place()`: when `size` > 1 the product is converted in place and the card is linked as its first variation — a lone card of a group of several is already the variation its siblings will join; when `size` is 1 the simple product is linked |
+| `READY` (simple or variable) | that product is converted in place if it is still simple; the card becomes one more variation: a first save with the SKU, the import marker and the aspect attributes → `Product_Writer::complete()` on the variation → `Card_Linker::link()` with the product as parent |
+| `BUILDING` | skipped with the note «Импорт другой карточки этой группы (артикул …) не завершён. Импортируйте сначала её, затем повторите.» |
+
+The result does not depend on the order or on the number of runs: red today and black a week later give the same product as
+both at once (unit `GroupImportTest`, integration `GroupAssemblerTest`).
+
+**Why the conversion comes before the link.** Row 1 ends the import of a linked card, and the cards tab does not offer a
+linked card again. A card that were linked first and converted afterwards could be left, by a cut in between, as a variable
+product with no variation that no retry reaches. Converted first, a card whose run was cut anywhere is **still not linked**:
+its own retry — a re-click or the queue — meets row 4 (marked product), row 3 (its SKU on the simple product or on the first
+variation; `place()` runs there too for the importer's own product) or row 5 again (the product gave its SKU up and has no
+variation yet: `READY`, the conversion is finished and the card is linked to the variation it turns out to be). Row 1 itself
+calls `Group_Assembler::heal()`: nothing is imported, but a conversion **another** card's run left open on the linked card's
+product is finished, and the product of what was a group of one becomes variable once the group has several.
+
+**How a group's product is found.** Product meta, written by the importer's own saves and nothing else:
+`_woodev_{marketplace id}_import_group` = `{account id}:{group key}` stays on the product of the group for good, and a later card
+finds the product by it (the oldest one, any status short of the bin); `_woodev_{marketplace id}_import_variant` keeps the aspects
+of the card a simple product was made from, from the product's first save until its conversion is complete. Both go in with the
+writer's **first save**, beside the SKU and the marker: a run cut right after that save has not lost the group, so a sibling
+that arrives next finds a `BUILDING` product and waits instead of starting a second product for the group. The framework stays
+adapter-neutral: it never reads a remote identifier to tell a group. The consequence is deliberate — **only products the importer
+made are assembled**. A product the merchant linked by its article (row 3) carries no mark, is never converted, and its sibling
+cards make a product of their own.
+
+**The conversion** (the five steps of the Ozon spec's §5.6; steps 1–4 are `Group_Assembler::convert()`, step 5 is the new
+card's variation):
+
+1. The product is loaded as `variable` and saved without its SKU. The same save writes into the `…_import_variant` meta what the
+   first variation will take — the former SKU, the price, the sale dates, the stock, the measures, the main image — read from the
+   **simple** product: WooCommerce reads a variable product's own price as empty and recomputes its stock status from its
+   variations (READ `WC_Product_Variable_Data_Store_CPT::read_product_data()`, `WC_Product_Variable::validate_props()`, WooCommerce
+   11.3). The aspects become the product's own (custom) attributes with «used for variations» on — never global taxonomies (Ozon
+   spec risk 11).
+2. The first variation is created with the former SKU and those values. No duplicate SKU is ever met: the product gave its
+   SKU up in step 1.
+3. Every offer row of the product — of every account — is moved to the variation by `Wpdb_Link_Store::move_offer()`: the same
+   `link_id`, article, identifiers, switches and overrides, now `wc_product_id` = the variation, `wc_parent_id` = the product.
+   The run's own account is written under its claim fence; a lost claim throws `Claim_Lost`.
+4. Each of those accounts gets a `kind = parent` row for the product, `offer_id` NULL, carrying the moved row's `mapping_id`.
+   The variable product is therefore never a card: it has no SKU for row 3 to find, and `Card_Linker` answers `NOT_A_CARD` for it.
+The conversion closes with one more save of the product: it stops managing stock of its own, the `…_import_variant` meta is
+deleted and `_woodev_{marketplace id}_import_first_variation` names the first variation for good. WooCommerce clears the
+product's own price meta when it syncs the product with its variations, which every variation save queues. When the card is
+not linked yet (the lone card of a group of several), steps 3 and 4 find no row to move; the card is then linked to the
+variation and `Group_Assembler::parent_row()` adds the `parent` row.
+
+Each step tells from the stored state whether it has been done (the product's type, its one variation, where the offer rows
+sit), and the meta is deleted last, so **a conversion cut at any point is finished** — by the retry of the same card, by the
+next card of the group, or by row 1 of a card linked to that product.
+
+**Orders made before the conversion.** An order line made while the product was simple names the product and **no variation**.
+WooCommerce would resolve it to the variable product, which manages no stock, and paying, cancelling or refunding that order
+would no longer reduce or restore anything (READ `WC_Order_Item_Product::get_product()`, `wc_reduce_stock_levels()`,
+`wc_increase_stock_levels()`, `wc_restock_refunded_items()`, WooCommerce 11.3). `Flows\Legacy_Order_Lines`, hooked by
+`Flow_Wiring::import()` on WooCommerce's own `woocommerce_order_item_product`, resolves such a line to the first variation —
+only a line with no variation on a product that carries the `…_import_first_variation` meta, which a variable product can
+only have got while it was simple. No order is rewritten.
+
+**A variation.** The aspects are the variation's attributes; a card with no aspect is told apart by its article under the
+attribute «Вариант». It takes the card's price (the same inverse price rule, resolved from the **parent's** stored categories),
+weight, dimensions, description and **main image only** — the gallery is the product's, from the card the product was made
+from. A variation is `publish` or `private`, never `draft`: WooCommerce does not list a draft variation, so
+`Product_Writer::complete()` finishes a variation that is not published as `private`. Whether it is switched on is decided
+**before** the writer runs (`Group_Assembler::sells_at_once()`) and stored by the writer's **final save**, together with the
+removal of the marker: a variation that joins a product that is **already published** while «Сразу публиковать…» is off is
+finished switched off, is never stored on sale — not for a moment and not after a cut — and gets the note «Вариант добавлен в
+опубликованный товар выключенным…» (read from the stored state, so a retry that only links it says it too). A variation of a
+draft product is switched on and sells when the merchant publishes the product.
+
+**Cut points of a group import.** The four of §2.6 hold for the card that makes the product, and the conversion that follows
+its final save is covered by «Why the conversion comes before the link» above. For a card that joins:
+cut before the variation's first save → nothing of it exists, the next run starts again; cut between its first and final save →
+its SKU and marker are stored, row 4 resumes on the variation; cut between the final save and the link, or a link refused for a
+lost claim → row 3 links the variation with its real parent id. The budget and the claim renewal are the writer's, unchanged.
+
+**What is left as it is.** A linked card is never moved or regrouped when the marketplace changes its group; an archived card
+of a group gets no variation (row 2); stock quantity is not imported (§1.4), so a new variation starts with WooCommerce's
+defaults and both sync switches off (§2.7).
 
 ### 2.7 The link record
 
@@ -334,7 +436,7 @@ it on export**, so an imported product round-trips; only when nothing maps the p
 | weight, dimensions | `wc_get_weight( g )`, `wc_get_dimension( mm )` into the **profile's units** (`units.weight`, `units.dimension`: the export reads the product's numbers in them) when it names them, else the shop's units | profile |
 | category | the mapping's terms; else, when «Создавать категории…» is on, `category_path()` created by name (an existing term with the same name and parent is reused); else none | mapping |
 | status | `publish` when «Сразу публиковать…» is on, else `draft` | setting |
-| type, visibility, stock | `simple` (a group → variable, I7); WooCommerce defaults (visible, in stock, stock not managed) | — |
+| type, visibility, stock | `simple`; the cards of one group → one `variable` product with a variation per card (§2.6.1); WooCommerce defaults (visible, in stock, stock not managed) | — |
 
 Settings (card I4), both on «Общие», group «Заказы и карточки», stored as keys of the one defaults option
 `woodev_{adapter id}_account_defaults`, shown only when the adapter is a `Card_Importer`:
@@ -373,9 +475,9 @@ framework text domain with the Russian catalogue, PHP 7.4, a critic of another l
 | I4 — Import settings | S · Haiku 5.5 | — | `settings/class-effective-settings.php`, `settings/class-defaults-section.php` | §3 settings. Accept: hidden for an adapter that is not a `Card_Importer`; saved values survive a reload; defaults as decided |
 | I5 — One-card import, job, event handler, wiring | M · Sonnet 5.5 | I1–I4 | `flows/class-card-import.php`, `jobs/class-import-jobs.php`, `jobs/class-card-event-handler.php`, `class-flow-wiring.php`, the wiki page | §2.3, §2.5, §2.6, §2.9, §2.10, §4. Accept: the five rows of §2.6 and its four cut points; **a variable parent with the card's SKU and no link row gets no link** and the note of row 3; a variation with that SKU is linked with its real parent id; an archived card creates no product and no link; the five rows of §2.3; the claim is renewed before every card and a lost claim stops the run; budget requeue keeps the attempt, and a run whose `read_cards()` used the whole budget still finishes one card or one image; no handler and no hook without `Card_Importer`; no remote call at request time |
 | I6 — «Импортировать» on the cards tab | M · Sonnet 5.5 | I1 (parallel with I5) | `admin/pages/products/class-remote-cards-{definition,actions,rows,provider}.php`, `admin/pages/products/class-site-products-module.php` (construction of the three classes only) | §2.4, the note cell. Accept: preview writes and calls nothing and has the variable-parent and archived groups; apply replans; licence refusal; locked rows; **`link_to`, `near_confirm` and `near_dismiss` each refuse more than one id** in preview and apply; the note's `detail` is shown only while «Логирование» is on, switching it changes the same stored note's rendering both ways; a table GET never calls the marketplace |
-| I7 — Groups → variable products | L · Fable 5 | I5 | `flows/class-group-assembler.php`, `flows/class-card-import.php`, `admin/pages/products/class-remote-cards-actions.php` (the import plan) | Ozon spec §5.6 group assembly on `Card_Content::group()`, its five-step in-place conversion and its acceptance tests (red-then-black equals red+black). **Owns the preview too:** the cards-tab plan counts the cards of one group as **one** product («будет создано товаров: 1» for three colour cards), through the same group decision as the job, so §2.4's «the two cannot disagree» stays true; accept: a plan test with a three-card group. Part of 2.1.6 (operator decision 15.11.2026) |
+| I7 — Groups → variable products | L · Fable 5 | I5 | `flows/class-group-assembler.php`, `flows/class-card-import.php`, `admin/pages/products/class-remote-cards-actions.php` and `class-remote-cards-import-plan.php` (the import plan); built with files the row did not foresee: `data/class-wpdb-link-store.php` (`move_offer()`), `flows/class-product-writer.php` (`$prepare`, the final status of a variation), `flows/class-legacy-order-lines.php`, `class-flow-wiring.php` and `admin/pages/products/class-site-products-module.php` (construction only) | **Built (§2.6.1).** Ozon spec §5.6 group assembly on `Card_Content::group()`, its five-step in-place conversion and its acceptance tests (red-then-black equals red+black). **Owns the preview too:** the cards-tab plan counts the cards of one group as **one** product («будет создано товаров: 1» for three colour cards), through the same group decision as the job, so §2.4's «the two cannot disagree» stays true; accept: a plan test with a three-card group. Part of 2.1.6 (operator decision 15.11.2026) |
 | Release 2.1.6 | coordinator | I1–I7 | — | — |
-| O6 — Ozon adapter (repo `woocommerce-ozon-seller`) | M · Sonnet 5.5 | released 2.1.6 | `includes/ozon/catalog/class-ozon-card-reader.php`, `includes/ozon/adapter/class-ozon-adapter.php`, `includes/migration/**` (the two settings; one report line per dropped v1 option a shop had switched on: `external` type, attributes from the card, replace existing), fixtures, `docs/spec` §5.6 and `docs/wiki` | `Card_Importer` on the adapter; `Card_Content` from recorded fixtures of the three requests; migration carries `product_status` and `create_new_category`. Accept on the rig: bulk import of several cards, auto-import by a real notification, a re-click duplicates nothing, a card with an existing SKU is linked, a card whose SKU is a variable parent's is refused with the note, an archived card is skipped, an image failure leaves a product |
+| O6 — Ozon adapter (repo `woocommerce-ozon-seller`) | M · Sonnet 5.5 | released 2.1.6 | `includes/ozon/catalog/class-ozon-card-reader.php`, `includes/ozon/adapter/class-ozon-adapter.php`, `includes/migration/**` (the two settings; one report line per dropped v1 option a shop had switched on: `external` type, attributes from the card, replace existing), fixtures, `docs/spec` §5.6 and `docs/wiki` | `Card_Importer` on the adapter; `Card_Content` from recorded fixtures of the three requests, **with `group()` filled** (`key` = the model id, `size` = `model_info.count`, `aspects` = the card's aspect attributes by name) and the same `group` (`key`, `size`) on its snapshot cards, or the preview counts every card as a product; migration carries `product_status` and `create_new_category`. Accept on the rig: bulk import of several cards, auto-import by a real notification, a re-click duplicates nothing, a card with an existing SKU is linked, a card whose SKU is a variable parent's is refused with the note, an archived card is skipped, an image failure leaves a product |
 
 Waves (at most three workers, disjoint files): **I1 ∥ I2 ∥ I4** → **I3** → **I5 ∥ I6** → **I7** → release 2.1.6 → **O6**. I3 may start as
 soon as I1 is merged, beside I2 and I4.
@@ -402,7 +504,12 @@ The three questions r2 left open were answered by the operator on 15.11.2026:
   not measured — I3's acceptance covers `for_category()`.
 - Whether Ozon sends `CREATE_OR_UPDATE_ITEM` when only a price changes is not known; the price row of §4 depends on it.
 - v1's category creation in a background job (the capability check) was read, not run.
-- Nothing was run on the rig. r2 and r3 have not been re-read by a critic.
+- The group conversion (§2.6.1) was read against WooCommerce 11.3's source and is covered by the unit suite over a shop
+  double and by `tests/integration/Marketplace/GroupAssemblerTest.php` on a real WooCommerce; it was not clicked through on
+  the rig with a real Ozon group — O6's rig acceptance does that.
+- Nothing was run on the rig. r2 and r3 have not been re-read by a critic; r4 was (the I7 critic), r5 has not been yet.
+- A sibling that arrives while its group's product is half-made is skipped, not requeued: after a burst of notifications for one
+  new group the other cards may need a manual import (the preview says so, the job notes it).
 
 ## Revision log
 
@@ -411,6 +518,9 @@ The three questions r2 left open were answered by the operator on 15.11.2026:
 | r1 | 14.11.2026 | First draft (PR #1763). |
 | r2 | 14.11.2026 | The r1 critic's eight findings (Claude Opus). (1) §2.6: the first save carries the SKU, the marker and the category — r1 let the SKU arrive with the final save, so a run cut during images left a draft the next run could not find. (2) §2.6 row 3: a variable parent is refused before `Card_Linker` (the linker refuses a parent only when it already has a parent row), and a variation passes its real parent id. (3) §2.6, §3: the price is worked out after the category is stored. (4) §2.1, §2.4, §2.6 row 2: an archived card is skipped with a note, never linked. (5) §2.5, §2.8: the claim is extended before every card and every image; one download is bounded at 30 s. (6) §2.9: a note stores its technical tail separately and `Logging::hint()` is called at render. (7) §2.2, §2.4, I6: `class-site-products-module.php` joins the file set; `link_to`, `near_confirm`, `near_dismiss` refuse more than one id. (8) §2.5: a run always finishes one card or one image before the budget may stop it. Card acceptances I1, I2, I3, I5, I6 and O6 updated; §2.8 records that the image helpers load in a background job (read in WooCommerce's source); §7 gains the critic's unchecked items. §6 is unchanged. |
 | r3 | 15.11.2026 | The operator's answers to §6 (15.11.2026). (1) Groups → variable products are **in 2.0**: I7 joins release 2.1.6, the release row depends on I1–I7, the waves gain I7, §1.3 and §1.4 no longer list groups as out of scope. (2) «Сразу публиковать…» defaults to **off (draft)** for a new shop; an upgraded v1 shop keeps its value. (3) The `external` type, attributes from the card and «replace existing» are **dropped**, one migration-report line per option a shop had on (O6). §6 becomes «Operator decisions». §2.9: the give-up path wrote the raw exception message into the merchant `text`; it now writes a fixed Russian sentence into `text` and the reason into `detail`. The I7 row owns the cards-tab preview, which must count a group as one product. |
+| r4 | 15.11.2026 | Card I7 built. New §2.6.1: how a group's product is found (two product meta, importer-made products only), the conversion as built (the simple product's values are kept in meta before the type changes, because a variable product reads its own price as empty; every offer row of the product moves, each account gets a parent row; the meta is deleted last, so a cut conversion is finished by the next card), what a variation takes (main image only; `publish` or `private`, never `draft`; switched off when it joins a published product with «Сразу публиковать…» off), the cut points of a card that joins, and the half-made-group note. §2.1: `group()` and the snapshot card's `group`. §2.2 and the I7 row: the three files the row did not foresee. §2.4: the preview's product count and its two new sentences. O6: `group()` and the snapshot `group` are the adapter's to fill. |
+| r5 | 15.11.2026 | The I7 critic's five findings (Codex, PR #1781), each reproduced as a failing test first. (1) The group's mark is stored by the writer's **first save** (`Product_Writer::start()` takes `$prepare`): a run cut right after it no longer lets a sibling start a second product for the group. (2) The conversion comes **before the link** (`Group_Assembler::place()`), so a card whose conversion was cut is still not linked and its own retry finishes it; row 1 heals a conversion another card left open (`heal()`). (3) Whether a variation is switched on is decided before the writer runs and stored by its final save (`private` for a variation that is not published): a variation that must stay off is never stored on sale. (4) `Flows\Legacy_Order_Lines`: an order line made while the product was simple resolves to the first variation, so paying, cancelling or refunding an old order still moves the card's stock. (5) The preview and the job share the group decision (`NONE` / `BUILDING` / `READY`): a card whose group is half-made is left out of the preview, or queued after the card that resumes the group. |
+| r6 | 16.11.2026 | The I7 critic's round 2 (Codex, PR #1781): no Must; its one Should fixed. §2.4's product count: a card that resumes its own half-made **variation** in a group whose product is finished is counted as joining that product («Станут вариантами уже импортированных товаров»), not as a new product; only a card that resumes the group's half-made product counts as one. |
 
 ## Related
 

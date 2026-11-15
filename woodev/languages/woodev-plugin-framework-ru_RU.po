@@ -11178,3 +11178,27 @@ msgstr ""
 #: marketplace/admin/pages/mappings/class-view-config.php:275
 msgid "как в магазине (%s)"
 msgstr ""
+
+#. translators: %s: article of another card of the same group
+#: marketplace/flows/class-card-import.php:283
+#, php-format
+msgid "Импорт другой карточки этой группы (артикул %s) не завершён. Импортируйте сначала её, затем повторите."
+msgstr ""
+
+#: marketplace/flows/class-group-assembler.php:334
+msgid "Вариант добавлен в опубликованный товар выключенным. Проверьте его и включите в карточке товара."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:312
+msgid "Карточки одной группы станут вариантами одного товара."
+msgstr ""
+
+#. translators: %d: number of cards that will become variations of products that are on the site already.
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:317
+#, php-format
+msgid "Станут вариантами уже импортированных товаров: %d."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:346
+msgid "Импорт другой карточки этой группы не завершён — сначала импортируйте её"
+msgstr ""

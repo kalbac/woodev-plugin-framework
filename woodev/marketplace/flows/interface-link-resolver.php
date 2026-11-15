@@ -95,7 +95,10 @@ interface Link_Resolver {
 	 * @param string              $context Job hook.
 	 * @param callable            $renew   `function (): void`, extends the account claim or throws.
 	 * @param array<string,mixed> $state   Cursor of the read; updated as it advances.
-	 * @return array<int,array<string,mixed>> Cards for {@see \Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store::put()}.
+	 * @return array<int,array<string,mixed>> Cards for {@see \Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store::put()}. An adapter
+	 *                                        that imports cards of a group as one product also gives each card its `group`
+	 *                                        (`key`, `size` — the members of {@see \Woodev\Framework\Marketplace\Catalog\Card_Content::group()}):
+	 *                                        the preview of «Импортировать» counts products from it, with no call to the marketplace.
 	 * @throws Link_Resolve_Exception When the marketplace's answer cannot be trusted.
 	 */
 	public function snapshot( Account $account, string $context, callable $renew, array &$state ): array;
