@@ -204,6 +204,12 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 				}
 			);
 
+			Functions\when( 'wc_sanitize_phone_number' )->alias(
+				static function ( string $phone ): string {
+					return (string) preg_replace( '/[^\d+]/', '', $phone );
+				}
+			);
+
 			$this->states = [
 				'RU' => [
 					'МОСКВА'          => 'Москва',
@@ -426,6 +432,36 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame( 'apt 4', $destination['address_2'] );
 		}
 
+		/**
+		 * #1636: the recipient's phone is the destination's `phone`, sanitised; WooCommerce's own keys are untouched.
+		 *
+		 * @covers ::normalize_destination
+		 *
+		 * @return void
+		 */
+		public function test_the_recipient_phone_rides_on_the_destination_sanitised(): void {
+			$destination = $this->calculator()->normalize_destination( [ 'country' => 'RU', 'phone' => ' +7 (999) 123-45-67 ' ] );
+
+			$this->assertSame( '+79991234567', $destination['phone'] );
+			$this->assertSame( 'RU', $destination['country'] );
+		}
+
+		/**
+		 * #1636: no phone — or one that sanitises to nothing — leaves the key out, and nothing else changes.
+		 *
+		 * @covers ::normalize_destination
+		 *
+		 * @return void
+		 */
+		public function test_a_missing_or_empty_phone_leaves_the_destination_key_out(): void {
+			$calculator = $this->calculator();
+
+			$this->assertArrayNotHasKey( 'phone', $calculator->normalize_destination( [ 'country' => 'RU' ] ) );
+			$this->assertArrayNotHasKey( 'phone', $calculator->normalize_destination( [ 'country' => 'RU', 'phone' => '  ' ] ) );
+			$this->assertArrayNotHasKey( 'phone', $calculator->normalize_destination( [ 'country' => 'RU', 'phone' => 'нет' ] ) );
+			$this->assertArrayNotHasKey( 'phone', $calculator->normalize_destination( [ 'country' => 'RU', 'phone' => [ '1' ] ] ) );
+		}
+
 		/* ------------------------------------------------------------------ *
 		 * Package (spec D2 first bullet, «Mine 2»)
 		 * ------------------------------------------------------------------ */
@@ -546,6 +582,39 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$calculator->calculate( $lines, [ 'country' => 'RU' ] );
 
 			$this->assertSame( [ 'cod', null ], $seen, 'a quote without a payment method carries no key' );
+		}
+
+		/**
+		 * #1636: the method being quoted reads the recipient's phone from `$package['destination']['phone']`,
+		 * for a new order and a saved one alike (both reach the calculator through the same rates route); a
+		 * quote without a phone carries no key.
+		 *
+		 * @covers ::calculate
+		 * @covers ::build_package
+		 *
+		 * @return void
+		 */
+		public function test_the_method_reads_the_recipient_phone_from_the_package_destination(): void {
+			$seen   = [];
+			$method = Mockery::mock( Shipping_Method::class );
+
+			$method->id = 'test_shipping';
+			$method->shouldReceive( 'is_pickup_shipping' )->andReturn( false );
+			$method->shouldReceive( 'get_admin_rates_for_package' )->andReturnUsing(
+				function ( array $package ) use ( &$seen ) {
+					$seen[] = $package['destination']['phone'] ?? null;
+
+					return [];
+				}
+			);
+
+			$calculator               = $this->calculator( $this->provider( 'test', [ 'test_shipping' ] ) );
+			$calculator->zone_methods = [ $method ];
+
+			$calculator->calculate( $this->one_line(), $calculator->normalize_destination( [ 'country' => 'RU', 'phone' => '+7 999 123-45-67' ] ) );
+			$calculator->calculate( $this->one_line(), $calculator->normalize_destination( [ 'country' => 'RU' ] ) );
+
+			$this->assertSame( [ '+79991234567', null ], $seen );
 		}
 
 		/**

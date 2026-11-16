@@ -34,8 +34,8 @@ export function scalarMeta( meta: unknown ): Record<string, string | number | bo
  * manager reaches ④, so a line that fails here is a state the step never expects — it is left
  * out rather than sent, and the server's own 422 (`unknown product`) stays the last word.
  *
- * The destination carries WooCommerce STATE CODES (step ② holds a code), the lines carry the
- * EDITED price (O8), and the settlement record the manager picked travels whole as `location`
+ * The destination carries WooCommerce STATE CODES (step ② holds a code) and, when there is one,
+ * the recipient's `phone` (#1636), the lines carry the EDITED price (O8), and the settlement record the manager picked travels whole as `location`
  * — see {@link WizardData.settlementRecord}.
  *
  * @param {WizardData} data the wizard state.
@@ -61,9 +61,13 @@ export function buildRatesRequest( data: WizardData ): Record<string, unknown> |
 		return null;
 	}
 
+	// The recipient's phone, as the order will carry it (`buildPayload()`: delivery phone, else billing's), so a
+	// carrier that needs it to quote gets it from `package.destination.phone`. Left out when there is none.
+	const phone = ( data.shipping.phone || data.billing.phone ).trim();
+
 	const request: Record<string, unknown> = {
 		items,
-		destination: { country, state, city, postcode, address: address_1, address_2 },
+		destination: { country, state, city, postcode, address: address_1, address_2, ...( '' !== phone ? { phone } : {} ) },
 		customer_id: data.customer.id,
 	};
 

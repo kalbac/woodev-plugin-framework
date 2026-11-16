@@ -85,10 +85,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string, mixed> $destination `country`, `state`, `city`, `postcode`, `address`, `address_2`.
+		 * @param array<string, mixed> $destination `country`, `state`, `city`, `postcode`, `address`, `address_2`, and optionally the recipient's `phone` (added in 2.1.9).
 		 * @param Location_Record|null $record      Destination location record, when the wizard has one.
 		 *
-		 * @return array{country: string, state: string, postcode: string, city: string, address: string, address_1: string, address_2: string}
+		 * @return array{country: string, state: string, postcode: string, city: string, address: string, address_1: string, address_2: string, phone?: string} `phone` is present only when the wizard sent one.
 		 */
 		public function normalize_destination( array $destination, ?Location_Record $record = null ): array {
 
@@ -126,7 +126,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 
 			$address = $text( $destination, 'address' );
 
-			return [
+			$normalized = [
 				'country'   => $country,
 				'state'     => $this->resolve_state_code( $country, $state_input ),
 				'postcode'  => $postcode,
@@ -135,6 +135,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 				'address_1' => $address,
 				'address_2' => $text( $destination, 'address_2' ),
 			];
+
+			// The recipient's phone rides on the destination as `phone` — the one place a carrier reads it from
+			// in the admin calculator. WooCommerce's own package destination has no such key, so it is
+			// absent (not an empty string) when the wizard did not send one.
+			$phone = '' === $text( $destination, 'phone' ) ? '' : wc_sanitize_phone_number( $text( $destination, 'phone' ) );
+
+			if ( '' !== $phone ) {
+				$normalized['phone'] = $phone;
+			}
+
+			return $normalized;
 		}
 
 		/**
@@ -233,6 +244,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * `contents` mirrors a cart's shape — carrier code reads `data` (the product), `quantity`
 		 * and the `line_*` totals off it — at the EDITED price. Lines whose product needs no
 		 * shipping are left out, as `WC_Cart` leaves them out of a package.
+		 *
+		 * The recipient's phone, when the wizard has one, is `$package['destination']['phone']` (digits and a
+		 * leading `+`, see {@see self::normalize_destination()}): a carrier that needs it to quote reads it
+		 * from there, and the key is absent otherwise.
 		 *
 		 * @since 2.0.2
 		 *
