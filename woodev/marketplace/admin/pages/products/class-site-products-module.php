@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -43,6 +44,7 @@ use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
+use Woodev\Framework\Marketplace\Jobs\Price_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -235,6 +237,10 @@ final class Site_Products_Module {
 		$license  = License_Gate::for_plugin( $plugin );
 		$bulk     = self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table );
 		$withheld = $adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE ];
+
+		// An adapter that reads no prices has nothing to pull; one that sends none keeps no own prices to reset.
+		$withheld = null === $adapter->price_reader() ? array_merge( $withheld, [ Site_Products_Bulk::PULL_PRICES ] ) : $withheld;
+		$withheld = null === $adapter->price_pusher() ? array_merge( $withheld, [ Site_Products_Bulk::RESET_PRICE ] ) : $withheld;
 		$runner   = self::bulk_runner( $plugin, $accounts, $db );
 		$runs     = new Bulk_Run_Store( $db, $table( 'bulk_runs' ) );
 
@@ -350,6 +356,9 @@ final class Site_Products_Module {
 					return self::count_candidates( $shop->products( $category ), $links->identity_map( $account_id ) );
 				},
 				'link_effect'     => [ $linker, 'remote_effect' ],
+				'pull_prices'     => null === $adapter->price_reader() ? null : static function ( Account $account, array $offer_ids ) use ( $job_names ): int {
+					return ( new Price_Scheduler( $job_names ) )->queue_pull( $account->id(), $offer_ids );
+				},
 				'can_edit'        => static function ( int $product_id ): bool {
 					return current_user_can( 'edit_product', $product_id );
 				},

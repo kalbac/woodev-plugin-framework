@@ -42,6 +42,36 @@ final class Schema {
 	public const MAX_ID_LENGTH = 16;
 
 	/**
+	 * The revision of the whole table set, owned by the framework and independent of any plugin's version: it is raised whenever a
+	 * statement below changes (a table or a column is added), so that {@see Lifecycle} brings a site that already has the tables up to
+	 * date on its next request — whichever plugin's bundled framework copy won the bootstrap, and whether or not the plugin that owns
+	 * the tables was itself updated. A site that never stored one is at revision 0.
+	 *
+	 * 1: `bulk_runs` and `sync_state.pending_source` (2.1.8–2.1.10).
+	 *
+	 * @since 2.1.10
+	 *
+	 * @var int
+	 */
+	public const REVISION = 1;
+
+	/**
+	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
+	 * looks every one of them up before it stores a revision: `dbDelta` returns normally when its `ALTER TABLE … ADD COLUMN` is refused
+	 * and the table still exists, so the table names alone cannot tell a finished upgrade from a failed one. A new table needs no entry
+	 * (its existence is checked); a column added to an existing table gets one in the same change that raises {@see self::REVISION}.
+	 *
+	 * 1: `sync_state.pending_source`.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @var array<string,string[]>
+	 */
+	private const REQUIRED_COLUMNS = [
+		'sync_state' => [ 'pending_source' ],
+	];
+
+	/**
 	 * Names of the tables, without any prefix, in creation order.
 	 *
 	 * @var string[]
@@ -160,6 +190,24 @@ final class Schema {
 		}
 
 		return $statements;
+	}
+
+	/**
+	 * Returns the columns a revision-current table must have beyond its creation, see {@see self::REQUIRED_COLUMNS}.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param string $prefix `$wpdb->prefix`.
+	 * @return array<string,string[]> Full table name => column names.
+	 */
+	public function required_columns( string $prefix ): array {
+		$columns = [];
+
+		foreach ( self::REQUIRED_COLUMNS as $table => $names ) {
+			$columns[ $this->table_name( $table, $prefix ) ] = $names;
+		}
+
+		return $columns;
 	}
 
 	/**
@@ -358,6 +406,7 @@ final class Schema {
 			pending_payload longtext NULL,
 			pending_rev int(10) unsigned NOT NULL DEFAULT 0,
 			pending_since datetime NULL DEFAULT NULL,
+			pending_source longtext NULL,
 			in_flight_rev int(10) unsigned NULL DEFAULT NULL,
 			in_flight_payload longtext NULL,
 			sent_payload longtext NULL,

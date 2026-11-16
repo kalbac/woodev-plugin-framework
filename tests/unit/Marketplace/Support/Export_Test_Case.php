@@ -173,6 +173,10 @@ abstract class Export_Test_Case extends Sync_Test_Case {
 		$product->shouldReceive( 'get_name' )->andReturn( 'Товар ' . $id );
 		$product->shouldReceive( 'get_price' )->andReturn( $props['price'] );
 		$product->shouldReceive( 'get_regular_price' )->andReturn( $props['regular_price'] );
+		// The sale fields a price intent keeps beside its payload (#1797): none on these doubles unless a test says so.
+		$product->shouldReceive( 'get_sale_price' )->andReturn( (string) ( $props['sale_price'] ?? '' ) );
+		$product->shouldReceive( 'get_date_on_sale_from' )->andReturn( null );
+		$product->shouldReceive( 'get_date_on_sale_to' )->andReturn( null );
 		$product->shouldReceive( 'is_virtual' )->andReturn( (bool) $props['virtual'] );
 		$product->shouldReceive( 'is_downloadable' )->andReturn( (bool) $props['downloadable'] );
 		$product->shouldReceive( 'get_children' )->andReturn( $props['children'] );

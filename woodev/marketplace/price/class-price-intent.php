@@ -45,6 +45,13 @@ final class Price_Intent {
 	private $attempts;
 
 	/**
+	 * The shop's own price fields the payload was worked out from, when the intent was recorded from a product save.
+	 *
+	 * @var array<string,mixed>|null
+	 */
+	private $source;
+
+	/**
 	 * Creates the intent.
 	 *
 	 * @since 2.0.29
@@ -53,12 +60,25 @@ final class Price_Intent {
 	 * @param int                       $revision Revision.
 	 * @param array<string,string|null> $payload  Payload.
 	 * @param int                       $attempts Failed attempts so far.
+	 * @param array<string,mixed>|null  $source   The shop price fields the payload came from (2.1.10); null when not known.
 	 */
-	public function __construct( int $link_id, int $revision, array $payload, int $attempts = 0 ) {
+	public function __construct( int $link_id, int $revision, array $payload, int $attempts = 0, ?array $source = null ) {
 		$this->link_id  = $link_id;
 		$this->revision = $revision;
 		$this->payload  = $payload;
 		$this->attempts = $attempts;
+		$this->source   = $source;
+	}
+
+	/**
+	 * Returns the shop price fields the payload was worked out from: `regular`, `sale`, `from`, `to` as the product held them.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @return array<string,mixed>|null Null for an intent that was not recorded from a product (the card's creation seeds one).
+	 */
+	public function source(): ?array {
+		return $this->source;
 	}
 
 	/**

@@ -645,20 +645,56 @@ final class BulkRunWorkerTest extends Products_Test_Case {
 	public function test_a_lapsed_licence_stops_the_actions_that_write_to_the_marketplace_and_not_the_others(): void {
 		$this->licensed = false;
 
-		foreach ( [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::SEND_STOCK, Site_Products_Bulk::SEND_PRICE, Site_Products_Bulk::ARCHIVE ] as $action ) {
+		foreach ( [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::SEND_STOCK, Site_Products_Bulk::SEND_PRICE, Site_Products_Bulk::ARCHIVE, Site_Products_Bulk::PULL_PRICES ] as $action ) {
 			$this->assertNotNull( $this->worker()->refusal( $this->account_now(), $this->run_of( $action ) ), $action );
 		}
 
-		foreach ( [ Site_Products_Bulk::SYNC_STOCK_ON, Site_Products_Bulk::SET_WAREHOUSE, Site_Products_Bulk::RESET, Site_Products_Bulk::DETACH ] as $action ) {
+		foreach ( [ Site_Products_Bulk::SYNC_STOCK_ON, Site_Products_Bulk::SET_WAREHOUSE, Site_Products_Bulk::RESET, Site_Products_Bulk::DETACH, Site_Products_Bulk::RESET_PRICE ] as $action ) {
 			$this->assertNull( $this->worker()->refusal( $this->account_now(), $this->run_of( $action ) ), $action );
 		}
+	}
+
+	public function test_a_matching_run_resets_the_own_price_of_every_product_under_the_filter_and_counts_the_rows_without_one_as_skipped(): void {
+		foreach ( [ 511, 512, 513 ] as $id ) {
+			$this->shop->product( $id, 'Лампа ' . $id, 'LP-' . $id, 1, '5', 'simple' );
+			$this->shop->link( $id, 0, 'LP-' . $id, Link_Record::STATE_CREATED );
+		}
+
+		foreach ( [ 511, 512 ] as $id ) {
+			$this->links()->set_price_override( (int) $this->link_of( $id )->link_id(), [ 'price' => [ 'kind' => 'percent', 'value' => 10 ] ] );
+		}
+
+		$part = $this->worker()->part( $this->account_now(), $this->run_of( Site_Products_Bulk::RESET_PRICE, [], [ 'q' => 'LP-' ] ), [], static function (): bool {
+			return true;
+		} );
+
+		$this->assertSame( [ 3, 2, 1, 0 ], [ $part['counts']['products_done'], $part['counts']['offers_accepted'], $part['counts']['offers_skipped'], $part['counts']['offers_failed'] ] );
+		$this->assertSame( 'своей цены нет', $part['groups'][0]['reason'] );
+		$this->assertNull( $this->link_of( 511 )->price_rule_override() );
+	}
+
+	public function test_a_matching_run_queues_the_pull_of_the_created_cards_of_a_part_and_reports_the_rest(): void {
+		foreach ( [ 521, 522 ] as $id ) {
+			$this->shop->product( $id, 'Ваза ' . $id, 'VZ-' . $id, 1, '5', 'simple' );
+			$this->shop->link( $id, 0, 'VZ-' . $id, Link_Record::STATE_CREATED );
+		}
+
+		$this->shop->product( 523, 'Ваза 523', 'VZ-523', 1, '5', 'simple' );
+		$this->shop->link( 523, 0, 'VZ-523', Link_Record::STATE_UNLINKED );
+
+		$part = $this->worker()->part( $this->account_now(), $this->run_of( Site_Products_Bulk::PULL_PRICES, [], [ 'q' => 'VZ-' ] ), [], static function (): bool {
+			return true;
+		} );
+
+		$this->assertSame( [ 3, 2, 1 ], [ $part['counts']['products_done'], $part['counts']['offers_accepted'], $part['counts']['offers_skipped'] ] );
+		$this->assertSame( [ [ 'VZ-521', 'VZ-522' ] ], $this->pulled );
 	}
 
 	public function test_part_sizes_are_the_proposals_of_the_spec(): void {
 		$this->assertSame( 100, Site_Products_Run_Worker::size_of( Site_Products_Bulk::EXPORT ) );
 		$this->assertSame( 200, Site_Products_Run_Worker::size_of( Site_Products_Bulk::DETACH ) );
 
-		foreach ( [ Site_Products_Bulk::SEND_STOCK, Site_Products_Bulk::SEND_PRICE, Site_Products_Bulk::SYNC_STOCK_ON, Site_Products_Bulk::SET_WAREHOUSE, Site_Products_Bulk::RESET, Site_Products_Bulk::ARCHIVE ] as $action ) {
+		foreach ( [ Site_Products_Bulk::SEND_STOCK, Site_Products_Bulk::SEND_PRICE, Site_Products_Bulk::SYNC_STOCK_ON, Site_Products_Bulk::SET_WAREHOUSE, Site_Products_Bulk::RESET, Site_Products_Bulk::ARCHIVE, Site_Products_Bulk::RESET_PRICE, Site_Products_Bulk::PULL_PRICES ] as $action ) {
 			$this->assertSame( 500, Site_Products_Run_Worker::size_of( $action ), $action );
 		}
 	}

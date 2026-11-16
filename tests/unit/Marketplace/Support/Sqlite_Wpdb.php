@@ -54,6 +54,14 @@ final class Sqlite_Wpdb extends \wpdb {
 	public $fail_reads = false;
 
 	/**
+	 * Whether an `UPDATE` reports the rows it CHANGED, as MySQL and MariaDB do, instead of the rows it matched, as SQLite does. A
+	 * statement that rewrites a row to the values it already holds then returns 0 — which the SQLite default hides.
+	 *
+	 * @var bool
+	 */
+	public $count_changed_rows = false;
+
+	/**
 	 * When true `insert()` fails without storing anything, like a denied INSERT.
 	 *
 	 * @var bool
@@ -158,7 +166,10 @@ final class Sqlite_Wpdb extends \wpdb {
 		$this->last_error   = '';
 
 		try {
+			$table           = $this->count_changed_rows && 1 === preg_match( '/^\s*UPDATE\s+(\S+)\s+SET/i', (string) $query, $found ) ? $found[1] : null;
+			$before          = null === $table ? [] : $this->rows_of( $table );
 			$changed         = $this->pdo->exec( self::to_sqlite( (string) $query ) );
+			$changed         = null === $table ? $changed : $this->rows_changed( $before, $this->rows_of( $table ) );
 			$this->insert_id = (int) $this->pdo->lastInsertId();
 		} catch ( \PDOException $e ) {
 			// The real `wpdb` never throws: it records the error and returns false.
@@ -168,6 +179,39 @@ final class Sqlite_Wpdb extends \wpdb {
 		}
 
 		return $changed;
+	}
+
+	/**
+	 * The rows of a table, each as a string, for {@see self::$count_changed_rows}.
+	 *
+	 * @param string $table Table.
+	 * @return string[]
+	 */
+	private function rows_of( string $table ): array {
+		$rows = $this->pdo->query( 'SELECT * FROM ' . $table )->fetchAll( \PDO::FETCH_ASSOC );
+
+		return array_map( 'serialize', $rows );
+	}
+
+	/**
+	 * How many rows an update changed: the rows after it that were not there before (a multiset difference).
+	 *
+	 * @param string[] $before Rows before.
+	 * @param string[] $after  Rows after.
+	 * @return int
+	 */
+	private function rows_changed( array $before, array $after ): int {
+		$remaining = array_count_values( $before );
+		$same      = 0;
+
+		foreach ( $after as $row ) {
+			if ( ( $remaining[ $row ] ?? 0 ) > 0 ) {
+				--$remaining[ $row ];
+				++$same;
+			}
+		}
+
+		return count( $after ) - $same;
 	}
 
 	/**

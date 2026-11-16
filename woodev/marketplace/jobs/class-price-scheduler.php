@@ -37,6 +37,13 @@ final class Price_Scheduler {
 	public const REFRESH_BATCH = 100;
 
 	/**
+	 * The mode argument of a refresh batch that is the merchant's one-time pull of prices (#1797), not the notification-driven read.
+	 *
+	 * @since 2.1.10
+	 */
+	public const PULL_MODE = 'pull';
+
+	/**
 	 * Job names of the plugin.
 	 *
 	 * @var Job_Names
@@ -125,11 +132,18 @@ final class Price_Scheduler {
 	 * @param string[] $offer_ids  Articles.
 	 * @param int      $attempt    Failed attempts so far.
 	 * @param int      $delay      Seconds to wait.
+	 * @param string   $mode       {@see self::PULL_MODE} for a pull of prices (2.1.10); empty for the notification-driven read.
 	 * @return void
 	 * @throws \RuntimeException When Action Scheduler refuses the action.
 	 */
-	public function refresh_later( int $account_id, array $offer_ids, int $attempt, int $delay ): void {
-		if ( 0 === as_schedule_single_action( time() + max( 0, $delay ), $this->refresh_hook(), [ $account_id, array_values( $offer_ids ), $attempt ], $this->names->group() ) ) {
+	public function refresh_later( int $account_id, array $offer_ids, int $attempt, int $delay, string $mode = '' ): void {
+		$args = [ $account_id, array_values( $offer_ids ), $attempt ];
+
+		if ( '' !== $mode ) {
+			$args[] = $mode;
+		}
+
+		if ( 0 === as_schedule_single_action( time() + max( 0, $delay ), $this->refresh_hook(), $args, $this->names->group() ) ) {
 			throw new \RuntimeException( 'Action Scheduler did not schedule the price refresh.' );
 		}
 	}
@@ -150,6 +164,29 @@ final class Price_Scheduler {
 		foreach ( $batches as $batch ) {
 			if ( 0 === as_enqueue_async_action( $this->refresh_hook(), [ $account_id, $batch ], $this->names->group() ) ) {
 				throw new \RuntimeException( 'Action Scheduler did not queue the price refresh.' );
+			}
+		}
+
+		return count( $batches );
+	}
+
+	/**
+	 * Queues the one-time pull of prices the merchant asked for («Загрузить цены»), in batches of {@see self::REFRESH_BATCH}. It is the
+	 * refresh job with the pull mode: the job takes the job gate and the account claim, and settles what the shop had queued to send.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int      $account_id Account id.
+	 * @param string[] $offer_ids  Articles.
+	 * @return int Batches queued.
+	 * @throws \RuntimeException When Action Scheduler refuses a batch.
+	 */
+	public function queue_pull( int $account_id, array $offer_ids ): int {
+		$batches = array_chunk( array_values( array_unique( array_map( 'strval', $offer_ids ) ) ), self::REFRESH_BATCH );
+
+		foreach ( $batches as $batch ) {
+			if ( 0 === as_enqueue_async_action( $this->refresh_hook(), [ $account_id, $batch, 0, self::PULL_MODE ], $this->names->group() ) ) {
+				throw new \RuntimeException( 'Action Scheduler did not queue the price pull.' );
 			}
 		}
 

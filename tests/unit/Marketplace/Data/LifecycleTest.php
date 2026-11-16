@@ -45,6 +45,13 @@ final class LifecycleTest extends TestCase {
 	private $creation_works = true;
 
 	/**
+	 * Whether `dbDelta` really adds the columns that are missing; a test sets it to false to play a database user without ALTER.
+	 *
+	 * @var bool
+	 */
+	private $alteration_works = true;
+
+	/**
 	 * The admin notice handler the plugin mock hands out.
 	 *
 	 * @var \Mockery\MockInterface
@@ -93,6 +100,7 @@ final class LifecycleTest extends TestCase {
 		$GLOBALS['wpdb'] = $this->database_double(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Test database double.
 
 		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'update_option' )->justReturn( true );
 		Functions\when( 'dbDelta' )->alias(
 			function ( $statements ) {
 				$this->delta_batches[] = $statements;
@@ -101,6 +109,10 @@ final class LifecycleTest extends TestCase {
 					$hook               = $this->during_delta;
 					$this->during_delta = null;
 					$hook();
+				}
+
+				if ( $this->alteration_works ) {
+					$GLOBALS['wpdb']->absent_columns = [];
 				}
 
 				if ( $this->creation_works ) {
@@ -244,6 +256,139 @@ final class LifecycleTest extends TestCase {
 		$this->assertSame( [], $this->delta_batches );
 		$this->assertSame( '1.1.7', $this->options['woodev_fake-seller_version'], 'an upgrade stays the admin lifecycle\'s job' );
 		$this->assertSame( [], $this->transients );
+	}
+
+	/**
+	 * A site whose tables predate a framework release (no schema revision stored) is brought up to date by the first request of any
+	 * kind — here a cron / REST one, with the consuming plugin's version unchanged — before anything reads the new column: `dbDelta`
+	 * runs once with every table, the revision is stored, and the next request is one option read (#1797).
+	 *
+	 * @return void
+	 */
+	public function test_a_cron_request_brings_an_installed_site_up_to_the_framework_schema_without_a_plugin_upgrade(): void {
+		$this->use_option_store(
+			[
+				'woodev_fake-seller_is_active' => 'yes',
+				'woodev_fake-seller_version'   => '2.0.0',
+			]
+		);
+		$this->use_transient_store();
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+
+		$this->assertSame( 2, has_action( 'init', [ $this->lifecycle, 'bring_schema_up_to_date' ] ), 'hooked on init, after the early install' );
+
+		$this->lifecycle->init(); // The plugin's own lifecycle: version equal, nothing to do.
+		$this->assertSame( [], $this->delta_batches );
+
+		$this->lifecycle->bring_schema_up_to_date();
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->assertCount( 1, $this->delta_batches, 'the tables are synchronised once' );
+		$this->assertSame( array_values( ( new Schema( 'fake' ) )->statements( 'wp_', 'DEFAULT CHARACTER SET utf8mb4' ) ), $this->delta_batches[0] );
+		$this->assertSame( Schema::REVISION, $this->options['woodev_fake-seller_schema_revision'] );
+		$this->assertSame( '2.0.0', $this->options['woodev_fake-seller_version'], 'the plugin version is not touched' );
+		$this->assertSame( [], $this->transients );
+	}
+
+	/**
+	 * A site already at the framework's revision, a site that is not installed yet, and a held lock cost nothing.
+	 *
+	 * @return void
+	 */
+	public function test_the_schema_gate_does_nothing_when_current_not_installed_or_locked(): void {
+		$this->use_transient_store();
+
+		$this->use_option_store(
+			[
+				'woodev_fake-seller_version'         => '2.0.0',
+				'woodev_fake-seller_schema_revision' => Schema::REVISION,
+			]
+		);
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->use_option_store( [] );
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->use_option_store( [ 'woodev_fake-seller_version' => '2.0.0' ] );
+		$GLOBALS['wpdb']->locks['woodev_fake-seller_install_lock'] = time() . '|someone-else';
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->assertSame( [], $this->delta_batches );
+		$this->assertArrayNotHasKey( 'woodev_fake-seller_schema_revision', $this->options );
+	}
+
+	/**
+	 * A database user that cannot create or alter tables stores no revision, tells the merchant, and is not retried by every request.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_schema_synchronisation_stores_no_revision_and_is_not_retried_at_once(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_version' => '2.0.0' ] );
+		$this->use_transient_store();
+		$this->creation_works = false;
+		$this->expect_failure_notice();
+
+		$this->lifecycle->bring_schema_up_to_date();
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->assertCount( 1, $this->delta_batches, 'the second request waits for the retry mark to lapse' );
+		$this->assertArrayNotHasKey( 'woodev_fake-seller_schema_revision', $this->options );
+		$this->assertArrayHasKey( 'woodev_fake-seller_schema_retry', $this->transients );
+	}
+
+	/**
+	 * A refused `ALTER TABLE … ADD COLUMN` leaves every table in place, so `dbDelta` returns normally and the table names prove nothing:
+	 * the gate stores no revision, tells the merchant and sets the retry mark, and once the `ALTER` is allowed the retry adds the column
+	 * and stores the revision (#1829).
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_column_change_stores_no_revision_and_the_retry_adds_it(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_version' => '2.0.0' ] );
+		$this->use_transient_store();
+		$this->expect_failure_notice();
+
+		$sync_state                      = ( new Schema( 'fake' ) )->table_name( 'sync_state', 'wp_' );
+		$GLOBALS['wpdb']->tables         = ( new Schema( 'fake' ) )->table_names( 'wp_' );
+		$GLOBALS['wpdb']->absent_columns = [ $sync_state . '.pending_source' ];
+		$this->alteration_works          = false;
+
+		$this->lifecycle->bring_schema_up_to_date();
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->assertCount( 1, $this->delta_batches, 'the second request waits for the retry mark to lapse' );
+		$this->assertArrayNotHasKey( 'woodev_fake-seller_schema_revision', $this->options, 'no revision is saved while a column is missing' );
+		$this->assertArrayHasKey( 'woodev_fake-seller_schema_retry', $this->transients, 'the retry mark is set' );
+		$this->assertSame( [], $GLOBALS['wpdb']->locks, 'the lock is released' );
+
+		// The next window: the database user may alter again.
+		$this->transients       = [];
+		$this->alteration_works = true;
+
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->assertCount( 2, $this->delta_batches, 'the retry runs dbDelta again' );
+		$this->assertSame( [], $GLOBALS['wpdb']->absent_columns, 'the column landed' );
+		$this->assertSame( Schema::REVISION, $this->options['woodev_fake-seller_schema_revision'] );
+		$this->assertSame( [], $this->transients );
+	}
+
+	/**
+	 * A fresh install and an upgrade store the revision too, so the gate does not run `dbDelta` a second time on the next request.
+	 *
+	 * @return void
+	 */
+	public function test_an_install_and_an_upgrade_store_the_schema_revision(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_is_active' => 'yes' ] );
+
+		$this->call( 'install' );
+
+		$this->assertSame( Schema::REVISION, $this->options['woodev_fake-seller_schema_revision'] );
+
+		unset( $this->options['woodev_fake-seller_schema_revision'] );
+		$this->call( 'upgrade', '1.1.7' );
+
+		$this->assertSame( Schema::REVISION, $this->options['woodev_fake-seller_schema_revision'] );
 	}
 
 	/**
@@ -530,6 +675,13 @@ final class LifecycleTest extends TestCase {
 			public $locks = [];
 
 			/**
+			 * Columns the database does not have, as `full table name.column`.
+			 *
+			 * @var string[]
+			 */
+			public $absent_columns = [];
+
+			/**
 			 * Charset clause.
 			 *
 			 * @return string
@@ -589,6 +741,12 @@ final class LifecycleTest extends TestCase {
 			 * @return null
 			 */
 			public function get_var( string $query = '' ) {
+				if ( preg_match( '/^SHOW COLUMNS FROM `([^`]+)` LIKE \'([^\']+)\'$/', $query, $matches ) ) {
+					$exists = in_array( strtolower( $matches[1] ), array_map( 'strtolower', $this->tables ), true ) && ! in_array( $matches[1] . '.' . $matches[2], $this->absent_columns, true );
+
+					return $exists ? $matches[2] : null;
+				}
+
 				if ( preg_match( "/SELECT option_value FROM \S+ WHERE option_name = '([^']+)'/", $query, $matches ) && isset( $this->locks[ $matches[1] ] ) ) {
 					return $this->locks[ $matches[1] ];
 				}

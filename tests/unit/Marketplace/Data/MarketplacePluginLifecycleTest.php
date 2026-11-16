@@ -81,6 +81,16 @@ final class MarketplacePluginLifecycleTest extends TestCase {
 			public function get_col(): array {
 				return $this->tables;
 			}
+
+			/**
+			 * Every column exists.
+			 *
+			 * @param string $query SQL.
+			 * @return string
+			 */
+			public function get_var( string $query = '' ): string {
+				return 'column';
+			}
 		};
 	}
 

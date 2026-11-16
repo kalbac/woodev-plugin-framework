@@ -272,6 +272,20 @@ final class BulkRunProviderTest extends Products_Test_Case {
 		$this->assertSame( Site_Products_Bulk::SEND_STOCK, $this->current()->action(), 'The running one is untouched.' );
 	}
 
+	public function test_a_run_of_the_other_table_is_named_by_its_label_not_by_its_id(): void {
+		$this->matching->apply_matching( $this->context(), Site_Products_Bulk::SEND_STOCK, $this->query(), [] );
+		$this->db->query( 'UPDATE ' . Sqlite_Tables::table( 'bulk_runs' ) . " SET action = 'import_selected'" );
+
+		foreach ( [ 'preview_matching', 'apply_matching' ] as $method ) {
+			try {
+				$this->matching->$method( $this->context(), Site_Products_Bulk::RESET, $this->query(), [] );
+				$this->fail( $method . ' must refuse.' );
+			} catch ( Action_State_Exception $e ) {
+				$this->assertSame( 'Уже выполняется «Импортировать» по фильтру — дождитесь окончания или остановите его.', $e->getMessage() );
+			}
+		}
+	}
+
 	public function test_a_start_right_after_a_finished_run_is_accepted(): void {
 		$this->matching->apply_matching( $this->context(), Site_Products_Bulk::SEND_STOCK, $this->query(), [] );
 		$this->runner->stop( $this->account_id, $this->current()->run_id() );

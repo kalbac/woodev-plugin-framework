@@ -341,15 +341,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 * @return void
 		 */
 		private function stock_and_price( Sync_State_Store $store ): void {
-			$adapter    = $this->adapter;
-			$classifier = $adapter->error_classifier();
-			$limits     = $adapter->sync_limits();
-			$queue      = new Sync_State_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'accounts' ), $adapter->stock_cadence() );
-			$releaser   = $this->deleted_product_releaser( $queue );
-			$flusher    = new Stock_Flusher( $queue, $store, $this->links, $adapter->stock_pusher(), $adapter->stock_rules(), $limits, $classifier, $this->gate->pause(), [ $releaser, 'release_settled' ] );
-			$pusher     = $adapter->price_pusher();
-			$price_half = null;
-			$scheduler  = new Price_Scheduler( $this->names );
+			$adapter     = $this->adapter;
+			$classifier  = $adapter->error_classifier();
+			$limits      = $adapter->sync_limits();
+			$queue       = new Sync_State_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'accounts' ), $adapter->stock_cadence() );
+			$releaser    = $this->deleted_product_releaser( $queue );
+			$flusher     = new Stock_Flusher( $queue, $store, $this->links, $adapter->stock_pusher(), $adapter->stock_rules(), $limits, $classifier, $this->gate->pause(), [ $releaser, 'release_settled' ] );
+			$pusher      = $adapter->price_pusher();
+			$price_half  = null;
+			$price_queue = null;
+			$scheduler   = new Price_Scheduler( $this->names );
 
 			( new Stock_Intents( [ $this->accounts, 'get' ], $this->links, $store, $queue, $adapter->stock_policy() ) )->register();
 
@@ -367,9 +368,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$reader = $adapter->price_reader();
 
 			if ( null !== $reader ) {
-				$refresher = new Price_Refresher( $reader, $this->links, $this->contexts );
+				// A marketplace that sends no prices has no price queue: the pull has nothing queued to settle there.
+				$refresher = new Price_Refresher( $reader, $this->links, $this->contexts, $price_queue );
 
-				( new Price_Refresh_Runner( $this->gate, $refresher, $scheduler, $classifier, $this->log_error ) )->register();
+				( new Price_Refresh_Runner( $this->gate, $refresher, $scheduler, $classifier, $this->log_error, $this->ring ) )->register();
 			}
 
 			( new Flush_Sync_Runner( $this->names, $this->gate, $flusher, $this->accounts, $adapter->id(), $limits, $this->log_error, $price_half ) )->register();
