@@ -305,6 +305,59 @@ final class Sync_State_Queue {
 	}
 
 	/**
+	 * Stores the readback of a stock pair, creating the row when the pair has none. A row made here carries only the readback:
+	 * no pending, in-flight or sent intent, so nothing is queued for the marketplace.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param array<string,mixed> $key      Row key.
+	 * @param int                 $present  Units on the warehouse.
+	 * @param int                 $reserved Units reserved.
+	 * @param string              $token    The account claim of the run.
+	 * @return bool False when the claim was lost.
+	 * @throws \RuntimeException When the database refuses the statement.
+	 */
+	public function record_remote( array $key, int $present, int $reserved, string $token ): bool {
+		if ( $this->remember_remote( $key, $present, $reserved, $token ) ) {
+			return true;
+		}
+
+		if ( ! $this->claim_held( (int) $key['account_id'], $token ) ) {
+			return false;
+		}
+
+		$now = $this->time( 0 );
+		$sql = $this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Fixed text and placeholders only.
+			'INSERT IGNORE INTO %i (account_id, link_id, warehouse_id, kind, remote_present, remote_reserved, remote_read_at) SELECT %d, %d, %d, %s, %d, %d, %s FROM %i AS claim_owner WHERE claim_owner.account_id = %d AND claim_owner.claim_token = %s AND claim_owner.claim_until > %s',
+			[ $this->table, (int) $key['account_id'], (int) $key['link_id'], (int) $key['warehouse_id'], (string) $key['kind'], $present, $reserved, $now, $this->accounts, (int) $key['account_id'], $token, $now ]
+		);
+
+		$inserted = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+
+		if ( false === $inserted ) {
+			throw new \RuntimeException( 'A sync_state write was refused by the database: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		// A row another writer made in between is updated instead.
+		return 1 === $inserted || $this->remember_remote( $key, $present, $reserved, $token );
+	}
+
+	/**
+	 * Stores what an accepted send left on the marketplace: the sent quantity, read now. The reserved units are not known from a
+	 * send and stay as they were.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param array<string,mixed> $key     Row key.
+	 * @param int                 $present Units the marketplace accepted.
+	 * @param string              $token   The account claim of the run.
+	 * @return bool False when the claim was lost or the row does not exist.
+	 */
+	public function remember_sent( array $key, int $present, string $token ): bool {
+		return $this->fenced( $key, $token, 'remote_present = %d, remote_read_at = %s', [ $present, $this->time( 0 ) ] );
+	}
+
+	/**
 	 * Returns a row's readback and send columns.
 	 *
 	 * @since 2.0.29

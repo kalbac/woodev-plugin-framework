@@ -434,6 +434,7 @@ final class Stock_Flusher {
 		if ( null !== $answer && $answer->is_ok() ) {
 			$sent = self::archives( $pair['payload'] ) ? [ 'stock' => $stock ] : null;
 			$run->write( $this->queue->acknowledge( $pair['key'], (int) $pair['rev'], $run->token(), $sent ) );
+			$run->write( $this->queue->remember_sent( $pair['key'], $stock, $run->token() ) ); // The read follows the send: no extra request to learn it.
 			$run->write( $this->links->record_stock_outcome( $link_id, $stock, null, null, $run->fence() ) );
 			++$result->sent;
 

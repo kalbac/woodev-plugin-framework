@@ -58,7 +58,18 @@ final class Fake_Action_Scheduler {
 		);
 		Functions\when( 'as_get_scheduled_actions' )->alias(
 			static function ( array $query = [] ) use ( $fake ): array {
+				if ( ! isset( $query['args'] ) ) {
+					return $fake->listed( (string) $query['hook'], (string) ( $query['status'] ?? '' ) ); // Without arguments the real function returns action objects.
+				}
+
 				return array_keys( $fake->matching( (string) $query['hook'], (array) $query['args'], (string) ( $query['status'] ?? '' ) ) );
+			}
+		);
+		Functions\when( 'as_unschedule_all_actions' )->alias(
+			static function ( string $hook, array $args = [] ) use ( $fake ): void {
+				foreach ( array_keys( $fake->matching( $hook, $args, 'pending' ) ) as $index ) {
+					unset( $fake->actions[ $index ] );
+				}
 			}
 		);
 		Functions\when( 'as_enqueue_async_action' )->alias(
@@ -123,6 +134,50 @@ final class Fake_Action_Scheduler {
 				}
 			)
 		);
+	}
+
+	/**
+	 * Lists the pending actions of a hook as the objects `as_get_scheduled_actions()` returns when it is not asked for ids.
+	 *
+	 * @param string $hook   Hook.
+	 * @param string $status Status; empty for any.
+	 * @return array<int,object> Keyed by action index.
+	 */
+	public function listed( string $hook, string $status ): array {
+		$objects = [];
+
+		foreach ( $this->actions as $index => $action ) {
+			if ( $action['hook'] === $hook && ( '' === $status || $action['status'] === $status ) ) {
+				$objects[ $index ] = new class( $action['args'] ) {
+					/**
+					 * Arguments.
+					 *
+					 * @var array
+					 */
+					private $args;
+
+					/**
+					 * Creates the object.
+					 *
+					 * @param array $args Arguments.
+					 */
+					public function __construct( array $args ) {
+						$this->args = $args;
+					}
+
+					/**
+					 * Returns the arguments.
+					 *
+					 * @return array
+					 */
+					public function get_args(): array {
+						return $this->args;
+					}
+				};
+			}
+		}
+
+		return $objects;
 	}
 
 	/**

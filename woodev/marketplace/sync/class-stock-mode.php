@@ -47,4 +47,16 @@ final class Stock_Mode {
 	public static function is_off( Account $account ): bool {
 		return self::OFF === $account->setting( 'stock_mode', self::SITE );
 	}
+
+	/**
+	 * Tells whether the marketplace's stock is the truth for an account: the shop mirrors it and the daily reconcile runs.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Account $account Account.
+	 * @return bool
+	 */
+	public static function is_marketplace( Account $account ): bool {
+		return self::MARKETPLACE === $account->setting( 'stock_mode', self::SITE );
+	}
 }
