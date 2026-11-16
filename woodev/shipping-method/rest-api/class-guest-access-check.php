@@ -20,9 +20,11 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 	 * the administrator — logged in — sees nothing wrong.
 	 *
 	 * So the server asks the route the way a guest would: a loopback request without cookies, like Site
-	 * Health does. The probe sends NO query parameters, on purpose: our route answers that with a 400
-	 * `rest_missing_callback_param` that names `q` and `level`, which proves the request reached OUR
-	 * route, costs no provider call and spends none of the route's rate-limit budget.
+	 * Health does. The probe sends every argument the route requires, so WordPress runs the route's
+	 * `permission_callback` (a restriction placed there is only visible to such a request) and reaches OUR
+	 * controller. The query is deliberately one character, too short to search on: the controller answers
+	 * it itself with `woodev_location_invalid_query`, which proves the request got through, calls no
+	 * provider and costs one tick of the route's own rate limit.
 	 *
 	 * The answer is kept for a day (a transient). It is read on every admin page that shows it, but the
 	 * request itself is made only when there is no kept answer — on the settings pages and in Site
@@ -50,6 +52,12 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 		/** The server could not make the request — nothing is known, so nothing is warned about. */
 		public const STATUS_UNREACHABLE = 'unreachable';
 
+		/**
+		 * The host answered the server's own request with an HTTP-level refusal (a Basic-auth challenge, or a
+		 * firewall's 403 page) — which says nothing about what a buyer gets, so nothing is blamed.
+		 */
+		public const STATUS_UNVERIFIABLE = 'unverifiable';
+
 		/** The kept answer. */
 		public const TRANSIENT = 'woodev_rest_guest_access';
 
@@ -61,6 +69,9 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 
 		/** The route probed, under the REST root. */
 		private const ROUTE = 'woodev/v1/location/suggest';
+
+		/** One character: shorter than the route's minimum, so the controller refuses it before any provider is asked. */
+		private const PROBE_QUERY = 'x';
 
 		/** One wiring for the whole process, whatever the number of carrier plugins. */
 		private static bool $registered = false;
@@ -84,23 +95,28 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 		/**
 		 * Sorts a loopback answer.
 		 *
+		 * A 401/403 only counts as «closed for buyers» when WordPress itself said it (a JSON error body, e.g.
+		 * `rest_not_logged_in`). A web-server Basic-auth challenge (`WWW-Authenticate`) or a 403 page that is not
+		 * JSON is the host refusing its own server's request — the buyers may well be let in — so it is neutral.
+		 *
 		 * @since 2.1.9
 		 *
-		 * @param int    $code HTTP status.
-		 * @param string $body Response body.
+		 * @param int    $code       HTTP status.
+		 * @param string $body       Response body.
+		 * @param bool   $challenged Whether the response carries a `WWW-Authenticate` header.
 		 * @return string One of the STATUS_* constants (never STATUS_UNREACHABLE: that is a failed request, not an answer).
 		 */
-		public static function classify( int $code, string $body ): string {
+		public static function classify( int $code, string $body, bool $challenged = false ): string {
 
 			if ( $code >= 300 && $code < 400 ) {
 				return self::STATUS_REDIRECT;
 			}
 
-			if ( 401 === $code || 403 === $code ) {
-				return self::STATUS_DENIED;
-			}
-
 			$data = json_decode( $body, true );
+
+			if ( 401 === $code || 403 === $code ) {
+				return ! $challenged && is_array( $data ) ? self::STATUS_DENIED : self::STATUS_UNVERIFIABLE;
+			}
 
 			if ( ! is_array( $data ) ) {
 				return self::STATUS_HTML;
@@ -110,20 +126,18 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 		}
 
 		/**
-		 * Whether a decoded JSON body is what OUR route says to a request without arguments.
+		 * Whether a decoded JSON body is what OUR controller says to the probe: the «query too short» error it
+		 * returns itself, or its own rate-limit error (the controller was reached either way).
 		 *
 		 * @param int                 $code HTTP status.
 		 * @param array<string,mixed> $data Decoded body.
 		 */
 		private static function is_our_answer( int $code, array $data ): bool {
 
-			if ( 400 !== $code || 'rest_missing_callback_param' !== ( $data['code'] ?? '' ) ) {
-				return false;
-			}
+			$error = (string) ( $data['code'] ?? '' );
 
-			$params = $data['data']['params'] ?? [];
-
-			return is_array( $params ) && in_array( 'q', $params, true );
+			return ( 400 === $code && 'woodev_location_invalid_query' === $error )
+				|| ( 429 === $code && 'woodev_location_rate_limited' === $error );
 		}
 
 		/**
@@ -146,14 +160,25 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 		 */
 		public static function probe(): string {
 
+			$url = add_query_arg(
+				[
+					'q'       => self::PROBE_QUERY,
+					'level'   => 'settlement',
+					'country' => 'RU',
+				],
+				rest_url( self::ROUTE )
+			);
+
 			$response = wp_remote_get(
-				rest_url( self::ROUTE ),
+				$url,
 				[
 					'timeout'     => 5,
 					'redirection' => 0,
 					'cookies'     => [],
 					'headers'     => [ 'Accept' => 'application/json' ],
-					'sslverify'   => (bool) apply_filters( 'https_local_ssl_verify', false ),
+					// WordPress core's own contract for loopback requests: the URL is the second argument, the result
+					// (a bool, or the path of a certificate file) goes to the request as it is.
+					'sslverify'   => apply_filters( 'https_local_ssl_verify', false, $url ),
 				]
 			);
 
@@ -161,7 +186,11 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 				return self::STATUS_UNREACHABLE;
 			}
 
-			return self::classify( (int) wp_remote_retrieve_response_code( $response ), (string) wp_remote_retrieve_body( $response ) );
+			return self::classify(
+				(int) wp_remote_retrieve_response_code( $response ),
+				(string) wp_remote_retrieve_body( $response ),
+				'' !== (string) wp_remote_retrieve_header( $response, 'www-authenticate' )
+			);
 		}
 
 		/**
@@ -225,7 +254,11 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 			return trim(
 				__( 'REST API закрыт для покупателей: поиск города и пункты выдачи при оформлении заказа не работают.', 'woodev-plugin-framework' )
 				. ' ' . ( $details[ $status ] ?? '' )
-				. ' ' . __( 'Откройте для всех адреса, которые начинаются с /wp-json/woodev/v1/ — в настройках плагина безопасности или кеширования, либо в коде темы.', 'woodev-plugin-framework' )
+				. ' ' . sprintf(
+					/* translators: %s: the address the site really uses for its REST API, e.g. https://shop.example/wp-json/woodev/v1/ */
+					__( 'Откройте для всех адреса, которые начинаются с %s — в настройках плагина безопасности или кеширования, либо в коде темы.', 'woodev-plugin-framework' ),
+					rest_url( 'woodev/v1/' )
+				)
 			);
 		}
 
@@ -347,10 +380,10 @@ if ( ! class_exists( __NAMESPACE__ . '\Guest_Access_Check' ) ) :
 				$result['label']       = __( 'REST API закрыт для покупателей', 'woodev-plugin-framework' );
 				$result['description'] = '<p>' . esc_html( self::get_message( $status ) ) . '</p>';
 				$result['actions']     = '<p><a href="' . esc_url( self::get_recheck_url() ) . '">' . esc_html__( 'Проверить снова', 'woodev-plugin-framework' ) . '</a></p>';
-			} elseif ( self::STATUS_UNREACHABLE === $status ) {
+			} elseif ( self::STATUS_UNREACHABLE === $status || self::STATUS_UNVERIFIABLE === $status ) {
 				$result['status']      = 'recommended';
 				$result['label']       = __( 'Не удалось проверить, открыт ли REST API для покупателей', 'woodev-plugin-framework' );
-				$result['description'] = '<p>' . esc_html__( 'Сервер не смог отправить запрос сам себе. Проверьте поиск города на странице оформления заказа вручную, не входя в аккаунт.', 'woodev-plugin-framework' ) . '</p>';
+				$result['description'] = '<p>' . esc_html__( 'Сервер не смог проверить это сам: запрос сайта к самому себе не прошёл (сетевая ошибка, защита доступа или файрвол хостинга). Это не значит, что покупатели не могут искать город. Проверьте поиск на странице оформления заказа вручную, не входя в аккаунт.', 'woodev-plugin-framework' ) . '</p>';
 			}
 
 			return $result;
