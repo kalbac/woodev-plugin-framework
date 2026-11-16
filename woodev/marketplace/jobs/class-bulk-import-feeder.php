@@ -20,8 +20,8 @@ defined( 'ABSPATH' ) || exit;
  * needs the **articles and their order**.
  *
  * 1. **Freeze** (the first part): read the snapshot once, apply the table's filter, drop the cards a product carries already, put the
- *    cards in the order the import needs and store them as the run's `items` — `[ article, group key ]` and nothing else. After this
- *    the snapshot may expire: nothing later reads it.
+ *    cards in the order the import needs and hand them to the runner as the run's `items` — `[ article, group key ]` and nothing else —
+ *    to be stored together with the part's cursor, counters and report. After this the snapshot may expire: nothing later reads it.
  * 2. **Feed** (every later part): hand the next {@see self::FEED} articles to {@see Import_Scheduler::import()} — ten actions, each one
  *    second after the previous part so the queue's order is explicit — and move the cursor.
  *
@@ -168,7 +168,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * @param Bulk_Run            $run     The run.
 	 * @param array<string,mixed> $cursor  Where the previous part stopped.
 	 * @param callable            $owns    `function (): bool`.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
 	 * @throws Bulk_Run_Lost When this tick lost the run.
 	 */
 	public function part( Account $account, Bulk_Run $run, array $cursor, callable $owns ): array {
@@ -185,7 +185,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * @param Account  $account Account.
 	 * @param Bulk_Run $run     The run.
 	 * @param callable $owns    `function (): bool`.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
 	 * @throws Bulk_Run_Lost When this tick lost the run.
 	 * @throws \RuntimeException When the list of cards expired between the refusal check and the freeze.
 	 */
@@ -214,10 +214,10 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 			throw new Bulk_Run_Lost( 'The tick lost the run before it froze the list.' );
 		}
 
-		$this->runs->freeze_items( $account->id(), $run->run_id(), $items );
-
-		// A tick that lost the race to freeze reads the list the winner stored, never the one it built.
-		$this->items = null;
+		// Nothing is stored here. The list goes back with the position it was frozen at, and the runner saves both in ONE fenced write
+		// ({@see Bulk_Run_Store::save_frozen()}): a tick that dies before it, or loses the run, leaves a run that has frozen nothing, and
+		// the next tick freezes it anew; once it is saved, the list and the cursor that says «frozen» are there together.
+		$this->items = [ $run->run_id(), $items ];
 
 		return [
 			'cursor'   => $this->cursor( 0 ),
@@ -225,6 +225,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 			'counts'   => $this->counts( 0, 0, count( $on_site ) ),
 			'groups'   => $this->on_site_groups( $on_site ),
 			'busy'     => 0,
+			'items'    => $items,
 		];
 	}
 
@@ -235,7 +236,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * @param Bulk_Run $run     The run.
 	 * @param int      $index   The first article of the list not fed yet.
 	 * @param callable $owns    `function (): bool`.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
 	 * @throws Bulk_Run_Lost When this tick lost the run.
 	 */
 	private function feed( Account $account, Bulk_Run $run, int $index, callable $owns ): array {
@@ -262,7 +263,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * @param int  $next     The first article not fed yet.
 	 * @param int  $fed      Cards this part fed.
 	 * @param bool $finished Whether the list is over.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
 	 */
 	private function fed( int $next, int $fed, bool $finished ): array {
 		return [

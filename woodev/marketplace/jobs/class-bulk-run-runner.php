@@ -355,7 +355,7 @@ final class Bulk_Run_Runner {
 				return;
 			}
 
-			if ( ! $this->store->save( $account_id, $run_id, $tick, $progress['cursor'], $progress['counts'], $progress['report'] ) ) {
+			if ( ! $this->saved( $run, $tick, $progress, $part['items'] ?? null ) ) {
 				return; // Another tick owns the run: no product write, no next tick.
 			}
 
@@ -373,6 +373,23 @@ final class Bulk_Run_Runner {
 		} while ( $now - $began + $longest <= self::BUDGET_SECONDS );
 
 		$this->scheduler->enqueue( $account_id, $run_id );
+	}
+
+	/**
+	 * Saves the progress of a part, fenced by the tick. A part that froze a list (`$items`) is saved with it in the same write.
+	 *
+	 * @param Bulk_Run                                 $run      Run.
+	 * @param string                                   $tick     The tick's token.
+	 * @param array<string,mixed>                      $progress `cursor`, `counts`, `report`.
+	 * @param array<int,array{0:string,1:string}>|null $items    The list the part froze; null for any other part.
+	 * @return bool False when this tick no longer owns the run.
+	 */
+	private function saved( Bulk_Run $run, string $tick, array $progress, ?array $items ): bool {
+		if ( null !== $items ) {
+			return $this->store->save_frozen( $run->account_id(), $run->run_id(), $tick, $items, $progress['cursor'], $progress['counts'], $progress['report'] );
+		}
+
+		return $this->store->save( $run->account_id(), $run->run_id(), $tick, $progress['cursor'], $progress['counts'], $progress['report'] );
 	}
 
 	/**

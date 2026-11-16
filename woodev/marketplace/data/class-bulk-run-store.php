@@ -228,20 +228,26 @@ final class Bulk_Run_Store {
 	}
 
 	/**
-	 * Stores the frozen card list of the remote-cards run (§2.7). Written once per run: a run that already holds a list keeps it, so a
-	 * second tick that also froze changes nothing and both read the same list.
+	 * The save of the part that froze the remote-cards run's list (§2.7): the list and the position after the freeze — cursor, counters
+	 * and report — in **one** conditional `UPDATE`, fenced by the tick like {@see self::save()}. They are never two writes: a process
+	 * that dies between them would leave a stored list the run does not know it has, and the next tick would freeze again from a
+	 * snapshot that may have expired or changed.
 	 *
 	 * @since 2.1.10
 	 *
 	 * @param int                                 $account_id Account.
 	 * @param string                              $run_id     Run.
+	 * @param string                              $tick       The writer's token; another tick's save is refused.
 	 * @param array<int,array{0:string,1:string}> $items      `[ article, group key ]` of every card, in the order the import must go.
-	 * @return bool False when the run is not that one, is over, or already has its list.
+	 * @param array<string,mixed>                 $cursor     Position after the freeze.
+	 * @param array<string,int>                   $counts     Counters.
+	 * @param array<int,array<string,mixed>>      $report     Groups.
+	 * @return bool False when this tick no longer owns the run: it must stop at once.
 	 */
-	public function freeze_items( int $account_id, string $run_id, array $items ): bool {
+	public function save_frozen( int $account_id, string $run_id, string $tick, array $items, array $cursor, array $counts, array $report ): bool {
 		$json = wp_json_encode( $items, JSON_UNESCAPED_UNICODE );
 
-		return is_string( $json ) && 1 === $this->db->query( $this->db->prepare( 'UPDATE %i SET items = %s WHERE account_id = %d AND run_id = %s AND state = %s AND items IS NULL', $this->table, $json, $account_id, $run_id, Bulk_Run::RUNNING ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+		return is_string( $json ) && 1 === $this->db->query( $this->db->prepare( 'UPDATE %i SET items = %s, `cursor` = %s, counts = %s, report = %s WHERE account_id = %d AND run_id = %s AND tick = %s AND state = %s', $this->table, $json, $this->encode( $cursor ), $this->encode( $counts ), $this->encode( $report ), $account_id, $run_id, $tick, Bulk_Run::RUNNING ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
 	}
 
 	/**

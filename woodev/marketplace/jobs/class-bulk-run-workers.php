@@ -63,7 +63,7 @@ final class Bulk_Run_Workers implements Bulk_Run_Worker {
 	 * @param Bulk_Run            $run     The run.
 	 * @param array<string,mixed> $cursor  Where the previous part stopped.
 	 * @param callable            $owns    `function (): bool`.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
 	 */
 	public function part( Account $account, Bulk_Run $run, array $cursor, callable $owns ): array {
 		return $this->worker_of( $run )->part( $account, $run, $cursor, $owns );
