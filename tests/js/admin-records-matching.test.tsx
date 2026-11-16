@@ -72,6 +72,13 @@ const BULK_ACTIONS = [
 	action( 'send_stock', 'Отправить остатки', { all_matching: true } ),
 	action( 'plain', 'Только отмеченные' ),
 	action( 'link_all', 'Связать по артикулу', { scope: 'account', scope_sentence: 'Будут обработаны все товары аккаунта.' } ),
+	// The stored report of a run: read-only, its answer is the preview.
+	action( 'bulk_report', 'Подробнее', {
+		effect: 'read',
+		scope: 'account',
+		scope_sentence: 'Отчёт о последнем запуске.',
+		fields: [ field( 'run_id', 'Запуск', { type: 'hidden', required: true } ) ],
+	} ),
 	action( 'bulk_stop', 'Остановить', {
 		scope: 'account',
 		scope_sentence: 'Остановит выполняющееся действие.',
@@ -157,6 +164,15 @@ function serve( list: { total?: number; account?: AccountActivity } = {} ): void
 				refresh_after_ms: 600000,
 				messages: {},
 			} );
+		}
+		if ( options.method === 'POST' && route.endsWith( '/bulk_report/preview' ) ) {
+			return Promise.resolve(
+				plan( {
+					action: 'bulk_report',
+					scope: { type: 'account', sentence: 'Отчёт о последнем запуске.' },
+					groups: [ { kind: 'failed', reason: 'Нет артикула', count: 45, fix_label: '', fix_url: '', examples: [ 'Кружка' ] } ],
+				} )
+			);
 		}
 		if ( options.method === 'POST' && route.endsWith( '/preview' ) ) {
 			return Promise.resolve( plan() );
@@ -331,16 +347,28 @@ describe( 'the «every row under the filter» mode', () => {
 		expect( bulkChoices() ).toEqual( [ 'Отправить остатки' ] );
 	} );
 
-	test( 'unticking a row leaves the mode', async () => {
+	test( 'unticking a row leaves the mode and clears the selection entirely', async () => {
 		await renderPage();
 		await takeEveryRow();
 
 		fireEvent.click( rowBox( 'Футболка' ) );
 
 		expect( bar() ).toBeNull();
-		expect( rowBox( 'Кружка' ) ).toBeChecked();
+		expect( rowBox( 'Кружка' ) ).not.toBeChecked();
 		expect( rowBox( 'Футболка' ) ).not.toBeChecked();
 		expect( bulkChoices() ).toEqual( [ 'Отправить остатки', 'Только отмеченные' ] );
+		// Nothing is selected, so the toolbar has nothing to run on.
+		expect( screen.getByRole( 'button', { name: 'Применить' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+	} );
+
+	test( 'unticking a row in the ordinary ticked mode only takes that row out', async () => {
+		await renderPage();
+		fireEvent.click( headerBox() );
+
+		fireEvent.click( rowBox( 'Футболка' ) );
+
+		expect( rowBox( 'Кружка' ) ).toBeChecked();
+		expect( rowBox( 'Футболка' ) ).not.toBeChecked();
 	} );
 
 	test( 'the clear button ends it and unticks the page', async () => {
@@ -459,7 +487,7 @@ describe( 'the account line with buttons', () => {
 		text: 'Выполняется «Отправить остатки» по фильтру: товаров 3 400 из ~12 345.',
 		actions: [
 			{ action: 'bulk_stop', label: 'Остановить', payload: { run_id: 'r9f2' } },
-			{ action: 'link_all', label: 'Подробнее', payload: {} },
+			{ action: 'bulk_report', label: 'Подробнее', payload: { run_id: 'r9f2' } },
 		],
 	} );
 
@@ -533,5 +561,40 @@ describe( 'the account line with buttons', () => {
 		expect( dialog.querySelector( 'input, select, textarea' ) ).toBeNull();
 		expect( within( dialog ).queryByText( 'Запуск' ) ).toBeNull();
 		expect( dialog.querySelector( '.woodev-records__fields' ) ).toBeNull();
+	} );
+	test( 'a read-only report shows its preview groups and closes without applying anything', async () => {
+		serve( { account: LINE } );
+		await renderPage();
+
+		fireEvent.click( lineButton( 'Подробнее' ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		await within( dialog ).findByText( 'Нет артикула' );
+
+		const previewed = posts( 'preview' );
+		expect( previewed ).toHaveLength( 1 );
+		expect( previewed[ 0 ].path ).toBe( `${ BASE }/actions/bulk_report/preview` );
+		expect( previewed[ 0 ].data ).toEqual( { context: { account_id: 'a1' }, ids: [], payload: { run_id: 'r9f2' } } );
+		// Nothing to confirm: the only button is the one that closes.
+		expect( within( dialog ).getAllByRole( 'button' ).map( ( button ) => button.textContent ) ).toContain( 'Закрыть' );
+		expect( within( dialog ).queryByRole( 'button', { name: 'Подробнее' } ) ).toBeNull();
+
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Закрыть' } ) );
+
+		expect( screen.queryByRole( 'dialog' ) ).toBeNull();
+		expect( posts( 'apply' ) ).toHaveLength( 0 );
+	} );
+
+	test( 'an action that needs a hidden value has no standalone button: only the line runs it', async () => {
+		serve( { account: LINE } );
+		await renderPage();
+
+		const toolbar = document.querySelector( '.woodev-records__account-actions' ) as HTMLElement;
+
+		expect( within( toolbar ).getAllByRole( 'button' ).map( ( button ) => button.textContent ) ).toEqual( [
+			'Связать по артикулу',
+		] );
+		expect( screen.getAllByRole( 'button', { name: 'Остановить' } ) ).toHaveLength( 1 );
+		expect( lineButton( 'Остановить' ) ).toBeInTheDocument();
 	} );
 } );

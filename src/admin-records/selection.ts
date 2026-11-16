@@ -44,6 +44,18 @@ function add( known: SelectionState, ids: string[], limit: number ): SelectionSt
 }
 
 /**
+ * Unticking rows. Taking a row out of «every row under the filter» corrects the whole choice, so it starts again from no
+ * selection rather than leaving a partial page behind.
+ */
+function remove( known: SelectionState, ids: string[] ): SelectionState {
+	if ( known.matching !== null ) {
+		return NOTHING;
+	}
+
+	return { ...known, ids: known.ids.filter( ( id ) => ! ids.includes( id ) ), limitReached: false };
+}
+
+/**
  * @param limit The table's `max_selection`.
  * @param epoch Changes with every list read.
  */
@@ -57,7 +69,10 @@ export function useSelection( limit: number, epoch: number ): Selection {
 			setState( ( known ) =>
 				selected
 					? add( known, ids, limit )
-					: { ids: known.ids.filter( ( id ) => ! ids.includes( id ) ), limitReached: false, matching: null }
+					: known.matching !== null
+					? // Taking a row out of «every row under the filter» is a correction of the whole choice: start again.
+					  NOTHING
+					: { ...known, ids: known.ids.filter( ( id ) => ! ids.includes( id ) ), limitReached: false }
 			),
 		[ limit ]
 	);

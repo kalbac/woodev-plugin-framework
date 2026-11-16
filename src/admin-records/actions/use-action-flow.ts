@@ -34,6 +34,11 @@ export interface FlowState {
 	ids: string[];
 	/** The filter and search the action runs over instead of ids, frozen when the merchant chose it; `null` for ticked rows. */
 	matching: MatchingQuery | null;
+	/**
+	 * The dialog only shows the plan and closes: a read-only report (the account line's «Подробнее») carries its answer in
+	 * the preview, and there is nothing to apply.
+	 */
+	previewOnly: boolean;
 	/** The row of a row action, for option reads that depend on it; empty for a bulk action. */
 	rowId: string;
 	/** The account the flow started in. A flow never outlives a change of account. */
@@ -53,6 +58,8 @@ export interface BeginOptions {
 	onApplied?: () => void;
 	/** Runs the action over every row under this filter, with no ids. */
 	matching?: MatchingQuery;
+	/** Show the preview's answer and never apply (see {@link FlowState.previewOnly}). */
+	previewOnly?: boolean;
 	/** Values the server already chose for the fields — an account-line button's payload; the dialog never asks for them. */
 	payload?: Record< string, string >;
 }
@@ -204,8 +211,8 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 		async ( table: TableHandle ) => {
 			const flow = current.current;
 			const planned = flow?.stage === 'previewed' && flow.plan?.can_apply === true;
-			const direct = flow?.stage === 'input' && ! needsPreview( flow.action );
-			if ( ! flow || busy.current || ! ( planned || direct ) ) {
+			const direct = flow?.stage === 'input' && ! needsPreview( flow.action ) && ! flow.previewOnly;
+			if ( ! flow || busy.current || flow.previewOnly || ! ( planned || direct ) ) {
 				return;
 			}
 
@@ -258,6 +265,7 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 				action,
 				ids,
 				matching: options.matching ?? null,
+				previewOnly: options.previewOnly === true,
 				rowId,
 				account: table.context.account_id,
 				stage: 'input',
@@ -272,7 +280,7 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 			if ( visibleFields( action ).length > 0 ) {
 				return;
 			}
-			if ( needsPreview( action ) ) {
+			if ( needsPreview( action ) || options.previewOnly ) {
 				void preview( table );
 			} else {
 				void confirm( table );

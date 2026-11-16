@@ -54,9 +54,17 @@ function blockedReason(
 	return locked?.activity?.reason ?? '';
 }
 
-/** A link is plain navigation; it has no bulk form. */
+/**
+ * A link is plain navigation; it has no bulk form. An account action that needs a hidden value has no standalone button
+ * either: only the account line, which holds the value, can run it.
+ */
 function formActions( table: TableHandle, scope: ActionDescriptor[ 'scope' ] ): ActionDescriptor[] {
-	return table.definition.bulk_actions.filter( ( action ) => action.interaction !== 'link' && action.scope === scope );
+	return table.definition.bulk_actions.filter(
+		( action ) =>
+			action.interaction !== 'link' &&
+			action.scope === scope &&
+			! ( scope === 'account' && action.fields.some( ( field ) => field.type === 'hidden' && field.required ) )
+	);
 }
 
 /**
