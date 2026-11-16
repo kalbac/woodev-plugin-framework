@@ -309,7 +309,8 @@ final class Bulk_Run_Runner {
 	 * Works parts until the next one would not fit in the budget, the run is over, or it is lost.
 	 *
 	 * A part starts only when the time used plus the longest part of this tick still fits {@see self::BUDGET_SECONDS}; the first part
-	 * always runs. A tick therefore ends within the budget unless one part alone is longer than it (#1795).
+	 * always runs. This is a prediction from the longest part seen so far, not a hard bound: a later part slower than every
+	 * earlier one can still end the tick past the budget (#1795).
 	 *
 	 * @param Account             $account  Account.
 	 * @param Bulk_Run            $run      Run as the tick read it.
