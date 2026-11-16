@@ -34,6 +34,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-che
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::save
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::process
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::validate
+ * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::order_chosen_method
  */
 class CheckoutHandlerStalePickupTest extends TestCase {
 
@@ -201,6 +202,111 @@ class CheckoutHandlerStalePickupTest extends TestCase {
 			],
 			$captured['woodev_shipping_carrier_checkout_processed'] ?? []
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// (5) #1817 — WHAT is persisted follows the order's own shipping line, not the
+	//     submit's `shipping_method[0]`: the pickup handler decides on the order line,
+	//     so the two handlers must never disagree about whose order this is.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A WC_Order double whose shipping lines are the given bare method ids.
+	 *
+	 * @param string[] $method_ids method ids of the shipping lines, in package order
+	 *
+	 * @return \WC_Order
+	 */
+	private function order_with_shipping_lines( array $method_ids ): \WC_Order {
+		$items = [];
+
+		foreach ( $method_ids as $method_id ) {
+			$items[] = new class( $method_id ) {
+				private string $method_id;
+
+				public function __construct( string $method_id ) {
+					$this->method_id = $method_id;
+				}
+
+				public function get_method_id(): string {
+					return $this->method_id;
+				}
+			};
+		}
+
+		$order = \Mockery::mock( \WC_Order::class );
+		$order->shouldReceive( 'get_items' )->with( 'shipping' )->andReturn( $items );
+
+		return $order;
+	}
+
+	/**
+	 * @return array<string, array{0: string[], 1: string[], 2: bool}> posted method (as the `shipping_method` array), order lines, pickup row written
+	 */
+	public function chosen_method_sources(): array {
+		return [
+			'POST empty, order line is pickup'            => [ [], [ 'carrier_pickup:2' ], true ],
+			'POST differs, order line is pickup'          => [ [ 'free_shipping:1' ], [ 'carrier_pickup:2' ], true ],
+			'POST equals the pickup order line'           => [ [ 'carrier_pickup:2' ], [ 'carrier_pickup:2' ], true ],
+			'POST empty, order line is not pickup'        => [ [], [ 'free_shipping:1' ], false ],
+			'POST says pickup, order line is not pickup'  => [ [ 'carrier_pickup:2' ], [ 'free_shipping:1' ], false ],
+			'POST equals the non-pickup order line'       => [ [ 'free_shipping:1' ], [ 'free_shipping:1' ], false ],
+			'order without a shipping line keeps the POST' => [ [ 'carrier_pickup:2' ], [], true ],
+			'first line decides on a multi-package order' => [ [ 'free_shipping:1', 'carrier_pickup:2' ], [ 'carrier_pickup:2', 'free_shipping:1' ], true ],
+		];
+	}
+
+	/**
+	 * @dataProvider chosen_method_sources
+	 *
+	 * @param string[] $posted_method the submit's `shipping_method` array
+	 * @param string[] $order_lines   method ids of the order's shipping lines
+	 * @param bool     $row_written   whether the pickup field row must be written
+	 */
+	public function test_process_decides_the_chosen_method_from_the_order_shipping_line( array $posted_method, array $order_lines, bool $row_written ): void {
+		$handler = $this->handler_with_pickup_and_ordinary_fields();
+
+		Functions\when( 'wc_clean' )->returnArg();
+		Functions\when( 'wp_unslash' )->returnArg();
+		Functions\when( 'do_action' )->justReturn();
+
+		$posted = [
+			'carrier_pickup_point' => 'PVZ-001',
+			'carrier_city'         => 'Москва',
+			'billing_country'      => 'RU',
+		];
+
+		if ( [] !== $posted_method ) {
+			$posted['shipping_method'] = $posted_method;
+		}
+
+		$this->assertTrue( $handler->process( $posted, $this->order_with_shipping_lines( $order_lines ) ) );
+
+		$ids = array_column( $handler->persisted, 'id' );
+
+		$this->assertSame( $row_written, in_array( 'carrier_pickup_point', $ids, true ) );
+		$this->assertContains( 'carrier_city', $ids, 'a non-pickup field is written either way' );
+	}
+
+	public function test_save_without_an_explicit_method_reads_the_order_shipping_line(): void {
+		$handler = $this->handler_with_pickup_and_ordinary_fields();
+
+		Functions\when( 'wc_clean' )->returnArg();
+		Functions\when( 'wp_unslash' )->returnArg();
+		Functions\when( 'do_action' )->justReturn();
+
+		$_POST['shipping_method'] = [ 'free_shipping:1' ];
+
+		try {
+			$handler->save(
+				$this->order_with_shipping_lines( [ 'carrier_pickup:2' ] ),
+				[ 'carrier_pickup_point' => 'PVZ-001' ]
+			);
+		} finally {
+			unset( $_POST['shipping_method'] );
+		}
+
+		$this->assertSame( [ 'carrier_pickup_point' ], array_column( $handler->persisted, 'id' ) );
 	}
 
 	// -------------------------------------------------------------------------

@@ -61,7 +61,13 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			parent::setUp();
 
 			$this->events = [];
-			$this->order  = new \WC_Order();
+			// A shipping-line-less order: process() reads the order's lines (#1817), and a bare global
+			// stand-in loaded by another test file may not declare get_items().
+			$this->order = new class() extends \WC_Order {
+				public function get_items( $type = 'line_item' ) {
+					return [];
+				}
+			};
 
 			Functions\when( 'wc_clean' )->returnArg();
 			Functions\when( 'wp_unslash' )->returnArg();
