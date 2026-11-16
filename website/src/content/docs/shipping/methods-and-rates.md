@@ -95,13 +95,13 @@ When the cart is packed into several parcels, ask the carrier for **one** quote 
 
 ### The recipient's phone
 
-If your carrier needs the recipient's phone to quote, read `$package['destination']['phone']`. When the manager quotes tariffs in the admin order wizard, the framework puts the phone from the order there (digits and a leading `+`). The key is absent when there is no phone, so read it with a default:
+If your carrier needs the recipient's phone to quote, read `$package['destination']['phone']`. When the manager quotes tariffs in the admin order wizard, the framework puts the recipient's phone from the order there: the shipping phone, or the billing phone when the order has none (sanitised to digits and `+`). The key is absent when there is no phone, so read it with a default:
 
 ```php
 $phone = (string) ( $package['destination']['phone'] ?? '' );
 ```
 
-WooCommerce's own package has no phone, so at the checkout the key is absent. Read the phone from the customer there (`WC()->customer->get_billing_phone()`), and let the admin key win when it is present.
+WooCommerce's own package has no phone, so at the checkout the key is absent. Read the recipient's phone from the customer there with the same order of preference — `WC()->customer->get_shipping_phone()`, then `get_billing_phone()` — and let the admin key win when it is present.
 
 ## The rate object
 
