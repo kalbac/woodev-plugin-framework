@@ -215,6 +215,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/class-fee-payments.php';
 			// the licence gate (#1270): the method's calculate_shipping() and the shipment handler both ask it
 			require_once $path . '/class-license-gate.php';
+			require_once $path . '/class-order-amount.php';
 			// additional carrier services (#1145): the method's declaration seam builds them
 			require_once $path . '/class-carrier-service.php';
 			require_once $path . '/class-instance-field-conditions.php';
@@ -493,6 +494,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// a licence flip must recalculate the rates WooCommerce cached in the session (#1270)
 			License_Gate::track_license_state( $this );
+
+			// the order amount after the coupon discounts rides on the package, so a moved discount is a new package hash (#1722)
+			Order_Amount::register();
 
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );

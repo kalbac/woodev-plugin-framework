@@ -106,7 +106,7 @@ own price from `rate_package()`; it builds no price field and applies no markup,
 |---|---|---|
 | «Наценка» — fixed or percent, and «База процента наценки» | `fee`, `fee_type` | `FEATURE_MARKUP` |
 | «Оплата с наценкой» — apply the markup only for chosen gateways | `fee_payments` | `FEATURE_FEE_PAYMENTS` |
-| «Бесплатная доставка от» and «Купон на бесплатную доставку» | `free_cost`, `coupon_free_shipping` | `FEATURE_FREE_SHIPPING` |
+| «Бесплатная доставка от», «Порог до скидки» and «Купон на бесплатную доставку» | `free_cost`, `free_before_discount`, `coupon_free_shipping` | `FEATURE_FREE_SHIPPING` |
 | «Округление цены» and «Шаг округления цены» | `round_cost`, `round_cost_range` | `FEATURE_ROUNDING` |
 | «Срок доставки» (show/hide) and «Добавочные дни доставки» | `show_delivery_time`, `additional_time` | `FEATURE_DELIVERY_TIME` + `with_delivery_days()` |
 | «Минимальная / Максимальная стоимость доставки» — clamps the price | `min_cost`, `max_cost` | `FEATURE_COST_LIMITS` |
@@ -115,14 +115,23 @@ own price from `rate_package()`; it builds no price field and applies no markup,
 Order the framework applies (`Shipping_Method::apply_price_features()`, then `calculate_rate()`): carrier price → markup →
 free shipping (amount ABOVE the threshold, or a free-shipping coupon) → rounding → box cost → cost limits (a free rate stays
 free). Exactly AT the threshold the carrier price is quoted without the markup — the Yandex/CDEK v1 behaviour, kept so their
-migration does not move a quote. The order amount is the cart subtotal while coupons are applied, the contents cost otherwise.
+migration does not move a quote. The order amount is the cart subtotal less the coupon discounts (the discount tax too while prices show with tax) — the way
+WooCommerce's Free shipping measures it, the same with and without a coupon; `contents_cost` when the package has no subtotal.
+The `free_before_discount` checkbox (default off, shown only while the shop uses coupons) measures the THRESHOLD on the subtotal
+before the discounts; the markup and the order-amount limits always use the amount after them (since 2.1.9).
 The framework adds the applied coupons, that amount and — with free shipping declared — whether a coupon grants free shipping
 to the rate-cache key of a method declaring the markup or free shipping.
 
+WooCommerce keeps a package's rates in the session under the package hash and serves them without calling the method, so the
+amount after the discounts rides ON the package: `Order_Amount` (`woodev_order_amount`, a string, added on
+`woocommerce_cart_shipping_packages` only to a package that carries a coupon, registered by `Shipping_Plugin`) and the method
+reads it back. A package without it (the admin order wizard, no coupons) is measured on its subtotal, or on `contents_cost`
+while it carries a coupon. A new rate input that is NOT in the package needs the same treatment (gotcha
+`woocommerce-caches-rates-per-package-hash-so-a-rate-gate-must-change-the-package`).
+
 Order-amount limits are availability, not price: `is_available_for_package()` hides the method BEFORE the rate cache, the
-packing and any carrier call, and an amount equal to a bound is inside. Their amount is `cart_subtotal`, else `contents_cost`
-(the Yandex/CDEK rule) — NOT the price features' amount, which takes the contents cost whenever no coupon is applied. Empty or
-0 is no bound. CDEK redefines `OPTION_MIN_ORDER_AMOUNT = 'min_price'` and `OPTION_MAX_ORDER_AMOUNT = 'max_price'`.
+packing and any carrier call, and an amount equal to a bound is inside. Their amount is the price features' amount (after the coupon discounts;
+before 2.1.9 it was the subtotal before them). Empty or 0 is no bound. CDEK redefines `OPTION_MIN_ORDER_AMOUNT = 'min_price'` and `OPTION_MAX_ORDER_AMOUNT = 'max_price'`.
 
 A plugin whose installed sites stored one of these under ANOTHER key redefines the `OPTION_*` constant in its method class
 (`const OPTION_FREE_SHIPPING_FROM = 'free';` for CDEK) — every key is read through `static::`, so no data migration is needed;

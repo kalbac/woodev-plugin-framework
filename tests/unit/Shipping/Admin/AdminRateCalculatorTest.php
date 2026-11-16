@@ -127,6 +127,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	use Woodev\Framework\Shipping\Fee_Payments;
 	use Woodev\Framework\Shipping\Location\Location_Record;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
+	use Woodev\Framework\Shipping\Order_Amount;
 	use Woodev\Framework\Shipping\Shipping_Method;
 	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Tests\Unit\TestCase;
@@ -135,6 +136,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-method.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-fee-payments.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-order-amount.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-orders-provider.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-admin-rate-calculator.php';
@@ -509,6 +511,43 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame( [], $package['applied_coupons'] );
 			$this->assertSame( [ 'ID' => 7 ], $package['user'] );
 			$this->assertSame( [ 'country' => 'RU' ], $package['destination'] );
+		}
+
+		/**
+		 * The wizard sums its lines as floats and sends no coupon and no prepared amount (#1722): `79.90 + 39.90` is
+		 * `119.80000000000001` in the package, and the pricing step normalises it to the shop's price decimals
+		 * ({@see Order_Amount::normalize()}), so an order AT a threshold or a limit of 119.80 is treated as at it.
+		 *
+		 * @covers ::build_package
+		 *
+		 * @return void
+		 */
+		public function test_the_package_subtotal_is_normalised_to_the_shop_precision_by_the_pricing_step(): void {
+			$package = $this->calculator()->build_package(
+				[
+					[
+						'product'  => $this->product( 79.90, true, 12 ),
+						'quantity' => 1,
+						'price'    => null,
+					],
+					[
+						'product'  => $this->product( 39.90, true, 13 ),
+						'quantity' => 1,
+						'price'    => null,
+					],
+				],
+				[ 'country' => 'RU' ]
+			);
+
+			$this->assertNotSame( 119.8, $package['cart_subtotal'], 'the raw sum carries float noise' );
+
+			Order_Amount::use_runtime_for_tests( null, 2 );
+
+			try {
+				$this->assertSame( 119.8, Order_Amount::normalize( $package['cart_subtotal'] ) );
+			} finally {
+				Order_Amount::reset();
+			}
 		}
 
 		/**

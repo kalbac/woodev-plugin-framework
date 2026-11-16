@@ -6755,6 +6755,18 @@ msgstr ""
 msgid "Если стоимость заказа больше этой суммы, доставка бесплатна. Оставьте поле пустым, если порог не нужен."
 msgstr ""
 
+#: shipping-method/class-shipping-method.php:837
+msgid "Порог до скидки"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:839
+msgid "Сравнивать с суммой до скидки по купону"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:841
+msgid "По умолчанию сумма для порога считается после вычета скидки по купону. Включите опцию, если порог нужно сравнивать с суммой товаров до скидки."
+msgstr ""
+
 #: shipping-method/class-shipping-method.php:829
 msgid "Купон на бесплатную доставку"
 msgstr ""

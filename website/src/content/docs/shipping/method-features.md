@@ -38,7 +38,7 @@ The framework applies them in a fixed order:
 5. The box cost, when the method packs boxes.
 6. The [cost limits](#cost-limits), when declared. A free rate is never raised to the minimum.
 
-The order amount that free delivery and a percentage markup are measured on is the cart subtotal before discounts while a coupon is applied, and the contents cost otherwise.
+The order amount that free delivery, a percentage markup and the [order-amount limits](#order-amount-limits) are measured on is the cart subtotal less the coupon discounts — the way WooCommerce's own Free shipping measures it. With prices shown including tax, the tax on the discount is taken off too. It is the same amount with a coupon and without one. The one exception is the free-delivery threshold, which the merchant can switch to the subtotal before discounts (see below).
 
 ```php
 <?php
@@ -74,8 +74,8 @@ The values are stored in the instance options `fee` and `fee_type` (`order` or `
 
 `FEATURE_FREE_SHIPPING` makes the rate free.
 
-- **The merchant sees** «Бесплатная доставка от» (Free delivery from), an order amount, and, while the shop uses coupons, «Купон на бесплатную доставку» (Free-shipping coupon).
-- **The framework does** the check. An order amount above the threshold makes the rate free. Exactly at the threshold the carrier's price is quoted as it is, without the markup. With the coupon option on, an applied coupon that grants free shipping makes the rate free too.
+- **The merchant sees** «Бесплатная доставка от» (Free delivery from), an order amount, and, while the shop uses coupons, «Порог до скидки» (Threshold before the discount) and «Купон на бесплатную доставку» (Free-shipping coupon).
+- **The framework does** the check. An order amount above the threshold makes the rate free; by default the amount is the one after the coupon discounts, so a coupon that takes the order under the threshold makes delivery paid. With «Порог до скидки» ticked, only the threshold is compared with the subtotal before the discount; the markup and the order-amount limits stay on the amount after it. Exactly at the threshold the carrier's price is quoted as it is, without the markup. With the coupon option on, an applied coupon that grants free shipping makes the rate free too.
 
 ```php
 <?php
@@ -83,7 +83,7 @@ The values are stored in the instance options `fee` and `fee_type` (`order` or `
 $this->supports = [ self::FEATURE_FREE_SHIPPING ];
 ```
 
-The values are stored in `free_cost` (empty means no threshold) and `coupon_free_shipping` (`yes` or `no`). Read the threshold with `get_free_shipping_threshold()`, which returns `0.0` when there is none.
+The values are stored in `free_cost` (empty means no threshold), `free_before_discount` (`yes` or `no`, off unless the merchant ticks it — before 2.1.9 the threshold was always compared with the subtotal before the discount while a coupon was applied) and `coupon_free_shipping` (`yes` or `no`). Read the threshold with `get_free_shipping_threshold()`, which returns `0.0` when there is none.
 
 ### Rounding
 
@@ -159,7 +159,7 @@ Do not declare this feature when the merchant types the price themselves. A limi
 - **The framework does** the hiding. The method is not offered when the order amount is below the minimum or above the maximum; an amount equal to a limit is allowed. The check runs before the rate cache, the packing and any call to the carrier, so an order outside the limits never costs a request.
 - **You write** nothing.
 
-The order amount is the cart subtotal when the cart has one, and the contents cost otherwise.
+The order amount is the cart subtotal less the coupon discounts, the same amount the markup uses; it does not depend on the free-delivery threshold option. Before 2.1.9 it was the subtotal before the discounts, so a coupon that takes a 1000 order down to 400 now hides a method with a minimum of 500. A package that has no cart behind it (the admin order wizard) is measured on its own subtotal.
 
 ```php
 <?php
