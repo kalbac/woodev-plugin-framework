@@ -158,6 +158,76 @@ final class Price_Sync_Queue {
 	}
 
 	/**
+	 * Reads what a link wants on the marketplace right now: its pending payload and revision, whatever was sent before and whenever
+	 * the next send is due. The one-time price pull reads it before it writes the shop price, to know whether anything is queued, and
+	 * again after, to see whether the merchant edited the price meanwhile (#1797).
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $link_id    Link id.
+	 * @return Price_Intent|null Null when the link has no price row, or the row holds no pending payload.
+	 */
+	public function pending_of( int $account_id, int $link_id ): ?Price_Intent {
+		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own tables, read fresh.
+			$this->db->prepare(
+				'SELECT pending_rev, pending_payload FROM %i WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND pending_payload IS NOT NULL LIMIT 1',
+				$this->table,
+				$account_id,
+				$link_id,
+				self::KIND
+			),
+			'ARRAY_A'
+		);
+
+		$row     = is_array( $rows ) && [] !== $rows ? $rows[0] : null;
+		$payload = null === $row ? null : json_decode( (string) $row['pending_payload'], true );
+
+		return is_array( $payload ) ? new Price_Intent( $link_id, (int) $row['pending_rev'], $payload ) : null;
+	}
+
+	/**
+	 * Settles the pair of a price the merchant pulled from the marketplace: the marketplace already holds this price, so the pair has
+	 * nothing left to send. Without it a send queued before the pull (the shop at 150, the marketplace at 100) would still be due and
+	 * would undo the pull a minute later, because the sender sends what differs between `pending_payload` and `sent_payload` and
+	 * knows nothing of the read.
+	 *
+	 * One claim-fenced statement: the payload read from the marketplace becomes both the pending and the sent one, the in-flight
+	 * snapshot and the retry state are cleared. It applies only while the pending revision is still the one the pull saw
+	 * (`$revision`): a price the merchant saved after that read has a newer revision and is left untouched, and the caller restores it.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int                       $account_id Account id.
+	 * @param int                       $link_id    Link id.
+	 * @param int                       $revision   The pending revision the pull read before it wrote the shop price.
+	 * @param array<string,string|null> $payload    The marketplace's price as a send payload.
+	 * @param string                    $token      Account claim token.
+	 * @return bool False when the pending revision moved on or the claim is no longer held; nothing was changed then.
+	 * @throws \RuntimeException When the database refuses a statement.
+	 */
+	public function settle_pulled( int $account_id, int $link_id, int $revision, array $payload, string $token ): bool {
+		$json    = (string) json_encode( $payload ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function; the store encodes the same way.
+		$settled = 1 === $this->write(
+			'UPDATE %i SET pending_payload = %s, sent_payload = %s, sent_rev = pending_rev, in_flight_rev = NULL, in_flight_payload = NULL,'
+			. ' attempts = 0, next_attempt_at = NULL, last_error = NULL'
+			. ' WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND pending_rev = %d',
+			[ $this->table, $json, $json, $account_id, $link_id, self::KIND, $revision ],
+			$token
+		);
+
+		if ( $settled ) {
+			$this->write(
+				'UPDATE %i SET last_pushed_price = %s, last_pushed_price_at = %s WHERE link_id = %d',
+				[ $this->links_table, (string) ( $payload['price'] ?? '0' ), $this->format( $this->now() ), $link_id ],
+				$token
+			);
+		}
+
+		return $settled;
+	}
+
+	/**
 	 * Copies the pending payload of a pair into its in-flight snapshot, when the pair is still at the revision that was read and
 	 * the claim is still held.
 	 *

@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
@@ -817,7 +818,7 @@ final class PriceSyncTest extends Sync_Test_Case {
 	 * @return Price_Refresh_Runner
 	 */
 	private function refresh_runner(): Price_Refresh_Runner {
-		return new Price_Refresh_Runner( $this->job_gate(), $this->refresher(), new Price_Scheduler( $this->names() ), $this->classifier, [ $this, 'log_line' ] );
+		return new Price_Refresh_Runner( $this->job_gate(), $this->refresher(), new Price_Scheduler( $this->names() ), $this->classifier, [ $this, 'log_line' ], new Api_Error_Ring( $this->db, Sqlite_Tables::table( 'api_errors' ), $this->clock() ) );
 	}
 
 	/**
