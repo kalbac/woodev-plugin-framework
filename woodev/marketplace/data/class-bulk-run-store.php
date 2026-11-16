@@ -228,6 +228,45 @@ final class Bulk_Run_Store {
 	}
 
 	/**
+	 * The save of the part that froze the remote-cards run's list (§2.7): the list and the position after the freeze — cursor, counters
+	 * and report — in **one** conditional `UPDATE`, fenced by the tick like {@see self::save()}. They are never two writes: a process
+	 * that dies between them would leave a stored list the run does not know it has, and the next tick would freeze again from a
+	 * snapshot that may have expired or changed.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int                                 $account_id Account.
+	 * @param string                              $run_id     Run.
+	 * @param string                              $tick       The writer's token; another tick's save is refused.
+	 * @param array<int,array{0:string,1:string}> $items      `[ article, group key ]` of every card, in the order the import must go.
+	 * @param array<string,mixed>                 $cursor     Position after the freeze.
+	 * @param array<string,int>                   $counts     Counters.
+	 * @param array<int,array<string,mixed>>      $report     Groups.
+	 * @return bool False when this tick no longer owns the run: it must stop at once.
+	 */
+	public function save_frozen( int $account_id, string $run_id, string $tick, array $items, array $cursor, array $counts, array $report ): bool {
+		$json = wp_json_encode( $items, JSON_UNESCAPED_UNICODE );
+
+		return is_string( $json ) && 1 === $this->db->query( $this->db->prepare( 'UPDATE %i SET items = %s, `cursor` = %s, counts = %s, report = %s WHERE account_id = %d AND run_id = %s AND tick = %s AND state = %s', $this->table, $json, $this->encode( $cursor ), $this->encode( $counts ), $this->encode( $report ), $account_id, $run_id, $tick, Bulk_Run::RUNNING ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+	}
+
+	/**
+	 * Reads the frozen card list of a run. The one place that reads the heavy `items` column.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int    $account_id Account.
+	 * @param string $run_id     Run.
+	 * @return array<int,array{0:string,1:string}>|null Null when the run has no list yet (or is not that run any more).
+	 */
+	public function items( int $account_id, string $run_id ): ?array {
+		$json  = $this->db->get_var( $this->db->prepare( 'SELECT items FROM %i WHERE account_id = %d AND run_id = %s', $this->table, $account_id, $run_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table, read fresh.
+		$items = is_string( $json ) && '' !== $json ? json_decode( $json, true ) : null;
+
+		return is_array( $items ) ? $items : null;
+	}
+
+	/**
 	 * Deletes a batch of an account's rows (the account's deletion).
 	 *
 	 * @since 2.1.8

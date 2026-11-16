@@ -31,7 +31,10 @@ defined( 'ABSPATH' ) || exit;
  * 4. **The budget** ({@see self::BUDGET_SECONDS}) is checked before every card and every image. Once it is spent, the run puts the
  *    cards it has not finished — the current one included — back in the queue with the attempt unchanged. A run makes progress (a card
  *    finished or a new image stored) first ({@see Import_Budget}), so that a requeue cannot repeat for ever.
- * 5. When the run gives up, every card of the batch gets a note: a fixed Russian sentence for the merchant, and the technical
+ * 5. A card whose group's product is half-made, while the card that resumes that product is still queued, **waits**: it goes back
+ *    to the queue by itself ({@see Job_Gate::BUSY_DELAY}) instead of being skipped, up to {@see Account_Job::MAX_ATTEMPTS} runs. Queue
+ *    order alone does not survive a retry — a cut run requeues its card behind the siblings that follow (#1796).
+ * 6. When the run gives up, every card of the batch gets a note: a fixed Russian sentence for the merchant, and the technical
  *    reason kept apart in the note's `detail`.
  *
  * @since 2.1.6
@@ -197,8 +200,12 @@ final class Import_Jobs {
 			try {
 				$hold();
 				$budget->check();
-				$this->import_card( $account, $fence, $offer_id, $cards[ $offer_id ] ?? null, $renew, $stored );
+				$outcome = $this->import_card( $account, $fence, $offer_id, $cards[ $offer_id ] ?? null, $renew, $stored, $attempt );
 				$budget->card_finished();
+
+				if ( Card_Import::WAITING === $outcome ) {
+					$this->scheduler->retry( $account->id(), [ $offer_id ], $attempt + 1, Job_Gate::BUSY_DELAY );
+				}
 			} catch ( Budget_Spent $spent ) {
 				$this->scheduler->retry( $account->id(), array_slice( $offer_ids, $index ), $attempt, 0 );
 
@@ -216,19 +223,20 @@ final class Import_Jobs {
 	 * @param Card_Content|null $content  The card, null when the marketplace did not answer for it.
 	 * @param callable          $renew    Extends the claim and checks the budget before an image.
 	 * @param callable          $stored   Counts a new image the writer stored as the run's progress.
-	 * @return void
+	 * @param int               $attempt  Failed attempts so far.
+	 * @return string The outcome of {@see Card_Import::import()}; empty when the card was not imported.
 	 * @throws Claim_Lost    When another run took the account claim.
 	 * @throws Budget_Spent  When the run's time is spent.
 	 */
-	private function import_card( Account $account, Claim_Fence $fence, string $offer_id, ?Card_Content $content, callable $renew, callable $stored ): void {
+	private function import_card( Account $account, Claim_Fence $fence, string $offer_id, ?Card_Content $content, callable $renew, callable $stored, int $attempt ): string {
 		if ( null === $content ) {
 			$this->notes->set_import_note( $account->id(), $offer_id, __( 'Маркетплейс не вернул данные карточки. Обновите список карточек и попробуйте ещё раз.', 'woodev-plugin-framework' ) );
 
-			return;
+			return '';
 		}
 
 		try {
-			$this->import->import( $account, $content, $fence, $renew, $stored );
+			return $this->import->import( $account, $content, $fence, $renew, $stored, $this->waits_for_queue( $account, $attempt ) );
 		} catch ( Claim_Lost | Budget_Spent $stop ) {
 			throw $stop;
 		} catch ( \Throwable $failure ) {
@@ -236,7 +244,23 @@ final class Import_Jobs {
 
 			$this->notes->set_import_note( $account->id(), $offer_id, __( 'Не удалось импортировать карточку.', 'woodev-plugin-framework' ), $detail );
 			call_user_func( $this->log_error, $this->scheduler->hook() . ': account ' . $account->id() . ': ' . $offer_id . ': ' . $detail );
+
+			return '';
 		}
+	}
+
+	/**
+	 * Whether a card of a half-made group should wait: the card that resumes the group's product still has an import queued (pending or
+	 * running), and this card has attempts left.
+	 *
+	 * @param Account $account Account.
+	 * @param int     $attempt Failed attempts so far.
+	 * @return callable `function ( string $article ): bool`.
+	 */
+	private function waits_for_queue( Account $account, int $attempt ): callable {
+		return function ( string $article ) use ( $account, $attempt ): bool {
+			return $attempt + 1 < Account_Job::MAX_ATTEMPTS && in_array( $article, $this->scheduler->pending_offer_ids( $account->id() ), true );
+		};
 	}
 
 	/**

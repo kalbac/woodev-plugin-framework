@@ -11639,3 +11639,67 @@ msgstr ""
 #, php-format
 msgid "Загрузка цен поставлена в очередь: %s. Цены на сайте обновятся в течение нескольких минут."
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:274
+msgid "Этот маркетплейс не умеет импортировать карточки."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:289
+msgid "Это действие нельзя выполнить для всех карточек по фильтру."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:257
+#: marketplace/admin/pages/products/class-remote-cards-run-actions.php:226
+msgid "Обработка остановится после текущей части. То, что уже поставлено в очередь, будет обработано."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-actions.php:145
+#, php-format
+msgid "Импорт запущен в фоне: %s. Ход работы — в строке аккаунта над таблицей."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-actions.php:257
+msgid "Похожие артикулы не импортируются все сразу: по каждой паре решение принимаете вы. Выберите вид «Карточки» и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-actions.php:269
+#: marketplace/jobs/class-bulk-import-feeder.php:156
+msgid "Список карточек устарел — нажмите «Обновить список» и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-actions.php:273
+msgid "По этому фильтру карточек нет."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-line.php:58
+msgid "Импорт по фильтру: готовим список карточек."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-line.php:62
+#, php-format
+msgid "Импорт по фильтру: в очередь на импорт поставлено %1$s из ~%2$s."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-line.php:85
+#, php-format
+msgid "Импорт по фильтру остановлен: %s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-line.php:93
+#, php-format
+msgid "Импорт по фильтру остановлен: поставлено в очередь %1$s из ~%2$s. "
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-line.php:101
+#, php-format
+msgid "Поставлено в очередь на импорт: %1$s; пропущено %2$s. Результат каждой карточки — в её строке."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-line.php:123
+#, php-format
+msgid "Будет импортировано до %s: часть из них свяжется с уже существующими товарами. Картинки загружаются по одной — импорт тысяч карточек займёт несколько часов."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-run-line.php:127
+msgid "Действие выполняется в фоне частями. Ход работы — в строке аккаунта над таблицей."
+msgstr ""

@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Action_State_Exception;
 use Woodev\Framework\Admin\Records\Activity_Normalizer;
+use Woodev\Framework\Admin\Records\Applies_To_Matching;
 use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
@@ -32,7 +33,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @since 2.1.5
  */
-final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Options {
+final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Options, Applies_To_Matching {
 	/**
 	 * Table id: the products page declares `tables => [ 'products', 'remote_cards' ]`.
 	 */
@@ -88,6 +89,13 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	private $importer;
 
 	/**
+	 * Returns the Unix time: the account line shows a finished run for a day.
+	 *
+	 * @var callable
+	 */
+	private $clock;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
@@ -101,8 +109,9 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @param Remote_Cards_Actions  $actions   The table's actions.
 	 * @param array<string,mixed>   $config    `adapter_id` and `marketplace`.
 	 * @param Import_Scheduler|null $importer  Reads the import queue; null when the adapter cannot import cards, and the table then offers no «Импортировать».
+	 * @param callable|null         $clock     Returns the Unix time; the system clock when null.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null, ?callable $clock = null ) {
 		$this->accounts  = $accounts;
 		$this->snapshots = $snapshots;
 		$this->links     = $links;
@@ -115,6 +124,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			'marketplace' => (string) ( $config['marketplace'] ?? '' ),
 		];
 		$this->importer  = $importer;
+		$this->clock     = $clock ?? 'time';
 	}
 
 	/**
@@ -276,6 +286,38 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
+	 * The plan of «Импортировать» over every card under the filter: one count and a sentence.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param array<string,string>                             $context Resolved context.
+	 * @param string                                           $action  Action id.
+	 * @param array{search:string,filters:array<string,mixed>} $query   Validated filter and search.
+	 * @param array<string,mixed>                              $payload Validated fields.
+	 * @return array<string,mixed>
+	 * @throws Action_State_Exception When the account is gone or the import may not start.
+	 */
+	public function preview_matching( array $context, string $action, array $query, array $payload ): array {
+		return $this->actions->preview_matching( $this->require_account( $context ), $action, $query );
+	}
+
+	/**
+	 * Starts the import of every card under the filter in the background.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param array<string,string>                             $context Resolved context.
+	 * @param string                                           $action  Action id.
+	 * @param array{search:string,filters:array<string,mixed>} $query   Validated filter and search.
+	 * @param array<string,mixed>                              $payload Validated fields.
+	 * @return array<string,mixed>
+	 * @throws Action_State_Exception When the account is gone, the import may not start or the queue refuses the run.
+	 */
+	public function apply_matching( array $context, string $action, array $query, array $payload ): array {
+		return $this->actions->apply_matching( $this->require_account( $context ), $action, $query );
+	}
+
+	/**
 	 * The current rows of the asked ids and the account line: a row's import lock, its import note and where it now stands on the site.
 	 * Local reads only: the snapshot, the links, the notes and the import queue.
 	 *
@@ -329,13 +371,37 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * The account line: «Обновить список» is blocked while its job runs, and a pending import is announced.
+	 * The account line: «Обновить список» is blocked while its job runs, a pending import is announced, and a bulk run says how far it got.
 	 *
 	 * @param int      $account_id    Account id.
 	 * @param string[] $importing_ids Articles being imported, read once per request by the caller ({@see self::import_state()}).
 	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::account()}.
 	 */
 	private function account_activity( int $account_id, array $importing_ids ): array {
+		$line  = $this->actions->run_line( $account_id, (int) call_user_func( $this->clock ) );
+		$other = $this->snapshot_and_import_line( $account_id, $this->actions->is_feeding_import( $account_id ) ? [] : $importing_ids ); // Only the feeding import's own line already says that cards are being imported.
+
+		if ( null === $line ) {
+			return $other;
+		}
+
+		return [
+			'active'          => $line['active'] || $other['active'],
+			'text'            => trim( $line['text'] . ' ' . $other['text'] ),
+			'blocked_actions' => $other['blocked_actions'],
+			'actions'         => $line['actions'],
+			'observed_at'     => Activity_Normalizer::now(),
+		];
+	}
+
+	/**
+	 * What the account line says about the list's refresh and the imports queued by hand.
+	 *
+	 * @param int      $account_id    Account id.
+	 * @param string[] $importing_ids Articles being imported.
+	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::account()}.
+	 */
+	private function snapshot_and_import_line( int $account_id, array $importing_ids ): array {
 		$refreshing = $this->snapshots->is_refreshing( $account_id );
 		$importing  = [] !== $importing_ids;
 

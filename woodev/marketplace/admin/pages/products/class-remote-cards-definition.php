@@ -120,7 +120,7 @@ final class Remote_Cards_Definition {
 	private static function bulk_actions( string $marketplace, bool $importable ): array {
 		$actions = [ self::refresh( $marketplace ), Site_Products_Definition::link_by_article( __( 'Связывание идёт по всему магазину или по одной категории. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ), true ) ];
 
-		return $importable ? array_merge( [ self::import( self::IMPORT_SELECTED ) ], $actions ) : $actions;
+		return $importable ? array_merge( [ self::import( self::IMPORT_SELECTED ) ], $actions, self::run_actions() ) : $actions;
 	}
 
 	/**
@@ -207,13 +207,14 @@ final class Remote_Cards_Definition {
 
 	/**
 	 * «Импортировать»: creates a shop product from each selected card, or links it to the product that already carries its article.
-	 * It starts a remote read and creates products, so it needs the same right as «Обновить список».
+	 * It starts a remote read and creates products, so it needs the same right as «Обновить список». The bulk twin also runs over every
+	 * card under the filter, in the background (#1796).
 	 *
 	 * @param string $id {@see self::IMPORT} or {@see self::IMPORT_SELECTED}.
 	 * @return array<string,mixed>
 	 */
 	private static function import( string $id ): array {
-		return [
+		$action = [
 			'id'             => $id,
 			'label'          => __( 'Импортировать', 'woodev-plugin-framework' ),
 			'tone'           => 'primary',
@@ -223,6 +224,49 @@ final class Remote_Cards_Definition {
 			'capability'     => 'manage_woocommerce',
 			'scope_sentence' => __( 'Для выбранных карточек будут созданы товары на сайте; если товар с таким артикулом уже есть, карточка свяжется с ним. Импорт идёт в фоне.', 'woodev-plugin-framework' ),
 			'confirm_label'  => __( 'Импортировать', 'woodev-plugin-framework' ),
+		];
+
+		return self::IMPORT_SELECTED === $id ? $action + [ 'all_matching' => true ] : $action;
+	}
+
+	/**
+	 * The two buttons of the account line of a bulk run — «Остановить» and «Подробнее» — declared as account actions the line runs
+	 * with the id of the run it shows. They carry a required `hidden` field, so the toolbar never draws them on their own. The line
+	 * shows whichever run the account has, so the table carries them whenever it can start the import.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function run_actions(): array {
+		$run = [
+			[
+				'id'       => Site_Products_Bulk::RUN_FIELD,
+				'label'    => __( 'Запуск', 'woodev-plugin-framework' ),
+				'type'     => 'hidden',
+				'required' => true,
+			],
+		];
+
+		return [
+			[
+				'id'             => Site_Products_Bulk::RUN_STOP,
+				'label'          => __( 'Остановить', 'woodev-plugin-framework' ),
+				'effect'         => 'mutate',
+				'interaction'    => 'dialog',
+				'scope'          => 'account',
+				'capability'     => 'manage_woocommerce',
+				'scope_sentence' => __( 'Обработка остановится после текущей части. То, что уже поставлено в очередь, будет обработано.', 'woodev-plugin-framework' ),
+				'fields'         => $run,
+			],
+			[
+				'id'             => Site_Products_Bulk::RUN_REPORT,
+				'label'          => __( 'Подробнее', 'woodev-plugin-framework' ),
+				'effect'         => 'read',
+				'interaction'    => 'dialog',
+				'scope'          => 'account',
+				'capability'     => 'manage_woocommerce',
+				'scope_sentence' => __( 'Итог действия по фильтру: что сделано и что пропущено.', 'woodev-plugin-framework' ),
+				'fields'         => $run,
+			],
 		];
 	}
 

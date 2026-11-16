@@ -210,4 +210,59 @@ final class BulkRunStoreTest extends TestCase {
 		$this->assertNull( $this->store->find( self::ACCOUNT ) );
 		$this->assertNotNull( $this->store->find( 8 ), 'Another account keeps its run.' );
 	}
+
+	public function test_the_frozen_list_and_the_position_after_the_freeze_are_one_write(): void {
+		$this->start();
+		$this->store->take_tick( self::ACCOUNT, 'r1', 'tick-a' );
+		$items  = [ [ 'Платье-1', 'g1' ], [ 'Платье-2', '' ] ];
+		$counts = [ 'products_total' => 3, 'offers_skipped' => 1 ];
+		$report = [ [ 'kind' => 'skipped', 'reason' => 'Уже на сайте', 'count' => 1, 'examples' => [ 'A-1' ] ] ];
+
+		$this->assertNull( $this->store->items( self::ACCOUNT, 'r1' ), 'A run starts with no list.' );
+		$this->assertTrue( $this->store->save_frozen( self::ACCOUNT, 'r1', 'tick-a', $items, [ 'frozen' => true, 'index' => 0 ], $counts, $report ) );
+
+		$run = $this->current();
+
+		$this->assertSame( $items, $this->store->items( self::ACCOUNT, 'r1' ), 'Cyrillic and the group keys survive the round trip.' );
+		$this->assertSame( [ 'frozen' => true, 'index' => 0 ], $run->cursor(), 'The cursor that says «frozen» came with the list.' );
+		$this->assertSame( 1, $run->counts()['offers_skipped'] );
+		$this->assertSame( $report, $run->report() );
+	}
+
+	public function test_a_tick_that_lost_the_run_stores_neither_the_list_nor_the_position(): void {
+		$this->start();
+		$this->store->take_tick( self::ACCOUNT, 'r1', 'tick-a' );
+		$this->store->take_tick( self::ACCOUNT, 'r1', 'tick-b' ); // Another tick took the run after the first lost its lock.
+
+		$this->assertFalse( $this->store->save_frozen( self::ACCOUNT, 'r1', 'tick-a', [ [ 'A', '' ] ], [ 'frozen' => true, 'index' => 0 ], [ 'products_total' => 1 ], [] ) );
+		$this->assertNull( $this->store->items( self::ACCOUNT, 'r1' ), 'The refused write stored no list …' );
+		$this->assertSame( [], $this->current()->cursor(), '… and no cursor: the run has frozen nothing.' );
+	}
+
+	public function test_a_list_is_saved_only_for_the_running_run_it_belongs_to(): void {
+		$this->start();
+		$this->store->take_tick( self::ACCOUNT, 'r1', 'tick-a' );
+
+		$this->assertFalse( $this->store->save_frozen( self::ACCOUNT, 'other-run', 'tick-a', [ [ 'A', '' ] ], [], [], [] ), 'Not this run.' );
+		$this->assertNull( $this->store->items( self::ACCOUNT, 'other-run' ) );
+
+		$this->store->end_under_lock( self::ACCOUNT, 'r1', Bulk_Run::CANCELLED );
+
+		$this->assertFalse( $this->store->save_frozen( self::ACCOUNT, 'r1', 'tick-a', [ [ 'A', '' ] ], [], [], [] ), 'A run that is over takes no list.' );
+	}
+
+	public function test_a_new_start_clears_the_frozen_list(): void {
+		$this->start();
+		$this->store->take_tick( self::ACCOUNT, 'r1', 'tick-a' );
+		$this->store->save_frozen( self::ACCOUNT, 'r1', 'tick-a', [ [ 'A', '' ] ], [ 'frozen' => true, 'index' => 0 ], [], [] );
+		$this->store->end_under_lock( self::ACCOUNT, 'r1', Bulk_Run::DONE );
+
+		$this->assertTrue( $this->start( 'r2' ) );
+		$this->assertNull( $this->store->items( self::ACCOUNT, 'r2' ), 'Every start writes the list fresh.' );
+		$this->assertSame( [], $this->current()->cursor() );
+
+		$this->store->take_tick( self::ACCOUNT, 'r2', 'tick-b' );
+		$this->assertTrue( $this->store->save_frozen( self::ACCOUNT, 'r2', 'tick-b', [ [ 'B', '' ] ], [ 'frozen' => true, 'index' => 0 ], [], [] ), 'The new run can freeze its own.' );
+		$this->assertSame( [ [ 'B', '' ] ], $this->store->items( self::ACCOUNT, 'r2' ) );
+	}
 }

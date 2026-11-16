@@ -36,9 +36,11 @@ use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Import_Feeder;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Lock;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Runner;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Scheduler;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Workers;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
@@ -140,6 +142,7 @@ final class Site_Products_Module {
 		$links   = new Wpdb_Link_Store( $db, $table( 'links' ), $table( 'link_ids' ) );
 		$ledger  = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
 		$names   = new Job_Names( $plugin->get_id() );
+		$runs    = new Bulk_Run_Store( $db, $table( 'bulk_runs' ) );
 		$worker  = new Site_Products_Run_Worker(
 			new Site_Products_Reader( $db, $table( 'links' ), $table( 'sync_state' ) ),
 			self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
@@ -148,16 +151,44 @@ final class Site_Products_Module {
 		);
 
 		return new Bulk_Run_Runner(
-			new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ),
+			$runs,
 			new Bulk_Run_Lock( $db, $table( 'bulk_runs' ) ),
 			new Bulk_Run_Scheduler( $names ),
 			$accounts,
 			$adapter->id(),
-			$worker,
+			self::run_workers( $plugin, $adapter, $db, $links, $runs, $worker ),
 			static function ( string $line ) use ( $plugin ): void {
 				$plugin->log_error( $line );
 			}
 		);
+	}
+
+	/**
+	 * The worker of every run: the products worker, and for an adapter that can import cards the feeder that serves «Импортировать все
+	 * по фильтру» (#1796).
+	 *
+	 * @param Marketplace_Plugin       $plugin  The marketplace plugin.
+	 * @param Marketplace_Adapter      $adapter Adapter.
+	 * @param \wpdb                    $db      Database.
+	 * @param Wpdb_Link_Store          $links   Links.
+	 * @param Bulk_Run_Store           $runs    Runs.
+	 * @param Site_Products_Run_Worker $products The worker of the «Товары сайта» actions.
+	 * @return \Woodev\Framework\Marketplace\Jobs\Bulk_Run_Worker
+	 */
+	private static function run_workers( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, \wpdb $db, Wpdb_Link_Store $links, Bulk_Run_Store $runs, Site_Products_Run_Worker $products ) {
+		if ( ! $adapter instanceof Card_Importer || ! $adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+			return $products;
+		}
+
+		$matching = new Remote_Cards_Matching( new Cards_Snapshot_Store( Uninstaller::option_prefix( $plugin->get_id() ) ), $links );
+		$feeder   = new Bulk_Import_Feeder(
+			$runs,
+			new Import_Scheduler( new Job_Names( $plugin->get_id() ) ),
+			[ $matching, 'entries' ],
+			Bulk_Import_Feeder::marked_in_database( $db, Product_Writer::marker_key( $adapter->id() ) )
+		);
+
+		return new Bulk_Run_Workers( $products, [ Remote_Cards_Definition::IMPORT_SELECTED => $feeder ] );
 	}
 
 	/**
@@ -288,6 +319,8 @@ final class Site_Products_Module {
 		$store    = new Cards_Snapshot_Store( $options );
 		$reports  = new Link_Report_Store( $options );
 		$plan     = null === $importer ? null : new Remote_Cards_Import_Plan( Remote_Cards_Import_Plan::woocommerce_lookup( Product_Writer::marker_key( $adapter->id() ) ), Group_Assembler::lookup( $adapter->id() ) );
+		$license  = License_Gate::for_plugin( $plugin );
+		$runs     = null === $importer ? null : new Remote_Cards_Run_Actions( self::bulk_runner( $plugin, $accounts, $db ), new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ), new Remote_Cards_Matching( $store, $links ), $license );
 		$actions  = new Remote_Cards_Actions(
 			$store,
 			$links,
@@ -295,11 +328,12 @@ final class Site_Products_Module {
 			self::linker( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
 			new Link_Scheduler( new Job_Names( $plugin->get_id() ) ),
 			self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
-			License_Gate::for_plugin( $plugin ),
+			$license,
 			$products,
 			$rows,
 			$importer,
-			$plan
+			$plan,
+			$runs
 		);
 
 		return new Remote_Cards_Provider(

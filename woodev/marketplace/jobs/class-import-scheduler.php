@@ -65,14 +65,16 @@ final class Import_Scheduler {
 	 *
 	 * @param int      $account_id Account id.
 	 * @param string[] $offer_ids  Articles.
+	 * @param int      $delay      Seconds to wait before the chunks start. The bulk import feeds its parts one second apart, which makes
+	 *                             the order of the queue explicit.
 	 * @return void
 	 * @throws Persistence_Exception When Action Scheduler is not available or could not store an action.
 	 */
-	public function import( int $account_id, array $offer_ids ): void {
+	public function import( int $account_id, array $offer_ids, int $delay = 0 ): void {
 		$offer_ids = array_map( 'strval', $offer_ids );
 
 		foreach ( array_chunk( array_values( array_unique( $offer_ids ) ), self::BATCH ) as $chunk ) {
-			$this->enqueue( [ $account_id, $chunk, 0 ], 0 );
+			$this->enqueue( [ $account_id, $chunk, 0 ], $delay, true );
 		}
 	}
 
@@ -90,7 +92,7 @@ final class Import_Scheduler {
 	 * @throws Persistence_Exception When Action Scheduler could not store the action.
 	 */
 	public function retry( int $account_id, array $offer_ids, int $attempt, int $delay ): void {
-		$this->enqueue( [ $account_id, array_values( array_map( 'strval', $offer_ids ) ), $attempt ], $delay );
+		$this->enqueue( [ $account_id, array_values( array_map( 'strval', $offer_ids ) ), $attempt ], $delay, 0 === $delay );
 	}
 
 	/**
@@ -132,19 +134,20 @@ final class Import_Scheduler {
 	}
 
 	/**
-	 * Schedules one import action. With no delay, a chunk already waiting with the same arguments is not queued twice.
+	 * Schedules one import action. A chunk already waiting with the same arguments is not queued twice when `$once` says so.
 	 *
 	 * @param array<int,mixed> $args  Arguments: account id, articles, attempt.
 	 * @param int              $delay Seconds to wait.
+	 * @param bool             $once  Whether a waiting twin makes this call a no-op.
 	 * @return void
 	 * @throws Persistence_Exception When Action Scheduler is not available or could not store the action.
 	 */
-	private function enqueue( array $args, int $delay ): void {
+	private function enqueue( array $args, int $delay, bool $once ): void {
 		if ( ! function_exists( 'as_schedule_single_action' ) ) {
 			throw Persistence_Exception::queue( 'the import of cards' );
 		}
 
-		if ( 0 === $delay && $this->is_waiting( $args ) ) {
+		if ( $once && $this->is_waiting( $args ) ) {
 			return;
 		}
 

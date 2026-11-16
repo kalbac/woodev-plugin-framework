@@ -28,6 +28,8 @@ defined( 'ABSPATH' ) || exit;
  * | Action | What it does | Who may |
  * |---|---|---|
  * | `import`, `import_selected` | «Импортировать»: sorts the selected cards ({@see Remote_Cards_Import_Plan}) and queues the eligible ones on {@see Import_Scheduler}; the job itself reads the marketplace | `manage_woocommerce` |
+ * | `import_selected` over every card under the filter | «Импортировать все по фильтру»: stores a bulk run and queues its first tick; the cards are frozen and fed to the import job in the background ({@see Remote_Cards_Run_Actions}) | `manage_woocommerce` |
+ * | `bulk_stop`, `bulk_report` | the buttons of the account line of a bulk run | `manage_woocommerce` |
  * | `refresh_list` | marks the snapshot as being refreshed and queues the job that fills it | `manage_woocommerce` |
  * | `link_by_article` | the account-wide job of {@see Site_Products_Bulk}, the same as on the products table | `manage_woocommerce` |
  * | `link_to` | links the one card to the product the merchant picked ({@see Card_Linker}); a link settles the pair in the near-match report | `edit_products`, and `edit_post` on the product |
@@ -105,6 +107,13 @@ final class Remote_Cards_Actions {
 	private $plan;
 
 	/**
+	 * The import of every card under a filter and the buttons of its account line; null when the adapter cannot import cards.
+	 *
+	 * @var Remote_Cards_Run_Actions|null
+	 */
+	private $runs;
+
+	/**
 	 * Creates the actions.
 	 *
 	 * @since 2.1.5
@@ -120,8 +129,9 @@ final class Remote_Cards_Actions {
 	 * @param Remote_Cards_Rows             $rows      Row builder, for the row an action changed.
 	 * @param Import_Scheduler|null         $importer  Queues the import job, null when the adapter cannot import cards.
 	 * @param Remote_Cards_Import_Plan|null $plan Sorts the cards of an import, null when the adapter cannot import cards.
+	 * @param Remote_Cards_Run_Actions|null $runs The import by filter and its account line, null when the adapter cannot import cards.
 	 */
-	public function __construct( Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Card_Linker $linker, Link_Scheduler $scheduler, Site_Products_Bulk $bulk, License_Gate $license, Remote_Cards_Products $products, Remote_Cards_Rows $rows, ?Import_Scheduler $importer = null, ?Remote_Cards_Import_Plan $plan = null ) {
+	public function __construct( Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Card_Linker $linker, Link_Scheduler $scheduler, Site_Products_Bulk $bulk, License_Gate $license, Remote_Cards_Products $products, Remote_Cards_Rows $rows, ?Import_Scheduler $importer = null, ?Remote_Cards_Import_Plan $plan = null, ?Remote_Cards_Run_Actions $runs = null ) {
 		$this->snapshots = $snapshots;
 		$this->links     = $links;
 		$this->reports   = $reports;
@@ -133,6 +143,7 @@ final class Remote_Cards_Actions {
 		$this->rows      = $rows;
 		$this->importer  = $importer;
 		$this->plan      = $plan;
+		$this->runs      = $runs;
 	}
 
 	/**
@@ -163,6 +174,9 @@ final class Remote_Cards_Actions {
 				return $this->preview_near( $account, $action, (string) ( $ids[0] ?? '' ) );
 			case Remote_Cards_Definition::REFRESH:
 				return $this->preview_refresh( $account );
+			case Site_Products_Bulk::RUN_STOP:
+			case Site_Products_Bulk::RUN_REPORT:
+				return $this->run_actions()->preview_line_action( $account, $action, $payload );
 			default:
 				return $this->bulk->preview( $account, $action, [], [], null, $this->bulk->link_category( $payload ) );
 		}
@@ -197,8 +211,94 @@ final class Remote_Cards_Actions {
 				return $this->apply_near_dismiss( $account, (string) ( $ids[0] ?? '' ) );
 			case Remote_Cards_Definition::REFRESH:
 				return $this->apply_refresh( $account );
+			case Site_Products_Bulk::RUN_STOP:
+				return $this->run_actions()->apply_stop( $account, $payload );
 			default:
 				return $this->bulk->apply( $account, $action, [], [], null, $this->bulk->link_category( $payload ) );
+		}
+	}
+
+	/**
+	 * The plan of an action over every card under the filter. Writes nothing.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param Account                                          $account Account.
+	 * @param string                                           $action  Action id: the import.
+	 * @param array{search:string,filters:array<string,mixed>} $query   Validated filter and search.
+	 * @return array<string,mixed> The preview answer of the records engine.
+	 * @throws Action_State_Exception When the import may not start.
+	 */
+	public function preview_matching( Account $account, string $action, array $query ): array {
+		$this->require_import( $action );
+
+		return $this->run_actions()->preview_matching( $account, $query );
+	}
+
+	/**
+	 * Starts the action over every card under the filter. Nothing is imported in the request.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param Account                                          $account Account.
+	 * @param string                                           $action  Action id: the import.
+	 * @param array{search:string,filters:array<string,mixed>} $query   Validated filter and search.
+	 * @return array<string,mixed> The apply answer of the records engine.
+	 * @throws Action_State_Exception When the import may not start, or the queue refuses the run.
+	 */
+	public function apply_matching( Account $account, string $action, array $query ): array {
+		$this->require_import( $action );
+
+		return $this->run_actions()->apply_matching( $account, $query );
+	}
+
+	/**
+	 * The bulk run's part of the account line, or null when the table has none.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int $account_id Account.
+	 * @param int $now        Unix time.
+	 * @return array<string,mixed>|null
+	 */
+	public function run_line( int $account_id, int $now ): ?array {
+		return null === $this->runs ? null : $this->runs->line( $account_id, $now );
+	}
+
+	/**
+	 * Whether the account's bulk run is the import of cards by filter, still going.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int $account_id Account.
+	 * @return bool
+	 */
+	public function is_feeding_import( int $account_id ): bool {
+		return null !== $this->runs && $this->runs->is_feeding( $account_id );
+	}
+
+	/**
+	 * @return Remote_Cards_Run_Actions
+	 * @throws Action_State_Exception When the adapter cannot import cards, so the table has no bulk run.
+	 */
+	private function run_actions(): Remote_Cards_Run_Actions {
+		if ( null === $this->runs ) {
+			throw new Action_State_Exception( __( 'Этот маркетплейс не умеет импортировать карточки.', 'woodev-plugin-framework' ) );
+		}
+
+		return $this->runs;
+	}
+
+	/**
+	 * Only «Импортировать» runs over every card under a filter on this table.
+	 *
+	 * @param string $action Action id.
+	 * @return void
+	 * @throws Action_State_Exception When the action is another one.
+	 */
+	private function require_import( string $action ): void {
+		if ( Remote_Cards_Definition::IMPORT_SELECTED !== $action ) {
+			throw new Action_State_Exception( __( 'Это действие нельзя выполнить для всех карточек по фильтру.', 'woodev-plugin-framework' ) );
 		}
 	}
 

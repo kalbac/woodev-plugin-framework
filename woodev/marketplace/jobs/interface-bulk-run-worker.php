@@ -40,9 +40,11 @@ interface Bulk_Run_Worker {
 	 * @param Bulk_Run            $run     The run.
 	 * @param array<string,mixed> $cursor  Where the previous part stopped.
 	 * @param callable            $owns    `function (): bool` — whether this tick still holds the run; asked before every product write.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
 	 *         `counts` are what this part adds (`products_done`, `offers_accepted`, `offers_skipped`, `offers_failed`); `busy` is a
-	 *         number of seconds when the part could not start and must be tried again unchanged, 0 otherwise.
+	 *         number of seconds when the part could not start and must be tried again unchanged, 0 otherwise. `items` is for the part
+	 *         that froze a list the run must keep (the remote-cards run, §2.7): the runner stores it in the very write that saves the
+	 *         part's cursor, counters and report, so the list and the position are never two writes.
 	 * @throws Bulk_Run_Lost When `$owns` says no.
 	 */
 	public function part( Account $account, Bulk_Run $run, array $cursor, callable $owns ): array;
