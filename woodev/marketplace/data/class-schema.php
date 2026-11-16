@@ -62,6 +62,7 @@ final class Schema {
 		'mapping_terms',
 		'profiles',
 		'catalog_cache',
+		'bulk_runs',
 	];
 
 	/**
@@ -531,6 +532,38 @@ final class Schema {
 			payload longblob NULL,
 			fetched_at datetime NOT NULL,
 			PRIMARY KEY  (cache_key)
+		) {$charset};";
+	}
+
+	/**
+	 * Bulk runs: one row per account, the active run or the last finished one (#1795). `tick` is the token of the tick that owns the
+	 * run now and fences every save; `cancel` is written only by «Остановить». `payload`, `filter` and `cursor` are JSON; `items` is
+	 * the frozen card list of a remote-cards run. `cursor` is a reserved word of MySQL, so the statement quotes it.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param string $table   Full table name.
+	 * @param string $charset Charset clause.
+	 * @return string
+	 */
+	private function bulk_runs( string $table, string $charset ): string {
+		return "CREATE TABLE {$table} (
+			account_id bigint(20) unsigned NOT NULL,
+			run_id char(32) NOT NULL,
+			state varchar(16) NOT NULL DEFAULT 'running',
+			cancel tinyint(1) NOT NULL DEFAULT 0,
+			tick char(32) NULL DEFAULT NULL,
+			action varchar(64) NOT NULL,
+			payload longtext NULL,
+			filter longtext NULL,
+			user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			`cursor` longtext NULL,
+			items longtext NULL,
+			counts longtext NULL,
+			report longtext NULL,
+			started_at datetime NOT NULL,
+			finished_at datetime NULL DEFAULT NULL,
+			PRIMARY KEY  (account_id)
 		) {$charset};";
 	}
 }

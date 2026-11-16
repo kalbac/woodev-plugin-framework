@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Deletion;
 
 use Woodev\Framework\Marketplace\Capabilities\Capability;
+use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Progress_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
@@ -184,6 +185,7 @@ final class Deletion_Module {
 			'documents'  => new Wpdb_Label_Store( $db, $table( 'tasks' ), $table( 'documents' ) ),
 			'throttle'   => new Wpdb_Throttle_Store( $db, $table( 'throttle' ) ),
 			'api_errors' => new Api_Error_Ring( $db, $table( 'api_errors' ) ),
+			'bulk_runs'  => new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ),
 		];
 	}
 

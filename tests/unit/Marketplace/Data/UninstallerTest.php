@@ -127,7 +127,7 @@ final class UninstallerTest extends TestCase {
 	}
 
 	/**
-	 * Deleting the plugin drops the 15 tables of its marketplace and the tables the plugin names itself, and no other table.
+	 * Deleting the plugin drops the 16 tables of its marketplace and the tables the plugin names itself, and no other table.
 	 *
 	 * @return void
 	 */
@@ -136,7 +136,7 @@ final class UninstallerTest extends TestCase {
 
 		$drops = array_values( array_filter( $this->db->queries, static fn( string $sql ): bool => 0 === strpos( $sql, 'DROP TABLE' ) ) );
 
-		$this->assertCount( 17, $drops );
+		$this->assertCount( 18, $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_woodev_fake_accounts', $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_woodev_fake_catalog_cache', $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_legacy_stores', $drops );
