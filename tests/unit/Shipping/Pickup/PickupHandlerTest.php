@@ -1175,6 +1175,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		protected function setUp(): void {
 			parent::setUp();
 			$_POST = [];
+			\Woodev\Framework\Shipping\Map\Yandex_Map_Provider::reset_page_pool_for_tests();
 
 			Functions\when( 'wp_unslash' )->returnArg();
 			Functions\when( 'wc_clean' )->alias(

@@ -34,6 +34,7 @@ final class MapProviderRegistryTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+		Yandex_Map_Provider::reset_page_pool_for_tests();
 		Functions\when( 'get_option' )->alias( static fn( $name, $default = false ) => $default );
 		Functions\when( 'wp_parse_args' )->alias( static fn( $args, $defaults = [] ) => array_merge( (array) $defaults, (array) $args ) );
 
@@ -224,6 +225,77 @@ final class MapProviderRegistryTest extends TestCase {
 		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
 		$provider = new Yandex_Map_Provider( 'fallback', 'legacy-key' );
 		$this->assertSame( 'store-key', $this->query_params_of( $provider->get_js_config( [] )['scriptUrl'] )['apikey'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Yandex_Map_Provider — one fallback key per page (#1596)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @return string the `apikey` query value of a provider's script URL.
+	 */
+	private function api_key_of( Yandex_Map_Provider $provider ): string {
+		return $this->query_params_of( $provider->get_js_config( [] )['scriptUrl'] )['apikey'];
+	}
+
+	public function test_two_plugins_with_different_fallback_keys_share_one_key_on_the_page(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$cdek = new Yandex_Map_Provider( 'key-cdek' );
+		$ozon = new Yandex_Map_Provider( 'key-ozon' );
+
+		$this->assertSame( $this->api_key_of( $cdek ), $this->api_key_of( $ozon ) );
+		$this->assertSame( 'key-cdek', $this->api_key_of( $ozon ) );
+	}
+
+	public function test_the_chosen_page_key_does_not_depend_on_registration_order(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$first_order = [ new Yandex_Map_Provider( 'key-a' ), new Yandex_Map_Provider( 'key-b' ) ];
+		$chosen      = $this->api_key_of( $first_order[0] );
+		unset( $first_order );
+
+		$second_order = [ new Yandex_Map_Provider( 'key-b' ), new Yandex_Map_Provider( 'key-a' ) ];
+
+		$this->assertSame( $chosen, $this->api_key_of( $second_order[0] ) );
+		$this->assertSame( $chosen, $this->api_key_of( $second_order[1] ) );
+	}
+
+	public function test_a_plugin_without_a_fallback_key_adopts_the_key_of_another_plugin(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$keyless = new Yandex_Map_Provider( '' );
+		$other   = new Yandex_Map_Provider( 'key-other' );
+
+		$this->assertSame( 'key-other', $this->api_key_of( $keyless ) );
+		$this->assertSame( 'key-other', $this->api_key_of( $other ) );
+	}
+
+	public function test_the_shared_store_key_still_beats_every_plugin_fallback(): void {
+		Functions\when( 'get_option' )->alias( static fn( $name, $default = false ) => 'woodev_pickup_map_yandex_api_key' === $name ? 'store-key' : $default );
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+
+		$one = new Yandex_Map_Provider( 'key-one' );
+		$two = new Yandex_Map_Provider( 'key-two' );
+
+		$this->assertSame( 'store-key', $this->api_key_of( $one ) );
+		$this->assertSame( 'store-key', $this->api_key_of( $two ) );
+	}
+
+	public function test_a_discarded_provider_stops_influencing_the_page_key(): void {
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$kept    = new Yandex_Map_Provider( 'key-z' );
+		$dropped = new Yandex_Map_Provider( 'key-a' );
+		$this->assertSame( 'key-a', $this->api_key_of( $kept ) );
+
+		unset( $dropped );
+
+		$this->assertSame( 'key-z', $this->api_key_of( $kept ) );
 	}
 
 	// -------------------------------------------------------------------------

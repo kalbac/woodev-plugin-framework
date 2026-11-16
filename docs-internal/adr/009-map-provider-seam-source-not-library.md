@@ -104,6 +104,17 @@ underlying FILE PATH is still built from `$map_provider->get_id()` separately
 (`map-provider-{id}.js`) — both concrete providers derive their handle from `get_id()` by the
 same convention, but nothing enforces a THIRD provider following it.
 
+## Addendum (2026-11-16): one fallback key per page (#1596)
+
+The ymaps script loads once per page under the shared `WoodevPickupMap` namespace, so with
+two delivery plugins active only ONE `apikey` ever takes effect — and which one used to depend
+on whose map initialised first, while each config advertised its own plugin's key. A provider
+now knows its live siblings (weak references) and `resolve_page_fallback_key()` hands every
+config the alphabetically first non-empty plugin fallback key: stable, independent of plugin
+load order. The shared key from «Доставка → Карта» still wins over all of them, and the
+`woodev_shipping_map_fallback_api_key` filter still wraps the chosen value. A plugin's own
+`map_api_key` setting is untouched.
+
 ## Consequences
 
 - The original §6a decision **a** in `archive/platform-v2-s1-shipping-spec.md` is superseded by this

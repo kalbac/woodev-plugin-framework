@@ -164,6 +164,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		private array $copyrights;
 
 		/**
+		 * Every live provider instance on this page, held weakly.
+		 *
+		 * The ymaps script loads ONCE per page under the shared `WoodevPickupMap` namespace, so
+		 * with several delivery plugins active only one `apikey` can ever take effect. Each
+		 * provider therefore needs to know its siblings' fallback keys to hand the SAME one to
+		 * every map config — see {@see self::resolve_page_fallback_key()}. Weak references, so a
+		 * discarded provider (a re-registered one, a test double) stops voting at once.
+		 *
+		 * @since 2.1.9
+		 * @var \WeakReference[]
+		 */
+		private static array $instances = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -199,6 +213,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 			$this->key_docs_url = $key_docs_url;
 			$this->layers       = self::sanitize_layers( $layers );
 			$this->copyrights   = self::sanitize_copyrights( $copyrights );
+
+			self::$instances[] = \WeakReference::create( $this );
 		}
 
 		/**
@@ -423,17 +439,82 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 			/**
 			 * Filters the fallback Yandex Maps API key used when a merchant supplies none.
 			 *
-			 * The default is the PLUGIN's own fallback key
-			 * ({@see Yandex_Map_Provider::get_fallback_map_key()}) — the framework itself
-			 * still hooks nothing here. This filter is a site-level override ON TOP of that
-			 * plugin-supplied fallback (e.g. to swap in an operator-managed key without a
-			 * plugin release), not the framework's own source of one.
+			 * The default is the plugin fallback key chosen for the whole page
+			 * ({@see Yandex_Map_Provider::resolve_page_fallback_key()}): the ymaps script
+			 * loads once per page, so when several plugins ship their own fallback key, the
+			 * same one of them is handed to every map config. The framework itself still hooks
+			 * nothing here. This filter is a site-level override ON TOP of that plugin-supplied
+			 * fallback (e.g. to swap in an operator-managed key without a plugin release), not
+			 * the framework's own source of one.
 			 *
 			 * @since 2.0.2
 			 *
-			 * @param string $key The fallback API key. Default: the plugin's own fallback key.
+			 * @param string $key The fallback API key. Default: the page-wide plugin fallback key.
 			 */
-			return (string) apply_filters( 'woodev_shipping_map_fallback_api_key', $this->get_fallback_map_key() );
+			return (string) apply_filters( 'woodev_shipping_map_fallback_api_key', $this->resolve_page_fallback_key() );
+		}
+
+		/**
+		 * Picks the ONE plugin fallback key every Yandex map on this page shares.
+		 *
+		 * Several delivery plugins can each construct their own provider with their own
+		 * fallback key, yet the ymaps script loads once per page under the shared
+		 * `WoodevPickupMap` namespace — whichever map initialises first used to decide which
+		 * key won, so the choice floated with init order and each config advertised a key that
+		 * might never be used. The choice is now made here, the same for every provider:
+		 * the alphabetically first non-empty fallback key among the live providers. Stable
+		 * and independent of plugin load order; a merchant who wants a specific key sets the
+		 * shared one in «Доставка → Карта», which always wins.
+		 *
+		 * @since 2.1.9
+		 *
+		 * @return string empty when no live provider has a fallback key.
+		 */
+		private function resolve_page_fallback_key(): string {
+			$keys      = [ $this->get_fallback_map_key() ];
+			$survivors = [];
+
+			foreach ( self::$instances as $reference ) {
+				$provider = $reference->get();
+
+				if ( ! $provider instanceof self ) {
+					continue;
+				}
+
+				$survivors[] = $reference;
+				$keys[]      = $provider->get_fallback_map_key();
+			}
+
+			self::$instances = $survivors;
+
+			$keys = array_filter(
+				$keys,
+				static fn( string $key ): bool => '' !== trim( $key )
+			);
+
+			if ( [] === $keys ) {
+				return '';
+			}
+
+			sort( $keys, SORT_STRING );
+
+			return $keys[0];
+		}
+
+		/**
+		 * Forgets every provider seen so far, so a test starts with no siblings.
+		 *
+		 * The pool is process-wide static state; in production it only ever holds the
+		 * providers of the plugins active on the page, but a unit-test process builds
+		 * providers across many tests.
+		 *
+		 * @since 2.1.9
+		 * @internal
+		 *
+		 * @return void
+		 */
+		public static function reset_page_pool_for_tests(): void {
+			self::$instances = [];
 		}
 	}
 
