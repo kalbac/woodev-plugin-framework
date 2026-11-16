@@ -99,7 +99,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 
 			register_rest_route(
 				$base,
-				'/settings/(?P<provider_id>[\w-]+)/connection/(?P<connection_id>[\w-]+)/test',
+				'/settings/(?P<provider_id>[\w-]+)/connection/(?P<connection_id>[\w-]+)/verify',
 				[
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => [ $this, 'test_connection' ],

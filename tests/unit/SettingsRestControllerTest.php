@@ -87,6 +87,28 @@ class SettingsRestControllerTest extends TestCase {
 			);
 	}
 
+	/**
+	 * #1595: the connection check's last segment was the generic `test`, which some sites' rewrite rules hijack
+	 * (HTML instead of JSON). It is `verify` now; the old path must not come back.
+	 */
+	public function test_the_connection_check_route_ends_in_verify_not_test(): void {
+		$routes = [];
+		Functions\when( 'register_rest_route' )->alias(
+			static function ( $namespace, $route ) use ( &$routes ) {
+				$routes[] = $route;
+				return true;
+			}
+		);
+
+		( new \Woodev_REST_API_Settings_Page( Mockery::mock() ) )->register_routes();
+
+		$this->assertContains( '/settings/(?P<provider_id>[\w-]+)/connection/(?P<connection_id>[\w-]+)/verify', $routes );
+
+		foreach ( $routes as $route ) {
+			$this->assertDoesNotMatchRegularExpression( '#/test$#', $route, 'No REST route may end in the generic word «test».' );
+		}
+	}
+
 	public function test_get_schema_returns_registry_tabs(): void {
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 

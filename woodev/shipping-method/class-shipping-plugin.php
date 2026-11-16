@@ -467,6 +467,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/rest-api/class-shipping-rest-api.php';
 			require_once $path . '/rest-api/class-field-source-controller.php';
 			require_once $path . '/rest-api/class-location-controller.php';
+			require_once $path . '/rest-api/class-guest-access-check.php';
 			require_once $path . '/rest-api/class-pickup-controller.php';
 			require_once $path . '/rest-api/class-orders-controller.php';
 			require_once $path . '/rest-api/class-document-controller.php';

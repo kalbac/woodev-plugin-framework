@@ -11358,3 +11358,57 @@ msgstr ""
 #, php-format
 msgid "%1$s, категория «%2$s»"
 msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:219
+msgid "Запрос без входа в аккаунт перенаправляется на другую страницу."
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:220
+msgid "Вместо ответа API приходит обычная страница сайта."
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:221
+msgid "Запрос без входа в аккаунт отклоняется: требуется авторизация."
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:222
+msgid "Адрес отвечает не нашим плагином."
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:226
+msgid "REST API закрыт для покупателей: поиск города и пункты выдачи при оформлении заказа не работают."
+msgstr ""
+
+#. translators: %s: the address the site really uses for its REST API, e.g. https://shop.example/wp-json/woodev/v1/
+#: shipping-method/rest-api/class-guest-access-check.php:228
+#, php-format
+msgid "Откройте для всех адреса, которые начинаются с %s — в настройках плагина безопасности или кеширования, либо в коде темы."
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:297
+msgid "Проверить снова"
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:314
+msgid "REST API открыт для покупателей"
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:340
+msgid "Поиск города и пункты выдачи при оформлении заказа доступны покупателям."
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:347
+msgid "REST API закрыт для покупателей"
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:352
+msgid "Не удалось проверить, открыт ли REST API для покупателей"
+msgstr ""
+
+#: shipping-method/rest-api/class-guest-access-check.php:353
+msgid "Сервер не смог проверить это сам: запрос сайта к самому себе не прошёл (сетевая ошибка, защита доступа или файрвол хостинга). Это не значит, что покупатели не могут искать город. Проверьте поиск на странице оформления заказа вручную, не входя в аккаунт."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Сайт вернул страницу вместо ответа API — вероятен конфликт плагинов или правил перезаписи. Отключите по очереди плагины безопасности и кеширования и проверьте снова."
+msgstr ""

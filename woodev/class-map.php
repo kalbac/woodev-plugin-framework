@@ -543,6 +543,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Analytics_Controller' => 'woodev/shipping-method/rest-api/class-analytics-controller.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Document_Controller' => 'woodev/shipping-method/rest-api/class-document-controller.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Controller' => 'woodev/shipping-method/rest-api/class-field-source-controller.php',
+	'Woodev\\Framework\\Shipping\\Rest_Api\\Guest_Access_Check' => 'woodev/shipping-method/rest-api/class-guest-access-check.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controller' => 'woodev/shipping-method/rest-api/class-location-controller.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Controller' => 'woodev/shipping-method/rest-api/class-order-editor-controller.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller' => 'woodev/shipping-method/rest-api/class-orders-controller.php',
