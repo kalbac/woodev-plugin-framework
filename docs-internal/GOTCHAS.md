@@ -19,7 +19,7 @@
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 3 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
 | [`woocommerce/*`](gotcha-index/woocommerce.md) | 48 | WooCommerce-specific |
-| [`framework/*`](gotcha-index/framework.md) | 10 | Framework internals |
+| [`framework/*`](gotcha-index/framework.md) | 11 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 26 | Location provider layer |
 | [`rig/*`](gotcha-index/rig.md) | 34 | Local verification rig |
