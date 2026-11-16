@@ -75,7 +75,7 @@ class SettingsPageRestTest extends TestCase {
 		// Pre-store 'good'; POST an EMPTY body → the route must merge the stored secret.
 		$this->seed_provider_with_connection( 'good' );
 
-		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/verify' );
 		$request->set_param( 'values', [] ); // untouched: nothing typed.
 		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
 
@@ -95,7 +95,7 @@ class SettingsPageRestTest extends TestCase {
 
 		$this->seed_provider_with_connection( 'good' ); // stored is good.
 
-		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/verify' );
 		$request->set_param( 'values', [ 'token' => 'bad' ] ); // user typed a wrong new token.
 		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
 
@@ -115,7 +115,7 @@ class SettingsPageRestTest extends TestCase {
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
 
-		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/verify' );
 		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
 
 		$response = rest_get_server()->dispatch( $request );
@@ -136,7 +136,7 @@ class SettingsPageRestTest extends TestCase {
 
 		$this->seed_provider_with_mixed_connection();
 
-		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/verify' );
 		$request->set_param( 'values', [ 'mode' => '' ] ); // intentionally cleared non-secret; token untouched.
 		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
 

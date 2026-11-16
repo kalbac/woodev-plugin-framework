@@ -737,6 +737,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			add_action( 'init', [ $this, 'maybe_install_popular_settlements_table' ], 20 );
 			add_action( 'wp_login', [ new Customer_Location_Store(), 'handle_wp_login' ], 10, 2 );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
+			// #1631: tells the merchant when a plugin or the theme closes the route above to guests (a static, once-per-process wiring)
+			\Woodev\Framework\Shipping\Rest_Api\Guest_Access_Check::register();
 			add_filter( 'wp_privacy_personal_data_exporters', [ $this, 'register_data_exporters' ] );
 			add_filter( 'wp_privacy_personal_data_erasers', [ $this, 'register_data_erasers' ] );
 			add_filter( 'woocommerce_states', [ $this, 'inject_related_list_states' ] );

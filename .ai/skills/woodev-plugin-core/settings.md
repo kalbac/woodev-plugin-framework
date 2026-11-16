@@ -158,7 +158,8 @@ A `create_connection()` section gets a "test" button. Make the HANDLER implement
 \Woodev_Connection_Result`) and, to show a status line, `\Woodev_Settings_Connection_Status`
 (`get_connection_status( string $connection_id ): ?\Woodev_Connection_Result`). Build results with
 `\Woodev_Connection_Result::success( $message )` / `::failure( $message )`. The POST route is
-`woodev/v1/settings/{provider}/connection/{connection}/test` and the posted `$values` are the form's
+`woodev/v1/settings/{provider}/connection/{connection}/verify` (not `/test`: a generic last segment is
+hijacked by some sites' rewrite rules, #1595) and the posted `$values` are the form's
 unsaved values merged with the stored ones for the block's declared setting ids (so an untouched,
 masked secret still reaches your test). The plugin owns all auth behaviour; the framework only transports
 the result. A throw from your test becomes a generic 500 error message — catch and return `failure()`.
