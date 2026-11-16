@@ -56,6 +56,7 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 		Site_Products_Bulk::SEND_STOCK,
 		Site_Products_Bulk::SEND_PRICE,
 		Site_Products_Bulk::ARCHIVE,
+		Site_Products_Bulk::PULL_PRICES,
 	];
 
 	/**

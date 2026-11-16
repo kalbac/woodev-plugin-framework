@@ -4639,6 +4639,14 @@ msgstr ""
 msgid "Цена маркетплейса меньше наценки — цена сайта получилась бы нулевой."
 msgstr ""
 
+#: marketplace/sync/class-price-refresher.php:285
+msgid "Цену товара изменили во время загрузки — осталась новая цена с сайта."
+msgstr ""
+
+#: marketplace/sync/class-price-refresher.php:285
+msgid "Цена менялась во время загрузки — проверьте товар."
+msgstr ""
+
 #. translators: 1: marketplace order number, 2: error text
 #: marketplace/sync/class-registry-stock-accounting.php:347
 #, php-format
@@ -11416,6 +11424,24 @@ msgstr ""
 msgid "Итог действия по фильтру: что сделано и что пропущено."
 msgstr ""
 
+#: marketplace/admin/pages/products/class-site-products-definition.php:298
+msgid "У товаров своя цена для маркетплейса будет удалена: цена снова считается по правилу аккаунта. Цены на сайте не меняются."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/pages/products/class-site-products-definition.php:303
+#, php-format
+msgid "Цены созданных карточек будут прочитаны с %s и записаны в товары сайта: цена на сайте заменится ценой с маркетплейса. Действие разовое, настройка направления цен не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:361
+msgid "Сбросить свою цену"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:362
+msgid "Загрузить цены"
+msgstr ""
+
 #: marketplace/admin/pages/products/class-site-products-provider.php:374
 msgid "Архивировать %s"
 msgstr ""
@@ -11528,6 +11554,21 @@ msgstr ""
 msgid "Подготовлено и поставлено в очередь: %1$s; пропущено %2$s, не удалось %3$s. Отправка идёт в фоне — её ход виден в столбце «Состояние», ошибки — в фильтре «только с ошибками»."
 msgstr ""
 
+#: marketplace/admin/pages/products/class-site-products-run-line.php:188
+msgid "У всех связанных товаров по фильтру своя цена будет удалена: цена снова считается по правилу аккаунта."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:189
+#, php-format
+msgid "Цены созданных карточек будут прочитаны с %s и записаны в товары сайта."
+msgstr ""
+
+#. translators: 1: offers queued, 2: offers skipped, 3: offers failed.
+#: marketplace/admin/pages/products/class-site-products-run-line.php:217
+#, php-format
+msgid "Поставлено в очередь на загрузку цен: %1$s; пропущено %2$s, не удалось %3$s. Цены на сайте обновятся в течение нескольких минут; то, что не удалось пересчитать, записано в журнал ошибок."
+msgstr ""
+
 #: marketplace/admin/pages/products/class-site-products-run-worker.php:119
 msgid "У пользователя, запустившего действие, больше нет прав."
 msgstr ""
@@ -11550,4 +11591,30 @@ msgstr ""
 
 #: marketplace/admin/pages/products/class-site-products-bulk.php:998
 msgid "Синхронизация включена, но первую отправку записать не удалось. Повторите действие — оно запишет недостающее."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:267
+msgid "загрузить цены с маркетплейса"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:781
+msgid "своей цены нет"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1146
+msgid "не удалось сбросить цену — повторите действие"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1163
+msgid "Этот маркетплейс не отдаёт цены для загрузки."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1184
+msgid "Не удалось поставить загрузку цен в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите."
+msgstr ""
+
+#. translators: %s: «3 товара».
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1421
+#, php-format
+msgid "Загрузка цен поставлена в очередь: %s. Цены на сайте обновятся в течение нескольких минут."
 msgstr ""

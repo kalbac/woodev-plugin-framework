@@ -1,6 +1,6 @@
 <?php
 /**
- * The twelve bulk actions of the «Товары сайта» table: the preview writes nothing, the apply replans and counts what really landed.
+ * The fourteen bulk actions of the «Товары сайта» table: the preview writes nothing, the apply replans and counts what really landed.
  *
  * @package Woodev\Tests\Unit\Marketplace\Admin\Products
  */
@@ -68,11 +68,11 @@ final class SiteProductsBulkTest extends Products_Test_Case {
 		return $body;
 	}
 
-	public function test_there_are_twelve_distinct_actions(): void {
+	public function test_there_are_fourteen_distinct_actions(): void {
 		$ids = Site_Products_Bulk::ids();
 
-		$this->assertCount( 12, $ids );
-		$this->assertCount( 12, array_unique( $ids ) );
+		$this->assertCount( 14, $ids );
+		$this->assertCount( 14, array_unique( $ids ) );
 	}
 
 	public function test_a_sync_switch_changes_the_link_and_a_repeat_is_skipped_with_its_reason(): void {

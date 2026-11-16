@@ -60,6 +60,15 @@ final class Site_Products_Bulk {
 	public const RESET           = 'reset';
 
 	/**
+	 * The two price actions of #1797: drop a link's own price (a v1 migration leaves them on thousands of products), and pull the
+	 * marketplace's prices into the shop once.
+	 *
+	 * @since 2.1.10
+	 */
+	public const RESET_PRICE = 'reset_price';
+	public const PULL_PRICES = 'pull_prices';
+
+	/**
 	 * The two account actions the account line of a bulk run runs (#1795): stop the run it shows, and show its report. Both carry the
 	 * run's id in the hidden field {@see self::RUN_FIELD}.
 	 *
@@ -87,7 +96,7 @@ final class Site_Products_Bulk {
 	/**
 	 * Actions whose work runs in the background after the request: the answer says «queued».
 	 */
-	private const BACKGROUND = [ self::EXPORT, self::LINK_BY_ARTICLE, self::SEND_STOCK, self::SEND_PRICE, self::ARCHIVE ];
+	private const BACKGROUND = [ self::EXPORT, self::LINK_BY_ARTICLE, self::SEND_STOCK, self::SEND_PRICE, self::ARCHIVE, self::PULL_PRICES ];
 
 	/**
 	 * @var Export_Service
@@ -174,6 +183,14 @@ final class Site_Products_Bulk {
 	private $fix_urls;
 
 	/**
+	 * Queues the one-time pull of prices for some articles: `function ( Account $account, string[] $offer_ids ): int`, the number of
+	 * batches queued. Null when the adapter reads no prices, which also withholds the action.
+	 *
+	 * @var callable|null
+	 */
+	private $pull_prices;
+
+	/**
 	 * Creates the planner.
 	 *
 	 * @since 2.1.4
@@ -185,7 +202,7 @@ final class Site_Products_Bulk {
 	 * @param Price_Context       $contexts        Reads a product and works out its price.
 	 * @param Link_Detacher       $detacher        Detaches cards.
 	 * @param Link_Scheduler      $scheduler       Queues the linking job.
-	 * @param array<string,mixed> $callbacks       `link_candidates`, `can_edit`, `describe` (see the properties), `fix_urls` (FIX_* => address) and, optionally, `link_effect`.
+	 * @param array<string,mixed> $callbacks       `link_candidates`, `can_edit`, `describe` (see the properties), `fix_urls` (FIX_* => address) and, optionally, `link_effect` and `pull_prices`.
 	 */
 	public function __construct( Export_Service $export, Wpdb_Link_Store $links, Stock_Intents $stock, Price_Intents $prices, Price_Context $contexts, Link_Detacher $detacher, Link_Scheduler $scheduler, Task_Ledger $ledger, array $callbacks ) {
 		$this->export          = $export;
@@ -203,6 +220,7 @@ final class Site_Products_Bulk {
 		$this->can_edit        = $callbacks['can_edit'];
 		$this->describe        = $callbacks['describe'];
 		$this->fix_urls        = (array) ( $callbacks['fix_urls'] ?? [] );
+		$this->pull_prices     = $callbacks['pull_prices'] ?? null;
 	}
 
 	/**
@@ -226,6 +244,8 @@ final class Site_Products_Bulk {
 			self::ARCHIVE,
 			self::DETACH,
 			self::RESET,
+			self::RESET_PRICE,
+			self::PULL_PRICES,
 		];
 	}
 
@@ -244,6 +264,7 @@ final class Site_Products_Bulk {
 			self::SEND_STOCK      => __( 'отправить остатки на маркетплейс', 'woodev-plugin-framework' ),
 			self::SEND_PRICE      => __( 'отправить цены на маркетплейс', 'woodev-plugin-framework' ),
 			self::ARCHIVE         => __( 'архивировать карточку на маркетплейсе', 'woodev-plugin-framework' ),
+			self::PULL_PRICES     => __( 'загрузить цены с маркетплейса', 'woodev-plugin-framework' ),
 		];
 
 		return $phrases[ $action ] ?? null;
@@ -756,6 +777,10 @@ final class Site_Products_Bulk {
 				return null !== $warehouse && ( $record->warehouse_id() ?? 0 ) === $warehouse ? __( 'этот склад уже выбран', 'woodev-plugin-framework' ) : null;
 			case self::RESET:
 				return $this->reason_not_to_reset( $record );
+			case self::RESET_PRICE:
+				return null === $record->price_rule_override() ? __( 'своей цены нет', 'woodev-plugin-framework' ) : null;
+			case self::PULL_PRICES:
+				return Link_Record::STATE_CREATED === $record->card_state() ? null : __( 'карточка ещё не создана на маркетплейсе', 'woodev-plugin-framework' );
 			case self::ARCHIVE:
 				return Link_Record::STATE_CREATED === $record->card_state() ? null : __( 'на маркетплейсе нет созданной карточки этого товара', 'woodev-plugin-framework' );
 			case self::DETACH:
@@ -903,6 +928,10 @@ final class Site_Products_Bulk {
 				return $this->run_archive( $plan['targets'] );
 			case self::DETACH:
 				return $this->run_detach( $account, $plan['targets'] );
+			case self::RESET_PRICE:
+				return $this->run_reset_price( $account, $plan['targets'] );
+			case self::PULL_PRICES:
+				return $this->run_pull_prices( $account, $plan['targets'] );
 			default:
 				return [
 					'done'   => $this->run_flags( $account, $action, $plan['targets'], $warehouse, $plan['enabled'] ?? [] ),
@@ -1085,6 +1114,80 @@ final class Site_Products_Bulk {
 		];
 
 		return Price_Intents::RECORDED === $outcome ? null : ( $reasons[ $outcome ] ?? __( 'нечего отправлять', 'woodev-plugin-framework' ) );
+	}
+
+	/**
+	 * Removes the link's own price (#1797, D2): the price for the marketplace is worked out by the account's rule again, and the new
+	 * price is recorded as an intent for the sender when the account pushes prices. A v1 shop that set prices per category leaves such
+	 * overrides on thousands of migrated links, and the product tab clears them one by one.
+	 *
+	 * @param Account       $account Account.
+	 * @param Link_Record[] $targets Links that carry an override.
+	 * @return array{done:int,groups:array<int,array<string,mixed>>}
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before a write.
+	 */
+	private function run_reset_price( Account $account, array $targets ): array {
+		$cleared = 0;
+		$missed  = [];
+
+		foreach ( $targets as $record ) {
+			$this->guard();
+
+			try {
+				$this->prices->change_override( $account, $record, null );
+				++$cleared;
+			} catch ( \RuntimeException $e ) {
+				$missed[] = $record->wc_product_id();
+			}
+		}
+
+		return [
+			'done'   => $cleared,
+			'groups' => [] === $missed ? [] : [ $this->group( __( 'не удалось сбросить цену — повторите действие', 'woodev-plugin-framework' ), $missed ) ],
+		];
+	}
+
+	/**
+	 * Queues the one-time pull of the marketplace's prices of created cards (#1797, D3). The job reads the prices and writes them into
+	 * the products; what it skips (a price the rule cannot be undone for) goes to the log, not to this report, which only knows what
+	 * was queued.
+	 *
+	 * @param Account       $account Account.
+	 * @param Link_Record[] $targets Created cards.
+	 * @return array{done:int,groups:array<int,array<string,mixed>>}
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before the write.
+	 * @throws Action_State_Exception When Action Scheduler refuses the batches, or the adapter reads no prices.
+	 */
+	private function run_pull_prices( Account $account, array $targets ): array {
+		if ( null === $this->pull_prices ) {
+			throw new Action_State_Exception( __( 'Этот маркетплейс не отдаёт цены для загрузки.', 'woodev-plugin-framework' ) );
+		}
+
+		$offers = [];
+
+		foreach ( $targets as $record ) {
+			$offers[] = (string) $record->offer_id();
+		}
+
+		if ( [] === $offers ) {
+			return [
+				'done'   => 0,
+				'groups' => [],
+			];
+		}
+
+		$this->guard();
+
+		try {
+			call_user_func( $this->pull_prices, $account, $offers );
+		} catch ( \RuntimeException $e ) {
+			throw new Action_State_Exception( __( 'Не удалось поставить загрузку цен в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите.', 'woodev-plugin-framework' ) );
+		}
+
+		return [
+			'done'   => count( $offers ),
+			'groups' => [],
+		];
 	}
 
 	/**
@@ -1313,6 +1416,9 @@ final class Site_Products_Bulk {
 			$text = __( 'Связывание по артикулу поставлено в очередь. Результат появится в таблице через минуту-две.', 'woodev-plugin-framework' );
 		} elseif ( 0 === $done ) {
 			$text = __( 'Ничего не изменилось: выбранные товары уже в нужном состоянии или это действие для них недоступно.', 'woodev-plugin-framework' );
+		} elseif ( self::PULL_PRICES === $action ) {
+			/* translators: %s: «3 товара». */
+			$text = sprintf( __( 'Загрузка цен поставлена в очередь: %s. Цены на сайте обновятся в течение нескольких минут.', 'woodev-plugin-framework' ), $done . ' ' . Bulk_Validation_Report::products( $done ) );
 		} elseif ( in_array( $action, self::BACKGROUND, true ) ) {
 			/* translators: %s: «3 товара». */
 			$text = sprintf( __( 'Принято в работу: %s. Ход работы виден в столбце «Состояние».', 'woodev-plugin-framework' ), $done . ' ' . Bulk_Validation_Report::products( $done ) );

@@ -35,6 +35,7 @@ final class Site_Products_Run_Line {
 		Site_Products_Bulk::SYNC_PRICE_OFF,
 		Site_Products_Bulk::SET_WAREHOUSE,
 		Site_Products_Bulk::RESET,
+		Site_Products_Bulk::RESET_PRICE,
 		Site_Products_Bulk::DETACH,
 	];
 
@@ -184,6 +185,8 @@ final class Site_Products_Run_Line {
 			Site_Products_Bulk::ARCHIVE        => __( 'Остаток на %s станет нулевым, затем карточки уйдут в архив. Товары на сайте не меняются.', 'woodev-plugin-framework' ),
 			Site_Products_Bulk::DETACH         => __( 'Сайт забудет карточки всех товаров по фильтру. Карточки на %s не меняются.', 'woodev-plugin-framework' ),
 			Site_Products_Bulk::RESET          => __( 'Товары снова станут «Не связан». На %s ничего не меняется.', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::RESET_PRICE    => __( 'У всех связанных товаров по фильтру своя цена будет удалена: цена снова считается по правилу аккаунта.', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::PULL_PRICES    => __( 'Цены созданных карточек будут прочитаны с %s и записаны в товары сайта.', 'woodev-plugin-framework' ),
 		];
 
 		return sprintf( $sentences[ $action ] ?? '', $marketplace );
@@ -202,6 +205,16 @@ final class Site_Products_Run_Line {
 				/* translators: 1: products, 2: offers changed, 3: offers skipped, 4: offers failed. */
 				__( 'Готово: товаров %1$s; изменено %2$s, пропущено %3$s, не удалось %4$s.', 'woodev-plugin-framework' ),
 				self::number( $counts['products_done'] ),
+				self::number( $counts['offers_accepted'] ),
+				self::number( $counts['offers_skipped'] ),
+				self::number( $counts['offers_failed'] )
+			);
+		}
+
+		if ( Site_Products_Bulk::PULL_PRICES === $action ) {
+			return sprintf(
+				/* translators: 1: offers queued, 2: offers skipped, 3: offers failed. */
+				__( 'Поставлено в очередь на загрузку цен: %1$s; пропущено %2$s, не удалось %3$s. Цены на сайте обновятся в течение нескольких минут; то, что не удалось пересчитать, записано в журнал ошибок.', 'woodev-plugin-framework' ),
 				self::number( $counts['offers_accepted'] ),
 				self::number( $counts['offers_skipped'] ),
 				self::number( $counts['offers_failed'] )

@@ -251,7 +251,7 @@ final class Site_Products_Definition {
 	}
 
 	/**
-	 * The twelve bulk actions. Each asks for a preview and a confirmation; the preview is the validation report.
+	 * The fourteen bulk actions. Each asks for a preview and a confirmation; the preview is the validation report.
 	 *
 	 * @param string   $marketplace Marketplace name.
 	 * @param string[] $withheld    Action ids to leave out.
@@ -295,6 +295,13 @@ final class Site_Products_Definition {
 				[ 'tone' => 'danger' ]
 			),
 			self::action( Site_Products_Bulk::RESET, self::label_of( Site_Products_Bulk::RESET ), __( 'Товар снова станет «Не связан». На маркетплейсе ничего не меняется: карточка остаётся там как была.', 'woodev-plugin-framework' ) ),
+			self::action( Site_Products_Bulk::RESET_PRICE, self::label_of( Site_Products_Bulk::RESET_PRICE ), __( 'У товаров своя цена для маркетплейса будет удалена: цена снова считается по правилу аккаунта. Цены на сайте не меняются.', 'woodev-plugin-framework' ) ),
+			self::action(
+				Site_Products_Bulk::PULL_PRICES,
+				self::label_of( Site_Products_Bulk::PULL_PRICES ),
+				/* translators: %s: marketplace name. */
+				sprintf( __( 'Цены созданных карточек будут прочитаны с %s и записаны в товары сайта: цена на сайте заменится ценой с маркетплейса. Действие разовое, настройка направления цен не меняется.', 'woodev-plugin-framework' ), $marketplace )
+			),
 		];
 
 		$actions = array_merge( $actions, self::run_actions() );
@@ -351,6 +358,8 @@ final class Site_Products_Definition {
 			Site_Products_Bulk::ARCHIVE       => __( 'Архивировать', 'woodev-plugin-framework' ),
 			Site_Products_Bulk::DETACH        => __( 'Снять связь', 'woodev-plugin-framework' ),
 			Site_Products_Bulk::RESET         => __( 'Сбросить состояние', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::RESET_PRICE   => __( 'Сбросить свою цену', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::PULL_PRICES   => __( 'Загрузить цены', 'woodev-plugin-framework' ),
 		];
 
 		return $labels[ $action ] ?? $action;

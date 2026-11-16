@@ -71,6 +71,20 @@ abstract class Products_Test_Case extends Export_Test_Case {
 	 */
 	protected $withheld = [];
 
+	/**
+	 * The articles each queued price pull was asked for (#1797).
+	 *
+	 * @var array<int,string[]>
+	 */
+	protected $pulled = [];
+
+	/**
+	 * Whether queueing a price pull is refused, as Action Scheduler does when it cannot store the action.
+	 *
+	 * @var bool
+	 */
+	protected $pull_refused = false;
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -78,6 +92,8 @@ abstract class Products_Test_Case extends Export_Test_Case {
 		$this->candidates       = 7;
 		$this->candidates_asked = [];
 		$this->withheld         = [];
+		$this->pulled           = [];
+		$this->pull_refused     = false;
 		$this->shop       = new Products_Shop( $this->db, $this->account_id );
 		$this->hook_stock();
 
@@ -139,6 +155,15 @@ abstract class Products_Test_Case extends Export_Test_Case {
 					$this->candidates_asked[] = $category;
 
 					return null === $category ? $this->candidates : $this->category_candidates;
+				},
+				'pull_prices'     => function ( Account $account, array $offer_ids ): int {
+					if ( $this->pull_refused ) {
+						throw new \RuntimeException( 'Action Scheduler did not queue the price pull.' );
+					}
+
+					$this->pulled[] = $offer_ids;
+
+					return 1;
 				},
 				'link_effect'     => function ( Account $account, string $unchanged ): string {
 					return null === $this->linker ? $unchanged : $this->linker->remote_effect( $account, $unchanged );
