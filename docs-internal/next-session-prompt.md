@@ -12,9 +12,9 @@
 
 # Первым делом
 
-1. **PR #1807 (E2 #1795):** после luna r2 — ребейз, интеграция в `tests-cli`, замер 10 000 товаров
-   (`tests/integration/fixtures/bulk-run/README`), бандлы, мерж.
-2. **ozon-seller#96** — Ozon на 2.1.8 (+ `sync-framework.sh` на риге). 3. E3 #1796 и D #1797 — после E2.
+1. **PR #1807 (E2 #1795):** критик пройден (3 раунда), интеграция на MySQL 7/7 у воркера. Осталось: замер 10 000 товаров на риге
+   (`tests/integration/fixtures/bulk-run/README`), таблица по тикам в PR, ребейз, мерж.
+2. **ozon-seller#96** — воркер `s232-oz96` запущен: PR → критик → local-ci → риг (`sync-framework.sh`). 3. E3 #1796 и D #1797 — после E2.
 
 # Очередь
 
