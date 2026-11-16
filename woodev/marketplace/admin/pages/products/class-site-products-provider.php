@@ -9,11 +9,16 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_State_Exception;
+use Woodev\Framework\Admin\Records\Applies_To_Matching;
 use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
+use Woodev\Framework\Marketplace\Catalog\Bulk_Validation_Report;
+use Woodev\Framework\Marketplace\Data\Bulk_Run;
+use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Runner;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 
@@ -29,7 +34,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @since 2.1.4
  */
-final class Site_Products_Provider implements Records_Provider, Provides_Field_Options {
+final class Site_Products_Provider implements Records_Provider, Provides_Field_Options, Applies_To_Matching {
 	/**
 	 * Table id: the page declares `tables => [ 'products' ]`.
 	 */
@@ -76,6 +81,20 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	private $license;
 
 	/**
+	 * Starts, stops and recovers the bulk runs of the «все по фильтру» mode; the mode is refused when null.
+	 *
+	 * @var Bulk_Run_Runner|null
+	 */
+	private $runs;
+
+	/**
+	 * The bulk runs, for the report and the «already running» sentence.
+	 *
+	 * @var Bulk_Run_Store|null
+	 */
+	private $run_store;
+
+	/**
 	 * `adapter_id`, `marketplace` (merchant-facing name), `withheld` (action ids the adapter cannot serve).
 	 *
 	 * @var array{adapter_id:string,marketplace:string,withheld:string[]}
@@ -95,8 +114,10 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * @param Warehouse_Options       $warehouses Warehouses of an account.
 	 * @param License_Gate            $license    Licence gate.
 	 * @param array<string,mixed>     $config     `adapter_id`, `marketplace` and `withheld`.
+	 * @param Bulk_Run_Runner|null    $runs       Bulk runs of the «все по фильтру» mode.
+	 * @param Bulk_Run_Store|null     $run_store  Their store.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Products_Reader $reader, Site_Products_Selection $selection, Site_Products_Activity $activity, Site_Products_Bulk $bulk, Warehouse_Options $warehouses, License_Gate $license, array $config ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Products_Reader $reader, Site_Products_Selection $selection, Site_Products_Activity $activity, Site_Products_Bulk $bulk, Warehouse_Options $warehouses, License_Gate $license, array $config, ?Bulk_Run_Runner $runs = null, ?Bulk_Run_Store $run_store = null ) {
 		$this->accounts   = $accounts;
 		$this->reader     = $reader;
 		$this->selection  = $selection;
@@ -104,6 +125,8 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 		$this->bulk       = $bulk;
 		$this->warehouses = $warehouses;
 		$this->license    = $license;
+		$this->runs       = $runs;
+		$this->run_store  = $run_store;
 		$this->config     = [
 			'adapter_id'  => (string) ( $config['adapter_id'] ?? '' ),
 			'marketplace' => (string) ( $config['marketplace'] ?? '' ),
@@ -280,6 +303,14 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * @throws Action_Input_Exception When the warehouse is not one of the account's, or the category of the linking is not a product category.
 	 */
 	public function preview( array $context, string $action, array $ids, array $payload ): array {
+		if ( Site_Products_Bulk::RUN_REPORT === $action ) {
+			return $this->report_preview( $context, $payload );
+		}
+
+		if ( Site_Products_Bulk::RUN_STOP === $action ) {
+			return $this->stop_preview( $context, $payload );
+		}
+
 		$call = $this->prepare( $context, $action, $ids, $payload );
 
 		return $this->bulk->preview( $call['account'], $action, $call['offers'], $call['editable'], $call['warehouse'], $call['category'] );
@@ -299,9 +330,106 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * @throws Action_Input_Exception When the warehouse is not one of the account's, or the category of the linking is not a product category.
 	 */
 	public function apply( array $context, string $action, array $ids, array $payload ): array {
+		if ( Site_Products_Bulk::RUN_STOP === $action ) {
+			return $this->stop_apply( $context, $payload );
+		}
+
+		if ( Site_Products_Bulk::RUN_REPORT === $action ) {
+			return $this->report_preview( $context, $payload );
+		}
+
 		$call = $this->prepare( $context, $action, $ids, $payload );
 
 		return $this->bulk->apply( $call['account'], $action, $call['offers'], $call['editable'], $call['warehouse'], $call['category'] );
+	}
+
+	/**
+	 * The plan of an action over every product under the filter (#1795): one count and a sentence. It does not plan the products — that is
+	 * the work the run spreads over parts — and the skip reasons arrive in the report.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param array<string,string>                             $context Resolved context.
+	 * @param string                                           $action  Action id.
+	 * @param array{search:string,filters:array<string,mixed>} $query   Validated filter and search.
+	 * @param array<string,mixed>                              $payload Validated fields.
+	 * @return array<string,mixed>
+	 * @throws Action_State_Exception When the licence is not in force or a run of this account is still going.
+	 * @throws Action_Input_Exception When the warehouse is not one of the account's.
+	 */
+	public function preview_matching( array $context, string $action, array $query, array $payload ): array {
+		$call  = $this->prepare_matching( $context, $action, $query, $payload );
+		$total = $this->reader->count_filtered( $call['filter'] );
+		$name  = $this->config['marketplace'];
+		$words = $total . ' ' . Bulk_Validation_Report::products( $total );
+		$out   = [
+			'requested'      => $total,
+			'eligible'       => $total,
+			'skipped'        => 0,
+			'scope_sentence' => Site_Products_Run_Line::reach( $total ) . ' ' . Site_Products_Run_Line::effect( $action, $name ) . ' ' . Site_Products_Run_Line::background(),
+		];
+
+		if ( Site_Products_Bulk::ARCHIVE === $action ) {
+			/* translators: %s: «120 товаров». */
+			$out['confirm_label'] = sprintf( __( 'Архивировать %s', 'woodev-plugin-framework' ), $words );
+		} elseif ( Site_Products_Bulk::DETACH === $action ) {
+			/* translators: %s: «120 товаров». */
+			$out['confirm_label'] = sprintf( __( 'Снять связь у %s', 'woodev-plugin-framework' ), $words );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Starts the run of an action over every product under the filter and queues its first tick. Nothing is processed in the request.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param array<string,string>                             $context Resolved context.
+	 * @param string                                           $action  Action id.
+	 * @param array{search:string,filters:array<string,mixed>} $query   Validated filter and search.
+	 * @param array<string,mixed>                              $payload Validated fields.
+	 * @return array<string,mixed>
+	 * @throws Action_State_Exception When the licence is not in force, a run is still going, there is nothing under the filter or the queue refuses the work.
+	 * @throws Action_Input_Exception When the warehouse is not one of the account's.
+	 */
+	public function apply_matching( array $context, string $action, array $query, array $payload ): array {
+		$call  = $this->prepare_matching( $context, $action, $query, $payload );
+		$total = $this->reader->count_filtered( $call['filter'] );
+
+		if ( 0 === $total ) {
+			throw new Action_State_Exception( __( 'По этому фильтру товаров нет.', 'woodev-plugin-framework' ) );
+		}
+
+		try {
+			$run_id = $this->runs->start( $call['account']->id(), $action, $call['payload'], [ 'search' => $query['search'], 'filters' => $query['filters'] ], get_current_user_id(), $total );
+		} catch ( \RuntimeException $e ) {
+			throw new Action_State_Exception( __( 'Не удалось поставить действие в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите.', 'woodev-plugin-framework' ) );
+		}
+
+		if ( null === $run_id ) {
+			throw new Action_State_Exception( $this->running_sentence( $call['account']->id() ) );
+		}
+
+		/* translators: %s: «12 345 товаров». */
+		$text = sprintf( __( 'Действие запущено в фоне: %s. Ход работы — в строке аккаунта над таблицей.', 'woodev-plugin-framework' ), $total . ' ' . Bulk_Validation_Report::products( $total ) );
+
+		return [
+			'requested' => $total,
+			'accepted'  => $total,
+			'skipped'   => 0,
+			'failed'    => 0,
+			'queued'    => true,
+			'run'       => [
+				'id'             => $run_id,
+				'products_total' => $total,
+			],
+			'messages'  => [
+				'action_status_done'    => $text,
+				'action_status_partial' => $text,
+				'action_status_queued'  => $text,
+			],
+		];
 	}
 
 	/**
@@ -416,6 +544,159 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	}
 
 	/**
+	 * Checks a matching request and resolves it: the account, the filter, the fields.
+	 *
+	 * @param array<string,string>                             $context Resolved context.
+	 * @param string                                           $action  Action id.
+	 * @param array{search:string,filters:array<string,mixed>} $query   Validated filter and search.
+	 * @param array<string,mixed>                              $payload Validated fields.
+	 * @return array{account:Account,filter:Site_Products_Filter,payload:array<string,mixed>}
+	 * @throws Action_State_Exception When the mode is not wired, the account is gone, the licence is not in force or a run is going.
+	 * @throws Action_Input_Exception When the warehouse is not one of the account's.
+	 */
+	private function prepare_matching( array $context, string $action, array $query, array $payload ): array {
+		$account = $this->account( $context );
+
+		if ( null === $account || null === $this->runs || null === $this->run_store ) {
+			throw new Action_State_Exception( __( 'Аккаунт не найден или выключен.', 'woodev-plugin-framework' ) );
+		}
+
+		$refusal = $this->license_refusal( $action );
+
+		if ( null !== $refusal ) {
+			throw new Action_State_Exception( $refusal );
+		}
+
+		$current = $this->run_store->find( $account->id() );
+
+		if ( null !== $current && $current->is_running() ) {
+			throw new Action_State_Exception( $this->running_sentence( $account->id() ) );
+		}
+
+		if ( Site_Products_Bulk::SET_WAREHOUSE === $action ) {
+			$payload = [ 'warehouse' => $this->warehouse( $account, $payload ) ];
+		}
+
+		return [
+			'account' => $account,
+			'filter'  => Site_Products_Filter::from_query( $account->id(), $query ),
+			'payload' => $payload,
+		];
+	}
+
+	/**
+	 * «Уже выполняется «Отправить остатки» по фильтру — дождитесь окончания или остановите его».
+	 *
+	 * @param int $account_id Account.
+	 * @return string
+	 */
+	private function running_sentence( int $account_id ): string {
+		$run = null === $this->run_store ? null : $this->run_store->find( $account_id );
+
+		/* translators: %s: the action's name. */
+		return sprintf( __( 'Уже выполняется «%s» по фильтру — дождитесь окончания или остановите его.', 'woodev-plugin-framework' ), null === $run ? '' : Site_Products_Definition::label_of( $run->action() ) );
+	}
+
+	/**
+	 * «Подробнее»: the stored report of the run on the line, through the preview contract. A read; nothing is changed.
+	 *
+	 * @param array<string,string> $context Resolved context.
+	 * @param array<string,mixed>  $payload Validated fields: the id of the run the button belongs to.
+	 * @return array<string,mixed>
+	 * @throws Action_State_Exception When that run is not the account's current one any more.
+	 */
+	private function report_preview( array $context, array $payload ): array {
+		$run    = $this->shown_run( $context, $payload );
+		$counts = $run->counts();
+
+		return [
+			'requested'      => $counts['offers_accepted'] + $counts['offers_skipped'] + $counts['offers_failed'],
+			'eligible'       => $counts['offers_accepted'],
+			'skipped'        => $counts['offers_skipped'] + $counts['offers_failed'],
+			'scope_sentence' => $run->is_running() ? Site_Products_Run_Line::running( $run ) : Site_Products_Run_Line::finished( $run ),
+			'groups'         => $run->report(),
+			'can_apply'      => false,
+		];
+	}
+
+	/**
+	 * «Остановить»: what stopping does.
+	 *
+	 * @param array<string,string> $context Resolved context.
+	 * @param array<string,mixed>  $payload Validated fields: the id of the run the button belongs to.
+	 * @return array<string,mixed>
+	 * @throws Action_State_Exception When that run is not the account's current one any more.
+	 */
+	private function stop_preview( array $context, array $payload ): array {
+		$this->shown_run( $context, $payload );
+
+		return [
+			'requested' => 1,
+			'eligible'  => 1,
+			'skipped'   => 0,
+		];
+	}
+
+	/**
+	 * Stops the run the merchant saw. A run id that is not the current running run changes nothing: a second tab must never stop a newer run.
+	 *
+	 * @param array<string,string> $context Resolved context.
+	 * @param array<string,mixed>  $payload Validated fields: the id of the run the button belongs to.
+	 * @return array<string,mixed>
+	 */
+	private function stop_apply( array $context, array $payload ): array {
+		$account = $this->account( $context );
+		$outcome = null === $account || null === $this->runs ? Bulk_Run_Runner::STOP_GONE : $this->runs->stop( $account->id(), (string) ( $payload[ Site_Products_Bulk::RUN_FIELD ] ?? '' ) );
+
+		if ( Bulk_Run_Runner::STOP_GONE === $outcome ) {
+			$gone = __( 'Это действие уже закончилось — новое действие не остановлено.', 'woodev-plugin-framework' );
+
+			return [
+				'requested' => 1,
+				'accepted'  => 0,
+				'skipped'   => 1,
+				'failed'    => 0,
+				'messages'  => [ 'action_status_failed' => $gone ],
+			];
+		}
+
+		$text = Bulk_Run_Runner::STOP_CANCELLED === $outcome
+			? __( 'Действие остановлено.', 'woodev-plugin-framework' )
+			: __( 'Обработка остановится после текущей части. То, что уже поставлено в очередь, будет отправлено.', 'woodev-plugin-framework' );
+
+		return [
+			'requested' => 1,
+			'accepted'  => 1,
+			'skipped'   => 0,
+			'failed'    => 0,
+			'messages'  => [
+				'action_status_done'    => $text,
+				'action_status_partial' => $text,
+				'action_status_queued'  => $text,
+			],
+		];
+	}
+
+	/**
+	 * The run a button of the account line belongs to, when it is still the account's current one.
+	 *
+	 * @param array<string,string> $context Resolved context.
+	 * @param array<string,mixed>  $payload Validated fields.
+	 * @return Bulk_Run
+	 * @throws Action_State_Exception When the account has no such run any more.
+	 */
+	private function shown_run( array $context, array $payload ): Bulk_Run {
+		$account = $this->account( $context );
+		$run     = null === $account || null === $this->run_store ? null : $this->run_store->find( $account->id() );
+
+		if ( null === $run || $run->run_id() !== (string) ( $payload[ Site_Products_Bulk::RUN_FIELD ] ?? '' ) ) {
+			throw new Action_State_Exception( __( 'Это действие уже закончилось или заменено новым — смотрите строку аккаунта над таблицей.', 'woodev-plugin-framework' ) );
+		}
+
+		return $run;
+	}
+
+	/**
 	 * Reads the warehouse out of the payload and checks it against the account's own list.
 	 *
 	 * @param Account             $account Account.
@@ -441,15 +722,9 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * @return string|null
 	 */
 	private function license_refusal( string $action ): ?string {
-		$phrases = [
-			Site_Products_Bulk::EXPORT          => __( 'отправить товар на маркетплейс', 'woodev-plugin-framework' ),
-			Site_Products_Bulk::LINK_BY_ARTICLE => __( 'искать карточки на маркетплейсе', 'woodev-plugin-framework' ),
-			Site_Products_Bulk::SEND_STOCK      => __( 'отправить остатки на маркетплейс', 'woodev-plugin-framework' ),
-			Site_Products_Bulk::SEND_PRICE      => __( 'отправить цены на маркетплейс', 'woodev-plugin-framework' ),
-			Site_Products_Bulk::ARCHIVE         => __( 'архивировать карточку на маркетплейсе', 'woodev-plugin-framework' ),
-		];
+		$phrase = Site_Products_Bulk::license_phrase( $action );
 
-		return isset( $phrases[ $action ] ) ? $this->license->refusal_for( $phrases[ $action ] ) : null;
+		return null === $phrase ? null : $this->license->refusal_for( $phrase );
 	}
 
 	/**
