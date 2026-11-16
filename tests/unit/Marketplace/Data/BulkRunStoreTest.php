@@ -210,4 +210,38 @@ final class BulkRunStoreTest extends TestCase {
 		$this->assertNull( $this->store->find( self::ACCOUNT ) );
 		$this->assertNotNull( $this->store->find( 8 ), 'Another account keeps its run.' );
 	}
+
+	public function test_the_frozen_list_of_cards_is_stored_once_and_read_back(): void {
+		$this->start();
+		$items = [ [ 'Платье-1', 'g1' ], [ 'Платье-2', '' ] ];
+
+		$this->assertNull( $this->store->items( self::ACCOUNT, 'r1' ), 'A run starts with no list.' );
+		$this->assertTrue( $this->store->freeze_items( self::ACCOUNT, 'r1', $items ) );
+		$this->assertSame( $items, $this->store->items( self::ACCOUNT, 'r1' ), 'Cyrillic and the group keys survive the round trip.' );
+
+		$this->assertFalse( $this->store->freeze_items( self::ACCOUNT, 'r1', [ [ 'other', '' ] ] ), 'A second tick that also froze changes nothing.' );
+		$this->assertSame( $items, $this->store->items( self::ACCOUNT, 'r1' ) );
+	}
+
+	public function test_a_list_is_frozen_only_for_the_running_run_it_belongs_to(): void {
+		$this->start();
+
+		$this->assertFalse( $this->store->freeze_items( self::ACCOUNT, 'other-run', [ [ 'A', '' ] ] ), 'Not this run.' );
+		$this->assertNull( $this->store->items( self::ACCOUNT, 'other-run' ) );
+
+		$this->store->end_under_lock( self::ACCOUNT, 'r1', Bulk_Run::CANCELLED );
+
+		$this->assertFalse( $this->store->freeze_items( self::ACCOUNT, 'r1', [ [ 'A', '' ] ] ), 'A run that is over takes no list.' );
+	}
+
+	public function test_a_new_start_clears_the_frozen_list(): void {
+		$this->start();
+		$this->store->freeze_items( self::ACCOUNT, 'r1', [ [ 'A', '' ] ] );
+		$this->store->end_under_lock( self::ACCOUNT, 'r1', Bulk_Run::DONE );
+
+		$this->assertTrue( $this->start( 'r2' ) );
+		$this->assertNull( $this->store->items( self::ACCOUNT, 'r2' ), 'Every start writes the list fresh.' );
+		$this->assertTrue( $this->store->freeze_items( self::ACCOUNT, 'r2', [ [ 'B', '' ] ] ), 'The new run can freeze its own.' );
+		$this->assertSame( [ [ 'B', '' ] ], $this->store->items( self::ACCOUNT, 'r2' ) );
+	}
 }

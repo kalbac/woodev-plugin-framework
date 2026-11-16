@@ -91,6 +91,10 @@ final class Site_Products_Run_Line {
 	 * @return string
 	 */
 	public static function running( Bulk_Run $run ): string {
+		if ( Remote_Cards_Run_Line::is_import( $run ) ) {
+			return Remote_Cards_Run_Line::running( $run ); // The import of cards counts cards, not products.
+		}
+
 		$counts = $run->counts();
 
 		$text = sprintf(
@@ -114,6 +118,10 @@ final class Site_Products_Run_Line {
 	 * @return string
 	 */
 	public static function finished( Bulk_Run $run ): string {
+		if ( Remote_Cards_Run_Line::is_import( $run ) ) {
+			return Remote_Cards_Run_Line::finished( $run );
+		}
+
 		$counts = $run->counts();
 		$label  = Site_Products_Definition::label_of( $run->action() );
 

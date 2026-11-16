@@ -228,6 +228,39 @@ final class Bulk_Run_Store {
 	}
 
 	/**
+	 * Stores the frozen card list of the remote-cards run (§2.7). Written once per run: a run that already holds a list keeps it, so a
+	 * second tick that also froze changes nothing and both read the same list.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int                                 $account_id Account.
+	 * @param string                              $run_id     Run.
+	 * @param array<int,array{0:string,1:string}> $items      `[ article, group key ]` of every card, in the order the import must go.
+	 * @return bool False when the run is not that one, is over, or already has its list.
+	 */
+	public function freeze_items( int $account_id, string $run_id, array $items ): bool {
+		$json = wp_json_encode( $items, JSON_UNESCAPED_UNICODE );
+
+		return is_string( $json ) && 1 === $this->db->query( $this->db->prepare( 'UPDATE %i SET items = %s WHERE account_id = %d AND run_id = %s AND state = %s AND items IS NULL', $this->table, $json, $account_id, $run_id, Bulk_Run::RUNNING ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+	}
+
+	/**
+	 * Reads the frozen card list of a run. The one place that reads the heavy `items` column.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int    $account_id Account.
+	 * @param string $run_id     Run.
+	 * @return array<int,array{0:string,1:string}>|null Null when the run has no list yet (or is not that run any more).
+	 */
+	public function items( int $account_id, string $run_id ): ?array {
+		$json  = $this->db->get_var( $this->db->prepare( 'SELECT items FROM %i WHERE account_id = %d AND run_id = %s', $this->table, $account_id, $run_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table, read fresh.
+		$items = is_string( $json ) && '' !== $json ? json_decode( $json, true ) : null;
+
+		return is_array( $items ) ? $items : null;
+	}
+
+	/**
 	 * Deletes a batch of an account's rows (the account's deletion).
 	 *
 	 * @since 2.1.8

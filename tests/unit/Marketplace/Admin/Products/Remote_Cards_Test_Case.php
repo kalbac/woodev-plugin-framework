@@ -16,6 +16,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Import_Plan;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Products;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Rows;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Run_Actions;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
@@ -65,6 +66,13 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	protected $importable = false;
 
 	/**
+	 * The import by filter, when the test wires it: {@see Remote_Cards_Run_Actions}.
+	 *
+	 * @var Remote_Cards_Run_Actions|null
+	 */
+	protected $run_actions = null;
+
+	/**
 	 * What the shop's SKU lookup answers, by article: one of the `Remote_Cards_Import_Plan::SKU_*` kinds; an article not listed has no product.
 	 *
 	 * @var array<string,string>
@@ -81,7 +89,8 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->importable = false;
+		$this->importable   = false;
+		$this->run_actions  = null;
 		$this->sku_kinds  = [];
 		$this->group_states = [];
 
@@ -315,13 +324,15 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 				$products,
 				$rows,
 				$importer,
-				null === $importer ? null : $this->import_plan()
+				null === $importer ? null : $this->import_plan(),
+				$this->run_actions
 			),
 			[
 				'adapter_id'  => Sqlite_Tables::MARKETPLACE_ID,
 				'marketplace' => 'Тестмаркет',
 			],
-			$importer
+			$importer,
+			$this->clock()
 		);
 	}
 
