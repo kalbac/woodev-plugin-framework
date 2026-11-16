@@ -121,8 +121,11 @@ function FailureView( { state, messages }: { state: FlowState; messages: Message
 function forwardButton( state: FlowState ): 'preview' | 'confirm' | null {
 	const { stage, action } = state;
 
-	if ( stage === 'planning' || ( stage === 'input' && needsPreview( action ) ) ) {
+	if ( stage === 'planning' || ( stage === 'input' && ( needsPreview( action ) || state.previewOnly ) ) ) {
 		return 'preview';
+	}
+	if ( state.previewOnly ) {
+		return null;
 	}
 
 	return stage === 'input' || stage === 'previewed' || stage === 'applying' ? 'confirm' : null;
@@ -137,7 +140,8 @@ function Footer( { flow, table, messages }: ActionDialogProps & { messages: Mess
 	const cancel = actionMessage( messages, ACTION_MESSAGE_KEYS.cancel ) || action.label;
 	const close = actionMessage( messages, ACTION_MESSAGE_KEYS.close ) || cancel;
 
-	if ( stage === 'done' || ( stage === 'failed' && state.failedAt === 'apply' ) ) {
+	// A report has nothing to apply: its plan is the answer, and the dialog only closes.
+	if ( stage === 'done' || ( stage === 'previewed' && state.previewOnly ) || ( stage === 'failed' && state.failedAt === 'apply' ) ) {
 		return (
 			<Button variant="primary" onClick={ flow.close }>
 				{ close }

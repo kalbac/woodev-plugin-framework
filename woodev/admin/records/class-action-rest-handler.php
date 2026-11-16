@@ -26,10 +26,12 @@ defined( 'ABSPATH' ) || exit;
  * 3. the provider's definition for this user; the account must be named (a write never falls
  *    back to a default account) and must be among the options the provider offered → 404;
  * 4. the action must be declared and executable here → 404; its capability → 403;
- * 5. ids for the action's scope → 400, oversized → 400; payload fields → 400 / 422
- *    ({@see Action_Input});
+ * 5. the target — ids for the action's scope → 400, oversized → 400; or, for an action that
+ *    declares `all_matching`, a `matching` filter and search → 400 ({@see Action_Request::matching()},
+ *    served only by a provider that implements {@see Applies_To_Matching}); payload fields →
+ *    400 / 422 ({@see Action_Input});
  * 6. the provider's object check ({@see Records_Provider::authorize()}, operation = action id)
- *    → 404;
+ *    → 404 — skipped for a `matching` call, which names no rows: the action's capability is its gate;
  * 7. only then the provider plans or applies; its answer is rebuilt by {@see Action_Response}.
  *
  * Kept apart from {@see Records_Rest_Controller}, which serves the reads; it is handed to the
@@ -119,6 +121,10 @@ final class Action_Rest_Handler {
 		$result = $this->run(
 			$call,
 			static function ( Records_Provider $provider ) use ( $call ): array {
+				if ( null !== $call['matching'] && $provider instanceof Applies_To_Matching ) {
+					return $provider->preview_matching( $call['context'], $call['action']['id'], $call['matching'], $call['payload'] );
+				}
+
 				return $provider->preview( $call['context'], $call['action']['id'], $call['ids'], $call['payload'] );
 			}
 		);
@@ -148,6 +154,10 @@ final class Action_Rest_Handler {
 		$result = $this->run(
 			$call,
 			static function ( Records_Provider $provider ) use ( $call ): array {
+				if ( null !== $call['matching'] && $provider instanceof Applies_To_Matching ) {
+					return $provider->apply_matching( $call['context'], $call['action']['id'], $call['matching'], $call['payload'] );
+				}
+
 				return $provider->apply( $call['context'], $call['action']['id'], $call['ids'], $call['payload'] );
 			}
 		);
@@ -168,7 +178,7 @@ final class Action_Rest_Handler {
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @param bool             $apply   Whether this is the apply route.
-	 * @return array{registration:Records_Registration,definition:Records_Definition,context:array{account_id:string},action:array<string,mixed>,ids:string[],payload:array<string,mixed>}|\WP_Error
+	 * @return array{registration:Records_Registration,definition:Records_Definition,context:array{account_id:string},action:array<string,mixed>,ids:string[],matching:array{search:string,filters:array<string,mixed>}|null,payload:array<string,mixed>}|\WP_Error
 	 */
 	private function prepare( \WP_REST_Request $request, bool $apply ) {
 		$body = Action_Request::body( $request, $apply );
@@ -186,9 +196,9 @@ final class Action_Rest_Handler {
 			return $action;
 		}
 
-		$ids = Action_Request::targets( $call['definition'], $action, $body['ids'] );
-		if ( $ids instanceof \WP_Error ) {
-			return $ids;
+		$target = $this->target( $call, $action, $body );
+		if ( $target instanceof \WP_Error ) {
+			return $target;
 		}
 
 		$payload = Action_Input::validate( $action, $body['payload'] );
@@ -196,15 +206,48 @@ final class Action_Rest_Handler {
 			return $payload;
 		}
 
-		$call += [
+		$call += $target + [
 			'action'  => $action,
-			'ids'     => $ids,
 			'payload' => $payload,
 		];
 
-		$denied = $this->authorize( $call );
+		// A `matching` call names no rows, so there is nothing for the object check to authorise: the action's
+		// capability, already checked, is the whole gate.
+		$denied = null === $call['matching'] ? $this->authorize( $call ) : null;
 
 		return null === $denied ? $call : $denied;
+	}
+
+	/**
+	 * Step 5, first half: what the request targets — ticked row ids, or every row under a filter.
+	 *
+	 * @param array<string,mixed> $call   Table, definition and context.
+	 * @param array<string,mixed> $action Normalised action descriptor.
+	 * @param array<string,mixed> $body   Output of {@see Action_Request::body()}.
+	 * @return array{ids:string[],matching:array{search:string,filters:array<string,mixed>}|null}|\WP_Error
+	 */
+	private function target( array $call, array $action, array $body ) {
+		$matching = Action_Request::matching( $call['definition'], $action, $body['ids'], $body['matching'] );
+		if ( $matching instanceof \WP_Error ) {
+			return $matching;
+		}
+
+		if ( null !== $matching ) {
+			// The provider must be able to apply to a filter; an action cannot declare a mode its table cannot serve.
+			return $call['registration']->get_provider() instanceof Applies_To_Matching
+				? [
+					'ids'      => [],
+					'matching' => $matching,
+				]
+				: Records_Error::invalid( 'matching' );
+		}
+
+		$ids = Action_Request::targets( $call['definition'], $action, $body['ids'] );
+
+		return $ids instanceof \WP_Error ? $ids : [
+			'ids'      => $ids,
+			'matching' => null,
+		];
 	}
 
 	/**

@@ -45,6 +45,10 @@ final class Activity_Normalizer {
 	/** Longest label, process text or reason. */
 	const MAX_TEXT_LENGTH = 500;
 
+	/** Most buttons the account line may carry, and the longest value of one button's payload. */
+	const MAX_LINE_ACTIONS      = 2;
+	const MAX_LINE_VALUE_LENGTH = 200;
+
 	/** Date-time as `observed_at` is written: ISO 8601 with a zone. */
 	const TIME_PATTERN = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:?\d{2})$/D';
 
@@ -116,13 +120,16 @@ final class Activity_Normalizer {
 	 * Normalises the account-wide activity.
 	 *
 	 * `active` is the line «по аккаунту идёт фоновая работа»; `blocked_actions` are the account actions
-	 * that take the account's claim themselves and so cannot run meanwhile.
+	 * that take the account's claim themselves and so cannot run meanwhile. The optional `actions` are
+	 * at most two buttons of the line (`action`, `label`, `payload`): each runs a declared account
+	 * action, the payload being a flat map of short strings under that action's declared fields. A
+	 * line with buttons says what it is about, like an active one.
 	 *
-	 * @since 2.1.0
+	 * @since 2.1.0 `actions` since 2.1.8.
 	 *
 	 * @param Records_Definition $definition Definition the action ids are checked against.
 	 * @param mixed              $raw        Provider value; null or absent = nothing going on.
-	 * @return array{active:bool,text:string,blocked_actions:string[],observed_at:string}
+	 * @return array{active:bool,text:string,blocked_actions:string[],observed_at:string,actions?:array<int,array{action:string,label:string,payload:array<string,string>}>}
 	 * @throws \UnexpectedValueException When the value breaks the contract.
 	 */
 	public static function account( Records_Definition $definition, $raw ): array {
@@ -136,17 +143,21 @@ final class Activity_Normalizer {
 		$active  = self::flag( $raw['active'] ?? false, 'active' );
 		$text    = self::text( $raw['text'] ?? '', self::MAX_TEXT_LENGTH );
 		$blocked = self::action_ids( $definition, $raw['blocked_actions'] ?? [] );
+		$actions = self::line_actions( $definition, $raw['actions'] ?? [] );
 
-		if ( ( $active || [] !== $blocked ) && '' === $text ) {
+		if ( ( $active || [] !== $blocked || [] !== $actions ) && '' === $text ) {
 			throw new \UnexpectedValueException( 'account activity must say what is going on.' );
 		}
 
-		return [
+		$account = [
 			'active'          => $active,
 			'text'            => $text,
 			'blocked_actions' => $blocked,
 			'observed_at'     => self::observed_at( $raw['observed_at'] ?? null ),
 		];
+
+		// Absent, not empty, when the provider offers no button: a table without them keeps its old shape.
+		return [] === $actions ? $account : $account + [ 'actions' => $actions ];
 	}
 
 	/**
@@ -188,6 +199,83 @@ final class Activity_Normalizer {
 		}
 
 		return false;
+	}
+
+	/**
+	 * The buttons of the account line: each names an account-wide action the browser runs through the normal
+	 * action flow, with a payload the server put there («Остановить» carries the id of the run on the line).
+	 *
+	 * @param Records_Definition $definition Definition the action ids are checked against.
+	 * @param mixed              $actions    Provider list.
+	 * @return array<int,array{action:string,label:string,payload:array<string,string>}>
+	 * @throws \UnexpectedValueException When a button names an action that is not a declared account action, or breaks the shape.
+	 */
+	private static function line_actions( Records_Definition $definition, $actions ): array {
+		if ( ! is_array( $actions ) || array_values( $actions ) !== $actions || count( $actions ) > self::MAX_LINE_ACTIONS ) {
+			throw new \UnexpectedValueException( 'account line actions are a list of at most ' . self::MAX_LINE_ACTIONS . '.' );
+		}
+
+		$out = [];
+		foreach ( $actions as $entry ) {
+			$out[] = self::line_action( $definition, $entry );
+		}
+
+		if ( count( $out ) !== count( array_unique( array_column( $out, 'action' ) ) ) ) {
+			throw new \UnexpectedValueException( 'an account line action may appear once.' );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * @param Records_Definition $definition Definition.
+	 * @param mixed              $entry      One provider button.
+	 * @return array{action:string,label:string,payload:array<string,string>}
+	 */
+	private static function line_action( Records_Definition $definition, $entry ): array {
+		$id     = is_array( $entry ) && is_string( $entry['action'] ?? null ) ? $entry['action'] : '';
+		$action = '' === $id ? null : $definition->get_action( $id );
+
+		if ( null === $action || 'account' !== $action['scope'] || 'link' === $action['interaction'] ) {
+			throw new \UnexpectedValueException( 'an account line button must name a declared account action.' );
+		}
+
+		$label = self::text( $entry['label'] ?? '', 200 );
+		if ( '' === $label ) {
+			throw new \UnexpectedValueException( 'an account line button needs a label.' );
+		}
+
+		return [
+			'action'  => $id,
+			'label'   => $label,
+			'payload' => self::line_payload( $definition, $id, $entry['payload'] ?? [] ),
+		];
+	}
+
+	/**
+	 * A flat map of short strings, each under a field the action declares: the payload goes back to the server
+	 * unchanged, so a key the action does not know could only ever be refused there.
+	 *
+	 * @param Records_Definition $definition Definition.
+	 * @param string             $action_id  The button's action.
+	 * @param mixed              $payload    Provider payload.
+	 * @return array<string,string>
+	 */
+	private static function line_payload( Records_Definition $definition, string $action_id, $payload ): array {
+		if ( ! is_array( $payload ) || ( [] !== $payload && array_values( $payload ) === $payload ) || count( $payload ) > Records_Definition::MAX_ACTION_FIELDS ) {
+			throw new \UnexpectedValueException( 'an account line payload is a short map.' );
+		}
+
+		$out = [];
+		foreach ( $payload as $key => $value ) {
+			if ( ! is_string( $key ) || null === $definition->get_action_field( $action_id, $key ) || ! is_string( $value ) || mb_strlen( $value ) > self::MAX_LINE_VALUE_LENGTH ) {
+				throw new \UnexpectedValueException( 'an account line payload maps declared field ids to short strings.' );
+			}
+
+			$out[ $key ] = $value;
+		}
+
+		return $out;
 	}
 
 	/**

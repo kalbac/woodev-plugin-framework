@@ -95,6 +95,7 @@ final class Action_Input {
 	private static function value( array $field, $raw ) {
 		switch ( $field['type'] ) {
 			case 'text':
+			case 'hidden':
 				return self::text( $field, $raw, self::MAX_TEXT_LENGTH, false );
 			case 'textarea':
 				return self::text( $field, $raw, self::MAX_TEXTAREA_LENGTH, true );

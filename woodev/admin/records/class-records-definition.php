@@ -51,8 +51,11 @@ final class Records_Definition {
 	/** What an action works on: the selected rows or the whole account. */
 	const SCOPES = [ 'selection', 'account' ];
 
-	/** Types of an action input field. */
-	const FIELD_TYPES = [ 'text', 'textarea', 'number', 'select', 'multi_select', 'boolean' ];
+	/**
+	 * Types of an action input field. A `hidden` field is never drawn: it carries a short string the server put in an
+	 * account-line button's payload, and is validated like any other field.
+	 */
+	const FIELD_TYPES = [ 'text', 'textarea', 'number', 'select', 'multi_select', 'boolean', 'hidden' ];
 
 	/** Hard ceilings: a definition may lower them, never raise them. */
 	const ABSOLUTE_MAX_PER_PAGE  = 200;

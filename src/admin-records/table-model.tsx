@@ -13,10 +13,11 @@
 import type { ReactNode } from 'react';
 import { Button, Spinner } from '@wordpress/components';
 import { cellText, renderCell } from './cells';
-import { MESSAGE_KEYS, firstMessage, joinLabel, message } from './messages';
+import { MESSAGE_KEYS, fillMessage, firstMessage, joinLabel, message } from './messages';
+import { searchFilter } from './query';
 import type { Selection } from './selection';
 import { STYLES } from './styles';
-import type { AdminRecord, Column, Definition, Messages } from './types';
+import type { AdminRecord, Column, Definition, Facet, Filter, FilterValue, Messages, RecordsQuery } from './types';
 import type { ChildrenState } from './use-records';
 import type { TableCell, TableHeader } from './wc-runtime';
 
@@ -70,7 +71,7 @@ export function visibleRowIds( rows: AdminRecord[], children: Record< string, Ch
 	return rows.flatMap( ( row ) => [ row.id, ...( children[ row.id ]?.rows ?? [] ).map( ( child ) => child.id ) ] );
 }
 
-function selectableIds( input: TableModelInput ): string[] {
+function selectableIds( input: Pick< TableModelInput, 'rows' | 'children' > ): string[] {
 	return input.rows.flatMap( ( row ) => selectableFamily( row, input.children[ row.id ] ) );
 }
 
@@ -145,7 +146,8 @@ function selectCell( input: TableModelInput, row: AdminRecord, family: string[] 
 	return cell(
 		<Checkbox
 			label={ label }
-			checked={ selection.selectedIds.includes( row.id ) }
+			// Every row under the filter is selected, the rows on screen — a variation opened later included — with it.
+			checked={ selection.selectedIds.includes( row.id ) || ( selection.matching && row.selectable ) }
 			disabled={ ! row.selectable }
 			onChange={ ( checked ) => selection.set( family, checked ) }
 		/>
@@ -299,7 +301,7 @@ function selectHeader( input: TableModelInput ): TableHeader {
 		label: (
 			<Checkbox
 				label={ message( input.messages, MESSAGE_KEYS.selectAll ) }
-				checked={ all.length > 0 && chosen.length === all.length }
+				checked={ selection.matching || ( all.length > 0 && chosen.length === all.length ) }
 				indeterminate={ chosen.length > 0 && chosen.length < all.length }
 				disabled={ all.length === 0 }
 				onChange={ ( checked ) => selection.set( all, checked ) }
@@ -324,4 +326,138 @@ export function buildHeaders( input: TableModelInput ): TableHeader[] {
 	}
 
 	return [ ...lead, ...input.definition.columns.map( ( column ) => columnHeader( column, input.messages ) ) ];
+}
+
+export interface SelectionBarInput {
+	definition: Definition;
+	messages: Messages;
+	/** Top-level rows on screen. */
+	rows: AdminRecord[];
+	/** Loaded child rows by parent id. */
+	childrenByParent: Record< string, ChildrenState >;
+	selection: Selection;
+	/** The table's own total: parent products, the unit of the table, so it matches the count above it. */
+	total: number;
+	/** The query on screen; the mode freezes it at the click. */
+	query: RecordsQuery;
+	facets: Record< string, Facet[] >;
+}
+
+/** A whole number written the way the page's own language writes it. */
+function formatCount( value: number ): string {
+	try {
+		return new Intl.NumberFormat( document.documentElement.lang || undefined ).format( value );
+	} catch ( error ) {
+		return String( value );
+	}
+}
+
+function optionLabel( filter: Filter, facets: Facet[], value: string ): string {
+	return (
+		filter.options.find( ( option ) => option.value === value )?.label ??
+		facets.find( ( facet ) => facet.value === value )?.label ??
+		value
+	);
+}
+
+function filterValueText( filter: Filter, facets: Facet[], value: FilterValue ): string {
+	if ( typeof value === 'boolean' ) {
+		return value ? '✓' : '✕';
+	}
+	if ( typeof value === 'string' ) {
+		return optionLabel( filter, facets, value );
+	}
+	if ( Array.isArray( value ) ) {
+		return value.map( ( item ) => optionLabel( filter, facets, item ) ).join( ', ' );
+	}
+
+	return `${ value.from ?? '' } – ${ value.to ?? '' }`;
+}
+
+/**
+ * The active filters in words — «Категория: Обувь · Состояние: Не связан» — so the merchant sees what «все» means before
+ * choosing an action. Nothing is written when nothing narrows the table.
+ *
+ * @param input The table as it is on screen.
+ */
+function describeFilters( input: SelectionBarInput ): string {
+	const { definition, facets, query } = input;
+	const parts = definition.filters
+		.filter( ( filter ) => filter.type !== 'search' && query.filters[ filter.id ] !== undefined )
+		.map( ( filter ) => `${ filter.label }: ${ filterValueText( filter, facets[ filter.id ] ?? [], query.filters[ filter.id ] ) }` );
+	const search = searchFilter( definition );
+
+	if ( search && query.search !== '' ) {
+		parts.push( `${ search.label }: «${ query.search }»` );
+	}
+
+	return parts.length === 0 ? '' : `«${ parts.join( ' · ' ) }»`;
+}
+
+/**
+ * The Gmail pattern: once the header box has selected the whole page and the table holds more than the page shows, offer
+ * every row under the filter; once taken, say so, name the filters, and offer the way back.
+ *
+ * Shown only when some bulk action declared `all_matching` and PHP sent the sentence for the state. Unticking a row,
+ * a new filter, search, page or account all end the mode (see `selection.ts`).
+ *
+ * @param input The table as it is on screen.
+ */
+export function SelectionBar( input: SelectionBarInput ) {
+	const { definition, messages, rows, selection, total } = input;
+	const supported = definition.bulk_actions.some(
+		( action ) => action.scope === 'selection' && action.interaction !== 'link' && action.all_matching === true
+	);
+
+	if ( ! supported ) {
+		return null;
+	}
+
+	if ( selection.matching ) {
+		const text = fillMessage( message( messages, MESSAGE_KEYS.selectedAllMatching ), {
+			count: formatCount( total ),
+			filters: describeFilters( input ),
+		} );
+
+		return text === '' ? null : (
+			<SelectionBarLine text={ text } action={ message( messages, MESSAGE_KEYS.clearSelection ) } onAction={ selection.clear } />
+		);
+	}
+
+	const all = selectableIds( { rows, children: input.childrenByParent } );
+	const pageSelected = all.length > 0 && all.every( ( id ) => selection.selectedIds.includes( id ) );
+	const offer = fillMessage( message( messages, MESSAGE_KEYS.selectAllMatching ), { count: formatCount( total ) } );
+
+	if ( ! pageSelected || total <= rows.length || offer === '' ) {
+		return null;
+	}
+
+	return (
+		<SelectionBarLine
+			text={ fillMessage( message( messages, MESSAGE_KEYS.selectedPage ), { count: formatCount( rows.length ) } ) }
+			action={ offer }
+			onAction={ () =>
+				selection.selectMatching( { filters: { ...input.query.filters }, search: input.query.search } )
+			}
+		/>
+	);
+}
+
+interface SelectionBarLineProps {
+	text: string;
+	action: string;
+	onAction: () => void;
+}
+
+function SelectionBarLine( { text, action, onAction }: SelectionBarLineProps ) {
+	return (
+		<div role="status" className="woodev-records__selection-bar" style={ STYLES.selectionBar }>
+			{ text !== '' && <span>{ text }</span> }
+			{ action !== '' && (
+				<Button variant="link" onClick={ onAction }>
+					{ action }
+				</Button>
+			) }
+		</div>
+	);
 }

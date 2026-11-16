@@ -167,6 +167,42 @@ final class Query_Validator {
 	}
 
 	/**
+	 * Validates the filter and search of an «every row under the filter» request: the list read's rules for
+	 * `filters` and `search`, and nothing else — page, page size and sort are not part of it.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Records_Definition $definition Definition.
+	 * @param mixed              $raw        Raw `matching` map (`filters` and `search`, each optional).
+	 * @return array{search:string,filters:array<string,mixed>}|\WP_Error
+	 */
+	public static function matching_query( Records_Definition $definition, $raw ) {
+		if ( ! is_array( $raw ) ) {
+			return Records_Error::invalid( 'matching' );
+		}
+
+		foreach ( array_keys( $raw ) as $key ) {
+			if ( ! in_array( (string) $key, Action_Request::MATCHING_KEYS, true ) ) {
+				return Records_Error::invalid( 'matching.' . $key );
+			}
+		}
+
+		$search  = self::search( $definition, $raw['search'] ?? null );
+		$filters = self::filters( $definition, $raw['filters'] ?? [] );
+
+		foreach ( [ $search, $filters ] as $part ) {
+			if ( $part instanceof \WP_Error ) {
+				return $part;
+			}
+		}
+
+		return [
+			'search'  => $search,
+			'filters' => $filters,
+		];
+	}
+
+	/**
 	 * Validates a flat, distinct list of row ids against the table's selection ceiling.
 	 *
 	 * @since 2.0.29

@@ -16,6 +16,7 @@ return [
 	'Woodev\\Framework\\Admin\\Records\\Action_State_Exception' => 'woodev/admin/records/class-action-state-exception.php',
 	'Woodev\\Framework\\Admin\\Records\\Activity_Normalizer' => 'woodev/admin/records/class-activity-normalizer.php',
 	'Woodev\\Framework\\Admin\\Records\\Activity_Reader' => 'woodev/admin/records/class-activity-reader.php',
+	'Woodev\\Framework\\Admin\\Records\\Applies_To_Matching' => 'woodev/admin/records/interface-applies-to-matching.php',
 	'Woodev\\Framework\\Admin\\Records\\Definition_Parser' => 'woodev/admin/records/class-definition-parser.php',
 	'Woodev\\Framework\\Admin\\Records\\Provides_Field_Options' => 'woodev/admin/records/interface-provides-field-options.php',
 	'Woodev\\Framework\\Admin\\Records\\Query_Validator' => 'woodev/admin/records/class-query-validator.php',

@@ -45,5 +45,15 @@ export const STYLES = {
 	dateRange: { display: 'flex', gap: '8px', alignItems: 'flex-end', border: 0, margin: 0, padding: 0 },
 	state: { padding: '32px 16px', textAlign: 'center', background: '#fff', border: '1px solid #dcdcde' },
 	summary: { margin: '0 0 12px' },
+	selectionBar: {
+		display: 'flex',
+		flexWrap: 'wrap',
+		alignItems: 'center',
+		gap: '4px 12px',
+		margin: '0 0 12px',
+		padding: '8px 12px',
+		background: '#f0f6fc',
+		borderLeft: '4px solid #72aee6',
+	},
 	pageSize: { display: 'flex', justifyContent: 'flex-end', marginTop: '12px' },
 } satisfies Record< string, CSSProperties >;
