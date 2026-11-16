@@ -2845,15 +2845,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * TWO SURFACES, ONE SESSION (SP-11 C-2b, #1089): the picker session itself is
 		 * `pickup-session.js`, shared by both checkouts. The classic checkout gets the mount on
-		 * top of it, with the config localized onto the mount as before. A page that renders only
+		 * top of it, with the config localized onto the mount as before. A page whose content holds
 		 * the Checkout block ({@see \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface})
-		 * gets the session WITHOUT the mount — there is no slot for it to fill, and its button is
-		 * a React inner block — with the same config, under the same global name, localized onto
-		 * the session script.
+		 * gets the config under the same global name localized onto the session script instead,
+		 * because its button is a React inner block. Where that page is also `is_checkout()` the
+		 * mount rides on top too (#1538): a theme can draw the classic form over such a page, and
+		 * the two cases cannot be told apart before the body is rendered. The mount is inert on a
+		 * real block checkout — it only fills `[data-woodev-pickup-slot]` anchors.
 		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.1.9 Adds the mount next to the block config on an `is_checkout()` page whose
+		 *              content holds the Checkout block (#1538).
 		 *
 		 * @return void
 		 */
@@ -2863,9 +2867,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			// `CartCheckoutUtils::is_page_type()` looks for the shortcode and the classic-shortcode
 			// block only). The block renders its pickup button there all the same, and without the
 			// session and the config the button has nothing to open (#1089).
-			$block_only = \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface::is_block_only();
+			$block_only  = \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface::is_block_only();
+			$is_checkout = function_exists( 'is_checkout' ) && is_checkout();
 
-			if ( ! $block_only && ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) ) {
+			if ( ! $block_only && ! $is_checkout ) {
 				return;
 			}
 
@@ -2898,20 +2903,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				]
 			);
 
-			// A page that renders ONLY the Checkout block has no slot for the classic mount to fill:
-			// its button is a React inner block (Checkout\Blocks\Pickup_Blocks) that opens the same
-			// session. It reads the same config, so the config rides on the session script there.
-			if ( $block_only ) {
-				$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css', [ 'woodev-modal' ] );
+			// A page whose content holds the Checkout block gets the config on the session script: its
+			// button is a React inner block (Checkout\Blocks\Pickup_Blocks) that opens the same session
+			// and reads the same config.
+			$config_on_session = $block_only && $session_enqueued;
 
-				if ( $session_enqueued ) {
-					wp_localize_script(
-						'woodev-pickup-session',
-						'woodev_pickup_config_' . $this->config_object_suffix(),
-						$this->get_js_config()
-					);
-				}
+			if ( $config_on_session ) {
+				wp_localize_script(
+					'woodev-pickup-session',
+					'woodev_pickup_config_' . $this->config_object_suffix(),
+					$this->get_js_config()
+				);
+			}
 
+			// #1538: the mount is added ALONGSIDE the block config, never instead of it. A theme can
+			// draw the classic checkout form over a page whose content holds the Checkout block
+			// (`is_checkout()` is true there and the content is never rendered), and
+			// `wp_enqueue_scripts` runs before the body, so the two cases cannot be told apart here.
+			// On a real block checkout the mount is inert: it fills `[data-woodev-pickup-slot]`
+			// anchors, which only the classic field layer creates. A page that is not `is_checkout()`
+			// (another page carrying the block, #1089) has no classic form to mount into.
+			// `woodev-modal`: the framework-registered chrome stylesheet (D-13) — declared as a
+			// dependency, never re-registered.
+			$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css', [ 'woodev-modal' ] );
+
+			if ( ! $is_checkout ) {
 				return;
 			}
 
@@ -2932,11 +2948,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				]
 			);
 
-			// `woodev-modal`: the framework-registered chrome stylesheet (D-13) — declared as a
-			// dependency here, exactly like the mount script does above, never re-registered.
-			$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css', [ 'woodev-modal' ] );
-
-			if ( $mount_enqueued ) {
+			// With the config already on the session script (a block-content page) the mount, which
+			// depends on that script, reads the same global; localizing it twice would print it twice.
+			if ( $mount_enqueued && ! $config_on_session ) {
 				wp_localize_script(
 					'woodev-pickup-mount',
 					'woodev_pickup_config_' . $this->config_object_suffix(),
