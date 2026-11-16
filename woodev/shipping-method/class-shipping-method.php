@@ -173,6 +173,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const OPTION_FREE_SHIPPING_COUPON = 'coupon_free_shipping';
 
 		/**
+		 * Instance setting (`yes`/`no`, default `no`) telling that the free-shipping threshold is measured on the cart
+		 * subtotal BEFORE the coupon discounts, as it was before 2.1.9. Off, the threshold is measured after them, the
+		 * way WooCommerce's Free shipping does.
+		 *
+		 * @since 2.1.9
+		 */
+		const OPTION_FREE_SHIPPING_BEFORE_DISCOUNT = 'free_before_discount';
+
+		/**
 		 * Rounding feature: the instance gets a rounding mode and a step, and the framework rounds the price the
 		 * customer sees. OFF unless declared.
 		 *
@@ -824,6 +833,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				];
 
 				if ( self::coupons_enabled() ) {
+
+					$fields[ static::OPTION_FREE_SHIPPING_BEFORE_DISCOUNT ] = [
+						'title'    => __( 'Порог до скидки', 'woodev-plugin-framework' ),
+						'type'     => 'checkbox',
+						'label'    => __( 'Сравнивать с суммой до скидки по купону', 'woodev-plugin-framework' ),
+						'default'  => 'no',
+						'desc_tip' => __(
+							'По умолчанию сумма для порога считается после вычета скидки по купону. Включите опцию, если порог нужно сравнивать с суммой товаров до скидки.',
+							'woodev-plugin-framework'
+						),
+					];
 
 					$fields[ static::OPTION_FREE_SHIPPING_COUPON ] = [
 						'title'    => __( 'Купон на бесплатную доставку', 'woodev-plugin-framework' ),
@@ -2489,19 +2509,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Whether the order amount of `$package` is inside the merchant's bounds; an amount equal to a bound is inside.
 		 *
-		 * The amount is the cart subtotal, else the contents cost — the rule both carrier plugins kept. It is NOT
-		 * {@see self::price_order_amount()}: that one takes the contents cost (after discounts) when no coupon is applied,
-		 * and a cart that carries a subtotal but no coupon is measured differently by the two.
+		 * The amount is {@see self::price_order_amount()}: the same one the markup and the free-shipping threshold use,
+		 * after the coupon discounts.
 		 *
 		 * @since 2.0.19
+		 * @since 2.1.9 After the coupon discounts (it was the subtotal before them).
 		 *
 		 * @param array $package WooCommerce shipping package.
 		 * @return bool
 		 */
 		private function order_amount_within_limits( array $package ): bool {
 
-			$value  = $package['cart_subtotal'] ?? $package['contents_cost'] ?? 0;
-			$amount = is_numeric( $value ) ? (float) $value : 0.0;
+			$amount = $this->price_order_amount( $package );
 			$min    = $this->get_min_order_amount();
 			$max    = $this->get_max_order_amount();
 
@@ -2726,8 +2745,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 *    quoted without the markup: the order is not free yet, and both plugins kept that on purpose;
 		 * 3. the rounding ({@see self::FEATURE_ROUNDING}) — a price of 0 stays 0.
 		 *
-		 * The order amount is the cart subtotal while coupons are applied and the contents cost otherwise, as both
-		 * plugins measured it. The box cost and the cost limits ({@see self::FEATURE_COST_LIMITS}) come after this, in
+		 * The order amount is the cart subtotal after the coupon discounts ({@see self::price_order_amount()}); the
+		 * threshold can be measured before them ({@see self::OPTION_FREE_SHIPPING_BEFORE_DISCOUNT}). The box cost and the cost limits ({@see self::FEATURE_COST_LIMITS}) come after this, in
 		 * {@see self::calculate_rate()}.
 		 *
 		 * @since 2.0.19
@@ -2742,10 +2761,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				return $rate;
 			}
 
-			$order_amount    = self::price_order_amount( $package );
+			$order_amount    = $this->price_order_amount( $package );
 			$threshold       = $this->get_free_shipping_threshold();
-			$above_threshold = $threshold > 0 && $order_amount > $threshold;
-			$at_threshold    = $threshold > 0 && $order_amount === $threshold;
+			$checked_amount  = $this->threshold_order_amount( $package );
+			$above_threshold = $threshold > 0 && $checked_amount > $threshold;
+			$at_threshold    = $threshold > 0 && $checked_amount === $threshold;
 			$price           = self::rate_cost_total( $rate );
 
 			// exactly at the threshold the order is not free yet and carries no markup either (the Yandex/CDEK v1 behaviour)
@@ -2866,19 +2886,125 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
-		 * The order amount the free-shipping threshold and a percentage markup are measured on: the cart subtotal
-		 * (before discounts) while coupons are applied, the contents cost (after them) otherwise.
+		 * The order amount a percentage markup and the minimum/maximum order amount are measured on, and the
+		 * free-shipping threshold by default: the cart subtotal less the coupon discounts, the way WooCommerce's
+		 * Free shipping measures it (the discount tax is taken off too while prices are shown with tax). The same
+		 * amount with and without a coupon; the contents cost when the package carries no subtotal.
 		 *
 		 * @since 2.0.19
+		 * @since 2.1.9 After the coupon discounts, with and without a coupon (it was the subtotal before them while
+		 *              a coupon was applied).
 		 *
 		 * @param array $package WooCommerce shipping package.
 		 * @return float
 		 */
-		private static function price_order_amount( array $package ): float {
+		private function price_order_amount( array $package ): float {
 
-			$value = ! empty( $package['applied_coupons'] ) ? ( $package['cart_subtotal'] ?? 0 ) : ( $package['contents_cost'] ?? 0 );
+			$subtotal = self::numeric_amount( $package['cart_subtotal'] ?? null );
+			$contents = self::numeric_amount( $package['contents_cost'] ?? null );
 
-			return is_numeric( $value ) ? (float) $value : 0.0;
+			if ( null === $subtotal ) {
+				return $contents ?? 0.0;
+			}
+
+			// no coupon, no discount: the same amount with and without a coupon
+			if ( empty( $package['applied_coupons'] ) ) {
+				return self::round_amount( $subtotal );
+			}
+
+			// the way WooCommerce's own Free shipping measures its minimum: the displayed subtotal less the discounts
+			$discount = $this->get_cart_discount_amount();
+
+			if ( null === $discount ) {
+				// no cart to ask (a package built outside the cart): the contents cost is already after discounts
+				return $contents ?? $subtotal;
+			}
+
+			return self::round_amount( $subtotal - $discount );
+		}
+
+		/**
+		 * The order amount the free-shipping threshold is measured on: {@see self::price_order_amount()} (after the
+		 * coupon discounts), or the cart subtotal before them when the merchant chose so
+		 * ({@see self::OPTION_FREE_SHIPPING_BEFORE_DISCOUNT}).
+		 *
+		 * @since 2.1.9
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return float
+		 */
+		private function threshold_order_amount( array $package ): float {
+
+			if ( 'yes' !== $this->get_option( static::OPTION_FREE_SHIPPING_BEFORE_DISCOUNT, 'no' ) ) {
+				return $this->price_order_amount( $package );
+			}
+
+			return self::numeric_amount( $package['cart_subtotal'] ?? null ) ?? self::numeric_amount( $package['contents_cost'] ?? null ) ?? 0.0;
+		}
+
+		/**
+		 * What the applied coupons took off the cart, as WooCommerce's Free shipping reads it: the discount total, and
+		 * the tax on the discount while prices are displayed with tax.
+		 *
+		 * @since 2.1.9
+		 *
+		 * @return float|null `null` when there is no cart (the admin order wizard, an unusual package source).
+		 */
+		private function get_cart_discount_amount(): ?float {
+
+			$cart = $this->get_discount_cart();
+
+			if ( null === $cart ) {
+				return null;
+			}
+
+			$discount = (float) $cart->get_discount_total();
+
+			if ( $cart->display_prices_including_tax() ) {
+				$discount += (float) $cart->get_discount_tax();
+			}
+
+			return $discount;
+		}
+
+		/**
+		 * The cart the coupon discounts are read from, `null` outside a cart request.
+		 *
+		 * A seam: the unit tests override it, the way they do {@see self::coupon_grants_free_shipping()}.
+		 *
+		 * @since 2.1.9
+		 *
+		 * @return object|null a `WC_Cart`.
+		 */
+		protected function get_discount_cart(): ?object {
+
+			$cart = function_exists( 'WC' ) ? \WC()->cart : null;
+
+			return is_object( $cart ) ? $cart : null;
+		}
+
+		/**
+		 * A package amount as a number, `null` when it is missing or not numeric.
+		 *
+		 * @since 2.1.9
+		 *
+		 * @param mixed $value raw package value.
+		 * @return float|null
+		 */
+		private static function numeric_amount( $value ): ?float {
+			return is_numeric( $value ) ? (float) $value : null;
+		}
+
+		/**
+		 * Rounds an amount to two decimals (kopecks), so «exactly at the threshold» is not lost to float noise.
+		 *
+		 * @since 2.1.9
+		 *
+		 * @param float $amount amount.
+		 * @return float
+		 */
+		private static function round_amount( float $amount ): float {
+			return round( $amount, 2 );
 		}
 
 		/**
@@ -3140,7 +3266,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			$context['payment'] = $this->payment_method_for_package( $package );
 
 			// the free-shipping coupon and the order amount the threshold and a percentage markup are measured on
-			// (the subtotal while coupons are applied) price the rate too; a method that declared neither feature adds
+			// (after the coupon discounts) price the rate too; a method that declared neither feature adds
 			// nothing, so its cache identity stays what it was
 			if ( $this->supports_markup() || $this->supports_free_shipping() ) {
 
@@ -3150,8 +3276,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 				$context['price'] = [
 					'coupons' => $coupons,
-					'amount'  => self::price_order_amount( $package ),
+					'amount'  => $this->price_order_amount( $package ),
 				];
+
+				// the threshold measured before the discounts is a second amount; off, the key stays what it was
+				if ( $this->supports_free_shipping() && 'yes' === $this->get_option( static::OPTION_FREE_SHIPPING_BEFORE_DISCOUNT, 'no' ) ) {
+					$context['price']['threshold_amount'] = $this->threshold_order_amount( $package );
+				}
 
 				// the effective answer, not the inputs: a coupon's free-shipping flag edited behind an unchanged code,
 				// and the shop-wide coupon switch, both change the price without changing the codes above

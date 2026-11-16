@@ -28,6 +28,13 @@ class Woodev_Test_Price_Features_Method extends Woodev_Test_Cost_Limits_Method {
 	public array $free_shipping_coupons = [];
 
 	/**
+	 * The cart the coupon discounts are read from; `null` is «no cart».
+	 *
+	 * @var object|null
+	 */
+	public ?object $discount_cart = null;
+
+	/**
 	 * How many times the packing step ran.
 	 *
 	 * @var int
@@ -44,6 +51,15 @@ class Woodev_Test_Price_Features_Method extends Woodev_Test_Cost_Limits_Method {
 		++$this->pack_calls;
 
 		return parent::pack_package( $package );
+	}
+
+	/**
+	 * The cart of the test.
+	 *
+	 * @return object|null
+	 */
+	protected function get_discount_cart(): ?object {
+		return $this->discount_cart;
 	}
 
 	/**
@@ -199,6 +215,7 @@ final class PriceFeaturesTest extends TestCase {
 		$this->assertSame( 'fee_type', Shipping_Method::OPTION_MARKUP_BASE );
 		$this->assertSame( 'free_cost', Shipping_Method::OPTION_FREE_SHIPPING_FROM );
 		$this->assertSame( 'coupon_free_shipping', Shipping_Method::OPTION_FREE_SHIPPING_COUPON );
+		$this->assertSame( 'free_before_discount', Shipping_Method::OPTION_FREE_SHIPPING_BEFORE_DISCOUNT );
 		$this->assertSame( 'round_cost', Shipping_Method::OPTION_ROUNDING );
 		$this->assertSame( 'round_cost_range', Shipping_Method::OPTION_ROUNDING_STEP );
 		$this->assertSame( 'show_delivery_time', Shipping_Method::OPTION_SHOW_DELIVERY_TIME );
@@ -245,7 +262,7 @@ final class PriceFeaturesTest extends TestCase {
 	public function test_each_feature_brings_its_own_controls(): void {
 		$expected = [
 			Shipping_Method::FEATURE_MARKUP        => [ 'fee', 'fee_type' ],
-			Shipping_Method::FEATURE_FREE_SHIPPING => [ 'free_cost', 'coupon_free_shipping' ],
+			Shipping_Method::FEATURE_FREE_SHIPPING => [ 'free_cost', 'free_before_discount', 'coupon_free_shipping' ],
 			Shipping_Method::FEATURE_ROUNDING      => [ 'round_cost', 'round_cost_range' ],
 			Shipping_Method::FEATURE_DELIVERY_TIME => [ 'show_delivery_time', 'additional_time' ],
 			Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS => [ 'min_order_cost', 'max_order_cost' ],
@@ -347,14 +364,14 @@ final class PriceFeaturesTest extends TestCase {
 			'percent of the shipping'            => [ [ 'fee' => '10%', 'fee_type' => 'shipping' ], [ 'contents_cost' => 1000 ], 110.0 ],
 			'comma decimal'                      => [ [ 'fee' => ' 10,5 ' ], [ 'contents_cost' => 1000 ], 110.5 ],
 			'empty is no markup'                 => [ [ 'fee' => '' ], [ 'contents_cost' => 1000 ], 100.0 ],
-			'percent of the subtotal with coupons' => [
+			'percent of the amount after coupons' => [
 				[ 'fee' => '10%' ],
 				[
 					'contents_cost'   => 800,
 					'cart_subtotal'   => 1000,
 					'applied_coupons' => [ 'sale' ],
 				],
-				200.0,
+				180.0,
 			],
 			'percent of an empty order is of the shipping' => [ [ 'fee' => '10%' ], [ 'contents_cost' => 0 ], 110.0 ],
 		];
@@ -415,18 +432,166 @@ final class PriceFeaturesTest extends TestCase {
 	}
 
 	/**
-	 * With coupons applied the threshold is measured on the subtotal before discounts.
+	 * A cart stub: what the applied coupons took off, and whether prices are shown with tax.
+	 *
+	 * @param float $discount     discount total (without tax).
+	 * @param float $discount_tax tax on the discount.
+	 * @param bool  $with_tax     whether prices are displayed with tax.
+	 * @return object
+	 */
+	private function cart( float $discount, float $discount_tax = 0.0, bool $with_tax = false ): object {
+		return new class( $discount, $discount_tax, $with_tax ) {
+			private $discount;
+			private $discount_tax;
+			private $with_tax;
+
+			public function __construct( $discount, $discount_tax, $with_tax ) {
+				$this->discount     = $discount;
+				$this->discount_tax = $discount_tax;
+				$this->with_tax     = $with_tax;
+			}
+
+			public function get_discount_total() {
+				return $this->discount;
+			}
+
+			public function get_discount_tax() {
+				return $this->discount_tax;
+			}
+
+			public function display_prices_including_tax() {
+				return $this->with_tax;
+			}
+		};
+	}
+
+	/**
+	 * The card's case: threshold 7900, goods 9023, a coupon takes 2707 off, 6316 is left to pay — the delivery is
+	 * paid by default, and stays free for a shop that chose to measure the threshold before the discount.
 	 *
 	 * @return void
 	 */
-	public function test_the_threshold_is_measured_on_the_subtotal_while_coupons_are_applied(): void {
+	public function test_a_coupon_that_takes_the_order_under_the_threshold_makes_delivery_paid(): void {
 		$package = [
-			'contents_cost'   => 4000,
-			'cart_subtotal'   => 6000,
+			'contents_cost'   => 6316,
+			'cart_subtotal'   => 9023,
 			'applied_coupons' => [ 'sale' ],
 		];
 
-		$this->assertSame( 0.0, $this->price( $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '5000' ] ), $package ) );
+		$default       = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '7900' ] );
+		$default->discount_cart = $this->cart( 2707 );
+
+		$this->assertSame( 100.0, $this->price( $default, $package ), 'default: after the discount' );
+
+		$before                 = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '7900', 'free_before_discount' => 'yes' ] );
+		$before->discount_cart = $this->cart( 2707 );
+
+		$this->assertSame( 0.0, $this->price( $before, $package ), 'the option on: the amount before the discount' );
+	}
+
+	/**
+	 * A coupon that leaves the order above the threshold keeps the delivery free.
+	 *
+	 * @return void
+	 */
+	public function test_a_coupon_that_leaves_the_order_above_the_threshold_keeps_delivery_free(): void {
+		$method                = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '5000' ] );
+		$method->discount_cart = $this->cart( 1000 );
+
+		$this->assertSame( 0.0, $this->price( $method, [ 'contents_cost' => 8023, 'cart_subtotal' => 9023, 'applied_coupons' => [ 'sale' ] ] ) );
+	}
+
+	/**
+	 * Without a coupon the same amount is measured: the cart subtotal, nothing taken off.
+	 *
+	 * @return void
+	 */
+	public function test_the_threshold_without_a_coupon_is_measured_on_the_subtotal(): void {
+		$options = [ 'free_cost' => '7900' ];
+
+		$this->assertSame( 0.0, $this->price( $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], $options ), [ 'contents_cost' => 9023, 'cart_subtotal' => 9023 ] ) );
+		$this->assertSame( 100.0, $this->price( $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], $options ), [ 'contents_cost' => 7000, 'cart_subtotal' => 7000 ] ) );
+	}
+
+	/**
+	 * Prices shown with tax: the tax on the discount is taken off too, as WooCommerce's Free shipping does; shown
+	 * without tax it is not.
+	 *
+	 * @return void
+	 */
+	public function test_the_tax_on_the_discount_is_taken_off_only_when_prices_include_tax(): void {
+		$package = [
+			'contents_cost'   => 7000,
+			'cart_subtotal'   => 9000,
+			'applied_coupons' => [ 'sale' ],
+		];
+
+		// 9000 - 1000 - 200 = 7800 is under 7900
+		$with_tax                = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '7900' ] );
+		$with_tax->discount_cart = $this->cart( 1000, 200, true );
+
+		$this->assertSame( 100.0, $this->price( $with_tax, $package ) );
+
+		// 9000 - 1000 = 8000 is above 7900: the discount tax of an ex-tax display is not part of the amount
+		$without_tax                = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '7900' ] );
+		$without_tax->discount_cart = $this->cart( 1000, 200, false );
+
+		$this->assertSame( 0.0, $this->price( $without_tax, $package ) );
+	}
+
+	/**
+	 * Exactly at the threshold after the discount the order is not free yet; float noise does not move it.
+	 *
+	 * @return void
+	 */
+	public function test_exactly_at_the_threshold_after_the_discount_is_not_free(): void {
+		$method                = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '7900.1' ] );
+		$method->discount_cart = $this->cart( 1099.9 );
+
+		$this->assertSame( 100.0, $this->price( $method, [ 'contents_cost' => 7900.1, 'cart_subtotal' => 9000, 'applied_coupons' => [ 'sale' ] ] ) );
+	}
+
+	/**
+	 * A coupon package with no cart behind it (nothing to ask) is measured on the contents cost, which is already
+	 * after the discounts.
+	 *
+	 * @return void
+	 */
+	public function test_a_coupon_package_without_a_cart_uses_the_contents_cost(): void {
+		$method = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '5000' ] );
+
+		$this->assertSame( 100.0, $this->price( $method, [ 'contents_cost' => 4000, 'cart_subtotal' => 6000, 'applied_coupons' => [ 'sale' ] ] ) );
+	}
+
+	/**
+	 * The markup and the order-amount limits follow the amount after the discounts, whatever the threshold option says.
+	 *
+	 * @return void
+	 */
+	public function test_the_markup_and_the_limits_follow_the_amount_after_the_discounts(): void {
+		$package = [
+			'contents_cost'   => 400,
+			'cart_subtotal'   => 1000,
+			'applied_coupons' => [ 'sale' ],
+		];
+
+		$method                = $this->method(
+			[ Shipping_Method::FEATURE_MARKUP, Shipping_Method::FEATURE_FREE_SHIPPING, Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ],
+			[ 'fee' => '10%', 'free_before_discount' => 'yes', 'min_order_cost' => '500' ]
+		);
+		$method->discount_cart = $this->cart( 600 );
+
+		$method->calculate_shipping( $package );
+
+		$this->assertCount( 0, $method->added_rates, '400 after the discount is under the minimum 500' );
+
+		$method                = $this->method(
+			[ Shipping_Method::FEATURE_MARKUP, Shipping_Method::FEATURE_FREE_SHIPPING ],
+			[ 'fee' => '10%', 'free_before_discount' => 'yes' ]
+		);
+		$method->discount_cart = $this->cart( 600 );
+
+		$this->assertSame( 140.0, $this->price( $method, $package ), '10 % of 400, not of 1000' );
 	}
 
 	/**
@@ -680,16 +845,24 @@ final class PriceFeaturesTest extends TestCase {
 			'applied_coupons' => [ 'b', 'a' ],
 		];
 
-		$declared = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ] )->get_rate_cache_context( $package );
+		$method                = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ] );
+		$method->discount_cart = $this->cart( 200 );
+		$declared              = $method->get_rate_cache_context( $package );
 
 		$this->assertSame(
 			[
 				'coupons' => [ 'a', 'b' ],
-				'amount'  => 1000.0,
+				'amount'  => 800.0,
 				'coupon_free' => false,
 			],
 			$declared['price']
 		);
+
+		$before                 = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_before_discount' => 'yes' ] );
+		$before->discount_cart = $this->cart( 200 );
+
+		$this->assertSame( 1000.0, $before->get_rate_cache_context( $package )['price']['threshold_amount'], 'the option on: the second amount keys the cache' );
+		$this->assertArrayNotHasKey( 'threshold_amount', $declared['price'] );
 
 		$this->assertArrayNotHasKey( 'price', $this->method( [ Shipping_Method::FEATURE_ROUNDING ] )->get_rate_cache_context( $package ) );
 		$this->assertArrayNotHasKey( 'coupon_free', $this->method( [ Shipping_Method::FEATURE_MARKUP ] )->get_rate_cache_context( $package )['price'] );
