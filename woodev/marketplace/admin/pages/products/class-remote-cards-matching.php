@@ -85,13 +85,14 @@ final class Remote_Cards_Matching {
 	}
 
 	/**
-	 * Every card the filter reaches: article, group key, and whether a product carries the article already.
+	 * Every card the filter reaches, split by whether a product carries its article already: the `[ article, group key ]` pair of each
+	 * card to import (the pair the run stores, built once) and the articles of the ones on the site.
 	 *
 	 * @since 2.1.10
 	 *
 	 * @param int                                              $account_id Account.
 	 * @param array{search:string,filters:array<string,mixed>} $query      Validated filter and search.
-	 * @return array<int,array{0:string,1:string,2:bool}>|null Null when the list is not loaded or has expired.
+	 * @return array{cards:array<int,array{0:string,1:string}>,on_site:string[]}|null Null when the list is not loaded or has expired.
 	 */
 	public function entries( int $account_id, array $query ): ?array {
 		$snapshot = $this->snapshots->get( $account_id );

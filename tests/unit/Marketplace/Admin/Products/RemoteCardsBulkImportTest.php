@@ -97,6 +97,14 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		$this->wire();
 	}
 
+	protected function tearDown(): void {
+		// PHPUnit keeps every test object until the run ends: a 50 000-card snapshot and 5 000 queued actions must not stay with it.
+		$this->scheduler->actions = [];
+		$this->wire(); // New feeder and runner: the old feeder holds the 50 000-card list it froze.
+
+		parent::tearDown();
+	}
+
 	/**
 	 * Wires the run engine and the table the way the module wires them, over the harness' database and scripted lock.
 	 *
@@ -869,13 +877,13 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 
 		$run_id = $this->start_run( $this->query( [ 'on_site' => 'no' ] ) );
 		$run    = $this->drive( $run_id );
-		$items  = (array) $this->runs->items( $this->account_id, $run_id );
-
 		$this->assertSame( Bulk_Run::DONE, $run->state() );
-		$this->assertCount( 50000, $items );
+		$stored = (string) $this->db->get_var( 'SELECT items FROM ' . Sqlite_Tables::table( 'bulk_runs' ) ); // Not decoded: 50 000 pairs of PHP arrays are the memory the freeze must not need.
+
+		$this->assertSame( 49999, substr_count( $stored, '],[' ), 'One pair per card.' );
 		$this->assertSame( 50000, $run->counts()['offers_accepted'] );
 		$this->assertSame( [ 50000 ], $this->lookups, 'One lookup call for the list, never one per card.' );
-		$this->assertLessThan( 4 * 1024 * 1024, strlen( (string) json_encode( $items, JSON_UNESCAPED_UNICODE ) ), 'The stored list stays far under max_allowed_packet.' );
+		$this->assertLessThan( 4 * 1024 * 1024, strlen( $stored ), 'The stored list stays far under max_allowed_packet.' );
 	}
 
 	// The account line and its buttons.

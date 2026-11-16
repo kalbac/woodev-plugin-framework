@@ -43,6 +43,12 @@ final class BulkImportMarkerLookupTest extends Export_Test_Case {
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 	}
 
+	protected function tearDown(): void {
+		$this->db->statements = []; // The test object outlives the test; the statements it ran need not.
+
+		parent::tearDown();
+	}
+
 	/**
 	 * Adds a shop product with a SKU, and optionally one meta row.
 	 *
@@ -140,7 +146,7 @@ final class BulkImportMarkerLookupTest extends Export_Test_Case {
 		$articles = $this->shop( 1300 ); // The snapshot lists S-1 first and R-1 last, past the first batch.
 		$cards    = array_map(
 			static function ( string $article ): array {
-				return [ $article, in_array( $article, [ 'S-1', 'R-1' ], true ) ? 'model-7' : '', false ];
+				return [ $article, in_array( $article, [ 'S-1', 'R-1' ], true ) ? 'model-7' : '' ];
 			},
 			array_values( array_diff( $articles, [ 'E-1', 'W-1' ] ) )
 		);
@@ -149,7 +155,10 @@ final class BulkImportMarkerLookupTest extends Export_Test_Case {
 			$store,
 			new Import_Scheduler( $this->names() ),
 			static function () use ( $cards ): array {
-				return $cards;
+				return [
+					'cards'   => $cards,
+					'on_site' => [],
+				];
 			},
 			Bulk_Import_Feeder::marked_in_database( $this->db, $this->marker )
 		);

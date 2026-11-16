@@ -93,8 +93,9 @@ final class Remote_Cards_Query {
 	}
 
 	/**
-	 * Every card the filter reaches, as the three facts the bulk import needs — not the cards themselves, so the pass over a
-	 * 50 000-card cabinet allocates three small values per card instead of a copy of each card ({@see self::page()} merges one in).
+	 * Every card the filter reaches, as what the bulk import needs — not the cards themselves, so the pass over a 50 000-card cabinet
+	 * allocates one small pair per card to import instead of a copy of each card ({@see self::page()} merges one in). The pairs are
+	 * the very ones the run stores: nothing downstream builds them again.
 	 *
 	 * @since 2.1.10
 	 *
@@ -102,21 +103,30 @@ final class Remote_Cards_Query {
 	 * @param array<string,int>              $linked  Product id by article, for every article a link row carries.
 	 * @param string                         $on_site {@see self::NOT_ON_SITE}, {@see self::ON_SITE}, or '' for both.
 	 * @param string                         $search  Text looked for in the article and the name; empty for none.
-	 * @return array<int,array{0:string,1:string,2:bool}> Article, group key ('' for a card that stands alone) and whether a product carries the article already, in the snapshot's order.
+	 * @return array{cards:array<int,array{0:string,1:string}>,on_site:string[]} `cards`: article and group key ('' for a card that stands alone) of each card no product carries, in the snapshot's order; `on_site`: the articles a product carries already.
 	 */
 	public static function entries( array $cards, array $linked, string $on_site, string $search ): array {
-		$entries = [];
+		$found = [
+			'cards'   => [],
+			'on_site' => [],
+		];
 
 		foreach ( $cards as $card ) {
 			$offer_id   = (string) ( $card['offer_id'] ?? '' );
 			$product_id = (int) ( $linked[ $offer_id ] ?? 0 );
 
-			if ( '' !== $offer_id && self::wanted( $card, $product_id, $on_site, $search ) ) {
-				$entries[] = [ $offer_id, Group_Assembler::key_of( (array) ( $card['group'] ?? [] ) ), $product_id > 0 ];
+			if ( '' === $offer_id || ! self::wanted( $card, $product_id, $on_site, $search ) ) {
+				continue;
+			}
+
+			if ( $product_id > 0 ) {
+				$found['on_site'][] = $offer_id;
+			} else {
+				$found['cards'][] = [ $offer_id, Group_Assembler::key_of( (array) ( $card['group'] ?? [] ) ) ];
 			}
 		}
 
-		return $entries;
+		return $found;
 	}
 
 	/**

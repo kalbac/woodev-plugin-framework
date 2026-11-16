@@ -61,8 +61,9 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	private $importer;
 
 	/**
-	 * The cards the filter reaches: `function ( int $account_id, array $query ): ?array` — `[ article, group key, on the site ]` of
-	 * each; null when the list of cards is not loaded or has expired.
+	 * The cards the filter reaches: `function ( int $account_id, array $query ): ?array` — `cards`, the `[ article, group key ]` of every
+	 * card no product carries yet, in the snapshot's order, and `on_site`, the articles a product carries already; null when the list of
+	 * cards is not loaded or has expired.
 	 *
 	 * @var callable
 	 */
@@ -78,7 +79,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	/**
 	 * The list the last refusal check read, kept for the freeze that follows it in the same tick: `[ run id, entries ]`.
 	 *
-	 * @var array{0:string,1:array<int,array{0:string,1:string,2:bool}>}|null
+	 * @var array{0:string,1:array{cards:array<int,array{0:string,1:string}>,on_site:string[]}}|null
 	 */
 	private $listed = null;
 
@@ -197,18 +198,10 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 		}
 
 		$this->listed = null;
-		$on_site      = [];
-		$to_import    = [];
+		$on_site      = $entries['on_site'];
+		$items        = $this->in_import_order( $entries['cards'] );
 
-		foreach ( $entries as list( $offer_id, $group, $linked ) ) {
-			if ( $linked ) {
-				$on_site[] = $offer_id;
-			} else {
-				$to_import[] = [ $offer_id, $group ];
-			}
-		}
-
-		$items = $this->in_import_order( $to_import );
+		unset( $entries );
 
 		if ( ! $owns() ) {
 			throw new Bulk_Run_Lost( 'The tick lost the run before it froze the list.' );
@@ -301,41 +294,55 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * The cards in the order the import needs: the ones that resume a half-made product first, then the rest with the cards of one
 	 * group side by side (a card that stands alone keeps its place).
 	 *
+	 * Memory is the point: a 50 000-card list is held once, as `$cards`, and the order is written as a second list of the **same** pairs
+	 * (a pair is shared, never copied) — no bucket array per card, no copy of the list per step — so the freeze costs a slot per card
+	 * on top of the list itself, also on PHP 7.4 where every array is heavier.
+	 *
 	 * @param array<int,array{0:string,1:string}> $cards Article and group key of each card, in the snapshot's order.
 	 * @return array<int,array{0:string,1:string}>
 	 */
 	private function in_import_order( array $cards ): array {
 		$resuming = array_flip( (array) call_user_func( $this->marked, array_column( $cards, 0 ) ) );
-		$first    = [];
-		$rest     = [];
+		$items    = [];
+		$next     = [];
+		$last     = [];
 
-		foreach ( $cards as $card ) {
+		// Pass 1: the resuming cards go first; the cards of one group are chained by position, `$next[ a ] = b`, with no array per card.
+		foreach ( $cards as $position => $card ) {
 			if ( isset( $resuming[ $card[0] ] ) ) {
-				$first[] = $card;
-			} else {
-				$rest[] = $card;
+				$items[] = $card;
+			} elseif ( '' !== $card[1] ) {
+				if ( isset( $last[ $card[1] ] ) ) {
+					$next[ $last[ $card[1] ] ] = $position;
+				}
+
+				$last[ $card[1] ] = $position;
 			}
 		}
 
-		return array_merge( $first, $this->grouped( $rest ) );
-	}
+		unset( $last );
 
-	/**
-	 * Puts the cards of one group next to each other, the group at the place of its first card.
-	 *
-	 * @param array<int,array{0:string,1:string}> $cards Cards.
-	 * @return array<int,array{0:string,1:string}>
-	 */
-	private function grouped( array $cards ): array {
-		$buckets = [];
+		// Pass 2: a card that stands alone keeps its place; a group is written whole at the place of its first card. `$items` holds the
+		// very pairs of `$cards` (a second reference to each, not a copy), so the order costs one slot per card.
+		$placed = [];
 
 		foreach ( $cards as $position => $card ) {
-			$bucket = '' === $card[1] ? 'alone:' . $position : 'group:' . $card[1];
+			if ( isset( $resuming[ $card[0] ] ) ) {
+				continue;
+			}
 
-			$buckets[ $bucket ][] = $card;
+			if ( '' === $card[1] ) {
+				$items[] = $card;
+			} elseif ( ! isset( $placed[ $card[1] ] ) ) {
+				$placed[ $card[1] ] = true;
+
+				for ( $member = $position; null !== $member; $member = $next[ $member ] ?? null ) {
+					$items[] = $cards[ $member ];
+				}
+			}
 		}
 
-		return array_merge( [], ...array_values( $buckets ) );
+		return $items;
 	}
 
 	/**
@@ -397,7 +404,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * The list the refusal check read for this very run.
 	 *
 	 * @param Bulk_Run $run The run.
-	 * @return array<int,array{0:string,1:string,2:bool}>|null
+	 * @return array{cards:array<int,array{0:string,1:string}>,on_site:string[]}|null
 	 */
 	private function listed_for( Bulk_Run $run ): ?array {
 		return null !== $this->listed && $run->run_id() === $this->listed[0] ? $this->listed[1] : null;

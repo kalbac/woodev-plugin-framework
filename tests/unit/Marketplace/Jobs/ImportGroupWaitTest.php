@@ -139,6 +139,12 @@ final class ImportGroupWaitTest extends Export_Test_Case {
 		);
 	}
 
+	protected function tearDown(): void {
+		$this->db->statements = []; // The test object outlives the test; the statements it ran need not.
+
+		parent::tearDown();
+	}
+
 	/**
 	 * @param string $article Article.
 	 * @param string $group   Group key, '' for a card that stands alone.
@@ -440,7 +446,10 @@ final class ImportGroupWaitTest extends Export_Test_Case {
 			$store,
 			new Import_Scheduler( $this->names() ),
 			static function (): array {
-				return [ [ 'S-1', self::GROUP, false ], [ 'R-1', self::GROUP, false ] ];
+				return [
+					'cards'   => [ [ 'S-1', self::GROUP ], [ 'R-1', self::GROUP ] ],
+					'on_site' => [],
+				];
 			},
 			static function ( array $articles ): array {
 				return array_values( array_intersect( $articles, [ 'R-1' ] ) );

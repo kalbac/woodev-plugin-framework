@@ -187,6 +187,15 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 		);
 	}
 
+	protected function tearDown(): void {
+		// The test object outlives the test (PHPUnit holds it until the run ends): let go of the snapshots and options it stored.
+		$this->transients = [];
+		$this->options    = [];
+		$this->db->statements = []; // Every statement the database ran, a 1 MB list among them.
+
+		parent::tearDown();
+	}
+
 	/**
 	 * A snapshot card, shaped like the adapter's `snapshot()` answer.
 	 *
