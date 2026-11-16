@@ -28,8 +28,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * and stops at once, without a product write, a save or a next tick, when either says it lost the run.
  *
- * **A tick** (`bulk_run( account_id, run_id )`): lock; read the run; token; the account's gates; the user; then parts until the
- * {@see self::BUDGET_SECONDS} budget is spent — after each, merge the counters and the report, save (fenced), re-read the cancel flag;
+ * **A tick** (`bulk_run( account_id, run_id )`): lock; read the run; token; the account's gates; the user; then parts for as long as the next one
+ * fits the {@see self::BUDGET_SECONDS} budget (the longest part so far decides) — after each, merge the counters and the report, save (fenced), re-read the cancel flag;
  * then queue the next tick with no delay and release. A part that reads nothing finishes the run.
  *
  * @since 2.1.8
@@ -306,7 +306,10 @@ final class Bulk_Run_Runner {
 	}
 
 	/**
-	 * Works parts until the budget is spent, the run is over, or it is lost.
+	 * Works parts until the next one would not fit in the budget, the run is over, or it is lost.
+	 *
+	 * A part starts only when the time used plus the longest part of this tick still fits {@see self::BUDGET_SECONDS}; the first part
+	 * always runs. A tick therefore ends within the budget unless one part alone is longer than it (#1795).
 	 *
 	 * @param Account             $account  Account.
 	 * @param Bulk_Run            $run      Run as the tick read it.
@@ -320,6 +323,8 @@ final class Bulk_Run_Runner {
 		$account_id = $run->account_id();
 		$run_id     = $run->run_id();
 		$began      = (float) call_user_func( $this->clock );
+		$last       = $began;
+		$longest    = 0.0;
 		$owns       = function () use ( $account_id ): bool {
 			return $this->lock->is_held( $account_id );
 		};
@@ -358,7 +363,13 @@ final class Bulk_Run_Runner {
 
 				return;
 			}
-		} while ( (float) call_user_func( $this->clock ) - $began < self::BUDGET_SECONDS );
+
+			// The budget is checked before a part starts, not after it ended: a part begins only when the longest one of this tick
+			// still fits. The first part always runs, so every tick moves the run forward.
+			$now     = (float) call_user_func( $this->clock );
+			$longest = max( $longest, $now - $last );
+			$last    = $now;
+		} while ( $now - $began + $longest <= self::BUDGET_SECONDS );
 
 		$this->scheduler->enqueue( $account_id, $run_id );
 	}

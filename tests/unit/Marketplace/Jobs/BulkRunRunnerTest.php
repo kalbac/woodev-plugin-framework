@@ -248,6 +248,33 @@ final class BulkRunRunnerTest extends Export_Test_Case {
 		$this->assertSame( 4, $this->current()->counts()['products_done'] );
 	}
 
+	public function test_a_tick_does_not_start_a_part_that_would_not_fit_the_budget(): void {
+		$this->step          = 3.0; // The clock moves 3 s on every reading, so each part takes 3 s.
+		$this->worker->parts = array_fill( 0, 10, [] );
+		$run_id              = $this->start();
+
+		$this->runner()->tick( $this->account_id, $run_id );
+
+		// After 6 parts 18 s are used and a 7th would end at 21 s: the tick stops there, never above the 20 s budget.
+		$this->assertSame( 6, count( $this->worker->cursors ) );
+		$this->assertSame( 18.0, $this->seconds - 3.0, 'The tick worked 18 s, not 21.' );
+		$this->assertLessThanOrEqual( Bulk_Run_Runner::BUDGET_SECONDS, $this->seconds - 3.0 );
+		$this->assertSame( 12, $this->current()->counts()['products_done'], 'Every part that ran was saved.' );
+		$this->assertSame( 2, $this->queued_ticks(), 'The start and the continuation.' );
+	}
+
+	public function test_a_single_part_longer_than_the_budget_still_runs_once_per_tick(): void {
+		$this->step          = 25.0;
+		$this->worker->parts = array_fill( 0, 3, [] );
+		$run_id              = $this->start();
+
+		$this->runner()->tick( $this->account_id, $run_id );
+
+		$this->assertSame( 1, count( $this->worker->cursors ), 'The first part of a tick always runs, and the second does not start.' );
+		$this->assertSame( 2, $this->current()->counts()['products_done'] );
+		$this->assertSame( 2, $this->queued_ticks(), 'The start and the continuation.' );
+	}
+
 	public function test_a_tick_of_an_old_run_does_nothing(): void {
 		$runner = $this->runner();
 		$old    = $this->start( $runner );
