@@ -1445,6 +1445,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	/**
 	 * Builds warehouse select pairs for an account, preserving a stored warehouse id even before the cache is populated.
 	 *
+	 * A stored warehouse that the current cached list no longer contains is kept and noted as switched off in the marketplace (#1801).
+	 *
 	 * @param int    $account_id Account id.
 	 * @param string $setting    Account setting that holds the stored warehouse (`warehouse_id` or `oversize_warehouse_id`).
 	 * @return array<int,array{value:string,label:string}>
@@ -1456,7 +1458,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$stored  = null !== $account ? (int) $account->setting( $setting, 0 ) : 0;
 
 		if ( $stored > 0 && ! isset( $cached[ (string) $stored ] ) ) {
-			$pairs[] = Field_Kit::option( (string) $stored, '#' . $stored );
+			// A current list without the id means the marketplace switched the warehouse off; a missing or stale list says nothing.
+			$label   = $this->warehouses->is_unavailable( $account_id, $stored )
+				? sprintf( '#%d (%s)', $stored, Warehouse_Options::unavailable_note() )
+				: '#' . $stored;
+			$pairs[] = Field_Kit::option( (string) $stored, $label );
 		}
 
 		foreach ( $cached as $id => $name ) {

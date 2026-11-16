@@ -45,9 +45,13 @@ final class SettingsHandlerTest extends TestCase {
 	/** @var array<string,mixed> */
 	private $options = [];
 
+	/** @var int Seconds the test clock runs ahead of NOW. */
+	private $clock_shift = 0;
+
 	protected function setUp(): void {
 		parent::setUp();
-		$this->options = [];
+		$this->options     = [];
+		$this->clock_shift = 0;
 
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( 'wp_parse_args' )->alias(
@@ -449,13 +453,111 @@ final class SettingsHandlerTest extends TestCase {
 				],
 			]
 		);
-		$options = new Warehouse_Options( $this->cache );
+		$options = new Warehouse_Options( $this->cache, $this->clock() );
 
 		$this->assertSame( [ 1, 2, 3, 4 ], array_keys( $options->for_account( 5 ) ), 'the default warehouse select keeps the order' );
 		$this->assertSame( 'Склад Б', $options->for_account( 5 )['2'], 'and does not mark anything' );
 		$this->assertSame( [ 2, 4, 1, 3 ], array_keys( $options->for_account( 5, true ) ), 'flagged first, stable inside the groups' );
 		$this->assertSame( 'Склад Б (КГТ)', $options->for_account( 5, true )['2'] );
 		$this->assertSame( 'Склад А', $options->for_account( 5, true )['1'] );
+	}
+
+	/**
+	 * Fills the cached warehouse list of an account.
+	 *
+	 * @param int   $account_id Account id.
+	 * @param int[] $ids        Ids of the available warehouses.
+	 * @return void
+	 */
+	private function cache_warehouses( int $account_id, array $ids ): void {
+		$this->cache->put(
+			Warehouse_Options::key_for( $account_id ),
+			[
+				'warehouses' => array_map(
+					static function ( int $id ): array {
+						return [ 'warehouse_id' => $id, 'name' => 'Склад ' . $id ];
+					},
+					$ids
+				),
+			]
+		);
+	}
+
+	public function test_a_saved_warehouse_missing_from_a_known_list_is_noted_as_switched_off(): void {
+		[ $handler, , $acc_id ] = $this->stock_mode_handler( [], '1', true, [ 'warehouse_id' => 7 ], [ 1, 2 ] );
+
+		$schema  = Field_Schema::from_handler( $handler );
+		$options = array_column( $schema[ "account_{$acc_id}_warehouse_id" ]['options'] ?? [], 'label', 'value' );
+
+		$this->assertSame( '#7 (Склад отключён в маркетплейсе — выберите другой)', $options['7'] );
+		$this->assertSame( 'Склад 1', $options['1'], 'the available ones are listed as before' );
+	}
+
+	public function test_a_saved_warehouse_stays_a_bare_id_while_the_list_is_not_cached(): void {
+		[ $handler, , $acc_id ] = $this->stock_mode_handler( [], '1', true, [ 'warehouse_id' => 7 ] );
+
+		$schema  = Field_Schema::from_handler( $handler );
+		$options = array_column( $schema[ "account_{$acc_id}_warehouse_id" ]['options'] ?? [], 'label', 'value' );
+
+		$this->assertSame( '#7', $options['7'], 'an empty cache proves nothing' );
+	}
+
+	public function test_the_account_status_reports_an_unavailable_warehouse_once_and_only_for_a_known_list(): void {
+		[ , $store, $acc_id ] = $this->stock_mode_handler( [] );
+		$store->update_fields( $acc_id, [ 'warehouse_id' => 7 ] );
+		$store->set_health( $acc_id, new Health_Result( Health_Result::OK ) );
+		$adapter = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => [],
+				'credential_fields'   => new Credential_Fields( 'merchant_uid', [ 'access_token' ] ),
+				'settings_descriptor' => new Fake_Settings_Descriptor( new Credential_Fields( 'merchant_uid', [ 'access_token' ] ), 'Acme', [] ),
+			]
+		);
+		$status  = new Account_Status(
+			$store,
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			},
+			new Warehouse_Options( $this->cache, $this->clock() )
+		);
+
+		$this->assertTrue( $status->for_account( $store->get( $acc_id ) )->is_success(), 'no cache, nothing to report' );
+
+		$this->cache_warehouses( $acc_id, [ 1, 7 ] );
+		$this->assertTrue( $status->for_account( $store->get( $acc_id ) )->is_success(), 'the warehouse is listed' );
+
+		$this->cache_warehouses( $acc_id, [ 1, 2 ] );
+		$result = $status->for_account( $store->get( $acc_id ) );
+		$this->assertFalse( $result->is_success() );
+		$this->assertSame( 1, substr_count( $result->get_message(), 'Склад #7 отключён в маркетплейсе' ), 'one line, not one per product' );
+
+		$store->update_fields( $acc_id, [ 'warehouse_id' => 2 ] );
+		$this->assertTrue( $status->for_account( $store->get( $acc_id ) )->is_success(), 'another warehouse picked: the reason is gone' );
+	}
+
+	/**
+	 * A clock that can be moved forward.
+	 *
+	 * @return callable
+	 */
+	private function clock(): callable {
+		return function (): int {
+			return self::NOW + $this->clock_shift;
+		};
+	}
+
+	public function test_a_stale_warehouse_list_does_not_count(): void {
+		[ , , $acc_id ] = $this->stock_mode_handler( [], '1', true, [ 'warehouse_id' => 7 ], [ 1, 2 ] );
+		$options = new Warehouse_Options( $this->cache, $this->clock() );
+
+		$this->assertTrue( $options->is_unavailable( $acc_id, 7 ), 'a fresh list without the id counts' );
+
+		Warehouse_Options::forget_current();
+		$this->clock_shift = Warehouse_Options::FRESH_FOR + 1;
+		$this->assertFalse( $options->is_unavailable( $acc_id, 7 ), 'the refresh has not succeeded for over the window: the list says nothing' );
 	}
 
 	public function test_the_add_account_form_starts_with_the_account_switched_on(): void {
@@ -491,7 +593,7 @@ final class SettingsHandlerTest extends TestCase {
 		);
 		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', true, [ 'merchant_uid' => '1', 'access_token' => 't' ] ) );
 
-		$accounts = new Accounts_Sections( $store, $adapter, new Account_Status( $store, $adapter ), new Warehouse_Options( $this->cache ), 'fake_mp' );
+		$accounts = new Accounts_Sections( $store, $adapter, new Account_Status( $store, $adapter ), new Warehouse_Options( $this->cache, $this->clock() ), 'fake_mp' );
 		$params   = array_values(
 			array_filter(
 				$accounts->sections(),
@@ -537,9 +639,11 @@ final class SettingsHandlerTest extends TestCase {
 	 * @param string[] $capabilities Capabilities the fake adapter declares.
 	 * @param string   $uid          Merchant identifier (unique per account in one test).
 	 * @param bool     $enabled      Whether the saved account is switched on.
+	 * @param array<string,mixed> $columns Account columns to set before the handler reads the account (e.g. `warehouse_id`).
+	 * @param int[]|null $available Ids of the cached available warehouses, null for no cache yet.
 	 * @return array{0:Settings_Handler,1:Wpdb_Account_Store,2:int}
 	 */
-	private function stock_mode_handler( array $capabilities, string $uid = '1', bool $enabled = true ): array {
+	private function stock_mode_handler( array $capabilities, string $uid = '1', bool $enabled = true, array $columns = [], ?array $available = null ): array {
 		$fields     = new Credential_Fields( 'merchant_uid', [ 'access_token' ] );
 		$descriptor = new Fake_Settings_Descriptor(
 			$fields,
@@ -571,6 +675,14 @@ final class SettingsHandlerTest extends TestCase {
 			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', $enabled, [ 'merchant_uid' => $uid, 'access_token' => 'token-1' ] )
 		);
 
+		if ( [] !== $columns ) {
+			$store->update_fields( $acc_id, $columns );
+		}
+
+		if ( null !== $available ) {
+			$this->cache_warehouses( $acc_id, $available );
+		}
+
 		return [ $this->build_handler( $adapter, $store ), $store, $acc_id ];
 	}
 
@@ -599,7 +711,7 @@ final class SettingsHandlerTest extends TestCase {
 				return self::NOW;
 			}
 		);
-		$wh       = new Warehouse_Options( $this->cache );
+		$wh       = new Warehouse_Options( $this->cache, $this->clock() );
 		$accounts = new Accounts_Sections( $store, $adapter, $status, $wh, 'fake_mp', $on_connected );
 
 		return new Settings_Handler( 'fake_mp', [ $accounts ], 'Fake Market' );

@@ -8312,6 +8312,16 @@ msgstr ""
 msgid "Срок действия ключа истёк %s."
 msgstr ""
 
+#. translators: %s: saved warehouse ids, for example «#123».
+#: marketplace/settings/class-account-status.php:177
+#, php-format
+msgid "Склад %s отключён в маркетплейсе — остатки на него не отправляются. Выберите другой склад в настройках аккаунта."
+msgstr ""
+
+#: marketplace/settings/class-warehouse-options.php:139
+msgid "Склад отключён в маркетплейсе — выберите другой"
+msgstr ""
+
 #. translators: %s: expiry date in d.m.Y format.
 #: marketplace/admin/notices/class-key-expiry-notices.php:211
 #, php-format

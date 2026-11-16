@@ -47,18 +47,28 @@ final class Account_Status {
 	private $clock;
 
 	/**
+	 * Cached warehouse lists, or null when the reader does not check the saved warehouses.
+	 *
+	 * @var Warehouse_Options|null
+	 */
+	private $warehouses;
+
+	/**
 	 * Creates the status reader.
 	 *
 	 * @since 2.1.2
 	 *
-	 * @param Account_Store       $store   Account store.
-	 * @param Marketplace_Adapter $adapter Marketplace adapter.
-	 * @param callable|null       $clock   `function (): int`, defaults to `time`.
+	 * @param Account_Store          $store      Account store.
+	 * @param Marketplace_Adapter    $adapter    Marketplace adapter.
+	 * @param callable|null          $clock      `function (): int`, defaults to `time`.
+	 * @param Warehouse_Options|null $warehouses Cached warehouse lists; when given, a saved warehouse that the marketplace no longer
+	 *                                           offers is reported in the status (@since 2.1.8).
 	 */
-	public function __construct( Account_Store $store, Marketplace_Adapter $adapter, ?callable $clock = null ) {
-		$this->store   = $store;
-		$this->adapter = $adapter;
-		$this->clock   = $clock ?? 'time';
+	public function __construct( Account_Store $store, Marketplace_Adapter $adapter, ?callable $clock = null, ?Warehouse_Options $warehouses = null ) {
+		$this->store      = $store;
+		$this->adapter    = $adapter;
+		$this->clock      = $clock ?? 'time';
+		$this->warehouses = $warehouses;
 	}
 
 	/**
@@ -128,7 +138,43 @@ final class Account_Status {
 			}
 		}
 
+		$gone = $this->unavailable_warehouse_warning( $account );
+		if ( null !== $gone ) {
+			return \Woodev_Connection_Result::failure( $gone );
+		}
+
 		return \Woodev_Connection_Result::success( $this->connected_detail( $account, $expires_at, $now ) );
+	}
+
+	/**
+	 * Builds the one-line reason shown when a saved warehouse is no longer among the available ones, so stock is not sent to it.
+	 *
+	 * Per-product messages stay quiet: this line is the single place that explains it. An empty cache reports nothing.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Account $account Saved account.
+	 * @return string|null Null when every saved warehouse is available or unknown.
+	 */
+	private function unavailable_warehouse_warning( Account $account ): ?string {
+		if ( null === $this->warehouses ) {
+			return null;
+		}
+
+		$gone = [];
+		foreach ( [ 'warehouse_id', 'oversize_warehouse_id' ] as $setting ) {
+			$id = (int) $account->setting( $setting, 0 );
+			if ( $this->warehouses->is_unavailable( $account->id(), $id ) ) {
+				$gone[ $id ] = '#' . $id;
+			}
+		}
+
+		if ( [] === $gone ) {
+			return null;
+		}
+
+		/* translators: %s: saved warehouse ids, for example «#123». */
+		return sprintf( __( 'Склад %s отключён в маркетплейсе — остатки на него не отправляются. Выберите другой склад в настройках аккаунта.', 'woodev-plugin-framework' ), implode( ', ', $gone ) );
 	}
 
 	/**

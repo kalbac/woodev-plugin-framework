@@ -42,6 +42,14 @@ final class Wpdb_Catalog_Cache {
 	private $clock;
 
 	/**
+	 * How many writes this request has made through any instance; a reader that keeps a value for the request drops it when
+	 * the count moves (see {@see \Woodev\Framework\Marketplace\Settings\Warehouse_Options}).
+	 *
+	 * @var int
+	 */
+	private static $writes = 0;
+
+	/**
 	 * Creates the cache.
 	 *
 	 * @param \wpdb         $db    Database.
@@ -52,6 +60,28 @@ final class Wpdb_Catalog_Cache {
 		$this->db    = $db;
 		$this->table = $table;
 		$this->clock = $clock ?? 'time';
+	}
+
+	/**
+	 * Tells how many writes (put, replace, delete) this request has made through any instance.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @return int
+	 */
+	public static function writes(): int {
+		return self::$writes;
+	}
+
+	/**
+	 * Names the table this cache reads and writes, so a reader can keep one value per cache.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @return string
+	 */
+	public function table(): string {
+		return $this->table;
 	}
 
 	/**
@@ -68,6 +98,8 @@ final class Wpdb_Catalog_Cache {
 		if ( [] === $keys ) {
 			return 0;
 		}
+
+		++self::$writes;
 
 		$twins        = array_map( [ $this, 'fetched_key' ], $keys );
 		$rows         = array_merge( $keys, $twins );
@@ -156,6 +188,8 @@ final class Wpdb_Catalog_Cache {
 	 * @throws \RuntimeException When the row cannot be written.
 	 */
 	public function put( string $key, array $payload ): void {
+		++self::$writes;
+
 		$written = $this->db->replace( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			$this->table,
 			[
@@ -189,6 +223,8 @@ final class Wpdb_Catalog_Cache {
 	 * @throws \RuntimeException When the database refuses the write for another reason than a lost race.
 	 */
 	public function replace_if_unchanged( string $key, array $payload, ?int $seen ): bool {
+		++self::$writes;
+
 		$now = (int) call_user_func( $this->clock );
 		$row = [
 			'payload'    => self::encode( $payload ),

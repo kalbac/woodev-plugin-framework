@@ -59,7 +59,7 @@ final class Settings_Module {
 		$schema     = new Schema( $adapter->id() );
 		$cache      = new Wpdb_Catalog_Cache( $wpdb, $schema->table_name( 'catalog_cache', $wpdb->prefix ) );
 		$warehouses = new Warehouse_Options( $cache );
-		$status     = new Account_Status( $accounts, $adapter );
+		$status     = new Account_Status( $accounts, $adapter, null, $warehouses );
 		$plugin_id  = $plugin->get_id();
 		$names      = new Job_Names( $plugin_id );
 

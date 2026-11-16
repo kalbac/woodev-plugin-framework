@@ -23,6 +23,8 @@ abstract class TestCase extends PHPUnitTestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		Monkey\setUp();
+		// The marketplace warehouse lists kept for a request must not leak from one test's database into the next.
+		\Woodev\Framework\Marketplace\Settings\Warehouse_Options::forget_current();
 
 		// Мокаем самые частые WP функции чтобы они не падали
 		Monkey\Functions\stubTranslationFunctions();
