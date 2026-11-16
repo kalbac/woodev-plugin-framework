@@ -3839,6 +3839,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              before persistence and before both save hooks (issue #745).
 		 * @since 2.0.2 The writes moved into {@see self::persist_values()} (#964); behaviour,
 		 *              hook order and payloads are unchanged.
+		 * @since 2.1.9 A `null` method is read from the order's own shipping line first, `$_POST`
+		 *              only when the order has none (#1817).
 		 *
 		 * @param \WC_Order|int        $order                  order object or id to save onto
 		 * @param array<string, mixed> $values                 clean values keyed by field id
@@ -3852,7 +3854,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$chosen = $chosen_shipping_method;
 
 			if ( null === $chosen ) {
-				$chosen = [] !== $this->pickup_slot_fields() ? $this->chosen_shipping_method() : '';
+				$chosen = [] !== $this->pickup_slot_fields() ? self::order_chosen_method( $order, $this->chosen_shipping_method() ) : '';
 			}
 
 			$values = $this->persist_values(
@@ -4062,6 +4064,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 The persist-and-announce tail moved into {@see self::commit_values()},
 		 *              shared with the Store API path (#964).
 		 *
+		 * @since 2.1.9 What is persisted follows the order's own shipping line when it has one, not
+		 *              the posted `shipping_method[0]` (#1817); validation still reads the post.
+		 *
 		 * @param array<string, mixed> $posted raw posted data (e.g. `$_POST`)
 		 * @param \WC_Order|int        $order  order object or id to save onto
 		 *
@@ -4078,9 +4083,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return false;
 			}
 
-			$this->commit_values( $order, $values, $state['chosen_shipping_method'] );
+			// Validation above ran on what the buyer submitted; WHAT TO PERSIST follows the order's own
+			// shipping line — the source the pickup handler reads too (#1817).
+			$this->commit_values( $order, $values, self::order_chosen_method( $order, $state['chosen_shipping_method'] ) );
 
 			return true;
+		}
+
+		/**
+		 * The bare id of the method an already-created order was placed with.
+		 *
+		 * The order's first shipping line wins over `$posted_method`: it is what the order really carries and
+		 * what the pickup handler decides on, while the submit's `shipping_method[0]` can be empty or rewritten
+		 * by a third-party plugin, which used to drop the pickup field while the pickup data was still saved
+		 * (#1817). A multi-package order is read the same way as everywhere else — package 0, the first line.
+		 * An order without a shipping line (or an order id, which is not loaded here) keeps the posted value.
+		 *
+		 * @since 2.1.9
+		 *
+		 * @param \WC_Order|int $order         the created order (an id keeps the posted value)
+		 * @param string        $posted_method the bare id the submit carried, or an empty string
+		 *
+		 * @return string bare method id (no `:instance_id`)
+		 */
+		private static function order_chosen_method( $order, string $posted_method ): string {
+			if ( ! $order instanceof \WC_Order ) {
+				return $posted_method;
+			}
+
+			$from_order = self::store_api_chosen_method( $order );
+
+			return '' !== $from_order ? $from_order : $posted_method;
 		}
 
 		/**
