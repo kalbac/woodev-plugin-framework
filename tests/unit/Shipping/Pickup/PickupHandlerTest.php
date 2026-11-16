@@ -6247,10 +6247,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
-		 * SP-11 C-2b (#1089): a page that renders ONLY the Checkout block has no slot for the
-		 * classic mount — its button is a React inner block that opens the same session. The mount
-		 * must not boot there, and the picker config must still reach the page, on the session
-		 * script, under the very global the block's descriptor names.
+		 * SP-11 C-2b (#1089) + #1538: a checkout page whose content holds the Checkout block gets the
+		 * picker config on the session script, under the very global the block's descriptor names —
+		 * AND the classic mount next to it, because a theme can draw the classic form over such a
+		 * page and `wp_enqueue_scripts` cannot tell the two apart. The mount reads the config the
+		 * session script carries; it is not localized a second time.
 		 *
 		 * In its own process: defining `has_block` here would make every later test in this process
 		 * that reaches `Checkout_Surface::is_block_only()` take the block-detection path.
@@ -6258,8 +6259,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * @runInSeparateProcess
 		 * @preserveGlobalState disabled
 		 */
-		public function test_enqueue_assets_on_a_block_only_checkout_loads_the_session_without_the_classic_mount(): void {
-			$this->assert_a_block_only_page_loads_the_session_without_the_classic_mount( true );
+		public function test_enqueue_assets_on_a_block_content_checkout_loads_the_session_and_the_classic_mount(): void {
+			$this->assert_a_block_content_page_loads_the_session( true );
 		}
 
 		/**
@@ -6268,19 +6269,20 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * `CartCheckoutUtils::is_page_type()` looks for the shortcode and the classic-shortcode
 		 * block only). The block renders its pickup button there all the same — and with the old
 		 * `is_checkout()` gate the session and the config never reached the page, so the button had
-		 * no config to render from and the shopper could not choose a point at all.
+		 * no config to render from and the shopper could not choose a point at all. There is no
+		 * classic form on such a page, so the mount stays out (#1538 adds it only on `is_checkout()`).
 		 *
 		 * @runInSeparateProcess
 		 * @preserveGlobalState disabled
 		 */
 		public function test_enqueue_assets_follows_the_checkout_block_onto_a_page_woocommerce_does_not_call_a_checkout(): void {
-			$this->assert_a_block_only_page_loads_the_session_without_the_classic_mount( false );
+			$this->assert_a_block_content_page_loads_the_session( false );
 		}
 
 		/**
 		 * @param bool $is_checkout What WooCommerce's own `is_checkout()` answers for the page.
 		 */
-		private function assert_a_block_only_page_loads_the_session_without_the_classic_mount( bool $is_checkout ): void {
+		private function assert_a_block_content_page_loads_the_session( bool $is_checkout ): void {
 			Functions\when( 'is_checkout' )->justReturn( $is_checkout );
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
@@ -6325,7 +6327,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 			$handler->enqueue_assets();
 
-			$this->assertArrayNotHasKey( 'woodev-pickup-mount', $scripts, 'the classic DOM adapter must not boot next to the React block' );
+			if ( $is_checkout ) {
+				$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts, '#1538: a theme may draw the classic form over block content' );
+				$this->assertContains( 'woodev-pickup-session', $scripts['woodev-pickup-mount'] );
+			} else {
+				$this->assertArrayNotHasKey( 'woodev-pickup-mount', $scripts, 'no classic form on a page WooCommerce does not call a checkout' );
+			}
 			$this->assertArrayHasKey( 'woodev-pickup-session', $scripts );
 			$this->assertNotContains( 'jquery', $scripts['woodev-pickup-session'] );
 			$this->assertContains( 'woodev-modal', $scripts['woodev-pickup-session'] );

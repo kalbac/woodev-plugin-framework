@@ -1120,9 +1120,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              Location-Provider field's Rule 7b fan-out reaches the browser
 		 *              config under the same id(s)/section(s) it attaches to server-side
 		 *              (issue #458).
-		 * @since 2.0.2 Enqueues nothing on a page that renders only the Checkout block
-		 *              ({@see self::is_block_only_checkout_surface()}); the phone mask follows
-		 *              the same current-page answer instead of the store-wide one (SP-11 C-1, #1087).
+		 * @since 2.0.2 Enqueued nothing on a page that renders only the Checkout block, and the
+		 *              phone mask followed the same current-page answer (SP-11 C-1, #1087).
+		 * @since 2.1.9 Enqueues on every `is_checkout()` page again, block content or not: a theme
+		 *              can draw the classic form over a page whose content holds the Checkout
+		 *              block, and the scripts are inert on a real block checkout (#1538).
 		 *
 		 * @return void
 		 */
@@ -1135,15 +1137,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
-			// SP-11 C-1 (#1087): a page that renders ONLY the Checkout block has no classic DOM for these
-			// scripts to adapt — its locality chooser is a React inner block (Blocks\Locality_Blocks).
-			// Decided by what THIS page renders, never by what the store's configured checkout page is:
-			// a classic form on any other page keeps its adapter. Cart (#331) and My Account (#332)
-			// keep their own paths above.
-			if ( $this->is_block_only_checkout_surface() ) {
-				return;
-			}
-
+			// #1538: a checkout page is NOT skipped just because its content holds the Checkout
+			// block. A theme can draw the classic checkout form over such a page (the content is
+			// never rendered, `form.checkout` is), and `wp_enqueue_scripts` runs before the body,
+			// so nothing can tell the two apart here. The classic adapters are inert without
+			// `form.checkout` — they only look up classic field ids and `#shipping_method`, none of
+			// which a block checkout has (its locality chooser is the React inner block
+			// Blocks\Locality_Blocks) — so loading them on a real block checkout costs a request,
+			// not a double mount. A page that is not `is_checkout()` (another page carrying the
+			// block) still gets nothing, above. Cart (#331) and My Account (#332) keep their own paths.
 			if ( [] === $this->fields->get_fields() ) {
 				return;
 			}
@@ -1247,9 +1249,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// object rather than a second `wp_localize_script()` call — `phone-mask.js`
 			// discovers it by the same `woodev_checkout_field_config_` PREFIX scan
 			// `checkout-field-classic.js` already uses. The script is enqueued only when
-			// the merchant turned the option on AND on the classic checkout — «Не
-			// использовать» (the default) and the block checkout both mean zero extra
-			// request, not an inert one (a block-only page returned above).
+			// the merchant turned the option on — «Не использовать» (the default) means
+			// zero extra request. On a block checkout (#1538) it is inert: it only looks
+			// up the classic `#billing_phone` / `#shipping_phone`.
 			$config['phone_mask'] = $field_settings->get_phone_mask_config();
 
 			if ( 'off' !== $config['phone_mask']['mode'] ) {
@@ -1293,21 +1295,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				'woodev_checkout_field_config_' . $this->config_object_suffix(),
 				$config
 			);
-		}
-
-		/**
-		 * Whether the page being rendered shows ONLY the Checkout block — no classic checkout form
-		 * (SP-11 C-1, #1087).
-		 *
-		 * The rule itself lives in {@see Blocks\Checkout_Surface::is_block_only()} since SP-11 C-2b
-		 * (#1089): the pickup-point mount asks the same question, and two copies of it would drift.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return bool
-		 */
-		private function is_block_only_checkout_surface(): bool {
-			return Blocks\Checkout_Surface::is_block_only();
 		}
 
 		private function enqueue_cart_assets(): void {

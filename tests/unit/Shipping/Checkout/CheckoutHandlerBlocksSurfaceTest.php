@@ -1,11 +1,12 @@
 <?php
 /**
- * Tests for the checkout-surface guard in Checkout_Handler::enqueue_assets() (SP-11 C-1, #1087).
+ * Tests for the checkout-surface decision in Checkout_Handler::enqueue_assets() (SP-11 C-1, #1087; #1538).
  *
- * The classic DOM adapter is skipped ONLY on a page that renders nothing but the Checkout block. The
- * question is asked of the page being rendered, never of the store's configured checkout page: a
- * classic form on a second page — or next to a block — keeps its fields, location and pickup scripts
- * (round-1 review, finding 7).
+ * The classic DOM adapter is enqueued on every `is_checkout()` page, whatever its content holds: a
+ * theme can draw the classic form over a page whose content is the Checkout block, and
+ * `wp_enqueue_scripts` runs before the body, so nothing can tell the two apart (#1538). The scripts are
+ * inert on a real block checkout. A page WooCommerce does not call a checkout (another page that merely
+ * carries the block, #1087) still gets nothing.
  *
  * Each test runs in its own process: the block-template branch asks WooCommerce's `CartCheckoutUtils`,
  * which does not exist in the unit process (and must not, for every other test), so the test declares it.
@@ -32,7 +33,6 @@ final class Classic_Adapter_Enqueued extends \RuntimeException {}
 
 /**
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::enqueue_assets
- * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::is_block_only_checkout_surface
  */
 class CheckoutHandlerBlocksSurfaceTest extends TestCase {
 
@@ -47,14 +47,16 @@ class CheckoutHandlerBlocksSurfaceTest extends TestCase {
 	 * @param bool   $is_store_checkout     Whether the current page is the store's configured checkout page.
 	 * @param bool   $default_uses_block    What WooCommerce says about the store's configured checkout page.
 	 */
-	private function classic_adapter_loads( string $content, bool $is_store_checkout, bool $default_uses_block ): bool {
+	private function classic_adapter_loads( string $content, bool $is_store_checkout, bool $default_uses_block, bool $is_checkout = true ): bool {
 		eval( 'namespace Automattic\WooCommerce\Blocks\Utils; class CartCheckoutUtils { public static function is_checkout_block_default() { return ' . ( $default_uses_block ? 'true' : 'false' ) . '; } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged
 
 		if ( ! class_exists( '\Woodev_Blocks_Handler', false ) ) {
 			eval( 'class Woodev_Blocks_Handler { public static function is_checkout_block_in_use(): bool { return \Automattic\WooCommerce\Blocks\Utils\CartCheckoutUtils::is_checkout_block_default(); } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged
 		}
 
-		Functions\when( 'is_checkout' )->justReturn( true );
+		Functions\when( 'is_checkout' )->justReturn( $is_checkout );
+		Functions\when( 'is_cart' )->justReturn( false );
+		Functions\when( 'is_account_page' )->justReturn( false );
 		Functions\when( 'get_post' )->justReturn( (object) [ 'post_content' => $content ] );
 		Functions\when( 'has_block' )->alias( static fn( string $name, $in = null ): bool => is_string( $in ) && false !== strpos( $in, '<!-- wp:' . $name . ' ' ) );
 		Functions\when( 'has_shortcode' )->alias( static fn( string $in, string $tag ): bool => false !== strpos( $in, '[' . $tag ) );
@@ -84,8 +86,19 @@ class CheckoutHandlerBlocksSurfaceTest extends TestCase {
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_a_page_with_only_the_checkout_block_boots_no_classic_script(): void {
-		$this->assertFalse( $this->classic_adapter_loads( self::BLOCK, true, true ) );
+	public function test_a_checkout_page_with_only_the_checkout_block_still_boots_the_classic_script(): void {
+		$this->assertTrue( $this->classic_adapter_loads( self::BLOCK, true, true ) );
+	}
+
+	/**
+	 * #1087: a page that only carries the block and that WooCommerce does not call a checkout has no
+	 * classic form to adapt.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_page_that_is_not_a_checkout_boots_no_classic_script_even_with_the_block(): void {
+		$this->assertFalse( $this->classic_adapter_loads( self::BLOCK, false, true, false ) );
 	}
 
 	/**
@@ -132,8 +145,8 @@ class CheckoutHandlerBlocksSurfaceTest extends TestCase {
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_the_store_checkout_page_rendered_by_a_block_template_boots_no_classic_script(): void {
-		$this->assertFalse( $this->classic_adapter_loads( '', true, true ) );
+	public function test_the_store_checkout_page_rendered_by_a_block_template_still_boots_the_classic_script(): void {
+		$this->assertTrue( $this->classic_adapter_loads( '', true, true ) );
 	}
 
 	/**

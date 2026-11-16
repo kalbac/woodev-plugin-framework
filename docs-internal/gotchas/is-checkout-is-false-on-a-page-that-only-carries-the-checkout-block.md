@@ -49,6 +49,17 @@ Data the block needs at render time is better published through the integration'
 `get_script_data()` — WooCommerce reads it only where it renders the block, with no page check at
 all. That is why the locality chooser (C-1) worked on the same page while the pickup button did not.
 
+## The reverse trap: block content does not mean no classic form (#1538)
+
+A page whose CONTENT holds the Checkout block can still show a classic form: a theme that draws
+`woocommerce/checkout.php` itself never renders the content, and `is_checkout()` is true there.
+`wp_enqueue_scripts` runs before the body, so `is_block_only()` cannot tell the two apart. So on an
+`is_checkout()` page the classic scripts (`checkout-field-*`, `pickup-mount`) are ALWAYS enqueued —
+they are inert without `form.checkout` (pinned by `tests/js/classic-adapters-on-block-checkout.test.js`)
+— and `Pickup_Handler` adds the mount next to the block config. `did_action( 'woocommerce_before_checkout_form' )`
+is no way out: it is still 0 at enqueue time. `is_block_only()` still decides for a page that is NOT
+`is_checkout()`, and for the block-only hidden-reason script.
+
 ## How to see it
 
 A probe on the page itself, not a guess from the URL:
