@@ -257,6 +257,7 @@ final class Site_Products_Module {
 			$plugin->log_error( $line );
 		};
 		$shop      = new Shop_Sku_Source( $db );
+		$linker    = self::linker( $plugin, $adapter, $accounts, $db, $links, $ledger, $table );
 		$mappings_url = $plugin->get_marketplace_page_url( 'mappings' );
 
 		return new Site_Products_Bulk(
@@ -272,6 +273,7 @@ final class Site_Products_Module {
 				'link_candidates' => static function ( int $account_id ) use ( $shop, $links ): int {
 					return self::count_candidates( $shop->products(), $links->identity_map( $account_id ) );
 				},
+				'link_effect'     => [ $linker, 'remote_effect' ],
 				'can_edit'        => static function ( int $product_id ): bool {
 					return current_user_can( 'edit_product', $product_id );
 				},

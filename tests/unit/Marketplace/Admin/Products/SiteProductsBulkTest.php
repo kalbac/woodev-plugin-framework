@@ -363,6 +363,22 @@ final class SiteProductsBulkTest extends Products_Test_Case {
 		$this->assertCount( 1, $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() ) );
 	}
 
+	public function test_the_linking_preview_follows_what_linking_will_send(): void {
+		$plain = $this->preview( Site_Products_Bulk::LINK_BY_ARTICLE, [] )['scope_sentence'];
+
+		$this->assertStringContainsString( 'На маркетплейсе ничего не записывается.', $plain );
+
+		$this->sync_on_link( true );
+		$this->set_account( [ 'stock_mode' => 'site', 'price_direction' => 'to_marketplace' ] );
+		$sends = $this->preview( Site_Products_Bulk::LINK_BY_ARTICLE, [] )['scope_sentence'];
+
+		$this->assertStringContainsString( 'будут отправлены остатки и цены с сайта', $sends );
+		$this->assertStringNotContainsString( 'ничего не записывается', $sends );
+
+		$this->sync_on_link( false );
+		$this->assertStringContainsString( 'На маркетплейсе ничего не записывается.', $this->preview( Site_Products_Bulk::LINK_BY_ARTICLE, [] )['scope_sentence'] );
+	}
+
 	public function test_the_apply_never_trusts_the_preview(): void {
 		$product = $this->add_product();
 		$this->add_link( $product, Link_Record::STATE_CREATED );

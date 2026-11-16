@@ -7,12 +7,14 @@
 
 namespace Woodev\Framework\Marketplace\Flows;
 
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
+use Woodev\Framework\Marketplace\Sync\Stock_Mode;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -179,6 +181,38 @@ final class Card_Linker {
 		}
 
 		return $this->lost( $account_id, $fence ) ? self::CLAIM_LOST : self::BUSY;
+	}
+
+	/**
+	 * The sentence a confirmation window shows about what linking does on the marketplace: that stock and prices will be sent when the
+	 * account's «sync on link» setting is on and the account sends them from the site, otherwise the caller's own assurance that
+	 * nothing changes there. The one place that sentence is built.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Account $account   Account the card is linked in.
+	 * @param string  $unchanged What to say when linking sends nothing («На маркетплейсе ничего не меняется.»).
+	 * @return string
+	 */
+	public function remote_effect( Account $account, string $unchanged ): string {
+		if ( [] === $this->switches( $account->id() ) ) {
+			return $unchanged;
+		}
+
+		$stock = null !== $this->first_stock && Stock_Mode::is_site( $account );
+		$price = null !== $this->first_price && Price_Intents::pushes( $account );
+
+		if ( $stock && $price ) {
+			return __( 'После связывания на маркетплейс будут отправлены остатки и цены с сайта (так включено в настройках аккаунта).', 'woodev-plugin-framework' );
+		}
+
+		if ( $stock ) {
+			return __( 'После связывания на маркетплейс будут отправлены остатки с сайта (так включено в настройках аккаунта).', 'woodev-plugin-framework' );
+		}
+
+		return $price
+			? __( 'После связывания на маркетплейс будут отправлены цены с сайта (так включено в настройках аккаунта).', 'woodev-plugin-framework' )
+			: $unchanged;
 	}
 
 	/**

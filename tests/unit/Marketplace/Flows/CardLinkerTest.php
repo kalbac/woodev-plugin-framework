@@ -594,4 +594,46 @@ final class CardLinkerTest extends Sync_Test_Case {
 			$this->assertNull( $this->stock_row( $product ), 'stock mode «' . $mode . '» records nothing' );
 		}
 	}
+	/**
+	 * What a confirmation window says about the marketplace, for the setting and each direction the account sends (#1793).
+	 *
+	 * @return void
+	 */
+	public function test_the_confirmation_sentence_says_what_will_be_sent_only_when_something_will(): void {
+		$nothing = 'На маркетплейсе ничего не меняется.';
+		$stock   = [];
+		$price   = [];
+		$on      = $this->syncing_linker( true, $stock, $price );
+		$off     = $this->syncing_linker( false, $stock, $price );
+		$no_pusher = new Card_Linker( $this->links(), static function (): bool {
+			return true;
+		}, static function (): void {} );
+
+		$cases = [
+			'site stock, prices out'      => [ [ 'stock_mode' => 'site', 'price_direction' => 'to_marketplace' ], 'остатки и цены с сайта' ],
+			'site stock, prices off'      => [ [ 'stock_mode' => 'site', 'price_direction' => 'off' ], 'остатки с сайта' ],
+			'marketplace stock, prices out' => [ [ 'stock_mode' => 'marketplace', 'price_direction' => 'to_marketplace' ], 'цены с сайта' ],
+			'prices read from the marketplace' => [ [ 'stock_mode' => 'off', 'price_direction' => 'from_marketplace' ], null ],
+			'nothing sent'                => [ [ 'stock_mode' => 'off', 'price_direction' => 'off' ], null ],
+		];
+
+		foreach ( $cases as $name => [ $settings, $what ] ) {
+			$this->set_account( $settings );
+			$account = $this->account_now();
+
+			if ( null === $what ) {
+				$this->assertSame( $nothing, $on->remote_effect( $account, $nothing ), $name );
+			} else {
+				$this->assertSame( 'После связывания на маркетплейс будут отправлены ' . $what . ' (так включено в настройках аккаунта).', $on->remote_effect( $account, $nothing ), $name );
+			}
+
+			$this->assertSame( $nothing, $off->remote_effect( $account, $nothing ), $name . ': the setting is off' );
+		}
+
+		$this->set_account( [ 'stock_mode' => 'site', 'price_direction' => 'to_marketplace' ] );
+
+		$this->assertSame( $nothing, $this->linker->remote_effect( $this->account_now(), $nothing ), 'a plain linker never switches anything on' );
+		$this->assertStringContainsString( 'остатки с сайта', $no_pusher->remote_effect( $this->account_now(), $nothing ), 'a marketplace without a price pusher sends no prices' );
+		$this->assertStringNotContainsString( 'цены', $no_pusher->remote_effect( $this->account_now(), $nothing ) );
+	}
 }

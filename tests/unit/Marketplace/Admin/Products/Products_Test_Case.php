@@ -8,13 +8,16 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Activity;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Reader;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Selection;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
+use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
+use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
@@ -67,6 +70,41 @@ abstract class Products_Test_Case extends Export_Test_Case {
 	}
 
 	/**
+	 * The linker the actions write through; null builds the plain one (switches off).
+	 *
+	 * @var Card_Linker|null
+	 */
+	protected $linker;
+
+	/**
+	 * Product ids the linker recorded a first stock send for.
+	 *
+	 * @var int[]
+	 */
+	protected $first_stock_sends = [];
+
+	/**
+	 * Makes the actions link through a linker that follows a «sync on link» decision and records its first sends.
+	 *
+	 * @param bool $on         What the account's «sync on link» setting says.
+	 * @param bool $with_price Whether the linker has a price recorder (a marketplace with a price pusher).
+	 * @return void
+	 */
+	protected function sync_on_link( bool $on, bool $with_price = true ): void {
+		$this->first_stock_sends = [];
+		$this->linker            = new Card_Linker(
+			$this->links(),
+			static function () use ( $on ): bool {
+				return $on;
+			},
+			function ( Link_Record $link ): void {
+				$this->first_stock_sends[] = $link->wc_product_id();
+			},
+			$with_price ? static function (): void {} : null
+		);
+	}
+
+	/**
 	 * The bulk actions, over the harness' stores.
 	 *
 	 * @return Site_Products_Bulk
@@ -84,6 +122,9 @@ abstract class Products_Test_Case extends Export_Test_Case {
 			[
 				'link_candidates' => function (): int {
 					return $this->candidates;
+				},
+				'link_effect'     => function ( Account $account, string $unchanged ): string {
+					return null === $this->linker ? $unchanged : $this->linker->remote_effect( $account, $unchanged );
 				},
 				'can_edit'        => function ( int $product_id ): bool {
 					return ! in_array( $product_id, $this->forbidden, true );

@@ -114,6 +114,13 @@ final class Site_Products_Bulk {
 	private $link_candidates;
 
 	/**
+	 * Says what linking does on the marketplace: `function ( Account $account, string $unchanged ): string`, the sentence of {@see Card_Linker::remote_effect()}.
+	 *
+	 * @var callable
+	 */
+	private $link_effect;
+
+	/**
 	 * Tells whether the current user may edit a product: `function ( int $product_id ): bool`.
 	 *
 	 * @var callable
@@ -146,7 +153,7 @@ final class Site_Products_Bulk {
 	 * @param Price_Context       $contexts        Reads a product and works out its price.
 	 * @param Link_Detacher       $detacher        Detaches cards.
 	 * @param Link_Scheduler      $scheduler       Queues the linking job.
-	 * @param array<string,mixed> $callbacks       `link_candidates`, `can_edit`, `describe` (see the properties) and `fix_urls` (FIX_* => address).
+	 * @param array<string,mixed> $callbacks       `link_candidates`, `can_edit`, `describe` (see the properties), `fix_urls` (FIX_* => address) and, optionally, `link_effect`.
 	 */
 	public function __construct( Export_Service $export, Wpdb_Link_Store $links, Stock_Intents $stock, Price_Intents $prices, Price_Context $contexts, Link_Detacher $detacher, Link_Scheduler $scheduler, Task_Ledger $ledger, array $callbacks ) {
 		$this->export          = $export;
@@ -158,6 +165,9 @@ final class Site_Products_Bulk {
 		$this->scheduler       = $scheduler;
 		$this->ledger          = $ledger;
 		$this->link_candidates = $callbacks['link_candidates'];
+		$this->link_effect     = $callbacks['link_effect'] ?? static function ( Account $account, string $unchanged ): string {
+			return $unchanged;
+		};
 		$this->can_edit        = $callbacks['can_edit'];
 		$this->describe        = $callbacks['describe'];
 		$this->fix_urls        = (array) ( $callbacks['fix_urls'] ?? [] );
@@ -207,7 +217,7 @@ final class Site_Products_Bulk {
 				'requested'      => $plan['will'],
 				'eligible'       => $plan['will'],
 				'skipped'        => 0,
-				'scope_sentence' => $this->linking_sentence( $plan['will'] ),
+				'scope_sentence' => $this->linking_sentence( $account, $plan['will'] ),
 			];
 		}
 
@@ -1010,12 +1020,17 @@ final class Site_Products_Bulk {
 	/**
 	 * The sentence under the title of the confirmation window for the account-wide linking.
 	 *
-	 * @param int $candidates Shop products the job would try to match.
+	 * @param Account $account    Account.
+	 * @param int     $candidates Shop products the job would try to match.
 	 * @return string
 	 */
-	private function linking_sentence( int $candidates ): string {
-		/* translators: %s: «120 товаров». */
-		return sprintf( __( 'Весь аккаунт — %s магазина без связи с маркетплейсом. Связывание идёт по всему магазину, не только по отмеченным товарам; на маркетплейсе ничего не записывается.', 'woodev-plugin-framework' ), $candidates . ' ' . Bulk_Validation_Report::products( $candidates ) );
+	private function linking_sentence( Account $account, int $candidates ): string {
+		/* translators: 1: «120 товаров», 2: what linking does on the marketplace. */
+		return sprintf(
+			__( 'Весь аккаунт — %1$s магазина без связи с маркетплейсом. Связывание идёт по всему магазину, не только по отмеченным товарам. %2$s', 'woodev-plugin-framework' ),
+			$candidates . ' ' . Bulk_Validation_Report::products( $candidates ),
+			call_user_func( $this->link_effect, $account, __( 'На маркетплейсе ничего не записывается.', 'woodev-plugin-framework' ) )
+		);
 	}
 
 	/**
