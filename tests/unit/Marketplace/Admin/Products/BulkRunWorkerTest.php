@@ -469,6 +469,63 @@ final class BulkRunWorkerTest extends Products_Test_Case {
 		$this->assertSame( [], $this->scheduler->of( 'woodev_fake_seller_export_batch' ), 'And no batch was scheduled.' );
 	}
 
+	public function test_an_export_that_loses_ownership_after_creating_a_link_does_not_queue_it(): void {
+		$id    = (int) $this->add_product( [ 'sku' => 'W-1' ] )->get_id();
+		$asked = 0;
+
+		try {
+			// The first write of the offer (the link row) is allowed; the second (queueing it) is asked on its own and refused.
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::EXPORT, [ $id ], [ $id => $id ], null, $this->owns_for( 1, $asked ) );
+			$this->fail( 'The loss must stop the export between the two writes of one offer.' );
+		} catch ( Bulk_Run_Lost $e ) {
+			$this->assertSame( 2, $asked, 'Asked before each write, not once per offer.' );
+		}
+
+		$link = $this->links()->find( $this->account_id, $id );
+		$this->assertNotNull( $link, 'The first write happened.' );
+		$this->assertNotSame( Link_Record::STATE_QUEUED, $link->card_state(), 'The second did not.' );
+		$this->assertSame( [], $this->scheduler->of( 'woodev_fake_seller_export_batch' ) );
+	}
+
+	public function test_an_export_that_loses_ownership_before_recording_a_blocked_card_does_not_record_it(): void {
+		$id    = (int) $this->add_product( [ 'sku' => 'B-1' ] )->get_id();
+		$link  = $this->add_link( $this->products[ $id ], Link_Record::STATE_UNLINKED );
+		$asked = 0;
+
+		$this->rule->blocked = [ $id ];
+
+		try {
+			// The link exists, so the first write is the blocked record: it is refused outright.
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::EXPORT, [ $id ], [ $id => $id ], null, $this->owns_for( 0, $asked ) );
+			$this->fail( 'The loss must stop the part.' );
+		} catch ( Bulk_Run_Lost $e ) {
+			$this->assertSame( 1, $asked );
+		}
+
+		$this->assertSame( '', trim( $this->links()->last_error( (int) $link->link_id() )['text'] ), 'No error was written.' );
+	}
+
+	public function test_a_detach_that_loses_ownership_after_the_detach_keeps_the_send_history_and_the_queued_intents(): void {
+		$id = $this->stock_product( 'S-1', 9301, 5 );
+		$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::SEND_STOCK, [ $id ], [ $id => $id ], null, static function (): bool {
+			return true;
+		} );
+		$this->assertNotNull( $this->stock_row( $id ), 'There is an intent to retire.' );
+		$asked = 0;
+
+		try {
+			// The detach itself (the first write) is allowed; the cleanup that follows is asked on its own and refused.
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::DETACH, [ $id ], [ $id => $id ], null, $this->owns_for( 1, $asked ) );
+			$this->fail( 'The loss must stop the detach between its writes.' );
+		} catch ( Bulk_Run_Lost $e ) {
+			$this->assertSame( 2, $asked, 'Asked before each write of the row, not once per row.' );
+		}
+
+		$this->assertSame( Link_Record::STATE_UNLINKED, $this->link_of( $id )->card_state(), 'The first write happened.' );
+		$this->assertNotNull( $this->stock_row( $id ), 'The cleanup after it did not: the new owner replays it.' );
+		$this->assertNotNull( $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL ), 'The claim was released.' );
+	}
+
 	public function test_an_export_that_loses_ownership_before_its_rollback_writes_nothing_more(): void {
 		$product = $this->add_product( [ 'sku' => 'R-1' ] );
 		$id      = (int) $product->get_id();
@@ -477,11 +534,11 @@ final class BulkRunWorkerTest extends Products_Test_Case {
 		$this->scheduler->zero_for['woodev_fake_seller_export_batch'] = true; // Action Scheduler refuses the batch: a rollback follows.
 
 		try {
-			// Product loop: yes; before scheduling: yes; before the rollback write: no.
-			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::EXPORT, [ $id ], [ $id => $id ], null, $this->owns_for( 2, $asked ) );
+			// Before the link is created: yes; before it is queued: yes; before scheduling: yes; before the rollback write: no.
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::EXPORT, [ $id ], [ $id => $id ], null, $this->owns_for( 3, $asked ) );
 			$this->fail( 'The loss must stop the rollback.' );
 		} catch ( Bulk_Run_Lost $e ) {
-			$this->assertSame( 3, $asked );
+			$this->assertSame( 4, $asked );
 		}
 
 		$this->assertSame( Link_Record::STATE_QUEUED, $this->link_of( $id )->card_state(), 'The new owner re-plans the part; this tick rolled nothing back.' );

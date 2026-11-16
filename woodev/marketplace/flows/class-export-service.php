@@ -110,8 +110,8 @@ final class Export_Service {
 	 *
 	 * @param Account       $account     Account the cards go to.
 	 * @param int[]         $product_ids Products or variations; a variable product stands for its variations.
-	 * @param callable|null $guard       `function (): void`, called before every product write (a link created, blocked or queued, and each
-	 *                                   rollback after a refused batch); it throws to stop the export. A bulk run passes the check that its
+	 * @param callable|null $guard       `function (): void`, called before every product write, each one on its own (a link created, blocked
+	 *                                   or queued, and each rollback after a refused batch); it throws to stop the export. A bulk run passes the check that its
 	 *                                   tick still owns the run. Links queued before it throws are replayed by the tick that owns the run now,
 	 *                                   which re-plans the part from its saved cursor.
 	 * @return array{report:Bulk_Validation_Report,queued:int[],refused:array<int,string>} `queued`: product ids whose link is now
@@ -127,12 +127,14 @@ final class Export_Service {
 		$previous = [];
 
 		foreach ( $this->offers( $product_ids ) as $product ) {
-			$this->guard( $guard );
-
 			$link    = $this->links->find( $account->id(), (int) $product->get_id() );
 			$context = $this->contexts->build( $account, $product, $link );
 			$report  = $this->validator->validate( $product, $context->mapping(), $context->profile(), $context->raw_context() );
 			$article = (string) $context->raw_context()['frozen_offer_id'];
+			if ( null === $link ) {
+				$this->guard( $guard );
+			}
+
 			$link    = $link ?? $this->create_link( $account, $product, $article );
 
 			$bulk->add( (int) $product->get_id(), $report );
@@ -142,12 +144,16 @@ final class Export_Service {
 			}
 
 			if ( ! $report->is_valid() ) {
+				$this->guard( $guard );
+
 				$first = (array) $report->first_error();
 				$this->links->record_blocked( (int) $link->link_id(), (string) ( $first['code'] ?? '' ), implode( "\n", array_column( $report->errors(), 'message' ) ) );
 				continue;
 			}
 
 			$before = $link->card_state();
+
+			$this->guard( $guard );
 
 			if ( $this->links->queue( (int) $link->link_id(), $article ) ) {
 				$link_ids[]                          = (int) $link->link_id();

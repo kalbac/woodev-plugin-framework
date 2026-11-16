@@ -89,8 +89,9 @@ final class Link_Detacher {
 	 *
 	 * @param int           $account_id Account id.
 	 * @param Link_Record[] $rows       Rows to detach (offer rows with a card).
-	 * @param callable|null $guard      `function (): void`, called before every row is detached; it throws to stop. A bulk run passes the check
-	 *                                  that its tick still owns the run. The claim is released either way.
+	 * @param callable|null $guard      `function (): void`, called before every write (the detach, the send history, the queued intents), each one
+	 *                                  on its own; it throws to stop. A bulk run passes the check that its tick still owns the run. The claim is
+	 *                                  released either way.
 	 * @return array{detached:int,kept:int,busy:bool} `busy` is true when the account's sender holds the claim: nothing was changed.
 	 * @throws \RuntimeException When the database refuses a write.
 	 */
@@ -110,18 +111,19 @@ final class Link_Detacher {
 
 		try {
 			foreach ( $rows as $row ) {
-				if ( null !== $guard ) {
-					call_user_func( $guard );
-				}
-
 				$link_id = (int) $row->link_id();
+
+				$this->guard( $guard );
 
 				if ( ! $this->links->detach( $account_id, $link_id ) ) {
 					++$kept; // Being submitted right now: the request carries its article.
 					continue;
 				}
 
+				$this->guard( $guard );
 				$this->ledger->forget_sent( $link_id );
+
+				$this->guard( $guard );
 				$this->queue->forget_link( $account_id, $link_id, $token );
 				++$detached;
 			}
@@ -134,6 +136,16 @@ final class Link_Detacher {
 			'kept'     => $kept,
 			'busy'     => false,
 		];
+	}
+
+	/**
+	 * @param callable|null $guard The caller's check; it throws when the caller may not write any more.
+	 * @return void
+	 */
+	private function guard( ?callable $guard ): void {
+		if ( null !== $guard ) {
+			call_user_func( $guard );
+		}
 	}
 
 	/**
