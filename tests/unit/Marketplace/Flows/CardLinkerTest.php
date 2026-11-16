@@ -624,7 +624,7 @@ final class CardLinkerTest extends Sync_Test_Case {
 			if ( null === $what ) {
 				$this->assertSame( $nothing, $on->remote_effect( $account, $nothing ), $name );
 			} else {
-				$this->assertSame( 'После связывания на маркетплейс будут отправлены ' . $what . ' (так включено в настройках аккаунта).', $on->remote_effect( $account, $nothing ), $name );
+				$this->assertSame( 'После связывания на маркетплейс могут быть отправлены ' . $what . ' (так включено в настройках аккаунта).', $on->remote_effect( $account, $nothing ), $name );
 			}
 
 			$this->assertSame( $nothing, $off->remote_effect( $account, $nothing ), $name . ': the setting is off' );

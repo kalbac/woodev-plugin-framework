@@ -220,12 +220,12 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$linking = $this->preview( 'import_selected', [ 'NEW-1', 'LINK-1' ] )['scope']['sentence'];
 		$creating = $this->preview( 'import_selected', [ 'NEW-1', 'NEW-2' ] )['scope']['sentence'];
 
-		$this->assertStringContainsString( 'После связывания на маркетплейс будут отправлены остатки и цены с сайта (так включено в настройках аккаунта).', $linking );
+		$this->assertStringContainsString( 'После связывания на маркетплейс могут быть отправлены остатки и цены с сайта (так включено в настройках аккаунта).', $linking );
 		$this->assertStringNotContainsString( 'ничего не меняется', $linking );
 		$this->assertStringContainsString( 'На маркетплейсе ничего не меняется.', $creating, 'a product the import creates sends nothing at linking' );
 
 		$this->set_account( [ 'price_direction' => 'off' ] );
-		$this->assertStringContainsString( 'будут отправлены остатки с сайта', $this->preview( 'import_selected', [ 'LINK-1' ] )['scope']['sentence'] );
+		$this->assertStringContainsString( 'могут быть отправлены остатки с сайта', $this->preview( 'import_selected', [ 'LINK-1' ] )['scope']['sentence'] );
 
 		$this->sync_on_link( false );
 		$this->assertStringContainsString( 'На маркетплейсе ничего не меняется.', $this->preview( 'import_selected', [ 'LINK-1' ] )['scope']['sentence'] );

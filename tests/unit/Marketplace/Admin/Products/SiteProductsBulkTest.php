@@ -372,7 +372,7 @@ final class SiteProductsBulkTest extends Products_Test_Case {
 		$this->set_account( [ 'stock_mode' => 'site', 'price_direction' => 'to_marketplace' ] );
 		$sends = $this->preview( Site_Products_Bulk::LINK_BY_ARTICLE, [] )['scope_sentence'];
 
-		$this->assertStringContainsString( 'будут отправлены остатки и цены с сайта', $sends );
+		$this->assertStringContainsString( 'могут быть отправлены остатки и цены с сайта', $sends );
 		$this->assertStringNotContainsString( 'ничего не записывается', $sends );
 
 		$this->sync_on_link( false );

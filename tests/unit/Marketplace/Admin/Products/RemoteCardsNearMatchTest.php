@@ -233,7 +233,7 @@ final class RemoteCardsNearMatchTest extends Remote_Cards_Test_Case {
 
 		$this->sync_on_link( true );
 		$this->set_account( [ 'stock_mode' => 'site', 'price_direction' => 'to_marketplace' ] );
-		$this->assertStringContainsString( 'будут отправлены остатки и цены с сайта', $preview() );
+		$this->assertStringContainsString( 'могут быть отправлены остатки и цены с сайта', $preview() );
 
 		$this->sync_on_link( false );
 		$this->assertStringContainsString( 'На маркетплейсе ничего не меняется.', $preview() );

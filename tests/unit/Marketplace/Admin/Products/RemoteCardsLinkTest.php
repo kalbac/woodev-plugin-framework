@@ -128,14 +128,14 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 		$this->set_account( [ 'stock_mode' => 'site', 'price_direction' => 'to_marketplace' ] );
 		$sentence = $this->preview( 'MUG-1', '41' )['scope']['sentence'];
 
-		$this->assertStringContainsString( 'После связывания на маркетплейс будут отправлены остатки и цены с сайта (так включено в настройках аккаунта).', $sentence );
+		$this->assertStringContainsString( 'После связывания на маркетплейс могут быть отправлены остатки и цены с сайта (так включено в настройках аккаунта).', $sentence );
 		$this->assertStringNotContainsString( 'ничего не меняется', $sentence );
 
 		$this->set_account( [ 'price_direction' => 'off' ] );
-		$this->assertStringContainsString( 'будут отправлены остатки с сайта', $this->preview( 'MUG-1', '41' )['scope']['sentence'] );
+		$this->assertStringContainsString( 'могут быть отправлены остатки с сайта', $this->preview( 'MUG-1', '41' )['scope']['sentence'] );
 
 		$this->set_account( [ 'stock_mode' => 'marketplace', 'price_direction' => 'to_marketplace' ] );
-		$this->assertStringContainsString( 'будут отправлены цены с сайта', $this->preview( 'MUG-1', '41' )['scope']['sentence'] );
+		$this->assertStringContainsString( 'могут быть отправлены цены с сайта', $this->preview( 'MUG-1', '41' )['scope']['sentence'] );
 
 		$this->set_account( [ 'stock_mode' => 'off', 'price_direction' => 'off' ] );
 		$this->assertStringContainsString( 'На маркетплейсе ничего не меняется.', $this->preview( 'MUG-1', '41' )['scope']['sentence'], 'the account sends nothing' );
