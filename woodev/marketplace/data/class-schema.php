@@ -42,6 +42,20 @@ final class Schema {
 	public const MAX_ID_LENGTH = 16;
 
 	/**
+	 * The revision of the whole table set, owned by the framework and independent of any plugin's version: it is raised whenever a
+	 * statement below changes (a table or a column is added), so that {@see Lifecycle} brings a site that already has the tables up to
+	 * date on its next request — whichever plugin's bundled framework copy won the bootstrap, and whether or not the plugin that owns
+	 * the tables was itself updated. A site that never stored one is at revision 0.
+	 *
+	 * 1: `bulk_runs` and `sync_state.pending_source` (2.1.8–2.1.10).
+	 *
+	 * @since 2.1.10
+	 *
+	 * @var int
+	 */
+	public const REVISION = 1;
+
+	/**
 	 * Names of the tables, without any prefix, in creation order.
 	 *
 	 * @var string[]

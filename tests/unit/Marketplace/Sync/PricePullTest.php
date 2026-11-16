@@ -84,6 +84,13 @@ final class PricePullTest extends Sync_Test_Case {
 	private $in_hook = false;
 
 	/**
+	 * A `woocommerce_product_get_*_price` filter of the shop: `function ( string $price ): string`, applied to the `view` context.
+	 *
+	 * @var callable|null
+	 */
+	private $view_filter;
+
+	/**
 	 * Builds the doubles.
 	 *
 	 * @return void
@@ -97,6 +104,7 @@ final class PricePullTest extends Sync_Test_Case {
 		$this->on_save      = null;
 		$this->before_write = [];
 		$this->in_hook      = false;
+		$this->view_filter  = null;
 	}
 
 	/**
@@ -484,6 +492,69 @@ final class PricePullTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * A shop that filters its price getters (a price shown doubled) must not have the filtered value recorded as the merchant's price:
+	 * the snapshot is the raw stored value, a product that already holds it is not saved again, and a restore after the pull puts back
+	 * the raw 201, not the 402 the filter shows.
+	 *
+	 * @return void
+	 */
+	public function test_the_recorded_shop_price_is_the_raw_stored_value_not_a_filtered_one(): void {
+		$product              = $this->queued( 'a', '150.00' );
+		$this->view_filter    = static function ( string $price ): string {
+			return number_format( (float) $price * 2, 2, '.', '' );
+		};
+
+		$this->merchant_saves( $product, '201.00' );
+
+		$source = $this->price_queue()->pending_of( $this->account_id, $this->link_id( $product ) )->source();
+
+		$this->assertSame( '402.00', $this->products[ $product ]->get_regular_price(), 'The shop shows the filtered price.' );
+		$this->assertSame( '201.00', $source['regular'], 'The source is the raw stored one.' );
+		$this->assertFalse( ( new \Woodev\Framework\Marketplace\Sync\Shop_Price_Writer( $this->contexts ) )->put_back( Sqlite_Tables::MARKETPLACE_ID, $this->products[ $product ], $source ), 'It already holds that: no save.' );
+	}
+
+	/**
+	 * The same through a whole pull: the merchant's save lands before the shop write, the restore runs, and the stored price is 201.
+	 *
+	 * @return void
+	 */
+	public function test_a_restore_puts_back_the_raw_price_when_the_getters_are_filtered(): void {
+		$product                   = $this->queued( 'a', '150.00' );
+		$this->reader->prices['a'] = $this->pair( '100.00', null );
+		$this->view_filter         = static function ( string $price ): string {
+			return number_format( (float) $price * 2, 2, '.', '' );
+		};
+		$this->before_write[]      = function () use ( $product ): void {
+			$this->merchant_saves( $product, '201.00' );
+		};
+
+		$this->pull( [ 'a' ] );
+
+		$this->assertSame( '201.00', $this->shop[ $product ]['regular'], 'The stored price is the merchant\'s, not the doubled view of it.' );
+	}
+
+	/**
+	 * A queue that cannot be read (here: the column the new code needs is missing) is not «nothing is queued»: the pull stops with an
+	 * error before it writes the shop price, instead of reporting success and leaving the old send due to undo it.
+	 *
+	 * @return void
+	 */
+	public function test_an_unreadable_queue_stops_the_pull_instead_of_reading_as_nothing_queued(): void {
+		$product                   = $this->queued( 'a', '150.00' );
+		$this->reader->prices['a'] = $this->pair( '100.00', null );
+		$this->db->query( 'ALTER TABLE ' . Sqlite_Tables::table( 'sync_state' ) . ' DROP COLUMN pending_source' );
+
+		try {
+			$this->pull( [ 'a' ] );
+			$this->fail( 'The pull must not report success on a queue it cannot read.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'could not be read', $e->getMessage() );
+		}
+
+		$this->assertSame( '150.00', $this->shop[ $product ]['regular'], 'Nothing was written to the product.' );
+	}
+
+	/**
 	 * A pull whose claim was taken over stops instead of undoing itself: the pulled price stays in the product, the queue is untouched
 	 * and the next try, under a claim it holds, settles it.
 	 *
@@ -666,7 +737,7 @@ final class PricePullTest extends Sync_Test_Case {
 
 		foreach ( [ 'regular' => 'regular_price', 'sale' => 'sale_price', 'from' => 'date_on_sale_from', 'to' => 'date_on_sale_to' ] as $key => $prop ) {
 			$product->shouldReceive( 'get_' . $prop )->andReturnUsing(
-				function () use ( $id, $key ) {
+				function ( $context = 'view' ) use ( $id, $key ) {
 					if ( 'regular' === $key && [] !== $this->before_write && ! $this->in_hook ) {
 						// The merchant's save reads the product too: it must not trigger the next scripted save.
 						$this->in_hook = true;
@@ -674,7 +745,10 @@ final class PricePullTest extends Sync_Test_Case {
 						$this->in_hook = false;
 					}
 
-					return $this->shop[ $id ][ $key ];
+					// WooCommerce runs the shop's getter filters in the `view` context only; `edit` is the raw stored value.
+					$value = $this->shop[ $id ][ $key ];
+
+					return 'view' === $context && null !== $this->view_filter && in_array( $key, [ 'regular', 'sale' ], true ) && '' !== $value ? call_user_func( $this->view_filter, $value ) : $value;
 				}
 			);
 			$product->shouldReceive( 'set_' . $prop )->andReturnUsing(

@@ -167,6 +167,7 @@ final class Price_Sync_Queue {
 	 * @param int $account_id Account id.
 	 * @param int $link_id    Link id.
 	 * @return Price_Intent|null Null when the link has no price row, or the row holds no pending payload.
+	 * @throws \RuntimeException When the read fails (a column or table missing, a lost connection).
 	 */
 	public function pending_of( int $account_id, int $link_id ): ?Price_Intent {
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own tables, read fresh.
@@ -180,7 +181,12 @@ final class Price_Sync_Queue {
 			'ARRAY_A'
 		);
 
-		$row     = is_array( $rows ) && [] !== $rows ? $rows[0] : null;
+		// A failed read is not «nothing is queued»: the pull would report success and leave the old send due to undo it.
+		if ( ! is_array( $rows ) || '' !== (string) $this->db->last_error ) {
+			throw new \RuntimeException( 'The price queue could not be read: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		$row     = [] !== $rows ? $rows[0] : null;
 		$payload = null === $row ? null : json_decode( (string) $row['pending_payload'], true );
 
 		$source = null === $row || null === $row['pending_source'] ? null : json_decode( (string) $row['pending_source'], true );

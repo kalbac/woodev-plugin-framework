@@ -34,6 +34,15 @@ final class Lifecycle extends \Woodev_Lifecycle {
 	public const NOTICE_SCHEMA_FAILED = 'schema_failed';
 
 	/**
+	 * Suffix of the option that holds the {@see Schema::REVISION} the tables were last brought up to; `woodev_{plugin id}_` goes in front.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @var string
+	 */
+	public const SCHEMA_REVISION_OPTION = 'schema_revision';
+
+	/**
 	 * Seconds after which a first-install lock counts as left by a crashed request.
 	 *
 	 * @var int
@@ -124,6 +133,75 @@ final class Lifecycle extends \Woodev_Lifecycle {
 		parent::add_hooks();
 
 		add_action( 'init', [ $this, 'install_outside_admin' ], 1 );
+		add_action( 'init', [ $this, 'bring_schema_up_to_date' ], 2 );
+	}
+
+	/**
+	 * Brings the tables of a site that already has them up to the framework's {@see Schema::REVISION}, on any request.
+	 *
+	 * The plugin's own upgrade runs only when the plugin's version changes, and only on an admin page load. Neither says anything about
+	 * the framework: a marketplace plugin can run on a newer framework copy bundled in ANOTHER plugin (the highest version wins the
+	 * bootstrap) while its own version stays put, and a cron event or a REST call can arrive before any admin page. A table or column
+	 * the new code reads would then be missing. So the revision stored beside the plugin's version is compared with the framework's
+	 * on every request — one option read when they agree — and `dbDelta` runs when they differ, which changes only the difference.
+	 *
+	 * A site with no stored plugin version is not installed yet and is left to {@see self::install_outside_admin()}, whose install
+	 * stores the revision. A failed run stores no revision, is reported like a failed install, and is not repeated on every request
+	 * (the short mark of {@see self::install_outside_admin()}); the first-install lock keeps two requests from running `dbDelta` at once.
+	 *
+	 * @internal Hook callback.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @return void
+	 */
+	public function bring_schema_up_to_date(): void {
+		if ( ! $this->is_installed() || $this->stored_schema_revision() >= Schema::REVISION ) {
+			return;
+		}
+
+		$mark = 'woodev_' . $this->get_plugin()->get_id() . '_schema_retry';
+
+		if ( get_transient( $mark ) ) {
+			return;
+		}
+
+		$token = $this->acquire_install_lock();
+
+		if ( null === $token ) {
+			return;
+		}
+
+		try {
+			// Another request may have finished between the check above and the lock.
+			if ( $this->stored_schema_revision() < Schema::REVISION ) {
+				$this->create_tables();
+				$this->store_schema_revision();
+			}
+		} catch ( Schema_Exception $exception ) {
+			$this->report_schema_failure( $exception );
+			set_transient( $mark, 1, 5 * MINUTE_IN_SECONDS );
+		} finally {
+			$this->release_install_lock( $token );
+		}
+	}
+
+	/**
+	 * The revision the tables were last brought up to; 0 when none was ever stored.
+	 *
+	 * @return int
+	 */
+	private function stored_schema_revision(): int {
+		return (int) get_option( Uninstaller::option_prefix( $this->get_plugin()->get_id() ) . self::SCHEMA_REVISION_OPTION, 0 );
+	}
+
+	/**
+	 * Stores the framework's revision, once the tables are proved to exist.
+	 *
+	 * @return void
+	 */
+	private function store_schema_revision(): void {
+		update_option( Uninstaller::option_prefix( $this->get_plugin()->get_id() ) . self::SCHEMA_REVISION_OPTION, Schema::REVISION );
 	}
 
 	/**
@@ -253,6 +331,7 @@ final class Lifecycle extends \Woodev_Lifecycle {
 	 */
 	protected function install(): void {
 		$this->create_tables();
+		$this->store_schema_revision();
 	}
 
 	/**
@@ -265,6 +344,7 @@ final class Lifecycle extends \Woodev_Lifecycle {
 	 */
 	protected function upgrade( string $installed_version ): void {
 		$this->create_tables();
+		$this->store_schema_revision();
 
 		parent::upgrade( $installed_version );
 	}

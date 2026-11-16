@@ -153,7 +153,9 @@ final class Shop_Price_Writer {
 	/**
 	 * Reads the price fields a product holds as the merchant saved them: the regular and sale price and the sale schedule. This is what a
 	 * price intent is worked out from, kept beside the intent ({@see Price_Intents}) so that {@see self::put_back()} can restore it
-	 * exactly; the marketplace price cannot be turned back into it when the rule rounds.
+	 * exactly; the marketplace price cannot be turned back into it when the rule rounds. The fields are read in WooCommerce's `edit`
+	 * context, the raw stored values the setters take: a `view` read runs the shop's getter filters (a price that shows doubled, a date
+	 * moved) and would write the filtered value back as if the merchant had saved it.
 	 *
 	 * @since 2.1.10
 	 *
@@ -162,10 +164,10 @@ final class Shop_Price_Writer {
 	 */
 	public static function snapshot( \WC_Product $product ): array {
 		return [
-			'regular' => (string) $product->get_regular_price(),
-			'sale'    => (string) $product->get_sale_price(),
-			'from'    => self::moment( $product->get_date_on_sale_from() ),
-			'to'      => self::moment( $product->get_date_on_sale_to() ),
+			'regular' => (string) $product->get_regular_price( 'edit' ),
+			'sale'    => (string) $product->get_sale_price( 'edit' ),
+			'from'    => self::moment( $product->get_date_on_sale_from( 'edit' ) ),
+			'to'      => self::moment( $product->get_date_on_sale_to( 'edit' ) ),
 		];
 	}
 
