@@ -61,6 +61,13 @@ class SchemaRevisionUpgradeTest extends TestCase {
 	 */
 	private $original;
 
+	/**
+	 * Products the test created.
+	 *
+	 * @var int[]
+	 */
+	private $product_ids = [];
+
 	protected function setUp(): void {
 		$this->schema = new Schema( self::ADAPTER );
 
@@ -75,6 +82,14 @@ class SchemaRevisionUpgradeTest extends TestCase {
 		$this->conn     = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
 		$this->conn->set_prefix( $this->original->prefix );
 
+		// WooCommerce and other plugins register their own tables as properties of the global `$wpdb` (`wc_product_meta_lookup`, …);
+		// a fresh connection does not have them and a product save would fail on `Undefined property: wpdb::$wc_product_meta_lookup`.
+		foreach ( get_object_vars( $this->original ) as $name => $value ) {
+			if ( is_string( $value ) && '' !== $value && 0 === strpos( $value, $this->original->prefix ) && ! isset( $this->conn->$name ) ) {
+				$this->conn->$name = $value;
+			}
+		}
+
 		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- The connection that carries the DDL stands in for the global one.
 		$wpdb = $this->conn;
 
@@ -83,6 +98,15 @@ class SchemaRevisionUpgradeTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		// The product was written through the connection that carries the DDL, outside the test case's transaction: remove it here.
+		foreach ( $this->product_ids as $product_id ) {
+			$product = wc_get_product( $product_id );
+
+			if ( $product instanceof \WC_Product ) {
+				$product->delete( true );
+			}
+		}
+
 		$this->drop_tables();
 
 		foreach ( [ 'woodev_' . self::PLUGIN_ID . '_version', 'woodev_' . self::PLUGIN_ID . '_schema_revision', 'woodev_' . self::PLUGIN_ID . '_install_lock' ] as $option ) {
@@ -202,6 +226,9 @@ class SchemaRevisionUpgradeTest extends TestCase {
 		$product    = new \WC_Product_Simple();
 		$product->set_regular_price( '150' );
 		$product->save();
+
+		$this->product_ids[] = $product->get_id();
+
 		$links->save( new Product_Link( $account_id, $product->get_id(), 0, 'a', [ 'item' => 701 ], Product_Link::STATE_CREATED, [ 'sync_price' => true ] ) );
 
 		$this->assertSame( 1, $account_id, 'The fixture rows belong to account 1 and link 1.' );
