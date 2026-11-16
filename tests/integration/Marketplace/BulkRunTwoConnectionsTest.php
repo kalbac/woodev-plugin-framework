@@ -66,15 +66,19 @@ class BulkRunTwoConnectionsTest extends TestCase {
 		remove_filter( 'query', [ $this, '_create_temporary_tables' ] );
 		remove_filter( 'query', [ $this, '_drop_temporary_tables' ] );
 
+		global $wpdb;
+
 		foreach ( [ 'a', 'b', 'c' ] as $name ) {
 			$this->conn[ $name ] = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+			// A fresh `wpdb` has an empty prefix; the tables are named with the test installation's own (`$wpdb->prefix`, as `table()` does).
+			$this->conn[ $name ]->prefix = $wpdb->prefix;
 		}
 
 		$this->drop_tables();
 		$charset = $this->conn['a']->get_charset_collate();
 
 		foreach ( [ 'accounts', 'bulk_runs' ] as $table ) {
-			$statement = $this->schema->statements( $this->conn['a']->prefix, $charset )[ $this->table( $table ) ];
+			$statement = $this->schema->statements( $wpdb->prefix, $charset )[ $this->table( $table ) ];
 			$this->assertNotFalse( $this->conn['a']->query( $statement ), 'Created ' . $table );
 		}
 
@@ -82,6 +86,14 @@ class BulkRunTwoConnectionsTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		// PHPUnit keeps a finished test's object alive: close the connections, or a lock one of them still holds is held for the next
+		// test (the account id is 1 again after the tables are recreated).
+		foreach ( $this->conn as $connection ) {
+			$connection->close();
+		}
+
+		$this->conn = [];
+
 		as_unschedule_all_actions( $this->hook() );
 
 		parent::tearDown();
