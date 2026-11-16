@@ -146,4 +146,5 @@ For the rest of the settings API, read [settings.md](settings.md).
 - The plugin has a Russian catalogue plus its storefront-translation test, an error-reporting DSN filter, a unit
   bootstrap that defines every WordPress time constant, and CI pinned to a reviewed framework SHA
   ([layout-and-testing.md](layout-and-testing.md#ci-of-a-plugin-repo)).
+- Help links are by topic, never by address: `get_help_topics()` is the plugin's one table, fields/sections/groups/pages declare `help`, a unit test runs `Help_Links::missing_topics()` over every declaration, and `wp woodev help-links check` is green before the release ([settings.md](settings.md)).
 - Read [traps.md](traps.md) once per plugin — it is one line per trap and each links its gotcha.

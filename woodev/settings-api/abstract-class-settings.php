@@ -218,6 +218,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_tooltip( (string) $args['tooltip'] );
 				}
 
+				if ( isset( $args['help'] ) ) {
+					$control->set_help( $args['help'] );
+				}
+
 				if ( isset( $args['description_on'] ) ) {
 					$control->set_description_on( (string) $args['description_on'] );
 				}

@@ -14,6 +14,7 @@ import ToolsBlock, { ToolsRow } from './tools-block';
 import FieldsTable from './fields-table';
 import GroupCard, { arrangeFields } from './group-card';
 import { isFieldVisible } from '../components/validate';
+import HelpLink from '../components/help-link';
 import { RawHTML } from '@wordpress/element';
 
 export default function SectionView( { providerId, section, tabFields, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors } ) {
@@ -87,6 +88,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 			{ section.description && (
 				<div className="woodev-settings__section-desc"><RawHTML>{ section.description }</RawHTML></div>
 			) }
+			<HelpLink help={ section.help } className="woodev-settings__section-help" />
 			{ arrangeFields( visibleIds, groups ).map( ( item ) => {
 				if ( 'field' === item.kind ) {
 					return renderField( item.id );

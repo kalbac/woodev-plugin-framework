@@ -212,6 +212,15 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		protected $placeholder = '';
 
 		/**
+		 * The «Подробнее…» help link: a topic of the plugin's help table, optionally with a link-text variant
+		 * ({@see \Woodev\Framework\Help\Help_Links}). Empty when the control declares none.
+		 *
+		 * @since 2.1.11
+		 * @var array{topic:string,text:string}|array{}
+		 */
+		protected $help = [];
+
+		/**
 		 * @var int|null optional textarea row count; null keeps the renderer default.
 		 */
 		private ?int $rows = null;
@@ -598,6 +607,27 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_placeholder( string $value ): void {
 			$this->placeholder = $value;
+		}
+
+		/**
+		 * The declared help link, as `[ topic, text ]`; empty when none.
+		 *
+		 * @since 2.1.11
+		 * @return array{topic:string,text:string}|array{}
+		 */
+		public function get_help(): array {
+			return $this->help;
+		}
+
+		/**
+		 * Declares the «Подробнее…» link of this control.
+		 *
+		 * @since 2.1.11
+		 * @param string|array<string,string> $help A topic of the plugin's help table, or `[ 'topic' => …, 'text' => … ]`.
+		 * @return void
+		 */
+		public function set_help( $help ): void {
+			$this->help = \Woodev\Framework\Help\Help_Links::declaration( $help ) ?? [];
 		}
 
 		/**

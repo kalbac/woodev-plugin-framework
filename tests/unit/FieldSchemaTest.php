@@ -120,6 +120,29 @@ class FieldSchemaTest extends TestCase {
 		}
 	}
 
+	public function test_a_declared_help_topic_is_resolved_against_the_plugin_table_and_only_then(): void {
+		$handler = $this->make_handler( static function ( $handler ) {
+			$handler->register_setting( 'token', \Woodev_Setting::TYPE_STRING );
+			$handler->register_control( 'token', \Woodev_Control::TYPE_TEXT, [ 'help' => [ 'topic' => 'token', 'text' => 'why_needed' ] ] );
+			$handler->register_setting( 'plain', \Woodev_Setting::TYPE_STRING );
+			$handler->register_control( 'plain', \Woodev_Control::TYPE_TEXT );
+		} );
+
+		$with_table = Field_Schema::from_handler( $handler, [], '', [ 'token' => 'https://woodev.ru/docs/token/#get' ] );
+		$no_table   = Field_Schema::from_handler( $handler );
+
+		$this->assertSame(
+			[
+				'url'   => 'https://woodev.ru/docs/token/#get',
+				'text'  => 'Подробнее для чего это нужно',
+				'label' => 'Подробнее для чего это нужно (откроется в новой вкладке)',
+			],
+			$with_table['token']['help']
+		);
+		$this->assertArrayNotHasKey( 'help', $with_table['plain'], 'a field that declared none serialises as before' );
+		$this->assertArrayNotHasKey( 'help', $no_table['token'], 'no table, no link' );
+	}
+
 	public function test_table_without_country_columns_gets_no_country_metadata(): void {
 		$handler = $this->make_handler( static function ( $handler ) {
 			$handler->register_setting( 'warehouses', \Woodev_Setting::TYPE_STRING );
@@ -136,6 +159,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_tooltip' )->andReturn( 'tip' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( 1.0 );
 		$control->shouldReceive( 'get_max' )->andReturn( 10.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 0.5 );
@@ -170,6 +194,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -302,6 +327,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -373,6 +399,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( 'enter value' );
 		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -409,6 +436,7 @@ class FieldSchemaTest extends TestCase {
 		$picker_control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$picker_control->shouldReceive( 'get_placeholder' )->andReturn( '' );
 		$picker_control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$picker_control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$picker_control->shouldReceive( 'get_min' )->andReturn( null );
 		$picker_control->shouldReceive( 'get_max' )->andReturn( null );
 		$picker_control->shouldReceive( 'get_step' )->andReturn( null );
@@ -423,6 +451,7 @@ class FieldSchemaTest extends TestCase {
 		$plain_control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$plain_control->shouldReceive( 'get_placeholder' )->andReturn( '' );
 		$plain_control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$plain_control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$plain_control->shouldReceive( 'get_min' )->andReturn( null );
 		$plain_control->shouldReceive( 'get_max' )->andReturn( null );
 		$plain_control->shouldReceive( 'get_step' )->andReturn( null );
@@ -494,6 +523,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' );
 		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -525,7 +555,7 @@ class FieldSchemaTest extends TestCase {
 	 */
 	public function test_enabled_control_emits_no_disabled_key(): void {
 		$control = Mockery::mock( \Woodev_Control::class );
-		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'is_native_bounds' => false ] as $m => $r ) {
+		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'get_help' => [], 'is_native_bounds' => false ] as $m => $r ) {
 			$control->shouldReceive( $m )->andReturn( $r );
 		}
 		$setting = $this->make_setting( 'y', 'string', $control );
@@ -548,7 +578,7 @@ class FieldSchemaTest extends TestCase {
 	public function test_description_on_is_emitted_only_when_declared(): void {
 		foreach ( [ 'В тестовом режиме используются встроенные ключи.' => true, '' => false ] as $text => $emitted ) {
 			$control = Mockery::mock( \Woodev_Control::class );
-			foreach ( [ 'get_type' => 'toggle', 'get_description' => '', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => (string) $text, 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'is_native_bounds' => false ] as $m => $r ) {
+			foreach ( [ 'get_type' => 'toggle', 'get_description' => '', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => (string) $text, 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'get_help' => [], 'is_native_bounds' => false ] as $m => $r ) {
 				$control->shouldReceive( $m )->andReturn( $r );
 			}
 			$setting = $this->make_setting( 'test_mode', 'boolean', $control );
@@ -574,7 +604,7 @@ class FieldSchemaTest extends TestCase {
 	 */
 	public function test_numeric_assoc_options_are_emitted_in_declared_order(): void {
 		$control = Mockery::mock( \Woodev_Control::class );
-		foreach ( [ 'get_type' => 'select', 'get_description' => '', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'is_native_bounds' => false ] as $method => $result ) {
+		foreach ( [ 'get_type' => 'select', 'get_description' => '', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'get_help' => [], 'is_native_bounds' => false ] as $method => $result ) {
 			$control->shouldReceive( $method )->andReturn( $result );
 		}
 		$setting = $this->make_setting( 'vat', 'string', $control );

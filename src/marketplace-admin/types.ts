@@ -8,6 +8,7 @@
  */
 
 import type { ComponentType } from 'react';
+import type { HelpLinkData } from '../components/help-link';
 
 export type PageKind = 'records' | 'custom' | 'settings';
 
@@ -24,6 +25,8 @@ export interface ManifestPage {
 	tableLabels?: Record< string, string >;
 	view: string;
 	breadcrumbs: Breadcrumb[];
+	/** The page's «Подробнее…» link, resolved by PHP against the plugin's help table; absent when none. */
+	help?: HelpLinkData;
 	/** The reserved analytics slot: always null, never requested. */
 	analytics: null;
 }

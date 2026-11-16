@@ -594,8 +594,7 @@
 		flex: 1;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		white-space: nowrap;
-
+	
 		&.is-placeholder {
 			color: wd.$muted;
 		}
@@ -736,4 +735,12 @@
 		td:first-child { min-width: 160px; }
 		.components-base-control { min-width: 72px; }
 	}
+}
+
+// «Подробнее…» link (HelpLink): one line under a field, a section, a group or a note. A link, never a button, and
+// it flows with the text around it.
+.woodev-help-link {
+	display: inline-block;
+	margin-top: 4px;
+	font-size: 13px;
 }

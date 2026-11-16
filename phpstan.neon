@@ -110,6 +110,9 @@ parameters:
         # WC HPOS internal classes — not present in woocommerce-stubs
         - '#Call to static method .* on an unknown class Automattic\\WooCommerce\\Internal\\DataStores\\Orders\\OrdersTableDataStore#'
 
+        # WP-CLI is not stubbed; the help-link release command runs only under it (`defined( 'WP_CLI' )` guard).
+        - '#Call to static method .* on an unknown class WP_CLI#'
+
         # ---------------------------------------------------------------------------
         # Cross-hierarchy method calls (parent sees child methods)
         # ---------------------------------------------------------------------------

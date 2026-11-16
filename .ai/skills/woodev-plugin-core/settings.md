@@ -96,7 +96,7 @@ names are an installed-site data contract the moment you ship: choose setting id
 `text`, `textarea`, `number`, `email`, `tel`, `url`, `password`, `date`, `checkbox`, `radio`, `select`,
 `search-select`, `boxes-table`, `file`, `color`, `range`, `toggle`, `richtext`, `multiselect`, and
 `location-picker` (read the constant's docblock before using it), and `records-table`. Args: `name`, `description`,
-`description_on`, `options`, `min`, `max`, `step`, `native_bounds`, `tooltip`, `placeholder`, `rows`
+`description_on`, `options`, `min`, `max`, `step`, `native_bounds`, `tooltip`, `help` (a topic of `get_help_topics()` — «Подробнее…» link, `Help_Links`), `placeholder`, `rows`
 (textarea only), `country`, `disabled` + `disabled_reason`. A control type that does not fit
 the setting's type is rejected with `_doing_it_wrong()`; `toggle`/`checkbox` fit a scalar boolean only.
 

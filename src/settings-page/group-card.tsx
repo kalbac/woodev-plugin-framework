@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { runTool } from './rest';
 import { ToolSelector, selectorDefault, toolArgs } from './tools-block';
+import HelpLink, { type HelpLinkData } from '../components/help-link';
 import type { TableSchema } from './fields-table';
 
 /** A group as the registry serialises it (`Settings_Page_Registry::build_groups()`). */
@@ -25,6 +26,8 @@ export interface GroupSchema {
 	title: string;
 	description: string;
 	notice: string;
+	/** The «Подробнее…» link (`Settings_Group::with_help()`), resolved by PHP; absent when none was declared. */
+	help?: HelpLinkData;
 	/** HTML drawn after the fields and before the buttons (`Settings_Group::with_footnote()`). */
 	footnote?: string;
 	fields: string[];
@@ -169,6 +172,7 @@ export default function GroupCard( { providerId, group, actions, children, onRun
 			{ group.description && (
 				<div className="woodev-group__desc"><RawHTML>{ group.description }</RawHTML></div>
 			) }
+			<HelpLink help={ group.help } className="woodev-group__help" />
 			{ children }
 			{ group.footnote && (
 				<div className="woodev-group__footnote"><RawHTML>{ group.footnote }</RawHTML></div>
