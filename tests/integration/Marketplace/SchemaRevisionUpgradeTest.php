@@ -147,6 +147,11 @@ class SchemaRevisionUpgradeTest extends TestCase {
 		$plugin->shouldReceive( 'log_debug' );
 		$plugin->shouldReceive( 'log' );
 
+		// A refused column change reports through the admin notice handler (Lifecycle::report_schema_failure()).
+		$notices = \Mockery::mock();
+		$notices->shouldReceive( 'add_admin_notice' );
+		$plugin->shouldReceive( 'get_admin_notice_handler' )->andReturn( $notices );
+
 		return $plugin;
 	}
 
