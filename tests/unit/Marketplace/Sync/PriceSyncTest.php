@@ -13,6 +13,8 @@ use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
 use Woodev\Framework\Marketplace\Jobs\Price_Recompute_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Refresh_Runner;
@@ -127,6 +129,39 @@ final class PriceSyncTest extends Sync_Test_Case {
 		$recorder->register();
 
 		$this->assertSame( 10, has_action( 'woocommerce_product_object_updated_props', [ $recorder, 'on_product_updated' ] ) );
+	}
+
+	/**
+	 * Linking a created card with «sync on link» records the first price send the way the product tab does (#1793); an account that
+	 * does not push prices records none.
+	 *
+	 * @return void
+	 */
+	public function test_linking_a_card_records_the_first_price_send_for_an_account_that_pushes_prices(): void {
+		$product = $this->priced( 'a-9', '500.00', '700.00' );
+		$this->db->query( 'DELETE FROM ' . Sqlite_Tables::table( 'links' ) . ' WHERE wc_product_id = ' . $product );
+		$linker = Card_Linker::syncing( $this->links(), Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID ), [ $this->accounts(), 'get' ], $this->hook_stock(), $this->recorder() );
+		$card   = [
+			'offer_id'   => 'a-9',
+			'remote_ids' => [ 'item' => 9001 ],
+			'state'      => 'created',
+			'is_created' => true,
+		];
+
+		$this->assertSame( Card_Linker::LINKED, $linker->link( $this->account_id, $product, 0, $card ) );
+
+		$pending = $this->intents()->pending_of( $this->account_id, (int) $this->link_of( $product )->link_id(), 0, 'price' );
+
+		$this->assertSame( '500.00', $pending['payload']['price'] );
+		$this->assertTrue( $this->link_of( $product )->sync_price() );
+
+		$this->set_account( [ 'price_direction' => 'off' ] );
+		$other = $this->priced( 'a-10', '300.00' );
+		$this->db->query( 'DELETE FROM ' . Sqlite_Tables::table( 'links' ) . ' WHERE wc_product_id = ' . $other );
+
+		$linker->link( $this->account_id, $other, 0, [ 'offer_id' => 'a-10', 'remote_ids' => [ 'item' => 9002 ], 'state' => 'created', 'is_created' => true ] );
+
+		$this->assertNull( $this->intents()->pending_of( $this->account_id, (int) $this->link_of( $other )->link_id(), 0, 'price' ), 'the account pushes no prices: nothing recorded' );
 	}
 
 	/**

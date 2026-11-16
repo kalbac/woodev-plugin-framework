@@ -215,6 +215,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		private $contexts;
 
 		/**
+		 * The linker every link path of the plugin writes through (the link job and the import).
+		 *
+		 * @var Card_Linker
+		 */
+		private $linker;
+
+		/**
 		 * The adapter's importer part, set when the plugin imports cards.
 		 *
 		 * @var Card_Importer|null
@@ -278,6 +285,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->ring       = new Api_Error_Ring( $this->db, $this->table( 'api_errors' ) );
 			$this->contexts   = $this->export_context_builder();
 			$sync_state_store = new Sync_State_Store( $this->db, $this->table( 'sync_state' ) );
+			$this->linker     = $this->card_linker( $sync_state_store );
 
 			$this->stock_and_price( $sync_state_store );
 			$this->export( $sync_state_store );
@@ -301,6 +309,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 */
 		public static function forget(): void {
 			self::$registered = [];
+		}
+
+		/**
+		 * The linker of the plugin: it switches synchronisation on at linking when the account's setting says so, and records the first
+		 * send through intent recorders of its own (they hook nothing; the registered ones are built in {@see self::stock_and_price()}).
+		 *
+		 * @param Sync_State_Store $store Pending side of `sync_state`.
+		 * @return Card_Linker
+		 */
+		private function card_linker( Sync_State_Store $store ): Card_Linker {
+			$adapter = $this->adapter;
+			$queue   = new Sync_State_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'accounts' ), $adapter->stock_cadence() );
+			$stock   = new Stock_Intents( [ $this->accounts, 'get' ], $this->links, $store, $queue, $adapter->stock_policy() );
+			$price   = null === $adapter->price_pusher() ? null : new Price_Intents( $this->accounts, $adapter->id(), $this->links, $this->contexts, $store, $this->log_error );
+
+			return Card_Linker::syncing( $this->links, Effective_Settings::for_adapter( $adapter->id() ), [ $this->accounts, 'get' ], $stock, $price );
 		}
 
 		/**
@@ -429,7 +453,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			( new Link_Jobs(
 				$this->gate,
 				$this->links,
-				new Card_Linker( $this->links ),
+				$this->linker,
 				[ $shop, 'products' ],
 				new Link_Report_Store( $options ),
 				new Cards_Snapshot_Store( $options ),
@@ -467,7 +491,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 				new Wpdb_Profile_Store( $this->db, $this->table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
 				new Shop_Price_Writer( $this->contexts )
 			);
-			$import    = new Card_Import( $this->links, new Card_Linker( $this->links ), $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links ), [ $writer, 'start' ], [ $writer, 'complete' ] );
+			$import    = new Card_Import( $this->links, $this->linker, $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links ), [ $writer, 'start' ], [ $writer, 'complete' ] );
 
 			( new Import_Jobs( $this->gate, $adapter, $import, $notes, $scheduler, $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
 			( new Legacy_Order_Lines( $adapter->id() ) )->register();

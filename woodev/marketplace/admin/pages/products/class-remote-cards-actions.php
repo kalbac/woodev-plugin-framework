@@ -219,7 +219,7 @@ final class Remote_Cards_Actions {
 			'requested'      => $eligible + $skipped,
 			'eligible'       => $eligible,
 			'skipped'        => $skipped,
-			'scope_sentence' => $this->import_sentence( $plan ),
+			'scope_sentence' => $this->import_sentence( $account, $plan ),
 			'groups'         => $this->import_groups( $plan ),
 		];
 	}
@@ -297,10 +297,11 @@ final class Remote_Cards_Actions {
 	 * «Будет создано товаров: N. Товар с таким артикулом уже есть, свяжем: M.» The cards of one group are counted as the one
 	 * variable product they become, by the plan's own count.
 	 *
-	 * @param array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int} $plan Plan.
+	 * @param Account                                                                                     $account Account.
+	 * @param array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int} $plan    Plan.
 	 * @return string
 	 */
-	private function import_sentence( array $plan ): string {
+	private function import_sentence( Account $account, array $plan ): string {
 		$parts = [];
 
 		if ( $plan['products'] > 0 ) {
@@ -322,9 +323,21 @@ final class Remote_Cards_Actions {
 			$parts[] = sprintf( __( 'Товар с таким артикулом уже есть, свяжем: %d.', 'woodev-plugin-framework' ), count( $plan[ Remote_Cards_Import_Plan::LINK ] ) );
 		}
 
-		$parts[] = __( 'Импорт идёт в фоне. На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' );
+		$parts[] = __( 'Импорт идёт в фоне.', 'woodev-plugin-framework' );
+
+		// A product the import creates holds no managed stock and gets its price from the card, so only a card linked to a product that is already there can send anything.
+		$parts[] = [] === $plan[ Remote_Cards_Import_Plan::LINK ] ? $this->unchanged() : $this->linker->remote_effect( $account, $this->unchanged() );
 
 		return implode( ' ', $parts );
+	}
+
+	/**
+	 * What a confirmation says when linking sends nothing to the marketplace.
+	 *
+	 * @return string
+	 */
+	private function unchanged(): string {
+		return __( 'На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' );
 	}
 
 	/**
@@ -420,11 +433,12 @@ final class Remote_Cards_Actions {
 			'eligible'       => 1,
 			'skipped'        => 0,
 			'scope_sentence' => sprintf(
-				/* translators: 1: the card's article, 2: the card's name, 3: the product's name. */
-				__( 'Карточка %1$s «%2$s» будет связана с товаром «%3$s». На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' ),
+				/* translators: 1: the card's article, 2: the card's name, 3: the product's name, 4: what linking does on the marketplace. */
+				__( 'Карточка %1$s «%2$s» будет связана с товаром «%3$s». %4$s', 'woodev-plugin-framework' ),
 				(string) $card['offer_id'],
 				(string) ( $card['name'] ?? '' ),
-				$product['title']
+				$product['title'],
+				$this->linker->remote_effect( $account, $this->unchanged() )
 			),
 		];
 	}
@@ -506,11 +520,12 @@ final class Remote_Cards_Actions {
 			'eligible'       => 1,
 			'skipped'        => 0,
 			'scope_sentence' => sprintf(
-				/* translators: 1: the card's article, 2: the card's name, 3: the product's name. */
-				__( 'Карточка %1$s «%2$s» будет связана с товаром «%3$s». На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' ),
+				/* translators: 1: the card's article, 2: the card's name, 3: the product's name, 4: what linking does on the marketplace. */
+				__( 'Карточка %1$s «%2$s» будет связана с товаром «%3$s». %4$s', 'woodev-plugin-framework' ),
 				(string) $card['offer_id'],
 				(string) ( $card['name'] ?? '' ),
-				$product['title']
+				$product['title'],
+				$this->linker->remote_effect( $account, $this->unchanged() )
 			),
 		];
 	}

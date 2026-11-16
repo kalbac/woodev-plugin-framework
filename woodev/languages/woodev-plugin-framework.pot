@@ -4127,6 +4127,68 @@ msgstr ""
 msgid "Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено."
 msgstr ""
 
+#: marketplace/settings/class-shared-fields.php:215
+msgid "Включать синхронизацию остатков и цен сразу после связывания"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-shared-fields.php:218
+#, php-format
+msgid "Когда товар связывается с карточкой — по артикулу, вручную, при импорте или подтверждении похожего артикула, — у него сразу включается синхронизация. Если в настройках аккаунта остатки и цены отправляются с сайта, текущие остаток и цена сразу уйдут на %s и заменят те, что там сейчас. Выключите, если хотите сначала проверить связанные товары и включать синхронизацию сами."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:326
+msgid "Импорт идёт в фоне."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:340
+msgid "На маркетплейсе ничего не меняется."
+msgstr ""
+
+#. translators: 1: the card's article, 2: the card's name, 3: the product's name, 4: what linking does on the marketplace.
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:437
+#, php-format
+msgid "Карточка %1$s «%2$s» будет связана с товаром «%3$s». %4$s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:224
+msgid "Для выбранных карточек будут созданы товары на сайте; если товар с таким артикулом уже есть, карточка свяжется с ним. Импорт идёт в фоне."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:244
+msgid "Карточка будет связана с товаром сайта, на который она похожа."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:280
+msgid "Карточка будет связана с выбранным товаром сайта."
+msgstr ""
+
+#. translators: 1: «120 товаров», 2: what linking does on the marketplace.
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1030
+#, php-format
+msgid "Весь аккаунт — %1$s магазина без связи с маркетплейсом. Связывание идёт по всему магазину, не только по отмеченным товарам. %2$s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1032
+msgid "На маркетплейсе ничего не записывается."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:533
+msgid "Ищет в кабинете маркетплейса карточки с таким же артикулом, как у товаров, и связывает их с сайтом. Работает не с одним этим товаром, а со всеми товарами категории (или магазина)."
+msgstr ""
+
+#: marketplace/flows/class-card-linker.php:206
+msgid "После связывания на маркетплейс могут быть отправлены остатки и цены с сайта (так включено в настройках аккаунта)."
+msgstr ""
+
+#: marketplace/flows/class-card-linker.php:210
+msgid "После связывания на маркетплейс могут быть отправлены остатки с сайта (так включено в настройках аккаунта)."
+msgstr ""
+
+#: marketplace/flows/class-card-linker.php:214
+msgid "После связывания на маркетплейс могут быть отправлены цены с сайта (так включено в настройках аккаунта)."
+msgstr ""
+
 #. translators: %s: marketplace name.
 #: marketplace/settings/class-accounts-sections.php:672
 msgid "In the other direction, add products manually on the Products screen."

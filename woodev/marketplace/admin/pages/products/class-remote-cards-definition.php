@@ -221,7 +221,7 @@ final class Remote_Cards_Definition {
 			'interaction'    => 'dialog',
 			'scope'          => 'selection',
 			'capability'     => 'manage_woocommerce',
-			'scope_sentence' => __( 'Для выбранных карточек будут созданы товары на сайте; если товар с таким артикулом уже есть, карточка свяжется с ним. Импорт идёт в фоне. На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' ),
+			'scope_sentence' => __( 'Для выбранных карточек будут созданы товары на сайте; если товар с таким артикулом уже есть, карточка свяжется с ним. Импорт идёт в фоне.', 'woodev-plugin-framework' ),
 			'confirm_label'  => __( 'Импортировать', 'woodev-plugin-framework' ),
 		];
 	}
@@ -241,7 +241,7 @@ final class Remote_Cards_Definition {
 			'interaction'    => 'dialog',
 			'scope'          => 'selection',
 			'capability'     => 'edit_products',
-			'scope_sentence' => __( 'Карточка будет связана с товаром сайта, на который она похожа. На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' ),
+			'scope_sentence' => __( 'Карточка будет связана с товаром сайта, на который она похожа.', 'woodev-plugin-framework' ),
 			'confirm_label'  => __( 'Связать', 'woodev-plugin-framework' ),
 		];
 	}
@@ -277,7 +277,7 @@ final class Remote_Cards_Definition {
 			'interaction'    => 'dialog',
 			'scope'          => 'selection',
 			'capability'     => 'edit_products',
-			'scope_sentence' => __( 'Карточка будет связана с выбранным товаром сайта. На маркетплейсе ничего не меняется.', 'woodev-plugin-framework' ),
+			'scope_sentence' => __( 'Карточка будет связана с выбранным товаром сайта.', 'woodev-plugin-framework' ),
 			'confirm_label'  => __( 'Связать', 'woodev-plugin-framework' ),
 			'fields'         => [
 				[

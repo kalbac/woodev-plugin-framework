@@ -57,7 +57,7 @@ final class Shared_Fields {
 	 * @since 2.1.5
 	 *
 	 * @param Marketplace_Adapter $adapter Adapter.
-	 * @return string[] `orders_enabled` and/or `import_enabled`.
+	 * @return string[] `orders_enabled` and `import_enabled` when supported, then `sync_on_link` (every adapter pushes stock).
 	 */
 	public static function exchange_field_names( Marketplace_Adapter $adapter ): array {
 		$names = [];
@@ -69,6 +69,8 @@ final class Shared_Fields {
 		if ( $adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
 			$names[] = 'import_enabled';
 		}
+
+		$names[] = Effective_Settings::KEY_SYNC_ON_LINK;
 
 		return $names;
 	}
@@ -168,7 +170,7 @@ final class Shared_Fields {
 	}
 
 	/**
-	 * Registers the orders and card-import switches the adapter supports.
+	 * Registers the orders, card-import and «sync on link» switches the adapter supports.
 	 *
 	 * @since 2.1.5
 	 *
@@ -206,6 +208,16 @@ final class Shared_Fields {
 				$setting_extra
 			);
 		}
+
+		Field_Kit::add_toggle(
+			$handler,
+			$id_for( Effective_Settings::KEY_SYNC_ON_LINK ),
+			__( 'Включать синхронизацию остатков и цен сразу после связывания', 'woodev-plugin-framework' ),
+			true,
+			/* translators: %s: marketplace name. */
+			sprintf( __( 'Когда товар связывается с карточкой — по артикулу, вручную, при импорте или подтверждении похожего артикула, — у него сразу включается синхронизация. Если в настройках аккаунта остатки и цены отправляются с сайта, текущие остаток и цена сразу уйдут на %s и заменят те, что там сейчас. Выключите, если хотите сначала проверить связанные товары и включать синхронизацию сами.', 'woodev-plugin-framework' ), $marketplace ),
+			$setting_extra
+		);
 	}
 
 	/**

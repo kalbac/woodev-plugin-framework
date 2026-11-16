@@ -79,6 +79,20 @@ final class CardImportTest extends Export_Test_Case {
 	private $next_id = 900;
 
 	/**
+	 * The linker the next import writes through; null builds the plain one (switches off).
+	 *
+	 * @var Card_Linker|null
+	 */
+	private $linker;
+
+	/**
+	 * First sends the linker recorded: `[ 'stock'|'price', product id ]`.
+	 *
+	 * @var array<int,array{0:string,1:int}>
+	 */
+	private $first_sends = [];
+
+	/**
 	 * Products the writer's first save made and its second half has not seen yet, by id.
 	 *
 	 * @var array<int,bool>
@@ -136,7 +150,7 @@ final class CardImportTest extends Export_Test_Case {
 	private function importer(): Card_Import {
 		return new Card_Import(
 			$this->links(),
-			new Card_Linker( $this->links() ),
+			$this->linker ?? new Card_Linker( $this->links() ),
 			$this->notes(),
 			new Effective_Settings(
 				Sqlite_Tables::MARKETPLACE_ID,
@@ -406,6 +420,81 @@ final class CardImportTest extends Export_Test_Case {
 		$this->assertFalse( $row->sync_stock() );
 		$this->assertFalse( $row->sync_price() );
 		$this->assertNull( $this->note() );
+	}
+
+	/**
+	 * Makes the next import write through a linker that switches synchronisation on (or not) and records its first sends.
+	 *
+	 * @param bool $on What the account's «sync on link» setting says.
+	 * @return void
+	 */
+	private function sync_on_link( bool $on ): void {
+		$this->first_sends = [];
+		$this->linker      = new Card_Linker(
+			$this->links(),
+			static function () use ( $on ): bool {
+				return $on;
+			},
+			function ( Link_Record $link ): void {
+				$this->first_sends[] = [ 'stock', $link->wc_product_id() ];
+			},
+			function ( int $account_id, Link_Record $link ): void {
+				$this->first_sends[] = [ 'price', $link->wc_product_id() ];
+			}
+		);
+	}
+
+	/**
+	 * A product the importer linked to an existing shop product gets sync on and the full first send, stock and price (#1793).
+	 *
+	 * @return void
+	 */
+	public function test_an_existing_product_is_linked_with_sync_on_and_both_first_sends(): void {
+		$this->sync_on_link( true );
+		$product = $this->shop_product( 401 );
+		$this->unmarked( $product );
+
+		$this->assertSame( Card_Import::LINKED_EXISTING, $this->import() );
+
+		$row = $this->links()->find( $this->account_id, 401 );
+
+		$this->assertTrue( $row->sync_stock() );
+		$this->assertTrue( $row->sync_price() );
+		$this->assertSame( [ [ 'stock', 401 ], [ 'price', 401 ] ], $this->first_sends );
+	}
+
+	/**
+	 * A product made from the card gets sync on and only the first stock send: its price came from the card (#1793).
+	 *
+	 * @return void
+	 */
+	public function test_a_created_product_is_linked_with_sync_on_and_only_the_stock_first_send(): void {
+		$this->sync_on_link( true );
+
+		$this->assertSame( Card_Import::CREATED, $this->import() );
+
+		$row = $this->links()->find( $this->account_id, 900 );
+
+		$this->assertTrue( $row->sync_stock() );
+		$this->assertTrue( $row->sync_price() );
+		$this->assertSame( [ [ 'stock', 900 ] ], $this->first_sends, 'no price send for a product created from the card' );
+	}
+
+	/**
+	 * With the setting off the import links as before: switches off, nothing recorded.
+	 *
+	 * @return void
+	 */
+	public function test_with_the_setting_off_an_imported_card_links_with_sync_off(): void {
+		$this->sync_on_link( false );
+		$product = $this->shop_product( 401 );
+		$this->unmarked( $product );
+
+		$this->import();
+		$this->import( $this->card( [ 'offer_id' => 'OTHER-ARTICLE' ] ) );
+
+		$this->assertFalse( $this->links()->find( $this->account_id, 401 )->sync_stock() );
+		$this->assertSame( [], $this->first_sends );
 	}
 
 	/**

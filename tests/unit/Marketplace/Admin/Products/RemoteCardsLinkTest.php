@@ -103,6 +103,53 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [], $this->scheduler->actions );
 	}
 
+	public function test_the_manual_link_follows_the_sync_on_link_setting(): void {
+		$this->add_product( [ 'id' => 41, 'sku' => '' ] );
+		$this->add_product( [ 'id' => 42, 'sku' => '' ] );
+
+		$this->sync_on_link( true );
+		$this->apply( 'MUG-1', '41' );
+
+		$this->assertTrue( $this->link_row( 41 )->sync_stock() );
+		$this->assertTrue( $this->link_row( 41 )->sync_price() );
+		$this->assertSame( [ 41 ], $this->first_stock_sends );
+
+		$this->sync_on_link( false );
+		$this->apply( 'TEE-2', '42' );
+
+		$this->assertFalse( $this->link_row( 42 )->sync_stock() );
+		$this->assertSame( [], $this->first_stock_sends );
+	}
+
+	public function test_the_preview_says_what_will_be_sent_when_sync_on_link_is_on_for_an_account_that_sends(): void {
+		$this->add_product( [ 'id' => 41, 'sku' => '' ] );
+
+		$this->sync_on_link( true );
+		$this->set_account( [ 'stock_mode' => 'site', 'price_direction' => 'to_marketplace' ] );
+		$sentence = $this->preview( 'MUG-1', '41' )['scope']['sentence'];
+
+		$this->assertStringContainsString( 'После связывания на маркетплейс могут быть отправлены остатки и цены с сайта (так включено в настройках аккаунта).', $sentence );
+		$this->assertStringNotContainsString( 'ничего не меняется', $sentence );
+
+		$this->set_account( [ 'price_direction' => 'off' ] );
+		$this->assertStringContainsString( 'могут быть отправлены остатки с сайта', $this->preview( 'MUG-1', '41' )['scope']['sentence'] );
+
+		$this->set_account( [ 'stock_mode' => 'marketplace', 'price_direction' => 'to_marketplace' ] );
+		$this->assertStringContainsString( 'могут быть отправлены цены с сайта', $this->preview( 'MUG-1', '41' )['scope']['sentence'] );
+
+		$this->set_account( [ 'stock_mode' => 'off', 'price_direction' => 'off' ] );
+		$this->assertStringContainsString( 'На маркетплейсе ничего не меняется.', $this->preview( 'MUG-1', '41' )['scope']['sentence'], 'the account sends nothing' );
+	}
+
+	public function test_the_preview_keeps_the_no_change_promise_when_sync_on_link_is_off(): void {
+		$this->add_product( [ 'id' => 41, 'sku' => '' ] );
+		$this->set_account( [ 'stock_mode' => 'site', 'price_direction' => 'to_marketplace' ] );
+
+		$this->sync_on_link( false );
+
+		$this->assertStringContainsString( 'На маркетплейсе ничего не меняется.', $this->preview( 'MUG-1', '41' )['scope']['sentence'] );
+	}
+
 	public function test_a_variation_is_linked_under_its_parent(): void {
 		$this->add_product( [ 'id' => 50, 'type' => 'variable' ] );
 		$this->add_product( [ 'id' => 51, 'parent_id' => 50, 'type' => 'variation' ] );

@@ -308,7 +308,7 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 				$this->snapshots(),
 				$this->links(),
 				$this->reports(),
-				new Card_Linker( $this->links() ),
+				$this->linker ?? new Card_Linker( $this->links() ),
 				new Link_Scheduler( $this->names() ),
 				$this->bulk(),
 				$license,
