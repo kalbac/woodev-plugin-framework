@@ -292,7 +292,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->stock_and_price( $sync_state_store );
 			$this->export( $sync_state_store );
 			$this->links_and_catalog();
-			$this->release_deleted_products();
 			$this->import();
 			$this->postings();
 			$this->labels();
@@ -341,7 +340,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$classifier = $adapter->error_classifier();
 			$limits     = $adapter->sync_limits();
 			$queue      = new Sync_State_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'accounts' ), $adapter->stock_cadence() );
-			$flusher    = new Stock_Flusher( $queue, $store, $this->links, $adapter->stock_pusher(), $adapter->stock_rules(), $limits, $classifier, $this->gate->pause() );
+			$releaser   = $this->deleted_product_releaser( $queue );
+			$flusher    = new Stock_Flusher( $queue, $store, $this->links, $adapter->stock_pusher(), $adapter->stock_rules(), $limits, $classifier, $this->gate->pause(), [ $releaser, 'release_settled' ] );
 			$pusher     = $adapter->price_pusher();
 			$price_half = null;
 			$scheduler  = new Price_Scheduler( $this->names );
@@ -438,15 +438,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		}
 
 		/**
-		 * A product deleted for good lets go of its cards: its link rows go, as «Снять связь» ends them, so the card can be imported or linked again.
+		 * A product deleted for good lets go of its cards: the link rows go as «Снять связь» ends them, so the card can be imported or linked
+		 * again. A created card is archived first; the stock sender hands the link back when that settles.
 		 *
-		 * @return void
+		 * @param Sync_State_Queue $queue Flusher side of `sync_state`.
+		 * @return Deleted_Product_Releaser
 		 */
-		private function release_deleted_products(): void {
-			$queue  = new Sync_State_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'accounts' ), $this->adapter->stock_cadence() );
-			$ledger = new Wpdb_Task_Ledger( $this->db, $this->table( 'tasks' ), $this->table( 'task_items' ) );
+		private function deleted_product_releaser( Sync_State_Queue $queue ): Deleted_Product_Releaser {
+			$ledger   = new Wpdb_Task_Ledger( $this->db, $this->table( 'tasks' ), $this->table( 'task_items' ) );
+			$releaser = new Deleted_Product_Releaser( new Link_Detacher( $this->links, $queue, $ledger, $this->accounts ), $this->log_error );
 
-			( new Deleted_Product_Releaser( new Link_Detacher( $this->links, $queue, $ledger, $this->accounts ), $this->log_error ) )->register();
+			$releaser->register();
+
+			return $releaser;
 		}
 
 		/**

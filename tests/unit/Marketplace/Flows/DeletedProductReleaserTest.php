@@ -16,7 +16,11 @@ use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
+use Woodev\Framework\Marketplace\Sync\Stock_Flusher;
+use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Export_Test_Case;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Price_Pusher;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Stock_Pusher;
 
 /**
  * @covers \Woodev\Framework\Marketplace\Flows\Deleted_Product_Releaser
@@ -36,6 +40,32 @@ final class DeletedProductReleaserTest extends Export_Test_Case {
 				$this->log[] = $line;
 			}
 		);
+	}
+
+	/**
+	 * The stock sender, wired to hand a settled link of a gone product back, as the plugin wires it.
+	 *
+	 * @return Stock_Flusher
+	 */
+	protected function flusher(): Stock_Flusher {
+		return new Stock_Flusher( $this->queue(), $this->intents(), $this->links(), $this->market, $this->market, $this->limits(), $this->classifier, $this->pause(), [ $this->releaser(), 'release_settled' ] );
+	}
+
+	/**
+	 * Deletes a product for good the way WordPress does: the stock recorder and the releaser hear `before_delete_post`, then the
+	 * product is gone.
+	 *
+	 * @param int $product_id Product id.
+	 * @return void
+	 */
+	private function delete_for_good( int $product_id ): void {
+		if ( null !== $this->stock_hook ) {
+			$this->stock_hook->on_removed( $product_id );
+		}
+
+		$this->releaser()->on_delete( $product_id );
+
+		unset( $this->products[ $product_id ] );
 	}
 
 	/**
@@ -125,7 +155,7 @@ final class DeletedProductReleaserTest extends Export_Test_Case {
 		$this->assertNull( $this->links()->find( $this->account_id, 301 ), 'the row is gone' );
 		$this->assertNull( $this->links()->find_by_offer_id( $this->account_id, 'NB-301' ), 'the card is free for a new link' );
 		$this->assertNull( $this->links()->get( $link_id ) );
-		$this->assertSame( 0, (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . \Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables::table( 'link_ids' ) . ' WHERE link_id = ' . $link_id ), 'the remote identifiers are gone' );
+		$this->assertSame( 0, (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . Sqlite_Tables::table( 'link_ids' ) . ' WHERE link_id = ' . $link_id ), 'the remote identifiers are gone' );
 		$this->assertNull( $this->ledger()->sent_offer_id( $link_id ) );
 		$this->assertFalse( $this->has_intents( $link_id ), 'queued stock and price are gone' );
 		$this->assertNotNull( $this->link_of( 302 ), 'another product is not touched' );
@@ -174,37 +204,156 @@ final class DeletedProductReleaserTest extends Export_Test_Case {
 	}
 
 	/**
-	 * A card that is created keeps its row for the archive intent; one being submitted keeps it for the request.
+	 * A submitting row stays for its request.
 	 *
 	 * @return void
 	 */
-	public function test_a_created_or_submitting_row_stays(): void {
-		$this->linked( 601, 'NB-601', Link_Record::STATE_CREATED );
+	public function test_a_submitting_row_stays(): void {
 		$this->linked( 602, 'NB-602', Link_Record::STATE_SUBMITTED );
 
 		$this->post_type_is( 'product' );
-		$this->releaser()->on_delete( 601 );
 		$this->releaser()->on_delete( 602 );
 
-		$this->assertNotNull( $this->links()->find( $this->account_id, 601 ) );
 		$this->assertNotNull( $this->links()->find( $this->account_id, 602 ) );
 	}
 
 	/**
-	 * The links go even while the account's sender runs: it finds no link and drops what it holds.
+	 * A created card is still zeroed and archived on the marketplace so it stops selling; its row stays until that settles, and
+	 * is gone, with everything the plugin remembered about it, right after.
 	 *
 	 * @return void
 	 */
-	public function test_a_busy_sender_does_not_keep_the_row(): void {
-		$link = $this->linked( 701, 'NB-701' );
+	public function test_a_created_card_is_archived_first_then_its_link_goes(): void {
+		$product = $this->stock_product( 'gone', 1001, 5 );
+		$link_id = $this->link_id( $product );
 
-		$this->assertNotNull( $this->accounts()->claim( $this->account_id, 120 ) );
+		$this->hook_stock();
+		$this->want_price( $product );
+		$this->delete_for_good( $product );
 
-		$this->post_type_is( 'product' );
-		$this->releaser()->on_delete( 701 );
+		$this->assertSame( Link_Record::STATE_CREATED, $this->links()->get( $link_id )->card_state(), 'the row stays until the archive settles' );
+		$this->assertSame(
+			[
+				'stock'   => 0,
+				'archive' => true,
+			],
+			$this->queue()->get( Sync_State_Queue::key( $this->account_id, $link_id, self::WAREHOUSE, Sync_State_Store::KIND_STOCK ) )['pending_payload']
+		);
 
-		$this->assertNull( $this->links()->get( (int) $link->link_id() ) );
-		$this->assertNull( $this->ledger()->sent_offer_id( (int) $link->link_id() ) );
+		$result = $this->flush();
+
+		$this->assertSame( [ [ 'gone' => 0 ] ], $this->market->sent( Scripted_Stock_Pusher::PUSH ) );
+		$this->assertSame( [ [ 'gone' ] ], $this->market->sent( Scripted_Stock_Pusher::ARCHIVE ) );
+		$this->assertSame( 1, $result->archived );
+		$this->assertNull( $this->links()->get( $link_id ), 'the link is released once the archive settled' );
+		$this->assertNull( $this->links()->find_by_offer_id( $this->account_id, 'gone' ), 'the card is not linked any more' );
+		$this->assertSame( 0, (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . Sqlite_Tables::table( 'link_ids' ) . ' WHERE link_id = ' . $link_id ) );
+		$this->assertSame( 0, (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . Sqlite_Tables::table( 'sync_state' ) . ' WHERE link_id = ' . $link_id ) );
+	}
+
+	/**
+	 * A product only in the trash is not gone: its archived card keeps its row, so restoring it finds the link.
+	 *
+	 * @return void
+	 */
+	public function test_a_trashed_product_keeps_its_link_after_the_archive(): void {
+		$product = $this->stock_product( 'trashed', 1101, 5 );
+
+		$this->hook_stock();
+		$this->trash( $product );
+		$this->flush();
+
+		$this->assertSame( Link_Record::STATE_ARCHIVED, $this->link_of( $product )->card_state() );
+	}
+
+	/**
+	 * An archive the marketplace refuses for good (the card is not there) ends the link after the last attempt, not before.
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_archive_releases_the_link_after_the_last_attempt(): void {
+		$product = $this->stock_product( 'refused', 1201, 5 );
+		$link_id = $this->link_id( $product );
+
+		$this->hook_stock();
+		$this->delete_for_good( $product );
+
+		$this->market->script[] = static function () {
+			return null;
+		};
+
+		for ( $attempt = 1; $attempt <= 5; ++$attempt ) {
+			$this->market->script[] = static function (): bool {
+				return false;
+			};
+		}
+
+		for ( $attempt = 1; $attempt <= 4; ++$attempt ) {
+			$this->flush();
+			$this->now += 100000;
+
+			$this->assertNotNull( $this->links()->get( $link_id ), 'attempt ' . $attempt . ' is not the last' );
+		}
+
+		$this->flush();
+
+		$this->assertNull( $this->links()->get( $link_id ) );
+	}
+
+	/**
+	 * The link of a deleted product goes even while the account's sender holds the claim; the sender's next pass drops the stock
+	 * and the price it still held for it.
+	 *
+	 * @return void
+	 */
+	public function test_a_busy_sender_leaves_no_rows_after_its_next_pass(): void {
+		$product = $this->stock_product( 'busy', 1301, 5, [ 'sync_price' => true ] );
+		$link_id = $this->link_id( $product );
+
+		$this->want_price( $product );
+		$this->intents()->record( $this->account_id, $link_id, self::WAREHOUSE, Sync_State_Store::KIND_STOCK, [ 'stock' => 3 ] );
+		$this->links()->set_state( $link_id, Link_Record::STATE_PRICE_SENT );
+
+		$token = $this->accounts()->claim( $this->account_id, 120 );
+		$this->assertNotNull( $token );
+
+		$this->delete_for_good( $product );
+
+		$this->assertNull( $this->links()->get( $link_id ) );
+		$this->assertSame( 2, (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . Sqlite_Tables::table( 'sync_state' ) . ' WHERE link_id = ' . $link_id ), 'the rows wait for the sender' );
+
+		$this->accounts()->release_claim( $this->account_id, (string) $token );
+
+		$prices = $this->price_runner( new Scripted_Price_Pusher() );
+		$this->flush_runner( [ $prices, 'flush_under_claim' ] )->run( $this->account_id );
+
+		$this->assertSame( 0, (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . Sqlite_Tables::table( 'sync_state' ) . ' WHERE link_id = ' . $link_id ), 'no stock and no price row is left' );
+	}
+
+	/**
+	 * The price half does the same for a link that only had a price queued.
+	 *
+	 * @return void
+	 */
+	public function test_the_price_sender_drops_a_price_of_a_gone_link(): void {
+		$product = $this->stock_product( 'priceonly', 1401, 5, [ 'sync_price' => true ] );
+		$link_id = $this->link_id( $product );
+
+		$this->want_price( $product );
+		$this->links()->set_state( $link_id, Link_Record::STATE_PRICE_SENT );
+
+		$token = $this->accounts()->claim( $this->account_id, 120 );
+		$this->assertNotNull( $token );
+
+		$this->delete_for_good( $product );
+		$this->accounts()->release_claim( $this->account_id, (string) $token );
+
+		$pusher = new Scripted_Price_Pusher();
+		$prices = $this->price_runner( $pusher );
+		$this->flush_runner( [ $prices, 'flush_under_claim' ] )->run( $this->account_id );
+
+		$this->assertSame( 0, (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . Sqlite_Tables::table( 'sync_state' ) . ' WHERE link_id = ' . $link_id ) );
+		$this->assertSame( [], $pusher->requests, 'nothing was sent for a gone card' );
 	}
 
 	/**

@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Flows;
 
+use Woodev\Framework\Marketplace\Data\Link_Record;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -16,7 +18,10 @@ defined( 'ABSPATH' ) || exit;
  *
  * `before_delete_post` is the one hook every route reaches: the trash screen's «Удалить навсегда», the REST API, WP-CLI and
  * the deletion of a variable product's variations. Moving to the trash fires another hook, so a product restored from the trash keeps
- * its links. The marketplace is not called: its card stays where it is and can be imported or linked again.
+ * its links. The marketplace is not called for the release: its card stays where it is and can be imported or linked again.
+ *
+ * A `created` card is the exception in time, not in the end: the shop still sets it to stock 0 and archives it (the intent the stock
+ * hook records on the same event), so it stops selling, and the sender then hands the settled link back here ({@see self::release_settled()}).
  *
  * @since 2.1.8
  */
@@ -81,6 +86,22 @@ final class Deleted_Product_Releaser {
 			$this->detacher->release_deleted( (int) $post_id );
 		} catch ( \Throwable $e ) {
 			call_user_func( $this->log_error, 'the links of deleted product ' . (int) $post_id . ' could not be released: ' . get_class( $e ) . ': ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Releases a link whose archive the sender has settled, when its product no longer exists. A product still in the trash is not gone.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Link_Record $link  The link.
+	 * @param string      $token The account claim the sender holds.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function release_settled( Link_Record $link, string $token ): void {
+		if ( false === get_post_status( $link->wc_product_id() ) ) {
+			$this->detacher->release_link( $link, $token );
 		}
 	}
 }

@@ -130,6 +130,13 @@ final class Stock_Flusher {
 	private $pause;
 
 	/**
+	 * Releases the link of a card the flusher has settled for a product that no longer exists, or null when nothing is released.
+	 *
+	 * @var callable|null
+	 */
+	private $release;
+
+	/**
 	 * Creates the flusher.
 	 *
 	 * @since 2.1.0
@@ -142,8 +149,9 @@ final class Stock_Flusher {
 	 * @param Sync_Limits      $limits     Per-request limits of the marketplace.
 	 * @param Error_Classifier $classifier Classifies a failed request.
 	 * @param Account_Pause    $pause      Account pause.
+	 * @param callable|null    $release    `function ( Link_Record $link, string $claim_token ): void`: called once a card is archived, or its archive refused for good, to let go of a link whose product is gone.
 	 */
-	public function __construct( Sync_State_Queue $queue, Sync_State_Store $intents, Wpdb_Link_Store $links, Stock_Pusher $pusher, Stock_Rules $rules, Sync_Limits $limits, Error_Classifier $classifier, Account_Pause $pause ) {
+	public function __construct( Sync_State_Queue $queue, Sync_State_Store $intents, Wpdb_Link_Store $links, Stock_Pusher $pusher, Stock_Rules $rules, Sync_Limits $limits, Error_Classifier $classifier, Account_Pause $pause, ?callable $release = null ) {
 		$this->queue      = $queue;
 		$this->intents    = $intents;
 		$this->links      = $links;
@@ -152,6 +160,7 @@ final class Stock_Flusher {
 		$this->limits     = $limits;
 		$this->classifier = $classifier;
 		$this->pause      = $pause;
+		$this->release    = $release;
 	}
 
 	/**
@@ -216,6 +225,14 @@ final class Stock_Flusher {
 		foreach ( $this->queue->due( $account->id(), Sync_State_Store::KIND_STOCK, self::MAX_REQUESTS * $this->limits->stock_batch() ) as $row ) {
 			$key      = Sync_State_Queue::key( (int) $row['account_id'], (int) $row['link_id'], (int) $row['warehouse_id'], Sync_State_Store::KIND_STOCK );
 			$link     = $this->links->get( (int) $row['link_id'] );
+
+			if ( null === $link ) {
+				// The link is gone (its product was deleted): there is no card to send to, so the link's rows go, not wait.
+				$run->guard();
+				$this->queue->forget_link( $account->id(), (int) $row['link_id'], $run->token() );
+				continue;
+			}
+
 			$archives = self::archives( $row['pending_payload'] );
 			$refusal  = self::refusal( $link, $site, $archives );
 
@@ -439,6 +456,7 @@ final class Stock_Flusher {
 			case Stock_Rules::ARCHIVED:
 				$run->write( $this->links->mark_archived( $link_id, $text, $run->fence() ) );
 				$run->write( $this->queue->drop( $pair['key'], $code . ': ' . $text, $run->token() ) );
+				$this->release_settled( $run, $link );
 				$result->error( $text );
 				break;
 			default:
@@ -526,13 +544,18 @@ final class Stock_Flusher {
 
 		foreach ( $pairs as $pair ) {
 			if ( ! $archived ) {
-				$this->fail( $run, $pair['key'], $text, $result );
+				// An archive the marketplace refuses for good (the card is gone or already archived there) ends the link as well.
+				if ( $this->fail( $run, $pair['key'], $text, $result ) ) {
+					$this->release_settled( $run, $pair['link'] );
+				}
+
 				$result->error( $text );
 				continue;
 			}
 
 			$run->write( $this->links->mark_archived( (int) $pair['link']->link_id(), null, $run->fence() ) );
 			$run->write( $this->queue->acknowledge( $pair['key'], (int) $pair['rev'], $run->token() ) );
+			$this->release_settled( $run, $pair['link'] );
 			++$result->archived;
 		}
 	}
@@ -544,16 +567,34 @@ final class Stock_Flusher {
 	 * @param array<string,mixed> $key    Row key.
 	 * @param string              $text   Reason.
 	 * @param Stock_Flush_Result  $result Result.
-	 * @return void
+	 * @return bool True when this was the last attempt: the pair is left failed.
 	 * @throws Claim_Lost When the claim was taken over.
 	 */
-	private function fail( Account_Run $run, array $key, string $text, Stock_Flush_Result $result ): void {
+	private function fail( Account_Run $run, array $key, string $text, Stock_Flush_Result $result ): bool {
 		$attempts = (int) ( $this->queue->get( $key )['attempts'] ?? 0 );
 
 		$run->write( $this->queue->defer( $key, Backoff::seconds_after( $attempts + 1 ), $text, true, $run->token() ) );
 
 		if ( $attempts + 1 >= $this->queue->cadence()->max_attempts() ) {
 			++$result->failed;
+
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Lets go of a link whose card is settled (archived, or refused for good) when the release is wired: the callback decides
+	 * whether the product is gone.
+	 *
+	 * @param Account_Run $run  The run, whose claim the release writes under.
+	 * @param Link_Record $link The link.
+	 * @return void
+	 */
+	private function release_settled( Account_Run $run, Link_Record $link ): void {
+		if ( null !== $this->release ) {
+			call_user_func( $this->release, $link, $run->token() );
 		}
 	}
 

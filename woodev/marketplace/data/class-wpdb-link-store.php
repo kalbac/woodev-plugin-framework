@@ -1064,7 +1064,8 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * it can be imported or linked again.
 	 *
 	 * Two kinds of rows stay: one an export is submitting right now (its request carries the article, as for {@see self::detach()}),
-	 * and a `created` card, whose archive intent the shop is still to send and needs the row for.
+	 * and a `created` card, whose archive intent the sender is still to send and needs the row for; the sender deletes that row
+	 * when the archive settles ({@see self::delete_link()}).
 	 *
 	 * @since 2.1.8
 	 *
@@ -1096,13 +1097,40 @@ final class Wpdb_Link_Store implements Link_Store {
 			$released[ (int) $row['link_id'] ] = (int) $row['account_id'];
 		}
 
-		$in = implode( ', ', array_fill( 0, count( $released ), '%d' ) );
+		$this->delete_rows( array_keys( $released ) );
+
+		return $released;
+	}
+
+	/**
+	 * Deletes one link row with its remote identifiers, whatever its state. For the sender that has just settled the archive of a
+	 * card whose product is gone ({@see \Woodev\Framework\Marketplace\Flows\Link_Detacher::release_link()}).
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int $link_id Link id.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function delete_link( int $link_id ): void {
+		$this->delete_rows( [ $link_id ] );
+	}
+
+	/**
+	 * Deletes link rows and their remote identifiers as one unit.
+	 *
+	 * @param int[] $link_ids Link ids.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	private function delete_rows( array $link_ids ): void {
+		$in = implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) );
 
 		$this->atomically(
-			function () use ( $released, $in ): void {
+			function () use ( $link_ids, $in ): void {
 				foreach ( [ $this->ids_table, $this->table ] as $table ) {
 					$deleted = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
-						$this->db->prepare( 'DELETE FROM %i WHERE link_id IN (' . $in . ')', array_merge( [ $table ], array_keys( $released ) ) ) // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+						$this->db->prepare( 'DELETE FROM %i WHERE link_id IN (' . $in . ')', array_merge( [ $table ], $link_ids ) ) // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 					);
 
 					if ( false === $deleted ) {
@@ -1111,8 +1139,6 @@ final class Wpdb_Link_Store implements Link_Store {
 				}
 			}
 		);
-
-		return $released;
 	}
 
 	/**

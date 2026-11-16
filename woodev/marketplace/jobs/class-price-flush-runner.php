@@ -171,6 +171,8 @@ final class Price_Flush_Runner {
 			return 0;
 		}
 
+		$this->queue->forget_orphans( $account_id, $token );
+
 		$used = 0;
 
 		while ( $used < $remaining_budget ) {

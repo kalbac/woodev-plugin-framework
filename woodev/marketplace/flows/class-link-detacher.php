@@ -166,4 +166,23 @@ final class Link_Detacher {
 
 		return count( $released );
 	}
+
+	/**
+	 * Releases one link whose card the sender has just archived because its product was deleted: the row and its remote identifiers
+	 * go, the send history ends, and the link's `sync_state` rows are retired under the claim the caller holds.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Link_Record $link  The link.
+	 * @param string      $token The account claim the sender holds.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function release_link( Link_Record $link, string $token ): void {
+		$link_id = (int) $link->link_id();
+
+		$this->links->delete_link( $link_id );
+		$this->ledger->forget_sent( $link_id );
+		$this->queue->forget_link( $link->account_id(), $link_id, $token );
+	}
 }
