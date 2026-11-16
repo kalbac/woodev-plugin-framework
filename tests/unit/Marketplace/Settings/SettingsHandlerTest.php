@@ -45,9 +45,13 @@ final class SettingsHandlerTest extends TestCase {
 	/** @var array<string,mixed> */
 	private $options = [];
 
+	/** @var int Seconds the test clock runs ahead of NOW. */
+	private $clock_shift = 0;
+
 	protected function setUp(): void {
 		parent::setUp();
-		$this->options = [];
+		$this->options     = [];
+		$this->clock_shift = 0;
 
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( 'wp_parse_args' )->alias(
@@ -449,7 +453,7 @@ final class SettingsHandlerTest extends TestCase {
 				],
 			]
 		);
-		$options = new Warehouse_Options( $this->cache );
+		$options = new Warehouse_Options( $this->cache, $this->clock() );
 
 		$this->assertSame( [ 1, 2, 3, 4 ], array_keys( $options->for_account( 5 ) ), 'the default warehouse select keeps the order' );
 		$this->assertSame( 'Склад Б', $options->for_account( 5 )['2'], 'and does not mark anything' );
@@ -517,7 +521,7 @@ final class SettingsHandlerTest extends TestCase {
 			static function (): int {
 				return self::NOW;
 			},
-			new Warehouse_Options( $this->cache )
+			new Warehouse_Options( $this->cache, $this->clock() )
 		);
 
 		$this->assertTrue( $status->for_account( $store->get( $acc_id ) )->is_success(), 'no cache, nothing to report' );
@@ -532,6 +536,28 @@ final class SettingsHandlerTest extends TestCase {
 
 		$store->update_fields( $acc_id, [ 'warehouse_id' => 2 ] );
 		$this->assertTrue( $status->for_account( $store->get( $acc_id ) )->is_success(), 'another warehouse picked: the reason is gone' );
+	}
+
+	/**
+	 * A clock that can be moved forward.
+	 *
+	 * @return callable
+	 */
+	private function clock(): callable {
+		return function (): int {
+			return self::NOW + $this->clock_shift;
+		};
+	}
+
+	public function test_a_stale_warehouse_list_does_not_count(): void {
+		[ , , $acc_id ] = $this->stock_mode_handler( [], '1', true, [ 'warehouse_id' => 7 ], [ 1, 2 ] );
+		$options = new Warehouse_Options( $this->cache, $this->clock() );
+
+		$this->assertTrue( $options->is_unavailable( $acc_id, 7 ), 'a fresh list without the id counts' );
+
+		Warehouse_Options::forget_current();
+		$this->clock_shift = Warehouse_Options::FRESH_FOR + 1;
+		$this->assertFalse( $options->is_unavailable( $acc_id, 7 ), 'the refresh has not succeeded for over the window: the list says nothing' );
 	}
 
 	public function test_the_add_account_form_starts_with_the_account_switched_on(): void {
@@ -567,7 +593,7 @@ final class SettingsHandlerTest extends TestCase {
 		);
 		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', true, [ 'merchant_uid' => '1', 'access_token' => 't' ] ) );
 
-		$accounts = new Accounts_Sections( $store, $adapter, new Account_Status( $store, $adapter ), new Warehouse_Options( $this->cache ), 'fake_mp' );
+		$accounts = new Accounts_Sections( $store, $adapter, new Account_Status( $store, $adapter ), new Warehouse_Options( $this->cache, $this->clock() ), 'fake_mp' );
 		$params   = array_values(
 			array_filter(
 				$accounts->sections(),
@@ -685,7 +711,7 @@ final class SettingsHandlerTest extends TestCase {
 				return self::NOW;
 			}
 		);
-		$wh       = new Warehouse_Options( $this->cache );
+		$wh       = new Warehouse_Options( $this->cache, $this->clock() );
 		$accounts = new Accounts_Sections( $store, $adapter, $status, $wh, 'fake_mp', $on_connected );
 
 		return new Settings_Handler( 'fake_mp', [ $accounts ], 'Fake Market' );

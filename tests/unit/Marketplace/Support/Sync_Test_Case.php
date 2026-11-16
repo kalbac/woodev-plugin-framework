@@ -37,6 +37,7 @@ use Woodev\Framework\Marketplace\Price\Money;
 use Woodev\Framework\Marketplace\Price\Price_Pusher;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
 use Woodev\Framework\Marketplace\Stock\Stock_Policy;
+use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Mirror_Stock_Writer;
@@ -191,6 +192,7 @@ abstract class Sync_Test_Case extends TestCase {
 	 */
 	protected function setUp(): void {
 		parent::setUp();
+		Warehouse_Options::forget_current();
 		Monkey\setUp();
 		Functions\stubTranslationFunctions();
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
@@ -243,6 +245,7 @@ abstract class Sync_Test_Case extends TestCase {
 	 * @return void
 	 */
 	protected function tearDown(): void {
+		Warehouse_Options::forget_current(); // The kept list belongs to this test's database.
 		Monkey\tearDown();
 		parent::tearDown();
 	}

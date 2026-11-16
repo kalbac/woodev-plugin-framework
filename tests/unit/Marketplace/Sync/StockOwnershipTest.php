@@ -238,8 +238,11 @@ final class StockOwnershipTest extends Sync_Test_Case {
 		$oversize = $this->stock_product( 'big', 3, 1, [ 'oversize' => true ] );
 		$this->set_account( [ 'oversize_warehouse_id' => 555 ] );
 		$account = $this->account_now();
-		$cache   = new Wpdb_Catalog_Cache( $this->db, Sqlite_Tables::schema()->table_name( 'catalog_cache', Sqlite_Tables::PREFIX ) );
-		$known   = new Warehouse_Options( $cache );
+		$clock   = function (): int {
+			return $this->now;
+		};
+		$cache   = new Wpdb_Catalog_Cache( $this->db, Sqlite_Tables::schema()->table_name( 'catalog_cache', Sqlite_Tables::PREFIX ), $clock );
+		$known   = new Warehouse_Options( $cache, $clock );
 		$resolve = function ( int $product_id ) use ( $account, $known ): ?int {
 			return Stock_Warehouse::for_link( $account, $this->link_of( $product_id ), $known );
 		};
@@ -274,6 +277,41 @@ final class StockOwnershipTest extends Sync_Test_Case {
 		$listed( [ 1, 2 ] );
 		$this->set_account( [ 'warehouse_id' => 2 ] );
 		$this->assertSame( 2, Stock_Warehouse::for_link( $this->account_now(), $this->link_of( $default ), $known ), 'another warehouse picked: sends resume' );
+
+		// A list the refresh has not renewed for longer than the window (it keeps failing) is not the current one: nothing is blocked.
+		$this->now += Warehouse_Options::FRESH_FOR + 1;
+		Warehouse_Options::forget_current();
+		$this->assertSame( 99, $resolve( $own ), 'a stale list never blocks' );
+		$this->assertSame( self::WAREHOUSE, $resolve( $default ), 'a stale list never blocks' );
+	}
+
+	/**
+	 * The available list is read once per account for the request, whoever resolves how many warehouses; a cache write drops it.
+	 *
+	 * @return void
+	 */
+	public function test_the_available_list_is_read_once_per_request(): void {
+		$default = $this->link_of( $this->stock_product( 'default', 2 ) );
+		$table   = Sqlite_Tables::schema()->table_name( 'catalog_cache', Sqlite_Tables::PREFIX );
+		$clock   = function (): int {
+			return $this->now;
+		};
+		$cache   = new Wpdb_Catalog_Cache( $this->db, $table, $clock );
+		$known   = new Warehouse_Options( $cache, $clock );
+		$account = $this->account_now();
+		$cache->put( Warehouse_Options::key_for( $account->id() ), [ 'warehouses' => [ [ 'warehouse_id' => 1, 'name' => 'Склад 1' ] ] ] );
+
+		$this->assertNull( Stock_Warehouse::for_link( $account, $default, $known ) );
+
+		// Take the rows out from under the reader: a second read would find no list and let the warehouse through.
+		$this->db->query( "DELETE FROM {$table}" );
+
+		for ( $i = 0; $i < 500; ++$i ) {
+			$this->assertNull( Stock_Warehouse::for_link( $account, $default, $known ), 'resolution ' . $i . ' came from the one read' );
+		}
+
+		$cache->put( Warehouse_Options::key_for( $account->id() ), [ 'warehouses' => [ [ 'warehouse_id' => self::WAREHOUSE, 'name' => 'Склад' ] ] ] );
+		$this->assertSame( self::WAREHOUSE, Stock_Warehouse::for_link( $account, $default, $known ), 'a refresh write drops the kept list' );
 	}
 
 	/**
