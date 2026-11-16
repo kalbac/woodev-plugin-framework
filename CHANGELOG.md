@@ -1,6 +1,62 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.9] — 2026-11-16
+### Bug Fixes
+- **shipping**: Send the recipient phone to the admin rates request
+
+- **checkout**: Enqueue the classic adapters on every checkout page, block content or not
+
+- **checkout**: The field gate does nothing on a page without form.checkout
+
+- **checkout**: Persist the pickup field by the order's own shipping line (#1817)
+
+- **shipping**: Hand every Yandex map config the same fallback key
+
+- **shipping**: Free-shipping threshold is measured after coupon discounts (#1722)
+
+- **shipping**: Carry the amount after coupon discounts on the shipping package (#1722)
+
+- **shipping**: Normalise every order amount to the shop's price decimals (#1722)
+
+- **settings,shipping**: Rename connection-check route to /verify; warn when REST is closed to guests
+
+- **shipping**: Guest-access probe reaches the controller, follows the core SSL contract, blames only WordPress
+
+
+### Documentation
+- Save session s232
+
+- S232 handoff — E2 critic done, #96 started
+
+- Trim handoff to budget
+
+- S232 handoff — ozon#97 state
+
+- S232 handoff — ozon#97 merged
+
+- Trim handoff to budget
+
+- S232 daytime — ozon#92 decided, support-card triage and handoff
+
+- Fix markdownlint in handoff
+
+- Handoff — yandex#165 also aligns button order with CDEK
+
+- **shipping**: Recipient phone prefers shipping, then billing, at checkout too
+
+
+### Build
+- Rebuild shipping-orders bundle for the recipient phone
+
+- Rebuild settings bundles for the verify route
+
+
+### I18n
+- Catalogue entry for the non-JSON connection-check message
+
+
+
 ## [2.1.8] — 2026-11-16
 ### Bug Fixes
 - **marketplace**: E1 review round 1 — report preview flow, matching deselect, hidden-value actions (#1792)
