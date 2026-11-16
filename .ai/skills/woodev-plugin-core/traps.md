@@ -197,6 +197,11 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 
 ## Lifecycle (topic `lifecycle`)
 
+- A v2 port that restores a v1 feature keeps the v1 hook NAMES and arguments: grep the v1 tag (`git grep -n -E "do_action|apply_filters" v1.x.y`)
+  before naming a hook, and diff the `get_deprecated_hooks()` list against what v2 fires — a hook declared «removed» that v2 should
+  fire is a silent break for every shop customisation on it (Ozon Seller s232: the restored «Купить на Ozon» button fired new
+  `woodev_ozon_seller_*_buy_button` names while v1 shops hook `wc_ozon_seller_before/after_product_button`; ozon-seller PR #95). →
+  `docs-internal/sessions/s232.md`
 - Install vs upgrade is a version comparison on `woodev_{id}_version`; delete or hand-edit that option and
   the install routine re-runs (or every upgrade does). →
   `docs-internal/gotchas/lifecycle-install-upgrade-detection.md`
