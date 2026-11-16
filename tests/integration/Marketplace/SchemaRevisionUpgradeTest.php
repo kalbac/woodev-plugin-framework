@@ -254,6 +254,7 @@ class SchemaRevisionUpgradeTest extends TestCase {
 			return $query;
 		};
 		add_filter( 'query', $refuser );
+		$printed = $GLOBALS['wpdb']->hide_errors(); // The refused statement must not print a wpdb error into the test output.
 
 		try {
 			$lifecycle = new Lifecycle( $this->plugin(), $this->schema );
@@ -271,6 +272,7 @@ class SchemaRevisionUpgradeTest extends TestCase {
 			$lifecycle->bring_schema_up_to_date();
 		} finally {
 			remove_filter( 'query', $refuser );
+			$GLOBALS['wpdb']->show_errors( $printed );
 			delete_transient( 'woodev_' . self::PLUGIN_ID . '_schema_retry' );
 		}
 
