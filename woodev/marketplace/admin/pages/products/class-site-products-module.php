@@ -270,8 +270,8 @@ final class Site_Products_Module {
 			new Link_Scheduler( $job_names ),
 			$ledger,
 			[
-				'link_candidates' => static function ( int $account_id ) use ( $shop, $links ): int {
-					return self::count_candidates( $shop->products(), $links->identity_map( $account_id ) );
+				'link_candidates' => static function ( int $account_id, ?int $category = null ) use ( $shop, $links ): int {
+					return self::count_candidates( $shop->products( $category ), $links->identity_map( $account_id ) );
 				},
 				'link_effect'     => [ $linker, 'remote_effect' ],
 				'can_edit'        => static function ( int $product_id ): bool {

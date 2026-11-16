@@ -121,23 +121,69 @@ final class Site_Products_Definition {
 
 	/**
 	 * «Связать по артикулу»: the account-wide job that matches the cabinet's cards to the shop's products by article. It reaches the
-	 * whole shop whatever is selected, and says so; both tables of the products page offer it.
+	 * whole shop or, when the table lets the merchant choose, one category with its subcategories — never the ticked rows.
 	 *
 	 * @since 2.1.5
+	 * @since 2.1.8 `$by_category` adds the choice «весь магазин / одна категория».
 	 *
 	 * @param string|null $scope_sentence The sentence that names the reach of the job, for a table whose rows cannot be selected. The
 	 *                                    products table's own wording (which speaks of the marked products) when omitted.
+	 * @param bool        $by_category    Whether the dialog asks «весь магазин / одна категория». Only the products table does: the
+	 *                                    category list is served by its provider.
 	 * @return array<string,mixed>
 	 */
-	public static function link_by_article( ?string $scope_sentence = null ): array {
-		return [
+	public static function link_by_article( ?string $scope_sentence = null, bool $by_category = false ): array {
+		$action = [
 			'id'             => Site_Products_Bulk::LINK_BY_ARTICLE,
 			'label'          => __( 'Связать по артикулу', 'woodev-plugin-framework' ),
 			'effect'         => 'mutate',
 			'interaction'    => 'dialog',
 			'scope'          => 'account',
 			'capability'     => 'manage_woocommerce',
-			'scope_sentence' => $scope_sentence ?? __( 'Связывание идёт по всему магазину, не только по отмеченным товарам. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ),
+			'scope_sentence' => $scope_sentence ?? __( 'Связывание идёт по всему магазину или по одной категории, не только по отмеченным товарам. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ),
+		];
+
+		if ( $by_category ) {
+			$action['fields'] = self::link_scope_fields();
+		}
+
+		return $action;
+	}
+
+	/**
+	 * The two fields of «Связать по артикулу»: where to link and, for one category, which. An empty «where» means the whole shop, so
+	 * the one-click path of the old dialog stays.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function link_scope_fields(): array {
+		return [
+			[
+				'id'      => Site_Products_Bulk::LINK_WHERE,
+				'label'   => __( 'Где связывать', 'woodev-plugin-framework' ),
+				'type'    => 'select',
+				'options' => [
+					[
+						'value' => Site_Products_Bulk::LINK_WHERE_SHOP,
+						'label' => __( 'Весь магазин', 'woodev-plugin-framework' ),
+					],
+					[
+						'value' => Site_Products_Bulk::LINK_WHERE_CATEGORY,
+						'label' => __( 'Одна категория (вместе с подкатегориями)', 'woodev-plugin-framework' ),
+					],
+				],
+				'help'    => __( 'Если ничего не выбрано, связываются товары всего магазина.', 'woodev-plugin-framework' ),
+			],
+			[
+				'id'             => Site_Products_Bulk::LINK_CATEGORY,
+				'label'          => __( 'Категория', 'woodev-plugin-framework' ),
+				'type'           => 'select',
+				'options_source' => true,
+				'searchable'     => true,
+				'help'           => __( 'Нужна, когда выбрана одна категория. Начните вводить название.', 'woodev-plugin-framework' ),
+			],
 		];
 	}
 
@@ -212,7 +258,7 @@ final class Site_Products_Definition {
 	private static function bulk_actions( string $marketplace, array $withheld ): array {
 		$actions = [
 			self::action( Site_Products_Bulk::EXPORT, __( 'Экспортировать / Обновить карточку', 'woodev-plugin-framework' ), __( 'Товары, прошедшие проверку, уйдут в очередь на отправку. Остальные останутся как есть — исправьте причину и повторите.', 'woodev-plugin-framework' ) ),
-			self::link_by_article(),
+			self::link_by_article( null, true ),
 			self::action( Site_Products_Bulk::SEND_STOCK, __( 'Отправить остатки', 'woodev-plugin-framework' ), __( 'Текущий остаток с сайта будет отправлен на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
 			self::action( Site_Products_Bulk::SEND_PRICE, __( 'Отправить цены', 'woodev-plugin-framework' ), __( 'Текущая цена с сайта будет отправлена на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
 			self::action( Site_Products_Bulk::SYNC_STOCK_ON, __( 'Включить синхронизацию остатков', 'woodev-plugin-framework' ) ),

@@ -20,6 +20,8 @@ use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 
+require_once dirname( __DIR__ ) . '/Mappings/wp-term-stub.php';
+
 /**
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk
  */
@@ -361,6 +363,53 @@ final class SiteProductsBulkTest extends Products_Test_Case {
 		$this->assertSame( 7, $done['accepted'] );
 		$this->assertTrue( $done['queued'] );
 		$this->assertCount( 1, $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() ) );
+	}
+
+	public function test_linking_one_category_counts_that_category_names_it_and_queues_it(): void {
+		Functions\when( 'get_term' )->alias( [ $this, 'term' ] );
+
+		$plan = $this->bulk()->preview( $this->account_now(), Site_Products_Bulk::LINK_BY_ARTICLE, [], [], null, 7 );
+
+		$this->assertSame( [ 7 ], $this->candidates_asked );
+		$this->assertSame( 3, $plan['eligible'] );
+		$this->assertStringContainsString( '3 товара', $plan['scope_sentence'] );
+		$this->assertStringContainsString( 'Категория «Обувь» и её подкатегории', $plan['scope_sentence'] );
+		$this->assertStringContainsString( 'связываются только товары этой категории', $plan['scope_sentence'] );
+		$this->assertStringNotContainsString( 'по всему магазину', $plan['scope_sentence'] );
+
+		$done = $this->bulk()->apply( $this->account_now(), Site_Products_Bulk::LINK_BY_ARTICLE, [], [], null, 7 );
+
+		$this->assertSame( 3, $done['accepted'] );
+		$queued = $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() );
+		$this->assertCount( 1, $queued );
+		$this->assertSame( [ $this->account_id, 7, 0 ], $queued[0]['args'], 'The job gets the account, the category and the first page.' );
+	}
+
+	public function test_linking_the_whole_shop_queues_category_zero_and_asks_for_no_category(): void {
+		$this->preview( Site_Products_Bulk::LINK_BY_ARTICLE, [] );
+		$this->apply( Site_Products_Bulk::LINK_BY_ARTICLE, [] );
+
+		$this->assertSame( [ null, null ], $this->candidates_asked );
+		$queued = $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() );
+		$this->assertSame( [ $this->account_id, 0, 0 ], $queued[0]['args'] );
+	}
+
+	/**
+	 * A category as `get_term()` returns it: term 7 «Обувь».
+	 *
+	 * @param int $term_id Term.
+	 * @return \WP_Term|null
+	 */
+	public function term( int $term_id ) {
+		if ( 7 !== $term_id ) {
+			return null;
+		}
+
+		$term          = new \WP_Term();
+		$term->term_id = 7;
+		$term->name    = 'Обувь';
+
+		return $term;
 	}
 
 	public function test_the_linking_preview_follows_what_linking_will_send(): void {

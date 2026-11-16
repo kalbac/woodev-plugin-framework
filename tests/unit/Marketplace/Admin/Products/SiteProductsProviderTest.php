@@ -16,6 +16,8 @@ use Woodev\Framework\Admin\Records\Activity_Reader;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Row_Normalizer;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Definition;
+use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Selection;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\State_Groups;
 use Woodev\Framework\Marketplace\Data\Link_Record;
@@ -23,6 +25,7 @@ use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 
 require_once dirname( __DIR__, 3 ) . '/Shipping/Rest_Api/wp-rest-controller-stub.php';
+require_once dirname( __DIR__ ) . '/Mappings/wp-term-stub.php';
 
 /**
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Provider
@@ -101,6 +104,146 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$options = $this->provider()->get_field_options( $this->context(), 'set_warehouse', 'warehouse', [ 'row_id' => '', 'search' => '', 'cursor' => '' ] );
 
 		$this->assertSame( '0', $options['options'][0]['value'], 'The first choice is the account default.' );
+	}
+
+	public function test_linking_by_article_asks_where_and_which_category_and_the_remote_table_does_not(): void {
+		$actions = array_column( $this->definition()->to_array()['bulk_actions'], null, 'id' );
+		$fields  = array_column( $actions['link_by_article']['fields'], null, 'id' );
+
+		$this->assertSame( [ 'where', 'category' ], array_keys( $fields ) );
+		$this->assertSame( 'select', $fields['where']['type'] );
+		$this->assertSame( [ 'shop', 'category' ], array_column( $fields['where']['options'], 'value' ) );
+		$this->assertFalse( $fields['where']['required'], 'Nothing chosen is the whole shop, as before.' );
+		$this->assertTrue( $fields['category']['options_source'] );
+		$this->assertTrue( $fields['category']['searchable'] );
+		$this->assertFalse( $fields['category']['required'], 'Only «одна категория» needs it; the provider checks that.' );
+		$this->assertSame( [], Site_Products_Definition::link_by_article()['fields'] ?? [], 'A table that cannot list categories keeps the plain action.' );
+	}
+
+	/**
+	 * Categories as the term API returns them.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}> $rows Term id, name, parent.
+	 * @return \WP_Term[]
+	 */
+	private function terms( array $rows ): array {
+		return array_map(
+			static function ( array $row ): \WP_Term {
+				$term          = new \WP_Term();
+				$term->term_id = $row[0];
+				$term->name    = $row[1];
+				$term->parent  = $row[2];
+
+				return $term;
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * Makes term 7 «Обувь» the only product category the shop has.
+	 *
+	 * @return void
+	 */
+	private function shop_has_category_seven(): void {
+		Functions\when( 'get_term' )->alias(
+			function ( int $term_id ) {
+				return 7 === $term_id ? $this->terms( [ [ 7, 'Обувь', 0 ] ] )[0] : null;
+			}
+		);
+	}
+
+	public function test_one_category_reaches_the_bulk_as_the_term_and_the_whole_shop_as_none(): void {
+		$this->shop_has_category_seven();
+
+		$this->provider()->preview( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '7' ] );
+		$this->provider()->apply( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '7' ] );
+		$this->provider()->preview( $this->context(), 'link_by_article', [], [] );
+		$this->provider()->preview( $this->context(), 'link_by_article', [], [ 'where' => 'shop', 'category' => '7' ] );
+
+		$this->assertSame( [ 7, 7, null, null ], $this->candidates_asked, 'The apply replans with the category; «весь магазин» ignores a category left in the form.' );
+		$queued = $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() );
+		$this->assertSame( [ $this->account_id, 7, 0 ], $queued[0]['args'] );
+	}
+
+	/**
+	 * @return array<string,array{0:array<string,string>}>
+	 */
+	public function bad_categories(): array {
+		return [
+			'none chosen'      => [ [ 'where' => 'category' ] ],
+			'empty'            => [ [ 'where' => 'category', 'category' => '' ] ],
+			'not a number'     => [ [ 'where' => 'category', 'category' => 'shoes' ] ],
+			'zero'             => [ [ 'where' => 'category', 'category' => '0' ] ],
+			'negative'         => [ [ 'where' => 'category', 'category' => '-7' ] ],
+			'not a product_cat' => [ [ 'where' => 'category', 'category' => '99' ] ],
+		];
+	}
+
+	/**
+	 * @dataProvider bad_categories
+	 *
+	 * @param array<string,string> $payload Fields.
+	 * @return void
+	 */
+	public function test_a_category_that_is_not_a_product_category_is_refused_on_the_category_field( array $payload ): void {
+		$this->shop_has_category_seven();
+
+		foreach ( [ 'preview', 'apply' ] as $method ) {
+			try {
+				$this->provider()->$method( $this->context(), 'link_by_article', [], $payload );
+				$this->fail( "$method accepted the category." );
+			} catch ( Action_Input_Exception $e ) {
+				$this->assertSame( [ 'category' ], array_keys( $e->get_errors() ) );
+			}
+		}
+
+		$this->assertSame( [], $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() ), 'Nothing was queued.' );
+	}
+
+	public function test_the_category_picker_pages_and_searches_by_name_and_shows_the_parents(): void {
+		$asked = [];
+		Functions\when( 'get_terms' )->alias(
+			function ( array $args ) use ( &$asked ): array {
+				$asked[] = $args;
+
+				return $this->terms( [ [ 7, 'Обувь', 5 ], [ 8, 'Сумки', 0 ] ] );
+			}
+		);
+		Functions\when( 'get_ancestors' )->alias(
+			static function ( int $term_id ): array {
+				return 7 === $term_id ? [ 5, 4 ] : [];
+			}
+		);
+		Functions\when( 'get_term' )->alias(
+			function ( int $term_id ) {
+				$names = [ 4 => 'Каталог', 5 => 'Одежда' ];
+
+				return isset( $names[ $term_id ] ) ? $this->terms( [ [ $term_id, $names[ $term_id ], 0 ] ] )[0] : null;
+			}
+		);
+
+		$page = $this->provider()->get_field_options( $this->context(), 'link_by_article', 'category', [ 'row_id' => '', 'search' => 'об', 'cursor' => '60' ] );
+
+		$this->assertSame( 'product_cat', $asked[0]['taxonomy'] );
+		$this->assertSame( 'об', $asked[0]['search'] );
+		$this->assertSame( 60, $asked[0]['offset'] );
+		$this->assertSame( [ [ 'value' => '7', 'label' => 'Каталог › Одежда › Обувь' ], [ 'value' => '8', 'label' => 'Сумки' ] ], $page['options'] );
+		$this->assertNull( $page['next_cursor'], 'A short page is the last one.' );
+	}
+
+	public function test_the_category_picker_hands_over_a_cursor_while_there_are_more_categories(): void {
+		Functions\when( 'get_ancestors' )->justReturn( [] );
+		Functions\when( 'get_terms' )->alias(
+			function (): array {
+				return $this->terms( array_map( static fn( int $id ): array => [ $id, "Категория $id", 0 ], range( 1, 31 ) ) );
+			}
+		);
+
+		$page = $this->provider()->get_field_options( $this->context(), 'link_by_article', 'category', [ 'row_id' => '', 'search' => '', 'cursor' => '' ] );
+
+		$this->assertCount( 30, $page['options'], 'The thirty-first category only proves there is a next page.' );
+		$this->assertSame( '30', $page['next_cursor'] );
 	}
 
 	public function test_an_adapter_that_cannot_import_gets_no_export_and_no_linking(): void {

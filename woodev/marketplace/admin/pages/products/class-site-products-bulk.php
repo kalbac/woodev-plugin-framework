@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Action_State_Exception;
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
 use Woodev\Framework\Marketplace\Catalog\Bulk_Validation_Report;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
 use Woodev\Framework\Marketplace\Data\Link_Record;
@@ -55,6 +56,16 @@ final class Site_Products_Bulk {
 	public const ARCHIVE         = 'archive';
 	public const DETACH          = 'detach';
 	public const RESET           = 'reset';
+
+	/**
+	 * The two fields of «Связать по артикулу» and the values of the first one.
+	 *
+	 * @since 2.1.8
+	 */
+	public const LINK_WHERE         = 'where';
+	public const LINK_WHERE_SHOP    = 'shop';
+	public const LINK_WHERE_CATEGORY = 'category';
+	public const LINK_CATEGORY      = 'category';
 
 	/**
 	 * Names examples under each reason in a group.
@@ -107,7 +118,8 @@ final class Site_Products_Bulk {
 	private $ledger;
 
 	/**
-	 * Counts the shop's products the linking job would try to match, in the whole account: `function ( int $account_id ): int`.
+	 * Counts the shop's products the linking job would try to match, in the whole shop or one category with its subcategories:
+	 * `function ( int $account_id, ?int $category_id ): int`.
 	 *
 	 * @var callable
 	 */
@@ -207,17 +219,18 @@ final class Site_Products_Bulk {
 	 * @param array<int,int> $offers    Distinct offers, from {@see Site_Products_Selection}.
 	 * @param array<int,int> $editable  Offer => the product whose edit right decides it.
 	 * @param int|null       $warehouse Warehouse for {@see self::SET_WAREHOUSE}; 0 for the account default.
+	 * @param int|null       $category  Category (`product_cat` term id) {@see self::LINK_BY_ARTICLE} is limited to; null for the whole shop.
 	 * @return array<string,mixed> The preview answer of the records engine.
 	 */
-	public function preview( Account $account, string $action, array $offers, array $editable, ?int $warehouse = null ): array {
-		$plan = $this->plan( $account, $action, $offers, $editable, $warehouse );
+	public function preview( Account $account, string $action, array $offers, array $editable, ?int $warehouse = null, ?int $category = null ): array {
+		$plan = $this->plan( $account, $action, $offers, $editable, $warehouse, $category );
 
 		if ( self::LINK_BY_ARTICLE === $action ) {
 			return [
 				'requested'      => $plan['will'],
 				'eligible'       => $plan['will'],
 				'skipped'        => 0,
-				'scope_sentence' => $this->linking_sentence( $account, $plan['will'] ),
+				'scope_sentence' => $this->linking_sentence( $account, $plan['will'], $category ),
 			];
 		}
 
@@ -246,11 +259,12 @@ final class Site_Products_Bulk {
 	 * @param array<int,int> $offers    Distinct offers.
 	 * @param array<int,int> $editable  Offer => the product whose edit right decides it.
 	 * @param int|null       $warehouse Warehouse for {@see self::SET_WAREHOUSE}.
+	 * @param int|null       $category  Category {@see self::LINK_BY_ARTICLE} is limited to; null for the whole shop.
 	 * @return array<string,mixed> The apply answer of the records engine.
 	 * @throws Action_State_Exception When the queue or the scheduler refuses the work.
 	 */
-	public function apply( Account $account, string $action, array $offers, array $editable, ?int $warehouse = null ): array {
-		$plan = $this->plan( $account, $action, $offers, $editable, $warehouse );
+	public function apply( Account $account, string $action, array $offers, array $editable, ?int $warehouse = null, ?int $category = null ): array {
+		$plan = $this->plan( $account, $action, $offers, $editable, $warehouse, $category );
 		$ran  = $this->run( $account, $action, $plan, $warehouse );
 
 		if ( self::LINK_BY_ARTICLE === $action ) {
@@ -287,11 +301,12 @@ final class Site_Products_Bulk {
 	 * @param array<int,int> $offers    Offers.
 	 * @param array<int,int> $editable  Offer => product whose right decides.
 	 * @param int|null       $warehouse Warehouse.
+	 * @param int|null       $category  Category of the linking; null for the whole shop.
 	 * @return array{targets:Link_Record[],will:int,warnings:int,groups:array<int,array<string,mixed>>}
 	 */
-	private function plan( Account $account, string $action, array $offers, array $editable, ?int $warehouse ): array {
+	private function plan( Account $account, string $action, array $offers, array $editable, ?int $warehouse, ?int $category ): array {
 		if ( self::LINK_BY_ARTICLE === $action ) {
-			return $this->plan_linking( $account );
+			return $this->plan_linking( $account, $category );
 		}
 
 		list( $allowed, $denied ) = $this->by_right( $offers, $editable );
@@ -483,15 +498,18 @@ final class Site_Products_Bulk {
 	}
 
 	/**
-	 * Plans the linking by article. The job matches the whole account, so the preview counts the account's candidates (shop products
-	 * with an article that have no identity yet), never the ticked subset.
+	 * Plans the linking by article. The job reads the whole cabinet, so the preview counts the shop's candidates (products with an
+	 * article that have no identity yet) in the chosen reach — the whole shop or one category with its subcategories — never the
+	 * ticked subset.
 	 *
-	 * @param Account $account Account.
-	 * @return array{targets:Link_Record[],will:int,warnings:int,groups:array<int,array<string,mixed>>}
+	 * @param Account  $account  Account.
+	 * @param int|null $category Category the job is limited to; null for the whole shop.
+	 * @return array{targets:Link_Record[],will:int,warnings:int,groups:array<int,array<string,mixed>>,category:int|null}
 	 */
-	private function plan_linking( Account $account ): array {
-		$plan         = $this->empty_plan();
-		$plan['will'] = (int) call_user_func( $this->link_candidates, $account->id() );
+	private function plan_linking( Account $account, ?int $category ): array {
+		$plan             = $this->empty_plan();
+		$plan['will']     = (int) call_user_func( $this->link_candidates, $account->id(), $category );
+		$plan['category'] = $category;
 
 		return $plan;
 	}
@@ -763,15 +781,16 @@ final class Site_Products_Bulk {
 	}
 
 	/**
-	 * Queues the linking of the account's cards by article. It covers the whole account, not only the ticked products.
+	 * Queues the linking of the account's cards by article. It covers the whole shop or the plan's category, not only the ticked
+	 * products.
 	 *
 	 * @param Account             $account Account.
-	 * @param array<string,mixed> $plan    The plan.
+	 * @param array<string,mixed> $plan    The plan (`category`: the term id, or null for the whole shop).
 	 * @return array{done:int,groups:array<int,array<string,mixed>>}
 	 * @throws Action_State_Exception When Action Scheduler refuses the job.
 	 */
 	private function run_linking( Account $account, array $plan ): array {
-		if ( ! $this->scheduler->link_by_article( $account->id() ) ) {
+		if ( ! $this->scheduler->link_by_article( $account->id(), $plan['category'] ?? null ) ) {
 			throw new Action_State_Exception( __( 'Не удалось поставить поиск в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите.', 'woodev-plugin-framework' ) );
 		}
 
@@ -1018,18 +1037,32 @@ final class Site_Products_Bulk {
 	}
 
 	/**
-	 * The sentence under the title of the confirmation window for the account-wide linking.
+	 * The sentence under the title of the confirmation window for the linking: the whole shop or one category.
 	 *
-	 * @param Account $account    Account.
-	 * @param int     $candidates Shop products the job would try to match.
+	 * @param Account  $account    Account.
+	 * @param int      $candidates Shop products the job would try to match.
+	 * @param int|null $category   Category the job is limited to; null for the whole shop.
 	 * @return string
 	 */
-	private function linking_sentence( Account $account, int $candidates ): string {
+	private function linking_sentence( Account $account, int $candidates, ?int $category ): string {
+		$effect = call_user_func( $this->link_effect, $account, __( 'На маркетплейсе ничего не записывается.', 'woodev-plugin-framework' ) );
+		$count  = $candidates . ' ' . Bulk_Validation_Report::products( $candidates );
+
+		if ( null !== $category ) {
+			/* translators: 1: the category name, 2: «120 товаров», 3: what linking does on the marketplace. */
+			return sprintf(
+				__( 'Категория «%1$s» и её подкатегории — %2$s без связи с маркетплейсом. Карточки аккаунта читаются целиком, а связываются только товары этой категории. %3$s', 'woodev-plugin-framework' ),
+				Shop_Categories::name_of( $category ),
+				$count,
+				$effect
+			);
+		}
+
 		/* translators: 1: «120 товаров», 2: what linking does on the marketplace. */
 		return sprintf(
 			__( 'Весь аккаунт — %1$s магазина без связи с маркетплейсом. Связывание идёт по всему магазину, не только по отмеченным товарам. %2$s', 'woodev-plugin-framework' ),
-			$candidates . ' ' . Bulk_Validation_Report::products( $candidates ),
-			call_user_func( $this->link_effect, $account, __( 'На маркетплейсе ничего не записывается.', 'woodev-plugin-framework' ) )
+			$count,
+			$effect
 		);
 	}
 

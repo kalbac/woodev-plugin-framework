@@ -11292,3 +11292,37 @@ msgstr ""
 #: admin/records/class-standard-messages.php:50
 msgid "Снять выбор"
 msgstr ""
+
+#. translators: 1: the category name, 2: «120 товаров», 3: what linking does on the marketplace.
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1054
+#, php-format
+msgid "Категория «%1$s» и её подкатегории — %2$s без связи с маркетплейсом. Карточки аккаунта читаются целиком, а связываются только товары этой категории. %3$s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:143
+msgid "Связывание идёт по всему магазину или по одной категории, не только по отмеченным товарам. По артикулу сопоставляются все карточки аккаунта."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:165
+msgid "Где связывать"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:170
+msgid "Весь магазин"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:174
+msgid "Одна категория (вместе с подкатегориями)"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:177
+msgid "Если ничего не выбрано, связываются товары всего магазина."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:185
+msgid "Нужна, когда выбрана одна категория. Начните вводить название."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:440
+msgid "Выберите категорию из списка."
+msgstr ""
