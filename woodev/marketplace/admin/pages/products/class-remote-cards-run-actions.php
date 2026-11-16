@@ -97,6 +97,20 @@ final class Remote_Cards_Run_Actions {
 	}
 
 	/**
+	 * Whether the account's bulk run is this import, still going: its own line already says that cards are being imported.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int $account_id Account.
+	 * @return bool
+	 */
+	public function is_feeding( int $account_id ): bool {
+		$run = $this->runs->find( $account_id );
+
+		return null !== $run && $run->is_running() && Remote_Cards_Run_Line::is_import( $run );
+	}
+
+	/**
 	 * The plan of the import over every card under the filter: one count and a sentence. Nothing is queued.
 	 *
 	 * @since 2.1.10

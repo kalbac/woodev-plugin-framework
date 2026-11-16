@@ -266,6 +266,18 @@ final class Remote_Cards_Actions {
 	}
 
 	/**
+	 * Whether the account's bulk run is the import of cards by filter, still going.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int $account_id Account.
+	 * @return bool
+	 */
+	public function is_feeding_import( int $account_id ): bool {
+		return null !== $this->runs && $this->runs->is_feeding( $account_id );
+	}
+
+	/**
 	 * @return Remote_Cards_Run_Actions
 	 * @throws Action_State_Exception When the adapter cannot import cards, so the table has no bulk run.
 	 */

@@ -379,7 +379,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 */
 	private function account_activity( int $account_id, array $importing_ids ): array {
 		$line  = $this->actions->run_line( $account_id, (int) call_user_func( $this->clock ) );
-		$other = $this->snapshot_and_import_line( $account_id, null === $line ? $importing_ids : [] ); // The run's own line already says that cards are being imported.
+		$other = $this->snapshot_and_import_line( $account_id, $this->actions->is_feeding_import( $account_id ) ? [] : $importing_ids ); // Only the feeding import's own line already says that cards are being imported.
 
 		if ( null === $line ) {
 			return $other;

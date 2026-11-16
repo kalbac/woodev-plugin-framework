@@ -24,8 +24,10 @@ use Woodev\Framework\Marketplace\Data\Bulk_Run;
 use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Import_Feeder;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Lost;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Runner;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Scheduler;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Worker;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Scripted_Bulk_Run_Lock;
@@ -104,29 +106,8 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		$this->runs   = new Bulk_Run_Store( $this->db, Sqlite_Tables::table( 'bulk_runs' ), $this->clock() );
 		$this->lock   = new Scripted_Bulk_Run_Lock();
 		$matching     = new Remote_Cards_Matching( $this->snapshots(), $this->links() );
-		$this->feeder = new Bulk_Import_Feeder(
-			$this->runs,
-			$this->import_scheduler(),
-			[ $matching, 'entries' ],
-			function ( array $articles ): array {
-				$this->lookups[] = count( $articles );
-
-				return array_values( array_intersect( $articles, $this->half_made ) );
-			}
-		);
-		$this->runner = new Bulk_Run_Runner(
-			$this->runs,
-			$this->lock,
-			new Bulk_Run_Scheduler( $this->names() ),
-			$this->accounts(),
-			Sqlite_Tables::MARKETPLACE_ID,
-			$this->feeder,
-			null,
-			null,
-			function (): string {
-				return str_pad( (string) ++$this->tokens, 32, '0', STR_PAD_LEFT );
-			}
-		);
+		$this->feeder = $this->new_feeder();
+		$this->runner = $this->runner_over( $this->feeder );
 		$this->run_actions = new Remote_Cards_Run_Actions(
 			$this->runner,
 			$this->runs,
@@ -137,6 +118,123 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 				}
 			)
 		);
+	}
+
+	/**
+	 * A feeder as a tick builds it: nothing in memory from an earlier tick.
+	 *
+	 * @return Bulk_Import_Feeder
+	 */
+	private function new_feeder(): Bulk_Import_Feeder {
+		return new Bulk_Import_Feeder(
+			$this->runs,
+			$this->import_scheduler(),
+			[ new Remote_Cards_Matching( $this->snapshots(), $this->links() ), 'entries' ],
+			function ( array $articles ): array {
+				$this->lookups[] = count( $articles );
+
+				return array_values( array_intersect( $articles, $this->half_made ) );
+			}
+		);
+	}
+
+	/**
+	 * A runner over a worker, with the harness' store, lock and token counter.
+	 *
+	 * @param Bulk_Run_Worker $worker Worker.
+	 * @return Bulk_Run_Runner
+	 */
+	private function runner_over( Bulk_Run_Worker $worker ): Bulk_Run_Runner {
+		return new Bulk_Run_Runner(
+			$this->runs,
+			$this->lock,
+			new Bulk_Run_Scheduler( $this->names() ),
+			$this->accounts(),
+			Sqlite_Tables::MARKETPLACE_ID,
+			$worker,
+			null,
+			null,
+			function (): string {
+				return str_pad( (string) ++$this->tokens, 32, '0', STR_PAD_LEFT );
+			}
+		);
+	}
+
+	/**
+	 * A runner over a fresh feeder that a test interrupts: `$before( $call )` runs before part number `$call` (from 1), `$after( $call )`
+	 * after it. Throwing {@see Bulk_Run_Lost} from either is a tick that dies there; the runner's own writes of that part are not made.
+	 *
+	 * @param callable|null $before Hook.
+	 * @param callable|null $after  Hook.
+	 * @return Bulk_Run_Runner
+	 */
+	private function interrupted_runner( ?callable $before, ?callable $after ): Bulk_Run_Runner {
+		$feeder = $this->new_feeder();
+
+		return $this->runner_over(
+			new class( $feeder, $before, $after ) implements Bulk_Run_Worker {
+				/** @var Bulk_Run_Worker */
+				private $inner;
+				/** @var callable|null */
+				private $before;
+				/** @var callable|null */
+				private $after;
+				/** @var int */
+				private $calls = 0;
+
+				public function __construct( Bulk_Run_Worker $inner, ?callable $before, ?callable $after ) {
+					$this->inner  = $inner;
+					$this->before = $before;
+					$this->after  = $after;
+				}
+
+				public function refusal( Account $account, Bulk_Run $run ): ?string {
+					return $this->inner->refusal( $account, $run );
+				}
+
+				public function part( Account $account, Bulk_Run $run, array $cursor, callable $owns ): array {
+					++$this->calls;
+
+					if ( null !== $this->before ) {
+						call_user_func( $this->before, $this->calls );
+					}
+
+					$part = $this->inner->part( $account, $run, $cursor, $owns );
+
+					if ( null !== $this->after ) {
+						call_user_func( $this->after, $this->calls );
+					}
+
+					return $part;
+				}
+			}
+		);
+	}
+
+	/**
+	 * The first part of a run, saved the way the runner saves it: the list and the position in one fenced write.
+	 *
+	 * @param Bulk_Run $run The run.
+	 * @return array<string,mixed> The part.
+	 */
+	private function freeze( Bulk_Run $run ): array {
+		$feeder = $this->new_feeder();
+
+		$this->assertNull( $feeder->refusal( $this->account_now(), $run ) );
+
+		$part = $feeder->part(
+			$this->account_now(),
+			$run,
+			[],
+			static function (): bool {
+				return true;
+			}
+		);
+
+		$this->runs->take_tick( $this->account_id, $run->run_id(), 'freezer' );
+		$this->assertTrue( $this->runs->save_frozen( $this->account_id, $run->run_id(), 'freezer', $part['items'], $part['cursor'], $part['counts'], $part['groups'] ) );
+
+		return $part;
 	}
 
 	/**
@@ -392,8 +490,8 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 			return true;
 		};
 
-		$this->feeder->refusal( $account, $run );
-		$first = $this->feeder->part( $account, $run, [], $owns );
+		$first  = $this->freeze( $run );
+		$feeder = $this->new_feeder();
 		$this->assertTrue( $first['cursor']['frozen'] );
 		$this->assertSame( [], $this->scheduler->of( self::IMPORT_HOOK ), 'The freeze feeds nothing.' );
 
@@ -401,7 +499,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 
 		for ( $part = 0; $part < 3; $part++ ) {
 			$before = count( $this->scheduler->of( self::IMPORT_HOOK ) );
-			$answer = $this->feeder->part( $account, $run, $cursor, $owns );
+			$answer = $feeder->part( $account, $run, $cursor, $owns );
 			$cursor = $answer['cursor'];
 
 			$this->assertLessThanOrEqual( 10, count( $this->scheduler->of( self::IMPORT_HOOK ) ) - $before, 'A part queues at most ten actions.' );
@@ -432,16 +530,197 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		};
 		$this->assertNotNull( $run );
 
-		$this->assertNull( $this->feeder->refusal( $account, $run ) );
-		$frozen = $this->feeder->part( $account, $run, [], $owns );
+		$frozen = $this->freeze( $run );
 
 		$this->transients = []; // The 600 s of the snapshot are over.
 
-		$fed = $this->feeder->part( $account, $run, $frozen['cursor'], $owns );
+		$fed = $this->new_feeder()->part( $account, $run, $frozen['cursor'], $owns );
 
 		$this->assertSame( 12, $fed['counts']['offers_accepted'] );
 		$this->assertTrue( $fed['finished'] );
 		$this->assertCount( 12, $this->queued_articles() );
+	}
+
+	/**
+	 * What happens to the snapshot after the tick died: the list is gone, or replaced by an empty one, or by other cards.
+	 *
+	 * @return array<string,array{0:callable}>
+	 */
+	public function snapshot_after_the_crash(): array {
+		return [
+			'expired'                   => [
+				function (): void {
+					$this->transients = [];
+				},
+			],
+			'refreshed to no cards'     => [
+				function (): void {
+					$this->put_snapshot( [] );
+				},
+			],
+			'refreshed to other cards'  => [
+				function (): void {
+					$this->put_snapshot( $this->cards( 3, 'Z-' ) );
+				},
+			],
+		];
+	}
+
+	public function test_a_tick_that_dies_before_the_freeze_is_saved_leaves_a_run_that_has_frozen_nothing(): void {
+		$this->put_snapshot( $this->cards( 12 ) );
+		$run_id = $this->start_run( $this->query() );
+
+		// The freeze was computed; the process dies before the runner's one write of the list and the position.
+		$this->interrupted_runner(
+			null,
+			static function ( int $call ): void {
+				throw new Bulk_Run_Lost( 'The tick died after part ' . $call );
+			}
+		)->tick( $this->account_id, $run_id );
+		$run = $this->runs->find( $this->account_id );
+
+		$this->assertNotNull( $run );
+		$this->assertTrue( $run->is_running() );
+		$this->assertNull( $this->runs->items( $this->account_id, $run_id ), 'No list without the position that goes with it …' );
+		$this->assertSame( [], $run->cursor(), '… and no position without the list.' );
+		$this->assertSame( 0, $run->counts()['offers_skipped'] );
+
+		// Recovery freezes it again from the snapshot that is still there, and feeds every card once.
+		$this->runner_over( $this->new_feeder() )->tick( $this->account_id, $run_id );
+		$done = $this->runs->find( $this->account_id );
+
+		$this->assertNotNull( $done );
+		$this->assertSame( Bulk_Run::DONE, $done->state() );
+		$this->assertSame( 12, $done->counts()['offers_accepted'] );
+		$this->assertSame( array_column( $this->cards( 12 ), 'offer_id' ), $this->queued_articles() );
+	}
+
+	public function test_a_run_that_froze_nothing_before_its_tick_died_stops_with_the_apply_sentence_when_the_list_is_gone(): void {
+		$this->put_snapshot( $this->cards( 12 ) );
+		$run_id = $this->start_run( $this->query() );
+
+		$this->interrupted_runner(
+			null,
+			static function ( int $call ): void {
+				throw new Bulk_Run_Lost( 'The tick died after part ' . $call );
+			}
+		)->tick( $this->account_id, $run_id );
+		$this->transients = [];
+
+		$this->runner_over( $this->new_feeder() )->tick( $this->account_id, $run_id );
+		$run = $this->runs->find( $this->account_id );
+
+		$this->assertNotNull( $run );
+		$this->assertSame( Bulk_Run::STOPPED, $run->state(), 'Nothing durable was frozen, so there is nothing to feed.' );
+		$this->assertStringContainsString( 'Список карточек устарел', Remote_Cards_Run_Line::finished( $run ) );
+		$this->assertSame( [], $this->queued_articles() );
+	}
+
+	/**
+	 * @dataProvider snapshot_after_the_crash
+	 * @param callable $change What happens to the snapshot.
+	 * @return void
+	 */
+	public function test_a_tick_that_dies_after_the_freeze_is_saved_still_feeds_the_frozen_cards_once_whatever_the_snapshot_became( callable $change ): void {
+		$this->put_snapshot( $this->cards( 12 ) );
+		$run_id = $this->start_run( $this->query() );
+
+		// The freeze part is saved; the process dies at the start of the next part, before anything is fed.
+		$this->interrupted_runner(
+			static function ( int $call ): void {
+				if ( 2 === $call ) {
+					throw new Bulk_Run_Lost( 'The tick died before part 2' );
+				}
+			},
+			null
+		)->tick( $this->account_id, $run_id );
+		$run = $this->runs->find( $this->account_id );
+
+		$this->assertNotNull( $run );
+		$this->assertCount( 12, (array) $this->runs->items( $this->account_id, $run_id ), 'The list is stored …' );
+		$this->assertSame( [ 'frozen' => true, 'index' => 0 ], $run->cursor(), '… with the position that says so.' );
+		$this->assertSame( [], $this->queued_articles(), 'Nothing was fed yet.' );
+
+		$change();
+		$this->runner_over( $this->new_feeder() )->tick( $this->account_id, $run_id );
+		$done = $this->runs->find( $this->account_id );
+
+		$this->assertNotNull( $done );
+		$this->assertSame( Bulk_Run::DONE, $done->state() );
+		$this->assertSame( 12, $done->counts()['offers_accepted'], 'The frozen cards are fed, whatever the snapshot is now.' );
+		$this->assertSame( 12, $done->counts()['products_done'] );
+		$this->assertSame( 0, $done->counts()['offers_skipped'] );
+		$this->assertSame( array_column( $this->cards( 12 ), 'offer_id' ), $this->queued_articles(), 'Each card once, in the frozen order.' );
+	}
+
+	public function test_a_tick_that_dies_after_the_freeze_keeps_the_counters_and_the_report_of_the_freeze(): void {
+		$this->put_snapshot( $this->cards( 5 ) );
+		$this->put_on_site( 'A-2', 42 );
+		$run_id = $this->start_run( $this->query() );
+
+		$this->interrupted_runner(
+			static function ( int $call ): void {
+				if ( 2 === $call ) {
+					throw new Bulk_Run_Lost( 'The tick died before part 2' );
+				}
+			},
+			null
+		)->tick( $this->account_id, $run_id );
+		$this->put_snapshot( [] );
+
+		$this->runner_over( $this->new_feeder() )->tick( $this->account_id, $run_id );
+		$done = $this->runs->find( $this->account_id );
+
+		$this->assertNotNull( $done );
+		$this->assertSame( 4, $done->counts()['offers_accepted'] );
+		$this->assertSame( 1, $done->counts()['offers_skipped'], 'The card a product carries was counted once, by the freeze that was saved.' );
+		$this->assertSame( 'Уже на сайте', $done->report()[0]['reason'] );
+		$this->assertSame( [ 'A-1', 'A-3', 'A-4', 'A-5' ], $this->queued_articles() );
+	}
+
+	public function test_a_refused_freeze_save_stores_nothing_and_queues_nothing(): void {
+		$this->put_snapshot( $this->cards( 12 ) );
+		$run_id = $this->start_run( $this->query() );
+
+		// Another tick takes the run between the freeze and its save.
+		$this->interrupted_runner(
+			null,
+			function () use ( $run_id ): void {
+				$this->runs->take_tick( $this->account_id, $run_id, 'intruder' );
+			}
+		)->tick( $this->account_id, $run_id );
+		$run = $this->runs->find( $this->account_id );
+
+		$this->assertNotNull( $run );
+		$this->assertTrue( $run->is_running() );
+		$this->assertNull( $this->runs->items( $this->account_id, $run_id ) );
+		$this->assertSame( [], $run->cursor() );
+		$this->assertSame( 0, $run->counts()['offers_skipped'], 'The counters the refused tick computed are not kept.' );
+		$this->assertSame( [], $this->queued_articles(), 'It feeds nothing.' );
+		$this->assertCount( 1, $this->scheduler->of( self::RUN_HOOK ), 'It queues no next tick: the tick that owns the run does.' );
+	}
+
+	public function test_a_refused_freeze_save_does_not_finish_a_run_with_nothing_to_import(): void {
+		$this->put_snapshot( $this->cards( 3 ) );
+
+		foreach ( [ 'A-1' => 41, 'A-2' => 42, 'A-3' => 43 ] as $article => $product ) {
+			$this->put_on_site( $article, $product );
+		}
+
+		$run_id = $this->start_run( $this->query() );
+
+		// Every card is on the site: the freeze is empty and would finish the run — but the tick lost it.
+		$this->interrupted_runner(
+			null,
+			function () use ( $run_id ): void {
+				$this->runs->take_tick( $this->account_id, $run_id, 'intruder' );
+			}
+		)->tick( $this->account_id, $run_id );
+		$run = $this->runs->find( $this->account_id );
+
+		$this->assertNotNull( $run );
+		$this->assertSame( Bulk_Run::RUNNING, $run->state(), 'A tick that lost the run does not end it with its own completion.' );
+		$this->assertSame( 0, $run->counts()['offers_skipped'] );
 	}
 
 	public function test_a_run_whose_list_expired_before_the_freeze_stops_with_the_apply_sentence(): void {
@@ -615,9 +894,39 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		$this->drive( $run_id );
 		$finished = $this->matching_provider()->get_activity( $this->context(), [] )['account_activity'];
 
-		$this->assertFalse( $finished['active'] );
+		$this->assertTrue( $finished['active'], 'The cards the run queued are still being imported.' );
 		$this->assertStringContainsString( 'Поставлено в очередь на импорт: 30 карточек; пропущено 0. Результат каждой карточки — в её строке.', $finished['text'] );
+		$this->assertStringContainsString( 'Импортируем карточки…', $finished['text'] );
 		$this->assertSame( [ Site_Products_Bulk::RUN_REPORT ], array_column( $finished['actions'], 'action' ) );
+	}
+
+	public function test_a_finished_run_of_the_products_table_does_not_hide_the_imports_that_are_going(): void {
+		$this->put_snapshot( $this->cards( 5 ) );
+
+		// «Включить синхронизацию остатков» finished a minute ago and its result stays on the line for a day.
+		$this->assertTrue( $this->runs->start( $this->account_id, 'old-run', 'sync_stock_on', [], [ 'search' => '', 'filters' => [] ], 3, 5 ) );
+		$this->runs->take_tick( $this->account_id, 'old-run', 'old-tick' );
+		$this->runs->finish( $this->account_id, 'old-run', 'old-tick', Bulk_Run::DONE, [], [ 'products_total' => 5, 'products_done' => 5 ], [] );
+		$this->import_scheduler()->import( $this->account_id, [ 'A-1', 'A-2' ] ); // A ticked import, selection mode.
+
+		$line = $this->matching_provider()->get_activity( $this->context(), [] )['account_activity'];
+
+		$this->assertTrue( $line['active'], 'Imports are going, whatever an old run says.' );
+		$this->assertStringContainsString( 'Готово: товаров 5', $line['text'] );
+		$this->assertStringContainsString( 'Импортируем карточки…', $line['text'] );
+		$this->assertSame( [ Site_Products_Bulk::RUN_REPORT ], array_column( $line['actions'], 'action' ), 'The old run keeps its own button.' );
+	}
+
+	public function test_the_running_import_does_not_say_it_twice(): void {
+		$this->put_snapshot( $this->cards( 5 ) );
+		$this->start_run( $this->query() );
+		$this->import_scheduler()->import( $this->account_id, [ 'A-1' ] );
+
+		$line = $this->matching_provider()->get_activity( $this->context(), [] )['account_activity'];
+
+		$this->assertTrue( $line['active'] );
+		$this->assertStringContainsString( 'Импорт по фильтру', $line['text'] );
+		$this->assertStringNotContainsString( 'Импортируем карточки…', $line['text'], 'The run\'s own line already says it.' );
 	}
 
 	public function test_the_products_table_reads_an_import_run_in_cards_too(): void {
