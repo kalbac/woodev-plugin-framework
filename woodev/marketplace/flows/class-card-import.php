@@ -47,8 +47,10 @@ defined( 'ABSPATH' ) || exit;
  * - row 4 on a marked variation → the same, from the second step; row 3 on a finished variation → linked with its parent id;
  * - row 1 → nothing is imported, but a conversion of the card's product that was left open is finished
  *   ({@see Group_Assembler::heal()});
- * - a group whose first product is still half-made (its own import was cut) is not built upon: the card is skipped with a note.
- *   The preview of «Импортировать» makes the same decision ({@see Group_Assembler::group_of()}).
+ * - a group whose first product is still half-made (its own import was cut) is not built upon: the card gets a note, and is skipped
+ *   ({@see self::SKIPPED}) — or, when the caller says the card that resumes that product is still queued, **waits**
+ *   ({@see self::WAITING}) so the caller can bring it back after that card. The preview of «Импортировать» makes the same decision
+ *   ({@see Group_Assembler::group_of()}).
  *
  * What the merchant should know goes into an import note ({@see Link_Report_Store::set_import_note()}); a successful import
  * clears the card's note. This class never talks to the marketplace; the card is already read.
@@ -60,6 +62,11 @@ final class Card_Import {
 	public const SKIPPED         = 'skipped';
 	public const LINKED_EXISTING = 'linked_existing';
 	public const CREATED         = 'created';
+
+	/**
+	 * The card's group has a half-made product that another queued card resumes: nothing was written but the note; the card must be tried again.
+	 */
+	public const WAITING = 'waiting';
 
 	/**
 	 * Links.
@@ -143,11 +150,12 @@ final class Card_Import {
 	 * @param Claim_Fence   $fence   The run's account claim.
 	 * @param callable      $renew   `function (): void`; extends the claim before each image and throws when it was lost or the run's time is spent.
 	 * @param callable|null $stored `function (): void`; called right after a new image was stored, for the run's budget.
+	 * @param callable|null $waits  `function ( string $article ): bool`; asked when the card's group has a half-made product, with the article of that product: true when the card that resumes it is still queued, so this card should wait for it. Without it such a card is skipped.
 	 * @return string One of the outcome constants of this class.
 	 * @throws Claim_Lost When a link write is refused because another run took the account claim.
 	 * @throws \Throwable Whatever WooCommerce throws when it refuses a save; the caller notes it for this card.
 	 */
-	public function import( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored = null ): string {
+	public function import( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored = null, ?callable $waits = null ): string {
 		$card    = $content->card();
 		$article = (string) ( $card['offer_id'] ?? '' );
 
@@ -171,7 +179,7 @@ final class Card_Import {
 		$product = $this->product_with_article( $article );
 
 		if ( null === $product ) {
-			return $this->create( $account, $content, $fence, $renew, $stored );
+			return $this->create( $account, $content, $fence, $renew, $stored, $waits );
 		}
 
 		if ( Product_Writer::is_marked( $product, $account->adapter_id() ) ) {
@@ -242,16 +250,14 @@ final class Card_Import {
 	 * @param Claim_Fence   $fence   The run's claim.
 	 * @param callable      $renew   Extends the claim.
 	 * @param callable|null $stored Called when a new image was stored.
+	 * @param callable|null $waits  See {@see self::import()}.
 	 * @return string
 	 */
-	private function create( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
+	private function create( Account $account, Card_Content $content, Claim_Fence $fence, callable $renew, ?callable $stored, ?callable $waits ): string {
 		$group = $this->groups->group_of( $account, $content );
 
 		if ( null !== $group['product'] && Group_Assembler::BUILDING === $group['state'] ) {
-			/* translators: %s: article of another card of the same group */
-			$text = sprintf( __( 'Импорт другой карточки этой группы (артикул %s) не завершён. Импортируйте сначала её, затем повторите.', 'woodev-plugin-framework' ), (string) $group['product']->get_sku( 'edit' ) );
-
-			return $this->skipped( $account, (string) $content->card()['offer_id'], $text );
+			return $this->group_building( $account, $content, (string) $group['product']->get_sku( 'edit' ), $waits );
 		}
 
 		if ( null !== $group['product'] ) {
@@ -269,6 +275,24 @@ final class Card_Import {
 		);
 
 		return $this->finish( $account, $content, $product, $fence, $renew, $stored );
+	}
+
+	/**
+	 * A card whose group's product is half-made is not built upon. It gets the note the merchant reads; whether it is skipped or must
+	 * wait for the card that resumes that product is the caller's knowledge (the queue), so it is asked.
+	 *
+	 * @param Account       $account Account.
+	 * @param Card_Content  $content Card.
+	 * @param string        $article Article of the half-made product: the card that resumes it.
+	 * @param callable|null $waits   See {@see self::import()}.
+	 * @return string {@see self::WAITING} or {@see self::SKIPPED}.
+	 */
+	private function group_building( Account $account, Card_Content $content, string $article, ?callable $waits ): string {
+		/* translators: %s: article of another card of the same group */
+		$text    = sprintf( __( 'Импорт другой карточки этой группы (артикул %s) не завершён. Импортируйте сначала её, затем повторите.', 'woodev-plugin-framework' ), $article );
+		$skipped = $this->skipped( $account, (string) $content->card()['offer_id'], $text );
+
+		return null !== $waits && call_user_func( $waits, $article ) ? self::WAITING : $skipped;
 	}
 
 	/**
