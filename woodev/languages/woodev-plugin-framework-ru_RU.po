@@ -11568,3 +11568,7 @@ msgstr ""
 #: marketplace/jobs/class-bulk-run-runner.php:421
 msgid "Аккаунт выключен или удалён."
 msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:998
+msgid "Синхронизация включена, но первую отправку записать не удалось. Повторите действие — оно запишет недостающее."
+msgstr ""
