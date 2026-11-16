@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.7] — 2026-11-15
+### Bug Fixes
+- **marketplace**: Uninstaller removes extension product meta; critic nits
+
+
+### Documentation
+- **agents**: Screenshots are taken with the WordPress admin menu collapsed
+
+- Save session s231
+
+- Handoff list lint
+
+
+### Features
+- **marketplace**: Extension point for plugin fields on «Общие» and the product tab
+
+
+
 ## [2.1.6] — 2026-11-15
 ### Bug Fixes
 - **marketplace**: Tools empty-state sentence matches the no-selector view (#1759)
