@@ -2889,7 +2889,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * The order amount a percentage markup and the minimum/maximum order amount are measured on, and the
 		 * free-shipping threshold by default: the cart subtotal less the coupon discounts, the way WooCommerce's
 		 * Free shipping measures it (the discount tax is taken off too while prices are shown with tax). The same
-		 * amount with and without a coupon; the contents cost when the package carries no subtotal.
+		 * amount with and without a coupon.
+		 *
+		 * With a coupon applied the amount comes from the package itself ({@see Order_Amount::PACKAGE_KEY}): the
+		 * cart puts it there before WooCommerce hashes the package, so a change of the discount is a new package and a
+		 * recalculation, not a rate served from the session. A package without it (built outside the cart, such as the
+		 * admin order wizard's) is measured on its subtotal, or on its contents cost while it carries a coupon — that
+		 * one is already after the discounts.
 		 *
 		 * @since 2.0.19
 		 * @since 2.1.9 After the coupon discounts, with and without a coupon (it was the subtotal before them while
@@ -2900,6 +2906,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private function price_order_amount( array $package ): float {
 
+			$prepared = self::numeric_amount( $package[ Order_Amount::PACKAGE_KEY ] ?? null );
+
+			if ( null !== $prepared ) {
+				return $prepared;
+			}
+
 			$subtotal = self::numeric_amount( $package['cart_subtotal'] ?? null );
 			$contents = self::numeric_amount( $package['contents_cost'] ?? null );
 
@@ -2907,20 +2919,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				return $contents ?? 0.0;
 			}
 
-			// no coupon, no discount: the same amount with and without a coupon
-			if ( empty( $package['applied_coupons'] ) ) {
-				return self::round_amount( $subtotal );
-			}
-
-			// the way WooCommerce's own Free shipping measures its minimum: the displayed subtotal less the discounts
-			$discount = $this->get_cart_discount_amount();
-
-			if ( null === $discount ) {
-				// no cart to ask (a package built outside the cart): the contents cost is already after discounts
-				return $contents ?? $subtotal;
-			}
-
-			return self::round_amount( $subtotal - $discount );
+			return ! empty( $package['applied_coupons'] ) ? ( $contents ?? $subtotal ) : $subtotal;
 		}
 
 		/**
@@ -2943,47 +2942,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
-		 * What the applied coupons took off the cart, as WooCommerce's Free shipping reads it: the discount total, and
-		 * the tax on the discount while prices are displayed with tax.
-		 *
-		 * @since 2.1.9
-		 *
-		 * @return float|null `null` when there is no cart (the admin order wizard, an unusual package source).
-		 */
-		private function get_cart_discount_amount(): ?float {
-
-			$cart = $this->get_discount_cart();
-
-			if ( null === $cart ) {
-				return null;
-			}
-
-			$discount = (float) $cart->get_discount_total();
-
-			if ( $cart->display_prices_including_tax() ) {
-				$discount += (float) $cart->get_discount_tax();
-			}
-
-			return $discount;
-		}
-
-		/**
-		 * The cart the coupon discounts are read from, `null` outside a cart request.
-		 *
-		 * A seam: the unit tests override it, the way they do {@see self::coupon_grants_free_shipping()}.
-		 *
-		 * @since 2.1.9
-		 *
-		 * @return object|null a `WC_Cart`.
-		 */
-		protected function get_discount_cart(): ?object {
-
-			$cart = function_exists( 'WC' ) ? \WC()->cart : null;
-
-			return is_object( $cart ) ? $cart : null;
-		}
-
-		/**
 		 * A package amount as a number, `null` when it is missing or not numeric.
 		 *
 		 * @since 2.1.9
@@ -2993,18 +2951,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private static function numeric_amount( $value ): ?float {
 			return is_numeric( $value ) ? (float) $value : null;
-		}
-
-		/**
-		 * Rounds an amount to two decimals (kopecks), so «exactly at the threshold» is not lost to float noise.
-		 *
-		 * @since 2.1.9
-		 *
-		 * @param float $amount amount.
-		 * @return float
-		 */
-		private static function round_amount( float $amount ): float {
-			return round( $amount, 2 );
 		}
 
 		/**

@@ -122,6 +122,13 @@ before the discounts; the markup and the order-amount limits always use the amou
 The framework adds the applied coupons, that amount and — with free shipping declared — whether a coupon grants free shipping
 to the rate-cache key of a method declaring the markup or free shipping.
 
+WooCommerce keeps a package's rates in the session under the package hash and serves them without calling the method, so the
+amount after the discounts rides ON the package: `Order_Amount` (`woodev_order_amount`, a string, added on
+`woocommerce_cart_shipping_packages` only to a package that carries a coupon, registered by `Shipping_Plugin`) and the method
+reads it back. A package without it (the admin order wizard, no coupons) is measured on its subtotal, or on `contents_cost`
+while it carries a coupon. A new rate input that is NOT in the package needs the same treatment (gotcha
+`woocommerce-caches-rates-per-package-hash-so-a-rate-gate-must-change-the-package`).
+
 Order-amount limits are availability, not price: `is_available_for_package()` hides the method BEFORE the rate cache, the
 packing and any carrier call, and an amount equal to a bound is inside. Their amount is the price features' amount (after the coupon discounts;
 before 2.1.9 it was the subtotal before them). Empty or 0 is no bound. CDEK redefines `OPTION_MIN_ORDER_AMOUNT = 'min_price'` and `OPTION_MAX_ORDER_AMOUNT = 'max_price'`.
