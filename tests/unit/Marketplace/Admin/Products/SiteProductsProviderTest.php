@@ -76,11 +76,11 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		return array_column( $body['rows'], null, 'id' );
 	}
 
-	public function test_the_definition_is_accepted_by_the_engine_and_declares_the_twelve_actions(): void {
+	public function test_the_definition_is_accepted_by_the_engine_and_declares_the_twelve_actions_and_the_two_run_buttons(): void {
 		$definition = $this->definition()->to_array();
 
 		$this->assertSame(
-			[ 'export', 'link_by_article', 'send_stock', 'send_price', 'sync_stock_on', 'sync_stock_off', 'sync_price_on', 'sync_price_off', 'set_warehouse', 'archive', 'detach', 'reset' ],
+			[ 'export', 'link_by_article', 'send_stock', 'send_price', 'sync_stock_on', 'sync_stock_off', 'sync_price_on', 'sync_price_off', 'set_warehouse', 'archive', 'detach', 'reset', 'bulk_stop', 'bulk_report' ],
 			array_column( $definition['bulk_actions'], 'id' )
 		);
 		$this->assertSame( 'account', $definition['bulk_actions'][1]['scope'], 'Linking by article names its reach.' );
@@ -251,7 +251,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 
 		$ids = array_column( $this->definition()->to_array()['bulk_actions'], 'id' );
 
-		$this->assertCount( 10, $ids );
+		$this->assertCount( 12, $ids );
 		$this->assertNotContains( 'export', $ids );
 		$this->assertNotContains( 'link_by_article', $ids );
 	}

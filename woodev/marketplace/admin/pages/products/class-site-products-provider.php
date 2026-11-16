@@ -402,7 +402,17 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 		}
 
 		try {
-			$run_id = $this->runs->start( $call['account']->id(), $action, $call['payload'], [ 'search' => $query['search'], 'filters' => $query['filters'] ], get_current_user_id(), $total );
+			$run_id = $this->runs->start(
+				$call['account']->id(),
+				$action,
+				$call['payload'],
+				[
+					'search' => $query['search'],
+					'filters' => $query['filters'],
+				],
+				get_current_user_id(),
+				$total
+			);
 		} catch ( \RuntimeException $e ) {
 			throw new Action_State_Exception( __( 'Не удалось поставить действие в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите.', 'woodev-plugin-framework' ) );
 		}

@@ -204,16 +204,18 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 		$editable = [];
 		$products = 0;
 		$walking  = $child > 0;
+		$taken    = 0;
 
-		while ( count( $offers ) < $size ) {
-			$room = $size - count( $offers );
+		while ( $taken < $size ) {
+			$room = $size - $taken;
 
 			if ( $walking ) {
 				$ids = $this->reader->variation_ids_after( $parent, $child, $room );
 
 				foreach ( $ids as $id ) {
-					$offers[]       = $id;
+					$offers[]        = $id;
 					$editable[ $id ] = $parent;
+					++$taken;
 				}
 
 				// A read shorter than the room means the parent has no more variations.
@@ -241,8 +243,9 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 				$offers[]        = $id;
 				$editable[ $id ] = $id;
 				++$products;
+				++$taken;
 
-				if ( count( $offers ) >= $size ) {
+				if ( $taken >= $size ) {
 					break;
 				}
 			}
@@ -252,12 +255,12 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 	}
 
 	/**
-	 * @param int[]            $offers    Offers.
-	 * @param array<int,int>   $editable  Offer => product whose right decides.
-	 * @param int              $parent    Cursor parent.
-	 * @param int              $child     Cursor child.
-	 * @param int              $products  Parents finished in this part.
-	 * @param bool             $exhausted Whether there is nothing after this part.
+	 * @param int[]          $offers    Offers.
+	 * @param array<int,int> $editable  Offer => product whose right decides.
+	 * @param int            $parent    Cursor parent.
+	 * @param int            $child     Cursor child.
+	 * @param int            $products  Parents finished in this part.
+	 * @param bool           $exhausted Whether there is nothing after this part.
 	 * @return array{offers:int[],editable:array<int,int>,cursor:array{parent:int,child:int},products:int,exhausted:bool}
 	 */
 	private function part_of( array $offers, array $editable, int $parent, int $child, int $products, bool $exhausted ): array {

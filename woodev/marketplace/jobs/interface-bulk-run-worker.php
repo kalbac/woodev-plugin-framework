@@ -36,10 +36,10 @@ interface Bulk_Run_Worker {
 	 *
 	 * @since 2.1.8
 	 *
-	 * @param Account            $account Account.
-	 * @param Bulk_Run           $run     The run.
+	 * @param Account             $account Account.
+	 * @param Bulk_Run            $run     The run.
 	 * @param array<string,mixed> $cursor  Where the previous part stopped.
-	 * @param callable           $owns    `function (): bool` — whether this tick still holds the run; asked before every product write.
+	 * @param callable            $owns    `function (): bool` — whether this tick still holds the run; asked before every product write.
 	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int}
 	 *         `counts` are what this part adds (`products_done`, `offers_accepted`, `offers_skipped`, `offers_failed`); `busy` is a
 	 *         number of seconds when the part could not start and must be tried again unchanged, 0 otherwise.

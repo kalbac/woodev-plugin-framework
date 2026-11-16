@@ -192,7 +192,7 @@ final class Site_Products_Run_Line {
 	/**
 	 * The result of a run, in the words of what its action does.
 	 *
-	 * @param string          $action Action id.
+	 * @param string            $action Action id.
 	 * @param array<string,int> $counts Counters.
 	 * @return string
 	 */

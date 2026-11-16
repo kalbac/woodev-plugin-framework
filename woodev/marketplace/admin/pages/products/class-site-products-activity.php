@@ -79,13 +79,13 @@ final class Site_Products_Activity {
 	 *
 	 * @since 2.1.4
 	 *
-	 * @param Task_Ledger   $ledger         Task ledger.
-	 * @param \wpdb         $db             Database.
-	 * @param string        $sync_table     Full name of the sync state table.
-	 * @param string        $accounts_table Full name of the accounts table.
-	 * @param callable|null $clock          Returns the Unix time; the system clock when null.
+	 * @param Task_Ledger         $ledger         Task ledger.
+	 * @param \wpdb               $db             Database.
+	 * @param string              $sync_table     Full name of the sync state table.
+	 * @param string              $accounts_table Full name of the accounts table.
+	 * @param callable|null       $clock          Returns the Unix time; the system clock when null.
 	 * @param Bulk_Run_Store|null $runs     The bulk runs; the account line says nothing about them when null.
-	 * @param callable|null $recover        `function ( int $account_id ): void` — the recovery check the line's read makes for a run in progress.
+	 * @param callable|null       $recover        `function ( int $account_id ): void` — the recovery check the line's read makes for a run in progress.
 	 */
 	public function __construct( Task_Ledger $ledger, \wpdb $db, string $sync_table, string $accounts_table, ?callable $clock = null, ?Bulk_Run_Store $runs = null, ?callable $recover = null ) {
 		$this->ledger         = $ledger;

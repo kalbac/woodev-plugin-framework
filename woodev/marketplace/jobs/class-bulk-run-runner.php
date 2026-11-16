@@ -120,7 +120,8 @@ final class Bulk_Run_Runner {
 		$this->accounts   = $accounts;
 		$this->adapter_id = $adapter_id;
 		$this->worker     = $worker;
-		$this->log        = $log ?? static function ( string $line ): void {};
+		$this->log        = $log ?? static function ( string $line ): void {
+		};
 		$this->clock      = $clock ?? static function (): float {
 			return microtime( true );
 		};
@@ -307,10 +308,10 @@ final class Bulk_Run_Runner {
 	/**
 	 * Works parts until the budget is spent, the run is over, or it is lost.
 	 *
-	 * @param Account              $account  Account.
-	 * @param Bulk_Run             $run      Run as the tick read it.
-	 * @param string               $tick     The tick's token.
-	 * @param array<string,mixed>  $progress `cursor`, `counts`, `report`; updated as parts go.
+	 * @param Account             $account  Account.
+	 * @param Bulk_Run            $run      Run as the tick read it.
+	 * @param string              $tick     The tick's token.
+	 * @param array<string,mixed> $progress `cursor`, `counts`, `report`; updated as parts go.
 	 * @return void
 	 * @throws Bulk_Run_Lost When the ownership check fails.
 	 */

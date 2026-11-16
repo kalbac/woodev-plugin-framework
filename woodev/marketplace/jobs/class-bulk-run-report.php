@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Groups of reasons with a count and a few examples, merged part after part (#1795). It is bounded so that a 50 000-offer run on a
  * heterogeneous catalogue cannot grow the row without limit and still fits the records engine's answer
- (at most 50 groups of {@see self::EXAMPLES} examples):
+(at most 50 groups of {@see self::EXAMPLES} examples):
  *
  * - at most {@see self::DISTINCT} distinct reasons are kept; the later ones merge into one group «Другие причины» whose count is the
  *   sum of the merged ones, so the counts of the report always add up to what was skipped and what failed;

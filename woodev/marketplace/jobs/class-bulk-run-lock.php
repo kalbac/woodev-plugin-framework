@@ -43,7 +43,7 @@ final class Bulk_Run_Lock implements Bulk_Run_Locking {
 	 */
 	public function __construct( \wpdb $db, string $table ) {
 		$this->db    = $db;
-		$this->scope = substr( md5( ( isset( $db->dbname ) ? (string) $db->dbname : '' ) . '|' . $table ), 0, 16 );
+		$this->scope = substr( md5( ( defined( 'DB_NAME' ) ? (string) DB_NAME : '' ) . '|' . $table ), 0, 16 );
 	}
 
 	/**
