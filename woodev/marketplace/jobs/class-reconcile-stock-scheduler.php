@@ -37,14 +37,23 @@ final class Reconcile_Stock_Scheduler {
 	private $names;
 
 	/**
+	 * Unix time: `function (): int`.
+	 *
+	 * @var callable
+	 */
+	private $clock;
+
+	/**
 	 * Creates the scheduler.
 	 *
 	 * @since 2.1.8
 	 *
-	 * @param Job_Names $names Job names of the plugin.
+	 * @param Job_Names     $names Job names of the plugin.
+	 * @param callable|null $clock `function (): int`, the moment the daily window and the first run are worked out from; the system clock when null.
 	 */
-	public function __construct( Job_Names $names ) {
+	public function __construct( Job_Names $names, ?callable $clock = null ) {
 		$this->names = $names;
+		$this->clock = $clock ?? 'time';
 	}
 
 	/**
@@ -104,7 +113,7 @@ final class Reconcile_Stock_Scheduler {
 				continue;
 			}
 
-			if ( ! as_schedule_recurring_action( $this->next_run( time() ), DAY_IN_SECONDS, $this->hook(), [ $account_id ], $this->names->group() ) ) {
+			if ( ! as_schedule_recurring_action( $this->next_run( (int) call_user_func( $this->clock ) ), DAY_IN_SECONDS, $this->hook(), [ $account_id ], $this->names->group() ) ) {
 				throw new \RuntimeException( 'Action Scheduler did not create the daily stock reconcile of account ' . (int) $account_id . '.' ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 			}
 		}
@@ -150,7 +159,7 @@ final class Reconcile_Stock_Scheduler {
 	}
 
 	/**
-	 * Returns the continuations an account was given today (UTC day).
+	 * Returns the continuations an account was given in the current window (the site's day, counted from the hour of the daily run).
 	 *
 	 * @since 2.1.8
 	 *
@@ -162,13 +171,19 @@ final class Reconcile_Stock_Scheduler {
 	}
 
 	/**
-	 * Names the transient that counts an account's continuations of the day.
+	 * Names the transient that counts an account's continuations of the current window. The window is the site's day measured from
+	 * the hour of the daily run, the boundary the schedule itself uses, so a daily run always opens a fresh allowance.
 	 *
 	 * @param int $account_id Account id.
 	 * @return string
 	 */
 	private function counter_key( int $account_id ): string {
-		return $this->hook() . '_cont_' . $account_id . '_' . gmdate( 'Ymd' );
+		$window = ( new \DateTimeImmutable( '@' . (int) call_user_func( $this->clock ) ) )
+			->setTimezone( wp_timezone() )
+			->modify( '-' . $this->hour() . ' hours' )
+			->format( 'Ymd' );
+
+		return $this->hook() . '_cont_' . $account_id . '_' . $window;
 	}
 
 	/**

@@ -103,7 +103,7 @@ final class StockOwnershipTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * `site` mode: the readback only compares — it never writes WC stock, whatever the marketplace reserved.
+	 * `site` mode: the readback only compares — it never writes WC stock, whatever the marketplace reserved. It remembers the numbers.
 	 *
 	 * @return void
 	 */
@@ -115,7 +115,9 @@ final class StockOwnershipTest extends Sync_Test_Case {
 
 		$this->assertSame( [], $this->reconcile() );
 		$this->assertSame( 9, $this->wc_stock( $product ) );
-		$this->assertNull( $this->stock_row( $product ), 'no pair, nothing to remember' );
+		$row = $this->stock_row( $product );
+		$this->assertSame( [ 9, 1 ], [ (int) $row['remote_present'], (int) $row['remote_reserved'] ], 'the readback is remembered on a row of its own' );
+		$this->assertNull( $row['pending_payload'], 'and nothing is queued for the marketplace' );
 	}
 
 	/**

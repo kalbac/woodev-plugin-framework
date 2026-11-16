@@ -130,14 +130,18 @@ final class Account_Run {
 	}
 
 	/**
-	 * Tells whether the budget allows one more request now.
+	 * Tells whether the budget allows a call of up to `$count` requests now. A call that needs more than the whole budget is
+	 * allowed as the first call of a run, so it is never starved.
 	 *
 	 * @since 2.1.0
 	 *
+	 * @param int $count Most requests the call may send (2.1.8; one by default).
 	 * @return bool
 	 */
-	public function can_request(): bool {
-		return $this->requests < $this->budget && $this->now() < $this->deadline;
+	public function can_request( int $count = 1 ): bool {
+		return $this->requests < $this->budget
+			&& $this->requests + min( max( 1, $count ), $this->budget ) <= $this->budget
+			&& $this->now() < $this->deadline;
 	}
 
 	/**

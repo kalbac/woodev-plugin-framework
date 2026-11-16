@@ -84,7 +84,7 @@ final class Stock_Readback {
 	private $policy;
 
 	/**
-	 * Told after a link's stock was applied or confirmed: `function ( Account $account, Product_Link $link, int $read_started_at ): void`.
+	 * Told after a link's stock was applied or confirmed: `function ( Account $account, Product_Link $link, int $read_started_at, int $warehouse_id ): void`.
 	 *
 	 * @var callable|null
 	 */
@@ -108,9 +108,10 @@ final class Stock_Readback {
 	 * @param Sync_State_Queue    $queue      Flusher side of `sync_state`.
 	 * @param Mirror_Stock_Writer $mirror     `marketplace` mode writer.
 	 * @param Stock_Policy        $policy     The formula in force (the adapter's `stock_policy()`).
-	 * @param callable|null       $on_applied `function ( Account $account, Product_Link $link, int $read_started_at ): void`, called in
-	 *                                        `marketplace` mode after a link's stock was set from the marketplace or found equal
-	 *                                        to it; `$read_started_at` is the moment before the read request. Added in 2.1.8.
+	 * @param callable|null       $on_applied `function ( Account $account, Product_Link $link, int $read_started_at, int $warehouse_id ): void`,
+	 *                                        called in `marketplace` mode after a link's stock was set from the marketplace or found
+	 *                                        equal to it; `$read_started_at` is the moment before the read request, `$warehouse_id`
+	 *                                        the warehouse it was read in. Added in 2.1.8.
 	 * @param callable|null       $clock      `function (): int`; the system clock when null. Added in 2.1.8.
 	 */
 	public function __construct( Wpdb_Link_Store $links, Stock_Pusher $pusher, Sync_State_Store $intents, Sync_State_Queue $queue, Mirror_Stock_Writer $mirror, Stock_Policy $policy, ?callable $on_applied = null, ?callable $clock = null ) {
@@ -152,8 +153,8 @@ final class Stock_Readback {
 	 *
 	 * @param Account_Run   $run          The run under the account claim; each read counts against its budget.
 	 * @param Link_Record[] $links        Links to check; links that are not created cards with stock sync on are skipped.
-	 * @param bool          $refresh_only Only store what the marketplace holds (`remote_present`, `remote_reserved`) on the rows that
-	 *                                    exist: no shop write, no drift repair, nothing queued for the marketplace.
+	 * @param bool          $refresh_only Only store what the marketplace holds (`remote_present`, `remote_reserved`): no shop write, no
+	 *                                    drift repair, nothing queued for the marketplace.
 	 * @return Readback_Progress
 	 * @throws Claim_Lost When another run took the account claim; nothing is written after that.
 	 * @throws \Throwable What the marketplace read threw; the caller classifies it.
@@ -171,7 +172,10 @@ final class Stock_Readback {
 		$unread  = [];
 
 		foreach ( $groups as $warehouse => $products ) {
-			if ( ! $run->can_request() ) {
+			$links_of_group = array_values( $products );
+
+			// The HTTP requests the read may send are reserved before it starts: a read the budget cannot cover waits for the next run.
+			if ( ! $run->can_request( $this->read_bound( (int) $warehouse, $links_of_group ) ) ) {
 				$unread = array_merge( $unread, array_keys( $products ) ); // The caller resumes with these on its next run.
 				continue;
 			}
@@ -179,7 +183,7 @@ final class Stock_Readback {
 			$run->spend_request();
 
 			$started = (int) call_user_func( $this->clock );
-			$read    = $this->pusher->read( $account, (int) $warehouse, array_values( $products ) );
+			$read    = $this->pusher->read( $account, (int) $warehouse, $links_of_group );
 
 			if ( $this->pusher instanceof Reports_Read_Requests ) {
 				$run->add_requests( $this->pusher->last_read_requests() - 1 );
@@ -224,6 +228,17 @@ final class Stock_Readback {
 	}
 
 	/**
+	 * Returns the most HTTP requests a read of these links may send: what the pusher promises, one for a pusher that does not page.
+	 *
+	 * @param int            $warehouse Warehouse.
+	 * @param Product_Link[] $links     Links of the read.
+	 * @return int At least 1.
+	 */
+	private function read_bound( int $warehouse, array $links ): int {
+		return $this->pusher instanceof Reports_Read_Requests ? max( 1, $this->pusher->max_read_requests( $warehouse, $links ) ) : 1;
+	}
+
+	/**
 	 * Stores one readback and acts on it, each side effect right after the claim was renewed.
 	 *
 	 * @param Account_Run                     $run     The run.
@@ -259,25 +274,25 @@ final class Stock_Readback {
 		$run->guard();
 
 		if ( self::REFRESH === $mode ) {
-			$this->remember( $run, $key, $row, $remote );
+			$this->remember( $run, $key, $remote );
 
 			return null; // Only what the marketplace holds is stored: the shop and the marketplace are left as they are.
 		}
 
 		if ( self::MIRROR === $mode ) {
-			$this->remember( $run, $key, $row, $remote );
+			$this->remember( $run, $key, $remote );
 
 			if ( $wc_stock !== $expected ) {
 				$this->mirror->mirror( $product, $remote['present'], $remote['reserved'] );
 			}
 
-			$this->applied( $run->account(), $link, $started );
+			$this->applied( $run->account(), $link, $started, $warehouse );
 
 			return $wc_stock === $expected ? null : $entry; // `wc_stock` is the value before the mirror wrote `expected`.
 		}
 
 		if ( $remote['present'] === $expected ) {
-			$this->remember( $run, $key, $row, $remote );
+			$this->remember( $run, $key, $remote );
 
 			return null;
 		}
@@ -293,31 +308,30 @@ final class Stock_Readback {
 	/**
 	 * Tells the listener that a link's stock now equals the marketplace's.
 	 *
-	 * @param Account      $account Account.
-	 * @param Product_Link $link    The link.
-	 * @param int          $started The moment before the read request.
+	 * @param Account      $account   Account.
+	 * @param Product_Link $link      The link.
+	 * @param int          $started   The moment before the read request.
+	 * @param int          $warehouse The warehouse the link was read in (resolved, not the link's override).
 	 * @return void
 	 */
-	private function applied( Account $account, Product_Link $link, int $started ): void {
+	private function applied( Account $account, Product_Link $link, int $started, int $warehouse ): void {
 		if ( null !== $this->on_applied ) {
-			call_user_func( $this->on_applied, $account, $link, $started );
+			call_user_func( $this->on_applied, $account, $link, $started, $warehouse );
 		}
 	}
 
 	/**
-	 * Stores the readback on the pair's row when the pair has one (a `marketplace` mode pair usually has none).
+	 * Stores the readback on the pair's row; a pair that has none gets a row with only the readback on it (no pending, in-flight
+	 * or sent intent), so nothing is queued for the marketplace.
 	 *
 	 * @param Account_Run                     $run    The run.
 	 * @param array<string,mixed>             $key    Row key.
-	 * @param array<string,mixed>|null        $row    The row, or null.
 	 * @param array{present:int,reserved:int} $remote The marketplace's numbers.
 	 * @return void
 	 * @throws Claim_Lost When the claim was taken over.
 	 */
-	private function remember( Account_Run $run, array $key, ?array $row, array $remote ): void {
-		if ( null !== $row ) {
-			$run->write( $this->queue->remember_remote( $key, $remote['present'], $remote['reserved'], $run->token() ) );
-		}
+	private function remember( Account_Run $run, array $key, array $remote ): void {
+		$run->write( $this->queue->record_remote( $key, $remote['present'], $remote['reserved'], $run->token() ) );
 	}
 
 	/**

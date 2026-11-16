@@ -18,6 +18,7 @@ use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Runner;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Framework\Marketplace\Stock\Stock_Pusher;
+use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Mirror_Stock_Writer;
 use Woodev\Framework\Marketplace\Sync\Stock_Readback;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
@@ -89,7 +90,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 			Sqlite_Tables::MARKETPLACE_ID,
 			$this->links(),
 			new Stock_Readback( $this->links(), $pusher ?? $this->market, $this->intents(), $this->queue(), new Mirror_Stock_Writer(), $this->policy, $on_applied, $this->clock() ),
-			new Reconcile_Stock_Scheduler( $this->names() ),
+			new Reconcile_Stock_Scheduler( $this->names(), $this->clock() ),
 			$this->classifier,
 			new Api_Error_Ring( $this->db, Sqlite_Tables::table( 'api_errors' ), $this->clock() ),
 			[ $this, 'log_line' ],
@@ -208,7 +209,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 		$this->assertSame( 3, $this->wc_stock( $first ), 'present − reserved' );
 		$this->assertSame( 6, $this->wc_stock( $second ), 'equal values are not written' );
 		$this->assertSame( [], $this->market->sent( Scripted_Stock_Pusher::PUSH ), 'the stock the shop just took is not sent back' );
-		$this->assertNull( $this->stock_row( $first ), 'no pending stock is queued for the marketplace' );
+		$this->assertNull( $this->stock_row( $first )['pending_payload'], 'no pending stock is queued for the marketplace' );
 		$this->assertSame( [], $this->continuations() );
 		$this->assertNotNull( $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL ), 'the claim was released' );
 	}
@@ -246,6 +247,38 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 		$this->runner()->run( $this->account_id );
 
 		$this->assertSame( [], $this->market->requests );
+	}
+
+	/**
+	 * A link that has no sync row yet gets one with only the readback on it — in both modes — and nothing is queued to be sent.
+	 *
+	 * @return void
+	 */
+	public function test_a_fresh_link_gets_the_remote_numbers_and_no_send_in_both_modes(): void {
+		foreach ( [ Wpdb_Account_Store::STOCK_MARKETPLACE, Wpdb_Account_Store::STOCK_SITE ] as $index => $mode ) {
+			$this->set_account( [ 'stock_mode' => $mode ] );
+
+			$product = $this->stock_product( 'fresh-' . $mode, 700 + $index, 10 );
+			$this->hook_stock();
+			$this->assertNull( $this->stock_row( $product ), 'no row before the first reconcile' );
+
+			$this->market->present[ 'fresh-' . $mode ]  = 4;
+			$this->market->reserved[ 'fresh-' . $mode ] = 1;
+			$this->market->requests                     = [];
+
+			$this->runner()->run( $this->account_id );
+
+			$row = $this->stock_row( $product );
+
+			$this->assertNotNull( $row, $mode );
+			$this->assertSame( 4, (int) $row['remote_present'], $mode );
+			$this->assertSame( 1, (int) $row['remote_reserved'], $mode );
+			$this->assertNotNull( $row['remote_read_at'], $mode );
+			$this->assertNull( $row['pending_payload'], $mode );
+			$this->assertNull( $row['sent_payload'], $mode );
+			$this->assertSame( [], $this->queue()->due( $this->account_id, Sync_State_Store::KIND_STOCK, 10 ), $mode . ': nothing to send' );
+			$this->assertSame( [], $this->market->sent( Scripted_Stock_Pusher::PUSH ), $mode );
+		}
 	}
 
 	/**
@@ -456,27 +489,66 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * A pusher that pages through several HTTP requests in one read is charged for all of them.
+	 * The HTTP requests a read may send are reserved BEFORE it starts: after nineteen single-request reads a read that may send
+	 * twenty is not started, and the continuation sends it — no run sends more than its budget.
 	 *
 	 * @return void
 	 */
-	public function test_the_http_pages_of_a_read_count_against_the_budget(): void {
+	public function test_a_read_that_may_exceed_the_http_budget_is_not_started(): void {
 		$this->marketplace_is_master();
-		$products = $this->products_of_the_account( 201 );
 
-		foreach ( array_keys( $products ) as $index ) {
-			$this->market->present[ 'sku-' . ( $index + 1 ) ] = 4;
+		for ( $i = 1; $i < Reconcile_Stock_Runner::BUDGET_REQUESTS; $i++ ) { // Nineteen warehouses of one link each.
+			$this->stock_product( 'one-' . $i, 3000 + $i, 10, [ 'warehouse_id' => 100 + $i ] );
+			$this->market->present[ 'one-' . $i ] = 3;
 		}
 
-		$paged = new Paged_Stock_Pusher( $this->market, Reconcile_Stock_Runner::BUDGET_REQUESTS );
+		$big = [];
+
+		for ( $i = 1; $i <= Reconcile_Stock_Runner::BUDGET_REQUESTS; $i++ ) { // One warehouse of twenty links: twenty HTTP requests.
+			$big[]                                = $this->stock_product( 'big-' . $i, 4000 + $i, 10, [ 'warehouse_id' => 999 ] );
+			$this->market->present[ 'big-' . $i ] = 6;
+		}
+
+		$paged = new Paged_Stock_Pusher( $this->market, 1 );
 
 		$this->runner( $paged )->run( $this->account_id );
 
 		$continuations = $this->continuations();
 
-		$this->assertCount( 1, $this->market->sent( Scripted_Stock_Pusher::READ ), 'one read used the whole budget' );
-		$this->assertSame( [ $this->account_id, $this->link_id( $products[199] ), 0 ], $continuations[0]['args'] );
-		$this->assertSame( 10, $this->wc_stock( $products[200] ) );
+		$this->assertCount( Reconcile_Stock_Runner::BUDGET_REQUESTS - 1, $this->market->sent( Scripted_Stock_Pusher::READ ), 'the twenty-request read did not start' );
+		$this->assertSame( Reconcile_Stock_Runner::BUDGET_REQUESTS - 1, $paged->total, 'nineteen HTTP requests in this run' );
+		$this->assertSame( [ $this->account_id, $this->link_id( $big[0] ) - 1, 0 ], $continuations[0]['args'] );
+		$this->assertSame( 10, $this->wc_stock( $big[0] ) );
+
+		$paged->total = 0;
+		$this->runner( $paged )->run( ...$continuations[0]['args'] );
+
+		$this->assertSame( Reconcile_Stock_Runner::BUDGET_REQUESTS, $paged->total, 'the continuation sends the twenty' );
+		$this->assertSame( 6, $this->wc_stock( $big[0] ) );
+		$this->assertCount( 1, $this->continuations(), 'and the pass ends' );
+	}
+
+	/**
+	 * A read whose bound is larger than the whole budget is not starved: it runs first in a run, alone.
+	 *
+	 * @return void
+	 */
+	public function test_a_read_larger_than_the_whole_budget_runs_first_in_a_run(): void {
+		$this->marketplace_is_master();
+		$products = [];
+
+		for ( $i = 1; $i <= 2; $i++ ) {
+			$products[]                        = $this->stock_product( 'p' . $i, 5000 + $i, 10 );
+			$this->market->present[ 'p' . $i ] = 2;
+		}
+
+		$paged = new Paged_Stock_Pusher( $this->market, Reconcile_Stock_Runner::BUDGET_REQUESTS ); // Bound 40 for the two links.
+
+		$this->runner( $paged )->run( $this->account_id );
+
+		$this->assertCount( 1, $this->market->sent( Scripted_Stock_Pusher::READ ) );
+		$this->assertSame( 2, $this->wc_stock( $products[0] ) );
+		$this->assertSame( [], $this->continuations() );
 	}
 
 	/**
@@ -494,7 +566,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 				return null;
 			},
 		];
-		$this->transients[ self::HOOK . '_cont_' . $this->account_id . '_' . gmdate( 'Ymd' ) ] = Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY;
+		$this->transients[ self::HOOK . '_cont_' . $this->account_id . '_' . $this->window( $this->now ) ] = Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY;
 
 		$this->runner()->run( $this->account_id );
 
@@ -511,7 +583,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	 * @return void
 	 */
 	public function test_continuations_are_counted_per_account_and_day(): void {
-		$scheduler = new Reconcile_Stock_Scheduler( $this->names() );
+		$scheduler = new Reconcile_Stock_Scheduler( $this->names(), $this->clock() );
 
 		for ( $cursor = 1; $cursor <= Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY; $cursor++ ) {
 			$this->assertTrue( $scheduler->continue_later( $this->account_id, $cursor, 0, 30 ) );
@@ -524,30 +596,61 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * The allowance is a window of the SITE day counted from the hour of the daily run, the schedule's own boundary: with the run at
+	 * 01:00 in Moscow, an allowance spent at 23:00 is still spent at 00:30 and is fresh again when the 01:00 run comes.
+	 *
+	 * @return void
+	 */
+	public function test_the_allowance_resets_with_the_daily_run_across_local_midnight(): void {
+		Filters\expectApplied( 'woodev_fake_seller_reconcile_stock_hour' )->zeroOrMoreTimes()->andReturn( 1 );
+
+		$now       = gmmktime( 20, 0, 0, 11, 16, 2026 ); // 23:00 on 16 November in Moscow.
+		$scheduler = new Reconcile_Stock_Scheduler(
+			$this->names(),
+			static function () use ( &$now ): int {
+				return $now;
+			}
+		);
+
+		for ( $cursor = 1; $cursor <= Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY; $cursor++ ) {
+			$this->assertTrue( $scheduler->continue_later( $this->account_id, $cursor, 0, 30 ) );
+		}
+
+		$this->assertFalse( $scheduler->continue_later( $this->account_id, 1001, 0, 30 ), 'spent at 23:00' );
+
+		$now = gmmktime( 21, 30, 0, 11, 16, 2026 ); // 00:30 on 17 November, still the window of the 16th's run.
+		$this->assertFalse( $scheduler->continue_later( $this->account_id, 1002, 0, 30 ) );
+
+		$now = gmmktime( 22, 0, 0, 11, 16, 2026 ); // 01:00 on 17 November: the daily run opens a fresh allowance.
+		$this->assertSame( 0, $scheduler->continuations_today( $this->account_id ) );
+		$this->assertTrue( $scheduler->continue_later( $this->account_id, 1003, 0, 30 ) );
+	}
+
+	/**
 	 * In «marketplace is master» mode the listener hears about every link that was set from the marketplace or found equal, with
-	 * the moment before its read; «site is master» tells it nothing.
+	 * the moment before its read and the resolved warehouse; «site is master» tells it nothing.
 	 *
 	 * @return void
 	 */
 	public function test_the_applied_listener_hears_changed_and_unchanged_links(): void {
 		$this->marketplace_is_master();
 		$changed   = $this->stock_product( 'a', 101, 10 );
-		$unchanged = $this->stock_product( 'b', 102, 6 );
+		$unchanged = $this->stock_product( 'b', 102, 6, [ 'warehouse_id' => 33 ] );
 
 		$this->market->present['a'] = 4;
 		$this->market->present['b'] = 6;
 
 		$heard    = [];
-		$listener = static function ( $account, $link, int $started ) use ( &$heard ): void {
-			$heard[] = [ $account->id(), $link->wc_product_id(), $started ];
+		$listener = static function ( $account, $link, int $started, int $warehouse ) use ( &$heard ): void {
+			$heard[] = [ $account->id(), $link->wc_product_id(), $started, $warehouse ];
 		};
 
 		$this->runner( null, $listener )->run( $this->account_id );
 
 		$this->assertSame(
 			[
-				[ $this->account_id, $changed, self::NOW ],
-				[ $this->account_id, $unchanged, self::NOW ],
+				[ $this->account_id, $changed, self::NOW, self::WAREHOUSE ], // The account's warehouse, resolved: the link has no override.
+				[ $this->account_id, $unchanged, self::NOW, 33 ],
 			],
 			$heard
 		);
@@ -786,6 +889,16 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 
 		$this->assertCount( 1, $this->log );
 		$this->assertStringContainsString( 'reconcile_stock could not be scheduled', $this->log[0] );
+	}
+
+	/**
+	 * The allowance window the scheduler names at a moment, with the daily run at the default hour in Moscow.
+	 *
+	 * @param int $time Unix time.
+	 * @return string
+	 */
+	private function window( int $time ): string {
+		return ( new \DateTimeImmutable( '@' . $time ) )->setTimezone( new \DateTimeZone( 'Europe/Moscow' ) )->modify( '-' . Reconcile_Stock_Scheduler::DEFAULT_HOUR . ' hours' )->format( 'Ymd' );
 	}
 
 	/**

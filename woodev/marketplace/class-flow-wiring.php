@@ -380,10 +380,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		/**
 		 * The daily stock reconcile of the accounts that sync stock.
 		 *
-		 * **Extension point** `woodev_{plugin id}_stock_readback_applied( int $account_id, Product_Link $link, int $read_started_at )`:
+		 * **Extension point** `woodev_{plugin id}_stock_readback_applied( int $account_id, Product_Link $link, int $read_started_at, int $warehouse_id )`:
 		 * fires in «marketplace is master» mode after a link's shop stock was set from the marketplace, or found equal to it.
 		 * `$read_started_at` is the Unix time before the read request, so a marketplace notification older than it is not newer
-		 * than what the reconcile applied. A plugin that keeps a freshness mark for its stock notifications advances it here.
+		 * than what the reconcile applied; `$warehouse_id` is the warehouse the link was read in (resolved by
+		 * {@see \Woodev\Framework\Marketplace\Sync\Stock_Warehouse::for_link()}, not the link's nullable override). A plugin that keeps
+		 * a freshness mark for its stock notifications advances it here.
 		 *
 		 * @param Sync_State_Store $store Pending side of `sync_state`.
 		 * @param Sync_State_Queue $queue Flusher side of `sync_state`.
@@ -400,9 +402,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 				$queue,
 				new Mirror_Stock_Writer(),
 				$adapter->stock_policy(),
-				static function ( Account $account, Product_Link $link, int $started ) use ( $hook, $log ): void {
+				static function ( Account $account, Product_Link $link, int $started, int $warehouse ) use ( $hook, $log ): void {
 					try {
-						do_action( $hook, $account->id(), $link, $started ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores,WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Job_Names builds `woodev_{plugin id}_…` in snake case.
+						do_action( $hook, $account->id(), $link, $started, $warehouse ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores,WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Job_Names builds `woodev_{plugin id}_…` in snake case.
 					} catch ( \Throwable $e ) {
 						call_user_func( $log, 'stock_readback_applied listener failed: ' . get_class( $e ) . ': ' . $e->getMessage() ); // A listener's failure must not stop the reconcile.
 					}
