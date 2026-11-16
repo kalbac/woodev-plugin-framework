@@ -63,6 +63,34 @@ describe( 'buildRatesRequest (D2)', () => {
 		} );
 	} );
 
+	test( 'carries the buyer phone of step ① as `destination.phone` (#1636)', () => {
+		const data = filled();
+		data.billing = { ...data.billing, phone: ' +7 (999) 123-45-67 ' };
+
+		expect( buildRatesRequest( data ).destination ).toEqual( {
+			country: 'RU',
+			state: 'МОСКВА',
+			city: 'Москва',
+			postcode: '101000',
+			address: 'ул Тверская 1',
+			address_2: 'кв 5',
+			phone: '+7 (999) 123-45-67',
+		} );
+	} );
+
+	test( 'prefers the delivery phone, as the order payload does, and the repricing request keeps it', () => {
+		const data = filled();
+		data.billing = { ...data.billing, phone: '+79991234567' };
+		data.shipping = { ...data.shipping, phone: '+79990000000' };
+
+		expect( buildRatesRequest( data ).destination.phone ).toBe( '+79990000000' );
+		expect( buildRepriceRequest( data ).destination.phone ).toBe( '+79990000000' );
+	} );
+
+	test( 'leaves the phone out when there is none, and the request is otherwise unchanged', () => {
+		expect( buildRatesRequest( filled() ).destination ).not.toHaveProperty( 'phone' );
+	} );
+
 	test( 'hands over the settlement record the manager picked, whole, as `location`', () => {
 		const record = { key: 'dadata:77', level: 'settlement', settlement: { name: 'Москва', type: 'г' } };
 		const data = { ...filled(), settlementRecord: record };
@@ -469,6 +497,12 @@ describe( 'an order loaded for edit meets the rates (#972, O4)', () => {
 			destination: { country: 'RU', state: 'МОСКВА', city: 'Москва', postcode: '', address: 'ул Тверская 1', address_2: '' },
 			customer_id: 5,
 		} );
+	} );
+
+	test( 'a saved order re-asks the tariffs with the order\'s own billing phone (#1636)', () => {
+		const data = prefillToData( prefill( { billing: { first_name: 'Анна', email: 'anna@example.test', country: 'RU', city: 'Москва', phone: '+79991234567' } } ) );
+
+		expect( buildRatesRequest( data ).destination.phone ).toBe( '+79991234567' );
 	} );
 
 	test( 'the edit request carries the newly picked settlement record', () => {

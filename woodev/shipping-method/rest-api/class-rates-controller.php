@@ -74,7 +74,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller'
 		 * Registers `POST /shipping/orders/rates`.
 		 *
 		 * The body is the wizard's state after the Items step: the lines at their edited prices,
-		 * the destination (typed fields and/or a `Location_Record::to_array()` shape) and the
+		 * the destination (typed fields and/or a `Location_Record::to_array()` shape, plus the recipient's
+		 * optional `phone`, which a carrier then reads from `$package['destination']['phone']`) and the
 		 * chosen customer, and — once the manager has chosen one — the payment method. Nothing is
 		 * read from a cart or a session.
 		 *

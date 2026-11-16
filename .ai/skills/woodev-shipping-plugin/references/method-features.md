@@ -143,6 +143,10 @@ value is still submitted). It works on the method's own page AND inside WooComme
 gotcha [enhanced select in the method modal](../../../../docs-internal/gotchas/wc-enhanced-select-is-not-initialised-in-the-shipping-method-modal.md)).
 Source: `class-instance-field-conditions.php`.
 
+## The recipient's phone in a package (#1636, 2.1.9)
+
+WooCommerce's package destination has no phone, and the checkout path gives none either — a carrier that needs it to quote reads `WC()->customer` / the checkout session there. In the ADMIN order wizard there is no cart and no session, so the wizard sends the recipient's phone (delivery phone, else billing's — what the order will carry) as `destination.phone` of `POST woodev/v1/shipping/orders/rates`, and `Admin_Rate_Calculator::normalize_destination()` sanitises it (`wc_sanitize_phone_number()`) into `$package['destination']['phone']`. The key is ABSENT, never `''`, when there is none. A new order and a saved one take the same route (the wizard re-asks with the order's own phone), so one read covers both: `(string) ( $package['destination']['phone'] ?? '' )`, falling back to the checkout customer when empty. A carrier that needs the phone and finds none should report why through the admin hint below, not quote «no tariffs».
+
 ## Why a method is hidden: the admin-only hint
 
 A method that yields no rate is invisible to everyone, including the manager who is trying to find out why. Every `rate_package()`
