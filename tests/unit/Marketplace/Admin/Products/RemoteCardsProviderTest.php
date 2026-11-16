@@ -9,6 +9,7 @@
 
 namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
+use Brain\Monkey\Functions;
 use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_Response;
 use Woodev\Framework\Admin\Records\Action_State_Exception;
@@ -20,6 +21,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 
 require_once dirname( __DIR__, 3 ) . '/Shipping/Rest_Api/wp-rest-controller-stub.php';
+require_once dirname( __DIR__ ) . '/Mappings/wp-term-stub.php';
 
 /**
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider
@@ -81,7 +83,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		}
 
 		$this->assertStringContainsString( 'Тестмаркет', $actions['refresh_list']['scope_sentence'] );
-		$this->assertStringContainsString( 'по всему магазину', $actions['link_by_article']['scope_sentence'] );
+		$this->assertStringContainsString( 'по всему магазину или по одной категории', $actions['link_by_article']['scope_sentence'] );
 		$this->assertStringNotContainsString( 'отмеченным', $actions['link_by_article']['scope_sentence'], 'no card row can be marked on this table' );
 	}
 
@@ -322,6 +324,79 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 
 		$this->assertTrue( $done['queued'] );
 		$this->assertCount( 1, $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() ) );
+	}
+
+	public function test_linking_by_article_asks_the_same_two_fields_as_on_the_products_table(): void {
+		$actions = array_column( $this->cards_definition()->to_array()['bulk_actions'], null, 'id' );
+		$fields  = array_column( $actions['link_by_article']['fields'], null, 'id' );
+
+		$this->assertSame( [ 'where', 'category' ], array_keys( $fields ) );
+		$this->assertSame( [ 'shop', 'category' ], array_column( $fields['where']['options'], 'value' ) );
+		$this->assertTrue( $fields['category']['options_source'] );
+		$this->assertTrue( $fields['category']['searchable'] );
+	}
+
+	public function test_one_category_reaches_the_job_from_this_table_and_the_whole_shop_stays_the_default(): void {
+		Functions\when( 'get_term' )->alias(
+			static function ( int $term_id ) {
+				if ( 7 !== $term_id ) {
+					return null;
+				}
+
+				$term          = new \WP_Term();
+				$term->term_id = 7;
+				$term->name    = 'Обувь';
+
+				return $term;
+			}
+		);
+		$provider = $this->cards_provider();
+
+		$plan = Action_Response::preview( $this->cards_definition()->get_action( 'link_by_article' ), $provider->preview( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '7' ] ) );
+		$this->assertSame( 3, $plan['requested'] );
+		$this->assertStringContainsString( 'Категория «Обувь»', $plan['scope']['sentence'] );
+
+		$provider->apply( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '7' ] );
+		$provider->apply( $this->context(), 'link_by_article', [], [ 'where' => 'shop', 'category' => '7' ] );
+		$provider->apply( $this->context(), 'link_by_article', [], [] );
+
+		$this->assertSame( [ 7, 7, null, null ], $this->candidates_asked );
+		$queued = $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() );
+		$this->assertSame( [ $this->account_id, 7, 0 ], $queued[0]['args'] );
+		$this->assertSame( [ $this->account_id, 0, 0 ], $queued[1]['args'] );
+	}
+
+	public function test_a_category_that_is_not_a_product_category_is_refused_on_the_category_field_here_too(): void {
+		Functions\when( 'get_term' )->justReturn( null );
+
+		foreach ( [ 'preview', 'apply' ] as $method ) {
+			try {
+				$this->cards_provider()->$method( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '99' ] );
+				$this->fail( "$method accepted the category." );
+			} catch ( Action_Input_Exception $e ) {
+				$this->assertSame( [ 'category' ], array_keys( $e->get_errors() ) );
+			}
+		}
+
+		$this->assertSame( [], $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() ) );
+	}
+
+	public function test_the_category_options_are_the_categories_not_the_products(): void {
+		Functions\when( 'get_ancestors' )->justReturn( [] );
+		Functions\when( 'get_terms' )->alias(
+			static function (): array {
+				$term          = new \WP_Term();
+				$term->term_id = 7;
+				$term->name    = 'Обувь';
+
+				return [ $term ];
+			}
+		);
+
+		$page = $this->cards_provider()->get_field_options( $this->context(), 'link_by_article', 'category', [ 'row_id' => '', 'search' => 'об', 'cursor' => '' ] );
+
+		$this->assertSame( [ [ 'value' => '7', 'label' => 'Обувь' ] ], $page['options'] );
+		$this->assertNull( $page['next_cursor'] );
 	}
 
 	public function test_an_action_for_a_switched_off_account_is_refused(): void {

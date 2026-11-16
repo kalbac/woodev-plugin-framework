@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 
 defined( 'ABSPATH' ) || exit;
@@ -31,6 +32,11 @@ final class Remote_Cards_Summary {
 		}
 
 		$time = wp_date( 'd.m.Y H:i', (int) ( $run['finished_at'] ?? 0 ) );
+
+		if ( (int) ( $run['category_id'] ?? 0 ) > 0 ) {
+			/* translators: 1: time of the run, 2: the category the run was limited to. */
+			$time = sprintf( __( '%1$s, категория «%2$s»', 'woodev-plugin-framework' ), $time, Shop_Categories::name_of( (int) $run['category_id'] ) );
+		}
 
 		if ( '' !== (string) ( $run['error'] ?? '' ) ) {
 			/* translators: 1: time of the run, 2: the reason it failed. */

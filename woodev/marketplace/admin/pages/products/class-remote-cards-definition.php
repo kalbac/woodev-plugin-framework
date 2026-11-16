@@ -118,7 +118,7 @@ final class Remote_Cards_Definition {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private static function bulk_actions( string $marketplace, bool $importable ): array {
-		$actions = [ self::refresh( $marketplace ), Site_Products_Definition::link_by_article( __( 'Связывание идёт по всему магазину. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ) ) ];
+		$actions = [ self::refresh( $marketplace ), Site_Products_Definition::link_by_article( __( 'Связывание идёт по всему магазину или по одной категории. По артикулу сопоставляются все карточки аккаунта.', 'woodev-plugin-framework' ), true ) ];
 
 		return $importable ? array_merge( [ self::import( self::IMPORT_SELECTED ) ], $actions ) : $actions;
 	}

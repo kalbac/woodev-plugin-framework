@@ -51,6 +51,20 @@ abstract class Products_Test_Case extends Export_Test_Case {
 	protected $candidates = 7;
 
 	/**
+	 * Shop products the linking job would try to match inside one category.
+	 *
+	 * @var int
+	 */
+	protected $category_candidates = 3;
+
+	/**
+	 * The category of every count of candidates asked for (null: the whole shop).
+	 *
+	 * @var array<int,int|null>
+	 */
+	protected $candidates_asked = [];
+
+	/**
 	 * Action ids the provider's adapter cannot serve.
 	 *
 	 * @var string[]
@@ -61,8 +75,9 @@ abstract class Products_Test_Case extends Export_Test_Case {
 		parent::setUp();
 
 		$this->forbidden  = [];
-		$this->candidates = 7;
-		$this->withheld   = [];
+		$this->candidates       = 7;
+		$this->candidates_asked = [];
+		$this->withheld         = [];
 		$this->shop       = new Products_Shop( $this->db, $this->account_id );
 		$this->hook_stock();
 
@@ -120,8 +135,10 @@ abstract class Products_Test_Case extends Export_Test_Case {
 			new Link_Scheduler( $this->names() ),
 			$this->ledger(),
 			[
-				'link_candidates' => function (): int {
-					return $this->candidates;
+				'link_candidates' => function ( int $account_id, ?int $category = null ): int {
+					$this->candidates_asked[] = $category;
+
+					return null === $category ? $this->candidates : $this->category_candidates;
 				},
 				'link_effect'     => function ( Account $account, string $unchanged ): string {
 					return null === $this->linker ? $unchanged : $this->linker->remote_effect( $account, $unchanged );

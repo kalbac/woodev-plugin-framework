@@ -650,7 +650,9 @@ callback.
 with the same planner as preview (Ozon's `Products_Bulk::preview()` / `apply()` already
 work this way) and returns the actual counts and groups. Changed eligibility shows up as
 grouped skips in the response. The account-wide «Связать по артикулу» job states its account
-scope in the preview; it is idempotent, so a grown count between preview and apply is
+scope in the preview — the whole shop, or one category with its subcategories, on both tables
+(`where` / `category` fields, read by `Site_Products_Bulk::link_category()`; the category is a searchable server-listed select, checked to be a
+`product_cat` term, 422 on the `category` field otherwise); it is idempotent, so a grown count between preview and apply is
 harmless. A simple non-destructive row action may skip the preview only when its PHP
 definition says so; one row uses the same path with one id.
 

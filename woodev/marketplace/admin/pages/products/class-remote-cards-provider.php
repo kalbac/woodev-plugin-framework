@@ -12,6 +12,7 @@ use Woodev\Framework\Admin\Records\Activity_Normalizer;
 use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
@@ -305,7 +306,8 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * The options of the product field: the shop's products that match what the merchant typed.
+	 * The options of a field the server lists: the categories of «Связать по артикулу», or the product field of «Связать с…» — the
+	 * shop's products that match what the merchant typed.
 	 *
 	 * @since 2.1.5
 	 *
@@ -313,9 +315,13 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @param string                                           $action  Action id.
 	 * @param string                                           $field   Field id.
 	 * @param array{row_id:string,search:string,cursor:string} $query   Validated input.
-	 * @return array{options:array<int,array{value:string,label:string}>,next_cursor:null}
+	 * @return array{options:array<int,array{value:string,label:string}>,next_cursor:string|null}
 	 */
 	public function get_field_options( array $context, string $action, string $field, array $query ): array {
+		if ( Site_Products_Bulk::LINK_BY_ARTICLE === $action && Site_Products_Bulk::LINK_CATEGORY === $field ) {
+			return Shop_Categories::page( $query['search'], $query['cursor'] );
+		}
+
 		return [
 			'options'     => $this->products->options( $query['search'] ),
 			'next_cursor' => null,

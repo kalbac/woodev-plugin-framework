@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Flows;
 use Brain\Monkey;
 use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 
@@ -114,5 +115,19 @@ final class ShopSkuSourceTest extends TestCase {
 		$this->assertSame( [ 10, 60 ], array_column( $source->products( 5 ), 'id' ), 'category 5 and its child 7' );
 		$this->assertSame( [ 21, 22, 30 ], array_column( $source->products( 6 ), 'id' ), 'the variations follow the variable parent' );
 		$this->assertSame( [ 60 ], array_column( $source->products( 7 ), 'id' ) );
+	}
+
+	/**
+	 * What «Связать по артикулу» previews for a category: its subtree's products without a card identity.
+	 *
+	 * @return void
+	 */
+	public function test_the_candidates_of_a_category_are_its_subtree_minus_the_linked_ones(): void {
+		$source   = new Shop_Sku_Source( $this->db );
+		$identity = [ 10 => [ 'offer_id' => 'SIMPLE-10', 'has_remote_ids' => true, 'card_state' => 'created' ] ];
+
+		$this->assertSame( 1, Site_Products_Module::count_candidates( $source->products( 5 ), $identity ), 'product 60 of the child category 7 is not linked' );
+		$this->assertSame( 3, Site_Products_Module::count_candidates( $source->products( 6 ), $identity ) );
+		$this->assertSame( 4, Site_Products_Module::count_candidates( $source->products(), $identity ), 'the whole shop: 5 products with an article, one linked' );
 	}
 }
