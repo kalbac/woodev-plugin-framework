@@ -2,7 +2,7 @@
 /**
  * Generates the catalogue of the bulk run scale test (#1795, E2): 10 000 parents, 18 592 offers, 16 592 linked.
  *
- * Usage: `wp eval-file generate-catalogue.php <adapter id> <account id> [reset]`
+ * Usage: `wp eval-file generate-catalogue.php <adapter id> <account id> [reset|delete]` — `delete` removes the fixture and stops, for the cleanup after the measurement
  *
  * Direct SQL on purpose: it writes only what the «Товары сайта» table, the reader and the link store read — the post, its type term,
  * `_sku`, the price and stock meta, the lookup row and, for a variation, `attribute_size`. It does NOT build a product the shop could
@@ -24,10 +24,11 @@ global $wpdb;
 
 $adapter = isset( $args[0] ) ? (string) $args[0] : '';
 $account = isset( $args[1] ) ? (int) $args[1] : 0;
-$reset   = isset( $args[2] ) && 'reset' === $args[2];
+$delete  = isset( $args[2] ) && 'delete' === $args[2];
+$reset   = $delete || ( isset( $args[2] ) && 'reset' === $args[2] );
 
 if ( '' === $adapter || $account <= 0 ) {
-	WP_CLI::error( 'Usage: wp eval-file generate-catalogue.php <adapter id> <account id> [reset]' );
+	WP_CLI::error( 'Usage: wp eval-file generate-catalogue.php <adapter id> <account id> [reset|delete]' );
 }
 
 const WOODEV_FIXTURE_PREFIX = 'BULKRUN-';
@@ -60,6 +61,11 @@ if ( [] !== $fixture_ids ) {
 	}
 
 	WP_CLI::log( 'Removed ' . count( $fixture_ids ) . ' fixture products.' );
+}
+
+if ( $delete ) {
+	WP_CLI::success( 'Fixture deleted; nothing rebuilt.' );
+	return;
 }
 
 $simple_term   = (int) $wpdb->get_var( "SELECT tt.term_taxonomy_id FROM {$wpdb->term_taxonomy} tt JOIN {$wpdb->terms} t ON t.term_id = tt.term_id WHERE tt.taxonomy = 'product_type' AND t.slug = 'simple'" );

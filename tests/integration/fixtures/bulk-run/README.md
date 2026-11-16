@@ -49,6 +49,8 @@ Expected (the acceptance): `sync_stock_on` by no filter ends with **products 10 
 («не отправлялся на маркетплейс»), failed 0**; `set_warehouse` (pass the warehouse id as the 4th argument of `start-run.php`) the same
 partition; `export` with the filter `state=unlinked` (5th argument `unlinked`) reaches exactly the 2 000 unlinked offers
 (`accepted + skipped + failed = 2000`, products 2 000). Every tick under 20 s, peak memory flat across ticks. Between two runs rebuild the catalogue:
-`wp eval-file .../generate-catalogue.php $ADAPTER $ACCOUNT reset` (it deletes the fixture products, their links and their sync state).
+`wp eval-file .../generate-catalogue.php $ADAPTER $ACCOUNT reset` (it deletes the fixture products, their links and their sync state),
+and clear the ticks: `rm -f wp-content/bulk-run-ticks.jsonl`. After the last run remove the fixture without rebuilding it —
+`wp eval-file .../generate-catalogue.php $ADAPTER $ACCOUNT delete` — then the measurement mu-plugin and `bulk-run-ticks.jsonl`.
 
 `start-run.php` arguments: `<plugin id> <account id> <action> [warehouse id or 0] [state filter]`.
