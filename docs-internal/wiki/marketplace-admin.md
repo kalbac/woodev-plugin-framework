@@ -466,6 +466,13 @@ What the code settled, where the text above left it open:
   (`stock_mode = 'off'`): no stock push except the zero that precedes an archive, no readback or mirroring, and the intake drops a `Webhook_Type` declared as the stock one
   (`$stock = true`) as `ignored`; an adapter's `Push_Admin` leaves that type out of the wanted subscriptions for an account whose
   `Notification_Account::stock_mode()` is `Stock_Mode::OFF`.
+- **A saved warehouse the marketplace no longer offers (#1801).** The adapter keeps only available warehouses in the cached list
+  (`warehouses:{account}`); a saved id missing from a NON-empty list is «unavailable» (`Warehouse_Options::is_unavailable()`), an empty
+  or absent list proves nothing and blocks nothing. The account select keeps such an id and labels it «#id (Склад отключён в маркетплейсе —
+  выберите другой)». `Stock_Warehouse::for_link()` (link's own, account default, oversize alike) resolves it to none, so the flusher, the
+  intents and the readback simply see «no warehouse» and nothing is sent; `Account_Status` (given the `Warehouse_Options`) shows ONE line
+  in the account's status naming the ids, not one message per product. Sends resume by themselves once another warehouse is picked or the
+  id is listed again — there is no stored flag to clear.
 - **Notification types are switches.** The adapter declares them in `Push_Protocol::webhook_types()` (`Webhook_Type`: id = the
   decoder's event type, label, purpose, cabinet location, default). The framework registers one toggle per type
   (`woodev_{plugin id}_webhook_{type id}`), explains them in the first card, and `Notification_Intake` stores a switched-off type

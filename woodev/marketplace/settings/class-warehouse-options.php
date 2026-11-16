@@ -107,6 +107,39 @@ final class Warehouse_Options {
 	}
 
 	/**
+	 * Tells whether a warehouse is known to be unavailable: the cached list is there and the id is not in it.
+	 *
+	 * An empty cache (never refreshed, or the refresh failed) proves nothing, so it never counts as «unavailable» and
+	 * nothing is blocked because of it.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int $account_id   Account id.
+	 * @param int $warehouse_id Warehouse id, as saved.
+	 * @return bool
+	 */
+	public function is_unavailable( int $account_id, int $warehouse_id ): bool {
+		if ( $warehouse_id <= 0 ) {
+			return false;
+		}
+
+		$known = $this->for_account( $account_id );
+
+		return [] !== $known && ! isset( $known[ (string) $warehouse_id ] );
+	}
+
+	/**
+	 * The note the account settings give a saved warehouse that the marketplace no longer offers.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @return string
+	 */
+	public static function unavailable_note(): string {
+		return __( 'Склад отключён в маркетплейсе — выберите другой', 'woodev-plugin-framework' );
+	}
+
+	/**
 	 * Moves the flagged warehouses to the front, keeping the order inside both groups, and marks their labels.
 	 *
 	 * @param array<string,string> $options Options by warehouse id.
