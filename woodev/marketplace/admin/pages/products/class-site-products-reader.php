@@ -299,6 +299,72 @@ final class Site_Products_Reader {
 	}
 
 	/**
+	 * How many products pass every filter of the read: the table's own total, and the estimate a bulk run starts with.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Site_Products_Filter $filter Filters; the sort is not part of a count.
+	 * @return int
+	 */
+	public function count_filtered( Site_Products_Filter $filter ): int {
+		return $this->count_matching( $this->where( $filter ) );
+	}
+
+	/**
+	 * Reads the next listed products under the filter, by id: the parents of a bulk run's cursor.
+	 *
+	 * It is the list's own `where()` plus `p.ID > after ORDER BY p.ID ASC LIMIT n`, so a product is taken as it is when its turn comes:
+	 * one that left the filter is not read, one that entered above the cursor is, and an action that moves a product out of the filter
+	 * cannot make the run repeat it — the cursor is an id, not an offset.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Site_Products_Filter $filter Filters.
+	 * @param int                  $after  Last product id the run entered; 0 at the start.
+	 * @param int                  $limit  Most products to read.
+	 * @return array<int,bool> Product id => whether it has published variations (a variable product to expand), in id order.
+	 */
+	public function ids_after( Site_Products_Filter $filter, int $after, int $limit ): array {
+		$children = $this->db->prepare( "SELECT 1 FROM %i AS v WHERE v.post_parent = p.ID AND v.post_type = 'product_variation' AND v.post_status IN ('publish', 'private')", $this->db->posts ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+		$rows     = $this->db->get_results(
+			'SELECT p.ID AS id, EXISTS (' . $children . ') AS has_variations FROM ' . $this->db->prepare( '%i AS p', $this->db->posts ) . ' WHERE ' . $this->where( $filter ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Every fragment is prepared.
+			. $this->db->prepare( ' AND p.ID > %d ORDER BY p.ID ASC LIMIT %d', $after, max( 1, $limit ) ),
+			'ARRAY_A'
+		);
+		$ids      = [];
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$ids[ (int) $row['id'] ] = 1 === (int) $row['has_variations'];
+		}
+
+		return $ids;
+	}
+
+	/**
+	 * Reads the next published variations of one variable product, by id: the child half of a bulk run's cursor.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int $parent_id Variable product.
+	 * @param int $after     Last variation id read; 0 to start.
+	 * @param int $limit     Most variations to read.
+	 * @return int[] Variation ids, ascending.
+	 */
+	public function variation_ids_after( int $parent_id, int $after, int $limit ): array {
+		$ids = $this->db->get_col(
+			$this->db->prepare(
+				"SELECT p.ID FROM %i AS p WHERE p.post_parent = %d AND p.post_type = 'product_variation' AND p.post_status IN ('publish', 'private') AND p.ID > %d ORDER BY p.ID ASC LIMIT %d",
+				$this->db->posts,
+				$parent_id,
+				$after,
+				max( 1, $limit )
+			) // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Prepared here.
+		);
+
+		return array_map( 'intval', (array) $ids );
+	}
+
+	/**
 	 * Builds the WHERE clause (without the keyword) of the product list.
 	 *
 	 * @param Site_Products_Filter $filter Filters.
