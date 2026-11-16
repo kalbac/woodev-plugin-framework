@@ -38,6 +38,14 @@ final class Effective_Settings {
 	public const OVERRIDES_KEY = 'overrides';
 
 	/**
+	 * Key of the «switch synchronisation on right after linking» switch: part of the `exchange` group, kept in the account's `settings`
+	 * JSON (it has no column), with a «Общие» default.
+	 *
+	 * @since 2.1.8
+	 */
+	public const KEY_SYNC_ON_LINK = 'sync_on_link';
+
+	/**
 	 * Keys of the two card-import settings. They exist once per shop, on «Общие» only: an account never overrides them.
 	 */
 	public const KEY_IMPORT_PUBLISH    = 'import_publish';
@@ -133,7 +141,7 @@ final class Effective_Settings {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @return array<string,mixed> `price_rule` keys, `orders_enabled`, `import_enabled`, and the two card-import settings.
+	 * @return array<string,mixed> `price_rule` keys, `orders_enabled`, `import_enabled`, `sync_on_link`, and the two card-import settings.
 	 */
 	public static function builtin_defaults(): array {
 		return [
@@ -145,6 +153,7 @@ final class Effective_Settings {
 			'min_percent'               => null,
 			'orders_enabled'            => true,
 			'import_enabled'            => false,
+			self::KEY_SYNC_ON_LINK      => true, // Linking a card switches stock and price synchronisation on at once (an account that never saved the key reads this).
 			self::KEY_IMPORT_PUBLISH    => false, // A new shop gets drafts: the price and the text are the marketplace's, nobody has looked at them yet.
 			self::KEY_IMPORT_CATEGORIES => true,
 		];
@@ -236,6 +245,22 @@ final class Effective_Settings {
 	 */
 	public function import_enabled( Account $account ): bool {
 		return $this->exchange_flag( $account, 'import_enabled', false );
+	}
+
+	/**
+	 * Whether linking a card to a product switches the product's stock and price synchronisation on at once.
+	 *
+	 * An account whose `settings` JSON holds no value (a migrated one, or one that never saved the switch) reads the built-in default,
+	 * which is on. What «on» achieves still depends on the account's stock mode and price direction; the switch only grants the
+	 * per-link permission.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Account $account Account.
+	 * @return bool
+	 */
+	public function sync_on_link( Account $account ): bool {
+		return $this->exchange_flag( $account, self::KEY_SYNC_ON_LINK, true );
 	}
 
 	/**
@@ -346,7 +371,7 @@ final class Effective_Settings {
 	 * Reads one exchange switch: the account's own, or the default.
 	 *
 	 * @param Account $account  Account.
-	 * @param string  $key      `orders_enabled` or `import_enabled`.
+	 * @param string  $key      `orders_enabled`, `import_enabled` or `sync_on_link`.
 	 * @param bool    $fallback Value when the account holds none.
 	 * @return bool
 	 */

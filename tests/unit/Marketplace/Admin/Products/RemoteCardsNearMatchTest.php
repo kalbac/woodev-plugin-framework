@@ -207,6 +207,23 @@ final class RemoteCardsNearMatchTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [], $this->adapter->link_resolver()->reads, 'Nothing reached the marketplace.' );
 	}
 
+	public function test_confirming_a_near_match_follows_the_sync_on_link_setting(): void {
+		$this->sync_on_link( true );
+
+		$this->confirm( 'abc-001', 41 );
+
+		$this->assertTrue( $this->link_of( 41 )->sync_stock() );
+		$this->assertTrue( $this->link_of( 41 )->sync_price() );
+		$this->assertSame( [ 41 ], $this->first_stock_sends );
+
+		$this->sync_on_link( false );
+
+		$this->confirm( 'xyz-9', 42 );
+
+		$this->assertFalse( $this->link_of( 42 )->sync_stock() );
+		$this->assertSame( [], $this->first_stock_sends );
+	}
+
 	public function test_a_linked_card_shows_its_product_in_the_cards_table_after_the_answer(): void {
 		$this->confirm( 'abc-001', 41 );
 

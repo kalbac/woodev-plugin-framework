@@ -172,7 +172,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * is never rewritten; with a fence the write also depends on the account claim.
 	 *
 	 * @param int                 $link_id Link id.
-	 * @param array<string,mixed> $card    `offer_id`, `remote_ids` (name => id), `state`, `is_created`, `error_text`.
+	 * @param array<string,mixed> $card    `offer_id`, `remote_ids` (name => id), `state`, `is_created`, `error_text`; optionally `is_oversize`, and `sync_stock` / `sync_price` (bool, written together; absent keeps the row's switches).
 	 * @param Claim_Fence|null    $fence   The account claim the run holds, or null for a request-time link.
 	 * @return bool True when the row now holds the card.
 	 */
@@ -183,12 +183,16 @@ final class Wpdb_Link_Store implements Link_Store {
 		$has_oversize  = array_key_exists( 'is_oversize', $card );
 		$oversize_sql  = $has_oversize ? ', is_oversize = %d' : '';
 		$oversize_args = $has_oversize ? [ (int) $card['is_oversize'] ] : [];
+		$has_sync      = array_key_exists( 'sync_stock', $card ) || array_key_exists( 'sync_price', $card );
+		$sync_sql      = $has_sync ? ', sync_stock = %d, sync_price = %d' : '';
+		$sync_args     = $has_sync ? [ empty( $card['sync_stock'] ) ? 0 : 1, empty( $card['sync_price'] ) ? 0 : 1 ] : [];
 
 		$sql = $this->db->prepare(
-			'UPDATE %i SET offer_id = %s, card_state = %s, is_created = %d' . $oversize_sql . ', last_error_code = NULL, last_error_text = ' . ( '' === $error ? 'NULL' : '%s' ) . ', updated_at = %s WHERE link_id = %d AND kind = %s AND card_state = %s AND NOT EXISTS (SELECT 1 FROM %i AS known WHERE known.link_id = %i.link_id) AND offer_id IS NULL AND last_task_id IS NULL' . $fence_sql, // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+			'UPDATE %i SET offer_id = %s, card_state = %s, is_created = %d' . $oversize_sql . $sync_sql . ', last_error_code = NULL, last_error_text = ' . ( '' === $error ? 'NULL' : '%s' ) . ', updated_at = %s WHERE link_id = %d AND kind = %s AND card_state = %s AND NOT EXISTS (SELECT 1 FROM %i AS known WHERE known.link_id = %i.link_id) AND offer_id IS NULL AND last_task_id IS NULL' . $fence_sql, // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 			array_merge(
 				[ $this->table, (string) $card['offer_id'], (string) $card['state'], ! empty( $card['is_created'] ) ? 1 : 0 ],
 				$oversize_args,
+				$sync_args,
 				'' === $error ? [] : [ $error ],
 				[ $this->format_time( $this->now() ), $link_id, Link_Record::KIND_OFFER, Link_Record::STATE_UNLINKED, $this->ids_table, $this->table ],
 				$fence_args

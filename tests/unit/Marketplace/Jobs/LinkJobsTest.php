@@ -161,13 +161,14 @@ final class LinkJobsTest extends Export_Test_Case {
 	/**
 	 * Builds the jobs over the test doubles.
 	 *
+	 * @param Card_Linker|null $linker The linker the job writes through; the plain one (switches off) by default.
 	 * @return Link_Jobs
 	 */
-	private function jobs(): Link_Jobs {
+	private function jobs( ?Card_Linker $linker = null ): Link_Jobs {
 		return new Link_Jobs(
 			$this->job_gate(),
 			$this->links(),
-			new Card_Linker( $this->links() ),
+			$linker ?? new Card_Linker( $this->links() ),
 			function ( ?int $category_id ): array {
 				$this->asked[] = $category_id;
 
@@ -250,6 +251,43 @@ final class LinkJobsTest extends Export_Test_Case {
 		$this->assertSame( 3, $run['cards'] );
 		$this->assertSame( '', $run['error'] );
 		$this->assertSame( self::NOW, $run['finished_at'] );
+	}
+
+	/**
+	 * With «sync on link» the exact pairs are linked with both switches on and the first send is recorded; with it off, as before (#1793).
+	 *
+	 * @return void
+	 */
+	public function test_the_link_job_follows_the_sync_on_link_decision(): void {
+		$first = [];
+		$spy   = function ( bool $on ) use ( &$first ): Card_Linker {
+			return new Card_Linker(
+				$this->links(),
+				static function () use ( $on ): bool {
+					return $on;
+				},
+				static function ( Link_Record $link ) use ( &$first ): void {
+					$first[] = $link->wc_product_id();
+				}
+			);
+		};
+
+		$this->jobs( $spy( true ) )->link_cards( $this->account_id, 0, 0 );
+
+		$row = $this->links()->find( $this->account_id, 101 );
+
+		$this->assertTrue( $row->sync_stock() );
+		$this->assertTrue( $row->sync_price() );
+		$this->assertSame( [ 101 ], $first, 'the first send is recorded for the exact pair, not for the near matches' );
+
+		$this->db->query( 'DELETE FROM ' . Sqlite_Tables::table( 'links' ) );
+		$this->db->query( 'DELETE FROM ' . Sqlite_Tables::table( 'link_ids' ) );
+		$first = [];
+
+		$this->jobs( $spy( false ) )->link_cards( $this->account_id, 0, 0 );
+
+		$this->assertFalse( $this->links()->find( $this->account_id, 101 )->sync_stock() );
+		$this->assertSame( [], $first );
 	}
 
 	/**

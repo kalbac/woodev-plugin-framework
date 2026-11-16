@@ -40,6 +40,7 @@ use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
@@ -209,7 +210,7 @@ final class Site_Products_Module {
 			$store,
 			$links,
 			$reports,
-			new Card_Linker( $links ),
+			self::linker( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
 			new Link_Scheduler( new Job_Names( $plugin->get_id() ) ),
 			self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
 			License_Gate::for_plugin( $plugin ),
@@ -251,19 +252,7 @@ final class Site_Products_Module {
 		$job_names = new Job_Names( $plugin->get_id() );
 		$store     = new Sync_State_Store( $db, $table( 'sync_state' ) );
 		$queue     = new Sync_State_Queue( $db, $table( 'sync_state' ), $table( 'accounts' ), $adapter->stock_cadence() );
-		$mappings  = new Wpdb_Mapping_Store( $db, $table( 'mappings' ), $table( 'mapping_terms' ) );
-		$contexts  = new Export_Context_Builder(
-			new Link_Context_Resolver( $links, $mappings ),
-			new Wpdb_Profile_Store( $db, $table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
-			$links,
-			$adapter->export_facts(),
-			$adapter->article_policy(),
-			new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() ),
-			$adapter->price_source(),
-			null,
-			null,
-			$ledger
-		);
+		$contexts  = self::export_contexts( $adapter, $db, $links, $ledger, $table );
 		$log       = static function ( string $line ) use ( $plugin ): void {
 			$plugin->log_error( $line );
 		};
@@ -298,6 +287,63 @@ final class Site_Products_Module {
 					Validation_Report::FIX_ACCOUNT    => $plugin->get_settings_url(),
 				],
 			]
+		);
+	}
+
+	/**
+	 * Builds the linker the remote-cards table links through («Связать с…» and the near-match confirmation): the same one the link job
+	 * and the import use, so a link made by hand follows the account's «sync on link» setting too.
+	 *
+	 * @param Marketplace_Plugin  $plugin   Plugin.
+	 * @param Marketplace_Adapter $adapter  Adapter.
+	 * @param Wpdb_Account_Store  $accounts Accounts.
+	 * @param \wpdb               $db       Database.
+	 * @param Wpdb_Link_Store     $links    Links.
+	 * @param Wpdb_Task_Ledger    $ledger   Task ledger.
+	 * @param callable            $table    `function ( string $name ): string`, the full name of a table.
+	 * @return Card_Linker
+	 */
+	private static function linker( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, Wpdb_Link_Store $links, Wpdb_Task_Ledger $ledger, callable $table ): Card_Linker {
+		$store = new Sync_State_Store( $db, $table( 'sync_state' ) );
+		$queue = new Sync_State_Queue( $db, $table( 'sync_state' ), $table( 'accounts' ), $adapter->stock_cadence() );
+		$log   = static function ( string $line ) use ( $plugin ): void {
+			$plugin->log_error( $line );
+		};
+		$price = null === $adapter->price_pusher() ? null : new Price_Intents( $accounts, $adapter->id(), $links, self::export_contexts( $adapter, $db, $links, $ledger, $table ), $store, $log );
+
+		return Card_Linker::syncing(
+			$links,
+			Effective_Settings::for_adapter( $adapter->id() ),
+			[ $accounts, 'get' ],
+			new Stock_Intents( [ $accounts, 'get' ], $links, $store, $queue, $adapter->stock_policy() ),
+			$price
+		);
+	}
+
+	/**
+	 * Builds the export context builder the bulk actions and the price intents share.
+	 *
+	 * @param Marketplace_Adapter $adapter Adapter.
+	 * @param \wpdb               $db      Database.
+	 * @param Wpdb_Link_Store     $links   Links.
+	 * @param Wpdb_Task_Ledger    $ledger  Task ledger.
+	 * @param callable            $table   `function ( string $name ): string`, the full name of a table.
+	 * @return Export_Context_Builder
+	 */
+	private static function export_contexts( Marketplace_Adapter $adapter, \wpdb $db, Wpdb_Link_Store $links, Wpdb_Task_Ledger $ledger, callable $table ): Export_Context_Builder {
+		$mappings = new Wpdb_Mapping_Store( $db, $table( 'mappings' ), $table( 'mapping_terms' ) );
+
+		return new Export_Context_Builder(
+			new Link_Context_Resolver( $links, $mappings ),
+			new Wpdb_Profile_Store( $db, $table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
+			$links,
+			$adapter->export_facts(),
+			$adapter->article_policy(),
+			new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() ),
+			$adapter->price_source(),
+			null,
+			null,
+			$ledger
 		);
 	}
 

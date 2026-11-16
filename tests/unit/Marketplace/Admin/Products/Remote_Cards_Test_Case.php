@@ -17,6 +17,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Products;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Rows;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
+use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
@@ -70,6 +71,39 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	 * @var array<string,string>
 	 */
 	protected $sku_kinds = [];
+
+	/**
+	 * The linker the actions write through; null builds the plain one (switches off).
+	 *
+	 * @var Card_Linker|null
+	 */
+	protected $linker;
+
+	/**
+	 * Product ids the linker recorded a first stock send for.
+	 *
+	 * @var int[]
+	 */
+	protected $first_stock_sends = [];
+
+	/**
+	 * Makes the actions link through a linker that follows a «sync on link» decision and records its first stock sends.
+	 *
+	 * @param bool $on What the account's «sync on link» setting says.
+	 * @return void
+	 */
+	protected function sync_on_link( bool $on ): void {
+		$this->first_stock_sends = [];
+		$this->linker            = new Card_Linker(
+			$this->links(),
+			static function () use ( $on ): bool {
+				return $on;
+			},
+			function ( Link_Record $link ): void {
+				$this->first_stock_sends[] = $link->wc_product_id();
+			}
+		);
+	}
 
 	/**
 	 * What a group has on the site, by `{account id}:{group key}`: one of the `Group_Assembler` states; a group not listed has nothing.
@@ -308,7 +342,7 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 				$this->snapshots(),
 				$this->links(),
 				$this->reports(),
-				new Card_Linker( $this->links() ),
+				$this->linker ?? new Card_Linker( $this->links() ),
 				new Link_Scheduler( $this->names() ),
 				$this->bulk(),
 				$license,

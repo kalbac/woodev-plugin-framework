@@ -1021,6 +1021,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				return $this->resolver()->orders_enabled( $account );
 			case 'import_enabled':
 				return $this->resolver()->import_enabled( $account );
+			case Effective_Settings::KEY_SYNC_ON_LINK:
+				return $this->resolver()->sync_on_link( $account );
 		}
 
 		if ( isset( Shared_Fields::PRICE_RULE_FIELDS[ $field ] ) ) {
@@ -1201,6 +1203,9 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			case 'import_enabled':
 				$this->store->update_fields( $id, [ 'import_enabled' => self::to_bool( $value ) ] );
 				return;
+			case Effective_Settings::KEY_SYNC_ON_LINK:
+				$this->save_sync_on_link( $id, self::to_bool( $value ) );
+				return;
 		}
 	}
 
@@ -1258,6 +1263,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 					'import_enabled' => (bool) $defaults['import_enabled'],
 				]
 			);
+			$this->save_sync_on_link( $id, (bool) $defaults[ Effective_Settings::KEY_SYNC_ON_LINK ] );
 			return;
 		}
 
@@ -1267,6 +1273,24 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			$id,
 			static function ( array $current ) use ( $rule ): array {
 				$current['price_rule'] = $rule;
+
+				return $current;
+			}
+		);
+	}
+
+	/**
+	 * Saves the account's own «sync on link» value into its `settings` JSON (the switch has no column).
+	 *
+	 * @param int  $id    Account id.
+	 * @param bool $value New value.
+	 * @return void
+	 */
+	private function save_sync_on_link( int $id, bool $value ): void {
+		$this->store->update_settings(
+			$id,
+			static function ( array $current ) use ( $value ): array {
+				$current[ Effective_Settings::KEY_SYNC_ON_LINK ] = $value;
 
 				return $current;
 			}
@@ -1587,7 +1611,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return array_values(
 			array_unique(
 				array_merge(
-					[ 'name', 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', self::OVERRIDE_PRICES, self::OVERRIDE_EXCHANGE ],
+					[ 'name', 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', Effective_Settings::KEY_SYNC_ON_LINK, self::OVERRIDE_PRICES, self::OVERRIDE_EXCHANGE ],
 					$this->credential_field_names(),
 					array_keys( Shared_Fields::PRICE_RULE_FIELDS )
 				)
@@ -1638,7 +1662,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 * @return bool
 	 */
 	private function is_boolean_field( string $field ): bool {
-		return in_array( $field, [ 'enabled', 'orders_enabled', 'import_enabled' ], true );
+		return in_array( $field, [ 'enabled', 'orders_enabled', 'import_enabled', Effective_Settings::KEY_SYNC_ON_LINK ], true );
 	}
 
 	/**

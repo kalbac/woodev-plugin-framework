@@ -9,7 +9,9 @@ namespace Woodev\Tests\Unit\Marketplace\Flows;
 
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
 
@@ -398,5 +400,198 @@ final class CardLinkerTest extends Sync_Test_Case {
 
 		$this->assertSame( $texts, array_unique( $texts ) );
 		$this->assertSame( Card_Linker::message( Card_Linker::BUSY ), Card_Linker::message( Card_Linker::CLAIM_LOST ) );
+	}
+	// Synchronisation on link (#1793) -------------------------------------------------------------------------------------
+
+	/**
+	 * Builds a linker that follows a «sync on link» decision and records its first sends into the two lists.
+	 *
+	 * @param bool                      $on     What the decision answers.
+	 * @param array<int,Link_Record>    $stock  Collects the links of the first stock sends.
+	 * @param array<int,Link_Record>    $price  Collects the links of the first price sends.
+	 * @return Card_Linker
+	 */
+	private function syncing_linker( bool $on, array &$stock, array &$price ): Card_Linker {
+		return new Card_Linker(
+			$this->links(),
+			static function () use ( $on ): bool {
+				return $on;
+			},
+			static function ( Link_Record $link ) use ( &$stock ): void {
+				$stock[] = $link;
+			},
+			static function ( int $account_id, Link_Record $link ) use ( &$price ): void {
+				$price[] = $link;
+			}
+		);
+	}
+
+	/**
+	 * With the setting on a new row is written with both switches on and the first send is recorded for its fresh row.
+	 *
+	 * @return void
+	 */
+	public function test_a_new_row_is_linked_with_sync_on_and_the_first_send_is_recorded(): void {
+		$stock = [];
+		$price = [];
+
+		$this->assertSame( Card_Linker::LINKED, $this->syncing_linker( true, $stock, $price )->link( $this->account_id, 101, 0, $this->card() ) );
+
+		$row = $this->link_of( 101 );
+
+		$this->assertTrue( $row->sync_stock() );
+		$this->assertTrue( $row->sync_price() );
+		$this->assertCount( 1, $stock );
+		$this->assertCount( 1, $price );
+		$this->assertSame( $row->link_id(), $stock[0]->link_id(), 'the first send reads the row the link wrote' );
+		$this->assertTrue( $stock[0]->sync_stock(), 'the recorder sees the switch already on' );
+	}
+
+	/**
+	 * With the setting off both switches stay off and nothing is recorded, as before.
+	 *
+	 * @return void
+	 */
+	public function test_with_the_setting_off_a_new_row_keeps_both_switches_off_and_records_nothing(): void {
+		$stock = [];
+		$price = [];
+
+		$this->assertSame( Card_Linker::LINKED, $this->syncing_linker( false, $stock, $price )->link( $this->account_id, 101, 0, $this->card() ) );
+
+		$this->assertFalse( $this->link_of( 101 )->sync_stock() );
+		$this->assertFalse( $this->link_of( 101 )->sync_price() );
+		$this->assertSame( [], $stock );
+		$this->assertSame( [], $price );
+	}
+
+	/**
+	 * Adopting an identity-less row writes the switches with the card; with the setting off the row's own switches stay.
+	 *
+	 * @return void
+	 */
+	public function test_adoption_writes_the_switches_only_with_the_setting_on(): void {
+		$stock = [];
+		$price = [];
+		$this->links()->insert_if_absent( Link_Record::offer( $this->account_id, 101, 0, '' ) );
+		$this->links()->insert_if_absent( Link_Record::offer( $this->account_id, 102, 0, '', [ 'sync_stock' => 1 ] ) );
+
+		$this->syncing_linker( true, $stock, $price )->link( $this->account_id, 101, 0, $this->card() );
+		$this->syncing_linker( false, $stock, $price )->link( $this->account_id, 102, 0, $this->card( [ 'offer_id' => 'NB-TEST-4', 'remote_ids' => [ 'card_ref' => 77 ] ] ) );
+
+		$this->assertTrue( $this->link_of( 101 )->sync_stock() );
+		$this->assertTrue( $this->link_of( 101 )->sync_price() );
+		$this->assertTrue( $this->link_of( 102 )->sync_stock(), 'off leaves what the row had' );
+		$this->assertFalse( $this->link_of( 102 )->sync_price() );
+		$this->assertCount( 1, $stock, 'only the adoption with the setting on recorded a first send' );
+		$this->assertSame( $this->link_of( 101 )->link_id(), $stock[0]->link_id() );
+	}
+
+	/**
+	 * A product the importer made from the card gets only the first stock send: its price came from the card.
+	 *
+	 * @return void
+	 */
+	public function test_the_price_can_be_kept_out_of_the_first_send(): void {
+		$stock = [];
+		$price = [];
+
+		$this->syncing_linker( true, $stock, $price )->link( $this->account_id, 101, 0, $this->card(), null, false );
+
+		$this->assertCount( 1, $stock );
+		$this->assertSame( [], $price );
+		$this->assertTrue( $this->link_of( 101 )->sync_price(), 'the switch itself is still on' );
+	}
+
+	/**
+	 * A card that is not created yet is linked with the switches on but sends nothing: its creation seeds the first values.
+	 *
+	 * @return void
+	 */
+	public function test_a_card_that_is_not_created_records_no_first_send(): void {
+		$stock = [];
+		$price = [];
+
+		$this->syncing_linker( true, $stock, $price )->link( $this->account_id, 101, 0, $this->card( [ 'is_created' => false, 'state' => Link_Record::STATE_QUEUED ] ) );
+
+		$this->assertTrue( $this->link_of( 101 )->sync_stock() );
+		$this->assertSame( [], $stock );
+		$this->assertSame( [], $price );
+	}
+
+	/**
+	 * A link that was refused (product or card already linked) records nothing.
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_link_records_no_first_send(): void {
+		$stock = [];
+		$price = [];
+		$this->linker->link( $this->account_id, 101, 0, $this->card() );
+
+		$this->assertSame( Card_Linker::PRODUCT_LINKED, $this->syncing_linker( true, $stock, $price )->link( $this->account_id, 101, 0, $this->card() ) );
+		$this->assertSame( Card_Linker::CARD_LINKED, $this->syncing_linker( true, $stock, $price )->link( $this->account_id, 102, 0, $this->card() ) );
+
+		$this->assertSame( [], $stock );
+		$this->assertSame( [], $price );
+	}
+
+	/**
+	 * A claim that was taken over writes nothing and records nothing.
+	 *
+	 * @return void
+	 */
+	public function test_a_lost_claim_records_no_first_send(): void {
+		$stock = [];
+		$price = [];
+
+		$this->assertSame( Card_Linker::CLAIM_LOST, $this->syncing_linker( true, $stock, $price )->link( $this->account_id, 101, 0, $this->card(), $this->stale_fence() ) );
+		$this->assertSame( [], $stock );
+	}
+
+	/**
+	 * The plugin's linker follows the account's own «sync on link» value; an account that never saved it reads on.
+	 *
+	 * @return void
+	 */
+	public function test_the_plugin_linker_follows_the_accounts_setting(): void {
+		$stock_intents = $this->hook_stock();
+		$linker        = Card_Linker::syncing( $this->links(), Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID ), [ $this->accounts(), 'get' ], $stock_intents, null );
+		$managed       = $this->product( 12 );
+		$other         = $this->product( 7 );
+
+		$this->assertSame( Card_Linker::LINKED, $linker->link( $this->account_id, $managed, 0, $this->card() ) );
+		$this->assertTrue( $this->link_of( $managed )->sync_stock(), 'an account without the key reads the default: on' );
+
+		$this->set_account( [ Effective_Settings::KEY_SYNC_ON_LINK => false ] );
+
+		$this->assertSame( Card_Linker::LINKED, $linker->link( $this->account_id, $other, 0, $this->card( [ 'offer_id' => 'NB-TEST-5', 'remote_ids' => [ 'card_ref' => 5 ] ] ) ) );
+		$this->assertFalse( $this->link_of( $other )->sync_stock() );
+		$this->assertNull( $this->stock_row( $other ), 'nothing recorded with the setting off' );
+	}
+
+	/**
+	 * The first stock send is the product tab's: recorded on stock mode «сайт» for a product with managed stock, and only then.
+	 *
+	 * @return void
+	 */
+	public function test_the_first_stock_send_is_recorded_only_for_a_site_stock_and_a_managed_quantity(): void {
+		$linker = Card_Linker::syncing( $this->links(), Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID ), [ $this->accounts(), 'get' ], $this->hook_stock(), null );
+
+		$managed = $this->product( 12 );
+		$linker->link( $this->account_id, $managed, 0, $this->card() );
+		$this->assertNotNull( $this->stock_row( $managed ), 'stock mode «сайт» and a managed quantity: the intent is recorded' );
+
+		$unmanaged = $this->product( null, [ 'manage_stock' => false ] );
+		$linker->link( $this->account_id, $unmanaged, 0, $this->card( [ 'offer_id' => 'NB-TEST-6', 'remote_ids' => [ 'card_ref' => 6 ] ] ) );
+		$this->assertNull( $this->stock_row( $unmanaged ), 'a product without managed stock records nothing' );
+
+		foreach ( [ Wpdb_Account_Store::STOCK_MARKETPLACE, Wpdb_Account_Store::STOCK_OFF ] as $n => $mode ) {
+			$this->set_account( [ 'stock_mode' => $mode ] );
+			$product = $this->product( 9 );
+			$linker->link( $this->account_id, $product, 0, $this->card( [ 'offer_id' => 'NB-MODE-' . $n, 'remote_ids' => [ 'card_ref' => 100 + $n ] ] ) );
+
+			$this->assertTrue( $this->link_of( $product )->sync_stock(), 'the switch is on whatever the stock mode is' );
+			$this->assertNull( $this->stock_row( $product ), 'stock mode «' . $mode . '» records nothing' );
+		}
 	}
 }

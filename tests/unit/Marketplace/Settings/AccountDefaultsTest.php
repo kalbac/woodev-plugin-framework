@@ -309,7 +309,7 @@ final class AccountDefaultsTest extends TestCase {
 			[ 'defaults_price_base', 'defaults_price_markup_kind', 'defaults_price_markup', 'defaults_price_rounding', 'defaults_price_old_price_rule', 'defaults_price_min_percent' ],
 			$groups[0]->get_setting_ids()
 		);
-		$this->assertSame( [ 'defaults_orders_enabled', 'defaults_import_enabled', 'defaults_import_publish', 'defaults_import_create_categories' ], $groups[1]->get_setting_ids() );
+		$this->assertSame( [ 'defaults_orders_enabled', 'defaults_import_enabled', 'defaults_sync_on_link', 'defaults_import_publish', 'defaults_import_create_categories' ], $groups[1]->get_setting_ids() );
 	}
 
 	public function test_an_importing_adapter_gets_the_two_import_settings_in_the_orders_and_cards_card(): void {
@@ -319,7 +319,7 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertTrue( $section->handles( 'defaults_import_publish' ) );
 		$this->assertTrue( $section->handles( 'defaults_import_create_categories' ) );
 		$this->assertSame(
-			[ 'defaults_orders_enabled', 'defaults_import_enabled', 'defaults_import_publish', 'defaults_import_create_categories' ],
+			[ 'defaults_orders_enabled', 'defaults_import_enabled', 'defaults_sync_on_link', 'defaults_import_publish', 'defaults_import_create_categories' ],
 			$section->sections()[0]->get_groups()[1]->get_setting_ids()
 		);
 	}
@@ -541,6 +541,66 @@ final class AccountDefaultsTest extends TestCase {
 
 		$this->assertArrayHasKey( "account_{$id}_price_markup", $errors, 'the markup is checked against the «Общие» kind that the switch copies' );
 		$this->assertFalse( Effective_Settings::uses_own( $store->get( $id )->settings(), Effective_Settings::GROUP_PRICES ), 'validation saves nothing' );
+	}
+
+	// «Sync on link» (#1793) ------------------------------------------------------------------------------------------------
+
+	public function test_sync_on_link_is_on_for_an_account_that_never_saved_it_and_for_a_shop_without_defaults(): void {
+		$account = new Account( 1, Sqlite_Tables::MARKETPLACE_ID, 'Migrated', true, [], null, [ 'orders_enabled' => false ] );
+
+		$this->assertTrue( Effective_Settings::builtin_defaults()[ Effective_Settings::KEY_SYNC_ON_LINK ] );
+		$this->assertTrue( Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID )->sync_on_link( $account ), 'a migrated account holds no key and reads on' );
+	}
+
+	public function test_sync_on_link_follows_the_defaults_or_the_accounts_own_value(): void {
+		$this->options[ Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ) ] = [ Effective_Settings::KEY_SYNC_ON_LINK => false ];
+		$resolver = Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID );
+
+		$own       = new Account( 1, Sqlite_Tables::MARKETPLACE_ID, 'Own', true, [], null, [ Effective_Settings::KEY_SYNC_ON_LINK => true ] );
+		$unset_own = new Account( 2, Sqlite_Tables::MARKETPLACE_ID, 'Unset', true, [], null, [] );
+		$following = new Account( 3, Sqlite_Tables::MARKETPLACE_ID, 'Following', true, [], null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] );
+
+		$this->assertTrue( $resolver->sync_on_link( $own ), 'the account\'s own value wins over the default' );
+		$this->assertTrue( $resolver->sync_on_link( $unset_own ), 'an account on «свои» with no value reads the built-in on, not the «Общие» one' );
+		$this->assertFalse( $resolver->sync_on_link( $following ), 'an account that follows the defaults reads «Общие»' );
+	}
+
+	public function test_the_switch_is_a_field_of_the_orders_and_cards_card_of_every_adapter(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] ) );
+
+		$schema = Field_Schema::from_handler( $this->handler( $adapter, $store ) );
+
+		$this->assertArrayHasKey( "account_{$id}_sync_on_link", $schema );
+		$this->assertTrue( $schema[ "account_{$id}_sync_on_link" ]['value'], 'on by default' );
+
+		$defaults = new Defaults_Section( $adapter, $store, self::PLUGIN );
+
+		$this->assertTrue( $defaults->handles( 'defaults_sync_on_link' ) );
+		$this->assertTrue( $defaults->read( 'defaults_sync_on_link' ), 'on by default' );
+	}
+
+	public function test_an_account_saves_its_own_sync_on_link_in_its_settings_and_a_default_saves_in_the_option(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'orders_enabled' => true ] ) );
+		$handler             = $this->handler( $adapter, $store );
+
+		$handler->update_value( "account_{$id}_sync_on_link", false );
+		( new Defaults_Section( $adapter, $store, self::PLUGIN ) )->write( 'defaults_sync_on_link', false );
+
+		$this->assertFalse( $store->get( $id )->setting( Effective_Settings::KEY_SYNC_ON_LINK ) );
+		$this->assertFalse( Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID )->defaults()[ Effective_Settings::KEY_SYNC_ON_LINK ] );
+		$this->assertFalse( Effective_Settings::for_adapter( Sqlite_Tables::MARKETPLACE_ID )->sync_on_link( $store->get( $id ) ) );
+	}
+
+	public function test_switching_the_exchange_group_to_own_copies_the_sync_on_link_default(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$this->options[ Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ) ] = [ Effective_Settings::KEY_SYNC_ON_LINK => false ];
+		$id = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'New', true, [ 'merchant_uid' => '2', 'access_token' => 't2' ], null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] ) );
+
+		$this->handler( $adapter, $store )->update_value( "account_{$id}_override_exchange", 'own' );
+
+		$this->assertFalse( $store->get( $id )->setting( Effective_Settings::KEY_SYNC_ON_LINK ), '«свои» starts from the value the account was working with' );
 	}
 
 	// Runtime readers -----------------------------------------------------------------------------------------------------

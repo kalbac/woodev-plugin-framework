@@ -8517,6 +8517,16 @@ msgstr ""
 msgid "Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено."
 msgstr ""
 
+#: marketplace/settings/class-shared-fields.php:215
+msgid "Включать синхронизацию остатков и цен сразу после связывания"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-shared-fields.php:218
+#, php-format
+msgid "Когда товар связывается с карточкой — по артикулу, вручную, при импорте или подтверждении похожего артикула, — у него сразу включается синхронизация. Если в настройках аккаунта остатки и цены отправляются с сайта, текущие остаток и цена сразу уйдут на %s и заменят те, что там сейчас. Выключите, если хотите сначала проверить связанные товары и включать синхронизацию сами."
+msgstr ""
+
 #. translators: %s: marketplace name.
 #: marketplace/settings/class-accounts-sections.php:672
 msgid "In the other direction, add products manually on the Products screen."

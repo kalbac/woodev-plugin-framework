@@ -368,7 +368,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	 * @return bool
 	 */
 	private function is_boolean( string $field ): bool {
-		return in_array( $field, [ 'orders_enabled', 'import_enabled', Effective_Settings::KEY_IMPORT_PUBLISH, Effective_Settings::KEY_IMPORT_CATEGORIES ], true );
+		return in_array( $field, [ 'orders_enabled', 'import_enabled', Effective_Settings::KEY_SYNC_ON_LINK, Effective_Settings::KEY_IMPORT_PUBLISH, Effective_Settings::KEY_IMPORT_CATEGORIES ], true );
 	}
 
 	/**

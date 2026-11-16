@@ -103,6 +103,24 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [], $this->scheduler->actions );
 	}
 
+	public function test_the_manual_link_follows_the_sync_on_link_setting(): void {
+		$this->add_product( [ 'id' => 41, 'sku' => '' ] );
+		$this->add_product( [ 'id' => 42, 'sku' => '' ] );
+
+		$this->sync_on_link( true );
+		$this->apply( 'MUG-1', '41' );
+
+		$this->assertTrue( $this->link_row( 41 )->sync_stock() );
+		$this->assertTrue( $this->link_row( 41 )->sync_price() );
+		$this->assertSame( [ 41 ], $this->first_stock_sends );
+
+		$this->sync_on_link( false );
+		$this->apply( 'TEE-2', '42' );
+
+		$this->assertFalse( $this->link_row( 42 )->sync_stock() );
+		$this->assertSame( [], $this->first_stock_sends );
+	}
+
 	public function test_a_variation_is_linked_under_its_parent(): void {
 		$this->add_product( [ 'id' => 50, 'type' => 'variable' ] );
 		$this->add_product( [ 'id' => 51, 'parent_id' => 50, 'type' => 'variation' ] );

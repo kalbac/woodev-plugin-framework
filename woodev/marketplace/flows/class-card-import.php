@@ -351,7 +351,7 @@ final class Card_Import {
 	 */
 	private function link( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, string $done, array $warnings ): string {
 		$article = (string) $content->card()['offer_id'];
-		$result  = $this->linker->link( $account->id(), (int) $product->get_id(), (int) $product->get_parent_id(), $content->card(), $fence );
+		$result  = $this->linker->link( $account->id(), (int) $product->get_id(), (int) $product->get_parent_id(), $content->card(), $fence, self::CREATED !== $done ); // A product made from the card already holds the card's price: only its stock is sent first.
 
 		if ( Card_Linker::CLAIM_LOST === $result ) {
 			throw new Claim_Lost( 'The account claim was taken over before the link of an imported card was written.' );
