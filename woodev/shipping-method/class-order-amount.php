@@ -160,7 +160,20 @@ if ( ! class_exists( __NAMESPACE__ . '\Order_Amount' ) ) :
 				$discount += (float) $cart->get_discount_tax();
 			}
 
-			return round( (float) $subtotal - $discount, self::decimals() );
+			return self::normalize( (float) $subtotal - $discount );
+		}
+
+		/**
+		 * An order amount at the shop's price decimals — the one place amounts are rounded, so a sum that picked up float
+		 * noise (`119.80000000000001`) is compared with a threshold or a limit as the money it is.
+		 *
+		 * @since 2.1.9
+		 *
+		 * @param float $amount the amount.
+		 * @return float
+		 */
+		public static function normalize( float $amount ): float {
+			return round( $amount, self::decimals() );
 		}
 
 		/**

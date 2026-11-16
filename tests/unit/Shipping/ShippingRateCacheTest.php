@@ -67,6 +67,7 @@ namespace Woodev\Tests\Unit\Shipping {
 
 	use Brain\Monkey\Functions;
 	use Mockery;
+	use Woodev\Framework\Shipping\Order_Amount;
 	use Woodev\Framework\Shipping\Shipping_Method;
 	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Framework\Shipping\Shipping_Rate;
@@ -400,6 +401,9 @@ namespace Woodev\Tests\Unit\Shipping {
 			Functions\when( 'wc_get_weight' )->returnArg( 1 );
 			Functions\when( 'wc_get_dimension' )->returnArg( 1 );
 
+			// the order amount is read at the shop's price decimals (#1722); WooCommerce is not here to ask
+			Order_Amount::use_runtime_for_tests( null, 2 );
+
 			$this->store    = [];
 			$this->ttls     = [];
 			$this->filters  = [];
@@ -475,6 +479,7 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @return void */
 		protected function tearDown(): void {
+			Order_Amount::reset();
 			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
 			$this->reset_hidden_reasons();
 			$this->reset_hidden_reason_plugins();

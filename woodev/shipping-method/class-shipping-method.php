@@ -2907,19 +2907,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		private function price_order_amount( array $package ): float {
 
 			$prepared = self::numeric_amount( $package[ Order_Amount::PACKAGE_KEY ] ?? null );
-
-			if ( null !== $prepared ) {
-				return $prepared;
-			}
-
 			$subtotal = self::numeric_amount( $package['cart_subtotal'] ?? null );
 			$contents = self::numeric_amount( $package['contents_cost'] ?? null );
 
-			if ( null === $subtotal ) {
-				return $contents ?? 0.0;
+			if ( null !== $prepared ) {
+				$amount = $prepared;
+			} elseif ( null === $subtotal ) {
+				$amount = $contents ?? 0.0;
+			} else {
+				$amount = ! empty( $package['applied_coupons'] ) ? ( $contents ?? $subtotal ) : $subtotal;
 			}
 
-			return ! empty( $package['applied_coupons'] ) ? ( $contents ?? $subtotal ) : $subtotal;
+			return Order_Amount::normalize( $amount );
 		}
 
 		/**
@@ -2938,7 +2937,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				return $this->price_order_amount( $package );
 			}
 
-			return self::numeric_amount( $package['cart_subtotal'] ?? null ) ?? self::numeric_amount( $package['contents_cost'] ?? null ) ?? 0.0;
+			return Order_Amount::normalize( self::numeric_amount( $package['cart_subtotal'] ?? null ) ?? self::numeric_amount( $package['contents_cost'] ?? null ) ?? 0.0 );
 		}
 
 		/**

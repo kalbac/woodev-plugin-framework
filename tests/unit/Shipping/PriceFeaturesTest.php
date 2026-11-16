@@ -126,6 +126,7 @@ final class PriceFeaturesTest extends TestCase {
 		$this->coupons_enabled = true;
 
 		Order_Amount::reset();
+		Order_Amount::use_runtime_for_tests( null, 2 );
 
 		Functions\when( 'get_transient' )->justReturn( false );
 		Functions\when( 'set_transient' )->justReturn( true );
@@ -556,6 +557,69 @@ final class PriceFeaturesTest extends TestCase {
 		$package = $this->through_cart( [ 'contents_cost' => 7900.1, 'cart_subtotal' => 9000, 'applied_coupons' => [ 'sale' ] ], 1099.9 );
 
 		$this->assertSame( 100.0, $this->price( $method, $package ) );
+	}
+
+	/**
+	 * A sum that picked up float noise is the money it is: a tax-inclusive subtotal 1000.10 + 200.02 is
+	 * `1200.1200000000001` as a float, and at a threshold or a limit of exactly 1200.12 the order is AT it — not
+	 * above (no free delivery) and not over (the method stays offered).
+	 *
+	 * @return void
+	 */
+	public function test_a_package_without_a_coupon_is_compared_at_the_shop_precision(): void {
+		$subtotal = 1000.10 + 200.02;
+		$package  = [ 'contents_cost' => 1000.10, 'cart_subtotal' => $subtotal ];
+
+		$this->assertNotSame( 1200.12, $subtotal, 'the raw float carries noise' );
+
+		$threshold = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '1200.12' ] );
+
+		$this->assertSame( 100.0, $this->price( $threshold, $package ), 'at the threshold, strict >' );
+
+		$maximum = $this->method( [ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ], [ 'max_order_cost' => '1200.12' ] );
+
+		$this->assertSame( 100.0, $this->price( $maximum, $package ), 'an amount equal to the maximum is inside' );
+
+		$minimum = $this->method( [ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ], [ 'min_order_cost' => '1200.12' ] );
+
+		$this->assertSame( 100.0, $this->price( $minimum, $package ), 'an amount equal to the minimum is inside' );
+	}
+
+	/**
+	 * The admin order wizard sums its lines as floats (`79.90 + 39.90` is `119.80000000000001`) and sends no coupon and
+	 * no prepared amount: exactly at the threshold the carrier's price is quoted.
+	 *
+	 * @return void
+	 */
+	public function test_a_wizard_package_at_the_threshold_is_not_free(): void {
+		$cost = 0.0;
+
+		foreach ( [ 79.90, 39.90 ] as $line_total ) {
+			$cost += $line_total;
+		}
+
+		$package = [ 'contents_cost' => $cost, 'cart_subtotal' => $cost, 'applied_coupons' => [] ];
+
+		$this->assertNotSame( 119.8, $cost );
+		$this->assertSame( 100.0, $this->price( $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '119.80' ] ), $package ) );
+	}
+
+	/**
+	 * The same normalising applies to the threshold measured before the discount, and to a coupon package the cart
+	 * did not annotate (its contents cost).
+	 *
+	 * @return void
+	 */
+	public function test_the_other_amount_sources_are_normalised_too(): void {
+		$noisy = 1000.10 + 200.02;
+
+		$before = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '1200.12', 'free_before_discount' => 'yes' ] );
+
+		$this->assertSame( 100.0, $this->price( $before, [ 'contents_cost' => 1, 'cart_subtotal' => $noisy, 'applied_coupons' => [ 'sale' ] ] ) );
+
+		$unannotated = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free_cost' => '1200.12' ] );
+
+		$this->assertSame( 100.0, $this->price( $unannotated, [ 'contents_cost' => $noisy, 'cart_subtotal' => 5000, 'applied_coupons' => [ 'sale' ] ] ) );
 	}
 
 	/**
