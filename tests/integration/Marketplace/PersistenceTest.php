@@ -80,7 +80,7 @@ class PersistenceTest extends TestCase {
 		$this->lifecycle()->create_tables();
 
 		$tables = $this->schema->table_names( $wpdb->prefix );
-		$this->assertCount( 15, $tables );
+		$this->assertCount( 16, $tables );
 
 		foreach ( $tables as $table ) {
 			$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
@@ -90,7 +90,7 @@ class PersistenceTest extends TestCase {
 	}
 
 	/**
-	 * A second install is a no-op: `dbDelta` finds nothing to change in any of the 15 statements, and the rows survive.
+	 * A second install is a no-op: `dbDelta` finds nothing to change in any of the 16 statements, and the rows survive.
 	 */
 	public function test_a_second_install_changes_nothing_and_loses_no_rows(): void {
 		global $wpdb;
