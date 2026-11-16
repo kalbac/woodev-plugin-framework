@@ -1,6 +1,56 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.8] — 2026-11-16
+### Bug Fixes
+- **marketplace**: E1 review round 1 — report preview flow, matching deselect, hidden-value actions (#1792)
+
+- **i18n**: Catalogue entries for the matching-selection strings (#1792)
+
+- **marketplace**: Linking confirmations say what will be sent (#1793)
+
+- **marketplace**: The link warning says «могут быть отправлены» (#1793)
+
+- **marketplace**: A permanently deleted product releases its links (#1784)
+
+- **marketplace**: A deleted product's created card is archived, then its link is released (#1784)
+
+- **marketplace**: Reconcile progress, freshness seam, remote stock refresh (#1798, #1803)
+
+- **marketplace**: HTTP budget reserved before a read, fresh-link readback, site-day allowance (#1798, #1803)
+
+- **marketplace**: An unavailable saved warehouse is flagged and not sent to (#1801)
+
+- **marketplace**: Only a current warehouse list blocks sends; read it once per request (#1801)
+
+
+### Documentation
+- **spec**: Marketplace bulk operations for large catalogues (#1786)
+
+- **spec**: Bulk operations r2 — critic fixes, D decided (#1786)
+
+- **spec**: Bulk operations r3 — r2 critic fixes (#1786)
+
+- **spec**: Fold r3 critic findings into E1/E2/E3/D acceptance
+
+
+### Features
+- **marketplace**: Bulk operations E1 — records engine matching target and account-line actions (#1792)
+
+- **marketplace**: Bulk operations B — sync on right after linking (#1793)
+
+- **marketplace**: Bulk operations C — link by article for one category (#1794)
+
+- **marketplace**: Link by category on the remote-cards table too (#1794)
+
+- **marketplace**: Daily stock reconcile runner (#1798)
+
+
+### Build
+- Bundles for E1 (#1792)
+
+
+
 ## [2.1.7] — 2026-11-15
 ### Bug Fixes
 - **marketplace**: Uninstaller removes extension product meta; critic nits
