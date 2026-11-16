@@ -262,14 +262,17 @@ function Field( props: FieldProps ) {
 	}
 }
 
+/** A `hidden` field holds a value the server chose (the run an account-line button concerns); it is never drawn. */
 export function FieldsForm( { fields, values, errors, ...rest }: FieldsFormProps ) {
-	if ( fields.length === 0 ) {
+	const drawn = fields.filter( ( field ) => field.type !== 'hidden' );
+
+	if ( drawn.length === 0 ) {
 		return null;
 	}
 
 	return (
 		<div className="woodev-records__fields" style={ STYLES.form }>
-			{ fields.map( ( field ) => (
+			{ drawn.map( ( field ) => (
 				<Field key={ field.id } { ...rest } field={ field } value={ values[ field.id ] } error={ errors[ field.id ] ?? '' } />
 			) ) }
 		</div>

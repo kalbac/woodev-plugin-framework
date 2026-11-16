@@ -5,7 +5,7 @@
  * @package woodev-plugin-framework
  */
 
-import type { ActionDescriptor, ActionField, AdminRecord, Messages, Option } from '../types';
+import type { ActionDescriptor, ActionField, AdminRecord, MatchingQuery, Messages, Option } from '../types';
 
 export type GroupKind = 'skipped' | 'failed' | 'warning';
 
@@ -60,6 +60,13 @@ export interface ApplyResponse {
 	groups: ReportGroup[];
 	messages: Messages;
 	download?: DownloadTarget;
+	/** The background run an «every row under the filter» apply started. */
+	run?: ApplyRun;
+}
+
+export interface ApplyRun {
+	id: string;
+	products_total: number;
 }
 
 export interface FieldOptionsPage {
@@ -67,8 +74,11 @@ export interface FieldOptionsPage {
 	next_cursor: string | null;
 }
 
+/** What an action works on: ticked rows, or every row under a filter. Account actions send an empty id list. */
+export type ActionTarget = string[] | { matching: MatchingQuery };
+
 /** What the form holds for one field; the server types it again. */
 export type FieldValue = string | boolean | string[];
 export type Payload = Record< string, FieldValue >;
 
-export type { ActionDescriptor };
+export type { ActionDescriptor, MatchingQuery };

@@ -27,6 +27,7 @@ export function useActionExtensions( activity?: ActivityExtensions ): RecordsExt
 
 	return {
 		onRowAction: ( action, row, table ) => flow.begin( action, [ row.id ], row.id, table ),
+		onAccountAction: ( action, payload, table ) => flow.begin( action, [], '', table, { payload } ),
 		renderBulkActions: ( selection, table ) => <BulkToolbar flow={ flow } selection={ selection } table={ table } activity={ activity } />,
 		renderAccountActions: ( selection, table ) => (
 			<AccountActions flow={ flow } selection={ selection } table={ table } activity={ activity } />

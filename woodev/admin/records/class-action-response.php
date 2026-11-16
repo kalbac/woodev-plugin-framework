@@ -28,7 +28,9 @@ defined( 'ABSPATH' ) || exit;
  *   completed remotely;
  * - optional `queued` (true when the work runs in the background), `rows` (the changed rows),
  *   `removed_ids`, `groups`, `messages`, and `download` (`url`, optional `filename`) for a
- *   download action.
+ *   download action;
+ * - optional `run` (`id`, `products_total`) when an «every row under the filter» apply started a
+ *   background run: the engine keeps exactly those two keys.
  *
  * Each `groups` entry is `reason` plus `count`, and optionally `kind` (`skipped`, `failed` or
  * `warning`), `fix_label`, `fix_url` and a few `examples`.
@@ -120,6 +122,10 @@ final class Action_Response {
 
 			if ( 'download' === $action['interaction'] && isset( $result['download'] ) ) {
 				$body['download'] = self::download( $result['download'] );
+			}
+
+			if ( isset( $result['run'] ) ) {
+				$body['run'] = self::run( $result['run'] );
 			}
 
 			return $body;
@@ -288,6 +294,25 @@ final class Action_Response {
 			'fix_label' => $label,
 			'fix_url'   => '' === $url ? '' : Row_Normalizer::safe_url( $url ),
 			'examples'  => self::text_list( $group['examples'] ?? [], self::MAX_EXAMPLES, self::MAX_SHORT_LENGTH ),
+		];
+	}
+
+	/**
+	 * The background run an «every row under the filter» apply started: its opaque id and how many rows it
+	 * expects to reach.
+	 *
+	 * @param mixed $run Raw `run`.
+	 * @return array{id:string,products_total:int}
+	 * @throws \UnexpectedValueException When it is not an opaque id and a whole number.
+	 */
+	private static function run( $run ): array {
+		if ( ! is_array( $run ) || ! Query_Validator::is_row_id( $run['id'] ?? null ) ) {
+			throw new \UnexpectedValueException( 'a run has an opaque id.' );
+		}
+
+		return [
+			'id'             => $run['id'],
+			'products_total' => self::whole( $run['products_total'] ?? null, 'run products_total' ),
 		];
 	}
 

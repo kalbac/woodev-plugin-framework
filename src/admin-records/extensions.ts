@@ -11,7 +11,7 @@
 import type { ReactNode } from 'react';
 import type { RecordsApi } from './api';
 import type { AccountActivity } from './activity/types';
-import type { ActionDescriptor, AdminRecord, Definition, Messages, RecordsContext, RecordsQuery } from './types';
+import type { ActionDescriptor, AdminRecord, Definition, MatchingQuery, Messages, RecordsContext, RecordsQuery } from './types';
 
 /** What every extension gets: the table as it is on screen, and the ways to change it. */
 export interface TableHandle {
@@ -40,10 +40,17 @@ export interface TableHandle {
 	reload: () => void;
 	/** Replaces rows by id and removes the ids given, without a list read. */
 	patchRows: ( rows: AdminRecord[], removedIds?: string[] ) => void;
+	/**
+	 * Runs a declared account action for a button of the account line, with the payload the server put on it. Absent when
+	 * the page has no action part.
+	 */
+	runAccountAction?: ( actionId: string, payload: Record< string, string > ) => void;
 }
 
 export interface SelectionHandle {
 	selectedIds: string[];
+	/** The filter and search frozen by «every row under the filter»; `null` while the mode is off. */
+	matching: MatchingQuery | null;
 	clear: () => void;
 }
 
@@ -57,6 +64,8 @@ export interface RecordsExtensions {
 	renderBulkActions?: ( selection: SelectionHandle, table: TableHandle ) => ReactNode;
 	/** F6 — the account-wide actions: buttons above the filters. */
 	renderAccountActions?: ( selection: SelectionHandle, table: TableHandle ) => ReactNode;
+	/** F6 — runs a declared account action for a button of the account line; the payload comes from the server unchanged. */
+	onAccountAction?: ( action: ActionDescriptor, payload: Record< string, string >, table: TableHandle ) => void;
 	/** F6 — always mounted, bulk actions or not: the host of the action dialog that a row action opens. */
 	renderActions?: ( table: TableHandle ) => ReactNode;
 	/** F7 — why an action PHP enabled is blocked right now (a lock, a running process); empty when it is not. */

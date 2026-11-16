@@ -59,11 +59,14 @@ function formActions( table: TableHandle, scope: ActionDescriptor[ 'scope' ] ): 
 	return table.definition.bulk_actions.filter( ( action ) => action.interaction !== 'link' && action.scope === scope );
 }
 
-/** The select of the selection actions, for the table card's header. */
+/**
+ * The select of the selection actions, for the table card's header. While «every row under the filter» is on, only the
+ * actions that declared `all_matching` are listed: the others have no way to reach rows that are not on screen.
+ */
 export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarProps ) {
 	const health = useActivityState( activity?.state ?? NO_ACTIVITY );
 	const [ chosen, setChosen ] = useState( '' );
-	const actions = formActions( table, 'selection' );
+	const actions = formActions( table, 'selection' ).filter( ( entry ) => selection.matching === null || entry.all_matching === true );
 	const action = actions.find( ( candidate ) => candidate.id === chosen );
 
 	if ( actions.length === 0 ) {
@@ -76,9 +79,12 @@ export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarPr
 			value={ action ? action.id : '' }
 			onChange={ setChosen }
 			onApply={ () =>
-				action && flow.begin( action, selection.selectedIds, '', table, { onApplied: selection.clear } )
+				action &&
+				( selection.matching
+					? flow.begin( action, [], '', table, { onApplied: selection.clear, matching: selection.matching } )
+					: flow.begin( action, selection.selectedIds, '', table, { onApplied: selection.clear } ) )
 			}
-			disabled={ selection.selectedIds.length === 0 }
+			disabled={ selection.selectedIds.length === 0 && selection.matching === null }
 			disabledReason={ action ? blockedReason( action, selection.selectedIds, table, health ) : '' }
 			labels={ {
 				placeholder: message( table.messages, MESSAGE_KEYS.bulkPlaceholder ),

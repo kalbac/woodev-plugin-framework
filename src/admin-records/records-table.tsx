@@ -24,7 +24,7 @@ import { useSelection, type Selection } from './selection';
 import { EmptyCard, ErrorState, LoadingState } from './states';
 import './style.scss';
 import { HIDE_VENDOR_PAGE_SIZE, STYLES } from './styles';
-import { buildHeaders, buildLines, visibleRowIds, type TableModelInput } from './table-model';
+import { SelectionBar, buildHeaders, buildLines, visibleRowIds, type TableModelInput } from './table-model';
 import type { AdminRecord, Definition, Direction, Messages, RecordsQuery, RouteQuery } from './types';
 import { useRecords, type Records } from './use-records';
 import { getNavigate, getTableCard, type Navigate, type TableCardProps } from './wc-runtime';
@@ -286,7 +286,11 @@ function HeaderActions( { definition, query, selection, handle, extensions, hasB
 
 	return (
 		<div className="woodev-table-toolbar">
-			{ hasBulk && extensions.renderBulkActions?.( { selectedIds: selection.selectedIds, clear: selection.clear }, handle ) }
+			{ hasBulk &&
+				extensions.renderBulkActions?.(
+					{ selectedIds: selection.selectedIds, matching: selection.matchingQuery, clear: selection.clear },
+					handle
+				) }
 			{ search && (
 				<SearchBox
 					filter={ search }
@@ -370,6 +374,15 @@ export function RecordsTable( {
 		reload: records.reload,
 		patchRows: records.patchRows,
 	};
+	const onAccountAction = extensions.onAccountAction;
+	if ( onAccountAction ) {
+		handle.runAccountAction = ( actionId, payload ) => {
+			const action = definition.bulk_actions.find( ( entry ) => entry.id === actionId && entry.scope === 'account' );
+			if ( action ) {
+				onAccountAction( action, payload, handle );
+			}
+		};
+	}
 	const summary = message( messages, MESSAGE_KEYS.summary );
 	const limitNote = selection.limitReached ? message( messages, MESSAGE_KEYS.selectionLimit ) : '';
 	const headerActions = (
@@ -392,6 +405,7 @@ export function RecordsTable( {
 				extensions.renderAccountActions?.(
 					{
 						selectedIds: selection.selectedIds,
+						matching: selection.matchingQuery,
 						clear: selection.clear,
 					},
 					handle
@@ -415,6 +429,18 @@ export function RecordsTable( {
 				onChange={ change }
 			/>
 			{ limitNote !== '' && <p role="status">{ limitNote }</p> }
+			{ hasBulk && records.list.status === 'ready' && records.list.data && (
+				<SelectionBar
+					definition={ definition }
+					messages={ messages }
+					rows={ records.list.data.rows }
+					childrenByParent={ records.children }
+					selection={ selection }
+					total={ records.list.data.total }
+					query={ query }
+					facets={ records.list.data.facets }
+				/>
+			) }
 			{ summary !== '' && records.list.status === 'ready' && (
 				<p className="woodev-records__summary" style={ STYLES.summary }>
 					{ summary }

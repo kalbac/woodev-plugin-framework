@@ -425,7 +425,7 @@ final class Definition_Parser {
 	private static function action( array $action, string $path, bool $bulk ): array {
 		self::allow_keys(
 			$action,
-			[ 'id', 'label', 'tone', 'capability', 'effect', 'interaction', 'scope', 'scope_sentence', 'fields', 'skip_preview', 'confirm_label' ],
+			[ 'id', 'label', 'tone', 'capability', 'effect', 'interaction', 'scope', 'scope_sentence', 'fields', 'skip_preview', 'confirm_label', 'all_matching' ],
 			$path
 		);
 
@@ -440,11 +440,15 @@ final class Definition_Parser {
 			'scope_sentence' => self::text( $action, 'scope_sentence', $path, true ),
 			'confirm_label'  => self::text( $action, 'confirm_label', $path, true ),
 			'skip_preview'   => self::flag( $action, 'skip_preview', $path, false ),
+			'all_matching'   => self::flag( $action, 'all_matching', $path, false ),
 			'fields'         => self::action_fields( $action['fields'] ?? [], "$path.fields" ),
 		];
 
 		if ( 'account' === $entry['scope'] && '' === $entry['scope_sentence'] ) {
 			throw new \InvalidArgumentException( "$path: an account-wide action must state its scope in scope_sentence." );
+		}
+		if ( $entry['all_matching'] && ( ! $bulk || 'selection' !== $entry['scope'] ) ) {
+			throw new \InvalidArgumentException( "$path: only a bulk action scoped to the selection may declare all_matching." );
 		}
 		if ( $entry['skip_preview'] && ( $bulk || 'mutate' !== $entry['effect'] || 'danger' === $entry['tone'] ) ) {
 			throw new \InvalidArgumentException( "$path: only a non-destructive mutating row action may skip the preview." );

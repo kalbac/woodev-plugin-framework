@@ -45,6 +45,14 @@ export const MESSAGE_KEYS = {
 	selectRow: 'select_row',
 	/** The selection reached the table's `max_selection`. */
 	selectionLimit: 'selection_limit',
+	/** The bar above a ticked page: `{count}` rows on it. */
+	selectedPage: 'selected_page',
+	/** The bar's offer to take every row under the filter: `{count}` is the table's total. */
+	selectAllMatching: 'select_all_matching',
+	/** The bar once the mode is on: `{count}` rows, `{filters}` the active filters in words. */
+	selectedAllMatching: 'selected_all_matching',
+	/** The bar's way back out of the mode. */
+	clearSelection: 'clear_selection',
 	/** "Any" entry of a select filter. */
 	filterAny: 'filter_any',
 	/** Label of the page-size control. */
@@ -84,6 +92,18 @@ export type MessageKey = ( typeof MESSAGE_KEYS )[ keyof typeof MESSAGE_KEYS ];
  */
 export function message( messages: Messages, key: MessageKey ): string {
 	return messages[ key ] ?? '';
+}
+
+/**
+ * A PHP sentence with its `{name}` placeholders filled. A placeholder PHP did not write is simply not filled.
+ *
+ * @param text   The sentence.
+ * @param values What to write in place of each placeholder.
+ */
+export function fillMessage( text: string, values: Record< string, string > ): string {
+	return Object.entries( values )
+		.reduce( ( filled, [ name, value ] ) => filled.split( `{${ name }}` ).join( value ), text )
+		.trim();
 }
 
 /**

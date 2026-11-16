@@ -100,7 +100,21 @@ export interface ActionDescriptor {
 	scope_sentence: string;
 	confirm_label: string;
 	skip_preview: boolean;
+	/**
+	 * A selection action that can also run over every row under the table's filter («все по фильтру»). PHP always sends it;
+	 * an old fixture may not.
+	 */
+	all_matching?: boolean;
 	fields: ActionField[];
+}
+
+/**
+ * «Every row under the filter»: the filters and search of the table as they were when the merchant clicked, frozen. The
+ * server validates them by the list read's own rules; page, page size and sort are not part of it.
+ */
+export interface MatchingQuery {
+	filters: Record< string, FilterValue >;
+	search: string;
 }
 
 export type Messages = Record< string, string >;

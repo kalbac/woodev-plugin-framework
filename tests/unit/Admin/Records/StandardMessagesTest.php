@@ -23,7 +23,7 @@ final class StandardMessagesTest extends TestCase {
 	}
 
 	public function test_the_groups_are_accepted_as_definition_messages_and_do_not_overlap(): void {
-		$groups = [ Standard_Messages::bulk(), Standard_Messages::views(), Standard_Messages::period() ];
+		$groups = [ Standard_Messages::bulk(), Standard_Messages::matching(), Standard_Messages::views(), Standard_Messages::period() ];
 		$merged = array_merge( ...$groups );
 
 		$this->assertCount( array_sum( array_map( 'count', $groups ) ), $merged, 'No key is sent by two groups.' );
@@ -31,6 +31,15 @@ final class StandardMessagesTest extends TestCase {
 		$definition = Records_Definition::from_array( Records_Definitions::standard( [ 'messages' => $merged ] ) );
 
 		$this->assertSame( $merged, $definition->to_array()['messages'] );
+	}
+
+	public function test_the_matching_bar_has_every_key_the_shell_reads_and_the_placeholders_it_fills(): void {
+		$messages = Standard_Messages::matching();
+
+		$this->assertSame( [ 'selected_page', 'select_all_matching', 'selected_all_matching', 'clear_selection' ], array_keys( $messages ) );
+		$this->assertStringContainsString( '{count}', $messages['select_all_matching'] );
+		$this->assertStringContainsString( '{count}', $messages['selected_all_matching'] );
+		$this->assertStringContainsString( '{filters}', $messages['selected_all_matching'] );
 	}
 
 	public function test_the_period_picker_has_a_label_for_every_preset_the_shell_draws(): void {

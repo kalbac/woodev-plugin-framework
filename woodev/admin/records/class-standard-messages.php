@@ -33,6 +33,25 @@ final class Standard_Messages {
 	}
 
 	/**
+	 * The «select every row under the filter» bar above a ticked page: the offer, the confirmation and the way back.
+	 *
+	 * `{count}` is the number of rows and `{filters}` the active filters in words (the shell writes both); the sentences
+	 * say «записи», because a table of any kind may use them — a definition that knows its rows' name overrides them.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @return array<string,string>
+	 */
+	public static function matching(): array {
+		return [
+			'selected_page'         => __( 'Выбраны все записи на этой странице: {count}.', 'woodev-plugin-framework' ),
+			'select_all_matching'   => __( 'Выбрать все записи под текущим отбором: {count}', 'woodev-plugin-framework' ),
+			'selected_all_matching' => __( 'Выбраны все записи под текущим отбором: {count}. {filters}', 'woodev-plugin-framework' ),
+			'clear_selection'       => __( 'Снять выбор', 'woodev-plugin-framework' ),
+		];
+	}
+
+	/**
 	 * The counted view row: the entry that clears the filter.
 	 *
 	 * @since 2.1.6

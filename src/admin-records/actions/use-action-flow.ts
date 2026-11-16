@@ -21,17 +21,19 @@ import { useCallback, useRef, useState } from '@wordpress/element';
 import { isAbort } from '../api';
 import type { Ownership } from '../activity';
 import type { TableHandle } from '../extensions';
-import type { ActionDescriptor } from '../types';
+import type { ActionDescriptor, MatchingQuery } from '../types';
 import { createActionsApi } from './api';
 import { describeFailure, mayHaveChangedRows, type Failure } from './failure';
-import type { ApplyResponse, FieldValue, Payload, PreviewResponse } from './types';
+import type { ActionTarget, ApplyResponse, FieldValue, Payload, PreviewResponse } from './types';
 
 export type Stage = 'input' | 'planning' | 'previewed' | 'applying' | 'done' | 'failed';
 
 export interface FlowState {
 	action: ActionDescriptor;
-	/** Targets; empty for an account-wide action. */
+	/** Targets; empty for an account-wide action, and for an «every row under the filter» one (see `matching`). */
 	ids: string[];
+	/** The filter and search the action runs over instead of ids, frozen when the merchant chose it; `null` for ticked rows. */
+	matching: MatchingQuery | null;
 	/** The row of a row action, for option reads that depend on it; empty for a bulk action. */
 	rowId: string;
 	/** The account the flow started in. A flow never outlives a change of account. */
@@ -49,6 +51,10 @@ export interface FlowState {
 export interface BeginOptions {
 	/** Runs after an apply came back (for a bulk action: clears the selection). */
 	onApplied?: () => void;
+	/** Runs the action over every row under this filter, with no ids. */
+	matching?: MatchingQuery;
+	/** Values the server already chose for the fields — an account-line button's payload; the dialog never asks for them. */
+	payload?: Record< string, string >;
 }
 
 export interface ActionFlow {
@@ -77,6 +83,16 @@ function initialPayload( action: ActionDescriptor ): Payload {
 	return Object.fromEntries(
 		action.fields.filter( ( field ) => field.type === 'boolean' ).map( ( field ) => [ field.id, false ] )
 	);
+}
+
+/** What a request names: the frozen filter, or the ticked rows. */
+function targetOf( flow: FlowState ): ActionTarget {
+	return flow.matching ? { matching: flow.matching } : flow.ids;
+}
+
+/** Fields the merchant is asked about; a `hidden` one carries a value the server chose and is never drawn. */
+export function visibleFields( action: ActionDescriptor ): ActionDescriptor[ 'fields' ] {
+	return action.fields.filter( ( field ) => field.type !== 'hidden' );
 }
 
 /** Empty text and empty lists are left out, so the server's own "required" sentence is the one that answers. */
@@ -135,12 +151,12 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 	 * Brings the table in line with what the server did, then lets the caller clear its selection. If the merchant
 	 * has moved to another account meanwhile, the answer is not applied: its row ids may name other rows there.
 	 */
-	const showResult = useCallback( ( action: ActionDescriptor, result: ApplyResponse, table: TableHandle ) => {
+	const showResult = useCallback( ( flow: FlowState, result: ApplyResponse, table: TableHandle ) => {
 		if ( scopeOf( table ) !== onScreen.current ) {
 			return;
 		}
-		if ( result.status === 'queued' || action.scope === 'account' ) {
-			// The rows that changed are not in the answer: read them again.
+		if ( result.status === 'queued' || flow.action.scope === 'account' || flow.matching ) {
+			// The rows that changed are not in the answer — for a filter-wide action most of them are off this page: read them again.
 			table.reload();
 		} else {
 			table.patchRows( result.rows, result.removed_ids );
@@ -164,7 +180,7 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 				const plan = await createActionsApi( table.api ).preview(
 					table.context,
 					flow.action.id,
-					flow.ids,
+					targetOf( flow ),
 					sendable( flow.payload ),
 					abort.current.signal
 				);
@@ -203,11 +219,11 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 				const result = await createActionsApi( table.api ).apply(
 					table.context,
 					flow.action.id,
-					flow.ids,
+					targetOf( flow ),
 					sendable( flow.payload )
 				);
 				if ( mine === ticket.current ) {
-					showResult( flow.action, result, table );
+					showResult( flow, result, table );
 					patch( { stage: 'done', result } );
 				}
 			} catch ( error ) {
@@ -241,10 +257,11 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 			update( {
 				action,
 				ids,
+				matching: options.matching ?? null,
 				rowId,
 				account: table.context.account_id,
 				stage: 'input',
-				payload: initialPayload( action ),
+				payload: { ...initialPayload( action ), ...options.payload },
 				fieldErrors: {},
 				plan: null,
 				result: null,
@@ -252,7 +269,7 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 				failedAt: null,
 			} );
 
-			if ( action.fields.length > 0 ) {
+			if ( visibleFields( action ).length > 0 ) {
 				return;
 			}
 			if ( needsPreview( action ) ) {

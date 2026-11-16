@@ -10,10 +10,11 @@
  * @package woodev-plugin-framework
  */
 
+import { Button } from '@wordpress/components';
 import type { TableHandle } from '../extensions';
 import { healthNotice } from './messages';
 import type { Ownership } from './ownership';
-import { useActivityState, type ActivityState } from './state';
+import { accountBlockedReason, useActivityState, type ActivityState } from './state';
 import { ACTIVITY_STYLES } from './styles';
 import type { ActivityProcess, RowActivity } from './types';
 import { useActivityLoop } from './use-activity-loop';
@@ -80,12 +81,32 @@ export function ActivityLoop( { table, state, ownership }: ActivityLoopProps ) {
 	const health = useActivityState( state );
 	const notice = healthNotice( table.messages, health );
 
+	const account = health.account;
+	const buttons = account?.actions ?? [];
+	// A finished run keeps its line for a while with a «Подробнее» button, so buttons alone also earn the line.
+	const showLine = account !== null && account.text !== '' && ( account.active || buttons.length > 0 );
+
 	return (
 		<>
-			{ health.account?.active && health.account.text !== '' && (
-				<p role="status" className="woodev-records__account-activity" style={ ACTIVITY_STYLES.account }>
-					{ health.account.text }
-				</p>
+			{ account && showLine && (
+				<div className="woodev-records__account-line" style={ ACTIVITY_STYLES.accountLine }>
+					<p role="status" className="woodev-records__account-activity" style={ ACTIVITY_STYLES.account }>
+						{ account.text }
+					</p>
+					{ table.runAccountAction &&
+						buttons.map( ( entry ) => (
+							<Button
+								key={ entry.action }
+								variant="secondary"
+								data-action={ entry.action }
+								disabled={ accountBlockedReason( health, entry.action ) !== '' }
+								accessibleWhenDisabled
+								onClick={ () => table.runAccountAction?.( entry.action, entry.payload ) }
+							>
+								{ entry.label }
+							</Button>
+						) ) }
+				</div>
 			) }
 			{ notice !== '' && (
 				<p
