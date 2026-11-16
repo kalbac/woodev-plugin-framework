@@ -154,6 +154,19 @@ final class Account_Run {
 	}
 
 	/**
+	 * Counts requests a call sent beyond the one {@see self::spend_request()} counted: one read of an adapter may page through
+	 * several HTTP requests, and the budget is of the requests that reach the marketplace.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int $count Further requests.
+	 * @return void
+	 */
+	public function add_requests( int $count ): void {
+		$this->requests += max( 0, $count );
+	}
+
+	/**
 	 * Renews the claim right before a side effect.
 	 *
 	 * @since 2.1.0

@@ -17,10 +17,12 @@ use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Runner;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
+use Woodev\Framework\Marketplace\Stock\Stock_Pusher;
 use Woodev\Framework\Marketplace\Sync\Mirror_Stock_Writer;
 use Woodev\Framework\Marketplace\Sync\Stock_Readback;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Paged_Stock_Pusher;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Stock_Pusher;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
 
@@ -80,13 +82,13 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	 *
 	 * @return Reconcile_Stock_Runner
 	 */
-	private function runner(): Reconcile_Stock_Runner {
+	private function runner( ?Stock_Pusher $pusher = null, ?callable $on_applied = null ): Reconcile_Stock_Runner {
 		return new Reconcile_Stock_Runner(
 			$this->job_gate(),
 			$this->accounts(),
 			Sqlite_Tables::MARKETPLACE_ID,
 			$this->links(),
-			new Stock_Readback( $this->links(), $this->market, $this->intents(), $this->queue(), new Mirror_Stock_Writer(), $this->policy ),
+			new Stock_Readback( $this->links(), $pusher ?? $this->market, $this->intents(), $this->queue(), new Mirror_Stock_Writer(), $this->policy, $on_applied, $this->clock() ),
 			new Reconcile_Stock_Scheduler( $this->names() ),
 			$this->classifier,
 			new Api_Error_Ring( $this->db, Sqlite_Tables::table( 'api_errors' ), $this->clock() ),
@@ -212,21 +214,38 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * An account that is not in `marketplace` mode any more is not read at all, whatever was queued.
+	 * «Site is master»: the daily read only refreshes what the marketplace holds on the existing row; the shop is not written and
+	 * nothing is sent. An account that syncs no stock is not read at all.
 	 *
 	 * @return void
 	 */
-	public function test_an_account_in_another_mode_is_left_alone(): void {
+	public function test_site_mode_only_refreshes_the_remote_numbers(): void {
 		$product = $this->stock_product( 'a', 101, 10 );
-		$this->market->present['a'] = 2;
+		$this->hook_stock();
+		$this->set_stock( $product, 7 );
+		$this->flush();
+		$before                 = $this->stock_row( $product );
+		$this->market->requests = [];
 
-		foreach ( [ Wpdb_Account_Store::STOCK_SITE, Wpdb_Account_Store::STOCK_OFF ] as $mode ) {
-			$this->set_account( [ 'stock_mode' => $mode ] );
-			$this->runner()->run( $this->account_id );
-		}
+		$this->market->present['a']  = 2;
+		$this->market->reserved['a'] = 1;
+
+		$this->runner()->run( $this->account_id );
+
+		$row = $this->stock_row( $product );
+
+		$this->assertSame( [ [ Scripted_Stock_Pusher::READ, self::WAREHOUSE, [ 'a' ] ] ], $this->market->requests, 'one read, no push' );
+		$this->assertSame( 2, (int) $row['remote_present'] );
+		$this->assertSame( 1, (int) $row['remote_reserved'] );
+		$this->assertSame( 7, $this->wc_stock( $product ), 'the shop is not written' );
+		$this->assertSame( $before['pending_payload'], $row['pending_payload'], 'nothing new is queued for the marketplace' );
+		$this->assertSame( $before['sent_rev'], $row['sent_rev'] );
+
+		$this->market->requests = [];
+		$this->set_account( [ 'stock_mode' => Wpdb_Account_Store::STOCK_OFF ] );
+		$this->runner()->run( $this->account_id );
 
 		$this->assertSame( [], $this->market->requests );
-		$this->assertSame( 10, $this->wc_stock( $product ) );
 	}
 
 	/**
@@ -293,7 +312,8 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * When the run's time is spent the job queues the pass again from the page it was on, and the continuation finishes it.
+	 * When the run's time is spent after a full page, the pass continues after that page — it is not read again — and the
+	 * continuation finishes it.
 	 *
 	 * @return void
 	 */
@@ -319,18 +339,224 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 
 		$this->runner()->run( $this->account_id );
 
-		$last_of_first_page = $this->link_id( $products[199] );
-		$continuations      = $this->continuations();
+		$continuations = $this->continuations();
 
 		$this->assertCount( 1, $continuations );
-		$this->assertSame( [ $this->account_id, $last_of_first_page, 0 ], $continuations[0]['args'] );
+		$this->assertSame( [ $this->account_id, $this->link_id( $products[399] ), 0 ], $continuations[0]['args'], 'after the page that used the budget' );
 		$this->assertSame( 'woodev-fake-seller', $continuations[0]['group'] );
-		$this->assertSame( 2, $this->wc_stock( $products[0] ), 'the first page was written' );
+		$this->assertSame( 2, $this->wc_stock( $products[399] ), 'the second page was written' );
+		$this->assertSame( 10, $this->wc_stock( $products[400] ) );
 
 		$this->runner()->run( ...$continuations[0]['args'] );
 
 		$this->assertSame( 2, $this->wc_stock( $products[400] ), 'the continuation reaches the end' );
 		$this->assertCount( 1, $this->continuations(), 'and queues nothing more' );
+		$this->assertCount( 3, $this->market->sent( Scripted_Stock_Pusher::READ ), 'every page was read once' );
+	}
+
+	/**
+	 * A full page that is slow on every invocation finishes: its links were all read, so the next run starts after it.
+	 *
+	 * @return void
+	 */
+	public function test_a_consistently_slow_full_page_does_not_repeat_forever(): void {
+		$this->marketplace_is_master();
+		$products = $this->products_of_the_account( 200 );
+
+		foreach ( array_keys( $products ) as $index ) {
+			$this->market->present[ 'sku-' . ( $index + 1 ) ] = 5;
+		}
+
+		$slow = function () {
+			$this->now += 60;
+
+			return null;
+		};
+
+		$this->market->script = [ $slow, $slow ];
+		$this->runner()->run( $this->account_id );
+
+		$continuations = $this->continuations();
+
+		$this->assertCount( 1, $continuations );
+		$this->assertSame( [ $this->account_id, $this->link_id( $products[199] ), 0 ], $continuations[0]['args'] );
+
+		$this->runner()->run( ...$continuations[0]['args'] );
+
+		$this->assertCount( 1, $this->continuations(), 'the pass is over' );
+		$this->assertCount( 1, $this->market->sent( Scripted_Stock_Pusher::READ ), 'and the page was read once' );
+		$this->assertSame( 5, $this->wc_stock( $products[199] ) );
+	}
+
+	/**
+	 * A short page with two warehouses: when the first group spends the time, the second is not lost — the continuation starts at
+	 * it and reads nothing that was already read.
+	 *
+	 * @return void
+	 */
+	public function test_a_short_two_warehouse_page_resumes_at_the_unread_group(): void {
+		$this->marketplace_is_master();
+		$first  = $this->stock_product( 'a', 101, 10 );
+		$second = $this->stock_product( 'b', 102, 10, [ 'warehouse_id' => 33 ] );
+
+		$this->market->present['a'] = 1;
+		$this->market->present['b'] = 2;
+		$this->market->script       = [
+			function () {
+				$this->now += 60;
+
+				return null;
+			},
+		];
+
+		$this->runner()->run( $this->account_id );
+
+		$continuations = $this->continuations();
+
+		$this->assertCount( 1, $continuations );
+		$this->assertSame( [ $this->account_id, $this->link_id( $second ) - 1, 0 ], $continuations[0]['args'] );
+		$this->assertSame( 1, $this->wc_stock( $first ) );
+		$this->assertSame( 10, $this->wc_stock( $second ) );
+
+		$this->runner()->run( ...$continuations[0]['args'] );
+
+		$this->assertSame( 2, $this->wc_stock( $second ) );
+		$this->assertSame( [ [ 'a' ], [ 'b' ] ], $this->market->sent( Scripted_Stock_Pusher::READ ), 'each group was read once' );
+		$this->assertCount( 1, $this->continuations() );
+	}
+
+	/**
+	 * The request budget ends inside a page: the group after the last request is read by the continuation, not skipped and not
+	 * read again by every run.
+	 *
+	 * @return void
+	 */
+	public function test_the_request_budget_ending_inside_a_page_resumes_at_the_unread_group(): void {
+		$this->marketplace_is_master();
+		$products = [];
+
+		for ( $i = 1; $i <= Reconcile_Stock_Runner::BUDGET_REQUESTS + 1; $i++ ) {
+			$products[]                    = $this->stock_product( 'w' . $i, 2000 + $i, 10, [ 'warehouse_id' => 100 + $i ] );
+			$this->market->present[ 'w' . $i ] = 3;
+		}
+
+		$this->runner()->run( $this->account_id );
+
+		$last          = $products[ Reconcile_Stock_Runner::BUDGET_REQUESTS ];
+		$continuations = $this->continuations();
+
+		$this->assertCount( Reconcile_Stock_Runner::BUDGET_REQUESTS, $this->market->sent( Scripted_Stock_Pusher::READ ) );
+		$this->assertSame( [ $this->account_id, $this->link_id( $last ) - 1, 0 ], $continuations[0]['args'] );
+
+		$this->runner()->run( ...$continuations[0]['args'] );
+
+		$this->assertSame( 3, $this->wc_stock( $last ) );
+		$this->assertCount( Reconcile_Stock_Runner::BUDGET_REQUESTS + 1, $this->market->sent( Scripted_Stock_Pusher::READ ) );
+		$this->assertCount( 1, $this->continuations() );
+	}
+
+	/**
+	 * A pusher that pages through several HTTP requests in one read is charged for all of them.
+	 *
+	 * @return void
+	 */
+	public function test_the_http_pages_of_a_read_count_against_the_budget(): void {
+		$this->marketplace_is_master();
+		$products = $this->products_of_the_account( 201 );
+
+		foreach ( array_keys( $products ) as $index ) {
+			$this->market->present[ 'sku-' . ( $index + 1 ) ] = 4;
+		}
+
+		$paged = new Paged_Stock_Pusher( $this->market, Reconcile_Stock_Runner::BUDGET_REQUESTS );
+
+		$this->runner( $paged )->run( $this->account_id );
+
+		$continuations = $this->continuations();
+
+		$this->assertCount( 1, $this->market->sent( Scripted_Stock_Pusher::READ ), 'one read used the whole budget' );
+		$this->assertSame( [ $this->account_id, $this->link_id( $products[199] ), 0 ], $continuations[0]['args'] );
+		$this->assertSame( 10, $this->wc_stock( $products[200] ) );
+	}
+
+	/**
+	 * The day's continuations are capped: once they are spent the pass stops with a recorded text instead of going on.
+	 *
+	 * @return void
+	 */
+	public function test_the_days_continuations_are_capped(): void {
+		$this->marketplace_is_master();
+		$this->products_of_the_account( 201 );
+		$this->market->script = [
+			function () {
+				$this->now += 60;
+
+				return null;
+			},
+		];
+		$this->transients[ self::HOOK . '_cont_' . $this->account_id . '_' . gmdate( 'Ymd' ) ] = Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY;
+
+		$this->runner()->run( $this->account_id );
+
+		$rows = $this->db->rows( 'SELECT message FROM ' . Sqlite_Tables::table( 'api_errors' ) . " WHERE code = 'reconcile_stock_failed'" );
+
+		$this->assertSame( [], $this->continuations() );
+		$this->assertCount( 1, $rows );
+		$this->assertStringContainsString( 'continuations were already used today', (string) $rows[0]['message'] );
+	}
+
+	/**
+	 * Every continuation is counted, a waiting duplicate is not.
+	 *
+	 * @return void
+	 */
+	public function test_continuations_are_counted_per_account_and_day(): void {
+		$scheduler = new Reconcile_Stock_Scheduler( $this->names() );
+
+		for ( $cursor = 1; $cursor <= Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY; $cursor++ ) {
+			$this->assertTrue( $scheduler->continue_later( $this->account_id, $cursor, 0, 30 ) );
+		}
+
+		$this->assertTrue( $scheduler->continue_later( $this->account_id, 1, 0, 30 ), 'a waiting duplicate costs nothing' );
+		$this->assertFalse( $scheduler->continue_later( $this->account_id, 999, 0, 30 ), 'the sixty-first is refused' );
+		$this->assertSame( Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY, $scheduler->continuations_today( $this->account_id ) );
+		$this->assertSame( 0, $scheduler->continuations_today( $this->account_id + 1 ) );
+	}
+
+	/**
+	 * In «marketplace is master» mode the listener hears about every link that was set from the marketplace or found equal, with
+	 * the moment before its read; «site is master» tells it nothing.
+	 *
+	 * @return void
+	 */
+	public function test_the_applied_listener_hears_changed_and_unchanged_links(): void {
+		$this->marketplace_is_master();
+		$changed   = $this->stock_product( 'a', 101, 10 );
+		$unchanged = $this->stock_product( 'b', 102, 6 );
+
+		$this->market->present['a'] = 4;
+		$this->market->present['b'] = 6;
+
+		$heard    = [];
+		$listener = static function ( $account, $link, int $started ) use ( &$heard ): void {
+			$heard[] = [ $account->id(), $link->wc_product_id(), $started ];
+		};
+
+		$this->runner( null, $listener )->run( $this->account_id );
+
+		$this->assertSame(
+			[
+				[ $this->account_id, $changed, self::NOW ],
+				[ $this->account_id, $unchanged, self::NOW ],
+			],
+			$heard
+		);
+
+		$heard = [];
+		$this->set_account( [ 'stock_mode' => Wpdb_Account_Store::STOCK_SITE ] );
+		$this->runner( null, $listener )->run( $this->account_id );
+
+		$this->assertSame( [], $heard );
 	}
 
 	/**
@@ -439,11 +665,12 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * Only an enabled account in `marketplace` mode gets a daily run, in the plugin's group; a repeated check adds nothing.
+	 * Every enabled account that syncs stock gets a daily run, whatever its mode, in the plugin's group; an account that is
+	 * switched off or syncs no stock gets none; a repeated check adds nothing.
 	 *
 	 * @return void
 	 */
-	public function test_only_marketplace_mode_accounts_get_a_daily_run_once(): void {
+	public function test_every_enabled_stock_sync_account_gets_a_daily_run_once(): void {
 		$this->another_account( Wpdb_Account_Store::STOCK_OFF );
 		$this->another_account( Wpdb_Account_Store::STOCK_MARKETPLACE, false );
 		$master = $this->another_account( Wpdb_Account_Store::STOCK_MARKETPLACE );
@@ -452,8 +679,8 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 		$this->transients = [];
 		$this->runner()->ensure_schedules();
 
-		$this->assertSame( [ $master ], $this->daily_accounts() );
-		$this->assertCount( 1, $this->scheduler->actions );
+		$this->assertSame( [ $this->account_id, $master ], $this->daily_accounts(), 'the site-mode account and the marketplace-mode one' );
+		$this->assertCount( 2, $this->scheduler->actions );
 		$this->assertSame( 'woodev-fake-seller', $this->scheduler->actions[0]['group'] );
 	}
 
@@ -463,10 +690,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	 * @return void
 	 */
 	public function test_the_schedule_check_runs_once_an_hour(): void {
-		$this->marketplace_is_master();
-
 		$this->runner()->ensure_schedules();
-		$this->marketplace_is_master();
 		$second = $this->another_account( Wpdb_Account_Store::STOCK_MARKETPLACE );
 		$this->runner()->ensure_schedules();
 
@@ -476,24 +700,23 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * Switching the account off, to another stock mode, or deleting it removes its daily run on the next check; the other
+	 * Switching the account off, turning its stock sync off, or deleting it removes its daily run on the next check; the other
 	 * accounts keep theirs, and a continuation in flight is not touched.
 	 *
 	 * @return void
 	 */
 	public function test_a_daily_run_goes_when_its_account_no_longer_needs_it(): void {
-		$this->marketplace_is_master();
 		$switched_off = $this->another_account( Wpdb_Account_Store::STOCK_MARKETPLACE );
-		$other_mode   = $this->another_account( Wpdb_Account_Store::STOCK_MARKETPLACE );
+		$sync_off     = $this->another_account( Wpdb_Account_Store::STOCK_MARKETPLACE );
 		$deleted      = $this->another_account( Wpdb_Account_Store::STOCK_MARKETPLACE );
 
 		$this->runner()->ensure_schedules();
-		$this->assertSame( [ $this->account_id, $switched_off, $other_mode, $deleted ], $this->daily_accounts() );
+		$this->assertSame( [ $this->account_id, $switched_off, $sync_off, $deleted ], $this->daily_accounts() );
 
 		( new Reconcile_Stock_Scheduler( $this->names() ) )->continue_later( $switched_off, 5, 0, 30 );
 
 		$this->accounts()->set_enabled( $switched_off, false );
-		$this->set_account_of( $other_mode, [ 'stock_mode' => Wpdb_Account_Store::STOCK_SITE ] );
+		$this->set_account_of( $sync_off, [ 'stock_mode' => Wpdb_Account_Store::STOCK_OFF ] );
 		$this->accounts()->set_enabled( $deleted, false ); // The deletion switches the account off first.
 		$token = (string) $this->accounts()->claim( $deleted, Job_Gate::CLAIM_TTL );
 		$this->assertTrue( $this->accounts()->delete( $deleted, $token ) );
@@ -506,11 +729,12 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * An account switched back on, or into `marketplace` mode, gets its run again.
+	 * An account whose stock sync is turned back on gets its run again.
 	 *
 	 * @return void
 	 */
-	public function test_a_daily_run_returns_with_the_mode(): void {
+	public function test_a_daily_run_returns_with_the_stock_sync(): void {
+		$this->set_account( [ 'stock_mode' => Wpdb_Account_Store::STOCK_OFF ] );
 		$this->runner()->ensure_schedules();
 		$this->assertSame( [], $this->daily_accounts() );
 
@@ -556,7 +780,6 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	 * @return void
 	 */
 	public function test_a_refused_daily_run_is_logged(): void {
-		$this->marketplace_is_master();
 		$this->scheduler->zero_for[ self::HOOK ] = true;
 
 		$this->runner()->ensure_schedules();

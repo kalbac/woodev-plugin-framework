@@ -53,6 +53,40 @@ final class StockFlushTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * An accepted send leaves what the marketplace now holds on the row: the sent quantity, read now. The reserved units are
+	 * not known from a send and stay as they were; a refused send stores nothing.
+	 *
+	 * @return void
+	 */
+	public function test_an_accepted_send_records_what_the_marketplace_now_holds(): void {
+		$product = $this->stock_product( 'simple', 101 );
+		$this->hook_stock();
+		$this->set_stock( $product, 7 );
+
+		$this->flush();
+
+		$row = $this->stock_row( $product );
+		$this->assertSame( 7, (int) $row['remote_present'] );
+		$this->assertNull( $row['remote_reserved'], 'a send does not tell the reserved units' );
+		$this->assertNotNull( $row['remote_read_at'] );
+
+		$this->market->reserved['simple'] = 3;
+		$this->reconcile(); // A readback that knows the reserved units.
+		$this->set_stock( $product, 9 );
+		$this->flush();
+
+		$row = $this->stock_row( $product );
+		$this->assertSame( 9, (int) $row['remote_present'] );
+		$this->assertSame( 3, (int) $row['remote_reserved'], 'the reserved units of the last read are kept' );
+
+		$this->market->script = [ fn() => $this->refused( $product, 'fake_nope' ) ];
+		$this->set_stock( $product, 4 );
+		$this->flush();
+
+		$this->assertSame( 9, (int) $this->stock_row( $product )['remote_present'], 'a refused send changes nothing' );
+	}
+
+	/**
 	 * Each verdict of a line settles its pair: accepted acknowledges, «not ready» waits five minutes with the text and counts no
 	 * failure, «wait» waits 31 s (or what the marketplace named) with no text and counts no failure.
 	 *

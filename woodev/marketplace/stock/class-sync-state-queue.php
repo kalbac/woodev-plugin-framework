@@ -305,6 +305,21 @@ final class Sync_State_Queue {
 	}
 
 	/**
+	 * Stores what an accepted send left on the marketplace: the sent quantity, read now. The reserved units are not known from a
+	 * send and stay as they were.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param array<string,mixed> $key     Row key.
+	 * @param int                 $present Units the marketplace accepted.
+	 * @param string              $token   The account claim of the run.
+	 * @return bool False when the claim was lost or the row does not exist.
+	 */
+	public function remember_sent( array $key, int $present, string $token ): bool {
+		return $this->fenced( $key, $token, 'remote_present = %d, remote_read_at = %s', [ $present, $this->time( 0 ) ] );
+	}
+
+	/**
 	 * Returns a row's readback and send columns.
 	 *
 	 * @since 2.0.29

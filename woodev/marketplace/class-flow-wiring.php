@@ -74,6 +74,7 @@ use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Runner;
 use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
+use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -377,7 +378,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		}
 
 		/**
-		 * The daily stock reconcile of the accounts whose stock mode is «marketplace is master».
+		 * The daily stock reconcile of the accounts that sync stock.
+		 *
+		 * **Extension point** `woodev_{plugin id}_stock_readback_applied( int $account_id, Product_Link $link, int $read_started_at )`:
+		 * fires in «marketplace is master» mode after a link's shop stock was set from the marketplace, or found equal to it.
+		 * `$read_started_at` is the Unix time before the read request, so a marketplace notification older than it is not newer
+		 * than what the reconcile applied. A plugin that keeps a freshness mark for its stock notifications advances it here.
 		 *
 		 * @param Sync_State_Store $store Pending side of `sync_state`.
 		 * @param Sync_State_Queue $queue Flusher side of `sync_state`.
@@ -385,7 +391,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 */
 		private function reconcile_stock( Sync_State_Store $store, Sync_State_Queue $queue ): void {
 			$adapter  = $this->adapter;
-			$readback = new Stock_Readback( $this->links, $adapter->stock_pusher(), $store, $queue, new Mirror_Stock_Writer(), $adapter->stock_policy() );
+			$hook     = $this->names->hook( 'stock_readback_applied' );
+			$log      = $this->log_error;
+			$readback = new Stock_Readback(
+				$this->links,
+				$adapter->stock_pusher(),
+				$store,
+				$queue,
+				new Mirror_Stock_Writer(),
+				$adapter->stock_policy(),
+				static function ( Account $account, Product_Link $link, int $started ) use ( $hook, $log ): void {
+					try {
+						do_action( $hook, $account->id(), $link, $started ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores,WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Job_Names builds `woodev_{plugin id}_…` in snake case.
+					} catch ( \Throwable $e ) {
+						call_user_func( $log, 'stock_readback_applied listener failed: ' . get_class( $e ) . ': ' . $e->getMessage() ); // A listener's failure must not stop the reconcile.
+					}
+				}
+			);
 
 			( new Reconcile_Stock_Runner( $this->gate, $this->accounts, $adapter->id(), $this->links, $readback, new Reconcile_Stock_Scheduler( $this->names ), $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
 		}

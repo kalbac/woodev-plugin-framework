@@ -12,25 +12,30 @@ use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Sync\Readback_Progress;
 use Woodev\Framework\Marketplace\Sync\Stock_Mode;
 use Woodev\Framework\Marketplace\Sync\Stock_Readback;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * `woodev_{plugin id}_reconcile_stock( account_id, cursor_link_id, attempt )`: the daily stock reconcile of an account whose stock
- * mode is «marketplace is master». It reads the marketplace's stock of the account's linked cards a page at a time and writes it
- * into the shop through {@see Stock_Readback}. In that mode the readback queues nothing for the marketplace, so the shop never
- * sends the number it just received back.
+ * `woodev_{plugin id}_reconcile_stock( account_id, cursor_link_id, attempt )`: the daily stock reconcile of an account that syncs
+ * stock. It reads the marketplace's stock of the account's linked cards a page at a time ({@see Stock_Readback}):
  *
- * - **Schedule.** One recurring run a day per such account ({@see Reconcile_Stock_Scheduler}), kept in step with the accounts by
- *   {@see self::ensure_schedules()} at most once an hour.
+ * - **«Marketplace is master»**: the shop's stock takes what the marketplace holds. The readback queues nothing for the
+ *   marketplace, so the shop never sends the number it just received back.
+ * - **«Site is master»**: only `remote_present` / `remote_reserved` of the account's rows are refreshed; the shop and the
+ *   marketplace are left as they are.
+ *
+ * - **Schedule.** One recurring run a day per enabled account that syncs stock ({@see Reconcile_Stock_Scheduler}), kept in step
+ *   with the accounts by {@see self::ensure_schedules()} at most once an hour.
  * - **Run.** {@see Account_Job} applies the gate (account enabled, licence, pause) and the account claim and classifies a failed
- *   read; the work stops silently when the account is not in `marketplace` mode any more.
- * - **Pages.** 200 links by link id after the cursor. A run has {@see self::BUDGET_REQUESTS} requests and
- *   {@see self::BUDGET_SECONDS} seconds ({@see Account_Run}); when they are spent the run queues itself with the cursor and stops.
- *   The page that spent the budget is queued again whole, because the readback does not tell which of its links it reached; a
- *   second pass over a page compares equal and writes nothing.
+ *   read; the work stops silently when the account does not sync stock any more.
+ * - **Pages.** 200 links by link id after the cursor. A run has {@see self::BUDGET_REQUESTS} requests (HTTP requests when the
+ *   pusher implements {@see \Woodev\Framework\Marketplace\Stock\Reports_Read_Requests}) and {@see self::BUDGET_SECONDS} seconds
+ *   ({@see Account_Run}); when they are spent the run queues itself and stops. The cursor moves only past links that were read:
+ *   {@see Readback_Progress} names the warehouse groups the budget did not reach. An account gets at most
+ *   {@see Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY} continuations a day, which caps the day's traffic.
  *
  * @since 2.1.8
  */
@@ -147,7 +152,7 @@ final class Reconcile_Stock_Runner {
 	}
 
 	/**
-	 * Makes sure every enabled account in `marketplace` stock mode has its daily run and no other account has one; checked at
+	 * Makes sure every enabled account that syncs stock has its daily run and no other account has one; checked at
 	 * most once an hour.
 	 *
 	 * @since 2.1.8
@@ -164,7 +169,7 @@ final class Reconcile_Stock_Runner {
 		set_transient( $transient, '1', HOUR_IN_SECONDS );
 
 		try {
-			$this->scheduler->sync( $this->marketplace_account_ids() );
+			$this->scheduler->sync( $this->stock_sync_account_ids() );
 		} catch ( \Throwable $e ) {
 			$this->log( 'reconcile_stock could not be scheduled: ' . $e->getMessage() );
 		}
@@ -203,6 +208,9 @@ final class Reconcile_Stock_Runner {
 	/**
 	 * Reconciles page after page until a page is short or the run's budget is spent.
 	 *
+	 * The cursor moves only past links that were really read: a page whose last warehouse group the budget did not reach is
+	 * resumed from its first unread link, and a full page that used the last request of the budget is not read again.
+	 *
 	 * @param Account     $account Account.
 	 * @param Claim_Fence $fence   The run's claim.
 	 * @param int         $cursor  Last link id already covered.
@@ -211,11 +219,13 @@ final class Reconcile_Stock_Runner {
 	 * @throws \Throwable        What the marketplace read threw; {@see Account_Job} classifies it.
 	 */
 	private function reconcile( Account $account, Claim_Fence $fence, int $cursor ): void {
-		if ( ! Stock_Mode::is_marketplace( $account ) ) {
-			return; // The mode changed after the run was queued: nothing is mirrored from a marketplace that is not the master.
+		if ( Stock_Mode::is_off( $account ) ) {
+			return; // The mode changed after the run was queued: stock is not synced for this account any more.
 		}
 
-		$run = $this->account_run( $account, $fence );
+		// «Marketplace is master» writes the shop; in «site is master» the daily read only keeps `remote_present` fresh.
+		$refresh_only = ! Stock_Mode::is_marketplace( $account );
+		$run          = $this->account_run( $account, $fence );
 
 		do {
 			$page = $this->links->page( $account->id(), $cursor, self::PAGE_SIZE );
@@ -224,19 +234,25 @@ final class Reconcile_Stock_Runner {
 				return;
 			}
 
-			$this->readback->reconcile( $run, $page );
+			$progress = $this->readback->reconcile_page( $run, $page, $refresh_only );
+
+			if ( ! $progress->is_complete() ) {
+				$this->continue_from( $account->id(), (int) $progress->resume_cursor() );
+
+				return;
+			}
+
+			$cursor = (int) end( $page )->link_id();
 
 			if ( count( $page ) < self::PAGE_SIZE ) {
 				return;
 			}
 
 			if ( ! $run->can_request() ) {
-				$this->continue_from( $account->id(), $cursor ); // The budget ended inside this page: it is read again whole.
+				$this->continue_from( $account->id(), $cursor );
 
 				return;
 			}
-
-			$cursor = (int) end( $page )->link_id();
 		} while ( true );
 	}
 
@@ -268,24 +284,24 @@ final class Reconcile_Stock_Runner {
 	 * @param int $account_id Account id.
 	 * @param int $cursor     Last link id already covered.
 	 * @return void
-	 * @throws \RuntimeException When Action Scheduler refused the action.
+	 * @throws \RuntimeException When Action Scheduler refused the action, or the account's continuations of the day are spent.
 	 */
 	private function continue_from( int $account_id, int $cursor ): void {
 		if ( ! $this->scheduler->continue_later( $account_id, $cursor, 0, self::CONTINUE_DELAY ) ) {
-			throw new \RuntimeException( 'The stock reconcile could not be continued after link ' . (int) $cursor . '; the next daily run starts over.' ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+			throw new \RuntimeException( 'The stock reconcile could not be continued after link ' . (int) $cursor . ' (Action Scheduler refused it, or ' . Reconcile_Stock_Scheduler::MAX_CONTINUATIONS_PER_DAY . ' continuations were already used today); the next daily run starts over.' ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 	}
 
 	/**
-	 * Lists the enabled accounts whose stock mode is «marketplace».
+	 * Lists the enabled accounts that sync stock (any stock mode but «off»).
 	 *
 	 * @return int[]
 	 */
-	private function marketplace_account_ids(): array {
+	private function stock_sync_account_ids(): array {
 		$ids = [];
 
 		foreach ( $this->accounts->all( $this->marketplace_id, true ) as $account ) {
-			if ( Stock_Mode::is_marketplace( $account ) ) {
+			if ( ! Stock_Mode::is_off( $account ) ) {
 				$ids[] = $account->id();
 			}
 		}

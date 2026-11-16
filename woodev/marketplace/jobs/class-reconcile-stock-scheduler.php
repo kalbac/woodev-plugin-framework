@@ -10,8 +10,8 @@ namespace Woodev\Framework\Marketplace\Jobs;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Action Scheduler calls for `woodev_{plugin id}_reconcile_stock`: one daily recurring run per account whose stock mode is
- * «marketplace is master» (arguments `[ account_id ]`), and the single continuations a run queues for itself (arguments
+ * Action Scheduler calls for `woodev_{plugin id}_reconcile_stock`: one daily recurring run per enabled account that syncs stock
+ * (any stock mode but «off»; arguments `[ account_id ]`), and the single continuations a run queues for itself (arguments
  * `[ account_id, cursor_link_id, attempt ]`).
  *
  * The hour of the daily run is {@see self::DEFAULT_HOUR} (site time) unless the filter `woodev_{plugin id}_reconcile_stock_hour`
@@ -23,6 +23,11 @@ final class Reconcile_Stock_Scheduler {
 	public const JOB          = 'reconcile_stock';
 	public const HOUR_FILTER  = 'reconcile_stock_hour';
 	public const DEFAULT_HOUR = 4;
+
+	/**
+	 * Most continuations an account may queue in one day; with the daily run that is the whole of its day's work.
+	 */
+	public const MAX_CONTINUATIONS_PER_DAY = 60;
 
 	/**
 	 * Job names of the plugin.
@@ -85,7 +90,7 @@ final class Reconcile_Stock_Scheduler {
 	 *
 	 * @since 2.1.8
 	 *
-	 * @param int[] $account_ids Accounts that are enabled and in the `marketplace` stock mode.
+	 * @param int[] $account_ids Accounts that are enabled and sync stock.
 	 * @return void
 	 * @throws \RuntimeException When Action Scheduler did not create a run.
 	 */
@@ -107,6 +112,8 @@ final class Reconcile_Stock_Scheduler {
 
 	/**
 	 * Queues the continuation of a run (the next page, a wait or a retry); one waiting continuation per argument set is enough.
+	 * An account gets at most {@see self::MAX_CONTINUATIONS_PER_DAY} continuations a day, so a pass that cannot finish stops
+	 * instead of calling the marketplace all day.
 	 *
 	 * @since 2.1.8
 	 *
@@ -114,20 +121,58 @@ final class Reconcile_Stock_Scheduler {
 	 * @param int $cursor     Last link id the earlier pages covered.
 	 * @param int $attempt    Failed attempts so far.
 	 * @param int $delay      Seconds to wait.
-	 * @return bool False when Action Scheduler refused or threw.
+	 * @return bool False when Action Scheduler refused or threw, or the day's continuations are spent.
 	 */
 	public function continue_later( int $account_id, int $cursor, int $attempt, int $delay ): bool {
 		$args = [ $account_id, $cursor, $attempt ];
 
 		try {
-			return $this->has_pending( $args ) || 0 !== as_schedule_single_action( time() + max( 0, $delay ), $this->hook(), $args, $this->names->group() );
+			if ( $this->has_pending( $args ) ) {
+				return true;
+			}
+
+			$used = $this->continuations_today( $account_id );
+
+			if ( $used >= self::MAX_CONTINUATIONS_PER_DAY ) {
+				return false;
+			}
+
+			if ( 0 === as_schedule_single_action( time() + max( 0, $delay ), $this->hook(), $args, $this->names->group() ) ) {
+				return false;
+			}
+
+			set_transient( $this->counter_key( $account_id ), $used + 1, DAY_IN_SECONDS );
+
+			return true;
 		} catch ( \Throwable $e ) {
 			return false;
 		}
 	}
 
 	/**
-	 * Removes the daily runs of accounts that no longer need one: switched off, in another stock mode, or deleted. Continuations
+	 * Returns the continuations an account was given today (UTC day).
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int $account_id Account id.
+	 * @return int
+	 */
+	public function continuations_today( int $account_id ): int {
+		return max( 0, (int) get_transient( $this->counter_key( $account_id ) ) );
+	}
+
+	/**
+	 * Names the transient that counts an account's continuations of the day.
+	 *
+	 * @param int $account_id Account id.
+	 * @return string
+	 */
+	private function counter_key( int $account_id ): string {
+		return $this->hook() . '_cont_' . $account_id . '_' . gmdate( 'Ymd' );
+	}
+
+	/**
+	 * Removes the daily runs of accounts that no longer need one: switched off, with stock sync off, or deleted. Continuations
 	 * (three arguments) are left to finish.
 	 *
 	 * @param int[] $wanted Accounts that keep their run.
