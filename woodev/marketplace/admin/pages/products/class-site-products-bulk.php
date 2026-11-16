@@ -419,12 +419,13 @@ final class Site_Products_Bulk {
 
 	/**
 	 * Refuses a product write once the bulk run tick that works the part has lost its run (the connection that held the named lock is
-	 * gone). Outside a bulk run there is nothing to lose.
+	 * gone). Outside a bulk run there is nothing to lose. Public only so that it can be handed to the services whose loops write products
+	 * ({@see Export_Service::enqueue()}, {@see Link_Detacher::detach()}).
 	 *
 	 * @return void
 	 * @throws Bulk_Run_Lost When the tick no longer owns the run.
 	 */
-	private function guard(): void {
+	public function guard(): void {
 		if ( null !== $this->owns && ! call_user_func( $this->owns ) ) {
 			throw new Bulk_Run_Lost();
 		}
@@ -585,10 +586,8 @@ final class Site_Products_Bulk {
 			];
 		}
 
-		$this->guard();
-
 		try {
-			$out = $this->export->enqueue( $account, $offers );
+			$out = $this->export->enqueue( $account, $offers, [ $this, 'guard' ] );
 		} catch ( \RuntimeException $e ) {
 			throw new Action_State_Exception( __( 'Не удалось поставить товары в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите.', 'woodev-plugin-framework' ) );
 		}
@@ -665,6 +664,7 @@ final class Site_Products_Bulk {
 	private function plan_links( Account $account, string $action, array $offers, ?int $warehouse ): array {
 		$records = $this->links->offers_of( $account->id(), $offers );
 		$targets = [];
+		$enabled = [];
 		$reasons = [];
 
 		foreach ( $records as $record ) {
@@ -673,6 +673,12 @@ final class Site_Products_Bulk {
 			if ( null === $reason ) {
 				$targets[] = $record;
 				continue;
+			}
+
+			// A switch-on that was interrupted after the flags changed (a lost tick, a refused intent write) leaves cards that are on
+			// and have no first send; the retry must still record it, though «already so» keeps them out of the targets.
+			if ( $this->is_switched_on( $action, $record ) ) {
+				$enabled[] = $record;
 			}
 
 			$reasons[ $reason ][] = $record->wc_product_id();
@@ -699,10 +705,26 @@ final class Site_Products_Bulk {
 
 		return [
 			'targets'  => $targets,
+			'enabled'  => $enabled,
 			'will'     => count( $targets ),
 			'warnings' => 0,
 			'groups'   => $groups,
 		];
+	}
+
+	/**
+	 * Tells whether a switch-on action finds the card already switched on (a created one: only those have a first send to record).
+	 *
+	 * @param string      $action Action id.
+	 * @param Link_Record $record Link row.
+	 * @return bool
+	 */
+	private function is_switched_on( string $action, Link_Record $record ): bool {
+		if ( Link_Record::STATE_CREATED !== $record->card_state() ) {
+			return false;
+		}
+
+		return ( self::SYNC_STOCK_ON === $action && $record->sync_stock() ) || ( self::SYNC_PRICE_ON === $action && $record->sync_price() );
 	}
 
 	/**
@@ -883,7 +905,7 @@ final class Site_Products_Bulk {
 				return $this->run_detach( $account, $plan['targets'] );
 			default:
 				return [
-					'done'   => $this->run_flags( $account, $action, $plan['targets'], $warehouse ),
+					'done'   => $this->run_flags( $account, $action, $plan['targets'], $warehouse, $plan['enabled'] ?? [] ),
 					'groups' => [],
 				];
 		}
@@ -896,10 +918,13 @@ final class Site_Products_Bulk {
 	 * @param string        $action    Action id.
 	 * @param Link_Record[] $targets   Rows.
 	 * @param int|null      $warehouse Warehouse.
+	 * @param Link_Record[] $enabled   Created cards a switch-on found already on: their first send is recorded too, so a part that was
+	 *                                 interrupted after the flags changed is finished by its retry.
 	 * @return int Rows changed.
-	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before the write.
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before a write.
+	 * @throws Action_State_Exception When a first send could not be stored: the flags are on, and repeating the action records it.
 	 */
-	private function run_flags( Account $account, string $action, array $targets, ?int $warehouse ): int {
+	private function run_flags( Account $account, string $action, array $targets, ?int $warehouse, array $enabled = [] ): int {
 		$link_ids = array_map(
 			static function ( Link_Record $record ): int {
 				return (int) $record->link_id();
@@ -925,7 +950,7 @@ final class Site_Products_Bulk {
 		}
 
 		if ( in_array( $action, [ self::SYNC_STOCK_ON, self::SYNC_PRICE_ON ], true ) ) {
-			$this->record_first_send( $account, $targets, self::SYNC_STOCK_ON === $action );
+			$this->record_first_send( $account, array_merge( $targets, $enabled ), self::SYNC_STOCK_ON === $action );
 		}
 
 		return $changed;
@@ -939,9 +964,11 @@ final class Site_Products_Bulk {
 	 * have anything to send to.
 	 *
 	 * @param Account       $account  Account.
-	 * @param Link_Record[] $targets  Rows the switch reached.
+	 * @param Link_Record[] $targets  Rows the switch reached, and the created ones it found already on.
 	 * @param bool          $is_stock Stock when true, price when false.
 	 * @return void
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run.
+	 * @throws Action_State_Exception When an intent could not be stored.
 	 */
 	private function record_first_send( Account $account, array $targets, bool $is_stock ): void {
 		$created = [];
@@ -967,8 +994,8 @@ final class Site_Products_Bulk {
 					$this->prices->record_for_link( $account, $fresh );
 				}
 			} catch ( \RuntimeException $e ) {
-				// The switch is made; another request holding the intent only means this first send waits for the next change.
-				continue;
+				// Never reported as done: a card that is on with no first send would be skipped as «already so» by every later try.
+				throw new Action_State_Exception( __( 'Синхронизация включена, но первую отправку записать не удалось. Повторите действие — оно запишет недостающее.', 'woodev-plugin-framework' ) );
 			}
 		}
 	}
@@ -1109,10 +1136,8 @@ final class Site_Products_Bulk {
 			];
 		}
 
-		$this->guard();
-
 		try {
-			$outcome = $this->detacher->detach( $account->id(), $targets );
+			$outcome = $this->detacher->detach( $account->id(), $targets, [ $this, 'guard' ] );
 		} catch ( \RuntimeException $e ) {
 			throw new Action_State_Exception( __( 'Не удалось снять связь. Повторите чуть позже.', 'woodev-plugin-framework' ) );
 		}

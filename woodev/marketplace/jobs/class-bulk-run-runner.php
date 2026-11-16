@@ -311,11 +311,12 @@ final class Bulk_Run_Runner {
 	 * @param Account             $account  Account.
 	 * @param Bulk_Run            $run      Run as the tick read it.
 	 * @param string              $tick     The tick's token.
-	 * @param array<string,mixed> $progress `cursor`, `counts`, `report`; updated as parts go.
+	 * @param array<string,mixed> $progress `cursor`, `counts`, `report`; updated as parts go, by reference: an error in a later part ends
+	 *                                      the run with what the earlier parts saved, not with what the tick started from.
 	 * @return void
 	 * @throws Bulk_Run_Lost When the ownership check fails.
 	 */
-	private function parts( Account $account, Bulk_Run $run, string $tick, array $progress ): void {
+	private function parts( Account $account, Bulk_Run $run, string $tick, array &$progress ): void {
 		$account_id = $run->account_id();
 		$run_id     = $run->run_id();
 		$began      = (float) call_user_func( $this->clock );

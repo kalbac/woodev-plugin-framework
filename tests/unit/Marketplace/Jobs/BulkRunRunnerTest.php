@@ -462,6 +462,23 @@ final class BulkRunRunnerTest extends Export_Test_Case {
 		$this->assertSame( 1, $this->queued_ticks(), 'A queues no tick.' );
 	}
 
+	public function test_an_error_in_a_later_part_ends_the_run_with_what_the_earlier_parts_saved(): void {
+		$run_id = $this->start();
+
+		$this->worker->parts     = [ [ 'groups' => [ [ 'kind' => 'skipped', 'reason' => 'нет цены', 'count' => 1, 'fix_label' => '', 'fix_url' => '', 'examples' => [ 'A' ] ] ] ], [] ];
+		$this->worker->throws    = new \RuntimeException( 'database gone' );
+		$this->worker->throws_at = 2;
+		$this->runner()->tick( $this->account_id, $run_id );
+
+		$run = $this->current();
+		$this->assertSame( Bulk_Run::STOPPED, $run->state() );
+		$this->assertSame( 3, $run->counts()['offers_accepted'], 'Part 1 was saved and stays counted.' );
+		$this->assertSame( 2, $run->counts()['products_done'] );
+		$this->assertSame( 10, $run->cursor()['parent'], 'The cursor of part 1, not the one the tick started from.' );
+		$this->assertSame( 'нет цены', $run->report()[0]['reason'], 'And its skip reasons.' );
+		$this->assertArrayHasKey( 'stopped', $run->cursor() );
+	}
+
 	public function test_an_error_in_a_part_stops_the_run_with_a_sentence_and_logs_it(): void {
 		$run_id = $this->start();
 		$lines  = [];

@@ -44,6 +44,13 @@ final class Scripted_Bulk_Run_Worker implements Bulk_Run_Worker {
 	public $throws = null;
 
 	/**
+	 * The call that throws; 0 throws on every call.
+	 *
+	 * @var int
+	 */
+	public $throws_at = 0;
+
+	/**
 	 * The cursors the parts were asked with.
 	 *
 	 * @var array<int,array<string,mixed>>
@@ -74,7 +81,7 @@ final class Scripted_Bulk_Run_Worker implements Bulk_Run_Worker {
 			call_user_func( $this->during, $call );
 		}
 
-		if ( null !== $this->throws ) {
+		if ( null !== $this->throws && ( 0 === $this->throws_at || $call === $this->throws_at ) ) {
 			throw $this->throws;
 		}
 

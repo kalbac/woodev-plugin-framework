@@ -983,7 +983,8 @@ Spec: [Marketplace bulk operations](../specs/2026-11-16-marketplace-bulk-operati
 **The lost-connection fence.** `wpdb::query()` reconnects on error 2006 and re-runs the query on a new connection that holds no
 lock, so the named lock alone is not a fence. A tick therefore (1) writes its token right after the lock, (2) fences every save with it,
 (3) asks `is_held()` before every product write (`Site_Products_Bulk::guard()` throws `Bulk_Run_Lost`, which extends `\Exception` so the
-`\RuntimeException` catches around the writes cannot swallow it). Proven on two real connections in
+`\RuntimeException` catches around the writes cannot swallow it). The loops of `Export_Service::enqueue()` and `Link_Detacher::detach()` take the
+guard as an optional argument and ask it per product, and before the export's rollback writes — one check per batch would leave their writes unfenced. Proven on two real connections in
 `tests/integration/Marketplace/BulkRunTwoConnectionsTest.php` (needs MySQL; the unit suite scripts the lock).
 
 **The cursor.** `{ parent, child }`, both product ids ascending; `child > 0` means «a variable product is being walked». Parents are read
@@ -991,7 +992,8 @@ by id under the list's own `WHERE` (`Site_Products_Reader::ids_after()`), so an 
 the run repeat it. Part sizes are constants of `Site_Products_Run_Worker` (export 100, detach 200, the rest 500).
 
 **D1.** Switching sync on (`sync_stock_on`, `sync_price_on`) now records the first send of every created card it reached, in the ticked mode
-and in a run alike (`Site_Products_Bulk::record_first_send()`), as the product tab does.
+and in a run alike (`Site_Products_Bulk::record_first_send()`), as the product tab does. A part interrupted after the flags changed is finished by its retry: created cards a switch-on finds already on get their first send
+recorded too, and an intent that cannot be stored throws instead of counting as done.
 
 **Rig phase.** The 10 000-product scale test is generated and measured by `tests/integration/fixtures/bulk-run/` (see its README); the
 coordinator runs it, the PR carries the numbers.

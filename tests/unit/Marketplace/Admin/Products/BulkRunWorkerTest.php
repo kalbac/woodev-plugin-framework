@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Admin\Records\Action_State_Exception;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Filter;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Run_Worker;
@@ -395,6 +396,170 @@ final class BulkRunWorkerTest extends Products_Test_Case {
 		$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::SYNC_STOCK_ON, [ $off ], [ $off => $off ], null, $owns );
 		$this->assertTrue( $this->link_of( $off )->sync_stock() );
 		$this->assertNull( $this->stock_row( $off ), 'The marketplace is the source of stock: nothing goes out.' );
+	}
+
+	/**
+	 * An ownership answer that allows the first `$allowed` questions and refuses every later one: the connection is lost inside the
+	 * service's loop.
+	 *
+	 * @param int $allowed Questions answered yes.
+	 * @param int $asked   Questions asked so far (by reference).
+	 * @return callable
+	 */
+	private function owns_for( int $allowed, int &$asked ): callable {
+		return static function () use ( $allowed, &$asked ): bool {
+			++$asked;
+
+			return $asked <= $allowed;
+		};
+	}
+
+	public function test_a_detach_that_loses_ownership_inside_its_loop_stops_at_the_next_product_and_frees_the_claim(): void {
+		$ids = [];
+
+		foreach ( [ 1, 2, 3 ] as $n ) {
+			$product = $this->add_product();
+			$this->add_link( $product, Link_Record::STATE_CREATED, [ 'offer_id' => 'D-' . $n ] );
+			$ids[] = (int) $product->get_id();
+		}
+
+		$asked = 0;
+
+		try {
+			// Asked once per product in the detacher's loop: yes for the first, no for the second.
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::DETACH, $ids, array_combine( $ids, $ids ), null, $this->owns_for( 1, $asked ) );
+			$this->fail( 'The loss must stop the part.' );
+		} catch ( Bulk_Run_Lost $e ) {
+			$this->assertSame( 2, $asked, 'Asked per product, not once per batch.' );
+		}
+
+		$detached = array_filter(
+			$ids,
+			function ( int $id ): bool {
+				return Link_Record::STATE_UNLINKED === $this->link_of( $id )->card_state();
+			}
+		);
+		$this->assertCount( 1, $detached, 'Only the product written before the loss.' );
+		$this->assertNotNull( $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL ), 'The claim was released.' );
+	}
+
+	public function test_an_export_that_loses_ownership_inside_its_loop_stops_before_the_next_product(): void {
+		$ids = [];
+
+		foreach ( [ 'E-1', 'E-2', 'E-3' ] as $sku ) {
+			$ids[] = (int) $this->add_product( [ 'sku' => $sku ] )->get_id();
+		}
+
+		$asked = 0;
+
+		try {
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::EXPORT, $ids, array_combine( $ids, $ids ), null, $this->owns_for( 1, $asked ) );
+			$this->fail( 'The loss must stop the part.' );
+		} catch ( Bulk_Run_Lost $e ) {
+			$this->assertSame( 2, $asked, 'One product written, the second refused: asked per product.' );
+		}
+
+		$written = array_filter(
+			$ids,
+			function ( int $id ): bool {
+				return null !== $this->links()->find( $this->account_id, $id );
+			}
+		);
+		$this->assertCount( 1, $written, 'No link row was created for the products after the loss.' );
+		$this->assertSame( [], $this->scheduler->of( 'woodev_fake_seller_export_batch' ), 'And no batch was scheduled.' );
+	}
+
+	public function test_an_export_that_loses_ownership_before_its_rollback_writes_nothing_more(): void {
+		$product = $this->add_product( [ 'sku' => 'R-1' ] );
+		$id      = (int) $product->get_id();
+		$asked   = 0;
+
+		$this->scheduler->zero_for['woodev_fake_seller_export_batch'] = true; // Action Scheduler refuses the batch: a rollback follows.
+
+		try {
+			// Product loop: yes; before scheduling: yes; before the rollback write: no.
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::EXPORT, [ $id ], [ $id => $id ], null, $this->owns_for( 2, $asked ) );
+			$this->fail( 'The loss must stop the rollback.' );
+		} catch ( Bulk_Run_Lost $e ) {
+			$this->assertSame( 3, $asked );
+		}
+
+		$this->assertSame( Link_Record::STATE_QUEUED, $this->link_of( $id )->card_state(), 'The new owner re-plans the part; this tick rolled nothing back.' );
+	}
+
+	public function test_a_switch_on_interrupted_after_the_flags_changed_is_finished_by_its_retry(): void {
+		$product = $this->stock_product( 'S-1', 9101, 5, [ 'sync_stock' => false ] );
+		$asked   = 0;
+
+		try {
+			// The part asks once before the flag write (yes) and once before the first send (no): the connection is gone in between.
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::SYNC_STOCK_ON, [ $product ], [ $product => $product ], null, $this->owns_for( 1, $asked ) );
+			$this->fail( 'The loss must stop the part.' );
+		} catch ( Bulk_Run_Lost $e ) {
+			$this->assertTrue( $this->link_of( $product )->sync_stock(), 'The flag is on.' );
+			$this->assertNull( $this->stock_row( $product ), 'And the first send is missing.' );
+		}
+
+		// The part was not saved, so the next tick plans it again: the card is «already so», and still gets its first send.
+		$retry = $this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::SYNC_STOCK_ON, [ $product ], [ $product => $product ], null, static function (): bool {
+			return true;
+		} );
+
+		$this->assertNotNull( $this->stock_row( $product ), 'The retry recorded the first send.' );
+		$this->assertSame( 0, $retry['accepted'] );
+		$this->assertSame( 1, $retry['skipped'], 'It is still counted as already configured.' );
+	}
+
+	public function test_a_price_switch_on_interrupted_after_the_flags_changed_is_finished_by_its_retry(): void {
+		$product = $this->add_product( [ 'price' => '1500' ] );
+		$this->add_link( $product, Link_Record::STATE_CREATED, [ 'sync_price' => 0 ] );
+		$id    = (int) $product->get_id();
+		$asked = 0;
+
+		try {
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::SYNC_PRICE_ON, [ $id ], [ $id => $id ], null, $this->owns_for( 1, $asked ) );
+			$this->fail( 'The loss must stop the part.' );
+		} catch ( Bulk_Run_Lost $e ) {
+			$this->assertTrue( $this->link_of( $id )->sync_price() );
+			$this->assertSame( 0, $this->price_intents_of( $id ) );
+		}
+
+		$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::SYNC_PRICE_ON, [ $id ], [ $id => $id ], null, static function (): bool {
+			return true;
+		} );
+
+		$this->assertSame( 1, $this->price_intents_of( $id ), 'The retry recorded the price intent.' );
+	}
+
+	/**
+	 * @param int $product_id Product.
+	 * @return int Price rows of the sync state of the product's link.
+	 */
+	private function price_intents_of( int $product_id ): int {
+		return (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . Sqlite_Tables::table( 'sync_state' ) . ' WHERE kind = \'price\' AND link_id = ' . (int) $this->link_of( $product_id )->link_id() );
+	}
+
+	public function test_a_first_send_that_cannot_be_stored_is_never_reported_as_done_and_the_repeat_records_it(): void {
+		$product = $this->stock_product( 'S-1', 9102, 5, [ 'sync_stock' => false ] );
+		$owns    = static function (): bool {
+			return true;
+		};
+
+		$this->db->refuse_inserts = true;
+
+		try {
+			$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::SYNC_STOCK_ON, [ $product ], [ $product => $product ], null, $owns );
+			$this->fail( 'A refused intent must not end as accepted.' );
+		} catch ( Action_State_Exception $e ) {
+			$this->assertStringContainsString( 'первую отправку записать не удалось', $e->getMessage() );
+		}
+
+		$this->db->refuse_inserts = false;
+		$this->assertNull( $this->stock_row( $product ) );
+
+		$this->bulk()->run_part( $this->account_now(), Site_Products_Bulk::SYNC_STOCK_ON, [ $product ], [ $product => $product ], null, $owns );
+
+		$this->assertNotNull( $this->stock_row( $product ), 'Repeating the action finishes what was missing.' );
 	}
 
 	public function test_a_busy_detach_asks_for_the_same_part_again_instead_of_reporting_a_failure(): void {

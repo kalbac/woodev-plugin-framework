@@ -85,12 +85,16 @@ final class Link_Detacher {
 	 *
 	 * @since 2.1.0
 	 *
+	 * @since 2.1.8 `$guard`.
+	 *
 	 * @param int           $account_id Account id.
 	 * @param Link_Record[] $rows       Rows to detach (offer rows with a card).
+	 * @param callable|null $guard      `function (): void`, called before every row is detached; it throws to stop. A bulk run passes the check
+	 *                                  that its tick still owns the run. The claim is released either way.
 	 * @return array{detached:int,kept:int,busy:bool} `busy` is true when the account's sender holds the claim: nothing was changed.
 	 * @throws \RuntimeException When the database refuses a write.
 	 */
-	public function detach( int $account_id, array $rows ): array {
+	public function detach( int $account_id, array $rows, ?callable $guard = null ): array {
 		$token = $this->accounts->claim( $account_id, self::CLAIM_TTL );
 
 		if ( null === $token ) {
@@ -106,6 +110,10 @@ final class Link_Detacher {
 
 		try {
 			foreach ( $rows as $row ) {
+				if ( null !== $guard ) {
+					call_user_func( $guard );
+				}
+
 				$link_id = (int) $row->link_id();
 
 				if ( ! $this->links->detach( $account_id, $link_id ) ) {
