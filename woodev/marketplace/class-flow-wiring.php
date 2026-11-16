@@ -28,6 +28,7 @@ use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Flows\Deleted_Product_Releaser;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Import_Category;
@@ -35,6 +36,7 @@ use Woodev\Framework\Marketplace\Flows\Label_Download;
 use Woodev\Framework\Marketplace\Flows\Legacy_Order_Lines;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
+use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
@@ -290,6 +292,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->stock_and_price( $sync_state_store );
 			$this->export( $sync_state_store );
 			$this->links_and_catalog();
+			$this->release_deleted_products();
 			$this->import();
 			$this->postings();
 			$this->labels();
@@ -432,6 +435,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			) )->register();
 
 			add_action( 'action_scheduler_init', [ $scheduler, 'ensure_sweep' ] );
+		}
+
+		/**
+		 * A product deleted for good lets go of its cards: its link rows go, as «Снять связь» ends them, so the card can be imported or linked again.
+		 *
+		 * @return void
+		 */
+		private function release_deleted_products(): void {
+			$queue  = new Sync_State_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'accounts' ), $this->adapter->stock_cadence() );
+			$ledger = new Wpdb_Task_Ledger( $this->db, $this->table( 'tasks' ), $this->table( 'task_items' ) );
+
+			( new Deleted_Product_Releaser( new Link_Detacher( $this->links, $queue, $ledger, $this->accounts ), $this->log_error ) )->register();
 		}
 
 		/**
