@@ -73,6 +73,7 @@ final class FlowWiringTest extends TestCase {
 	 */
 	private const ACTIONS = [
 		'woodev_%s_flush_sync'                    => 1,
+		'woodev_%s_reconcile_stock'               => 1,
 		'woodev_%s_recompute_prices'              => 1,
 		'woodev_%s_refresh_prices'                => 1,
 		'woodev_%s_export_batch'                  => 1,
@@ -199,8 +200,8 @@ final class FlowWiringTest extends TestCase {
 			Actions\expectAdded( $name )->times( $times );
 		}
 
-		// The schedule checks: stock and price sender, posting poll, label prune, export sweep, weekly catalogue refresh.
-		Actions\expectAdded( 'action_scheduler_init' )->times( 5 );
+		// The schedule checks: stock and price sender, daily stock reconcile, posting poll, label prune, export sweep, weekly catalogue refresh.
+		Actions\expectAdded( 'action_scheduler_init' )->times( 6 );
 		// A changed price rule is named after the adapter, not the plugin.
 		Actions\expectAdded( 'woodev_fake_wildberries_profile_price_changed' )->once();
 		// The settings screen fires this one after saving an account's markup or price direction.

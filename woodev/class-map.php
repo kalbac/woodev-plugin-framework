@@ -304,6 +304,8 @@ return [
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Recompute_Runner' => 'woodev/marketplace/jobs/class-price-recompute-runner.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Refresh_Runner' => 'woodev/marketplace/jobs/class-price-refresh-runner.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Scheduler' => 'woodev/marketplace/jobs/class-price-scheduler.php',
+	'Woodev\\Framework\\Marketplace\\Jobs\\Reconcile_Stock_Runner' => 'woodev/marketplace/jobs/class-reconcile-stock-runner.php',
+	'Woodev\\Framework\\Marketplace\\Jobs\\Reconcile_Stock_Scheduler' => 'woodev/marketplace/jobs/class-reconcile-stock-scheduler.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Refresh_Catalog_Runner' => 'woodev/marketplace/jobs/class-refresh-catalog-runner.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Refresh_Catalog_Scheduler' => 'woodev/marketplace/jobs/class-refresh-catalog-scheduler.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Remote_Error' => 'woodev/marketplace/jobs/class-remote-error.php',
