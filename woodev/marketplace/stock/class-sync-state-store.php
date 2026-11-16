@@ -78,17 +78,23 @@ final class Sync_State_Store {
 	 *
 	 * @since 2.0.29
 	 *
-	 * @param int                 $account_id   Account id.
-	 * @param int                 $link_id      Link id.
-	 * @param int                 $warehouse_id Warehouse (0 for price).
-	 * @param string              $kind         `KIND_STOCK` or `KIND_PRICE`.
-	 * @param array<string,mixed> $payload      Complete payload.
+	 * @param int                      $account_id   Account id.
+	 * @param int                      $link_id      Link id.
+	 * @param int                      $warehouse_id Warehouse (0 for price).
+	 * @param string                   $kind         `KIND_STOCK` or `KIND_PRICE`.
+	 * @param array<string,mixed>      $payload      Complete payload.
+	 * @param array<string,mixed>|null $source  What the payload was worked out from (2.1.10): for a price, the shop's own price fields, which the
+	 *                                          one-time price pull puts back exactly if the merchant saved them while it ran. It is stored beside
+	 *                                          the payload and never inside it, because the sender compares payloads as a whole. A payload
+	 *                                          written again with a different source is a new revision (nothing is sent: the payloads are
+	 *                                          equal); null leaves the stored source alone when the payload is the same and clears it otherwise.
 	 * @return bool True when the row now holds the payload as pending; false when another writer won the revision (nothing was
 	 *              stored: the caller reloads its data and tries again, or reports the intent as not stored).
 	 * @throws \RuntimeException When the database refuses the write.
 	 */
-	public function record( int $account_id, int $link_id, int $warehouse_id, string $kind, array $payload ): bool {
-		$json = (string) json_encode( $payload ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
+	public function record( int $account_id, int $link_id, int $warehouse_id, string $kind, array $payload, ?array $source = null ): bool {
+		$json        = (string) json_encode( $payload ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
+		$source_json = null === $source ? null : (string) json_encode( $source ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- As above.
 		$key  = [
 			'account_id'   => $account_id,
 			'link_id'      => $link_id,
@@ -97,7 +103,7 @@ final class Sync_State_Store {
 		];
 		$row  = $this->pending( $key );
 
-		if ( null !== $row && $json === $row['pending_payload'] ) {
+		if ( null !== $row && $json === $row['pending_payload'] && ( null === $source_json || $source_json === $row['pending_source'] ) ) {
 			return true;
 		}
 
@@ -108,6 +114,7 @@ final class Sync_State_Store {
 				$this->table,
 				$key + [
 					'pending_payload' => $json,
+					'pending_source'  => $source_json,
 					'pending_rev'     => $rev,
 					'pending_since'   => $now,
 				]
@@ -116,6 +123,7 @@ final class Sync_State_Store {
 				$this->table,
 				[
 					'pending_payload' => $json,
+					'pending_source'  => $source_json,
 					'pending_rev'     => $rev,
 					'pending_since'   => $now,
 					'attempts'        => 0, // A new value is a new try, also for a pair that had failed (spec 4.1 d).
@@ -335,7 +343,7 @@ final class Sync_State_Store {
 	private function pending( array $key ): ?array {
 		$row = $this->db->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
 			$this->db->prepare(
-				'SELECT pending_payload, pending_rev FROM %i WHERE account_id = %d AND link_id = %d AND warehouse_id = %d AND kind = %s',
+				'SELECT pending_payload, pending_source, pending_rev FROM %i WHERE account_id = %d AND link_id = %d AND warehouse_id = %d AND kind = %s',
 				$this->table,
 				$key['account_id'],
 				$key['link_id'],

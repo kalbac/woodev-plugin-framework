@@ -335,9 +335,10 @@ final class Price_Refresher {
 
 	/**
 	 * Puts the shop price of the newest queued intent back into the product. The merchant saved it after the pull read the queue, so
-	 * the pull's write must not keep it: the intent's marketplace price is turned back into the shop price the way the pull does it for
-	 * a marketplace price. A save that lands while this runs is followed once more; after {@see self::RESTORE_ROUNDS} the article is
-	 * left with its newest intent untouched, to be checked by hand.
+	 * the pull's write must not keep it. The price fields recorded with that intent ({@see \Woodev\Framework\Marketplace\Price\Price_Intent::source()})
+	 * are written back exactly as the merchant saved them; an intent recorded without them (a card's creation seeds one) cannot be restored.
+	 * A save that lands while this runs is followed once more; after {@see self::RESTORE_ROUNDS} the article is left with its newest
+	 * intent untouched, to be checked by hand.
 	 *
 	 * @param Account     $account Account.
 	 * @param Link_Record $link    Link.
@@ -356,18 +357,14 @@ final class Price_Refresher {
 				return false;
 			}
 
-			try {
-				$refusal = null;
-				$shop    = $this->writer->restore( $account, $product, $intent->pair(), $link->price_rule_override(), $refusal );
-			} catch ( \InvalidArgumentException $e ) {
+			// Not inferred from the marketplace payload: a rule that rounds cannot be undone (the merchant's 201 went out as 200).
+			$source = $intent->source();
+
+			if ( null === $source ) {
 				return false;
 			}
 
-			if ( null === $shop ) {
-				return false;
-			}
-
-			$this->writer->write( $account->adapter_id(), $product, $shop );
+			$this->writer->put_back( $account->adapter_id(), $product, $source );
 
 			$newest = $this->queue->pending_of( $account->id(), (int) $link->link_id() );
 

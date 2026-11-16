@@ -171,7 +171,7 @@ final class Price_Sync_Queue {
 	public function pending_of( int $account_id, int $link_id ): ?Price_Intent {
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own tables, read fresh.
 			$this->db->prepare(
-				'SELECT pending_rev, pending_payload FROM %i WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND pending_payload IS NOT NULL LIMIT 1',
+				'SELECT pending_rev, pending_payload, pending_source FROM %i WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND pending_payload IS NOT NULL LIMIT 1',
 				$this->table,
 				$account_id,
 				$link_id,
@@ -183,7 +183,9 @@ final class Price_Sync_Queue {
 		$row     = is_array( $rows ) && [] !== $rows ? $rows[0] : null;
 		$payload = null === $row ? null : json_decode( (string) $row['pending_payload'], true );
 
-		return is_array( $payload ) ? new Price_Intent( $link_id, (int) $row['pending_rev'], $payload ) : null;
+		$source = null === $row || null === $row['pending_source'] ? null : json_decode( (string) $row['pending_source'], true );
+
+		return is_array( $payload ) ? new Price_Intent( $link_id, (int) $row['pending_rev'], $payload, 0, is_array( $source ) ? $source : null ) : null;
 	}
 
 	/**
@@ -208,23 +210,27 @@ final class Price_Sync_Queue {
 	 */
 	public function settle_pulled( int $account_id, int $link_id, int $revision, array $payload, string $token ): bool {
 		$json    = (string) json_encode( $payload ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function; the store encodes the same way.
-		$settled = 1 === $this->write(
-			'UPDATE %i SET pending_payload = %s, sent_payload = %s, sent_rev = pending_rev, in_flight_rev = NULL, in_flight_payload = NULL,'
+		$changed = $this->write(
+			'UPDATE %i SET pending_payload = %s, pending_source = NULL, sent_payload = %s, sent_rev = pending_rev, in_flight_rev = NULL, in_flight_payload = NULL,'
 			. ' attempts = 0, next_attempt_at = NULL, last_error = NULL'
 			. ' WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND pending_rev = %d',
 			[ $this->table, $json, $json, $account_id, $link_id, self::KIND, $revision ],
 			$token
 		);
 
-		if ( $settled ) {
-			$this->write(
-				'UPDATE %i SET last_pushed_price = %s, last_pushed_price_at = %s WHERE link_id = %d',
-				[ $this->links_table, (string) ( $payload['price'] ?? '0' ), $this->format( $this->now() ), $link_id ],
-				$token
-			);
+		// MySQL and MariaDB count changed rows, not matched ones: a pair that an earlier pull or a send already left exactly settled
+		// changes none. That is a settle that stands, but only when the row is read back as settled under the claim.
+		if ( 0 === $changed && ! $this->holds_settled( $account_id, $link_id, $revision, $json, $token ) ) {
+			return false;
 		}
 
-		return $settled;
+		$this->write(
+			'UPDATE %i SET last_pushed_price = %s, last_pushed_price_at = %s WHERE link_id = %d',
+			[ $this->links_table, (string) ( $payload['price'] ?? '0' ), $this->format( $this->now() ), $link_id ],
+			$token
+		);
+
+		return true;
 	}
 
 	/**
@@ -377,6 +383,42 @@ final class Price_Sync_Queue {
 		}
 
 		return (int) $changed;
+	}
+
+	/**
+	 * Reads back whether a pair is exactly the state {@see self::settle_pulled()} leaves, under the held claim: the proof that a settle
+	 * which changed no row had nothing to change. Every column the settle writes is compared, so a pair that merely shares the
+	 * revision (a retry state, an in-flight snapshot, another payload) is not taken for settled.
+	 *
+	 * @param int    $account_id Account id.
+	 * @param int    $link_id    Link id.
+	 * @param int    $revision   The pending revision the pull read.
+	 * @param string $json       The settled payload as stored.
+	 * @param string $token      Account claim token.
+	 * @return bool
+	 */
+	private function holds_settled( int $account_id, int $link_id, int $revision, string $json, string $token ): bool {
+		$found = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own tables.
+			$this->db->prepare(
+				'SELECT 1 FROM %i s WHERE s.account_id = %d AND s.link_id = %d AND s.warehouse_id = 0 AND s.kind = %s'
+				. ' AND s.pending_rev = %d AND s.sent_rev = %d AND s.pending_payload = %s AND s.sent_payload = %s AND s.pending_source IS NULL'
+				. ' AND s.in_flight_rev IS NULL AND s.in_flight_payload IS NULL AND s.attempts = 0 AND s.next_attempt_at IS NULL AND s.last_error IS NULL'
+				. ' AND EXISTS (SELECT 1 FROM %i AS claim_owner WHERE claim_owner.account_id = s.account_id AND claim_owner.claim_token = %s AND claim_owner.claim_until > %s)',
+				$this->table,
+				$account_id,
+				$link_id,
+				self::KIND,
+				$revision,
+				$revision,
+				$json,
+				$json,
+				$this->accounts_table,
+				$token,
+				$this->format( $this->now() )
+			)
+		);
+
+		return null !== $found && false !== $found;
 	}
 
 	/**

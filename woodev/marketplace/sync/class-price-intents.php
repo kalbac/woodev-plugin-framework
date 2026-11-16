@@ -210,7 +210,9 @@ final class Price_Intents {
 			return self::NO_PRICE;
 		}
 
-		$this->store->record( $account->id(), (int) $link->link_id(), 0, Sync_State_Store::KIND_PRICE, $this->contexts->payload( $pair ) );
+		// The shop's own price fields go beside the payload: the one-time price pull puts them back exactly when it overwrote a price the
+		// merchant saved meanwhile, which the marketplace payload cannot give back once the rule has rounded it.
+		$this->store->record( $account->id(), (int) $link->link_id(), 0, Sync_State_Store::KIND_PRICE, $this->contexts->payload( $pair ), Shop_Price_Writer::snapshot( $product ) );
 
 		return self::RECORDED;
 	}

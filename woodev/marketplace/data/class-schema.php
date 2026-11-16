@@ -358,6 +358,7 @@ final class Schema {
 			pending_payload longtext NULL,
 			pending_rev int(10) unsigned NOT NULL DEFAULT 0,
 			pending_since datetime NULL DEFAULT NULL,
+			pending_source longtext NULL,
 			in_flight_rev int(10) unsigned NULL DEFAULT NULL,
 			in_flight_payload longtext NULL,
 			sent_payload longtext NULL,

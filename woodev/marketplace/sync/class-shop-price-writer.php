@@ -151,6 +151,78 @@ final class Shop_Price_Writer {
 	}
 
 	/**
+	 * Reads the price fields a product holds as the merchant saved them: the regular and sale price and the sale schedule. This is what a
+	 * price intent is worked out from, kept beside the intent ({@see Price_Intents}) so that {@see self::put_back()} can restore it
+	 * exactly; the marketplace price cannot be turned back into it when the rule rounds.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param \WC_Product $product Product or variation.
+	 * @return array{regular:string,sale:string,from:int|null,to:int|null}
+	 */
+	public static function snapshot( \WC_Product $product ): array {
+		return [
+			'regular' => (string) $product->get_regular_price(),
+			'sale'    => (string) $product->get_sale_price(),
+			'from'    => self::moment( $product->get_date_on_sale_from() ),
+			'to'      => self::moment( $product->get_date_on_sale_to() ),
+		];
+	}
+
+	/**
+	 * Writes a {@see self::snapshot()} back into the product, under {@see Price_Refresh_Guard} of the marketplace the intent belongs to
+	 * (the save must not record an intent of its own). A product that already holds those fields is not saved.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param string              $marketplace_id The adapter's id.
+	 * @param \WC_Product         $product        Product or variation.
+	 * @param array<string,mixed> $source         The snapshot, as stored with the intent.
+	 * @return bool True when the product was saved.
+	 */
+	public function put_back( string $marketplace_id, \WC_Product $product, array $source ): bool {
+		$wanted = [
+			'regular' => (string) ( $source['regular'] ?? '' ),
+			'sale'    => (string) ( $source['sale'] ?? '' ),
+			'from'    => isset( $source['from'] ) ? (int) $source['from'] : null,
+			'to'      => isset( $source['to'] ) ? (int) $source['to'] : null,
+		];
+
+		if ( self::snapshot( $product ) === $wanted ) {
+			return false;
+		}
+
+		Price_Refresh_Guard::run(
+			$marketplace_id,
+			static function () use ( $product, $wanted ): void {
+				$product->set_regular_price( $wanted['regular'] );
+				$product->set_sale_price( $wanted['sale'] );
+				$product->set_date_on_sale_from( null === $wanted['from'] ? '' : $wanted['from'] );
+				$product->set_date_on_sale_to( null === $wanted['to'] ? '' : $wanted['to'] );
+				$product->save();
+			}
+		);
+
+		return true;
+	}
+
+	/**
+	 * A date WooCommerce hands out (a `WC_DateTime`, or nothing) as a Unix time.
+	 *
+	 * @param mixed $date Date.
+	 * @return int|null
+	 */
+	private static function moment( $date ): ?int {
+		if ( is_object( $date ) && method_exists( $date, 'getTimestamp' ) ) {
+			return (int) $date->getTimestamp();
+		}
+
+		$time = is_string( $date ) && '' !== $date ? strtotime( $date ) : false;
+
+		return false === $time ? null : $time;
+	}
+
+	/**
 	 * Compares a stored shop price with a computed one as amounts; an empty price equals only an empty price.
 	 *
 	 * @param string $stored   Price as WooCommerce holds it.

@@ -24,6 +24,7 @@ use Woodev\Framework\Marketplace\Sync\Price_Refresher;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Price_Context;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Price_Reader;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Policy_Price_Context;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
 
 /**
@@ -41,9 +42,9 @@ final class PricePullTest extends Sync_Test_Case {
 	private const REFRESH = 'woodev_fake_seller_refresh_prices';
 
 	/**
-	 * The export side.
+	 * The export side: the identity rule, or the production policy for a test that needs a rule that rounds.
 	 *
-	 * @var Fake_Price_Context
+	 * @var Fake_Price_Context|Policy_Price_Context
 	 */
 	private $contexts;
 
@@ -76,6 +77,13 @@ final class PricePullTest extends Sync_Test_Case {
 	private $before_write = [];
 
 	/**
+	 * Whether a scripted merchant save is running.
+	 *
+	 * @var bool
+	 */
+	private $in_hook = false;
+
+	/**
 	 * Builds the doubles.
 	 *
 	 * @return void
@@ -88,6 +96,7 @@ final class PricePullTest extends Sync_Test_Case {
 		$this->shop         = [];
 		$this->on_save      = null;
 		$this->before_write = [];
+		$this->in_hook      = false;
 	}
 
 	/**
@@ -321,6 +330,160 @@ final class PricePullTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * The production rounding `to_10`: the merchant saves 201, which goes out as 200, after the pull read the queue and before it wrote
+	 * the shop price. The restore puts back the 201 the merchant saved — the exact shop price recorded with the intent — and not the
+	 * 200 that inverting the outbound price would give; the pending price stays 200.
+	 *
+	 * @return void
+	 */
+	public function test_a_rounding_rule_keeps_the_exact_shop_price_the_merchant_saved(): void {
+		$this->contexts            = new Policy_Price_Context();
+		$product                   = $this->queued( 'a', '150.00' );
+		$this->reader->prices['a'] = $this->pair( '100.00', null );
+		$this->before_write[]      = function () use ( $product ): void {
+			$this->merchant_saves( $product, '201.00' );
+		};
+
+		$result = $this->pull( [ 'a' ] );
+		$due    = $this->price_queue()->due( $this->account_id, 10 );
+
+		$this->assertSame( '201.00', $this->shop[ $product ]['regular'], 'The merchant\'s 201 is back, not the rounded 200.' );
+		$this->assertSame( '200.00', $this->price_row( $product )['pending_payload']['price'], 'The pending price stays the rounded 200.' );
+		$this->assertSame( [ true, true ], $this->shop[ $product ]['guarded'] );
+		$this->assertSame( [ '200.00' ], array_map( static fn( $intent ) => $intent->payload()['price'], $due ) );
+		$this->assertSame( 'Цену товара изменили во время загрузки — осталась новая цена с сайта.', $result->skipped()['a'] );
+	}
+
+	/**
+	 * An intent that was recorded without the shop price (the card's creation seeds one) is not guessed from the outbound price: the
+	 * product keeps what the pull wrote and the article is left with the line to check.
+	 *
+	 * @return void
+	 */
+	public function test_an_intent_without_a_recorded_shop_price_is_not_guessed(): void {
+		$product                   = $this->queued( 'a', '150.00' );
+		$this->reader->prices['a'] = $this->pair( '100.00', null );
+		$this->before_write[]      = function () use ( $product ): void {
+			$this->want_price( $product, [ 'price' => '200.00' ] );
+		};
+
+		$result = $this->pull( [ 'a' ] );
+
+		$this->assertSame( '100.00', $this->shop[ $product ]['regular'] );
+		$this->assertSame( 'Цена менялась во время загрузки — проверьте товар.', $result->skipped()['a'] );
+		$this->assertSame( '200.00', $this->price_row( $product )['pending_payload']['price'] );
+	}
+
+	/**
+	 * A price saved again that goes out as the same payload (201, then 202, both 200) is a new revision, so a pull in progress sees the
+	 * edit; nothing is sent, because the sender compares the payloads and they are equal.
+	 *
+	 * @return void
+	 */
+	public function test_a_new_shop_price_with_the_same_outbound_price_is_a_revision_but_sends_nothing(): void {
+		$this->contexts = new Policy_Price_Context();
+		$product        = $this->priced( 'a', '201.00' );
+		$this->shop[ $product ]['regular'] = '201.00';
+
+		$this->merchant_saves( $product, '201.00' );
+		$token = (string) $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL );
+		$due   = $this->price_queue()->due( $this->account_id, 10 );
+
+		$this->assertTrue( $this->price_queue()->begin( $this->account_id, $due[0], $token ) );
+		$this->assertTrue( $this->price_queue()->accept( $this->account_id, $due[0], $token ) );
+		$this->accounts()->release_claim( $this->account_id, $token );
+
+		$this->merchant_saves( $product, '202.00' );
+
+		$this->assertSame( 2, $this->price_queue()->pending_of( $this->account_id, $this->link_id( $product ) )->revision() );
+		$this->assertSame( [], $this->price_queue()->due( $this->account_id, 10 ), 'The payloads are equal: nothing is sent.' );
+		$this->assertSame( '202.00', $this->price_queue()->pending_of( $this->account_id, $this->link_id( $product ) )->source()['regular'] );
+	}
+
+	/**
+	 * MySQL and MariaDB report changed rows, not matched ones: settling a pair an earlier pull already left settled changes none. That
+	 * is a settle that stands — read back as settled under the live claim — not a lost claim; a pair of another revision, or a claim that
+	 * is not held, is still refused.
+	 *
+	 * @return void
+	 */
+	public function test_an_already_settled_pair_stands_when_the_database_counts_changed_rows(): void {
+		$product                   = $this->queued( 'a', '150.00' );
+		$this->reader->prices['a'] = $this->pair( '100.00', null );
+		$this->pull( [ 'a' ] );
+
+		$row     = $this->price_row( $product );
+		$link_id = $this->link_id( $product );
+		$token   = (string) $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL );
+
+		$this->db->count_changed_rows = true;
+
+		$this->assertTrue( $this->price_queue()->settle_pulled( $this->account_id, $link_id, 1, $row['pending_payload'], $token ), 'An identical second settle stands.' );
+		$this->assertFalse( $this->price_queue()->settle_pulled( $this->account_id, $link_id, 1, $row['pending_payload'], 'not-the-holder' ), 'Without the claim it does not.' );
+		$this->assertFalse( $this->price_queue()->settle_pulled( $this->account_id, $link_id, 2, $row['pending_payload'], $token ), 'Another revision does not.' );
+
+		$this->db->query( 'UPDATE ' . Sqlite_Tables::table( 'sync_state' ) . ' SET attempts = 2 WHERE link_id = ' . $link_id );
+
+		$this->assertTrue( $this->price_queue()->settle_pulled( $this->account_id, $link_id, 1, $row['pending_payload'], $token ), 'A retry state is cleared by the settle itself.' );
+		$this->assertSame( 0, (int) $this->price_row( $product )['attempts'] );
+		$this->accounts()->release_claim( $this->account_id, $token );
+	}
+
+	/**
+	 * A batch whose first article is already settled and whose second needs an update loads both: the first is not taken for a lost
+	 * claim (which would requeue the whole batch for ever), the second is written and settled.
+	 *
+	 * @return void
+	 */
+	public function test_a_batch_with_an_already_settled_first_article_still_loads_the_second(): void {
+		$first  = $this->queued( 'a', '150.00' );
+		$second = $this->queued( 'b', '160.00' );
+
+		$this->reader->prices['a'] = $this->pair( '100.00', null );
+		$this->pull( [ 'a' ] );
+
+		$this->reader->prices['b']    = $this->pair( '110.00', null );
+		$this->db->count_changed_rows = true;
+
+		$result = $this->pull( [ 'a', 'b' ] );
+
+		$this->assertSame( [ 'a' ], $result->unchanged() );
+		$this->assertSame( [ 'b' ], $result->updated() );
+		$this->assertSame( '110.00', $this->shop[ $second ]['regular'] );
+		$this->assertSame( [], $this->price_queue()->due( $this->account_id, 10 ) );
+		$this->assertSame( '100.00', $this->shop[ $first ]['regular'] );
+	}
+
+	/**
+	 * What the job leaves behind: every article it did not load, with its own sentence, in the log. Article a cannot be inverted;
+	 * article b, second in the batch, runs out of restore rounds — its sentence must survive next to a's.
+	 *
+	 * @return void
+	 */
+	public function test_the_job_logs_every_skipped_article_with_its_own_sentence(): void {
+		$first  = $this->queued( 'a', '150.00' );
+		$second = $this->queued( 'b', '150.00' );
+		$this->db->query( 'UPDATE ' . Sqlite_Tables::table( 'links' ) . " SET price_rule_override = '{\"absolute\":\"999\"}' WHERE link_id = " . $this->link_id( $first ) );
+		$this->reader->prices['a'] = $this->pair( '100.00', null );
+		$this->reader->prices['b'] = $this->pair( '100.00', null );
+
+		foreach ( [ '200.00', '300.00', '400.00' ] as $edit ) {
+			$this->before_write[] = function () use ( $second, $edit ): void {
+				$this->merchant_saves( $second, $edit );
+			};
+		}
+
+		$this->runner()->run( $this->account_id, [ 'a', 'b' ], 0, Price_Scheduler::PULL_MODE );
+
+		$lines = array_values( preg_grep( '/refresh_prices \(pull\)/', $this->log ) );
+
+		$this->assertCount( 2, $lines );
+		$this->assertStringContainsString( 'article a not loaded:', $lines[0] );
+		$this->assertStringContainsString( 'обратный расчёт невозможен', $lines[0] );
+		$this->assertStringContainsString( 'article b not loaded: Цена менялась во время загрузки — проверьте товар.', $lines[1] );
+	}
+
+	/**
 	 * A pull whose claim was taken over stops instead of undoing itself: the pulled price stays in the product, the queue is untouched
 	 * and the next try, under a claim it holds, settles it.
 	 *
@@ -504,8 +667,11 @@ final class PricePullTest extends Sync_Test_Case {
 		foreach ( [ 'regular' => 'regular_price', 'sale' => 'sale_price', 'from' => 'date_on_sale_from', 'to' => 'date_on_sale_to' ] as $key => $prop ) {
 			$product->shouldReceive( 'get_' . $prop )->andReturnUsing(
 				function () use ( $id, $key ) {
-					if ( 'regular' === $key && [] !== $this->before_write ) {
+					if ( 'regular' === $key && [] !== $this->before_write && ! $this->in_hook ) {
+						// The merchant's save reads the product too: it must not trigger the next scripted save.
+						$this->in_hook = true;
 						call_user_func( array_shift( $this->before_write ) );
+						$this->in_hook = false;
 					}
 
 					return $this->shop[ $id ][ $key ];
@@ -517,6 +683,12 @@ final class PricePullTest extends Sync_Test_Case {
 				}
 			);
 		}
+
+		$product->shouldReceive( 'get_price' )->andReturnUsing(
+			function () use ( $id ): string {
+				return '' !== $this->shop[ $id ]['sale'] ? $this->shop[ $id ]['sale'] : $this->shop[ $id ]['regular'];
+			}
+		);
 
 		$product->shouldReceive( 'save' )->andReturnUsing(
 			function () use ( $id, $product ): int {

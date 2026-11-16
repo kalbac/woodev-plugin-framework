@@ -360,6 +360,9 @@ final class Site_Products_Definition {
 			Site_Products_Bulk::RESET         => __( 'Сбросить состояние', 'woodev-plugin-framework' ),
 			Site_Products_Bulk::RESET_PRICE   => __( 'Сбросить свою цену', 'woodev-plugin-framework' ),
 			Site_Products_Bulk::PULL_PRICES   => __( 'Загрузить цены', 'woodev-plugin-framework' ),
+			// The run of «Импортировать» on the «Карточки на маркетплейсе» table shares the account's one run slot, so a refusal on this
+			// table names it too (an action of the other table, which this definition does not declare).
+			'import_selected'                 => __( 'Импортировать', 'woodev-plugin-framework' ),
 		];
 
 		return $labels[ $action ] ?? $action;

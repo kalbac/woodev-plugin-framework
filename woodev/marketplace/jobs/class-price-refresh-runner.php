@@ -172,10 +172,11 @@ final class Price_Refresh_Runner {
 					$this->pulls->hold( $account->id(), $fence );
 				};
 				$result = $this->refresher->pull_once( $account, $offer_ids, $fence, $extend );
-				$left   = $result->skipped();
 
-				if ( [] !== $left ) {
-					$this->log( 'refresh_prices (pull): account ' . $account->id() . ': ' . count( $left ) . ' of ' . count( $offer_ids ) . ' articles left as they were (first: ' . reset( $left ) . ')' );
+				// One line per article, with its own sentence: the merchant has to find the product that needs a look. A batch holds at
+				// most REFRESH_BATCH articles, so this is bounded.
+				foreach ( $result->skipped() as $offer_id => $reason ) {
+					$this->log( 'refresh_prices (pull): account ' . $account->id() . ': article ' . $offer_id . ' not loaded: ' . $reason );
 				}
 			}
 		);
