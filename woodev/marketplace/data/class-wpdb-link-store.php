@@ -1059,6 +1059,89 @@ final class Wpdb_Link_Store implements Link_Store {
 	}
 
 	/**
+	 * Deletes the rows of a product that is gone for good: its own rows in every account and, for a variable product, the rows of its
+	 * variations (and the `parent` row of the group), together with their remote identifiers. The marketplace's card is untouched, so
+	 * it can be imported or linked again.
+	 *
+	 * Two kinds of rows stay: one an export is submitting right now (its request carries the article, as for {@see self::detach()}),
+	 * and a `created` card, whose archive intent the sender is still to send and needs the row for; the sender deletes that row
+	 * when the archive settles ({@see self::delete_link()}).
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int $wc_product_id Product or variation id.
+	 * @return array<int,int> Account id by link id of every deleted row; empty when the product has no rows (one query).
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function delete_product_rows( int $wc_product_id ): array {
+		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table, read fresh.
+			$this->db->prepare(
+				'SELECT link_id, account_id FROM %i WHERE (wc_product_id = %d OR wc_parent_id = %d) AND (kind = %s OR card_state NOT IN (%s, %s))',
+				$this->table,
+				$wc_product_id,
+				$wc_product_id,
+				Link_Record::KIND_PARENT,
+				Link_Record::STATE_SUBMITTED,
+				Link_Record::STATE_CREATED
+			),
+			'ARRAY_A'
+		);
+
+		if ( ! is_array( $rows ) || [] === $rows ) {
+			return [];
+		}
+
+		$released = [];
+
+		foreach ( $rows as $row ) {
+			$released[ (int) $row['link_id'] ] = (int) $row['account_id'];
+		}
+
+		$this->delete_rows( array_keys( $released ) );
+
+		return $released;
+	}
+
+	/**
+	 * Deletes one link row with its remote identifiers, whatever its state. For the sender that has just settled the archive of a
+	 * card whose product is gone ({@see \Woodev\Framework\Marketplace\Flows\Link_Detacher::release_link()}).
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int $link_id Link id.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function delete_link( int $link_id ): void {
+		$this->delete_rows( [ $link_id ] );
+	}
+
+	/**
+	 * Deletes link rows and their remote identifiers as one unit.
+	 *
+	 * @param int[] $link_ids Link ids.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	private function delete_rows( array $link_ids ): void {
+		$in = implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) );
+
+		$this->atomically(
+			function () use ( $link_ids, $in ): void {
+				foreach ( [ $this->ids_table, $this->table ] as $table ) {
+					$deleted = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+						$this->db->prepare( 'DELETE FROM %i WHERE link_id IN (' . $in . ')', array_merge( [ $table ], $link_ids ) ) // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+					);
+
+					if ( false === $deleted ) {
+						throw new \RuntimeException( 'The links of a deleted product could not be removed: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+					}
+				}
+			}
+		);
+	}
+
+	/**
 	 * Moves an offer row to another product, whole: its card, its identifiers, its switches and its overrides stay as they are.
 	 * The import uses it when a simple product becomes a variable one and its card is from then on the product's first variation
 	 * ({@see \Woodev\Framework\Marketplace\Flows\Group_Assembler}). Nothing is sent to the marketplace.

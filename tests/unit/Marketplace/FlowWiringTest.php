@@ -91,7 +91,7 @@ final class FlowWiringTest extends TestCase {
 		'woocommerce_product_set_stock'           => 1,
 		'woocommerce_variation_set_stock'         => 1,
 		'wp_trash_post'                           => 1,
-		'before_delete_post'                      => 1,
+		'before_delete_post'                      => 2,
 		'untrashed_post'                          => 1,
 		'woocommerce_product_object_updated_props' => 1,
 		'rest_api_init'                           => 1,

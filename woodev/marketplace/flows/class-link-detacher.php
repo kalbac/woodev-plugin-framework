@@ -127,4 +127,62 @@ final class Link_Detacher {
 			'busy'     => false,
 		];
 	}
+
+	/**
+	 * Releases the links of a product that was deleted for good: the rows go (see {@see Wpdb_Link_Store::delete_product_rows()}), and
+	 * the send history and the `sync_state` rows end the way a detach ends them. Nothing is sent to the marketplace.
+	 *
+	 * The rows are deleted whether or not an account's sender is running: a sender that still holds a deleted link's queued value
+	 * finds no link and drops it. The `sync_state` rows are retired at once only for an account whose claim could be taken.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int $wc_product_id Product or variation id.
+	 * @return int Rows released.
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function release_deleted( int $wc_product_id ): int {
+		$released = $this->links->delete_product_rows( $wc_product_id );
+
+		foreach ( $released as $link_id => $account_id ) {
+			$this->ledger->forget_sent( $link_id );
+		}
+
+		foreach ( array_unique( $released ) as $account_id ) {
+			$token = $this->accounts->claim( $account_id, self::CLAIM_TTL );
+
+			if ( null === $token ) {
+				continue;
+			}
+
+			try {
+				foreach ( array_keys( $released, $account_id, true ) as $link_id ) {
+					$this->queue->forget_link( $account_id, $link_id, $token );
+				}
+			} finally {
+				$this->accounts->release_claim( $account_id, $token );
+			}
+		}
+
+		return count( $released );
+	}
+
+	/**
+	 * Releases one link whose card the sender has just archived because its product was deleted: the row and its remote identifiers
+	 * go, the send history ends, and the link's `sync_state` rows are retired under the claim the caller holds.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Link_Record $link  The link.
+	 * @param string      $token The account claim the sender holds.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function release_link( Link_Record $link, string $token ): void {
+		$link_id = (int) $link->link_id();
+
+		$this->links->delete_link( $link_id );
+		$this->ledger->forget_sent( $link_id );
+		$this->queue->forget_link( $link->account_id(), $link_id, $token );
+	}
 }

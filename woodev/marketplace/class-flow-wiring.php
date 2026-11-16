@@ -28,6 +28,7 @@ use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Flows\Deleted_Product_Releaser;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Import_Category;
@@ -35,6 +36,7 @@ use Woodev\Framework\Marketplace\Flows\Label_Download;
 use Woodev\Framework\Marketplace\Flows\Legacy_Order_Lines;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
+use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
@@ -338,7 +340,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$classifier = $adapter->error_classifier();
 			$limits     = $adapter->sync_limits();
 			$queue      = new Sync_State_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'accounts' ), $adapter->stock_cadence() );
-			$flusher    = new Stock_Flusher( $queue, $store, $this->links, $adapter->stock_pusher(), $adapter->stock_rules(), $limits, $classifier, $this->gate->pause() );
+			$releaser   = $this->deleted_product_releaser( $queue );
+			$flusher    = new Stock_Flusher( $queue, $store, $this->links, $adapter->stock_pusher(), $adapter->stock_rules(), $limits, $classifier, $this->gate->pause(), [ $releaser, 'release_settled' ] );
 			$pusher     = $adapter->price_pusher();
 			$price_half = null;
 			$scheduler  = new Price_Scheduler( $this->names );
@@ -432,6 +435,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			) )->register();
 
 			add_action( 'action_scheduler_init', [ $scheduler, 'ensure_sweep' ] );
+		}
+
+		/**
+		 * A product deleted for good lets go of its cards: the link rows go as «Снять связь» ends them, so the card can be imported or linked
+		 * again. A created card is archived first; the stock sender hands the link back when that settles.
+		 *
+		 * @param Sync_State_Queue $queue Flusher side of `sync_state`.
+		 * @return Deleted_Product_Releaser
+		 */
+		private function deleted_product_releaser( Sync_State_Queue $queue ): Deleted_Product_Releaser {
+			$ledger   = new Wpdb_Task_Ledger( $this->db, $this->table( 'tasks' ), $this->table( 'task_items' ) );
+			$releaser = new Deleted_Product_Releaser( new Link_Detacher( $this->links, $queue, $ledger, $this->accounts ), $this->log_error );
+
+			$releaser->register();
+
+			return $releaser;
 		}
 
 		/**

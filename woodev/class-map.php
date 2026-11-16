@@ -217,6 +217,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Flows\\Card_Outcome' => 'woodev/marketplace/flows/class-card-outcome.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Catalog_Refresher' => 'woodev/marketplace/flows/interface-catalog-refresher.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Category_Ancestry' => 'woodev/marketplace/flows/class-category-ancestry.php',
+	'Woodev\\Framework\\Marketplace\\Flows\\Deleted_Product_Releaser' => 'woodev/marketplace/flows/class-deleted-product-releaser.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Export_Context' => 'woodev/marketplace/flows/class-export-context.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Export_Context_Builder' => 'woodev/marketplace/flows/class-export-context-builder.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Export_Facts' => 'woodev/marketplace/flows/interface-export-facts.php',

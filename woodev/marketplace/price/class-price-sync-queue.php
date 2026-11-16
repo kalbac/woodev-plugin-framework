@@ -242,6 +242,25 @@ final class Price_Sync_Queue {
 	}
 
 	/**
+	 * Deletes the price rows of an account whose link no longer exists (its product was deleted while a sender held the claim, so
+	 * the delete could not retire them). {@see self::due()} only reads rows that have a link, so nothing else would ever touch them.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $token      Account claim token.
+	 * @return int Rows deleted; 0 also when the claim is not held.
+	 * @throws \RuntimeException When the database refuses the statement.
+	 */
+	public function forget_orphans( int $account_id, string $token ): int {
+		return $this->write(
+			'DELETE FROM %i WHERE account_id = %d AND kind = %s AND NOT EXISTS (SELECT 1 FROM %i AS l WHERE l.link_id = %i.link_id)',
+			[ $this->table, $account_id, self::KIND, $this->links_table, $this->table ],
+			$token
+		);
+	}
+
+	/**
 	 * Makes a pair wait without counting an attempt (the marketplace asked for a pause, or the outcome of a send is uncertain).
 	 *
 	 * @since 2.0.29
