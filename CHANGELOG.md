@@ -1,6 +1,100 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.10] — 2026-11-16
+### Bug Fixes
+- **i18n**: Catalogue entries for the bulk run strings (#1795)
+
+- **marketplace**: Bulk run review round 1 — fence export/detach per product, replayable first send, keep saved progress on error (#1795)
+
+- **i18n**: Catalogue entry for the first-send failure sentence (#1795)
+
+- **marketplace**: Bulk run review round 2 — the ownership guard before every product write inside an offer (#1795)
+
+- **marketplace**: Bulk run tick stays within the budget (#1795)
+
+- **marketplace**: Price pull keeps the merchant's exact price, survives a settled pair, logs each skipped article (#1797)
+
+- **marketplace**: Framework-owned schema revision brings existing tables up to date on any request; restore reads raw prices (#1797)
+
+- **marketplace**: The schema gate saves a revision only when its columns landed (#1829)
+
+- **marketplace**: A card of a half-made group waits for the card that resumes it instead of being skipped (#1796)
+
+- **i18n**: Catalogue entries for the bulk import strings (#1796)
+
+- **marketplace**: The frozen card list and the freeze's position are one fenced write (#1796)
+
+- **marketplace**: A run line no longer hides the imports that are going from the account summary (#1796)
+
+- **marketplace**: The bulk import's freeze orders cards by position and shares one list, not five copies (#1796)
+
+
+### Documentation
+- Save session s233 — support wave, framework 2.1.9, Ozon Seller handoff
+
+- **marketplace**: Wiki — bulk runs for «Товары сайта» (#1795)
+
+- **gotchas**: A named lock does not fence a tick; Serena replace_symbol_body eats the docblock (#1795)
+
+- **gotchas**: Count the two E2 gotchas in the topic map (#1795)
+
+- **marketplace**: Bulk run budget is a prediction, not a hard bound (#1795)
+
+
+### Features
+- **marketplace**: Bulk run store — one row per account, conditional start, token-fenced saves (#1795)
+
+- **marketplace**: Bulk run named lock and ownership fence (#1795)
+
+- **marketplace**: Bulk run cursor — a position inside a parent (#1795)
+
+- **marketplace**: Bulk run runner, scheduler and bounded report (#1795)
+
+- **marketplace**: Bulk part entry point and first send on switch-on (#1795)
+
+- **marketplace**: Bulk run provider, account line and wiring (#1795)
+
+- **marketplace**: One-time price pull settles the queued send and keeps a newer edit (#1797)
+
+- **marketplace**: Bulk actions «Сбросить свою цену» and «Загрузить цены» (#1797)
+
+- **marketplace**: Import every card under the filter, in the background (#1796)
+
+
+### Refactoring
+- **marketplace**: Label_of() names the import_selected action by its constant (#1796)
+
+
+### Tests
+- **marketplace**: Bulk run store and report (#1795)
+
+- **marketplace**: Bulk run lifecycle — lock, tick, stop, recovery and the lost-run fences (#1795)
+
+- **marketplace**: Bulk run cursor, part, first send, provider and account line (#1795)
+
+- **marketplace**: Bulk run on two real connections and the scale-test fixtures (#1795)
+
+- **marketplace**: Make the two-connection bulk run test runnable on a prefixed installation (#1795)
+
+- **marketplace**: Bulk run rig fixture — drive by the run state, create the table, reset the sync state (#1795)
+
+- **marketplace**: Bulk-run fixture gains a delete-only mode; README cleans the ticks between runs (#1795)
+
+- **marketplace**: Schema upgrade integration test keeps WooCommerce's table properties and cleans its product (#1797)
+
+- **marketplace**: The refused-ALTER upgrade test stubs the notice handler (#1829)
+
+- **marketplace**: The refused-ALTER test keeps wpdb errors out of the output (#1829)
+
+- **marketplace**: Pin the production marker lookup of the bulk import order (#1796)
+
+
+### Style
+- **marketplace**: Phpcs and phpstan fixes for the bulk run
+
+
+
 ## [2.1.9] — 2026-11-16
 ### Bug Fixes
 - **shipping**: Send the recipient phone to the admin rates request
