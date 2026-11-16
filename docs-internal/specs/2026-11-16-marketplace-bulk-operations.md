@@ -108,6 +108,7 @@ deleted with the account's other rows when the account is deleted, dropped by th
 | `run_id` | random token of this run |
 | `state` | `running`, `done`, `cancelled`, `stopped` |
 | `cancel` | 0 / 1 — written only by «Остановить», never by a tick, so a tick's save cannot erase it |
+| `tick` | CHAR(32), NULL — the token of the tick that owns the run now; every save is fenced by it (reconnect case below) |
 | `action`, `payload`, `filter` | the action id, its validated fields, the `Site_Products_Filter` values — **not** a list of ids |
 | `user_id` | who started it |
 | `cursor` | JSON position: `{ parent, child }` (§2.4); for the remote-cards run the index into `items` (§2.7) |
@@ -127,9 +128,21 @@ mechanism that is provably exclusive and that the tree already uses.)** Why it h
 - **A paused or dead tick.** MySQL frees a named lock the moment the connection that holds it closes. A tick that is merely slow still
   holds the lock, so nobody else works; a tick whose process died has lost the lock and cannot resume. There is no takeover by
   heartbeat any more, so no «old tick resumes after takeover» case exists.
+- **A lost connection while PHP lives on (r3 critic, MANDATORY for E2).** Losing the connection does NOT kill the tick: `wpdb::query()`
+  catches MySQL error 2006, reconnects through `check_connection()` and re-runs the query on a NEW connection that does not hold the
+  lock (`wp-includes/class-wpdb.php`, the `_do_query()` retry). So the named lock alone is not a fence. The tick therefore also:
+  1. **writes a tick token** right after `GET_LOCK` is granted: `UPDATE … SET tick = <random> WHERE account_id = %d AND run_id = <read>
+     AND state = 'running'` (new column `tick`, CHAR(32), NULL);
+  2. **fences every save** of `cursor`/`counts`/`report` and the terminal write with `AND tick = <mine>`; 0 affected rows → the tick
+     stops at once: no further product write, no next tick queued, no `RELEASE_LOCK` attempt that matters (it releases nothing it owns);
+  3. **re-checks ownership before every product write** with one cheap `SELECT IS_USED_LOCK( name ) = CONNECTION_ID()` — after a
+     reconnect `CONNECTION_ID()` is the new connection, so the answer is false (the lock is free or a new tick holds it) and the tick
+     stops as in 2.
+  What remains is the single write whose own query triggered the reconnect retry; every per-product write of `Site_Products_Bulk` is
+  idempotent (it replans from the stored links and the row-level guards), so a duplicate of that one write is harmless. E2 states in
+  its PR the measured cost of check 3 per part (query count, wall time).
 - **Side effects are inside ownership.** The tick checks `run_id` and `state = running` *after* taking the lock, and every product
-  write, every save of `cursor`/`counts`/`report` and the terminal write happen while it holds it. The saves need no version: only the
-  holder writes those columns.
+  write, every save of `cursor`/`counts`/`report` and the terminal write happen while it holds it AND its tick token is the row's.
 - **Replacement.** A run reaches a terminal state only by a write made under the lock (the tick, or the stop below). A new start
   replaces only a terminal row: `UPDATE … WHERE account_id = %d AND run_id = <read> AND state <> 'running'` (no row → `INSERT`; the
   PK refuses a second). A terminal write is the holder's last write, so a replaced run has no worker left.
@@ -152,7 +165,7 @@ the account claim, the activity locks) already keep the two from writing the sam
 **The tick** — Action Scheduler action `woodev_{plugin id}_bulk_run( account_id, run_id )`:
 
 1. `GET_LOCK( name, 0 )`; not granted → exit. Read the row; exit (releasing) unless `run_id` matches and `state = running`; `cancel = 1`
-   → finish `cancelled`.
+   → finish `cancelled`. Write the fresh tick token (lost-connection fence above); 0 rows → exit.
 2. Gates: account enabled and of this adapter; for an action that leads to a remote write (export, send stock, send price,
    archive) `License_Gate::refusal_for()` and the account pause — a refusal ends the run `stopped` with that sentence. The remote
    writes themselves still pass `Job_Gate` in their own runners; this check only stops queueing new work.
@@ -272,6 +285,10 @@ half-made group resumed or, for a sibling, skipped with a note; else link or cre
    `Account_Job`) and Action Scheduler starts them in the order they were queued, so a resuming product is finished before a sibling
    of its group arrives, whichever part the two fall in. **(UNVERIFIED: that Action Scheduler runs same-timestamp actions in id
    order; the feed queues each part one second after the previous one, which makes the order explicit either way.)**
+   **Queue order alone does not survive a retry (r3 critic, MANDATORY for E3):** `Import_Jobs::run()` requeues an unfinished card on
+   `Budget_Spent`, and `Account_Job` retries a busy or throttled job, so a later sibling can run while the resuming card waits. A
+   sibling whose group still has an unfinished resuming product therefore **re-queues itself** (after `Job_Gate::BUSY_DELAY`, at most
+   the import job's own attempt cap) instead of being skipped as group-building; E3 owns that dependency check in the feeder/import path.
 
 `items` lives in the run's own row (§2.3), so there is no second row and no key conflict; a new start overwrites it; the account's
 deletion and the uninstaller remove it with the row. 50 000 entries are about 2–3 MB of JSON, under the MySQL/MariaDB default
@@ -419,9 +436,16 @@ the button and nothing would change. D3 is therefore a separate mode:
     `Account_Job` waits (`Job_Gate::BUSY_DELAY`) and the two never overlap; a stale in-flight snapshot left by a dead sender is cleared,
     and that sender's `accept()` is fenced by its lost claim token and changes nothing;
   - **a real edit after the pull wrote the price:** the hook is not guarded any more, the edit stores a revision above `r0`, and it is
-    sent as usual. An edit that lands *between* step 1 and step 3 of the same article also has a revision above `r0`: the settle
-    matches no row and that edit is sent — no edit is ever discarded. (The pull's own shop write may then be overwritten by the edit on
-    the next save; both sides stay consistent.)
+    sent as usual.
+  - **an edit that lands between step 1 and step 2 (r3 critic, MANDATORY for D).** The merchant saves WC 200 (revision 2) after the
+    pull read `r0 = 1`; the pull's step 2 then overwrites WC with 100 and its settle correctly fails. A queue CAS after the WC save
+    cannot repair that, so **a failed settle (0 rows) triggers a restore**: the pull reads the pair's current pending revision `r1` and
+    writes **that intent's shop price** back into the product under `Price_Refresh_Guard` — the merchant's edit is newer than the
+    pull's read and wins. The shop-side price is taken from what `Price_Intents` recorded the intent from; if the pending payload is
+    not invertible to a WC price (markup, rounding), D stores the shop price alongside the intent (a field in `pending_payload`'s
+    meta, no new table). Then it re-reads `pending_rev`: unchanged → done (the pending 200 goes out as usual, WC holds 200); changed
+    again → repeat, at most twice, then leave the article with the report line «Цена менялась во время загрузки — проверьте товар»
+    and the newest pending intent untouched. No path leaves WC holding the pulled price while a newer merchant intent is pending.
 - The one window left is the claim's own: a sender stalled past `Job_Gate::CLAIM_TTL` (120 s) inside its HTTP request can still land
   its send after the pull read the marketplace. Every claim user shares that window; it is named in §7.
 - Available on every account direction; on `from_marketplace` it is the same read the push job does, run now.
@@ -438,12 +462,12 @@ file, and only one such card runs per wave. B and C add no file.
 
 | Card | Files | Size | Wave / depends on |
 |---|---|---|---|
-| **E1 — records engine: matching target and account-line actions** | `woodev/admin/records/` (`class-action-request.php`, `class-action-rest-handler.php`, `class-action-response.php`, `class-definition-parser.php`, `class-activity-normalizer.php`, `class-standard-messages.php`, new `interface-applies-to-matching.php`), `src/admin-records/` (`selection.ts`, `table-model.tsx`, `records-table.tsx`, `actions/bulk-toolbar.tsx`, `actions/api.ts`, `actions/types.ts`, `activity/types.ts`, `activity/views.tsx`, `types.ts`, `messages.ts`), `woodev/class-map.php`, `composer.json` classmap, tests `tests/unit/Admin/Records/`, `tests/js/admin-records-*` | M | 1 |
+| **E1 — records engine: matching target and account-line actions** | `woodev/admin/records/` (`class-action-request.php`, `class-action-rest-handler.php`, `class-action-response.php`, `class-definition-parser.php`, `class-activity-normalizer.php`, `class-standard-messages.php`, new `interface-applies-to-matching.php`), `src/admin-records/` (`selection.ts`, `table-model.tsx`, `records-table.tsx`, `actions/bulk-toolbar.tsx`, `actions/api.ts`, `actions/types.ts`, `activity/types.ts`, `activity/views.tsx`, `types.ts`, `messages.ts`, `actions/fields.tsx` — the renderer of the `hidden` field), `woodev/admin/records/class-records-definition.php` and `class-action-input.php` (the server's `FIELD_TYPES` and input switch for `hidden`, r3 critic), `woodev/class-map.php`, `composer.json` classmap, tests `tests/unit/Admin/Records/`, `tests/js/admin-records-*` | M | 1 |
 | **B — sync on link** | `woodev/marketplace/settings/class-effective-settings.php`, `class-defaults-section.php`, `class-accounts-sections.php` (the per-account field), `flows/class-card-linker.php` (decision + first-send recorders, no new class), `data/class-wpdb-link-store.php` (`adopt_card()` takes the switches), `flows/class-card-import.php` (CREATED: stock only), `class-flow-wiring.php`, `admin/pages/products/class-site-products-module.php` (only the `Card_Linker` construction), tests | M | 1 |
 | **C — link by category** | `class-site-products-definition.php` (`link_by_article()` fields), `class-site-products-bulk.php` (`plan_linking()`, `run_linking()`, preview sentence), `class-site-products-provider.php` (`get_field_options()` for the category), `class-site-products-module.php` (`link_candidates`), `class-remote-cards-definition.php` (sentence), tests | S | 1b — **depends on B** (shares `class-site-products-module.php`); starts after B merges |
 | **E2 — bulk run for «Товары сайта», with D1** | new `jobs/class-bulk-run-scheduler.php`, `jobs/class-bulk-run-runner.php`, `data/class-bulk-run-store.php`; `data/class-schema.php` (the table, `items` column included), `data/class-uninstaller.php`, the account deletion path that removes the account's rows (`Wpdb_Link_Store::delete_account()`'s caller), `class-site-products-reader.php` (`ids_after()`, `variation_ids_after()`), `class-site-products-bulk.php` (part entry point; D1 in `run_flags()`), `class-site-products-provider.php` (`Applies_To_Matching`, `bulk_stop`, `bulk_report`), `class-site-products-definition.php` (`all_matching`, sentences), `class-site-products-activity.php` (run line, recovery check), the named lock (a small `jobs/class-bulk-run-lock.php` on the `Order_Lock` pattern), `class-site-products-module.php` (wiring), `woodev/class-map.php`, `composer.json` classmap, tests | L | 2 — after E1, B, C |
 | **E3 — remote cards: import all by filter** | `class-remote-cards-actions.php`, `class-remote-cards-provider.php`, `class-remote-cards-definition.php`, new `jobs/class-bulk-import-feeder.php` (freeze + feed strategy of the run runner), `data/class-bulk-run-store.php` (read/write of `items`; no schema change — E2 created the column), `woodev/class-map.php`, `composer.json` classmap, tests | M | 3 — after E2 |
-| **D — «Сбросить свою цену», «Загрузить цены»** | `class-site-products-bulk.php`, `class-site-products-definition.php`, `class-site-products-provider.php` (licence phrase), `sync/class-price-refresher.php` (`pull_once()`), `price/class-price-sync-queue.php` (`settle_pulled()`), `jobs/class-price-refresh-runner.php` (the mode, through `Account_Job`), `jobs/class-price-scheduler.php` (mode argument), tests — no new PHP file | M | 3 — after E2; parallel with E3 (disjoint files) |
+| **D — «Сбросить свою цену», «Загрузить цены»** | `class-site-products-bulk.php`, `class-site-products-definition.php`, `class-site-products-provider.php` (licence phrase), `sync/class-price-refresher.php` (`pull_once()`), `price/class-price-sync-queue.php` (`settle_pulled()`, the restore read), `price/class-price-intents.php` (only if the shop price must be stored with the intent, §5.1), `jobs/class-price-refresh-runner.php` (the mode, through `Account_Job`), `jobs/class-price-scheduler.php` (mode argument), tests — no new PHP file | M | 3 — after E2; parallel with E3 (disjoint files) |
 | **Ozon (ozon repo)** | composer bump to the framework release; the adapter's withheld list if an action must stay off for Ozon; merchant docs (bulk by filter, the new setting, link by category, the two price actions); release notes. No Ozon code is needed for A–C and D1–D3 (UNVERIFIED for the daily card limit, §7) | S | after a framework release with E2, E3, D |
 
 ### Acceptance (every card: phpunit, jest, phpcs, `lint:i18n`, `lint:docs` green)
@@ -469,7 +493,9 @@ file, and only one such card runs per wave. B and C add no file.
     the lock held sets `cancel` and the tick finishes after its part; cancel during a tick's save survives the save; **two-admin stop
     race:** a stop confirmed for R1 after R1 finished and R2 started answers «уже закончилось» and R2 keeps running; a save followed
     by a lost enqueue is recovered by the activity check and by the sweep; licence refusal mid-run; lost user capability; detach busy
-    → re-queue;
+    → re-queue; **reconnect fence (mandatory):** on two real connections, kill tick A's SERVER connection (`KILL <id>` from a third
+    connection) while A's PHP continues; tick B takes the lock and writes its token; A's next product write is refused by the
+    ownership check, A's next save affects 0 rows, A queues no tick, and the cursor/counts B saved are not overwritten;
   - report: 60 distinct reasons → 49 groups + «Другие причины», counts conserved; a 50 000-offer failing run keeps the stored report
     under 64 KB **(proposal for the bound)**;
   - **scale on the rig:** a generated fixture (a WP-CLI script under the scratchpad) of **10 000 parent products = 8 000 simple +
@@ -482,11 +508,14 @@ file, and only one such card runs per wave. B and C add no file.
 - **E3:** a 50 000-card snapshot fixture: the apply request's time and peak memory, the freeze tick's time, peak memory and stored
   `items` bytes stated in the PR (no plan, no article list in the request); the snapshot expiring between the freeze and the feed
   changes nothing; a half-made group whose resuming article would sort after a sibling is fed with the resuming article first, and
-  both end imported; a part never queues more than ten import actions; near rows are never imported; a new start clears `items`.
+  both end imported; **with a forced `Budget_Spent` in the resuming card's image step** the sibling re-queues itself instead of being
+  skipped, and both still end imported (mandatory); a part never queues more than ten import actions; near rows are never imported; a new start clears `items`.
 - **D:** «Сбросить свою цену» writes `null` and records the price intent, skips rows without an override; «Загрузить цены» on a
   `to_marketplace` account writes the restored price into the product and records no new revision; **a pair with WC 150 pending and
   the marketplace at 100** ends with pending = sent = 100 and is not selected by `due()`; a pull while a sender holds the claim waits
-  and runs after it; an edit recorded between the pull's revision read and its settle is still sent; a real edit after the pull is
+  and runs after it; an edit recorded between the pull's revision read and its settle is still sent; **the edit-BEFORE-the-WC-write interleaving
+  (mandatory):** pull reads `r0`, the merchant saves WC 200, the pull writes 100 and its settle fails → the restore writes 200 back,
+  WC = 200, pending = 200 and it is sent; an edit landing again during the restore is retried at most twice, then the report line; a real edit after the pull is
   sent; a stale in-flight snapshot is cleared and the dead sender's `accept()` changes nothing; on `from_marketplace` the same; a link
   with `sync_price` off is still pulled; a non-created card is skipped.
 
@@ -498,6 +527,7 @@ file, and only one such card runs per wave. B and C add no file.
   E2 states in its PR what happens past the limit; until then «No Ozon code is needed» is not established for export.
 - That `Price_Refresh_Guard` covers every price hook `Price_Intents` listens to on a product save — the r2 critic confirmed
   `on_product_updated()`; the other hooks of `Price_Intents` were not read in full. D's acceptance «records no new revision» proves it.
+- The lost-connection fence (§2.3) — designed from the `wpdb` retry path, not probed on a live disconnect; E2's integration test proves it.
 - The named lock's two environment limits (§2.3): persistent `wpdb` connections keep a dead request's lock until the connection is
   reused, and Galera clusters do not replicate `GET_LOCK`. Neither is WordPress's default; neither was probed on a real host.
 - The account claim's own window in D3 (§5.1): a sender stalled past `Job_Gate::CLAIM_TTL` inside its HTTP request can still land a
