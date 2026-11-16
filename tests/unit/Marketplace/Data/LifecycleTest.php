@@ -150,7 +150,7 @@ final class LifecycleTest extends TestCase {
 
 		$this->assertCount( 1, $this->delta_batches );
 		$this->assertSame( array_values( ( new Schema( 'fake' ) )->statements( 'wp_', 'DEFAULT CHARACTER SET utf8mb4' ) ), $this->delta_batches[0] );
-		$this->assertCount( 15, $this->delta_batches[0] );
+		$this->assertCount( 16, $this->delta_batches[0] );
 	}
 
 	/**
@@ -164,7 +164,7 @@ final class LifecycleTest extends TestCase {
 		$this->call( 'upgrade', '2.0.5' );
 
 		$this->assertCount( 2, $this->delta_batches );
-		$this->assertCount( 15, $this->delta_batches[1] );
+		$this->assertCount( 16, $this->delta_batches[1] );
 	}
 
 	/**

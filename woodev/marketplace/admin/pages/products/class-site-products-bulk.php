@@ -17,6 +17,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Lost;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 use Woodev\Framework\Marketplace\Sync\Price_Context;
@@ -57,6 +58,16 @@ final class Site_Products_Bulk {
 	public const ARCHIVE         = 'archive';
 	public const DETACH          = 'detach';
 	public const RESET           = 'reset';
+
+	/**
+	 * The two account actions the account line of a bulk run runs (#1795): stop the run it shows, and show its report. Both carry the
+	 * run's id in the hidden field {@see self::RUN_FIELD}.
+	 *
+	 * @since 2.1.8
+	 */
+	public const RUN_STOP   = 'bulk_stop';
+	public const RUN_REPORT = 'bulk_report';
+	public const RUN_FIELD  = 'run_id';
 
 	/**
 	 * The two fields of «Связать по артикулу» and the values of the first one.
@@ -148,6 +159,14 @@ final class Site_Products_Bulk {
 	private $describe;
 
 	/**
+	 * Tells whether the bulk run tick that is working a part still holds its run: `function (): bool`. Null outside a run. Asked before
+	 * every product write ({@see self::guard()}).
+	 *
+	 * @var callable|null
+	 */
+	private $owns;
+
+	/**
 	 * Where each kind of fix is done: `Validation_Report::FIX_*` => address.
 	 *
 	 * @var array<string,string>
@@ -208,6 +227,26 @@ final class Site_Products_Bulk {
 			self::DETACH,
 			self::RESET,
 		];
+	}
+
+	/**
+	 * What a lapsed licence stops, in the words of the refusal: the actions that write to the marketplace.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param string $action Action id.
+	 * @return string|null Null for an action that writes only on the site.
+	 */
+	public static function license_phrase( string $action ): ?string {
+		$phrases = [
+			self::EXPORT          => __( 'отправить товар на маркетплейс', 'woodev-plugin-framework' ),
+			self::LINK_BY_ARTICLE => __( 'искать карточки на маркетплейсе', 'woodev-plugin-framework' ),
+			self::SEND_STOCK      => __( 'отправить остатки на маркетплейс', 'woodev-plugin-framework' ),
+			self::SEND_PRICE      => __( 'отправить цены на маркетплейс', 'woodev-plugin-framework' ),
+			self::ARCHIVE         => __( 'архивировать карточку на маркетплейсе', 'woodev-plugin-framework' ),
+		];
+
+		return $phrases[ $action ] ?? null;
 	}
 
 	/**
@@ -317,6 +356,79 @@ final class Site_Products_Bulk {
 			'groups'    => array_merge( $this->engine_groups( $plan['groups'], 'skipped' ), $this->engine_groups( $ran['groups'], 'failed' ) ),
 			'messages'  => $this->messages( $action, $ran['done'] ),
 		];
+	}
+
+	/**
+	 * Does one part of a bulk run: the same planning and writing the ticked mode uses, over the offers the run's cursor read (#1795).
+	 * It replans from the stored links and never trusts a preview.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Account        $account   Account.
+	 * @param string         $action    Action id (any but {@see self::LINK_BY_ARTICLE}, which is an account action).
+	 * @param array<int,int> $offers    Distinct offers of the part.
+	 * @param array<int,int> $editable  Offer => the product whose edit right decides it.
+	 * @param int|null       $warehouse Warehouse for {@see self::SET_WAREHOUSE}; 0 for the account default.
+	 * @param callable       $owns      `function (): bool` — whether the tick still holds its run; asked before every product write.
+	 * @return array{busy:bool,accepted:int,skipped:int,failed:int,groups:array<int,array<string,mixed>>} `busy` when the account's sender holds
+	 *         the claim and nothing was changed: the part is tried again unchanged.
+	 * @throws Action_State_Exception When the queue or the scheduler refuses the work.
+	 * @throws Bulk_Run_Lost When `$owns` says the tick lost its run.
+	 */
+	public function run_part( Account $account, string $action, array $offers, array $editable, ?int $warehouse, callable $owns ): array {
+		$this->owns = $owns;
+
+		try {
+			$plan = $this->plan( $account, $action, $offers, $editable, $warehouse, null );
+			$ran  = $this->run( $account, $action, $plan, $warehouse );
+		} finally {
+			$this->owns = null;
+		}
+
+		$skipped = count( $offers ) - $plan['will'];
+		$failed  = $plan['will'] - $ran['done'];
+
+		return [
+			'busy'     => true === ( $ran['busy'] ?? false ),
+			'accepted' => $ran['done'],
+			'skipped'  => $skipped,
+			'failed'   => $failed,
+			'groups'   => array_merge(
+				$this->engine_groups( $this->explained( $plan['groups'], $skipped ), 'skipped' ),
+				$this->engine_groups( $this->explained( $ran['groups'], $failed ), 'failed' )
+			),
+		];
+	}
+
+	/**
+	 * Makes a part's groups explain every offer it left out, so the report's counts add up to the run's skipped and failed offers.
+	 *
+	 * @param array<int,array<string,mixed>> $groups   Groups the plan or the write gave.
+	 * @param int                            $expected Offers the groups must account for.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function explained( array $groups, int $expected ): array {
+		$missing = $expected - (int) array_sum( array_column( $groups, 'count' ) );
+
+		if ( $missing > 0 ) {
+			$groups[] = $this->group( __( 'причина не указана', 'woodev-plugin-framework' ), [], null, $missing );
+		}
+
+		return $groups;
+	}
+
+	/**
+	 * Refuses a product write once the bulk run tick that works the part has lost its run (the connection that held the named lock is
+	 * gone). Outside a bulk run there is nothing to lose. Public only so that it can be handed to the services whose loops write products
+	 * ({@see Export_Service::enqueue()}, {@see Link_Detacher::detach()}).
+	 *
+	 * @return void
+	 * @throws Bulk_Run_Lost When the tick no longer owns the run.
+	 */
+	public function guard(): void {
+		if ( null !== $this->owns && ! call_user_func( $this->owns ) ) {
+			throw new Bulk_Run_Lost();
+		}
 	}
 
 	/**
@@ -475,7 +587,7 @@ final class Site_Products_Bulk {
 		}
 
 		try {
-			$out = $this->export->enqueue( $account, $offers );
+			$out = $this->export->enqueue( $account, $offers, [ $this, 'guard' ] );
 		} catch ( \RuntimeException $e ) {
 			throw new Action_State_Exception( __( 'Не удалось поставить товары в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите.', 'woodev-plugin-framework' ) );
 		}
@@ -552,6 +664,7 @@ final class Site_Products_Bulk {
 	private function plan_links( Account $account, string $action, array $offers, ?int $warehouse ): array {
 		$records = $this->links->offers_of( $account->id(), $offers );
 		$targets = [];
+		$enabled = [];
 		$reasons = [];
 
 		foreach ( $records as $record ) {
@@ -560,6 +673,12 @@ final class Site_Products_Bulk {
 			if ( null === $reason ) {
 				$targets[] = $record;
 				continue;
+			}
+
+			// A switch-on that was interrupted after the flags changed (a lost tick, a refused intent write) leaves cards that are on
+			// and have no first send; the retry must still record it, though «already so» keeps them out of the targets.
+			if ( $this->is_switched_on( $action, $record ) ) {
+				$enabled[] = $record;
 			}
 
 			$reasons[ $reason ][] = $record->wc_product_id();
@@ -586,10 +705,26 @@ final class Site_Products_Bulk {
 
 		return [
 			'targets'  => $targets,
+			'enabled'  => $enabled,
 			'will'     => count( $targets ),
 			'warnings' => 0,
 			'groups'   => $groups,
 		];
+	}
+
+	/**
+	 * Tells whether a switch-on action finds the card already switched on (a created one: only those have a first send to record).
+	 *
+	 * @param string      $action Action id.
+	 * @param Link_Record $record Link row.
+	 * @return bool
+	 */
+	private function is_switched_on( string $action, Link_Record $record ): bool {
+		if ( Link_Record::STATE_CREATED !== $record->card_state() ) {
+			return false;
+		}
+
+		return ( self::SYNC_STOCK_ON === $action && $record->sync_stock() ) || ( self::SYNC_PRICE_ON === $action && $record->sync_price() );
 	}
 
 	/**
@@ -751,8 +886,9 @@ final class Site_Products_Bulk {
 	 * @param string              $action    Action id.
 	 * @param array<string,mixed> $plan      The plan.
 	 * @param int|null            $warehouse Warehouse.
-	 * @return array{done:int,groups:array<int,array<string,mixed>>} Offers really changed, and the ones the write left out.
+	 * @return array{done:int,groups:array<int,array<string,mixed>>,busy?:bool} Offers really changed, and the ones the write left out.
 	 * @throws Action_State_Exception When the queue or the scheduler refuses the work.
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before a write.
 	 */
 	private function run( Account $account, string $action, array $plan, ?int $warehouse ): array {
 		switch ( $action ) {
@@ -769,22 +905,26 @@ final class Site_Products_Bulk {
 				return $this->run_detach( $account, $plan['targets'] );
 			default:
 				return [
-					'done'   => $this->run_flags( $account, $action, $plan['targets'], $warehouse ),
+					'done'   => $this->run_flags( $account, $action, $plan['targets'], $warehouse, $plan['enabled'] ?? [] ),
 					'groups' => [],
 				];
 		}
 	}
 
 	/**
-	 * Applies a flag, warehouse or reset change.
+	 * Applies a flag, warehouse or reset change. Switching a flag on also records the first send of the cards it reached (#1795, D1).
 	 *
 	 * @param Account       $account   Account.
 	 * @param string        $action    Action id.
 	 * @param Link_Record[] $targets   Rows.
 	 * @param int|null      $warehouse Warehouse.
+	 * @param Link_Record[] $enabled   Created cards a switch-on found already on: their first send is recorded too, so a part that was
+	 *                                 interrupted after the flags changed is finished by its retry.
 	 * @return int Rows changed.
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before a write.
+	 * @throws Action_State_Exception When a first send could not be stored: the flags are on, and repeating the action records it.
 	 */
-	private function run_flags( Account $account, string $action, array $targets, ?int $warehouse ): int {
+	private function run_flags( Account $account, string $action, array $targets, ?int $warehouse, array $enabled = [] ): int {
 		$link_ids = array_map(
 			static function ( Link_Record $record ): int {
 				return (int) $record->link_id();
@@ -792,17 +932,71 @@ final class Site_Products_Bulk {
 			$targets
 		);
 
+		$this->guard();
+
 		switch ( $action ) {
 			case self::SYNC_STOCK_ON:
 			case self::SYNC_STOCK_OFF:
-				return $this->links->set_sync_flag( $account->id(), $link_ids, 'sync_stock', self::SYNC_STOCK_ON === $action );
+				$changed = $this->links->set_sync_flag( $account->id(), $link_ids, 'sync_stock', self::SYNC_STOCK_ON === $action );
+				break;
 			case self::SYNC_PRICE_ON:
 			case self::SYNC_PRICE_OFF:
-				return $this->links->set_sync_flag( $account->id(), $link_ids, 'sync_price', self::SYNC_PRICE_ON === $action );
+				$changed = $this->links->set_sync_flag( $account->id(), $link_ids, 'sync_price', self::SYNC_PRICE_ON === $action );
+				break;
 			case self::SET_WAREHOUSE:
 				return $this->links->set_warehouse( $account->id(), $link_ids, (int) $warehouse > 0 ? (int) $warehouse : null );
 			default:
 				return $this->links->reset_state( $account->id(), $link_ids );
+		}
+
+		if ( in_array( $action, [ self::SYNC_STOCK_ON, self::SYNC_PRICE_ON ], true ) ) {
+			$this->record_first_send( $account, array_merge( $targets, $enabled ), self::SYNC_STOCK_ON === $action );
+		}
+
+		return $changed;
+	}
+
+	/**
+	 * Records the first send of cards whose synchronisation was just switched on, as the product tab does on switch-on (#1795, D1):
+	 * a merchant who switched stock sync on for three thousand products expects their stock on the marketplace, not an empty column
+	 * until each product happens to change. The intent decides whether anything goes (the account's stock mode, a warehouse, managed
+	 * stock; the price direction) and records nothing otherwise, so a card with nothing to send is simply left alone. Only created cards
+	 * have anything to send to.
+	 *
+	 * @param Account       $account  Account.
+	 * @param Link_Record[] $targets  Rows the switch reached, and the created ones it found already on.
+	 * @param bool          $is_stock Stock when true, price when false.
+	 * @return void
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run.
+	 * @throws Action_State_Exception When an intent could not be stored.
+	 */
+	private function record_first_send( Account $account, array $targets, bool $is_stock ): void {
+		$created = [];
+
+		foreach ( $targets as $record ) {
+			if ( Link_Record::STATE_CREATED === $record->card_state() ) {
+				$created[] = $record->wc_product_id();
+			}
+		}
+
+		if ( [] === $created ) {
+			return;
+		}
+
+		// The rows as the switch left them: the intent reads the switch.
+		foreach ( $this->links->offers_of( $account->id(), $created ) as $fresh ) {
+			$this->guard();
+
+			try {
+				if ( $is_stock ) {
+					$this->stock->record_stock( $fresh );
+				} else {
+					$this->prices->record_for_link( $account, $fresh );
+				}
+			} catch ( \RuntimeException $e ) {
+				// Never reported as done: a card that is on with no first send would be skipped as «already so» by every later try.
+				throw new Action_State_Exception( __( 'Синхронизация включена, но первую отправку записать не удалось. Повторите действие — оно запишет недостающее.', 'woodev-plugin-framework' ) );
+			}
 		}
 	}
 
@@ -840,6 +1034,8 @@ final class Site_Products_Bulk {
 		$reasons = [];
 
 		foreach ( $targets as $record ) {
+			$this->guard();
+
 			try {
 				$reason = $is_stock ? $this->record_stock( $account, $record ) : $this->record_price( $account, $record );
 			} catch ( \RuntimeException $e ) {
@@ -902,6 +1098,8 @@ final class Site_Products_Bulk {
 		$missed   = [];
 
 		foreach ( $targets as $record ) {
+			$this->guard();
+
 			try {
 				$done = $this->stock->record_archive( $record );
 			} catch ( \RuntimeException $e ) {
@@ -927,7 +1125,8 @@ final class Site_Products_Bulk {
 	 *
 	 * @param Account       $account Account.
 	 * @param Link_Record[] $targets Linked cards.
-	 * @return array{done:int,groups:array<int,array<string,mixed>>}
+	 * @return array{done:int,groups:array<int,array<string,mixed>>,busy?:bool} `busy` when the account's sender holds the claim and nothing was changed.
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before the write.
 	 */
 	private function run_detach( Account $account, array $targets ): array {
 		if ( [] === $targets ) {
@@ -938,7 +1137,7 @@ final class Site_Products_Bulk {
 		}
 
 		try {
-			$outcome = $this->detacher->detach( $account->id(), $targets );
+			$outcome = $this->detacher->detach( $account->id(), $targets, [ $this, 'guard' ] );
 		} catch ( \RuntimeException $e ) {
 			throw new Action_State_Exception( __( 'Не удалось снять связь. Повторите чуть позже.', 'woodev-plugin-framework' ) );
 		}
@@ -948,6 +1147,7 @@ final class Site_Products_Bulk {
 		if ( $outcome['busy'] ) {
 			return [
 				'done'   => 0,
+				'busy'   => true,
 				'groups' => [ $this->group( __( 'сейчас идёт отправка остатков и цен этого аккаунта — повторите через минуту', 'woodev-plugin-framework' ), $ids ) ],
 			];
 		}

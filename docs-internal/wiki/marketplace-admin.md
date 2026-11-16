@@ -964,6 +964,40 @@ What is settled:
 - **Readers do not normalise.** `extra()` and `product_extra()` return what is stored; the screens show an option the adapter has dropped as the
   default, the readers do not — check the value against your own options.
 
+## Bulk runs: «все по фильтру» for «Товары сайта» (framework 2.1.8, #1795)
+
+An action ticked on «Выбрать все … по фильтру» never processes products in the request. `Site_Products_Provider::apply_matching()` stores a
+**run** (`Bulk_Run`, one row per account in `{prefix}woodev_{marketplace id}_bulk_runs`) and queues its first tick
+(`woodev_{plugin id}_bulk_run( account_id, run_id )`); the table keeps no list of ids, only the action, its fields and the validated filter.
+Spec: [Marketplace bulk operations](../specs/2026-11-16-marketplace-bulk-operations.md) §2.3–§2.6.
+
+| Piece | Where | What it owns |
+|---|---|---|
+| `Bulk_Run_Store` | `data/` | the row; a start replaces only a terminal row; a tick writes `tick` first and every save and the terminal write carry it; `cancel` is written only by the stop |
+| `Bulk_Run_Lock` (`Bulk_Run_Locking`) | `jobs/` | `GET_LOCK( name, 0 )` per account, scoped by database and table; `is_held()` is `IS_USED_LOCK( name ) = CONNECTION_ID()` |
+| `Bulk_Run_Runner` | `jobs/` | start, tick (budget = `Import_Jobs::BUDGET_SECONDS`), stop, recovery (the line's read and a 15-minute sweep `bulk_run( 0, '' )`) |
+| `Bulk_Run_Worker` → `Site_Products_Run_Worker` | `jobs/`, `admin/pages/products/` | the work of one part: the `{ parent, child }` cursor, the licence / pause / capability gates, `Site_Products_Bulk::run_part()` |
+| `Bulk_Run_Report` | `jobs/` | 49 reasons + «Другие причины», counts conserved, stored JSON under 64 KB |
+| `Site_Products_Run_Line` | `admin/pages/products/` | the account line text, the preview sentences |
+
+**The lost-connection fence.** `wpdb::query()` reconnects on error 2006 and re-runs the query on a new connection that holds no
+lock, so the named lock alone is not a fence. A tick therefore (1) writes its token right after the lock, (2) fences every save with it,
+(3) asks `is_held()` before every product write (`Site_Products_Bulk::guard()` throws `Bulk_Run_Lost`, which extends `\Exception` so the
+`\RuntimeException` catches around the writes cannot swallow it). The loops of `Export_Service::enqueue()` and `Link_Detacher::detach()` take the
+guard as an optional argument and ask it per product, and before the export's rollback writes — one check per batch would leave their writes unfenced. Proven on two real connections in
+`tests/integration/Marketplace/BulkRunTwoConnectionsTest.php` (needs MySQL; the unit suite scripts the lock).
+
+**The cursor.** `{ parent, child }`, both product ids ascending; `child > 0` means «a variable product is being walked». Parents are read
+by id under the list's own `WHERE` (`Site_Products_Reader::ids_after()`), so an action that moves a product out of the filter cannot make
+the run repeat it. Part sizes are constants of `Site_Products_Run_Worker` (export 100, detach 200, the rest 500).
+
+**D1.** Switching sync on (`sync_stock_on`, `sync_price_on`) now records the first send of every created card it reached, in the ticked mode
+and in a run alike (`Site_Products_Bulk::record_first_send()`), as the product tab does. A part interrupted after the flags changed is finished by its retry: created cards a switch-on finds already on get their first send
+recorded too, and an intent that cannot be stored throws instead of counting as done.
+
+**Rig phase.** The 10 000-product scale test is generated and measured by `tests/integration/fixtures/bulk-run/` (see its README); the
+coordinator runs it, the PR carries the numbers.
+
 ## Verification
 
 Implementation evidence: PHP 7.4 syntax/static analysis, unit and contract tests, Jest
@@ -1043,6 +1077,7 @@ B6.
 - [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md) — ownership decision
 - [Marketplace card importer spec](../specs/2026-11-14-marketplace-card-importer.md) — the importer's design (I1–I7, O6)
 - [Marketplace admin UI spec](../specs/2026-11-15-marketplace-admin-ui.md) — the delivery-look redesign (#1776), C1–C3
+- [Marketplace bulk operations spec](../specs/2026-11-16-marketplace-bulk-operations.md) — «все по фильтру», sync on link, link by category (#1786)
 - [Architecture](architecture.md) — current module and settings responsibilities
 - [Agent rules](../AGENT-RULES.md) — Rule 9 and preservation rules
 - [ADR-007](../adr/007-react-admin-stack-wordpress-scripts.md) — runtime/build conventions

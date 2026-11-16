@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
+use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
@@ -33,6 +34,10 @@ use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
+use Woodev\Framework\Marketplace\Jobs\Account_Pause;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Lock;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Runner;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
@@ -83,6 +88,73 @@ final class Site_Products_Module {
 				self::register_remote_cards( $plugin, $accounts, $db );
 			},
 			5 // Before the REST registrar walks its controllers (priority 10), so the routes of a table registered now exist.
+		);
+
+		self::register_bulk_runs( $plugin, $accounts, $db );
+	}
+
+	/**
+	 * Hooks the tick of the bulk runs and their recovery sweep (#1795). Action Scheduler runs the tick outside the REST API, so this is
+	 * hooked on every request; the runner and the services under it are built when a tick actually comes.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
+	 * @param Wpdb_Account_Store $accounts Account store.
+	 * @param \wpdb              $db       Database.
+	 * @return void
+	 */
+	private static function register_bulk_runs( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): void {
+		$scheduler = new Bulk_Run_Scheduler( new Job_Names( $plugin->get_id() ) );
+
+		add_action(
+			$scheduler->hook(),
+			static function ( $account_id, $run_id = '' ) use ( $plugin, $accounts, $db ): void {
+				self::bulk_runner( $plugin, $accounts, $db )->tick( $account_id, $run_id );
+			},
+			10,
+			2
+		);
+		add_action( 'action_scheduler_init', [ $scheduler, 'ensure_sweep' ] );
+	}
+
+	/**
+	 * Builds the runner of the bulk runs. The named lock is taken on the same database object the tick writes through: a lock on one
+	 * connection would fence nothing on another.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
+	 * @param Wpdb_Account_Store $accounts Account store.
+	 * @param \wpdb              $db       Database.
+	 * @return Bulk_Run_Runner
+	 */
+	public static function bulk_runner( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): Bulk_Run_Runner {
+		$adapter = $plugin->get_marketplace_adapter();
+		$schema  = new Schema( $adapter->id() );
+		$table   = static function ( string $name ) use ( $schema, $db ): string {
+			return $schema->table_name( $name, $db->prefix );
+		};
+		$links   = new Wpdb_Link_Store( $db, $table( 'links' ), $table( 'link_ids' ) );
+		$ledger  = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
+		$names   = new Job_Names( $plugin->get_id() );
+		$worker  = new Site_Products_Run_Worker(
+			new Site_Products_Reader( $db, $table( 'links' ), $table( 'sync_state' ) ),
+			self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
+			License_Gate::for_plugin( $plugin ),
+			Account_Pause::over( $accounts, $adapter->error_classifier() )
+		);
+
+		return new Bulk_Run_Runner(
+			new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ),
+			new Bulk_Run_Lock( $db, $table( 'bulk_runs' ) ),
+			new Bulk_Run_Scheduler( $names ),
+			$accounts,
+			$adapter->id(),
+			$worker,
+			static function ( string $line ) use ( $plugin ): void {
+				$plugin->log_error( $line );
+			}
 		);
 	}
 
@@ -163,12 +235,14 @@ final class Site_Products_Module {
 		$license  = License_Gate::for_plugin( $plugin );
 		$bulk     = self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table );
 		$withheld = $adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE ];
+		$runner   = self::bulk_runner( $plugin, $accounts, $db );
+		$runs     = new Bulk_Run_Store( $db, $table( 'bulk_runs' ) );
 
 		return new Site_Products_Provider(
 			$accounts,
 			$reader,
 			new Site_Products_Selection( $reader ),
-			new Site_Products_Activity( $ledger, $db, $table( 'sync_state' ), $table( 'accounts' ) ),
+			new Site_Products_Activity( $ledger, $db, $table( 'sync_state' ), $table( 'accounts' ), null, $runs, [ $runner, 'recover' ] ),
 			$bulk,
 			new Warehouse_Options( new Wpdb_Catalog_Cache( $db, $table( 'catalog_cache' ) ) ),
 			$license,
@@ -176,7 +250,9 @@ final class Site_Products_Module {
 				'adapter_id'  => $adapter->id(),
 				'marketplace' => $adapter->settings_descriptor()->marketplace_name(),
 				'withheld'    => $withheld,
-			]
+			],
+			$runner,
+			$runs
 		);
 	}
 

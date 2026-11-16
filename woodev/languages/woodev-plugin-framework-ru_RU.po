@@ -11412,3 +11412,163 @@ msgstr ""
 #: assets/build/settings-page/index.js:1
 msgid "Сайт вернул страницу вместо ответа API — вероятен конфликт плагинов или правил перезаписи. Отключите по очереди плагины безопасности и кеширования и проверьте снова."
 msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:414
+msgid "причина не указана"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:373
+msgid "Запуск"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:382
+msgid "Остановить"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:387
+msgid "Обработка остановится после текущей части. То, что уже поставлено в очередь, будет отправлено."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:392
+msgid "Подробнее"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:397
+msgid "Итог действия по фильтру: что сделано и что пропущено."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:374
+msgid "Архивировать %s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:377
+msgid "Снять связь у %s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:401
+msgid "По этому фильтру товаров нет."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:417
+msgid "Не удалось поставить действие в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:425
+msgid "Действие запущено в фоне: %s. Ход работы — в строке аккаунта над таблицей."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:607
+msgid "Уже выполняется «%s» по фильтру — дождитесь окончания или остановите его."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:662
+msgid "Это действие уже закончилось — новое действие не остановлено."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:674
+msgid "Действие остановлено."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:703
+msgid "Это действие уже закончилось или заменено новым — смотрите строку аккаунта над таблицей."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:97
+msgid "Выполняется «%1$s» по фильтру: товаров %2$s из ~%3$s (обработано вариантов и простых товаров: %4$s)."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:104
+msgid "Останавливаем: обработка прекратится после текущей части."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:122
+msgid "«%1$s» по фильтру остановлено: %2$s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:124
+msgid "причина не записана."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:131
+msgid "«%1$s» по фильтру остановлено: обработано товаров %2$s из ~%3$s. "
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:151
+msgid "Будет затронуто %s по фильтру."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:162
+msgid "Действие выполняется в фоне частями; товары, изменившиеся за это время, обрабатываются такими, какими они будут в момент обработки. Ход работы — в строке аккаунта над таблицей."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:176
+msgid "Каждый товар будет проверен перед отправкой; прошедшие проверку уйдут в очередь частями по 100. Товары с ошибками останутся как есть — список причин будет в итоге."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:177
+msgid "Текущие остатки с сайта будут поставлены в очередь на отправку на %s для всех связанных товаров по фильтру. Несвязанные и выключенные пропустим."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:178
+msgid "Текущие цены с сайта будут поставлены в очередь на отправку на %s для всех связанных товаров по фильтру. Несвязанные и выключенные пропустим."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:179
+msgid "Переключатель изменится у всех связанных товаров по фильтру. Включение сразу поставит в очередь отправку текущих остатков с сайта."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:180
+msgid "Переключатель изменится у всех связанных товаров по фильтру."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:181
+msgid "Переключатель изменится у всех связанных товаров по фильтру. Включение сразу поставит в очередь отправку текущих цен с сайта."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:183
+msgid "Остатки всех связанных товаров по фильтру будут отправляться на выбранный склад."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:184
+msgid "Остаток на %s станет нулевым, затем карточки уйдут в архив. Товары на сайте не меняются."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:185
+msgid "Сайт забудет карточки всех товаров по фильтру. Карточки на %s не меняются."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:186
+msgid "Товары снова станут «Не связан». На %s ничего не меняется."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:203
+msgid "Готово: товаров %1$s; изменено %2$s, пропущено %3$s, не удалось %4$s."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-line.php:213
+msgid "Подготовлено и поставлено в очередь: %1$s; пропущено %2$s, не удалось %3$s. Отправка идёт в фоне — её ход виден в столбце «Состояние», ошибки — в фильтре «только с ошибками»."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-worker.php:119
+msgid "У пользователя, запустившего действие, больше нет прав."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-run-worker.php:134
+msgid "Аккаунт приостановлен после отказа маркетплейса в доступе. Проверьте ключи в настройках аккаунта."
+msgstr ""
+
+#: marketplace/jobs/class-bulk-run-report.php:113
+msgid "Другие причины"
+msgstr ""
+
+#: marketplace/jobs/class-bulk-run-runner.php:304
+msgid "Обработка остановлена из-за внутренней ошибки. Подробности — в журнале плагина."
+msgstr ""
+
+#: marketplace/jobs/class-bulk-run-runner.php:421
+msgid "Аккаунт выключен или удалён."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:998
+msgid "Синхронизация включена, но первую отправку записать не удалось. Повторите действие — оно запишет недостающее."
+msgstr ""

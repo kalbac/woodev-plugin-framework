@@ -44,6 +44,7 @@ final class SchemaTest extends TestCase {
 			'mapping_terms' => [ 'term_id', 'mapping_id' ],
 			'profiles'      => [ 'profile_id', 'name', 'settings' ],
 			'catalog_cache' => [ 'cache_key', 'payload', 'fetched_at' ],
+			'bulk_runs'     => [ 'account_id', 'run_id', 'state', 'cancel', 'tick', 'action', 'payload', 'filter', 'user_id', 'cursor', 'items', 'counts', 'report', 'started_at', 'finished_at' ],
 		];
 	}
 

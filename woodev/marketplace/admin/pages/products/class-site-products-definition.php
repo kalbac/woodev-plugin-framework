@@ -21,8 +21,10 @@ defined( 'ABSPATH' ) || exit;
 final class Site_Products_Definition {
 	/**
 	 * Product capability the write actions ask for.
+	 *
+	 * @since 2.1.8 Public: a bulk run checks it for the user who started it.
 	 */
-	private const EDIT = 'edit_products';
+	public const EDIT = 'edit_products';
 
 	/**
 	 * Builds the definition.
@@ -257,16 +259,16 @@ final class Site_Products_Definition {
 	 */
 	private static function bulk_actions( string $marketplace, array $withheld ): array {
 		$actions = [
-			self::action( Site_Products_Bulk::EXPORT, __( 'Экспортировать / Обновить карточку', 'woodev-plugin-framework' ), __( 'Товары, прошедшие проверку, уйдут в очередь на отправку. Остальные останутся как есть — исправьте причину и повторите.', 'woodev-plugin-framework' ) ),
+			self::action( Site_Products_Bulk::EXPORT, self::label_of( Site_Products_Bulk::EXPORT ), __( 'Товары, прошедшие проверку, уйдут в очередь на отправку. Остальные останутся как есть — исправьте причину и повторите.', 'woodev-plugin-framework' ) ),
 			self::link_by_article( null, true ),
-			self::action( Site_Products_Bulk::SEND_STOCK, __( 'Отправить остатки', 'woodev-plugin-framework' ), __( 'Текущий остаток с сайта будет отправлен на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
-			self::action( Site_Products_Bulk::SEND_PRICE, __( 'Отправить цены', 'woodev-plugin-framework' ), __( 'Текущая цена с сайта будет отправлена на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
-			self::action( Site_Products_Bulk::SYNC_STOCK_ON, __( 'Включить синхронизацию остатков', 'woodev-plugin-framework' ) ),
-			self::action( Site_Products_Bulk::SYNC_STOCK_OFF, __( 'Выключить синхронизацию остатков', 'woodev-plugin-framework' ) ),
-			self::action( Site_Products_Bulk::SYNC_PRICE_ON, __( 'Включить синхронизацию цен', 'woodev-plugin-framework' ) ),
-			self::action( Site_Products_Bulk::SYNC_PRICE_OFF, __( 'Выключить синхронизацию цен', 'woodev-plugin-framework' ) ),
+			self::action( Site_Products_Bulk::SEND_STOCK, self::label_of( Site_Products_Bulk::SEND_STOCK ), __( 'Текущий остаток с сайта будет отправлен на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
+			self::action( Site_Products_Bulk::SEND_PRICE, self::label_of( Site_Products_Bulk::SEND_PRICE ), __( 'Текущая цена с сайта будет отправлена на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
+			self::action( Site_Products_Bulk::SYNC_STOCK_ON, self::label_of( Site_Products_Bulk::SYNC_STOCK_ON ) ),
+			self::action( Site_Products_Bulk::SYNC_STOCK_OFF, self::label_of( Site_Products_Bulk::SYNC_STOCK_OFF ) ),
+			self::action( Site_Products_Bulk::SYNC_PRICE_ON, self::label_of( Site_Products_Bulk::SYNC_PRICE_ON ) ),
+			self::action( Site_Products_Bulk::SYNC_PRICE_OFF, self::label_of( Site_Products_Bulk::SYNC_PRICE_OFF ) ),
 			array_merge(
-				self::action( Site_Products_Bulk::SET_WAREHOUSE, __( 'Выбрать склад', 'woodev-plugin-framework' ), __( 'Остатки этих товаров будут отправляться на выбранный склад.', 'woodev-plugin-framework' ) ),
+				self::action( Site_Products_Bulk::SET_WAREHOUSE, self::label_of( Site_Products_Bulk::SET_WAREHOUSE ), __( 'Остатки этих товаров будут отправляться на выбранный склад.', 'woodev-plugin-framework' ) ),
 				[
 					'fields' => [
 						[
@@ -282,18 +284,20 @@ final class Site_Products_Definition {
 			array_merge(
 				self::action(
 					Site_Products_Bulk::ARCHIVE,
-					__( 'Архивировать', 'woodev-plugin-framework' ),
+					self::label_of( Site_Products_Bulk::ARCHIVE ),
 					/* translators: %s: marketplace name. */
 					sprintf( __( 'Остаток на маркетплейсе станет нулевым, затем карточка уйдёт в архив %s. Товар на сайте не меняется.', 'woodev-plugin-framework' ), $marketplace )
 				),
 				[ 'tone' => 'danger' ]
 			),
 			array_merge(
-				self::action( Site_Products_Bulk::DETACH, __( 'Снять связь', 'woodev-plugin-framework' ), __( 'Сайт забудет карточку: товар можно будет выгрузить заново или связать с другой карточкой. Карточка на маркетплейсе не меняется.', 'woodev-plugin-framework' ) ),
+				self::action( Site_Products_Bulk::DETACH, self::label_of( Site_Products_Bulk::DETACH ), __( 'Сайт забудет карточку: товар можно будет выгрузить заново или связать с другой карточкой. Карточка на маркетплейсе не меняется.', 'woodev-plugin-framework' ) ),
 				[ 'tone' => 'danger' ]
 			),
-			self::action( Site_Products_Bulk::RESET, __( 'Сбросить состояние', 'woodev-plugin-framework' ), __( 'Товар снова станет «Не связан». На маркетплейсе ничего не меняется: карточка остаётся там как была.', 'woodev-plugin-framework' ) ),
+			self::action( Site_Products_Bulk::RESET, self::label_of( Site_Products_Bulk::RESET ), __( 'Товар снова станет «Не связан». На маркетплейсе ничего не меняется: карточка остаётся там как была.', 'woodev-plugin-framework' ) ),
 		];
+
+		$actions = array_merge( $actions, self::run_actions() );
 
 		return array_values(
 			array_filter(
@@ -322,6 +326,77 @@ final class Site_Products_Definition {
 			'scope'          => 'selection',
 			'capability'     => self::EDIT,
 			'scope_sentence' => $sentence,
+			'all_matching'   => true,
+		];
+	}
+
+	/**
+	 * The merchant's name of a bulk action: the toolbar's label, and the name the account line gives a run.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param string $action Action id.
+	 * @return string The id itself for an action with no label here.
+	 */
+	public static function label_of( string $action ): string {
+		$labels = [
+			Site_Products_Bulk::EXPORT        => __( 'Экспортировать / Обновить карточку', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::SEND_STOCK    => __( 'Отправить остатки', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::SEND_PRICE    => __( 'Отправить цены', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::SYNC_STOCK_ON => __( 'Включить синхронизацию остатков', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::SYNC_STOCK_OFF => __( 'Выключить синхронизацию остатков', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::SYNC_PRICE_ON => __( 'Включить синхронизацию цен', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::SYNC_PRICE_OFF => __( 'Выключить синхронизацию цен', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::SET_WAREHOUSE => __( 'Выбрать склад', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::ARCHIVE       => __( 'Архивировать', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::DETACH        => __( 'Снять связь', 'woodev-plugin-framework' ),
+			Site_Products_Bulk::RESET         => __( 'Сбросить состояние', 'woodev-plugin-framework' ),
+		];
+
+		return $labels[ $action ] ?? $action;
+	}
+
+	/**
+	 * The two buttons of a bulk run's account line, declared as account actions the line runs with the id of the run it shows: they
+	 * carry a required `hidden` field, so the toolbar never draws them on their own (#1795).
+	 *
+	 * «Остановить» stops the run; «Подробнее» is read-only and shows the stored report through the preview contract.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function run_actions(): array {
+		$run = [
+			[
+				'id'       => Site_Products_Bulk::RUN_FIELD,
+				'label'    => __( 'Запуск', 'woodev-plugin-framework' ),
+				'type'     => 'hidden',
+				'required' => true,
+			],
+		];
+
+		return [
+			[
+				'id'             => Site_Products_Bulk::RUN_STOP,
+				'label'          => __( 'Остановить', 'woodev-plugin-framework' ),
+				'effect'         => 'mutate',
+				'interaction'    => 'dialog',
+				'scope'          => 'account',
+				'capability'     => self::EDIT,
+				'scope_sentence' => __( 'Обработка остановится после текущей части. То, что уже поставлено в очередь, будет отправлено.', 'woodev-plugin-framework' ),
+				'fields'         => $run,
+			],
+			[
+				'id'             => Site_Products_Bulk::RUN_REPORT,
+				'label'          => __( 'Подробнее', 'woodev-plugin-framework' ),
+				'effect'         => 'read',
+				'interaction'    => 'dialog',
+				'scope'          => 'account',
+				'capability'     => self::EDIT,
+				'scope_sentence' => __( 'Итог действия по фильтру: что сделано и что пропущено.', 'woodev-plugin-framework' ),
+				'fields'         => $run,
+			],
 		];
 	}
 

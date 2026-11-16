@@ -106,14 +106,20 @@ final class Export_Service {
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Account $account     Account the cards go to.
-	 * @param int[]   $product_ids Products or variations; a variable product stands for its variations.
+	 * @since 2.1.8 `$guard`.
+	 *
+	 * @param Account       $account     Account the cards go to.
+	 * @param int[]         $product_ids Products or variations; a variable product stands for its variations.
+	 * @param callable|null $guard       `function (): void`, called before every product write, each one on its own (a link created, blocked
+	 *                                   or queued, and each rollback after a refused batch); it throws to stop the export. A bulk run passes the check that its
+	 *                                   tick still owns the run. Links queued before it throws are replayed by the tick that owns the run now,
+	 *                                   which re-plans the part from its saved cursor.
 	 * @return array{report:Bulk_Validation_Report,queued:int[],refused:array<int,string>} `queued`: product ids whose link is now
 	 *         `queued`; `refused`: valid product id => the card state that kept it out.
 	 * @throws \RuntimeException When a link cannot be stored; {@see Export_Not_Scheduled} when Action Scheduler refuses a batch (its
 	 *                           links are put back to the state they had).
 	 */
-	public function enqueue( Account $account, array $product_ids ): array {
+	public function enqueue( Account $account, array $product_ids, ?callable $guard = null ): array {
 		$bulk     = new Bulk_Validation_Report();
 		$link_ids = [];
 		$queued   = [];
@@ -125,6 +131,10 @@ final class Export_Service {
 			$context = $this->contexts->build( $account, $product, $link );
 			$report  = $this->validator->validate( $product, $context->mapping(), $context->profile(), $context->raw_context() );
 			$article = (string) $context->raw_context()['frozen_offer_id'];
+			if ( null === $link ) {
+				$this->guard( $guard );
+			}
+
 			$link    = $link ?? $this->create_link( $account, $product, $article );
 
 			$bulk->add( (int) $product->get_id(), $report );
@@ -134,12 +144,16 @@ final class Export_Service {
 			}
 
 			if ( ! $report->is_valid() ) {
+				$this->guard( $guard );
+
 				$first = (array) $report->first_error();
 				$this->links->record_blocked( (int) $link->link_id(), (string) ( $first['code'] ?? '' ), implode( "\n", array_column( $report->errors(), 'message' ) ) );
 				continue;
 			}
 
 			$before = $link->card_state();
+
+			$this->guard( $guard );
 
 			if ( $this->links->queue( (int) $link->link_id(), $article ) ) {
 				$link_ids[]                          = (int) $link->link_id();
@@ -151,7 +165,8 @@ final class Export_Service {
 		}
 
 		if ( [] !== $link_ids ) {
-			$this->schedule( $account, $link_ids, $previous );
+			$this->guard( $guard );
+			$this->schedule( $account, $link_ids, $previous, $guard );
 		}
 
 		return [
@@ -162,6 +177,16 @@ final class Export_Service {
 	}
 
 	/**
+	 * @param callable|null $guard The caller's check; it throws when the caller may not write any more.
+	 * @return void
+	 */
+	private function guard( ?callable $guard ): void {
+		if ( null !== $guard ) {
+			call_user_func( $guard );
+		}
+	}
+
+	/**
 	 * Schedules the batches of the links just queued. A link whose batch Action Scheduler refused is taken out of the queue again:
 	 * `queued` with no task and no batch is found by nothing (the poll sweep follows tasks), so it would never be exported. It goes
 	 * back to the state it was in, and an `unlinked` or `failed` row carries the reason where the merchant reads it.
@@ -169,14 +194,17 @@ final class Export_Service {
 	 * @param Account           $account  Account.
 	 * @param int[]             $link_ids Links just queued.
 	 * @param array<int,string> $previous Link id => the card state before it was queued.
+	 * @param callable|null     $guard    Called before every rollback write.
 	 * @return void
 	 * @throws Export_Not_Scheduled After the rollback, when some batch was refused.
 	 */
-	private function schedule( Account $account, array $link_ids, array $previous ): void {
+	private function schedule( Account $account, array $link_ids, array $previous, ?callable $guard = null ): void {
 		try {
 			$this->scheduler->queue_export( $account->id(), $link_ids );
 		} catch ( Export_Not_Scheduled $e ) {
 			foreach ( $e->link_ids() as $link_id ) {
+				$this->guard( $guard );
+
 				$state = $previous[ $link_id ] ?? Link_Record::STATE_UNLINKED;
 				$shown = in_array( $state, [ Link_Record::STATE_UNLINKED, Link_Record::STATE_FAILED ], true );
 

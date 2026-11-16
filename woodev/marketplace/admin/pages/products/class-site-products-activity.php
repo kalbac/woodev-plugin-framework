@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Activity_Normalizer;
+use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 
@@ -60,22 +61,40 @@ final class Site_Products_Activity {
 	private $clock;
 
 	/**
+	 * The bulk runs of the accounts; none for a table that has no «все по фильтру» mode.
+	 *
+	 * @var Bulk_Run_Store|null
+	 */
+	private $runs;
+
+	/**
+	 * Queues the tick of a run that lost its next one: `function ( int $account_id ): void`.
+	 *
+	 * @var callable|null
+	 */
+	private $recover;
+
+	/**
 	 * Creates the reader.
 	 *
 	 * @since 2.1.4
 	 *
-	 * @param Task_Ledger   $ledger         Task ledger.
-	 * @param \wpdb         $db             Database.
-	 * @param string        $sync_table     Full name of the sync state table.
-	 * @param string        $accounts_table Full name of the accounts table.
-	 * @param callable|null $clock          Returns the Unix time; the system clock when null.
+	 * @param Task_Ledger         $ledger         Task ledger.
+	 * @param \wpdb               $db             Database.
+	 * @param string              $sync_table     Full name of the sync state table.
+	 * @param string              $accounts_table Full name of the accounts table.
+	 * @param callable|null       $clock          Returns the Unix time; the system clock when null.
+	 * @param Bulk_Run_Store|null $runs     The bulk runs; the account line says nothing about them when null.
+	 * @param callable|null       $recover        `function ( int $account_id ): void` — the recovery check the line's read makes for a run in progress.
 	 */
-	public function __construct( Task_Ledger $ledger, \wpdb $db, string $sync_table, string $accounts_table, ?callable $clock = null ) {
+	public function __construct( Task_Ledger $ledger, \wpdb $db, string $sync_table, string $accounts_table, ?callable $clock = null, ?Bulk_Run_Store $runs = null, ?callable $recover = null ) {
 		$this->ledger         = $ledger;
 		$this->db             = $db;
 		$this->sync_table     = $sync_table;
 		$this->accounts_table = $accounts_table;
 		$this->clock          = $clock ?? 'time';
+		$this->runs           = $runs;
+		$this->recover        = $recover;
 	}
 
 	/**
@@ -157,12 +176,56 @@ final class Site_Products_Activity {
 	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::account()}.
 	 */
 	public function account( int $account_id ): array {
+		$claim = $this->claim_line( $account_id );
+		$line  = $this->run_line( $account_id );
+
+		if ( null === $line ) {
+			return $claim ?? Activity_Normalizer::idle_account();
+		}
+
+		return [
+			'active'          => $line['active'] || null !== $claim,
+			'text'            => $line['text'],
+			'blocked_actions' => null === $claim ? [] : $claim['blocked_actions'],
+			'actions'         => $line['actions'],
+			'observed_at'     => Activity_Normalizer::now(),
+		];
+	}
+
+	/**
+	 * The line of a bulk run (#1795): what it is doing or how it ended, with its buttons. A run that is going and has no tick waiting
+	 * gets one queued here (the next tick was lost between a save and its enqueue); the read is made every few seconds while the page is open.
+	 *
+	 * @param int $account_id Account.
+	 * @return array{active:bool,text:string,actions:array<int,array{action:string,label:string,payload:array<string,string>}>}|null
+	 */
+	private function run_line( int $account_id ): ?array {
+		if ( null === $this->runs ) {
+			return null;
+		}
+
+		$run = $this->runs->find( $account_id );
+
+		if ( null !== $run && $run->is_running() && null !== $this->recover ) {
+			call_user_func( $this->recover, $account_id );
+		}
+
+		return Site_Products_Run_Line::line( $run, (int) call_user_func( $this->clock ) );
+	}
+
+	/**
+	 * The line of the account's claim: «По аккаунту идёт фоновая работа», or null when nothing holds it.
+	 *
+	 * @param int $account_id Account.
+	 * @return array<string,mixed>|null Shape of {@see Activity_Normalizer::account()}.
+	 */
+	private function claim_line( int $account_id ): ?array {
 		$until = $this->db->get_var(
 			$this->db->prepare( 'SELECT claim_until FROM %i WHERE account_id = %d AND claim_token IS NOT NULL', $this->accounts_table, $account_id ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table, read fresh.
 		);
 
 		if ( ! is_string( $until ) || '' === $until || strtotime( $until . ' UTC' ) <= (int) call_user_func( $this->clock ) ) {
-			return Activity_Normalizer::idle_account();
+			return null;
 		}
 
 		return [
