@@ -22,6 +22,10 @@ offers. The last 2 000 simple products have no link row.
 # 0. The plugin id and the account id of the rig (the account must exist and be enabled).
 PLUGIN=ozon-seller; ADAPTER=ozon; ACCOUNT=1
 
+# 0b. The `bulk_runs` table is created by the plugin's install / upgrade, which runs only when the plugin version changes. On a rig
+#     whose plugin version did not change, create it first (idempotent: dbDelta changes only the difference).
+wp eval 'require_once ABSPATH . "wp-admin/includes/upgrade.php"; global $wpdb; dbDelta( array_values( ( new Woodev\Framework\Marketplace\Data\Schema( "'$ADAPTER'" ) )->statements( $wpdb->prefix, $wpdb->get_charset_collate() ) ) );'
+
 # 1. Catalogue (idempotent: it refuses to run when the first fixture product already exists; add `reset` to delete and rebuild).
 wp eval-file tests/integration/fixtures/bulk-run/generate-catalogue.php $ADAPTER $ACCOUNT
 
@@ -29,10 +33,12 @@ wp eval-file tests/integration/fixtures/bulk-run/generate-catalogue.php $ADAPTER
 cp tests/integration/fixtures/bulk-run/measure-mu-plugin.php wp-content/mu-plugins/bulk-run-measure.php
 rm -f wp-content/bulk-run-ticks.jsonl
 
-# 3. Start a run (no filter = every product) and drive the queue until it ends.
+# 3. Start a run (no filter = every product) and drive the queue until the RUN is finished.
+#    Do not loop on the pending count of the hook: the recurring recovery sweep (args `[0,'']`) is always pending, so it never reaches 0.
 wp eval-file tests/integration/fixtures/bulk-run/start-run.php $PLUGIN $ACCOUNT sync_stock_on
-while wp action-scheduler list --hook=woodev_ozon_seller_bulk_run --status=pending --format=count | grep -qv '^0$'; do
-  wp action-scheduler run --group=woodev-ozon-seller --batch-size=1
+HOOK=woodev_${PLUGIN//-/_}_bulk_run
+until [ "$(wp db query "SELECT state FROM $(wp db prefix)woodev_${ADAPTER}_bulk_runs WHERE account_id = $ACCOUNT" --skip-column-names)" != running ]; do
+  wp action-scheduler run --hooks=$HOOK --batches=1
 done
 
 # 4. The table.
@@ -42,7 +48,7 @@ wp eval-file tests/integration/fixtures/bulk-run/report.php $PLUGIN $ACCOUNT
 Expected (the acceptance): `sync_stock_on` by no filter ends with **products 10 000, accepted 16 592, skipped 2 000
 («не отправлялся на маркетплейс»), failed 0**; `set_warehouse` (pass the warehouse id as the 4th argument of `start-run.php`) the same
 partition; `export` with the filter `state=unlinked` (5th argument `unlinked`) reaches exactly the 2 000 unlinked offers
-(`accepted + skipped + failed = 2000`, products 2 000). Every tick under 20 s, peak memory flat across ticks. Between two runs delete
-the fixture links' sync state: `wp eval-file .../generate-catalogue.php $ADAPTER $ACCOUNT reset`.
+(`accepted + skipped + failed = 2000`, products 2 000). Every tick under 20 s, peak memory flat across ticks. Between two runs rebuild the catalogue:
+`wp eval-file .../generate-catalogue.php $ADAPTER $ACCOUNT reset` (it deletes the fixture products, their links and their sync state).
 
 `start-run.php` arguments: `<plugin id> <account id> <action> [warehouse id or 0] [state filter]`.

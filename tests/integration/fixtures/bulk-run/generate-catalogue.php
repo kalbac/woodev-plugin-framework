@@ -54,6 +54,8 @@ if ( [] !== $fixture_ids ) {
 		$wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE post_id IN ({$in})" );
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}wc_product_meta_lookup WHERE product_id IN ({$in})" );
 		$wpdb->query( "DELETE FROM {$wpdb->term_relationships} WHERE object_id IN ({$in})" );
+		// The sync state of a link is keyed by `link_id`, so it goes first, while the link rows that name it still exist.
+		$wpdb->query( $wpdb->prepare( 'DELETE s FROM %i s INNER JOIN %i l ON l.link_id = s.link_id WHERE l.account_id = %d AND l.wc_product_id IN (' . $in . ')', $schema->table_name( 'sync_state', $wpdb->prefix ), $schema->table_name( 'links', $wpdb->prefix ), $account ) ); // phpcs:ignore
 		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE account_id = %d AND wc_product_id IN (' . $in . ')', $schema->table_name( 'links', $wpdb->prefix ), $account ) ); // phpcs:ignore
 	}
 
