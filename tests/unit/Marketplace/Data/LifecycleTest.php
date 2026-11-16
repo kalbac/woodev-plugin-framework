@@ -45,6 +45,13 @@ final class LifecycleTest extends TestCase {
 	private $creation_works = true;
 
 	/**
+	 * Whether `dbDelta` really adds the columns that are missing; a test sets it to false to play a database user without ALTER.
+	 *
+	 * @var bool
+	 */
+	private $alteration_works = true;
+
+	/**
 	 * The admin notice handler the plugin mock hands out.
 	 *
 	 * @var \Mockery\MockInterface
@@ -102,6 +109,10 @@ final class LifecycleTest extends TestCase {
 					$hook               = $this->during_delta;
 					$this->during_delta = null;
 					$hook();
+				}
+
+				if ( $this->alteration_works ) {
+					$GLOBALS['wpdb']->absent_columns = [];
 				}
 
 				if ( $this->creation_works ) {
@@ -323,6 +334,43 @@ final class LifecycleTest extends TestCase {
 		$this->assertCount( 1, $this->delta_batches, 'the second request waits for the retry mark to lapse' );
 		$this->assertArrayNotHasKey( 'woodev_fake-seller_schema_revision', $this->options );
 		$this->assertArrayHasKey( 'woodev_fake-seller_schema_retry', $this->transients );
+	}
+
+	/**
+	 * A refused `ALTER TABLE … ADD COLUMN` leaves every table in place, so `dbDelta` returns normally and the table names prove nothing:
+	 * the gate stores no revision, tells the merchant and sets the retry mark, and once the `ALTER` is allowed the retry adds the column
+	 * and stores the revision (#1829).
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_column_change_stores_no_revision_and_the_retry_adds_it(): void {
+		$this->use_option_store( [ 'woodev_fake-seller_version' => '2.0.0' ] );
+		$this->use_transient_store();
+		$this->expect_failure_notice();
+
+		$sync_state                      = ( new Schema( 'fake' ) )->table_name( 'sync_state', 'wp_' );
+		$GLOBALS['wpdb']->tables         = ( new Schema( 'fake' ) )->table_names( 'wp_' );
+		$GLOBALS['wpdb']->absent_columns = [ $sync_state . '.pending_source' ];
+		$this->alteration_works          = false;
+
+		$this->lifecycle->bring_schema_up_to_date();
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->assertCount( 1, $this->delta_batches, 'the second request waits for the retry mark to lapse' );
+		$this->assertArrayNotHasKey( 'woodev_fake-seller_schema_revision', $this->options, 'no revision is saved while a column is missing' );
+		$this->assertArrayHasKey( 'woodev_fake-seller_schema_retry', $this->transients, 'the retry mark is set' );
+		$this->assertSame( [], $GLOBALS['wpdb']->locks, 'the lock is released' );
+
+		// The next window: the database user may alter again.
+		$this->transients       = [];
+		$this->alteration_works = true;
+
+		$this->lifecycle->bring_schema_up_to_date();
+
+		$this->assertCount( 2, $this->delta_batches, 'the retry runs dbDelta again' );
+		$this->assertSame( [], $GLOBALS['wpdb']->absent_columns, 'the column landed' );
+		$this->assertSame( Schema::REVISION, $this->options['woodev_fake-seller_schema_revision'] );
+		$this->assertSame( [], $this->transients );
 	}
 
 	/**
@@ -627,6 +675,13 @@ final class LifecycleTest extends TestCase {
 			public $locks = [];
 
 			/**
+			 * Columns the database does not have, as `full table name.column`.
+			 *
+			 * @var string[]
+			 */
+			public $absent_columns = [];
+
+			/**
 			 * Charset clause.
 			 *
 			 * @return string
@@ -686,6 +741,12 @@ final class LifecycleTest extends TestCase {
 			 * @return null
 			 */
 			public function get_var( string $query = '' ) {
+				if ( preg_match( '/^SHOW COLUMNS FROM `([^`]+)` LIKE \'([^\']+)\'$/', $query, $matches ) ) {
+					$exists = in_array( strtolower( $matches[1] ), array_map( 'strtolower', $this->tables ), true ) && ! in_array( $matches[1] . '.' . $matches[2], $this->absent_columns, true );
+
+					return $exists ? $matches[2] : null;
+				}
+
 				if ( preg_match( "/SELECT option_value FROM \S+ WHERE option_name = '([^']+)'/", $query, $matches ) && isset( $this->locks[ $matches[1] ] ) ) {
 					return $this->locks[ $matches[1] ];
 				}

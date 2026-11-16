@@ -350,7 +350,7 @@ final class Lifecycle extends \Woodev_Lifecycle {
 	}
 
 	/**
-	 * Creates or brings up to date every table, and proves they exist.
+	 * Creates or brings up to date every table, and proves the tables and the columns added since exist.
 	 *
 	 * `dbDelta` compares each statement with the live table and changes only the difference, so calling this again on an
 	 * unchanged schema writes nothing and loses no rows. It also returns normally when a `CREATE` fails (for example a database
@@ -359,7 +359,7 @@ final class Lifecycle extends \Woodev_Lifecycle {
 	 * @since 2.0.29
 	 *
 	 * @return void
-	 * @throws Schema_Exception When a table is still missing after `dbDelta`.
+	 * @throws Schema_Exception When a table or a required column is still missing after `dbDelta`.
 	 */
 	public function create_tables(): void {
 		global $wpdb;
@@ -374,6 +374,12 @@ final class Lifecycle extends \Woodev_Lifecycle {
 		if ( [] !== $missing ) {
 			// The message only reaches the plugin log; the merchant sees a fixed notice.
 			throw new Schema_Exception( 'Tables missing after dbDelta: ' . implode( ', ', $missing ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+		}
+
+		// A refused `ALTER TABLE … ADD COLUMN` leaves the table in place, so the names above prove nothing about the columns.
+		$missing = $this->missing_columns();
+		if ( [] !== $missing ) {
+			throw new Schema_Exception( 'Columns missing after dbDelta: ' . implode( ', ', $missing ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
 	}
 
@@ -417,6 +423,32 @@ final class Lifecycle extends \Woodev_Lifecycle {
 		foreach ( $schema->table_names( $wpdb->prefix ) as $table ) {
 			if ( ! in_array( strtolower( $table ), $found, true ) ) {
 				$missing[] = $table;
+			}
+		}
+
+		return $missing;
+	}
+
+	/**
+	 * Lists the columns {@see Schema::required_columns()} names that the database does not have, as `table.column`.
+	 *
+	 * Asked of the database itself: neither `dbDelta`'s return value nor the last error of `$wpdb` says whether an `ALTER` landed (a
+	 * later successful query clears the error).
+	 *
+	 * @return string[]
+	 */
+	private function missing_columns(): array {
+		global $wpdb;
+
+		$missing = [];
+
+		foreach ( $this->get_schema()->required_columns( $wpdb->prefix ) as $table => $columns ) {
+			foreach ( $columns as $column ) {
+				$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM `' . $table . '` LIKE %s', $wpdb->esc_like( $column ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Table and column names are the framework's own.
+
+				if ( null === $found ) {
+					$missing[] = $table . '.' . $column;
+				}
 			}
 		}
 

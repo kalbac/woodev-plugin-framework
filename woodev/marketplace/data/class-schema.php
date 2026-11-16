@@ -56,6 +56,22 @@ final class Schema {
 	public const REVISION = 1;
 
 	/**
+	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
+	 * looks every one of them up before it stores a revision: `dbDelta` returns normally when its `ALTER TABLE … ADD COLUMN` is refused
+	 * and the table still exists, so the table names alone cannot tell a finished upgrade from a failed one. A new table needs no entry
+	 * (its existence is checked); a column added to an existing table gets one in the same change that raises {@see self::REVISION}.
+	 *
+	 * 1: `sync_state.pending_source`.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @var array<string,string[]>
+	 */
+	private const REQUIRED_COLUMNS = [
+		'sync_state' => [ 'pending_source' ],
+	];
+
+	/**
 	 * Names of the tables, without any prefix, in creation order.
 	 *
 	 * @var string[]
@@ -174,6 +190,24 @@ final class Schema {
 		}
 
 		return $statements;
+	}
+
+	/**
+	 * Returns the columns a revision-current table must have beyond its creation, see {@see self::REQUIRED_COLUMNS}.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param string $prefix `$wpdb->prefix`.
+	 * @return array<string,string[]> Full table name => column names.
+	 */
+	public function required_columns( string $prefix ): array {
+		$columns = [];
+
+		foreach ( self::REQUIRED_COLUMNS as $table => $names ) {
+			$columns[ $this->table_name( $table, $prefix ) ] = $names;
+		}
+
+		return $columns;
 	}
 
 	/**

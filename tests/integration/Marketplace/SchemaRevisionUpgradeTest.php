@@ -209,6 +209,73 @@ class SchemaRevisionUpgradeTest extends TestCase {
 	}
 
 	/**
+	 * Every current table exists and only `sync_state.pending_source` is missing, and the database refuses exactly the `ALTER` that
+	 * would add it: `dbDelta` returns normally and the table names are all there, yet no revision may be stored (#1829). Once the
+	 * `ALTER` is allowed, the retry adds the column, stores the revision and leaves the queued rows as they were.
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_alter_stores_no_revision_and_the_retry_adds_the_column(): void {
+		// Every table of the current schema, then the column taken away again: the old shape with nothing else missing.
+		foreach ( $this->schema->statements( $this->conn->prefix, $this->conn->get_charset_collate() ) as $statement ) {
+			$this->assertNotFalse( $this->conn->query( $statement ) );
+		}
+
+		$this->conn->insert(
+			$this->table( 'sync_state' ),
+			[
+				'account_id'      => 1,
+				'link_id'         => 1,
+				'warehouse_id'    => 7,
+				'kind'            => 'stock',
+				'pending_payload' => '{"stock":5}',
+				'pending_rev'     => 1,
+			]
+		);
+		$this->assertNotFalse( $this->conn->query( 'ALTER TABLE ' . $this->table( 'sync_state' ) . ' DROP COLUMN pending_source' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.SchemaChange -- The test's own table.
+		update_option( 'woodev_' . self::PLUGIN_ID . '_version', self::VERSION );
+
+		$this->assertNotContains( 'pending_source', $this->columns_of_sync_state() );
+
+		$alters  = 0;
+		$refuse  = true;
+		$refuser = function ( $query ) use ( &$alters, &$refuse ) {
+			if ( $refuse && 1 === preg_match( '/^\s*ALTER\s+TABLE\s+`?' . preg_quote( $this->table( 'sync_state' ), '/' ) . '`?\s+ADD\s+COLUMN\s+`?pending_source`?/i', (string) $query ) ) {
+				++$alters;
+
+				return 'SELECT 1 FROM `woodev_refused_alter_does_not_exist`'; // The statement the server refuses, in place of the ALTER.
+			}
+
+			return $query;
+		};
+		add_filter( 'query', $refuser );
+
+		try {
+			$lifecycle = new Lifecycle( $this->plugin(), $this->schema );
+			$lifecycle->bring_schema_up_to_date();
+
+			$this->assertSame( 1, $alters, 'dbDelta generated and tried the ALTER of the missing column.' );
+			$this->assertNotContains( 'pending_source', $this->columns_of_sync_state(), 'The ALTER was refused.' );
+			$this->assertFalse( get_option( 'woodev_' . self::PLUGIN_ID . '_schema_revision' ), 'No revision is stored while the column is missing.' );
+			$this->assertNotFalse( get_transient( 'woodev_' . self::PLUGIN_ID . '_schema_retry' ), 'The retry mark is set.' );
+
+			// The refusal ends and the retry mark lapses.
+			$refuse = false;
+			delete_transient( 'woodev_' . self::PLUGIN_ID . '_schema_retry' );
+
+			$lifecycle->bring_schema_up_to_date();
+		} finally {
+			remove_filter( 'query', $refuser );
+			delete_transient( 'woodev_' . self::PLUGIN_ID . '_schema_retry' );
+		}
+
+		$this->assertContains( 'pending_source', $this->columns_of_sync_state(), 'The retry added the column.' );
+		$this->assertSame( (string) Schema::REVISION, (string) get_option( 'woodev_' . self::PLUGIN_ID . '_schema_revision' ) );
+		$this->assertSame( '{"stock":5}', $this->conn->get_var( 'SELECT pending_payload FROM ' . $this->table( 'sync_state' ) . " WHERE kind = 'stock'" ), 'The queued row is unchanged.' );
+		$this->assertSame( 1, (int) $this->conn->get_var( 'SELECT COUNT(*) FROM ' . $this->table( 'sync_state' ) ) );
+	}
+
+	/**
 	 * After the upgrade a stock intent records and a price pull finishes: the old 150 is settled and nothing is left due to undo it.
 	 *
 	 * @return void
