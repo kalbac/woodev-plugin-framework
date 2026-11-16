@@ -981,9 +981,20 @@
 	 * отправке формы. Вместе с текстом ушла и строка `i18n.required` из
 	 * `Checkout_Handler::enqueue_*` — у неё не осталось потребителя.
 	 *
+	 * Только на странице с `form.checkout` (#1538): на order-pay и order-received полей нет, а
+	 * `#place_order` на order-pay — кнопка оплаты существующего заказа.
+	 *
 	 * @returns {void}
 	 */
 	function refreshGate() {
+		// #1538: this adapter now also loads on `is_checkout()` pages that have no checkout form —
+		// order-pay (`form#order_review` with its own `#place_order`) and order-received. The
+		// fields the gate waits for do not exist there, so a required one would disable the
+		// payment button with nothing the buyer could fill in. No `form.checkout`, no gate.
+		if( ! document.querySelector( 'form.checkout' ) ) {
+			return
+		}
+
 		if( ! blockPlaceOrder ) {
 			if( ! placeOrderReleased ) {
 				placeOrderReleased = true

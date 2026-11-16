@@ -138,3 +138,95 @@ describe( 'classic adapters on a real block checkout (#1538)', () => {
 		expect( window.WoodevPickupMount.getSession( PICKUP_FIELD ) ).toBeNull();
 	} );
 } );
+
+/**
+ * Order-pay is an `is_checkout()` page too (`/checkout/order-pay/<id>/`): the adapter loads there,
+ * but WooCommerce renders `form#order_review` with its own `#place_order` and none of the checkout
+ * fields. A required non-takeover field is absent and permanently empty, so the A2 gate used to
+ * disable the PAYMENT button with nothing the buyer could fill in (#1538, critic round 1).
+ */
+describe( 'the field gate on checkout-less pages (#1538)', () => {
+	const FIELD = 'delivery_note';
+
+	const ORDER_PAY = `
+		<form id="order_review" method="post">
+			<table class="shop_table"><tbody></tbody></table>
+			<div id="payment"><button type="submit" id="place_order">Оплатить заказ</button></div>
+		</form>
+	`;
+
+	const CLASSIC_CHECKOUT = `
+		<form class="checkout woocommerce-checkout">
+			<p id="${ FIELD }_field"><input type="text" id="${ FIELD }" name="${ FIELD }" value="" /></p>
+			<button type="submit" id="place_order">Оформить заказ</button>
+		</form>
+	`;
+
+	/**
+	 * Boots the adapter against `markup` with one REQUIRED, non-takeover managed field.
+	 *
+	 * @param {string} markup
+	 * @param {Object} [extra] Extra config keys, e.g. `block_place_order`.
+	 * @returns {void}
+	 */
+	function boot( markup, extra ) {
+		jest.resetModules();
+		document.body.innerHTML = markup;
+
+		global.jQuery = require( 'jquery' );
+		global.$      = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js' );
+		window[ FIELD_GLOBAL ] = {
+			endpoint: 'https://example.test/wp-json/woodev/v1/test/field-source',
+			nonce:    'test-nonce',
+			i18n:     { placeholder: 'Выберите…' },
+			fields:   { [ FIELD ]: { id: FIELD, required: true } },
+			takeover: {},
+			...( extra || {} ),
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-classic.js' );
+
+		jest.runAllTimers();
+	}
+
+	afterEach( () => {
+		delete window[ FIELD_GLOBAL ];
+		delete window.WoodevCheckoutFieldStore;
+		document.body.innerHTML = '';
+	} );
+
+	it( 'keeps the order-pay payment button enabled', () => {
+		boot( ORDER_PAY );
+
+		global.jQuery( document.body ).trigger( 'updated_checkout' );
+		jest.runAllTimers();
+
+		expect( document.getElementById( 'place_order' ).disabled ).toBe( false );
+	} );
+
+	it( 'does not release a payment button the page disabled, even with the gate switched off', () => {
+		// `block_place_order: false` makes the gate release `#place_order` once on first run — fine on
+		// a checkout, but on order-pay the button belongs to WooCommerce's payment form.
+		document.body.innerHTML = ORDER_PAY;
+		document.getElementById( 'place_order' ).disabled = true;
+
+		boot( document.body.innerHTML, { block_place_order: false } );
+
+		expect( document.getElementById( 'place_order' ).disabled ).toBe( true );
+	} );
+
+	it( 'survives the order-received page, which has no form and no button', () => {
+		boot( '<section class="woocommerce-order"><p>Спасибо</p></section>' );
+
+		expect( document.body.innerHTML ).toBe( '<section class="woocommerce-order"><p>Спасибо</p></section>' );
+	} );
+
+	it( 'still blocks the place-order button of a real classic checkout (the gate is intact)', () => {
+		boot( CLASSIC_CHECKOUT );
+
+		expect( document.getElementById( 'place_order' ).disabled ).toBe( true );
+	} );
+} );
