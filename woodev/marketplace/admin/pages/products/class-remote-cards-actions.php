@@ -146,7 +146,7 @@ final class Remote_Cards_Actions {
 	 * @param array<string,mixed> $payload Validated fields.
 	 * @return array<string,mixed> The preview answer of the records engine.
 	 * @throws Action_State_Exception When the licence is not in force, or a one-card action got several rows.
-	 * @throws Action_Input_Exception When the picked product cannot take a card.
+	 * @throws Action_Input_Exception When the picked product cannot take a card, or the category of the linking is not a product category.
 	 */
 	public function preview( Account $account, string $action, array $ids, array $payload ): array {
 		$this->require_one_card( $action, $ids );
@@ -164,7 +164,7 @@ final class Remote_Cards_Actions {
 			case Remote_Cards_Definition::REFRESH:
 				return $this->preview_refresh( $account );
 			default:
-				return $this->bulk->preview( $account, $action, [], [] );
+				return $this->bulk->preview( $account, $action, [], [], null, $this->bulk->link_category( $payload ) );
 		}
 	}
 
@@ -179,7 +179,7 @@ final class Remote_Cards_Actions {
 	 * @param array<string,mixed> $payload Validated fields.
 	 * @return array<string,mixed> The apply answer of the records engine.
 	 * @throws Action_State_Exception When the licence is not in force, a one-card action got several rows, or the queue refuses the job.
-	 * @throws Action_Input_Exception When the picked product cannot take a card.
+	 * @throws Action_Input_Exception When the picked product cannot take a card, or the category of the linking is not a product category.
 	 */
 	public function apply( Account $account, string $action, array $ids, array $payload ): array {
 		$this->require_one_card( $action, $ids );
@@ -198,7 +198,7 @@ final class Remote_Cards_Actions {
 			case Remote_Cards_Definition::REFRESH:
 				return $this->apply_refresh( $account );
 			default:
-				return $this->bulk->apply( $account, $action, [], [] );
+				return $this->bulk->apply( $account, $action, [], [], null, $this->bulk->link_category( $payload ) );
 		}
 	}
 

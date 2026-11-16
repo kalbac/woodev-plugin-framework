@@ -106,7 +106,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( '0', $options['options'][0]['value'], 'The first choice is the account default.' );
 	}
 
-	public function test_linking_by_article_asks_where_and_which_category_and_the_remote_table_does_not(): void {
+	public function test_linking_by_article_asks_where_and_which_category(): void {
 		$actions = array_column( $this->definition()->to_array()['bulk_actions'], null, 'id' );
 		$fields  = array_column( $actions['link_by_article']['fields'], null, 'id' );
 
@@ -117,7 +117,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertTrue( $fields['category']['options_source'] );
 		$this->assertTrue( $fields['category']['searchable'] );
 		$this->assertFalse( $fields['category']['required'], 'Only «одна категория» needs it; the provider checks that.' );
-		$this->assertSame( [], Site_Products_Definition::link_by_article()['fields'] ?? [], 'A table that cannot list categories keeps the plain action.' );
+		$this->assertArrayNotHasKey( 'fields', Site_Products_Definition::link_by_article(), 'A table that cannot list categories keeps the plain action.' );
 	}
 
 	/**

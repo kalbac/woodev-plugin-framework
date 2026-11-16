@@ -11326,3 +11326,13 @@ msgstr ""
 #: marketplace/admin/pages/products/class-site-products-provider.php:440
 msgid "Выберите категорию из списка."
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:121
+msgid "Связывание идёт по всему магазину или по одной категории. По артикулу сопоставляются все карточки аккаунта."
+msgstr ""
+
+#. translators: 1: time of the run, 2: the category the run was limited to.
+#: marketplace/admin/pages/products/class-remote-cards-summary.php:34
+#, php-format
+msgid "%1$s, категория «%2$s»"
+msgstr ""

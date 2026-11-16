@@ -22,6 +22,11 @@ final class Shop_Categories {
 	private const SEPARATOR = ' › ';
 
 	/**
+	 * Categories per page of {@see self::page()}.
+	 */
+	private const PAGE = 30;
+
+	/**
 	 * Lists every product category, by path.
 	 *
 	 * @since 2.1.0
@@ -63,6 +68,51 @@ final class Shop_Categories {
 		);
 
 		return $list;
+	}
+
+	/**
+	 * One page of the product categories whose name matches what the merchant typed, by name, each with its parents. For a
+	 * searchable select that must not load every category of a shop with thousands of them. The cursor is the offset of the next page.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param string $search Typed text, '' for every category.
+	 * @param string $cursor The `next_cursor` of the previous page, '' for the first.
+	 * @return array{options:array<int,array{value:string,label:string}>,next_cursor:string|null}
+	 */
+	public static function page( string $search, string $cursor ): array {
+		$offset = ctype_digit( $cursor ) ? (int) $cursor : 0;
+		$terms  = get_terms(
+			[
+				'taxonomy'   => 'product_cat',
+				'hide_empty' => false,
+				'orderby'    => 'name',
+				'search'     => $search,
+				'number'     => self::PAGE + 1,
+				'offset'     => $offset,
+			]
+		);
+		$terms  = is_array( $terms ) ? $terms : [];
+		$list   = [];
+
+		foreach ( array_slice( $terms, 0, self::PAGE ) as $term ) {
+			$names = [];
+
+			foreach ( array_reverse( (array) get_ancestors( (int) $term->term_id, 'product_cat', 'taxonomy' ) ) as $parent_id ) {
+				$names[] = self::name_of( (int) $parent_id );
+			}
+
+			$names[] = (string) $term->name;
+			$list[]  = [
+				'value' => (string) $term->term_id,
+				'label' => html_entity_decode( implode( self::SEPARATOR, $names ), ENT_QUOTES, 'UTF-8' ),
+			];
+		}
+
+		return [
+			'options'     => $list,
+			'next_cursor' => count( $terms ) > self::PAGE ? (string) ( $offset + self::PAGE ) : null,
+		];
 	}
 
 	/**

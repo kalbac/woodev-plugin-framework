@@ -41,11 +41,6 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	private const MAX_CATEGORIES = 200;
 
 	/**
-	 * Categories of the «Связать по артикулу» picker per page.
-	 */
-	private const CATEGORY_PAGE = 30;
-
-	/**
 	 * @var Wpdb_Account_Store
 	 */
 	private $accounts;
@@ -351,7 +346,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 */
 	public function get_field_options( array $context, string $action, string $field, array $query ): array {
 		if ( Site_Products_Bulk::LINK_BY_ARTICLE === $action && Site_Products_Bulk::LINK_CATEGORY === $field ) {
-			return $this->category_page( $query );
+			return Shop_Categories::page( $query['search'], $query['cursor'] );
 		}
 
 		$options = [
@@ -416,85 +411,8 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			'offers'    => $resolved['offers'],
 			'editable'  => $resolved['editable'],
 			'warehouse' => Site_Products_Bulk::SET_WAREHOUSE === $action ? $this->warehouse( $account, $payload ) : null,
-			'category'  => Site_Products_Bulk::LINK_BY_ARTICLE === $action ? $this->link_category( $payload ) : null,
+			'category'  => Site_Products_Bulk::LINK_BY_ARTICLE === $action ? $this->bulk->link_category( $payload ) : null,
 		];
-	}
-
-	/**
-	 * Reads the reach of the linking out of the payload: no category for «весь магазин» (also when nothing was chosen), the term id
-	 * for «одна категория», which must be a product category.
-	 *
-	 * @param array<string,mixed> $payload Fields.
-	 * @return int|null Null for the whole shop.
-	 * @throws Action_Input_Exception When «одна категория» is chosen with no category, or with one that is not a product category.
-	 */
-	private function link_category( array $payload ): ?int {
-		if ( Site_Products_Bulk::LINK_WHERE_CATEGORY !== (string) ( $payload[ Site_Products_Bulk::LINK_WHERE ] ?? '' ) ) {
-			return null;
-		}
-
-		$chosen = (string) ( $payload[ Site_Products_Bulk::LINK_CATEGORY ] ?? '' );
-		$term   = ctype_digit( $chosen ) ? (int) $chosen : 0;
-
-		if ( $term <= 0 || ! Shop_Categories::exists( $term ) ) {
-			throw new Action_Input_Exception( [ Site_Products_Bulk::LINK_CATEGORY => __( 'Выберите категорию из списка.', 'woodev-plugin-framework' ) ] );
-		}
-
-		return $term;
-	}
-
-	/**
-	 * One page of the product categories whose name contains what the merchant typed, by name; each is shown with its parents, so
-	 * two categories of one name stay apart. The cursor is the offset of the next page.
-	 *
-	 * @param array{row_id:string,search:string,cursor:string} $query Validated input.
-	 * @return array{options:array<int,array{value:string,label:string}>,next_cursor:string|null}
-	 */
-	private function category_page( array $query ): array {
-		$offset = ctype_digit( $query['cursor'] ) ? (int) $query['cursor'] : 0;
-		$terms  = get_terms(
-			[
-				'taxonomy'   => 'product_cat',
-				'hide_empty' => false,
-				'orderby'    => 'name',
-				'search'     => $query['search'],
-				'number'     => self::CATEGORY_PAGE + 1,
-				'offset'     => $offset,
-			]
-		);
-		$terms  = is_array( $terms ) ? $terms : [];
-		$more   = count( $terms ) > self::CATEGORY_PAGE;
-		$list   = [];
-
-		foreach ( array_slice( $terms, 0, self::CATEGORY_PAGE ) as $term ) {
-			$list[] = [
-				'value' => (string) $term->term_id,
-				'label' => $this->category_path( $term ),
-			];
-		}
-
-		return [
-			'options'     => $list,
-			'next_cursor' => $more ? (string) ( $offset + self::CATEGORY_PAGE ) : null,
-		];
-	}
-
-	/**
-	 * The name of a category with its parents («Одежда › Обувь»).
-	 *
-	 * @param \WP_Term $term Category.
-	 * @return string
-	 */
-	private function category_path( \WP_Term $term ): string {
-		$names = [];
-
-		foreach ( array_reverse( (array) get_ancestors( (int) $term->term_id, 'product_cat', 'taxonomy' ) ) as $parent_id ) {
-			$names[] = Shop_Categories::name_of( (int) $parent_id );
-		}
-
-		$names[] = (string) $term->name;
-
-		return html_entity_decode( implode( ' › ', $names ), ENT_QUOTES, 'UTF-8' );
 	}
 
 	/**

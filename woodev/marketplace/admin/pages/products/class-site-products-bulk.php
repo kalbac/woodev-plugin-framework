@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
+use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_State_Exception;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
@@ -207,6 +208,31 @@ final class Site_Products_Bulk {
 			self::DETACH,
 			self::RESET,
 		];
+	}
+
+	/**
+	 * Reads the reach of «Связать по артикулу» out of the dialog's fields: no category for «весь магазин» (also when nothing was
+	 * chosen), the term id for «одна категория», which must be a product category. Both tables that offer the action read it here.
+	 *
+	 * @since 2.1.8
+	 *
+	 * @param array<string,mixed> $payload Validated fields.
+	 * @return int|null Null for the whole shop.
+	 * @throws Action_Input_Exception When «одна категория» is chosen with no category, or with one that is not a product category.
+	 */
+	public function link_category( array $payload ): ?int {
+		if ( self::LINK_WHERE_CATEGORY !== (string) ( $payload[ self::LINK_WHERE ] ?? '' ) ) {
+			return null;
+		}
+
+		$chosen = (string) ( $payload[ self::LINK_CATEGORY ] ?? '' );
+		$term   = ctype_digit( $chosen ) ? (int) $chosen : 0;
+
+		if ( $term <= 0 || ! Shop_Categories::exists( $term ) ) {
+			throw new Action_Input_Exception( [ self::LINK_CATEGORY => __( 'Выберите категорию из списка.', 'woodev-plugin-framework' ) ] );
+		}
+
+		return $term;
 	}
 
 	/**

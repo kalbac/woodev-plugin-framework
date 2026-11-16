@@ -17,6 +17,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Ids;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 
 require_once dirname( __DIR__, 3 ) . '/Shipping/Rest_Api/wp-rest-controller-stub.php';
+require_once dirname( __DIR__ ) . '/Mappings/wp-term-stub.php';
 
 /**
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Actions
@@ -147,6 +148,28 @@ final class RemoteCardsNearMatchTest extends Remote_Cards_Test_Case {
 		$this->assertStringContainsString( 'Последний поиск по артикулу (14.11.2023 22:13)', $summary );
 		$this->assertStringContainsString( 'карточек просмотрено — 40, связано — 30, уже были связаны — 6, неоднозначных — 1', $summary );
 		$this->assertStringContainsString( 'которые ждут вашего решения: 2', $summary );
+	}
+
+	public function test_the_line_of_the_last_run_names_its_category_and_a_whole_shop_run_names_none(): void {
+		Functions\when( 'get_term' )->alias(
+			static function ( int $term_id ) {
+				$term          = new \WP_Term();
+				$term->term_id = $term_id;
+				$term->name    = 'Обувь';
+
+				return $term;
+			}
+		);
+		$run = [ 'finished_at' => 1700000000, 'cards' => 4, 'linked' => 2, 'already_linked' => 0, 'ambiguous' => 0, 'error' => '' ];
+
+		$this->reports()->save_run( $this->account_id, $run + [ 'category_id' => 7 ] );
+		$this->assertStringContainsString( 'Последний поиск по артикулу (14.11.2023 22:13, категория «Обувь»): карточек просмотрено — 4', $this->list_body()['messages']['summary'] );
+
+		$this->reports()->save_run( $this->account_id, $run + [ 'category_id' => 0 ] );
+		$this->assertStringNotContainsString( 'категория', $this->list_body()['messages']['summary'] );
+
+		$this->reports()->save_run( $this->account_id, [ 'finished_at' => 1700000000, 'category_id' => 7, 'error' => 'Маркетплейс не ответил' ] );
+		$this->assertStringContainsString( '14.11.2023 22:13, категория «Обувь») не удался: Маркетплейс не ответил', $this->list_body()['messages']['summary'] );
 	}
 
 	public function test_pairs_dropped_for_the_limit_are_mentioned_and_none_dropped_says_nothing(): void {
