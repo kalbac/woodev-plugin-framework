@@ -170,8 +170,8 @@ final class Link_Jobs {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( $this->scheduler->link_hook(), [ $this, 'link_cards' ], 10, 3 );
-		add_action( $this->scheduler->refresh_hook(), [ $this, 'refresh_cards' ], 10, 2 );
+		add_action( $this->scheduler->link_hook(), [ $this, 'link_cards' ], 10, 4 );
+		add_action( $this->scheduler->refresh_hook(), [ $this, 'refresh_cards' ], 10, 3 );
 	}
 
 	/**
@@ -182,9 +182,10 @@ final class Link_Jobs {
 	 * @param mixed $account_id  Account id.
 	 * @param mixed $category_id Product category, 0 for the whole shop.
 	 * @param mixed $attempt     Failed attempts so far.
+	 * @param mixed $put_offs    Waits so far (2.1.12); absent on a job that has not waited.
 	 * @return void
 	 */
-	public function link_cards( $account_id = 0, $category_id = 0, $attempt = 0 ): void {
+	public function link_cards( $account_id = 0, $category_id = 0, $attempt = 0, $put_offs = 0 ): void {
 		$account_id  = (int) $account_id;
 		$category_id = (int) $category_id;
 		$attempt     = (int) $attempt;
@@ -192,8 +193,8 @@ final class Link_Jobs {
 		$this->job->run(
 			$account_id,
 			$this->scheduler->link_hook(),
-			function ( int $delay, int $failures ) use ( $account_id, $category_id ): bool {
-				return $this->scheduler->retry_link( $account_id, $category_id, $failures, $delay );
+			function ( int $delay, int $failures, int $waits ) use ( $account_id, $category_id ): bool {
+				return $this->scheduler->retry_link( $account_id, $category_id, $failures, $delay, $waits );
 			},
 			function ( string $text ) use ( $account_id ): void {
 				$this->progress->clear( $account_id, Link_Progress_Store::KIND_LINK );
@@ -208,7 +209,8 @@ final class Link_Jobs {
 			$attempt,
 			function ( Account $account, Claim_Fence $fence ) use ( $category_id ): void {
 				$this->link_run( $account, $fence, $category_id > 0 ? $category_id : null );
-			}
+			},
+			max( 0, (int) $put_offs )
 		);
 	}
 
@@ -219,17 +221,18 @@ final class Link_Jobs {
 	 *
 	 * @param mixed $account_id Account id.
 	 * @param mixed $attempt    Failed attempts so far.
+	 * @param mixed $put_offs   Waits so far (2.1.12); absent on a job that has not waited.
 	 * @return void
 	 */
-	public function refresh_cards( $account_id = 0, $attempt = 0 ): void {
+	public function refresh_cards( $account_id = 0, $attempt = 0, $put_offs = 0 ): void {
 		$account_id = (int) $account_id;
 		$attempt    = (int) $attempt;
 
 		$this->job->run(
 			$account_id,
 			$this->scheduler->refresh_hook(),
-			function ( int $delay, int $failures ) use ( $account_id ): bool {
-				return $this->scheduler->retry_refresh( $account_id, $failures, $delay );
+			function ( int $delay, int $failures, int $waits ) use ( $account_id ): bool {
+				return $this->scheduler->retry_refresh( $account_id, $failures, $delay, $waits );
 			},
 			function ( string $text ) use ( $account_id ): void {
 				$this->progress->clear( $account_id, Link_Progress_Store::KIND_REFRESH );
@@ -238,8 +241,22 @@ final class Link_Jobs {
 			$attempt,
 			function ( Account $account, Claim_Fence $fence ): void {
 				$this->refresh_run( $account, $fence );
-			}
+			},
+			max( 0, (int) $put_offs )
 		);
+	}
+
+	/**
+	 * Tells the job when an interrupted run kept more than it started with, so a long walk with now and then a wait is not cut off.
+	 *
+	 * @param array<string,mixed> $before The saved state the run started from.
+	 * @param array<string,mixed> $after  The state it kept.
+	 * @return void
+	 */
+	private function note_progress( array $before, array $after ): void {
+		if ( $before !== $after ) {
+			$this->job->made_progress();
+		}
 	}
 
 	/**
@@ -259,10 +276,11 @@ final class Link_Jobs {
 		};
 		$record     = $this->progress->load( $account_id, Link_Progress_Store::KIND_LINK, (int) $category_id, (int) call_user_func( $this->clock ) );
 
-		$state = $record['state'] + [
+		$state  = $record['state'] + [
 			'catalogue' => [],
 			'details'   => [],
 		];
+		$before = $state;
 
 		try {
 			$cards   = $this->resolver->catalogue( $account, $context, $renew, $state['catalogue'] );
@@ -281,6 +299,7 @@ final class Link_Jobs {
 			$tally = $this->link_exact( $account_id, $matched, $details, $fence, $renew );
 		} catch ( \Throwable $e ) {
 			// A governor wait or a lost claim comes back later: keep the pages and detail requests already answered.
+			$this->note_progress( $before, $state );
 			$record['state'] = $state;
 			$this->progress->save( $account_id, Link_Progress_Store::KIND_LINK, $record );
 
@@ -458,6 +477,7 @@ final class Link_Jobs {
 		$account_id = $account->id();
 		$record     = $this->progress->load( $account_id, Link_Progress_Store::KIND_REFRESH, 0, (int) call_user_func( $this->clock ) );
 		$state      = $record['state'];
+		$before     = $state;
 
 		try {
 			$cards = $this->resolver->snapshot(
@@ -469,6 +489,7 @@ final class Link_Jobs {
 				$state
 			);
 		} catch ( \Throwable $e ) {
+			$this->note_progress( $before, $state );
 			$record['state'] = $state;
 			$this->progress->save( $account_id, Link_Progress_Store::KIND_REFRESH, $record );
 

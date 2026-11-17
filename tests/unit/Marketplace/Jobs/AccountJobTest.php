@@ -34,6 +34,13 @@ final class AccountJobTest extends Export_Test_Case {
 	private $retries_asked = [];
 
 	/**
+	 * The put-offs each retry asked for carried, in the order of {@see self::$retries_asked}.
+	 *
+	 * @var int[]
+	 */
+	private $put_offs_asked = [];
+
+	/**
 	 * Texts the job gave up with.
 	 *
 	 * @var string[]
@@ -55,7 +62,8 @@ final class AccountJobTest extends Export_Test_Case {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->retries_asked = [];
+		$this->retries_asked  = [];
+		$this->put_offs_asked = [];
 		$this->given_up      = [];
 		$this->worked        = 0;
 	}
@@ -63,11 +71,12 @@ final class AccountJobTest extends Export_Test_Case {
 	/**
 	 * Builds the skeleton.
 	 *
-	 * @param string[] $give_up_on Exceptions the work gives the run up with.
+	 * @param string[] $give_up_on   Exceptions the work gives the run up with.
+	 * @param int      $max_put_offs Put-offs the job takes before it gives up.
 	 * @return Account_Job
 	 */
-	private function job( array $give_up_on = [] ): Account_Job {
-		return new Account_Job( $this->job_gate(), $this->classifier, $this->ring(), [ $this, 'log_line' ], self::PATH, self::CODE, $give_up_on );
+	private function job( array $give_up_on = [], int $max_put_offs = Account_Job::MAX_PUT_OFFS ): Account_Job {
+		return new Account_Job( $this->job_gate(), $this->classifier, $this->ring(), [ $this, 'log_line' ], self::PATH, self::CODE, $give_up_on, $max_put_offs );
 	}
 
 	/**
@@ -76,14 +85,17 @@ final class AccountJobTest extends Export_Test_Case {
 	 * @param callable|null $work     `function ( Account, Claim_Fence ): void`.
 	 * @param int           $attempt  Failed attempts so far.
 	 * @param string[]      $give_up_on Exceptions the work gives the run up with.
+	 * @param int           $put_offs   Waits so far.
+	 * @param int           $max_put_offs Put-offs the job takes before it gives up.
 	 * @return void
 	 */
-	private function run_job( ?callable $work = null, int $attempt = 0, array $give_up_on = [] ): void {
-		$this->job( $give_up_on )->run(
+	private function run_job( ?callable $work = null, int $attempt = 0, array $give_up_on = [], int $put_offs = 0, int $max_put_offs = Account_Job::MAX_PUT_OFFS ): void {
+		$this->job( $give_up_on, $max_put_offs )->run(
 			$this->account_id,
 			self::CONTEXT,
-			function ( int $delay, int $failures ): bool {
-				$this->retries_asked[] = [ $delay, $failures ];
+			function ( int $delay, int $failures, int $waits ): bool {
+				$this->retries_asked[]  = [ $delay, $failures ];
+				$this->put_offs_asked[] = $waits;
 
 				return true;
 			},
@@ -93,7 +105,8 @@ final class AccountJobTest extends Export_Test_Case {
 			$attempt,
 			$work ?? function (): void {
 				++$this->worked;
-			}
+			},
+			$put_offs
 		);
 	}
 
@@ -207,6 +220,131 @@ final class AccountJobTest extends Export_Test_Case {
 		$this->run_job( $this->throwing( Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 0 ) ), 2 );
 
 		$this->assertSame( [ [ 45, 2 ], [ 1, 2 ] ], $this->retries_asked );
+		$this->assertSame( [], $this->given_up );
+	}
+
+	/**
+	 * A throttle counts as a put-off, and the count travels with the retry; the attempt stays as it was.
+	 *
+	 * @return void
+	 */
+	public function test_a_throttle_counts_a_put_off_apart_from_the_attempts(): void {
+		$throttle = $this->throwing( Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 30 ) );
+
+		$this->run_job( $throttle, 1, [], 0 );
+		$this->run_job( $throttle, 1, [], 4 );
+
+		$this->assertSame( [ [ 30, 1 ], [ 30, 1 ] ], $this->retries_asked );
+		$this->assertSame( [ 1, 5 ], $this->put_offs_asked );
+	}
+
+	/**
+	 * A sustained 429 stops at the ceiling: the retry is asked for MAX_PUT_OFFS times, the next run gives up with a text.
+	 *
+	 * @return void
+	 */
+	public function test_a_sustained_throttle_gives_up_at_the_ceiling(): void {
+		$throttle = $this->throwing( Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 30 ) );
+		$put_offs = 0;
+
+		for ( $run = 0; $run < Account_Job::MAX_PUT_OFFS + 5 && [] === $this->given_up; ++$run ) {
+			$this->run_job( $throttle, 0, [], $put_offs );
+			$put_offs = (int) end( $this->put_offs_asked );
+		}
+
+		$this->assertCount( Account_Job::MAX_PUT_OFFS, $this->retries_asked );
+		$this->assertCount( 1, $this->given_up );
+		$this->assertStringContainsString( 'put off ' . Account_Job::MAX_PUT_OFFS . ' times', implode( "\n", $this->log ) );
+	}
+
+	/**
+	 * Work that reported progress before the wait starts the count again; the same wait without progress is given up at the ceiling.
+	 *
+	 * @return void
+	 */
+	public function test_progress_before_a_wait_starts_the_count_again(): void {
+		$job      = $this->job();
+		$throttle = Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 30 );
+		$retry    = function ( int $delay, int $failures, int $waits ): bool {
+			$this->put_offs_asked[] = $waits;
+
+			return true;
+		};
+		$give_up  = function ( string $text ): void {
+			$this->given_up[] = $text;
+		};
+
+		$job->run(
+			$this->account_id,
+			self::CONTEXT,
+			$retry,
+			$give_up,
+			0,
+			function () use ( $job, $throttle ): void {
+				$job->made_progress();
+
+				throw $throttle;
+			},
+			Account_Job::MAX_PUT_OFFS
+		);
+
+		$this->assertSame( [ 1 ], $this->put_offs_asked );
+		$this->assertSame( [], $this->given_up );
+
+		$this->run_job( $this->throwing( $throttle ), 0, [], Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [ 1 ], $this->put_offs_asked, 'no progress, no further wait' );
+		$this->assertCount( 1, $this->given_up );
+	}
+
+	/**
+	 * A licence that stays lapsed ends the same way: waits count against the same ceiling.
+	 *
+	 * @return void
+	 */
+	public function test_a_wait_for_the_licence_gives_up_at_the_ceiling(): void {
+		$this->licensed = false;
+
+		$this->run_job( null, 0, [], 2, 3 );
+
+		$this->assertSame( [ 3 ], $this->put_offs_asked );
+		$this->assertSame( [], $this->given_up );
+
+		$this->run_job( null, 0, [], 3, 3 );
+
+		$this->assertCount( 1, $this->retries_asked, 'no further wait' );
+		$this->assertCount( 1, $this->given_up );
+		$this->assertSame( 0, $this->worked );
+	}
+
+	/**
+	 * A job that waited and then got through still works: waits alone never block it.
+	 *
+	 * @return void
+	 */
+	public function test_a_job_that_waited_still_works_when_the_wait_is_over(): void {
+		$this->run_job( null, 0, [], Account_Job::MAX_PUT_OFFS - 1 );
+
+		$this->assertSame( 1, $this->worked );
+		$this->assertSame( [], $this->retries_asked );
+		$this->assertSame( [], $this->given_up );
+	}
+
+	/**
+	 * A failed attempt and a busy account carry the put-offs along without adding to them, and a spent ceiling does not stop a retry.
+	 *
+	 * @return void
+	 */
+	public function test_failures_and_a_busy_account_carry_the_put_offs_unchanged(): void {
+		$this->run_job( $this->throwing( Fake_Remote_Exception::of( Remote_Error::RETRY, 'HTTP 503' ) ), 0, [], Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [ Account_Job::MAX_PUT_OFFS ], $this->put_offs_asked );
+		$this->assertSame( [], $this->given_up );
+
+		$this->assertNotNull( $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL ) );
+		$this->run_job( null, 0, [], Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [ Account_Job::MAX_PUT_OFFS, Account_Job::MAX_PUT_OFFS ], $this->put_offs_asked );
 		$this->assertSame( [], $this->given_up );
 	}
 

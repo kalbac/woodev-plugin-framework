@@ -132,7 +132,7 @@ final class Import_Jobs {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( $this->scheduler->hook(), [ $this, 'import_cards' ], 10, 3 );
+		add_action( $this->scheduler->hook(), [ $this, 'import_cards' ], 10, 4 );
 	}
 
 	/**
@@ -143,9 +143,10 @@ final class Import_Jobs {
 	 * @param mixed $account_id Account id.
 	 * @param mixed $offer_ids  Articles of the batch.
 	 * @param mixed $attempt    Failed attempts so far.
+	 * @param mixed $put_offs   Waits so far (2.1.12); absent on a job that has not waited.
 	 * @return void
 	 */
-	public function import_cards( $account_id = 0, $offer_ids = [], $attempt = 0 ): void {
+	public function import_cards( $account_id = 0, $offer_ids = [], $attempt = 0, $put_offs = 0 ): void {
 		$account_id = (int) $account_id;
 		$attempt    = (int) $attempt;
 		$offer_ids  = array_values( array_map( 'strval', is_array( $offer_ids ) ? $offer_ids : [] ) );
@@ -157,8 +158,8 @@ final class Import_Jobs {
 		$this->job->run(
 			$account_id,
 			$this->scheduler->hook(),
-			function ( int $delay, int $failures ) use ( $account_id, $offer_ids ): bool {
-				$this->scheduler->retry( $account_id, $offer_ids, $failures, $delay );
+			function ( int $delay, int $failures, int $waits ) use ( $account_id, $offer_ids ): bool {
+				$this->scheduler->retry( $account_id, $offer_ids, $failures, $delay, $waits );
 
 				return true;
 			},
@@ -168,7 +169,8 @@ final class Import_Jobs {
 			$attempt,
 			function ( Account $account, Claim_Fence $fence ) use ( $offer_ids, $attempt ): void {
 				$this->run( $account, $fence, $offer_ids, $attempt );
-			}
+			},
+			max( 0, (int) $put_offs )
 		);
 	}
 

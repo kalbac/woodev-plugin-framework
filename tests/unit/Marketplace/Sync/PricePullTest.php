@@ -650,6 +650,12 @@ final class PricePullTest extends Sync_Test_Case {
 
 		$this->assertSame( [ $this->account_id, [ 'a' ], 1, 'pull' ], $this->scheduler->of( self::REFRESH )[3]['args'] );
 		$this->assertSame( [ $this->account_id, [ 'a' ], 1 ], $this->scheduler->of( self::REFRESH )[4]['args'], 'The notification-driven retry keeps its three arguments.' );
+
+		$scheduler->refresh_later( $this->account_id, [ 'a' ], 1, 30, Price_Scheduler::PULL_MODE, 3 );
+		$scheduler->refresh_later( $this->account_id, [ 'a' ], 1, 30, '', 3 );
+
+		$this->assertSame( [ $this->account_id, [ 'a' ], 1, 'pull', 3 ], $this->scheduler->of( self::REFRESH )[5]['args'], 'A pull carries its put-offs.' );
+		$this->assertSame( [ $this->account_id, [ 'a' ], 1 ], $this->scheduler->of( self::REFRESH )[6]['args'], 'The notification-driven retry never carries them.' );
 	}
 
 	/**

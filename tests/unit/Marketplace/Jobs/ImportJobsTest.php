@@ -425,12 +425,12 @@ final class ImportJobsTest extends Export_Test_Case {
 	}
 
 	/**
-	 * The job is hooked with its three arguments.
+	 * The job is hooked with its four arguments: the account, the articles, the attempts and the put-offs.
 	 *
 	 * @return void
 	 */
-	public function test_the_job_is_hooked_with_three_arguments(): void {
-		Actions\expectAdded( self::HOOK )->once()->with( \Mockery::type( 'array' ), 10, 3 );
+	public function test_the_job_is_hooked_with_four_arguments(): void {
+		Actions\expectAdded( self::HOOK )->once()->with( \Mockery::type( 'array' ), 10, 4 );
 
 		$this->jobs()->register();
 
@@ -743,8 +743,23 @@ final class ImportJobsTest extends Export_Test_Case {
 
 		$retry = $this->scheduler->of( self::HOOK );
 
-		$this->assertSame( [ $this->account_id, [ 'A-1' ], 2 ], $retry[0]['args'] );
+		$this->assertSame( [ $this->account_id, [ 'A-1' ], 2, 1 ], $retry[0]['args'], 'the wait is counted apart from the attempts' );
 		$this->assertSame( Job_Gate::LICENCE_DELAY, $retry[0]['delay'] );
+	}
+
+	/**
+	 * A batch that has waited as often as the ceiling allows is not put off again: it gives up with a note and queues nothing.
+	 *
+	 * @return void
+	 */
+	public function test_a_lapsed_licence_past_the_ceiling_gives_the_batch_up(): void {
+		$this->licensed = false;
+
+		$this->jobs()->import_cards( $this->account_id, [ 'A-1' ], 0, Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [], $this->importer->reads );
+		$this->assertSame( [], $this->scheduler->of( self::HOOK ) );
+		$this->assertNotNull( $this->note( 'A-1' ) );
 	}
 
 	/**

@@ -88,11 +88,18 @@ final class Import_Scheduler {
 	 * @param string[] $offer_ids  Articles of the chunk.
 	 * @param int      $attempt    Failed attempts so far.
 	 * @param int      $delay      Seconds to wait.
+	 * @param int      $put_offs   Waits so far (2.1.12); carried as a fourth argument only when it is not 0.
 	 * @return void
 	 * @throws Persistence_Exception When Action Scheduler could not store the action.
 	 */
-	public function retry( int $account_id, array $offer_ids, int $attempt, int $delay ): void {
-		$this->enqueue( [ $account_id, array_values( array_map( 'strval', $offer_ids ) ), $attempt ], $delay, 0 === $delay );
+	public function retry( int $account_id, array $offer_ids, int $attempt, int $delay, int $put_offs = 0 ): void {
+		$args = [ $account_id, array_values( array_map( 'strval', $offer_ids ) ), $attempt ];
+
+		if ( $put_offs > 0 ) {
+			$args[] = $put_offs;
+		}
+
+		$this->enqueue( $args, $delay, 0 === $delay );
 	}
 
 	/**

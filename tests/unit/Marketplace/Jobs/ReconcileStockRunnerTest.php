@@ -13,6 +13,7 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Jobs\Account_Job;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Runner;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
@@ -147,7 +148,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 			array_filter(
 				$this->scheduler->of( self::HOOK ),
 				static function ( array $action ): bool {
-					return 3 === count( $action['args'] );
+					return count( $action['args'] ) >= 3;
 				}
 			)
 		);
@@ -688,6 +689,22 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * A pass that has waited as often as the ceiling allows queues no further continuation; the next daily run starts again.
+	 *
+	 * @return void
+	 */
+	public function test_a_wait_past_the_ceiling_ends_the_pass(): void {
+		$this->marketplace_is_master();
+		$this->stock_product( 'a', 101, 10 );
+		$this->licensed = false;
+
+		$this->runner()->run( $this->account_id, 7, 0, Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [], $this->market->requests );
+		$this->assertSame( [], $this->continuations() );
+	}
+
+	/**
 	 * Without a licence nothing is read; the job waits an hour with the same cursor.
 	 *
 	 * @return void
@@ -703,7 +720,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 
 		$this->assertSame( [], $this->market->requests );
 		$this->assertCount( 1, $continuations );
-		$this->assertSame( [ $this->account_id, 7, 0 ], $continuations[0]['args'] );
+		$this->assertSame( [ $this->account_id, 7, 0, 1 ], $continuations[0]['args'], 'the wait is counted apart from the attempts' );
 		$this->assertEqualsWithDelta( Job_Gate::LICENCE_DELAY, $continuations[0]['delay'], 5 );
 
 		$this->runner()->run( $this->account_id, 7, 0 );
@@ -752,6 +769,50 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 		$this->assertSame( [ $this->account_id, 0, 1 ], $continuations[0]['args'] );
 		$this->assertSame( 10, $this->wc_stock( $product ) );
 		$this->assertNotNull( $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL ), 'the claim was released' );
+	}
+
+	/**
+	 * A wait after a page was reconciled resumes from that page and starts the put-off count again, even for a pass that had waited as often
+	 * as the ceiling allows; a wait with nothing reconciled since the last one is given up at the ceiling.
+	 *
+	 * @return void
+	 */
+	public function test_a_wait_after_progress_resumes_from_the_page_and_a_wait_without_progress_stops_at_the_ceiling(): void {
+		$this->marketplace_is_master();
+		$last = 0;
+
+		for ( $i = 1; $i <= Reconcile_Stock_Runner::PAGE_SIZE + 1; $i++ ) {
+			$last = $this->stock_product( 'p' . $i, 3000 + $i, 10 );
+			$this->market->present[ 'p' . $i ] = 3;
+		}
+
+		$throttle_second_page = function (): void {
+			$this->market->script = array_fill(
+				0,
+				50,
+				static function ( string $call, int $warehouse_id, array $items ) {
+					if ( in_array( 'p' . ( Reconcile_Stock_Runner::PAGE_SIZE + 1 ), $items, true ) ) {
+						throw Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 30 );
+					}
+
+					return null;
+				}
+			);
+		};
+
+		$throttle_second_page();
+		$this->runner()->run( $this->account_id, 0, 0, Account_Job::MAX_PUT_OFFS );
+
+		$continuations = $this->continuations();
+
+		$this->assertCount( 1, $continuations, 'a page was reconciled before the wait' );
+		$this->assertSame( [ $this->account_id, $this->link_id( $last ) - 1, 0, 1 ], $continuations[0]['args'], 'resumes after the page, count started again' );
+
+		$throttle_second_page();
+		$this->runner()->run( ...$continuations[0]['args'] );
+		$this->runner()->run( $this->account_id, $this->link_id( $last ) - 1, 0, Account_Job::MAX_PUT_OFFS );
+
+		$this->assertCount( 2, $this->continuations(), 'the run at the same cursor past the ceiling queued nothing more' );
 	}
 
 	/**

@@ -22,6 +22,11 @@ defined( 'ABSPATH' ) || exit;
  *    account, a wait is not an attempt, a server error retries on the {@see Backoff} ladder up to {@see self::MAX_ATTEMPTS}; any
  *    other refusal is given up with its text. Nothing is thrown out of the job.
  *
+ * A wait (a throttle, a lapsed licence, a paused account) is not a failed attempt, but it is not free either: the job counts its
+ * put-offs apart from its attempts and gives up with a recorded text after {@see self::MAX_PUT_OFFS} of them in a row, so a marketplace
+ * that answers 429 for hours cannot keep a job re-queued for ever. A run whose work reported progress ({@see self::made_progress()}: a
+ * page or a batch it kept before the wait) starts the count again, so a long walk with now and then a 429 is never cut off. A busy account is not counted: its claim expires by itself.
+ *
  * What differs between the jobs is passed in: the request path the error ring names next to a failed run, the ring's failure code
  * and the exceptions the job's own work throws to mean «give up, with this text» instead of going through the classifier.
  *
@@ -29,6 +34,14 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Account_Job {
 	public const MAX_ATTEMPTS = 3;
+
+	/**
+	 * Put-offs (throttle, licence or pause waits) a job takes before it gives up. At the default 60 seconds of a throttle that is
+	 * 24 minutes of an unbroken 429; a licence that stays lapsed is rechecked hourly for a day; a longer `Retry-After` stretches it.
+	 *
+	 * @since 2.1.12
+	 */
+	public const MAX_PUT_OFFS = 24;
 
 	private const DEFAULT_WAIT = 60;
 
@@ -82,6 +95,20 @@ final class Account_Job {
 	private $give_up_on;
 
 	/**
+	 * Put-offs a job takes before it gives up.
+	 *
+	 * @var int
+	 */
+	private $max_put_offs;
+
+	/**
+	 * Whether the work of the current run reported progress.
+	 *
+	 * @var bool
+	 */
+	private $progressed = false;
+
+	/**
 	 * Creates the skeleton of one job.
 	 *
 	 * @since 2.1.6
@@ -93,8 +120,9 @@ final class Account_Job {
 	 * @param string           $path         The request path the ring names next to a failed run.
 	 * @param string           $failure_code The ring's failure code.
 	 * @param string[]         $give_up_on   Exception classes the work throws to give the run up with their message.
+	 * @param int              $max_put_offs Put-offs a job takes before it gives up; a job that legitimately waits longer passes its own.
 	 */
-	public function __construct( Job_Gate $gate, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error, string $path, string $failure_code, array $give_up_on = [] ) {
+	public function __construct( Job_Gate $gate, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error, string $path, string $failure_code, array $give_up_on = [], int $max_put_offs = self::MAX_PUT_OFFS ) {
 		$this->gate         = $gate;
 		$this->classifier   = $classifier;
 		$this->ring         = $ring;
@@ -102,6 +130,7 @@ final class Account_Job {
 		$this->path         = $path;
 		$this->failure_code = $failure_code;
 		$this->give_up_on   = $give_up_on;
+		$this->max_put_offs = max( 0, $max_put_offs );
 	}
 
 	/**
@@ -111,13 +140,17 @@ final class Account_Job {
 	 *
 	 * @param int      $account_id Account id.
 	 * @param string   $context    Hook name, for the client's context and the error ring.
-	 * @param callable $retry      `function ( int $delay, int $attempt ): bool`, schedules the job again.
+	 * @param callable $retry      `function ( int $delay, int $attempt, int $put_offs ): bool`, schedules the job again with both counters. A
+	 *                             callback that takes two arguments still works, but it drops the put-offs and so the ceiling.
 	 * @param callable $give_up    `function ( string $text ): void`, records the failure for the merchant.
 	 * @param int      $attempt    Failed attempts so far.
 	 * @param callable $work       `function ( Account, Claim_Fence ): void`.
+	 * @param int      $put_offs   Waits so far (throttle, licence, pause), carried like the attempt; 0 for a new job.
 	 * @return void
 	 */
-	public function run( int $account_id, string $context, callable $retry, callable $give_up, int $attempt, callable $work ): void {
+	public function run( int $account_id, string $context, callable $retry, callable $give_up, int $attempt, callable $work, int $put_offs = 0 ): void {
+		$this->progressed = false;
+
 		try {
 			list( $account, $wait ) = $this->gate->check( $account_id );
 
@@ -127,14 +160,14 @@ final class Account_Job {
 			}
 
 			if ( $wait > 0 ) {
-				$retry( $wait, $attempt );
+				$this->put_off( $account_id, $context, $wait, $attempt, $put_offs, $retry, $give_up );
 				return;
 			}
 
 			$fence = $this->gate->claim( $account_id );
 
 			if ( null === $fence ) {
-				$retry( Job_Gate::BUSY_DELAY, $attempt );
+				$retry( Job_Gate::BUSY_DELAY, $attempt, $put_offs );
 				return;
 			}
 
@@ -145,10 +178,21 @@ final class Account_Job {
 			}
 		} catch ( Claim_Lost $exception ) {
 			$this->report( $account_id, $context, 'The account claim was taken over during the run.' );
-			$retry( Job_Gate::BUSY_DELAY, $attempt );
+			$retry( Job_Gate::BUSY_DELAY, $attempt, $put_offs );
 		} catch ( \Throwable $exception ) {
-			$this->after_throwable( $account_id, $context, $exception, $attempt, $retry, $give_up );
+			$this->after_throwable( $account_id, $context, $exception, $attempt, $put_offs, $retry, $give_up );
 		}
+	}
+
+	/**
+	 * Tells the job that the run moved the work forward before it was interrupted, so the waits so far no longer count.
+	 *
+	 * @since 2.1.12
+	 *
+	 * @return void
+	 */
+	public function made_progress(): void {
+		$this->progressed = true;
 	}
 
 	/**
@@ -174,11 +218,16 @@ final class Account_Job {
 	 * @param string     $context    Hook name.
 	 * @param \Throwable $exception  The failure.
 	 * @param int        $attempt    Failed attempts so far.
+	 * @param int        $put_offs   Waits so far.
 	 * @param callable   $retry      Schedules the job again.
 	 * @param callable   $give_up    Records the failure.
 	 * @return void
 	 */
-	private function after_throwable( int $account_id, string $context, \Throwable $exception, int $attempt, callable $retry, callable $give_up ): void {
+	private function after_throwable( int $account_id, string $context, \Throwable $exception, int $attempt, int $put_offs, callable $retry, callable $give_up ): void {
+		if ( $this->progressed ) {
+			$put_offs = 0;
+		}
+
 		if ( $this->is_give_up( $exception ) ) {
 			$this->report( $account_id, $context, $exception->getMessage() );
 			$give_up( $exception->getMessage() );
@@ -188,7 +237,7 @@ final class Account_Job {
 		$error = $this->classifier->classify( $exception );
 
 		if ( null !== $error ) {
-			$this->after_failure( $account_id, $context, $exception, $error, $attempt, $retry, $give_up );
+			$this->after_failure( $account_id, $context, $exception, $error, $attempt, $put_offs, $retry, $give_up );
 			return;
 		}
 
@@ -220,11 +269,12 @@ final class Account_Job {
 	 * @param \Throwable   $thrown     The refusal as thrown.
 	 * @param Remote_Error $error      What the classifier made of it.
 	 * @param int          $attempt    Failed attempts so far.
+	 * @param int          $put_offs   Waits so far.
 	 * @param callable     $retry      Schedules the job again.
 	 * @param callable     $give_up    Records the failure.
 	 * @return void
 	 */
-	private function after_failure( int $account_id, string $context, \Throwable $thrown, Remote_Error $error, int $attempt, callable $retry, callable $give_up ): void {
+	private function after_failure( int $account_id, string $context, \Throwable $thrown, Remote_Error $error, int $attempt, int $put_offs, callable $retry, callable $give_up ): void {
 		$this->report( $account_id, $context, $error->describe() );
 
 		if ( $error->is( Remote_Error::PAUSE_ACCOUNT ) ) {
@@ -239,17 +289,39 @@ final class Account_Job {
 		}
 
 		if ( $error->is( Remote_Error::THROTTLE ) ) {
-			// A wait is not a failed attempt.
-			$retry( max( 1, (int) ( $error->retry_after() ?? self::DEFAULT_WAIT ) ), $attempt );
+			// A wait is not a failed attempt, but it counts against the put-offs.
+			$this->put_off( $account_id, $context, max( 1, (int) ( $error->retry_after() ?? self::DEFAULT_WAIT ) ), $attempt, $put_offs, $retry, $give_up );
 			return;
 		}
 
 		if ( $error->is( Remote_Error::RETRY ) && $attempt + 1 < self::MAX_ATTEMPTS ) {
-			$retry( $error->retry_after() ?? Backoff::seconds_after( $attempt + 1 ), $attempt + 1 );
+			$retry( $error->retry_after() ?? Backoff::seconds_after( $attempt + 1 ), $attempt + 1, $put_offs );
 			return;
 		}
 
 		$give_up( $thrown->getMessage() );
+	}
+
+	/**
+	 * Puts the job off for a wait, or gives it up when it has already waited {@see self::MAX_PUT_OFFS} times (or the job's own ceiling).
+	 *
+	 * @param int      $account_id Account id.
+	 * @param string   $context    Hook name.
+	 * @param int      $delay      Seconds to wait.
+	 * @param int      $attempt    Failed attempts so far; a wait leaves it as it is.
+	 * @param int      $put_offs   Waits so far.
+	 * @param callable $retry      Schedules the job again.
+	 * @param callable $give_up    Records the failure.
+	 * @return void
+	 */
+	private function put_off( int $account_id, string $context, int $delay, int $attempt, int $put_offs, callable $retry, callable $give_up ): void {
+		if ( $put_offs < $this->max_put_offs ) {
+			$retry( $delay, $attempt, $put_offs + 1 );
+			return;
+		}
+
+		$this->report( $account_id, $context, 'The job was put off ' . $put_offs . ' times and gave up.' );
+		$give_up( __( 'Маркетплейс или лицензия слишком долго не давали выполнить задачу, она остановлена. Запустите её снова позже.', 'woodev-plugin-framework' ) );
 	}
 
 	/**

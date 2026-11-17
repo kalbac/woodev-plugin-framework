@@ -7971,6 +7971,10 @@ msgstr ""
 msgid "Аккаунт маркетплейса отключён или удалён."
 msgstr ""
 
+#: marketplace/jobs/class-account-job.php:299
+msgid "Маркетплейс или лицензия слишком долго не давали выполнить задачу, она остановлена. Запустите её снова позже."
+msgstr ""
+
 #. translators: %s: reason.
 #: marketplace/jobs/class-link-jobs.php:322
 #, php-format
