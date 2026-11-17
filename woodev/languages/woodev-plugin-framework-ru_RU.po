@@ -11323,6 +11323,29 @@ msgstr ""
 msgid "Снять выбор"
 msgstr ""
 
+#: admin/records/class-standard-messages.php:48
+#, php-format
+msgid "Выбраны все %s на этой странице: {count}."
+msgstr ""
+
+#: admin/records/class-standard-messages.php:49
+#, php-format
+msgid "Выбрать все %s под текущим отбором: {count}"
+msgstr ""
+
+#: admin/records/class-standard-messages.php:50
+#, php-format
+msgid "Выбраны все %s под текущим отбором: {count}. {filters}"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:424
+msgid "товары"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:373
+msgid "карточки"
+msgstr ""
+
 #. translators: 1: the category name, 2: «120 товаров», 3: what linking does on the marketplace.
 #: marketplace/admin/pages/products/class-site-products-bulk.php:1054
 #, php-format

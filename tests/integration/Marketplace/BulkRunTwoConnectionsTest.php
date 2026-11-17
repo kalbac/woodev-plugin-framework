@@ -262,6 +262,9 @@ class BulkRunTwoConnectionsTest extends TestCase {
 		$this->assertFalse( $this->lock( 'b' )->acquire( $this->account_id ), 'Held while A lives.' );
 		$this->conn['a']->close();
 
+		// `close()` returns when the client has hung up; the server frees the lock a moment later, and `GET_LOCK( name, 0 )` does not wait.
+		$this->assertTrue( $this->wait_until_free( 'b' ), 'MySQL freed A\'s lock when it saw the connection close.' );
+
 		$this->runner( 'b', $this->worker( 'b', null, [ true ] ) )->tick( $this->account_id, $run_id );
 
 		$this->assertSame( [ [ 'parent' => 40, 'child' => 7 ] ], $this->cursors['b'], 'B goes on from what A saved, not from the start.' );
@@ -358,7 +361,8 @@ class BulkRunTwoConnectionsTest extends TestCase {
 	}
 
 	/**
-	 * `KILL` is asynchronous: the lock is gone once the server finished tearing the connection down.
+	 * `KILL` and a client-side close are both asynchronous on the server: the lock is gone once the server finished tearing the
+	 * connection down. Polls up to five seconds.
 	 *
 	 * @param string $name Connection that asks.
 	 * @return bool

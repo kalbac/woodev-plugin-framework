@@ -370,6 +370,7 @@ final class Remote_Cards_Definition {
 		return array_merge(
 			Site_Products_Definition::action_messages(),
 			Standard_Messages::bulk(),
+			Standard_Messages::matching( __( 'карточки', 'woodev-plugin-framework' ) ),
 			Standard_Messages::views(),
 			[
 				'empty'                  => __( 'Карточек не найдено. Нажмите «Обновить список» или измените фильтры.', 'woodev-plugin-framework' ),

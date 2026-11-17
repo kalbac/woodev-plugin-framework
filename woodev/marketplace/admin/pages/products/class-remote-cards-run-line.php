@@ -121,7 +121,7 @@ final class Remote_Cards_Run_Line {
 		$what  = sprintf(
 			/* translators: %s: «12 345 карточек». */
 			__( 'Будет импортировано до %s: часть из них свяжется с уже существующими товарами. Картинки загружаются по одной — импорт тысяч карточек займёт несколько часов.', 'woodev-plugin-framework' ),
-			self::cards( $total )
+			self::cards_up_to( $total )
 		);
 
 		return $reach . ' ' . $what . ' ' . __( 'Действие выполняется в фоне частями. Ход работы — в строке аккаунта над таблицей.', 'woodev-plugin-framework' );
@@ -146,6 +146,21 @@ final class Remote_Cards_Run_Line {
 		} else {
 			$word = $last >= 2 && $last <= 4 ? 'карточки' : 'карточек';
 		}
+
+		return self::number( $count ) . ' ' . $word;
+	}
+
+	/**
+	 * «до 1 карточки», «до 3 карточек», «до 12 345 карточек»: after «до» the noun takes the genitive, which for 1, 21, 31… is the
+	 * singular and for every other count the plural.
+	 *
+	 * @since 2.1.10
+	 *
+	 * @param int $count Number.
+	 * @return string
+	 */
+	public static function cards_up_to( int $count ): string {
+		$word = 1 === $count % 10 && 11 !== $count % 100 ? 'карточки' : 'карточек';
 
 		return self::number( $count ) . ' ' . $word;
 	}
