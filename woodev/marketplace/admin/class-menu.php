@@ -356,10 +356,13 @@ if ( ! class_exists( Menu::class, false ) ) :
 		 *
 		 * @since 2.0.29
 		 *
-		 * @param callable $can Receives a capability, returns whether the current user holds it.
+		 * @since 2.1.11 Takes the plugin's help table so a page's `help` link is resolved.
+		 *
+		 * @param callable             $can         Receives a capability, returns whether the current user holds it.
+		 * @param array<string,string> $help_topics The plugin's help table, topic => URL.
 		 * @return array<string,mixed>|null Null when the user may open no page of the menu.
 		 */
-		public function build_manifest( callable $can ): ?array {
+		public function build_manifest( callable $can, array $help_topics = [] ): ?array {
 			$entries = [];
 			$landing = $this->get_page_path( $this->get_landing_page() );
 
@@ -378,6 +381,24 @@ if ( ! class_exists( Menu::class, false ) ) :
 					'breadcrumbs' => [ [ $landing, $this->title ], $page->get_heading() ],
 					'analytics'   => null,
 				];
+
+				$help = \Woodev\Framework\Help\Help_Links::resolve( $page->get_help(), $help_topics );
+
+				if ( null !== $help ) {
+					$entry['help'] = $help;
+				}
+
+				$problems = \Woodev\Framework\Help\Help_Links::resolve(
+					[
+						'topic' => $page->get_problems_topic(),
+						'text'  => \Woodev\Framework\Help\Help_Links::TEXT_TROUBLESHOOTING,
+					],
+					$help_topics
+				);
+
+				if ( null !== $problems ) {
+					$entry['problems'] = $problems;
+				}
 
 				// Only a page that offers several tables names them, so every other page's entry is as it was.
 				if ( [] !== $page->get_table_labels() ) {

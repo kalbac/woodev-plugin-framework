@@ -16,6 +16,7 @@
 
 import { RawHTML } from '@wordpress/element';
 import FieldTip from './field-tip';
+import HelpLink from './help-link';
 
 /**
  * `description` renders through `RawHTML` (issue #373 — the operator's own rule is
@@ -38,13 +39,14 @@ import FieldTip from './field-tip';
  * @param {string}    [props.disabledReason] why the control is currently disabled — rendered
  *                                            as a separate, visually distinguishable note from
  *                                            `description` (a state note, not documentation).
+ * @param {Object}    [props.help]           the resolved «Подробнее…» link (`schema.help`: `{ url, text }`), drawn under the description.
  * @param {string}    [props.error]          validation error message (red, under control).
  * @param {boolean}   [props.disabled]       whether the control is disabled — the row gets `woodev-field--disabled`,
  *                                            which greys the label and the control (the WordPress disabled look).
  * @param {*}         props.children         the control element(s).
  * @return {JSX.Element} the field row.
  */
-export default function FieldRow( { label, required, tooltip, description, disabledReason, error, disabled, children } ) {
+export default function FieldRow( { label, required, tooltip, description, help, disabledReason, error, disabled, children } ) {
 	return (
 		<div className={ `woodev-field${ error ? ' woodev-field--error' : '' }${ disabled ? ' woodev-field--disabled' : '' }` }>
 			{ label && (
@@ -63,6 +65,7 @@ export default function FieldRow( { label, required, tooltip, description, disab
 				{ description && (
 					<div className="woodev-field__desc"><RawHTML>{ description }</RawHTML></div>
 				) }
+				<HelpLink help={ help } />
 				{ disabledReason && (
 					<div className="woodev-field__disabled-reason">{ disabledReason }</div>
 				) }

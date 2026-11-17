@@ -115,6 +115,13 @@ final class Settings_Section {
 	private string $subtitle = '';
 
 	/**
+	 * The declared «Подробнее…» link — `[ topic, text ]`, empty when none ({@see \Woodev\Framework\Help\Help_Links}).
+	 *
+	 * @var array{topic:string,text:string}|array{}
+	 */
+	private array $help = [];
+
+	/**
 	 * Use one of the named constructors instead — {@see self::create()},
 	 * {@see self::create_connection()} or {@see self::create_tools()}. Private so that a call
 	 * site has to NAME the kind it is building rather than spell it out in positional
@@ -398,6 +405,34 @@ final class Settings_Section {
 		$copy->subtitle = $subtitle;
 
 		return $copy;
+	}
+
+	/**
+	 * A copy that carries a «Подробнее…» link under the section's description. The address is not named here: the
+	 * topic is looked up in the owning plugin's help table when the page is built, and a topic it does not know
+	 * draws nothing.
+	 *
+	 * @since 2.1.11
+	 *
+	 * @param string|array<string,string> $help A topic, or `[ 'topic' => …, 'text' => Help_Links::TEXT_* ]`.
+	 * @return self
+	 */
+	public function with_help( $help ): self {
+		$copy       = clone $this;
+		$copy->help = \Woodev\Framework\Help\Help_Links::declaration( $help ) ?? [];
+
+		return $copy;
+	}
+
+	/**
+	 * The declared help link, empty when none.
+	 *
+	 * @since 2.1.11
+	 *
+	 * @return array{topic:string,text:string}|array{}
+	 */
+	public function get_help(): array {
+		return $this->help;
 	}
 
 	/**

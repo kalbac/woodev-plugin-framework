@@ -11705,3 +11705,25 @@ msgstr ""
 #: marketplace/admin/pages/products/class-remote-cards-run-line.php:127
 msgid "Действие выполняется в фоне частями. Ход работы — в строке аккаунта над таблицей."
 msgstr ""
+
+#: help/class-help-links.php:63
+msgid "Подробнее как это работает"
+msgstr ""
+
+#: help/class-help-links.php:64
+msgid "Подробнее как настроить"
+msgstr ""
+
+#: help/class-help-links.php:65
+msgid "Подробнее для чего это нужно"
+msgstr ""
+
+#: help/class-help-links.php:66
+msgid "Что делать, если не получается"
+msgstr ""
+
+#. translators: %s: link text, e.g. «Подробнее как настроить».
+#: help/class-help-links.php:118
+#, php-format
+msgid "%s (откроется в новой вкладке)"
+msgstr ""

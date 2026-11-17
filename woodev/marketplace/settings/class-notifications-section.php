@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Settings;
 
+use Woodev\Framework\Help\Help_Links;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Diagnostics_Reader;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -193,7 +194,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 					$types
 				),
 				$this->webhooks_html( $types, $marketplace, $registers ) . $notice
-			);
+			)->with_help( self::problems_help() );
 		}
 
 		foreach ( $this->accounts->all() as $account ) {
@@ -352,7 +353,22 @@ final class Notifications_Section implements Settings_Section_Provider {
 			$this->account_title( $account ),
 			[],
 			$this->facts_html( $facts )
-		)->stacked( $this->identifier_line( $account ) )->with_actions( $this->tools_for_account( $id ), Settings_Section::ACTIONS_ROW );
+		)->stacked( $this->identifier_line( $account ) )->with_actions( $this->tools_for_account( $id ), Settings_Section::ACTIONS_ROW )->with_help( self::problems_help() );
+	}
+
+	/**
+	 * The link of the state notes («Не получали», «Сеть отправителя не подтверждена»…): the «Частые проблемы» of the
+	 * plugin's notifications article. A plugin whose help table has no `notifications-problems` topic shows no link.
+	 *
+	 * @since 2.1.11
+	 *
+	 * @return array{topic:string,text:string}
+	 */
+	private static function problems_help(): array {
+		return [
+			'topic' => 'notifications-problems',
+			'text'  => Help_Links::TEXT_TROUBLESHOOTING,
+		];
 	}
 
 	/**

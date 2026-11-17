@@ -754,6 +754,51 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertArrayNotHasKey( 'footnote', $sections[1]['groups'][0] );
 	}
 
+	public function test_build_sections_resolves_section_and_group_help_against_the_plugin_table(): void {
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$this->make_connection_handler(),
+			[
+				Settings_Section::create( 'prices', 'Цены', [ 'token' ] )
+					->with_help( [ 'topic' => 'prices', 'text' => 'how_to_set_up' ] )
+					->with_groups( [ Settings_Group::create( 'p', 'Наценка' )->with_fields( [ 'token' ] )->with_help( 'prices-problems' ) ] ),
+				Settings_Section::create( 'plain', 'Plain', [ 'token' ] )->with_help( 'unknown-topic' )->with_groups( [ Settings_Group::create( 'g', 'G' )->with_fields( [ 'token' ] ) ] ),
+			]
+		);
+		$topics   = [
+			'prices'          => 'https://woodev.ru/docs/prices/',
+			'prices-problems' => 'https://woodev.ru/docs/prices/#chastye-problemy',
+		];
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider, $topics ] );
+
+		$this->assertSame(
+			[
+				'url'   => 'https://woodev.ru/docs/prices/',
+				'text'  => 'Подробнее как настроить',
+				'label' => 'Подробнее как настроить (откроется в новой вкладке)',
+			],
+			$sections[0]['help']
+		);
+		$this->assertSame( 'https://woodev.ru/docs/prices/#chastye-problemy', $sections[0]['groups'][0]['help']['url'] );
+		$this->assertArrayNotHasKey( 'help', $sections[1], 'a topic the table does not know draws no link' );
+		$this->assertArrayNotHasKey( 'help', $sections[1]['groups'][0], 'a group that declared none serialises as before' );
+	}
+
+	public function test_build_sections_draws_no_help_without_a_plugin_table(): void {
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$this->make_connection_handler(),
+			[ Settings_Section::create( 'prices', 'Цены', [ 'token' ] )->with_help( 'prices' ) ]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertArrayNotHasKey( 'help', $sections[0] );
+	}
+
 	public function test_build_sections_omits_the_groups_key_when_none_are_declared(): void {
 		$tool     = Shipping_Tool::create( 'sync', 'Статусы', '', 'Обновить', static fn( array $args ): Tool_Result => Tool_Result::success() );
 		$provider = Settings_Provider::create( 'cdek', 'СДЭК', $this->make_connection_handler(), [ Settings_Section::create( 'general', 'Общие', [ 'token' ] )->with_actions( [ $tool ] ) ] );

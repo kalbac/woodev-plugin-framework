@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { Button, Card, CardBody, Notice, SelectControl, Spinner } from '@wordpress/components';
+import { ProblemsLink } from '../../../components/help-link';
 import FieldRow from '../../../components/field-row';
 import type { PageViewProps } from '../../types';
 import { errorLines } from '../mappings/api';
@@ -69,7 +70,7 @@ export function ToolsView( { menu }: PageViewProps ) {
 	}, [ state ] );
 
 	if ( ! state ) {
-		return notice?.status === 'error' ? <Notice status="error" isDismissible={ false }>{ notice.lines.join( ' ' ) }</Notice> : <Spinner />;
+		return notice?.status === 'error' ? <Notice status="error" isDismissible={ false }>{ notice.lines.join( ' ' ) }<ProblemsLink status="error" /></Notice> : <Spinner />;
 	}
 
 	const { messages } = state;
@@ -112,9 +113,10 @@ export function ToolsView( { menu }: PageViewProps ) {
 			{ notice && (
 				<Notice status={ notice.status } onRemove={ () => setNotice( null ) }>
 					{ notice.lines.join( ' ' ) }
+					<ProblemsLink status={ notice.status } />
 				</Notice>
 			) }
-			{ isBusy( state.activity ) && <Notice status="warning" isDismissible={ false }>{ state.activity.text }</Notice> }
+			{ isBusy( state.activity ) && <Notice status="warning" isDismissible={ false }>{ state.activity.text }<ProblemsLink status="warning" /></Notice> }
 			{ needsAccountChoice( state.accounts ) && (
 				<FieldRow label={ messages.accountLabel }>
 					<SelectControl
@@ -137,7 +139,7 @@ export function ToolsView( { menu }: PageViewProps ) {
 					<CardBody>
 						<h3 className="woodev-group__title">{ tool.title }</h3>
 						<p className="woodev-group__desc">{ tool.description }</p>
-						{ tool.disabled && <Notice status="warning" isDismissible={ false }>{ tool.disabled_reason }</Notice> }
+						{ tool.disabled && <Notice status="warning" isDismissible={ false }>{ tool.disabled_reason }<ProblemsLink status="warning" /></Notice> }
 						<Button variant="secondary" disabled={ ! canPreview( tool, accountId ) || pending } onClick={ () => openPreview( tool ) }>
 							{ tool.button }
 						</Button>

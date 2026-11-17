@@ -363,6 +363,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		protected function init_settings_page(): void {
 			\Woodev\Framework\Settings\Settings_Page_Registry::instance()->register_plugin( $this );
+			\Woodev\Framework\Help\Help_Links_Cli::register_plugin( $this );
 		}
 
 		/**
@@ -1694,6 +1695,23 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return \Woodev\Framework\Settings\Settings_Provider[]
 		 */
 		public function get_settings_providers(): array {
+			return [];
+		}
+
+		/**
+		 * The plugin's table of help articles: topic => absolute URL with the section anchor.
+		 *
+		 * The ONE place addresses live. A field, section, group, page or note names a TOPIC
+		 * (`'help' => 'import'`) and the framework draws a «Подробнее…» link to the address found here; a topic
+		 * the table does not know draws no link. A moved article is a one-line edit. The «Частые проблемы» section
+		 * of an article gets its own topic (`'import-problems' => 'https://…/import/#chastye-problemy'`).
+		 * `wp woodev help-links check` requests every address before a release.
+		 *
+		 * @since 2.1.11
+		 *
+		 * @return array<string,string>
+		 */
+		public function get_help_topics(): array {
 			return [];
 		}
 

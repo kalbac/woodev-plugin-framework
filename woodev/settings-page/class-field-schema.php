@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Settings;
 
+use Woodev\Framework\Help\Help_Links;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -17,6 +19,7 @@ defined( 'ABSPATH' ) || exit;
  * min / max / step / is_multi / description / name / type / required).
  *
  * @since 2.0.2
+ * @since 2.1.11 A field's declared `help` link is resolved into `help: { url, text }`.
  */
 final class Field_Schema {
 	/**
@@ -27,9 +30,10 @@ final class Field_Schema {
 	 * @param \Woodev_Abstract_Settings $handler     settings handler.
 	 * @param string[]                  $setting_ids optional subset of setting ids; empty = all.
 	 * @param string                    $provider_id exposed tab id for search routes; blank = handler id.
+	 * @param array<string,string>      $help_topics the owning plugin's help table (topic => URL); a field's `help` is drawn only when its topic is in it.
 	 * @return array<string,array<string,mixed>> schema keyed by setting id.
 	 */
-	public static function from_handler( $handler, array $setting_ids = [], string $provider_id = '' ): array {
+	public static function from_handler( $handler, array $setting_ids = [], string $provider_id = '', array $help_topics = [] ): array {
 		$schema = [];
 
 		foreach ( $handler->get_settings( $setting_ids ) as $setting ) {
@@ -110,6 +114,11 @@ final class Field_Schema {
 			if ( $constant_managed ) {
 				$entry['constant_managed'] = true;
 				$entry['constant_name']    = $constant_name;
+			}
+
+			$help = $control ? Help_Links::resolve( $control->get_help(), $help_topics ) : null;
+			if ( null !== $help ) {
+				$entry['help'] = $help;
 			}
 
 			if ( $control && null !== $control->get_min() ) {

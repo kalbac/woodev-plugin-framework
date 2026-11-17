@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Settings;
 
+use Woodev\Framework\Help\Help_Links;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 
 defined( 'ABSPATH' ) || exit;
@@ -235,7 +236,7 @@ final class Settings_Page_Registry {
 				'id'         => $id,
 				'label'      => $provider->get_label(),
 				'capability' => $capability,
-				'sections'   => $this->build_sections( $provider ),
+				'sections'   => $this->build_sections( $provider, Help_Links::topics_of( $entry['plugin'] ?? null ) ),
 			];
 		}
 
@@ -263,10 +264,13 @@ final class Settings_Page_Registry {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param Settings_Provider $provider provider.
+	 * @since 2.1.11 Takes the owning plugin's help table.
+	 *
+	 * @param Settings_Provider    $provider    provider.
+	 * @param array<string,string> $help_topics the owning plugin's help table, topic => URL; empty for a framework service.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private function build_sections( Settings_Provider $provider ): array {
+	private function build_sections( Settings_Provider $provider, array $help_topics = [] ): array {
 		$handler  = $provider->get_handler();
 		$sections = [];
 
@@ -284,8 +288,13 @@ final class Settings_Page_Registry {
 				// Descriptions are rendered as markup by RawHTML so links work; constrain
 				// that markup at the schema boundary just like other HTML descriptions.
 				'description' => wp_kses_post( $section->get_description() ),
-				'fields'      => empty( $setting_ids ) ? [] : Field_Schema::from_handler( $handler, $setting_ids, $provider->get_id() ),
+				'fields'      => empty( $setting_ids ) ? [] : Field_Schema::from_handler( $handler, $setting_ids, $provider->get_id(), $help_topics ),
 			];
+
+			$help = Help_Links::resolve( $section->get_help(), $help_topics );
+			if ( null !== $help ) {
+				$entry['help'] = $help;
+			}
 
 			if ( $section->is_tools() ) {
 				$entry['is_tools'] = true;
@@ -331,7 +340,7 @@ final class Settings_Page_Registry {
 			}
 
 			// Titled cards gathering some of those fields and actions (Settings_Section::with_groups()).
-			$groups = self::build_groups( $section, array_keys( $entry['fields'] ), array_column( $entry['actions'] ?? [], 'id' ), $handler );
+			$groups = self::build_groups( $section, array_keys( $entry['fields'] ), array_column( $entry['actions'] ?? [], 'id' ), $handler, $help_topics );
 			if ( [] !== $groups ) {
 				$entry['groups'] = $groups;
 			}
@@ -382,13 +391,14 @@ final class Settings_Page_Registry {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param Settings_Section $section    the section.
-	 * @param string[]         $field_ids  ids of the section's fields in declaration order.
-	 * @param string[]         $action_ids ids of the section's actions in declaration order.
-	 * @param object|null      $handler    the tab's settings handler, asked about a table's check cells.
+	 * @param Settings_Section     $section    the section.
+	 * @param string[]             $field_ids  ids of the section's fields in declaration order.
+	 * @param string[]             $action_ids ids of the section's actions in declaration order.
+	 * @param object|null          $handler    the tab's settings handler, asked about a table's check cells.
+	 * @param array<string,string> $help_topics the owning plugin's help table, topic => URL.
 	 * @return array<int,array<string,mixed>> each group with `id`, `title`, `description`, `notice`, `fields`, `actions` and, for a table group, `table`.
 	 */
-	private static function build_groups( Settings_Section $section, array $field_ids, array $action_ids, $handler = null ): array {
+	private static function build_groups( Settings_Section $section, array $field_ids, array $action_ids, $handler = null, array $help_topics = [] ): array {
 		$taken_fields  = [];
 		$taken_actions = [];
 		$resolved      = [];
@@ -411,6 +421,11 @@ final class Settings_Page_Registry {
 				'fields'      => $fields,
 				'actions'     => $actions,
 			];
+
+			$help = Help_Links::resolve( $group->get_help(), $help_topics );
+			if ( null !== $help ) {
+				$entry['help'] = $help;
+			}
 
 			if ( '' !== $group->get_footnote() ) {
 				$entry['footnote'] = wp_kses_post( $group->get_footnote() );
@@ -577,7 +592,7 @@ final class Settings_Page_Registry {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @return array<int,array<string,mixed>> entries [ provider, is_woocommerce, placement ]. `placement` is the id of the
+	 * @return array<int,array<string,mixed>> entries [ provider, is_woocommerce, placement, plugin ]. `placement` is the id of the
 	 *                                        marketplace plugin whose own «Настройки» page shows the provider, null for the Woodev page.
 	 */
 	public function collect_entries(): array {
@@ -597,6 +612,7 @@ final class Settings_Page_Registry {
 						'provider'       => $provider,
 						'is_woocommerce' => $is_wc,
 						'placement'      => $placement,
+						'plugin'         => $plugin,
 					];
 				}
 			}

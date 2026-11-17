@@ -82,6 +82,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_tooltip' )->andReturn( 'Hover tip' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( 0.0 );
 		$control->shouldReceive( 'get_max' )->andReturn( 100.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 1.0 );
@@ -157,6 +158,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_help' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );

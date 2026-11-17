@@ -5,6 +5,7 @@
  */
 
 import { Notice } from '@wordpress/components';
+import { ProblemsLink } from '../../../components/help-link';
 
 export interface NoticeState {
 	status: 'success' | 'error';
@@ -21,6 +22,7 @@ export function Notices( { notice, onDismiss }: { notice: NoticeState | null; on
 			{ notice.lines.map( ( line ) => (
 				<p key={ line }>{ line }</p>
 			) ) }
+			<ProblemsLink status={ notice.status } />
 		</Notice>
 	);
 }

@@ -347,7 +347,8 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 			};
 
 			foreach ( $this->get_menus() as $menu ) {
-				$entry = $menu->build_manifest( $can );
+				$plugin = $this->plugins[ $menu->get_plugin_id() ] ?? null;
+				$entry  = $menu->build_manifest( $can, \Woodev\Framework\Help\Help_Links::topics_of( $plugin ) );
 
 				if ( null !== $entry ) {
 					$menus[] = $entry;

@@ -10,6 +10,7 @@
  */
 
 import { Button, Modal, Notice, Spinner } from '@wordpress/components';
+import { ProblemsLink } from '../../components/help-link';
 import { useEffect } from '@wordpress/element';
 import type { TableHandle } from '../extensions';
 import type { Messages } from '../types';
@@ -113,6 +114,7 @@ function FailureView( { state, messages }: { state: FlowState; messages: Message
 	return (
 		<Notice status={ failure.kind === 'conflict' ? 'warning' : 'error' } isDismissible={ false }>
 			{ text }
+			<ProblemsLink status={ failure.kind === 'conflict' ? 'warning' : 'error' } />
 		</Notice>
 	);
 }

@@ -23,6 +23,7 @@ import {
 } from '@wordpress/components';
 import FieldRow from './field-row';
 import FieldTip from './field-tip';
+import HelpLink from './help-link';
 import SelectField from './select-field';
 import SearchSelectField from './search-select-field';
 import BoxesTable from './boxes-table';
@@ -316,6 +317,7 @@ function withAnatomy( schema, control, error ) {
 			required: schema.required && isRequirable( resolveControl( schema ) ),
 			tooltip: schema.tooltip,
 			description: schema.description,
+			help: schema.help,
 			disabledReason: schema.disabled ? schema.disabled_reason : null,
 			disabled: !! schema.disabled,
 			error,
@@ -454,6 +456,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 							{ className: 'woodev-field__toggle-desc' },
 							createElement( RawHTML, null, schema.description )
 						),
+					createElement( HelpLink, { help: schema.help } ),
 					// A line that belongs to the ON state alone (`description_on`): shown only while the toggle is on,
 					// so it is said once under the toggle instead of under every field the toggle affects.
 					value && schema.description_on &&

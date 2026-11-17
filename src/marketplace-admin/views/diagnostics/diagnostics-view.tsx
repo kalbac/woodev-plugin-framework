@@ -9,6 +9,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from '@wordpress/element';
 import { Button, Card, CardBody, Notice, Spinner } from '@wordpress/components';
+import { ProblemsLink } from '../../../components/help-link';
 import type { PageViewProps } from '../../types';
 import { errorLines } from '../mappings/api';
 import { createDiagnosticsApi } from './api';
@@ -48,7 +49,15 @@ export function DiagnosticsView( { menu }: PageViewProps ) {
 	}, [ api, enabled ] );
 
 	if ( ! state ) {
-		return <Spinner />;
+		// A state that cannot be read is said, not left as a spinner (the tools view does the same).
+		return notice?.status === 'error' ? (
+			<Notice status="error" isDismissible={ false }>
+				{ notice.lines.join( ' ' ) }
+				<ProblemsLink status="error" />
+			</Notice>
+		) : (
+			<Spinner />
+		);
 	}
 
 	const { messages } = state;
@@ -80,6 +89,7 @@ export function DiagnosticsView( { menu }: PageViewProps ) {
 			{ notice && (
 				<Notice status={ notice.status } onRemove={ () => setNotice( null ) }>
 					{ notice.lines.join( ' ' ) }
+					<ProblemsLink status={ notice.status } />
 				</Notice>
 			) }
 			<Card className="woodev-settings__card">

@@ -10,6 +10,7 @@
  */
 
 import { applyFilters } from '@wordpress/hooks';
+import HelpLink, { ProblemsHelpContext } from '../components/help-link';
 import type { ManifestMenu, ManifestPage, PageView, PageViewProps } from './types';
 
 export const PAGE_VIEW_FILTER = 'woodev.marketplace.page_view';
@@ -27,13 +28,19 @@ export function resolvePageView( page: ManifestPage, menu: ManifestMenu ): PageV
 export function PageBody( { page, menu, query }: PageViewProps ) {
 	const View = resolvePageView( page, menu );
 
-	if ( View ) {
-		return <View page={ page } menu={ menu } query={ query } />;
-	}
-
 	return (
-		<div className="woodev-marketplace-page" data-page={ page.id }>
-			<h2>{ page.title }</h2>
-		</div>
+		<ProblemsHelpContext.Provider value={ page.problems ?? null }>
+			{ View ? (
+				<>
+					<HelpLink help={ page.help } className="woodev-marketplace-page__help" />
+					<View page={ page } menu={ menu } query={ query } />
+				</>
+			) : (
+				<div className="woodev-marketplace-page" data-page={ page.id }>
+					<h2>{ page.title }</h2>
+					<HelpLink help={ page.help } />
+				</div>
+			) }
+		</ProblemsHelpContext.Provider>
 	);
 }

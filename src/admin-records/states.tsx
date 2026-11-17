@@ -9,6 +9,7 @@
 
 import type { ReactNode } from 'react';
 import { Button, Card, CardBody, CardHeader, Spinner } from '@wordpress/components';
+import { ProblemsLink } from '../components/help-link';
 import { STYLES } from './styles';
 
 export interface ErrorStateProps {
@@ -23,6 +24,7 @@ export function ErrorState( { text, retryLabel, onRetry }: ErrorStateProps ) {
 	return (
 		<div className="woodev-records__state is-error" style={ STYLES.state } role="alert">
 			<p>{ text }</p>
+			<ProblemsLink status="error" />
 			{ retryLabel !== '' && (
 				<Button __next40pxDefaultSize variant="secondary" onClick={ onRetry }>
 					{ retryLabel }

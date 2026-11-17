@@ -61,6 +61,11 @@ final class Settings_Group {
 	private string $footnote = '';
 
 	/**
+	 * @var array{topic:string,text:string}|array{} the declared «Подробнее…» link ({@see \Woodev\Framework\Help\Help_Links}).
+	 */
+	private array $help = [];
+
+	/**
 	 * Use {@see self::create()} instead.
 	 *
 	 * @since 2.0.2
@@ -147,6 +152,30 @@ final class Settings_Group {
 		$copy->footnote = $footnote;
 
 		return $copy;
+	}
+
+	/**
+	 * A copy that carries a «Подробнее…» link under the group's description — also the place for a link from the
+	 * group's notice. The topic is looked up in the owning plugin's help table when the page is built.
+	 *
+	 * @since 2.1.11
+	 *
+	 * @param string|array<string,string> $help A topic, or `[ 'topic' => …, 'text' => Help_Links::TEXT_* ]`.
+	 * @return self
+	 */
+	public function with_help( $help ): self {
+		$copy       = clone $this;
+		$copy->help = \Woodev\Framework\Help\Help_Links::declaration( $help ) ?? [];
+
+		return $copy;
+	}
+
+	/**
+	 * @since 2.1.11
+	 * @return array{topic:string,text:string}|array{}
+	 */
+	public function get_help(): array {
+		return $this->help;
 	}
 
 	/**

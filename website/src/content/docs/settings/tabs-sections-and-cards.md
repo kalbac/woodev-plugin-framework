@@ -153,6 +153,51 @@ The check works like a connection section's button: the settings handler impleme
 
 The arguments are, in order: an id (unique within the tab), a title, a description, the button label and the callback. Two optional arguments follow: `$disabled` to show the button but refuse the action, and `$status_text` for the reason or a live status.
 
+## Help links
+
+Any field, section, card or marketplace page can end with a «Learn more…» link to an article in your documentation. Available since framework `%%FRAMEWORK_VERSION%%`. The code names a **topic**; the address lives in **one table** on your plugin class, so moving an article is a one-line edit.
+
+```php
+// 1. The table: topic => absolute URL, with the anchor of the section.
+public function get_help_topics(): array {
+	return [
+		'api-key'         => 'https://example.com/docs/my-carrier/#api-key',
+		'orders'          => 'https://example.com/docs/my-carrier/orders/',
+		'orders-problems' => 'https://example.com/docs/my-carrier/orders/#common-problems',
+	];
+}
+
+// 2. A field, a section and a card name a topic.
+$this->register_control( 'api_key', \Woodev_Control::TYPE_PASSWORD, [ 'help' => 'api-key' ] );
+
+Settings_Section::create( 'orders', __( 'Orders', 'my-carrier' ), [ 'default_status' ] )
+	->with_help( [ 'topic' => 'orders', 'text' => Help_Links::TEXT_HOW_TO_SET_UP ] );
+
+Settings_Group::create( 'statuses', __( 'Statuses', 'my-carrier' ) )
+	->with_fields( [ 'default_status' ] )
+	->with_help( 'orders-problems' );
+```
+
+A marketplace page takes the same key in its descriptor: `'help' => 'orders'`.
+
+The link opens in a new tab. Its wording is one of four fixed variants, so every plugin reads the same:
+
+| `text` | The merchant reads |
+|---|---|
+| `Help_Links::TEXT_HOW_IT_WORKS` (default) | Learn more about how it works |
+| `Help_Links::TEXT_HOW_TO_SET_UP` | Learn more about how to set it up |
+| `Help_Links::TEXT_WHY_NEEDED` | Learn more about what it is for |
+| `Help_Links::TEXT_TROUBLESHOOTING` | What to do if it does not work |
+
+A topic missing from the table draws no link, so a typo never shows a dead one. Check your declarations in a unit test with `Help_Links::missing_topics( $declared_topics, $plugin->get_help_topics() )`, and before a release run `wp woodev help-links check`: it requests every address in the table and fails on anything that is not a 2xx or 3xx answer.
+
+Errors and notes the framework draws itself link to the «Common problems» section of your article. Add the topic to the table and the link appears; leave it out and nothing is drawn:
+
+| Where | Topic |
+|---|---|
+| Errors and warnings on a marketplace page (records, mappings, tools, diagnostics, action dialogs) | `<page slug>-problems`, for example `products-problems`; a page descriptor can name another with `'problems' => 'my-topic'` |
+| The state notes of the «Notifications» tab | `notifications-problems` |
+
 ## A complete tab
 
 The example below is a tab for My Carrier with two sections. The first has two cards. The second has one card that holds a field and a button.

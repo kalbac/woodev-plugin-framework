@@ -298,6 +298,14 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 			array_map( static function ( $section ) { return $section->get_subtitle(); }, $blocks ),
 			'the Client-Id sits under the heading'
 		);
+		$this->assertSame(
+			[
+				'topic' => 'notifications-problems',
+				'text'  => 'troubleshooting',
+			],
+			$blocks[0]->get_help(),
+			'the state note of an account block links to the «Частые проблемы» topic of the plugin'
+		);
 	}
 
 	public function test_each_declared_notification_type_gets_a_switch_with_its_explanation(): void {
