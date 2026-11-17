@@ -772,6 +772,50 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * A wait after a page was reconciled resumes from that page and starts the put-off count again, even for a pass that had waited as often
+	 * as the ceiling allows; a wait with nothing reconciled since the last one is given up at the ceiling.
+	 *
+	 * @return void
+	 */
+	public function test_a_wait_after_progress_resumes_from_the_page_and_a_wait_without_progress_stops_at_the_ceiling(): void {
+		$this->marketplace_is_master();
+		$last = 0;
+
+		for ( $i = 1; $i <= Reconcile_Stock_Runner::PAGE_SIZE + 1; $i++ ) {
+			$last = $this->stock_product( 'p' . $i, 3000 + $i, 10 );
+			$this->market->present[ 'p' . $i ] = 3;
+		}
+
+		$throttle_second_page = function (): void {
+			$this->market->script = array_fill(
+				0,
+				50,
+				static function ( string $call, int $warehouse_id, array $items ) {
+					if ( in_array( 'p' . ( Reconcile_Stock_Runner::PAGE_SIZE + 1 ), $items, true ) ) {
+						throw Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 30 );
+					}
+
+					return null;
+				}
+			);
+		};
+
+		$throttle_second_page();
+		$this->runner()->run( $this->account_id, 0, 0, Account_Job::MAX_PUT_OFFS );
+
+		$continuations = $this->continuations();
+
+		$this->assertCount( 1, $continuations, 'a page was reconciled before the wait' );
+		$this->assertSame( [ $this->account_id, $this->link_id( $last ) - 1, 0, 1 ], $continuations[0]['args'], 'resumes after the page, count started again' );
+
+		$throttle_second_page();
+		$this->runner()->run( ...$continuations[0]['args'] );
+		$this->runner()->run( $this->account_id, $this->link_id( $last ) - 1, 0, Account_Job::MAX_PUT_OFFS );
+
+		$this->assertCount( 2, $this->continuations(), 'the run at the same cursor past the ceiling queued nothing more' );
+	}
+
+	/**
 	 * Registration hooks the job with its three arguments and the schedule check on Action Scheduler's init.
 	 *
 	 * @return void

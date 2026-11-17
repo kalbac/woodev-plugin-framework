@@ -193,14 +193,14 @@ final class Reconcile_Stock_Runner {
 		$this->job->run(
 			$account_id,
 			$this->scheduler->hook(),
-			function ( int $delay, int $failures, int $waits ) use ( $account_id, $cursor ): bool {
+			function ( int $delay, int $failures, int $waits ) use ( $account_id, &$cursor ): bool {
 				return $this->scheduler->continue_later( $account_id, $cursor, $failures, $delay, $waits );
 			},
 			static function (): void {
 				// Nothing to tell the merchant: the next daily run starts again, and a failure is already in the ring and the log.
 			},
 			(int) $attempt,
-			function ( Account $account, Claim_Fence $fence ) use ( $cursor ): void {
+			function ( Account $account, Claim_Fence $fence ) use ( &$cursor ): void {
 				$this->reconcile( $account, $fence, $cursor );
 			},
 			max( 0, (int) $put_offs )
@@ -215,12 +215,12 @@ final class Reconcile_Stock_Runner {
 	 *
 	 * @param Account     $account Account.
 	 * @param Claim_Fence $fence   The run's claim.
-	 * @param int         $cursor  Last link id already covered.
+	 * @param int         $cursor  Last link id already covered; moves past every page that was reconciled, so a wait resumes from there.
 	 * @return void
 	 * @throws \RuntimeException When the continuation could not be queued.
 	 * @throws \Throwable        What the marketplace read threw; {@see Account_Job} classifies it.
 	 */
-	private function reconcile( Account $account, Claim_Fence $fence, int $cursor ): void {
+	private function reconcile( Account $account, Claim_Fence $fence, int &$cursor ): void {
 		if ( Stock_Mode::is_off( $account ) ) {
 			return; // The mode changed after the run was queued: stock is not synced for this account any more.
 		}
@@ -245,6 +245,7 @@ final class Reconcile_Stock_Runner {
 			}
 
 			$cursor = (int) end( $page )->link_id();
+			$this->job->made_progress();
 
 			if ( count( $page ) < self::PAGE_SIZE ) {
 				return;
