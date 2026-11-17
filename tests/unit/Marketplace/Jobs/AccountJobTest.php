@@ -258,6 +258,46 @@ final class AccountJobTest extends Export_Test_Case {
 	}
 
 	/**
+	 * Work that reported progress before the wait starts the count again; the same wait without progress is given up at the ceiling.
+	 *
+	 * @return void
+	 */
+	public function test_progress_before_a_wait_starts_the_count_again(): void {
+		$job      = $this->job();
+		$throttle = Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 30 );
+		$retry    = function ( int $delay, int $failures, int $waits ): bool {
+			$this->put_offs_asked[] = $waits;
+
+			return true;
+		};
+		$give_up  = function ( string $text ): void {
+			$this->given_up[] = $text;
+		};
+
+		$job->run(
+			$this->account_id,
+			self::CONTEXT,
+			$retry,
+			$give_up,
+			0,
+			function () use ( $job, $throttle ): void {
+				$job->made_progress();
+
+				throw $throttle;
+			},
+			Account_Job::MAX_PUT_OFFS
+		);
+
+		$this->assertSame( [ 1 ], $this->put_offs_asked );
+		$this->assertSame( [], $this->given_up );
+
+		$this->run_job( $this->throwing( $throttle ), 0, [], Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [ 1 ], $this->put_offs_asked, 'no progress, no further wait' );
+		$this->assertCount( 1, $this->given_up );
+	}
+
+	/**
 	 * A licence that stays lapsed ends the same way: waits count against the same ceiling.
 	 *
 	 * @return void

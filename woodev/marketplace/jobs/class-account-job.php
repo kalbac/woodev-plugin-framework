@@ -23,8 +23,9 @@ defined( 'ABSPATH' ) || exit;
  *    other refusal is given up with its text. Nothing is thrown out of the job.
  *
  * A wait (a throttle, a lapsed licence, a paused account) is not a failed attempt, but it is not free either: the job counts its
- * put-offs apart from its attempts and gives up with a recorded text after {@see self::MAX_PUT_OFFS} of them, so a marketplace that
- * answers 429 for hours cannot keep a job re-queued for ever. A busy account is not counted: its claim expires by itself.
+ * put-offs apart from its attempts and gives up with a recorded text after {@see self::MAX_PUT_OFFS} of them in a row, so a marketplace
+ * that answers 429 for hours cannot keep a job re-queued for ever. A run whose work reported progress ({@see self::made_progress()}: a
+ * page or a batch it kept before the wait) starts the count again, so a long walk with now and then a 429 is never cut off. A busy account is not counted: its claim expires by itself.
  *
  * What differs between the jobs is passed in: the request path the error ring names next to a failed run, the ring's failure code
  * and the exceptions the job's own work throws to mean «give up, with this text» instead of going through the classifier.
@@ -101,6 +102,13 @@ final class Account_Job {
 	private $max_put_offs;
 
 	/**
+	 * Whether the work of the current run reported progress.
+	 *
+	 * @var bool
+	 */
+	private $progressed = false;
+
+	/**
 	 * Creates the skeleton of one job.
 	 *
 	 * @since 2.1.6
@@ -141,6 +149,8 @@ final class Account_Job {
 	 * @return void
 	 */
 	public function run( int $account_id, string $context, callable $retry, callable $give_up, int $attempt, callable $work, int $put_offs = 0 ): void {
+		$this->progressed = false;
+
 		try {
 			list( $account, $wait ) = $this->gate->check( $account_id );
 
@@ -175,6 +185,17 @@ final class Account_Job {
 	}
 
 	/**
+	 * Tells the job that the run moved the work forward before it was interrupted, so the waits so far no longer count.
+	 *
+	 * @since 2.1.12
+	 *
+	 * @return void
+	 */
+	public function made_progress(): void {
+		$this->progressed = true;
+	}
+
+	/**
 	 * Extends the account claim, or stops the run.
 	 *
 	 * @since 2.1.6
@@ -203,6 +224,10 @@ final class Account_Job {
 	 * @return void
 	 */
 	private function after_throwable( int $account_id, string $context, \Throwable $exception, int $attempt, int $put_offs, callable $retry, callable $give_up ): void {
+		if ( $this->progressed ) {
+			$put_offs = 0;
+		}
+
 		if ( $this->is_give_up( $exception ) ) {
 			$this->report( $account_id, $context, $exception->getMessage() );
 			$give_up( $exception->getMessage() );

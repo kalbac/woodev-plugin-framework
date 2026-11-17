@@ -247,6 +247,19 @@ final class Link_Jobs {
 	}
 
 	/**
+	 * Tells the job when an interrupted run kept more than it started with, so a long walk with now and then a wait is not cut off.
+	 *
+	 * @param array<string,mixed> $before The saved state the run started from.
+	 * @param array<string,mixed> $after  The state it kept.
+	 * @return void
+	 */
+	private function note_progress( array $before, array $after ): void {
+		if ( $before !== $after ) {
+			$this->job->made_progress();
+		}
+	}
+
+	/**
 	 * Links the cards of the cabinet that match the shop's products.
 	 *
 	 * @param Account     $account     Account.
@@ -263,10 +276,11 @@ final class Link_Jobs {
 		};
 		$record     = $this->progress->load( $account_id, Link_Progress_Store::KIND_LINK, (int) $category_id, (int) call_user_func( $this->clock ) );
 
-		$state = $record['state'] + [
+		$state  = $record['state'] + [
 			'catalogue' => [],
 			'details'   => [],
 		];
+		$before = $state;
 
 		try {
 			$cards   = $this->resolver->catalogue( $account, $context, $renew, $state['catalogue'] );
@@ -285,6 +299,7 @@ final class Link_Jobs {
 			$tally = $this->link_exact( $account_id, $matched, $details, $fence, $renew );
 		} catch ( \Throwable $e ) {
 			// A governor wait or a lost claim comes back later: keep the pages and detail requests already answered.
+			$this->note_progress( $before, $state );
 			$record['state'] = $state;
 			$this->progress->save( $account_id, Link_Progress_Store::KIND_LINK, $record );
 
@@ -462,6 +477,7 @@ final class Link_Jobs {
 		$account_id = $account->id();
 		$record     = $this->progress->load( $account_id, Link_Progress_Store::KIND_REFRESH, 0, (int) call_user_func( $this->clock ) );
 		$state      = $record['state'];
+		$before     = $state;
 
 		try {
 			$cards = $this->resolver->snapshot(
@@ -473,6 +489,7 @@ final class Link_Jobs {
 				$state
 			);
 		} catch ( \Throwable $e ) {
+			$this->note_progress( $before, $state );
 			$record['state'] = $state;
 			$this->progress->save( $account_id, Link_Progress_Store::KIND_REFRESH, $record );
 

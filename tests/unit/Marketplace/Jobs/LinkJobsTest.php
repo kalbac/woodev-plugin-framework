@@ -481,12 +481,36 @@ final class LinkJobsTest extends Export_Test_Case {
 	 * @return void
 	 */
 	public function test_a_throttle_past_the_ceiling_gives_the_run_up(): void {
-		$this->resolver->failure = Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 45 );
+		$this->resolver->on_read = static function (): void {
+			throw Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 45 );
+		};
 
 		$this->jobs()->link_cards( $this->account_id, 0, 0, Account_Job::MAX_PUT_OFFS );
 
 		$this->assertSame( [], $this->scheduler->of( self::LINK ) );
 		$this->assertNotNull( $this->reports()->last_run( $this->account_id )['error'] ?? null );
+	}
+
+	/**
+	 * A long walk that keeps its pages between short waits is never cut off: every run that advanced the cursor starts the count again.
+	 *
+	 * @return void
+	 */
+	public function test_waits_between_runs_that_make_progress_never_reach_the_ceiling(): void {
+		$args = [ $this->account_id, 0, 0 ];
+
+		for ( $run = 0; $run < Account_Job::MAX_PUT_OFFS + 6; ++$run ) {
+			$this->resolver->failure = Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'governor', 30, false );
+
+			$this->jobs()->link_cards( ...$args );
+
+			$retry = $this->scheduler->of( self::LINK );
+			$args  = end( $retry )['args'];
+		}
+
+		$this->assertNull( $this->reports()->last_run( $this->account_id ), 'the pass was not given up' );
+		$this->assertSame( [ $this->account_id, 0, 0, 1 ], $args, 'the count started again on every run' );
+		$this->assertCount( Account_Job::MAX_PUT_OFFS + 6, $this->scheduler->of( self::LINK ) );
 	}
 
 	/**
