@@ -835,7 +835,7 @@ the pieces live and what is easy to get wrong. The adapter implements the option
 |---|---|---|
 | Trigger: notification | `Jobs\Card_Event_Handler` | registered by `Flow_Wiring::intake()` for each `import_event_types()` **before** the plugin's `woodev_{plugin id}_event_handlers` filter, so a plugin can replace it. Only queues; no remote call |
 | Trigger: cards tab | `Jobs\Import_Scheduler` | the bulk and row action queue chunks of ten articles |
-| Job | `Jobs\Import_Jobs` | `import_cards( account_id, offer_ids[≤10], attempt )` through `Account_Job`: one `read_cards()` for the batch, then one `Card_Import` per card |
+| Job | `Jobs\Import_Jobs` | `import_cards( account_id, offer_ids[≤10], attempt, put_offs )` through `Account_Job` (waits are counted apart from attempts and stop at `Account_Job::MAX_PUT_OFFS`, #1835): one `read_cards()` for the batch, then one `Card_Import` per card |
 | One card | `Flows\Card_Import` | the five rows of the spec's §2.6, over `Product_Writer` and `Card_Linker` |
 | Groups | `Flows\Group_Assembler` | the cards of one marketplace group → one variable product (spec §2.6.1): marks the group's product, converts it in place, starts a variation |
 | Run clock | `Jobs\Import_Budget` | `Import_Jobs::BUDGET_SECONDS` (20), checked before every card and image |

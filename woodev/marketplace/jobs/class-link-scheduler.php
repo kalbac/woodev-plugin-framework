@@ -102,10 +102,17 @@ final class Link_Scheduler {
 	 * @param int $category_id Category, 0 for the whole shop.
 	 * @param int $attempt     Failed attempts so far.
 	 * @param int $delay       Seconds to wait.
+	 * @param int $put_offs    Waits so far (2.1.12); carried as a fourth argument only when it is not 0.
 	 * @return bool False when Action Scheduler refused it.
 	 */
-	public function retry_link( int $account_id, int $category_id, int $attempt, int $delay ): bool {
-		return $this->enqueue( $this->link_hook(), [ $account_id, $category_id, $attempt ], $delay );
+	public function retry_link( int $account_id, int $category_id, int $attempt, int $delay, int $put_offs = 0 ): bool {
+		$args = [ $account_id, $category_id, $attempt ];
+
+		if ( $put_offs > 0 ) {
+			$args[] = $put_offs;
+		}
+
+		return $this->enqueue( $this->link_hook(), $args, $delay );
 	}
 
 	/**
@@ -116,10 +123,17 @@ final class Link_Scheduler {
 	 * @param int $account_id Account id.
 	 * @param int $attempt    Failed attempts so far.
 	 * @param int $delay      Seconds to wait.
+	 * @param int $put_offs   Waits so far (2.1.12); carried as a third argument only when it is not 0.
 	 * @return bool False when Action Scheduler refused it.
 	 */
-	public function retry_refresh( int $account_id, int $attempt, int $delay ): bool {
-		return $this->enqueue( $this->refresh_hook(), [ $account_id, $attempt ], $delay );
+	public function retry_refresh( int $account_id, int $attempt, int $delay, int $put_offs = 0 ): bool {
+		$args = [ $account_id, $attempt ];
+
+		if ( $put_offs > 0 ) {
+			$args[] = $put_offs;
+		}
+
+		return $this->enqueue( $this->refresh_hook(), $args, $delay );
 	}
 
 	/**

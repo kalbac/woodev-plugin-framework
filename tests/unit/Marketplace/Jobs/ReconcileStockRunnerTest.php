@@ -13,6 +13,7 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Jobs\Account_Job;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Runner;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
@@ -147,7 +148,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 			array_filter(
 				$this->scheduler->of( self::HOOK ),
 				static function ( array $action ): bool {
-					return 3 === count( $action['args'] );
+					return count( $action['args'] ) >= 3;
 				}
 			)
 		);
@@ -688,6 +689,22 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * A pass that has waited as often as the ceiling allows queues no further continuation; the next daily run starts again.
+	 *
+	 * @return void
+	 */
+	public function test_a_wait_past_the_ceiling_ends_the_pass(): void {
+		$this->marketplace_is_master();
+		$this->stock_product( 'a', 101, 10 );
+		$this->licensed = false;
+
+		$this->runner()->run( $this->account_id, 7, 0, Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [], $this->market->requests );
+		$this->assertSame( [], $this->continuations() );
+	}
+
+	/**
 	 * Without a licence nothing is read; the job waits an hour with the same cursor.
 	 *
 	 * @return void
@@ -703,7 +720,7 @@ final class ReconcileStockRunnerTest extends Sync_Test_Case {
 
 		$this->assertSame( [], $this->market->requests );
 		$this->assertCount( 1, $continuations );
-		$this->assertSame( [ $this->account_id, 7, 0 ], $continuations[0]['args'] );
+		$this->assertSame( [ $this->account_id, 7, 0, 1 ], $continuations[0]['args'], 'the wait is counted apart from the attempts' );
 		$this->assertEqualsWithDelta( Job_Gate::LICENCE_DELAY, $continuations[0]['delay'], 5 );
 
 		$this->runner()->run( $this->account_id, 7, 0 );

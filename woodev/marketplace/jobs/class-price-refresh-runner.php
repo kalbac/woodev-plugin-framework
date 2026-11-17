@@ -108,7 +108,7 @@ final class Price_Refresh_Runner {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( $this->scheduler->refresh_hook(), [ $this, 'run' ], 10, 4 );
+		add_action( $this->scheduler->refresh_hook(), [ $this, 'run' ], 10, 5 );
 	}
 
 	/**
@@ -120,15 +120,16 @@ final class Price_Refresh_Runner {
 	 * @param mixed $offer_ids  Articles.
 	 * @param mixed $attempt    Failed attempts so far.
 	 * @param mixed $mode       {@see Price_Scheduler::PULL_MODE} for the merchant's pull of prices (2.1.10); absent for the read driven by a notification.
+	 * @param mixed $put_offs   Waits so far (2.1.12), for a pull; absent on a batch that has not waited.
 	 * @return void
 	 */
-	public function run( $account_id = 0, $offer_ids = [], $attempt = 0, $mode = '' ): void {
+	public function run( $account_id = 0, $offer_ids = [], $attempt = 0, $mode = '', $put_offs = 0 ): void {
 		$account_id = (int) $account_id;
 		$attempt    = (int) $attempt;
 		$offer_ids  = array_slice( array_values( array_unique( array_map( 'strval', (array) $offer_ids ) ) ), 0, Price_Scheduler::REFRESH_BATCH );
 
 		if ( Price_Scheduler::PULL_MODE === $mode ) {
-			$this->pull( $account_id, $offer_ids, $attempt );
+			$this->pull( $account_id, $offer_ids, $attempt, max( 0, (int) $put_offs ) );
 
 			return;
 		}
@@ -148,9 +149,10 @@ final class Price_Refresh_Runner {
 	 * @param int      $account_id Account id.
 	 * @param string[] $offer_ids  Articles.
 	 * @param int      $attempt    Failed attempts so far.
+	 * @param int      $put_offs   Waits so far.
 	 * @return void
 	 */
-	private function pull( int $account_id, array $offer_ids, int $attempt ): void {
+	private function pull( int $account_id, array $offer_ids, int $attempt, int $put_offs ): void {
 		if ( [] === $offer_ids ) {
 			return;
 		}
@@ -158,8 +160,8 @@ final class Price_Refresh_Runner {
 		$this->pulls->run(
 			$account_id,
 			$this->scheduler->refresh_hook(),
-			function ( int $delay, int $failed ) use ( $account_id, $offer_ids ): bool {
-				$this->scheduler->refresh_later( $account_id, $offer_ids, $failed, $delay, Price_Scheduler::PULL_MODE );
+			function ( int $delay, int $failed, int $waits ) use ( $account_id, $offer_ids ): bool {
+				$this->scheduler->refresh_later( $account_id, $offer_ids, $failed, $delay, Price_Scheduler::PULL_MODE, $waits );
 
 				return true;
 			},
@@ -178,7 +180,8 @@ final class Price_Refresh_Runner {
 				foreach ( $result->skipped() as $offer_id => $reason ) {
 					$this->log( 'refresh_prices (pull): account ' . $account->id() . ': article ' . $offer_id . ' not loaded: ' . $reason );
 				}
-			}
+			},
+			$put_offs
 		);
 	}
 

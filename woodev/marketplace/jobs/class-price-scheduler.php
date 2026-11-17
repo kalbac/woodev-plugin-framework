@@ -133,14 +133,19 @@ final class Price_Scheduler {
 	 * @param int      $attempt    Failed attempts so far.
 	 * @param int      $delay      Seconds to wait.
 	 * @param string   $mode       {@see self::PULL_MODE} for a pull of prices (2.1.10); empty for the notification-driven read.
+	 * @param int      $put_offs   Waits so far (2.1.12), for a pull only; carried as the fifth argument when it is not 0.
 	 * @return void
 	 * @throws \RuntimeException When Action Scheduler refuses the action.
 	 */
-	public function refresh_later( int $account_id, array $offer_ids, int $attempt, int $delay, string $mode = '' ): void {
+	public function refresh_later( int $account_id, array $offer_ids, int $attempt, int $delay, string $mode = '', int $put_offs = 0 ): void {
 		$args = [ $account_id, array_values( $offer_ids ), $attempt ];
 
 		if ( '' !== $mode ) {
 			$args[] = $mode;
+
+			if ( $put_offs > 0 ) {
+				$args[] = $put_offs;
+			}
 		}
 
 		if ( 0 === as_schedule_single_action( time() + max( 0, $delay ), $this->refresh_hook(), $args, $this->names->group() ) ) {

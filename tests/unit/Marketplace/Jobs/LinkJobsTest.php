@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Link_Resolve_Exception;
+use Woodev\Framework\Marketplace\Jobs\Account_Job;
 use Woodev\Framework\Marketplace\Jobs\Backoff;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Jobs;
@@ -415,7 +416,7 @@ final class LinkJobsTest extends Export_Test_Case {
 		$retry = $this->scheduler->of( self::LINK );
 
 		$this->assertCount( 1, $retry );
-		$this->assertSame( [ $this->account_id, 7, 2 ], $retry[0]['args'] );
+		$this->assertSame( [ $this->account_id, 7, 2, 1 ], $retry[0]['args'] );
 		$this->assertSame( Job_Gate::LICENCE_DELAY, $retry[0]['delay'] );
 		$this->assertNull( $this->reports()->last_run( $this->account_id ), 'no verdict while the job waits' );
 	}
@@ -469,9 +470,23 @@ final class LinkJobsTest extends Export_Test_Case {
 		$retry = $this->scheduler->of( self::LINK );
 
 		$this->assertCount( 1, $retry );
-		$this->assertSame( [ $this->account_id, 0, 2 ], $retry[0]['args'] );
+		$this->assertSame( [ $this->account_id, 0, 2, 1 ], $retry[0]['args'], 'the attempt stays, the wait is counted apart' );
 		$this->assertSame( 45, $retry[0]['delay'] );
 		$this->assertNull( $this->reports()->last_run( $this->account_id ) );
+	}
+
+	/**
+	 * A linking run that has waited as often as the ceiling allows gives up with a text instead of waiting again.
+	 *
+	 * @return void
+	 */
+	public function test_a_throttle_past_the_ceiling_gives_the_run_up(): void {
+		$this->resolver->failure = Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'slow down', 45 );
+
+		$this->jobs()->link_cards( $this->account_id, 0, 0, Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [], $this->scheduler->of( self::LINK ) );
+		$this->assertNotNull( $this->reports()->last_run( $this->account_id )['error'] ?? null );
 	}
 
 	/**
@@ -705,7 +720,7 @@ final class LinkJobsTest extends Export_Test_Case {
 		$retry = $this->scheduler->of( self::LINK );
 
 		$this->assertCount( 1, $retry );
-		$this->assertSame( [ $this->account_id, 0, 0 ], $retry[0]['args'], 'a wait does not count as a failed attempt' );
+		$this->assertSame( [ $this->account_id, 0, 0, 1 ], $retry[0]['args'], 'a wait does not count as a failed attempt' );
 		$this->assertNotNull( $this->wp_storage[ self::PREFIX . Link_Progress_Store::OPTION . 'link_' . $this->account_id ] ?? null, 'the pages already read are kept' );
 
 		$this->resolver->reads = [];
@@ -738,7 +753,7 @@ final class LinkJobsTest extends Export_Test_Case {
 		$retry = $this->scheduler->of( self::REFRESH );
 
 		$this->assertCount( 1, $retry );
-		$this->assertSame( [ $this->account_id, 0 ], $retry[0]['args'] );
+		$this->assertSame( [ $this->account_id, 0, 1 ], $retry[0]['args'] );
 
 		$this->resolver->reads = [];
 

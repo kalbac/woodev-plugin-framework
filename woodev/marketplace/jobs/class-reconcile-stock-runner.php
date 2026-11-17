@@ -147,7 +147,7 @@ final class Reconcile_Stock_Runner {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( $this->scheduler->hook(), [ $this, 'run' ], 10, 3 );
+		add_action( $this->scheduler->hook(), [ $this, 'run' ], 10, 4 );
 		add_action( 'action_scheduler_init', [ $this, 'ensure_schedules' ] );
 	}
 
@@ -183,17 +183,18 @@ final class Reconcile_Stock_Runner {
 	 * @param mixed $account_id     Account id.
 	 * @param mixed $cursor_link_id Last link id the earlier runs of this pass covered, 0 for a new pass.
 	 * @param mixed $attempt        Failed attempts so far.
+	 * @param mixed $put_offs       Waits so far (2.1.12); absent on a run that has not waited.
 	 * @return void
 	 */
-	public function run( $account_id = 0, $cursor_link_id = 0, $attempt = 0 ): void {
+	public function run( $account_id = 0, $cursor_link_id = 0, $attempt = 0, $put_offs = 0 ): void {
 		$account_id = (int) $account_id;
 		$cursor     = max( 0, (int) $cursor_link_id );
 
 		$this->job->run(
 			$account_id,
 			$this->scheduler->hook(),
-			function ( int $delay, int $failures ) use ( $account_id, $cursor ): bool {
-				return $this->scheduler->continue_later( $account_id, $cursor, $failures, $delay );
+			function ( int $delay, int $failures, int $waits ) use ( $account_id, $cursor ): bool {
+				return $this->scheduler->continue_later( $account_id, $cursor, $failures, $delay, $waits );
 			},
 			static function (): void {
 				// Nothing to tell the merchant: the next daily run starts again, and a failure is already in the ring and the log.
@@ -201,7 +202,8 @@ final class Reconcile_Stock_Runner {
 			(int) $attempt,
 			function ( Account $account, Claim_Fence $fence ) use ( $cursor ): void {
 				$this->reconcile( $account, $fence, $cursor );
-			}
+			},
+			max( 0, (int) $put_offs )
 		);
 	}
 

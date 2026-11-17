@@ -130,10 +130,15 @@ final class Reconcile_Stock_Scheduler {
 	 * @param int $cursor     Last link id the earlier pages covered.
 	 * @param int $attempt    Failed attempts so far.
 	 * @param int $delay      Seconds to wait.
+	 * @param int $put_offs   Waits so far (2.1.12); carried as a fourth argument only when it is not 0.
 	 * @return bool False when Action Scheduler refused or threw, or the day's continuations are spent.
 	 */
-	public function continue_later( int $account_id, int $cursor, int $attempt, int $delay ): bool {
+	public function continue_later( int $account_id, int $cursor, int $attempt, int $delay, int $put_offs = 0 ): bool {
 		$args = [ $account_id, $cursor, $attempt ];
+
+		if ( $put_offs > 0 ) {
+			$args[] = $put_offs;
+		}
 
 		try {
 			if ( $this->has_pending( $args ) ) {
