@@ -7,6 +7,8 @@
  * @package woodev-plugin-framework
  */
 
+import { createContext, useContext } from '@wordpress/element';
+
 /** What `Help_Links::resolve()` serialises. */
 export interface HelpLinkData {
 	url: string;
@@ -47,4 +49,22 @@ export default function HelpLink( { help, className }: HelpLinkProps ) {
 			{ help.text }…
 		</a>
 	);
+}
+
+/**
+ * The «Частые проблемы» link of the page being drawn (`page.problems` in the manifest, resolved by PHP from the owning
+ * plugin's help table). The page container provides it once; every error or note the framework draws asks for it with
+ * {@link ProblemsLink}, so no screen carries a copy of the link and a page without one draws nothing.
+ */
+export const ProblemsHelpContext = createContext< HelpLinkData | null >( null );
+
+/**
+ * Drawn after an error or a warning the framework itself shows. Success notes never carry it.
+ *
+ * @param props.status The note's status; only `error` and `warning` draw the link.
+ */
+export function ProblemsLink( { status = 'error' }: { status?: string } ) {
+	const help = useContext( ProblemsHelpContext );
+
+	return 'error' === status || 'warning' === status ? <HelpLink help={ help } className="woodev-help-link--problems" /> : null;
 }

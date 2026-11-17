@@ -4,6 +4,7 @@ namespace Woodev\Tests\Unit\Help;
 use Brain\Monkey\Filters;
 use Woodev\Framework\Help\Help_Links;
 use Woodev\Framework\Help\Help_Links_Checker;
+use Woodev\Framework\Help\Help_Links_Cli;
 use Woodev\Tests\Unit\TestCase;
 
 /**
@@ -138,5 +139,50 @@ class HelpLinksTest extends TestCase {
 
 	public function test_the_checker_passes_an_empty_table(): void {
 		$this->assertSame( [], ( new Help_Links_Checker( static fn(): int => 404 ) )->find_broken( [] ) );
+	}
+
+	public function test_an_unknown_plugin_id_selects_nothing_so_the_command_can_fail(): void {
+		$plugins = [
+			'ozon' => new \stdClass(),
+			'wb'   => new \stdClass(),
+		];
+
+		$this->assertNull( Help_Links_Cli::select_plugins( $plugins, 'typo' ) );
+		$this->assertSame( [ 'wb' => $plugins['wb'] ], Help_Links_Cli::select_plugins( $plugins, 'wb' ) );
+		$this->assertSame( $plugins, Help_Links_Cli::select_plugins( $plugins, '' ), 'no --plugin checks them all' );
+		$this->assertNull( Help_Links_Cli::select_plugins( [], 'ozon' ), 'nothing registered: a named plugin is still unknown' );
+	}
+
+	/**
+	 * @dataProvider head_answers
+	 */
+	public function test_a_host_without_head_is_asked_again_with_get_but_a_real_answer_stands( int $head, int $get, int $expected, bool $get_asked ): void {
+		$asked  = false;
+		$status = Help_Links_Checker::status_with_get_fallback(
+			static fn(): int => $head,
+			static function () use ( $get, &$asked ): int {
+				$asked = true;
+
+				return $get;
+			},
+			'https://woodev.ru/docs/a/'
+		);
+
+		$this->assertSame( $expected, $status );
+		$this->assertSame( $get_asked, $asked );
+	}
+
+	/**
+	 * @return array<string,array{int,int,int,bool}> head status, get status, result, whether GET was asked.
+	 */
+	public function head_answers(): array {
+		return [
+			'405 falls back to GET'            => [ 405, 200, 200, true ],
+			'501 falls back to GET'            => [ 501, 200, 200, true ],
+			'501 and GET 404 is a failure'     => [ 501, 404, 404, true ],
+			'a real 404 stands, GET not asked' => [ 404, 200, 404, false ],
+			'200 stands'                       => [ 200, 404, 200, false ],
+			'a network failure stands'         => [ 0, 200, 0, false ],
+		];
 	}
 }

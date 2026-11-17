@@ -52,6 +52,13 @@ final class Help_Links {
 	public const TEXT_TROUBLESHOOTING = 'troubleshooting';
 
 	/**
+	 * The variant keys, without translating anything — a declaration is validated on every request, the wording only when a link is drawn.
+	 *
+	 * @since 2.1.11
+	 */
+	private const VARIANTS = [ self::TEXT_HOW_IT_WORKS, self::TEXT_HOW_TO_SET_UP, self::TEXT_WHY_NEEDED, self::TEXT_TROUBLESHOOTING ];
+
+	/**
 	 * The link texts a declaration may pick from; the set is fixed so the wording stays uniform across plugins.
 	 *
 	 * @since 2.1.11
@@ -87,7 +94,7 @@ final class Help_Links {
 
 		return [
 			'topic' => trim( $topic ),
-			'text'  => is_string( $variant ) && isset( self::texts()[ $variant ] ) ? $variant : self::TEXT_HOW_IT_WORKS,
+			'text'  => is_string( $variant ) && in_array( $variant, self::VARIANTS, true ) ? $variant : self::TEXT_HOW_IT_WORKS,
 		];
 	}
 

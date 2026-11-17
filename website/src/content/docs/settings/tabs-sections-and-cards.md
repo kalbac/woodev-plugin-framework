@@ -191,7 +191,12 @@ The link opens in a new tab. Its wording is one of four fixed variants, so every
 
 A topic missing from the table draws no link, so a typo never shows a dead one. Check your declarations in a unit test with `Help_Links::missing_topics( $declared_topics, $plugin->get_help_topics() )`, and before a release run `wp woodev help-links check`: it requests every address in the table and fails on anything that is not a 2xx or 3xx answer.
 
-For a note or an error, point the topic at the «Common problems» section of the article (`orders-problems` above).
+Errors and notes the framework draws itself link to the «Common problems» section of your article. Add the topic to the table and the link appears; leave it out and nothing is drawn:
+
+| Where | Topic |
+|---|---|
+| Errors and warnings on a marketplace page (records, mappings, tools, diagnostics, action dialogs) | `<page slug>-problems`, for example `products-problems`; a page descriptor can name another with `'problems' => 'my-topic'` |
+| The state notes of the «Notifications» tab | `notifications-problems` |
 
 ## A complete tab
 

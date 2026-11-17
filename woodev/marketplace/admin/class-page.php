@@ -118,6 +118,13 @@ if ( ! class_exists( Page::class, false ) ) :
 		private $help = [];
 
 		/**
+		 * The topic of the article section the page's errors and notes point to, in the plugin's help table.
+		 *
+		 * @var string
+		 */
+		private $problems_topic = '';
+
+		/**
 		 * @param string      $slug         Page slug.
 		 * @param string      $title        Menu and page title, already translated.
 		 * @param string      $kind         One of the KIND_* constants.
@@ -200,6 +207,9 @@ if ( ! class_exists( Page::class, false ) ) :
 			);
 			$page->help = \Woodev\Framework\Help\Help_Links::declaration( $descriptor['help'] ?? null ) ?? [];
 
+			$problems             = isset( $descriptor['problems'] ) ? trim( (string) $descriptor['problems'] ) : '';
+			$page->problems_topic = '' !== $problems ? $problems : $slug . '-problems';
+
 			return $page;
 		}
 
@@ -213,6 +223,19 @@ if ( ! class_exists( Page::class, false ) ) :
 		 */
 		public function get_help(): array {
 			return $this->help;
+		}
+
+		/**
+		 * The topic the page's errors and notes link to — «Частые проблемы» of the page's article. A descriptor names it
+		 * with `problems`; without that it is `<slug>-problems`, so a plugin that adds the topic to its help table gets the
+		 * link on every framework-drawn error and note of the page, and one that does not gets none.
+		 *
+		 * @since 2.1.11
+		 *
+		 * @return string
+		 */
+		public function get_problems_topic(): string {
+			return $this->problems_topic;
 		}
 
 		/**

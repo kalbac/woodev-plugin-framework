@@ -388,6 +388,18 @@ if ( ! class_exists( Menu::class, false ) ) :
 					$entry['help'] = $help;
 				}
 
+				$problems = \Woodev\Framework\Help\Help_Links::resolve(
+					[
+						'topic' => $page->get_problems_topic(),
+						'text'  => \Woodev\Framework\Help\Help_Links::TEXT_TROUBLESHOOTING,
+					],
+					$help_topics
+				);
+
+				if ( null !== $problems ) {
+					$entry['problems'] = $problems;
+				}
+
 				// Only a page that offers several tables names them, so every other page's entry is as it was.
 				if ( [] !== $page->get_table_labels() ) {
 					$entry['tableLabels'] = $page->get_table_labels();

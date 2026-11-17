@@ -65,14 +65,18 @@ final class Help_Links_Cli {
 	 * @return void
 	 */
 	public function check( array $args, array $assoc_args ): void {
-		$only    = isset( $assoc_args['plugin'] ) ? (string) $assoc_args['plugin'] : '';
+		$only     = isset( $assoc_args['plugin'] ) ? (string) $assoc_args['plugin'] : '';
+		$selected = self::select_plugins( self::$plugins, $only );
+
+		// A typo must not turn into «0 addresses checked, every link answers».
+		if ( null === $selected ) {
+			\WP_CLI::error( sprintf( 'Unknown plugin "%1$s". Plugins with a help table: %2$s.', $only, implode( ', ', array_keys( self::$plugins ) ) ) );
+		}
+
 		$checker = new Help_Links_Checker( [ self::class, 'fetch_status' ] );
 		$failed  = false;
 
-		foreach ( self::$plugins as $id => $plugin ) {
-			if ( '' !== $only && $only !== $id ) {
-				continue;
-			}
+		foreach ( $selected as $id => $plugin ) {
 
 			$topics = Help_Links::topics_of( $plugin );
 			$broken = $checker->find_broken( $topics );
@@ -93,7 +97,24 @@ final class Help_Links_Cli {
 	}
 
 	/**
-	 * The HTTP status of an address: a HEAD request, then a GET for a server that refuses HEAD.
+	 * The plugins a run covers: every registered one, or the one `--plugin` names.
+	 *
+	 * @since 2.1.11
+	 *
+	 * @param array<string,object> $plugins Registered plugins, by id.
+	 * @param string               $only    The `--plugin` value; '' for all.
+	 * @return array<string,object>|null Null when `$only` names a plugin that is not registered.
+	 */
+	public static function select_plugins( array $plugins, string $only ): ?array {
+		if ( '' === $only ) {
+			return $plugins;
+		}
+
+		return isset( $plugins[ $only ] ) ? [ $only => $plugins[ $only ] ] : null;
+	}
+
+	/**
+	 * The HTTP status of an address: a HEAD request, then a GET for a server that does not implement HEAD.
 	 *
 	 * @since 2.1.11
 	 *
@@ -101,12 +122,18 @@ final class Help_Links_Cli {
 	 * @return int The status, 0 when the address was not reached.
 	 */
 	public static function fetch_status( string $url ): int {
-		$response = wp_remote_head( $url, [ 'timeout' => 15 ] );
+		$status_of = static function ( $response ): int {
+			return is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		};
 
-		if ( ! is_wp_error( $response ) && 405 === (int) wp_remote_retrieve_response_code( $response ) ) {
-			$response = wp_remote_get( $url, [ 'timeout' => 15 ] );
-		}
-
-		return is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		return Help_Links_Checker::status_with_get_fallback(
+			static function ( string $address ) use ( $status_of ): int {
+				return $status_of( wp_remote_head( $address, [ 'timeout' => 15 ] ) );
+			},
+			static function ( string $address ) use ( $status_of ): int {
+				return $status_of( wp_remote_get( $address, [ 'timeout' => 15 ] ) );
+			},
+			$url
+		);
 	}
 }

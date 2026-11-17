@@ -11,6 +11,7 @@
  */
 
 import { Button } from '@wordpress/components';
+import { ProblemsLink } from '../../components/help-link';
 import type { TableHandle } from '../extensions';
 import { healthNotice } from './messages';
 import type { Ownership } from './ownership';
@@ -109,14 +110,17 @@ export function ActivityLoop( { table, state, ownership }: ActivityLoopProps ) {
 				</div>
 			) }
 			{ notice !== '' && (
-				<p
-					role="status"
-					className="woodev-records__activity-notice"
-					data-stale={ health.stale }
-					style={ ACTIVITY_STYLES.notice }
-				>
-					{ notice }
-				</p>
+				<>
+					<p
+						role="status"
+						className="woodev-records__activity-notice"
+						data-stale={ health.stale }
+						style={ ACTIVITY_STYLES.notice }
+					>
+						{ notice }
+					</p>
+					<ProblemsLink status="warning" />
+				</>
 			) }
 		</>
 	);

@@ -10,7 +10,6 @@ import ControlField from '../../src/components/control-field';
 import GroupCard from '../../src/settings-page/group-card';
 import SectionView from '../../src/settings-page/section-view';
 import HelpLink, { isDrawableHelp } from '../../src/components/help-link';
-import { Notices } from '../../src/marketplace-admin/views/mappings/notices';
 import { PageBody } from '../../src/marketplace-admin/page-view';
 import type { ManifestMenu, ManifestPage } from '../../src/marketplace-admin/types';
 
@@ -89,12 +88,6 @@ describe( 'where the link is drawn', () => {
 			/>
 		);
 		expect( screen.getAllByRole( 'link' ).map( ( link ) => link.getAttribute( 'href' ) ) ).toEqual( [ HELP.url, 'https://woodev.ru/docs/ozon/#problems' ] );
-	} );
-
-	test( 'under a note, with the «Частые проблемы» link', () => {
-		render( <Notices notice={ { status: 'error', lines: [ 'Не удалось связать товар.' ], help: HELP } } onDismiss={ jest.fn() } /> );
-
-		expect( screen.getByRole( 'link', { name: HELP.label } ) ).toBeInTheDocument();
 	} );
 
 	test( 'on a marketplace page, whether a view is registered or not', () => {

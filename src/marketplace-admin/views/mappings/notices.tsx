@@ -5,13 +5,11 @@
  */
 
 import { Notice } from '@wordpress/components';
-import HelpLink, { type HelpLinkData } from '../../../components/help-link';
+import { ProblemsLink } from '../../../components/help-link';
 
 export interface NoticeState {
 	status: 'success' | 'error';
 	lines: string[];
-	/** The «Частые проблемы» link of the article the note belongs to, resolved by PHP (`Help_Links::resolve()`). */
-	help?: HelpLinkData;
 }
 
 export function Notices( { notice, onDismiss }: { notice: NoticeState | null; onDismiss: () => void } ) {
@@ -24,7 +22,7 @@ export function Notices( { notice, onDismiss }: { notice: NoticeState | null; on
 			{ notice.lines.map( ( line ) => (
 				<p key={ line }>{ line }</p>
 			) ) }
-			<HelpLink help={ notice.help } />
+			<ProblemsLink status={ notice.status } />
 		</Notice>
 	);
 }

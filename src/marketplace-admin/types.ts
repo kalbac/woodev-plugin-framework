@@ -27,6 +27,8 @@ export interface ManifestPage {
 	breadcrumbs: Breadcrumb[];
 	/** The page's «Подробнее…» link, resolved by PHP against the plugin's help table; absent when none. */
 	help?: HelpLinkData;
+	/** The «Частые проблемы» link every framework-drawn error and note of the page shows; absent when the plugin's table has no topic. */
+	problems?: HelpLinkData;
 	/** The reserved analytics slot: always null, never requested. */
 	analytics: null;
 }

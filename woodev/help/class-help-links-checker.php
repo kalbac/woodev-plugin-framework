@@ -33,6 +33,23 @@ final class Help_Links_Checker {
 	}
 
 	/**
+	 * The status of an address as the check reads it: a HEAD request first, then a GET for a host that does not
+	 * implement HEAD (405 «method not allowed», 501 «not implemented»). Any other answer — a real 404 included — stands.
+	 *
+	 * @since 2.1.11
+	 *
+	 * @param callable $head fn( string $url ): int — the status of a HEAD request, 0 when not reached.
+	 * @param callable $get  fn( string $url ): int — the status of a GET request, 0 when not reached.
+	 * @param string   $url  The address.
+	 * @return int
+	 */
+	public static function status_with_get_fallback( callable $head, callable $get, string $url ): int {
+		$status = (int) $head( $url );
+
+		return in_array( $status, [ 405, 501 ], true ) ? (int) $get( $url ) : $status;
+	}
+
+	/**
 	 * Checks each address of the table once, even when several topics share it.
 	 *
 	 * @since 2.1.11
