@@ -139,7 +139,7 @@ export function ToolsView( { menu }: PageViewProps ) {
 					<CardBody>
 						<h3 className="woodev-group__title">{ tool.title }</h3>
 						<p className="woodev-group__desc">{ tool.description }</p>
-						{ tool.disabled && <Notice status="warning" isDismissible={ false }>{ tool.disabled_reason }</Notice> }
+						{ tool.disabled && <Notice status="warning" isDismissible={ false }>{ tool.disabled_reason }<ProblemsLink status="warning" /></Notice> }
 						<Button variant="secondary" disabled={ ! canPreview( tool, accountId ) || pending } onClick={ () => openPreview( tool ) }>
 							{ tool.button }
 						</Button>
