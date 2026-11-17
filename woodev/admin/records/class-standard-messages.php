@@ -35,18 +35,19 @@ final class Standard_Messages {
 	/**
 	 * The «select every row under the filter» bar above a ticked page: the offer, the confirmation and the way back.
 	 *
-	 * `{count}` is the number of rows and `{filters}` the active filters in words (the shell writes both); the sentences
-	 * say «записи», because a table of any kind may use them — a definition that knows its rows' name overrides them.
+	 * `{count}` is the number of rows and `{filters}` the active filters in words (the shell writes both). `$records` names the
+	 * rows in the sentences: «записи» by default, a definition passes its own («товары», «карточки»).
 	 *
 	 * @since 2.1.8
 	 *
+	 * @param string $records The noun for the table's rows, already translated.
 	 * @return array<string,string>
 	 */
-	public static function matching(): array {
+	public static function matching( string $records = 'записи' ): array {
 		return [
-			'selected_page'         => __( 'Выбраны все записи на этой странице: {count}.', 'woodev-plugin-framework' ),
-			'select_all_matching'   => __( 'Выбрать все записи под текущим отбором: {count}', 'woodev-plugin-framework' ),
-			'selected_all_matching' => __( 'Выбраны все записи под текущим отбором: {count}. {filters}', 'woodev-plugin-framework' ),
+			'selected_page'         => sprintf( __( 'Выбраны все %s на этой странице: {count}.', 'woodev-plugin-framework' ), $records ),
+			'select_all_matching'   => sprintf( __( 'Выбрать все %s под текущим отбором: {count}', 'woodev-plugin-framework' ), $records ),
+			'selected_all_matching' => sprintf( __( 'Выбраны все %s под текущим отбором: {count}. {filters}', 'woodev-plugin-framework' ), $records ),
 			'clear_selection'       => __( 'Снять выбор', 'woodev-plugin-framework' ),
 		];
 	}
