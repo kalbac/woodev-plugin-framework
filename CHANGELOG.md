@@ -1,6 +1,40 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.11] — 2026-11-17
+### Bug Fixes
+- **help**: Problems link on framework errors and notes, CLI unknown plugin, GET fallback on 501 (#1789)
+
+- **help**: Problems link on the disabled-tool warning (#1789)
+
+- **marketplace**: Wire "select all by filter" bar on product screens (#1833)
+
+
+### Documentation
+- Save session s234 — bulk operations E2/E3/D, framework 2.1.10, Ozon Seller on 2.1.9
+
+- S234 — Ozon Seller on 2.1.10, overnight handoff
+
+
+### Features
+- **help**: «Подробнее…» help links on fields, sections, groups, pages and notes (#1789)
+
+
+### Tests
+- Wait for the server to free A's lock before tick B in BulkRunTwoConnectionsTest (#1828)
+
+
+### Build
+- **deps**: Bump taiki-e/install-action from 2.90.2 to 2.90.3 (#1832)
+
+- Bundles for the help links (#1789)
+
+
+### I18n
+- Catalogue the matching-bar sentences and the two bulk nouns (#1833)
+
+
+
 ## [2.1.10] — 2026-11-16
 ### Bug Fixes
 - **i18n**: Catalogue entries for the bulk run strings (#1795)
