@@ -9,6 +9,8 @@ namespace Woodev\Tests\Unit\Admin\Records;
 
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Standard_Messages;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Definition;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Definition;
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/Records_Fixtures.php';
@@ -40,6 +42,41 @@ final class StandardMessagesTest extends TestCase {
 		$this->assertStringContainsString( '{count}', $messages['select_all_matching'] );
 		$this->assertStringContainsString( '{count}', $messages['selected_all_matching'] );
 		$this->assertStringContainsString( '{filters}', $messages['selected_all_matching'] );
+	}
+
+	public function test_every_definition_with_an_all_matching_action_carries_the_matching_sentences(): void {
+		$definitions = [
+			Site_Products_Definition::build( [], 'Ozon', [] ),
+			Remote_Cards_Definition::build( [], 'Ozon' ),
+		];
+		$declaring   = 0;
+
+		foreach ( $definitions as $definition ) {
+			if ( ! $this->declares_all_matching( $definition ) ) {
+				continue;
+			}
+
+			++$declaring;
+
+			foreach ( array_keys( Standard_Messages::matching() ) as $key ) {
+				$this->assertNotSame( '', $definition['messages'][ $key ] ?? '', "A definition with all_matching lacks «{$key}»." );
+			}
+		}
+
+		$this->assertGreaterThan( 0, $declaring, 'The check must cover at least one definition that declares all_matching.' );
+	}
+
+	/**
+	 * @param array<string,mixed> $definition A definition as `to_array()` sends it.
+	 */
+	private function declares_all_matching( array $definition ): bool {
+		foreach ( $definition['bulk_actions'] as $action ) {
+			if ( true === ( $action['all_matching'] ?? false ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	public function test_the_period_picker_has_a_label_for_every_preset_the_shell_draws(): void {

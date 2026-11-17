@@ -387,6 +387,13 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [], $this->scheduler->of( self::IMPORT_HOOK ), 'Nothing is queued by a preview.' );
 	}
 
+	public function test_the_preview_takes_the_genitive_after_do_for_every_count(): void {
+		$this->assertStringContainsString( 'до 1 карточки', Remote_Cards_Run_Line::preview( 1 ) );
+		$this->assertStringContainsString( 'до 3 карточек', Remote_Cards_Run_Line::preview( 3 ) );
+		$this->assertStringContainsString( 'до 11 карточек', Remote_Cards_Run_Line::preview( 11 ) );
+		$this->assertStringContainsString( 'до 21 карточки', Remote_Cards_Run_Line::preview( 21 ) );
+	}
+
 	public function test_the_count_follows_the_search_and_the_on_site_filter_like_the_table_does(): void {
 		$this->put_snapshot( array_merge( $this->cards( 5 ), [ $this->card( 'B-1', 'Платье красное' ) ] ) );
 		$this->put_on_site( 'A-3', 43 );

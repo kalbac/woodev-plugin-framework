@@ -418,7 +418,13 @@ final class Site_Products_Definition {
 	 * @return array<string,string>
 	 */
 	private static function messages(): array {
-		return array_merge( self::shell_messages(), Standard_Messages::bulk(), Standard_Messages::views(), self::action_messages() );
+		return array_merge(
+			self::shell_messages(),
+			Standard_Messages::bulk(),
+			Standard_Messages::matching( __( 'товары', 'woodev-plugin-framework' ) ),
+			Standard_Messages::views(),
+			self::action_messages()
+		);
 	}
 
 	/**
