@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Diagnostics;
 
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
 
 defined( 'ABSPATH' ) || exit;
@@ -21,7 +22,8 @@ defined( 'ABSPATH' ) || exit;
 final class Diagnostics_Payload {
 	/**
 	 * Sections as `[ 'title' => string, 'lines' => [ [ 'label' => string, 'value' => string ], … ] ]`; a line can also carry
-	 * `monospace` (true) and `link` (`[ 'text' => string, 'url' => string ]`) when the section asked for them.
+	 * `monospace` (true) and `link` (`[ 'text' => string, 'url' => string ]`) when the section asked for them. A line whose presentation has
+	 * a `mask` shows it where the redactor's {@see Report_Redactor::MASK} stood: the card reads «…/1/••••», the support report keeps its own mask.
 	 *
 	 * @since 2.1.5
 	 *
@@ -60,6 +62,10 @@ final class Diagnostics_Payload {
 			];
 
 			$shown = $presentation[ (string) $label ] ?? [];
+
+			if ( ! empty( $shown['mask'] ) ) {
+				$row['value'] = str_replace( Report_Redactor::MASK, (string) $shown['mask'], $row['value'] );
+			}
 
 			if ( ! empty( $shown['monospace'] ) ) {
 				$row['monospace'] = true;

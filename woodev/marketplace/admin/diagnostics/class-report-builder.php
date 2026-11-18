@@ -446,12 +446,16 @@ final class Report_Builder {
 					$redaction['fields'],
 					$redaction['literals']
 				);
-				$presentation[ $address_label ] = [ 'monospace' => true ];
+				// The card shows the hidden part as dots; the support report keeps the redactor's own mask.
+				$presentation[ $address_label ] = [
+					'monospace' => true,
+					'mask'      => '••••',
+				];
 
 				$tab_url = null === $this->notifications_url ? '' : (string) call_user_func( $this->notifications_url );
 				if ( '' !== $tab_url ) {
 					$presentation[ $address_label ]['link'] = [
-						'text' => __( 'Скопировать адрес — в настройках уведомлений', 'woodev-plugin-framework' ),
+						'text' => __( 'Скопировать адрес можно во вкладке «Уведомления»', 'woodev-plugin-framework' ),
 						'url'  => $tab_url,
 					];
 				}

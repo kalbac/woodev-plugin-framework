@@ -666,4 +666,13 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'tooltip', array_filter( $schema['webhook_order_created'] ?? [] ), 'no icon to hover for it any more' );
 		$this->assertStringContainsString( 'Удалит аккаунты, связи и настройки без возможности восстановления.', $schema[ Advanced_Section::DELETE_DATA_ID ]['description'] ?? '' );
 	}
+
+	public function test_one_rule_for_every_explanation_a_short_one_is_a_line_a_longer_one_is_a_spoiler(): void {
+		$handler = new Settings_Handler( 'fake_mp', [ $this->push_section( new Fake_Push_Protocol() ), new Advanced_Section() ] );
+		$schema  = \Woodev\Framework\Settings\Field_Schema::from_handler( $handler );
+
+		$this->assertStringNotContainsString( '<details>', $schema['webhook_order_created']['description'] ?? '', 'a short one stays a visible line' );
+		$this->assertStringStartsWith( '<details><summary>Подробнее</summary>', $schema[ Advanced_Section::DELETE_DATA_ID ]['description'] ?? '' );
+		$this->assertStringNotContainsString( '<details>', $schema[ Advanced_Section::LOGGING_ID ]['description'] ?? '', 'under 100 characters it is one line' );
+	}
 }

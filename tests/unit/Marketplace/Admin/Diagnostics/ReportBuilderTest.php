@@ -253,6 +253,8 @@ final class ReportBuilderTest extends TestCase {
 
 		$this->assertNotEmpty( $diagnostic );
 		$this->assertStringContainsString( 'Что делать', $report );
+		$this->assertStringContainsString( '/notifications/' . $acc_id . '/[скрыто]', $report, 'the support report keeps the redactor\'s own mask' );
+		$this->assertStringNotContainsString( '••••', $report );
 		$this->assertStringContainsString( 'Хоругвино', $report );
 		$this->assertStringContainsString( '15 / 100 (00:00 UTC)', $report );
 		$this->assertStringContainsString( 'обновлено сегодня', $report );
@@ -315,9 +317,10 @@ final class ReportBuilderTest extends TestCase {
 		}
 
 		$this->assertNotNull( $address, 'the address line is there, with its own label' );
-		$this->assertStringContainsString( '[скрыто]', $address['value'] );
+		$this->assertStringEndsWith( '/••••', $address['value'], 'the card shows the hidden part as dots' );
+		$this->assertStringNotContainsString( '[скрыто]', $address['value'] );
 		$this->assertTrue( $address['monospace'] );
-		$this->assertSame( 'Скопировать адрес — в настройках уведомлений', $address['link']['text'] );
+		$this->assertSame( 'Скопировать адрес можно во вкладке «Уведомления»', $address['link']['text'] );
 		$this->assertSame( 'https://shop.example/wp-admin/admin.php?page=fake&tab=notifications', $address['link']['url'] );
 	}
 

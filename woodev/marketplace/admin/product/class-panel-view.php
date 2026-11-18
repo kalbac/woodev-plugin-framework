@@ -182,7 +182,7 @@ final class Panel_View {
 			$this->settings_fields( $block, $base, $id, true, $screen );
 			$this->buttons( $block, $screen );
 			$this->hints( $block, $screen );
-			$this->why( $block, false );
+			$this->why( $block );
 		}
 
 		echo '</div>';
@@ -198,7 +198,7 @@ final class Panel_View {
 	 * @return void
 	 */
 	private function parent_fields( array $block, string $base, string $id, array $screen ): void {
-		echo '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">' . esc_html__( 'Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой. Остатки, цены, склад и проверка товара — у каждого варианта, во вкладке «Вариации». Кнопка «Экспортировать» проверит все варианты сразу и покажет, что мешает.', 'woodev-plugin-framework' ) . '</span></p>';
+		echo '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">' . esc_html__( 'Остатки, цены и проверка — у каждого варианта, во вкладке «Вариации».', 'woodev-plugin-framework' ) . '</span></p>';
 
 		$this->mapping_field( $block['mapping'], $base, $id, $screen );
 		$this->buttons( $block, $screen );
@@ -275,9 +275,11 @@ final class Panel_View {
 			return;
 		}
 
-		$link = '' !== $ids['card_url'] ? ' · <a href="' . esc_url( $ids['card_url'] ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( sprintf( /* translators: %s: marketplace name. */ __( 'Открыть карточку: %s', 'woodev-plugin-framework' ), $this->names->name() ) ) . '</a>' : '';
+		// The numbers end on the last number: no separator dangles after it, and the link follows after a dot only when there is something before it.
+		$summary = trim( rtrim( trim( $ids['summary'] ), '·' ) );
+		$link    = '' !== $ids['card_url'] ? ( '' !== $summary ? ' · ' : '' ) . '<a href="' . esc_url( $ids['card_url'] ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( sprintf( /* translators: %s: marketplace name. */ __( 'Открыть на %s', 'woodev-plugin-framework' ), $this->names->name() ) ) . '</a>' : '';
 
-		$this->row( $id . 'remote_ids', sprintf( /* translators: %s: marketplace name. */ __( 'Номера: %s', 'woodev-plugin-framework' ), $this->names->name() ), '<span>' . esc_html( $ids['summary'] ) . $link . '</span>', __( 'Эти номера назначает сам маркетплейс, изменить их нельзя.', 'woodev-plugin-framework' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
+		$this->row( $id . 'remote_ids', sprintf( /* translators: %s: marketplace name. */ __( 'Номера: %s', 'woodev-plugin-framework' ), $this->names->name() ), '<span>' . esc_html( $summary ) . $link . '</span>', __( 'Эти номера назначает сам маркетплейс, изменить их нельзя.', 'woodev-plugin-framework' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
 	}
 
 	/**
@@ -484,15 +486,14 @@ final class Panel_View {
 	 * @return void
 	 */
 	private function buttons( array $block, array $screen ): void {
-		$labels  = $this->button_labels( $block, (string) ( $screen['link_scope'] ?? '' ) );
-		$tips    = $this->button_tips();
+		$labels  = $this->button_labels( $block );
 		$confirm = [
 			'archive' => sprintf( /* translators: %s: marketplace name. */ __( 'Точно архивировать на %s? Нажмите ещё раз.', 'woodev-plugin-framework' ), $this->names->name() ),
 			'detach'  => __( 'Точно снять связь? Нажмите ещё раз.', 'woodev-plugin-framework' ),
 		];
 
 		// One group of adjacent buttons, one row, never two. A button is an icon and its words; the stylesheet shows only the icon while the row is too
-		// narrow for the words (a container query), so the name goes in `aria-label` and the explanation in the tooltip.
+		// narrow for the words (a container query), so the name goes in `aria-label` and in a short tooltip: the explanations are in «Подсказки».
 		echo '<p class="form-field woodev-mp-buttons"><span class="woodev-mp-buttons__row" role="group" aria-label="' . esc_attr__( 'Действия с карточкой', 'woodev-plugin-framework' ) . '">';
 
 		foreach ( $labels as $op => $label ) {
@@ -501,11 +502,10 @@ final class Panel_View {
 			}
 
 			printf(
-				'<button type="button" class="button woodev-mp-btn%1$s" %2$s data-confirm="%3$s" title="%4$s" aria-label="%5$s">%6$s<span class="woodev-mp-btn__text">%5$s</span></button>',
+				'<button type="button" class="button woodev-mp-btn%1$s" %2$s data-confirm="%3$s" title="%4$s" aria-label="%4$s">%5$s<span class="woodev-mp-btn__text">%4$s</span></button>',
 				'export' === $op ? ' button-primary' : '',
 				$this->op_attributes( $op, $block, $screen ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in op_attributes().
 				esc_attr( $confirm[ $op ] ?? '' ),
-				esc_attr( $label . '. ' . $tips[ $op ] ),
 				esc_attr( $label ),
 				$this->op_icon( $op, $this->export_is_new( $block ) ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static markup.
 			);
@@ -556,18 +556,16 @@ final class Panel_View {
 	}
 
 	/**
-	 * Picks the buttons a block offers and their labels.
+	 * Picks the buttons a block offers and their labels. The category-wide «Связать по артикулу» is not among them: it works on many products, so it
+	 * is a text link in «Подсказки» ({@see Panel_View::hints()}), not one of the icons that act on this product.
 	 *
 	 * @param array<string,mixed> $block Block.
-	 * @param string              $scope Name of the product's category, '' when it has none.
 	 * @return array<string,string> `op` => label.
 	 */
-	private function button_labels( array $block, string $scope ): array {
+	private function button_labels( array $block ): array {
 		$is_offer = 'offer' === $block['kind'];
-		$is_new   = $this->export_is_new( $block );
 		$labels   = [
-			'export' => $is_new ? __( 'Экспортировать', 'woodev-plugin-framework' ) : __( 'Обновить карточку', 'woodev-plugin-framework' ),
-			'link'   => '' !== $scope ? __( 'Связать категорию по артикулу', 'woodev-plugin-framework' ) : __( 'Связать все товары по артикулу', 'woodev-plugin-framework' ),
+			'export' => $this->export_is_new( $block ) ? __( 'Экспортировать', 'woodev-plugin-framework' ) : __( 'Обновить карточку', 'woodev-plugin-framework' ),
 		];
 
 		if ( $is_offer ? $block['can_archive'] : $block['any_created'] ) {
@@ -582,41 +580,41 @@ final class Panel_View {
 	}
 
 	/**
-	 * Returns the tooltips of the buttons.
+	 * Returns the explanations of the buttons, shown in «Подсказки».
 	 *
 	 * @return array<string,string>
 	 */
 	private function button_tips(): array {
 		return [
 			'export'  => __( 'Проверит товар и поставит его в очередь на отправку на маркетплейс. Результат появится в состоянии выше через минуту-две.', 'woodev-plugin-framework' ),
-			'link'    => __( 'Ищет в кабинете маркетплейса карточки с таким же артикулом, как у товаров, и связывает их с сайтом. Работает не с одним этим товаром, а со всеми товарами категории (или магазина).', 'woodev-plugin-framework' ),
 			'archive' => __( 'Остаток карточки на маркетплейсе станет нулевым, и карточка уйдёт в архив. Товар на сайте не меняется.', 'woodev-plugin-framework' ),
 			'detach'  => __( 'Сайт забудет связь с карточкой маркетплейса. Сама карточка не удаляется и не меняется.', 'woodev-plugin-framework' ),
 		];
 	}
 
 	/**
-	 * Prints the help under the buttons as one collapsed «Подсказки» block: that the buttons work with the saved product, what «Связать по
-	 * артикулу» works on (a category-wide search, not a search for this one product) and, when the reasons are hidden, how to see them.
+	 * Prints the help under the buttons as one collapsed «Подсказки» block: that the buttons work with the saved product, what each button does,
+	 * and the category-wide «Связать по артикулу» as a text link with what it works on (a search over the whole category, not over this one product).
+	 * A variable product's block starts with how its variants are sent.
 	 *
 	 * @param array<string,mixed> $block  Block.
 	 * @param array<string,mixed> $screen Screen (`ops`, `link_scope`).
 	 * @return void
 	 */
 	private function hints( array $block, array $screen ): void {
-		$scope = (string) ( $screen['link_scope'] ?? '' );
-		$hints = [
-			sprintf( /* translators: %s: name of a button. */ __( 'Кнопки работают с уже сохранённым товаром: если меняли поля выше, сначала сохраните товар («Обновить» справа), затем нажмите «%s».', 'woodev-plugin-framework' ), $this->button_labels( $block, $scope )['export'] ),
-		];
+		$labels = $this->button_labels( $block );
+		$hints  = [];
 
-		if ( isset( $screen['ops']['link'] ) ) {
-			$hints[] = '' !== $scope
-				? sprintf( /* translators: %s: category name. */ __( 'Кнопка «Связать категорию по артикулу» ищет карточки маркетплейса для всех товаров категории «%s», а не только для этого товара.', 'woodev-plugin-framework' ), $scope )
-				: __( 'У товара нет категории, поэтому кнопка «Связать все товары по артикулу» ищет карточки маркетплейса для всех товаров магазина, а не только для этого.', 'woodev-plugin-framework' );
+		if ( 'parent' === $block['kind'] ) {
+			$hints[] = __( 'Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой. Остатки, цены, склад и проверка товара — у каждого варианта. Кнопка «Экспортировать» проверит все варианты сразу и покажет, что мешает.', 'woodev-plugin-framework' );
 		}
 
-		if ( 0 !== ( $block['link_id'] ?? 0 ) && ! ( $block['reasons']['visible'] ?? true ) ) {
-			$hints[] = __( 'Включите «Логирование» в настройках, чтобы увидеть, почему остатки и цены этого товара не отправляются.', 'woodev-plugin-framework' );
+		$hints[] = sprintf( /* translators: %s: name of a button. */ __( 'Кнопки работают с уже сохранённым товаром: если меняли поля выше, сначала сохраните товар («Обновить» справа), затем нажмите «%s».', 'woodev-plugin-framework' ), $labels['export'] );
+
+		foreach ( $this->button_tips() as $op => $tip ) {
+			if ( isset( $labels[ $op ], $screen['ops'][ $op ] ) ) {
+				$hints[] = '«' . $labels[ $op ] . '»: ' . $tip;
+			}
 		}
 
 		echo '<fieldset class="form-field woodev-mp-hints"><details><summary>' . esc_html__( 'Подсказки', 'woodev-plugin-framework' ) . '</summary>';
@@ -625,7 +623,34 @@ final class Panel_View {
 			echo '<span class="woodev-mp-note">' . esc_html( $hint ) . '</span>';
 		}
 
+		if ( isset( $screen['ops']['link'] ) ) {
+			$this->link_by_sku( $block, $screen, (string) ( $screen['link_scope'] ?? '' ) );
+		}
+
 		echo '</details></fieldset>';
+	}
+
+	/**
+	 * Prints the category-wide «Связать по артикулу»: what it works on, then a text button that runs it (the tab's script handles any element
+	 * that carries `data-woodev-mp-op`).
+	 *
+	 * @param array<string,mixed> $block  Block.
+	 * @param array<string,mixed> $screen Screen (`ops`).
+	 * @param string              $scope  Name of the product's category, '' when it has none.
+	 * @return void
+	 */
+	private function link_by_sku( array $block, array $screen, string $scope ): void {
+		$explanation = '' !== $scope
+			? sprintf( /* translators: %s: category name. */ __( 'Ищет карточки маркетплейса с таким же артикулом для всех товаров категории «%s», а не только для этого товара.', 'woodev-plugin-framework' ), $scope )
+			: __( 'У товара нет категории, поэтому поиск карточек маркетплейса с таким же артикулом идёт по всем товарам магазина, а не только по этому.', 'woodev-plugin-framework' );
+		$label       = '' !== $scope ? __( 'Связать категорию по артикулу', 'woodev-plugin-framework' ) : __( 'Связать все товары по артикулу', 'woodev-plugin-framework' );
+
+		echo '<span class="woodev-mp-note">' . esc_html( $explanation ) . '</span>';
+		printf(
+			'<span class="woodev-mp-note"><button type="button" class="button-link woodev-mp-link-op" %1$s>%2$s</button></span>',
+			$this->op_attributes( 'link', $block, $screen ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in op_attributes().
+			esc_html( $label )
+		);
 	}
 
 	/**
@@ -643,14 +668,13 @@ final class Panel_View {
 	}
 
 	/**
-	 * Prints «Почему не синхронизируется». While «Логирование» is off there is nothing to show: a tab says how to turn it on in its «Подсказки»
-	 * ({@see Panel_View::hints()}); a variation has no such block and keeps the line.
+	 * Prints «Почему не синхронизируется». While «Логирование» is off there is nothing to show: a diagnostics hint is not shown to a merchant
+	 * who has not turned the logging on (operator rule), so the row is simply absent.
 	 *
-	 * @param array<string,mixed> $block     Block.
-	 * @param bool                $hint_line Whether to print the line that says how to see the reasons when they are hidden.
+	 * @param array<string,mixed> $block Block.
 	 * @return void
 	 */
-	private function why( array $block, bool $hint_line = true ): void {
+	private function why( array $block ): void {
 		if ( 0 === $block['link_id'] ) {
 			return;
 		}
@@ -658,10 +682,6 @@ final class Panel_View {
 		$label = __( 'Почему не синхронизируется', 'woodev-plugin-framework' );
 
 		if ( ! $block['reasons']['visible'] ) {
-			if ( $hint_line ) {
-				$this->row( '', $label, '<span class="woodev-mp-note">' . esc_html__( 'Включите «Логирование» в настройках, чтобы увидеть разбор причин', 'woodev-plugin-framework' ) . '</span>', '' );
-			}
-
 			return;
 		}
 
