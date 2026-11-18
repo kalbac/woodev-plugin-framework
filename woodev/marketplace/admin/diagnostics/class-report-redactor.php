@@ -152,7 +152,8 @@ final class Report_Redactor {
 
 		return new Report_Section(
 			self::redact_text( $section->title(), $secret_field_names, $known_secrets ),
-			$lines
+			$lines,
+			$section->presentation()
 		);
 	}
 

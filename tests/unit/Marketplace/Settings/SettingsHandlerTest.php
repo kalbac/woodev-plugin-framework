@@ -571,6 +571,12 @@ final class SettingsHandlerTest extends TestCase {
 	}
 
 	public function test_the_price_example_closes_the_price_card_and_no_longer_heads_the_tab(): void {
+		Functions\when( 'wc_price' )->alias(
+			static function ( $amount, array $args = [] ): string {
+				return '<span class="amount">' . number_format( (float) $amount, (int) ( $args['decimals'] ?? 2 ), ',', ' ' ) . '&nbsp;<span>₽</span></span>';
+			}
+		);
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
 		$fields     = new Credential_Fields( 'merchant_uid', [ 'access_token' ] );
 		$descriptor = new Fake_Settings_Descriptor( $fields, 'Acme', [ 'merchant_uid' => new Credential_Field_Spec( 'UID', '' ), 'access_token' => new Credential_Field_Spec( 'Токен', '' ) ] );
 		$adapter    = new Fake_Marketplace_Adapter(
@@ -612,8 +618,8 @@ final class SettingsHandlerTest extends TestCase {
 		);
 
 		$this->assertNotSame( [], $prices, 'the fake adapter prices, so the card exists' );
-		$this->assertStringContainsString( 'Пример по текущему правилу', $prices[0]->get_footnote(), 'the example is the card\'s footnote' );
-		$this->assertStringNotContainsString( 'Пример по текущему правилу', $params->get_description(), 'and no longer the head of the whole tab' );
+		$this->assertStringContainsString( "Например: на сайте товар за 1 000\u{00A0}₽ (было 1 200\u{00A0}₽) → на Acme цена 1 000\u{00A0}₽, старая цена 1 200\u{00A0}₽.", $prices[0]->get_footnote(), 'the example is the card\'s footnote, in the shop\'s own price format and with the marketplace\'s name' );
+		$this->assertStringNotContainsString( 'Например:', $params->get_description(), 'and no longer the head of the whole tab' );
 	}
 
 	public function test_the_price_direction_options_are_short_and_the_explanations_sit_in_the_tooltip(): void {

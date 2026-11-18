@@ -709,6 +709,33 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertArrayNotHasKey( 'stacked', $sections[2] );
 	}
 
+	public function test_build_sections_flags_advanced_actions_and_carries_a_copy_field_only_for_a_section_that_asked(): void {
+		$sync     = Shipping_Tool::create( 'sync', 'Статусы', '', 'Обновить', static fn( array $args ): Tool_Result => Tool_Result::success() );
+		$extra    = Shipping_Tool::create( 'extra', 'Типы', 'Объяснение', 'Дополнительное', static fn( array $args ): Tool_Result => Tool_Result::success() );
+		$provider = Settings_Provider::create(
+			'mp',
+			'Marketplace',
+			$this->make_connection_handler(),
+			[
+				Settings_Section::create( 'tuned', 'Tuned', [ 'token' ] )
+					->with_actions( [ $sync, $extra ], Settings_Section::ACTIONS_ROW )
+					->with_advanced_actions( [ 'extra' ], 'Дополнительно' )
+					->with_copy_field( 'Адрес', 'https://shop.example/hook' ),
+				Settings_Section::create( 'plain', 'Plain', [ 'token' ] )->with_actions( [ $sync, $extra ], Settings_Section::ACTIONS_ROW ),
+			]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertArrayNotHasKey( 'advanced', $sections[0]['actions'][0] );
+		$this->assertTrue( $sections[0]['actions'][1]['advanced'] );
+		$this->assertSame( 'Дополнительно', $sections[0]['advanced_actions_label'] );
+		$this->assertSame( [ 'label' => 'Адрес', 'value' => 'https://shop.example/hook' ], $sections[0]['copy_field'] );
+		$this->assertArrayNotHasKey( 'advanced', $sections[1]['actions'][1], 'a section that never asked keeps its schema as it was' );
+		$this->assertArrayNotHasKey( 'advanced_actions_label', $sections[1] );
+		$this->assertArrayNotHasKey( 'copy_field', $sections[1] );
+	}
+
 	public function test_build_sections_serialises_actions_layout_only_when_a_section_asks_for_the_row(): void {
 		$tool     = Shipping_Tool::create( 'sync', 'Статусы', '', 'Обновить', static fn( array $args ): Tool_Result => Tool_Result::success() );
 		$provider = Settings_Provider::create(

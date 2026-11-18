@@ -23,6 +23,7 @@ use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Admin\Pages\Diagnostics\Diagnostics_Payload;
 use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
@@ -279,6 +280,47 @@ final class ReportBuilderTest extends TestCase {
 		}
 	}
 
+	public function test_the_notification_address_is_masked_in_the_card_and_links_to_the_tab_that_has_the_real_one(): void {
+		$fields  = new Credential_Fields( 'cabinet_code', [ 'vendor_key' ] );
+		$adapter = $this->make_adapter( $fields, [ Capability::PUSH_NOTIFICATIONS ] );
+		$store   = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-a' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$acc_id  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Acme Primary', true, [ 'cabinet_code' => '123', 'vendor_key' => self::LIVE_API_SECRET ] ) );
+		$store->set_health_for_credentials( $acc_id, [ 'cabinet_code' => '123', 'vendor_key' => self::LIVE_API_SECRET ], new Health_Result( Health_Result::OK, '' ) );
+
+		$token = ( new Notification_Account_Reader( $this->db, $this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ) ) )->find( $acc_id )->token();
+		$this->assertNotSame( '', $token );
+
+		$builder  = $this->make_builder( $adapter, $store, false, 'https://shop.example/wp-admin/admin.php?page=fake&tab=notifications' );
+		$sections = $builder->operational_sections();
+		$payload  = Diagnostics_Payload::sections( $sections );
+		$encoded  = (string) wp_json_encode( $payload );
+
+		$this->assertStringNotContainsString( $token, $encoded, 'the full notification address never reaches the Diagnostics payload' );
+
+		$address = null;
+		foreach ( $payload as $section ) {
+			foreach ( $section['lines'] as $line ) {
+				if ( 'Адрес для уведомлений' === $line['label'] ) {
+					$address = $line;
+				}
+			}
+		}
+
+		$this->assertNotNull( $address, 'the address line is there, with its own label' );
+		$this->assertStringContainsString( '[скрыто]', $address['value'] );
+		$this->assertTrue( $address['monospace'] );
+		$this->assertSame( 'Скопировать адрес — в настройках уведомлений', $address['link']['text'] );
+		$this->assertSame( 'https://shop.example/wp-admin/admin.php?page=fake&tab=notifications', $address['link']['url'] );
+	}
+
 	public function test_key_value_pairs_of_every_builtin_secret_name_are_masked(): void {
 		$value = 'dummy-token-for-tests';
 		$text  = implode(
@@ -387,6 +429,56 @@ final class ReportBuilderTest extends TestCase {
 		$this->assertGreaterThan( 0, $acc_id );
 	}
 
+	public function test_a_healthy_key_shows_no_stored_sentence_and_the_days_left_are_counted_from_the_expiry_date_now(): void {
+		$fields  = new Credential_Fields( 'cabinet_code', [ 'vendor_key' ] );
+		$adapter = $this->make_adapter( $fields, [] );
+		$store   = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-a' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+
+		$expires = ( new \DateTimeImmutable( '@' . ( self::NOW + 79 * 86400 + 3600 ) ) );
+		$acc_id  = $store->save(
+			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Cabinet One', true, [ 'cabinet_code' => 'CAB-12345678', 'vendor_key' => 'secret-1' ], $expires, [ 'currency' => 'RUB' ] )
+		);
+		// The sentence the marketplace gave at the last check, with a day count frozen in it.
+		$store->set_health( $acc_id, new Health_Result( Health_Result::OK, 'Подключено. Ключ действует до 06.02.2027 (81 день). Валюта кабинета: RUB.', $expires ) );
+
+		$lines = $this->make_builder( $adapter, $store, false )->operational_sections()[1]->lines();
+
+		$this->assertArrayNotHasKey( 'Сообщение Acme Market', $lines, 'the frozen sentence repeats the key date and the currency below' );
+		$this->assertSame( gmdate( 'd.m.Y', self::NOW + 79 * 86400 + 3600 ) . ' (дней: 79)', $lines['Ключ действует до'], 'counted now, from the stored date' );
+		$this->assertSame( 'RUB', $lines['Валюта кабинета'] );
+		$this->assertSame( 'Включён', $lines['Аккаунт'], 'values start with a capital' );
+		$this->assertSame( 'Подключено', $lines['Состояние подключения'] );
+	}
+
+	public function test_a_failing_key_keeps_the_marketplaces_sentence_because_it_is_the_explanation(): void {
+		$fields  = new Credential_Fields( 'cabinet_code', [ 'vendor_key' ] );
+		$adapter = $this->make_adapter( $fields, [] );
+		$store   = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-a' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$acc_id  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Cabinet One', true, [ 'cabinet_code' => 'CAB-1', 'vendor_key' => 'secret-1' ] ) );
+		$store->set_health( $acc_id, new Health_Result( Health_Result::ROLE_MISSING, 'Роль ключа не подходит' ) );
+
+		$lines = $this->make_builder( $adapter, $store, false )->operational_sections()[1]->lines();
+
+		$this->assertSame( 'Роль ключа не подходит', $lines['Сообщение Acme Market'] );
+		$this->assertSame( 'У ключа нет нужных прав', $lines['Состояние подключения'] );
+	}
+
 	/**
 	 * @param Credential_Fields $fields       Credential fields.
 	 * @param string[]          $capabilities Capabilities.
@@ -403,7 +495,7 @@ final class ReportBuilderTest extends TestCase {
 		);
 	}
 
-	private function make_builder( Fake_Marketplace_Adapter $adapter, Wpdb_Account_Store $store, bool $logging_enabled ): Report_Builder {
+	private function make_builder( Fake_Marketplace_Adapter $adapter, Wpdb_Account_Store $store, bool $logging_enabled, string $notifications_url = '' ): Report_Builder {
 		$warehouses = new Warehouse_Options( $this->cache );
 		$license    = new License_Gate(
 			static function (): bool {
@@ -434,7 +526,10 @@ final class ReportBuilderTest extends TestCase {
 			$site,
 			new Notification_Account_Reader( $this->db, $this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ) ),
 			new Last_Notification_Reader( $this->db, $this->schema->table_name( 'events', Sqlite_Tables::PREFIX ) ),
-			$clock
+			$clock,
+			static function () use ( $notifications_url ): string {
+				return $notifications_url;
+			}
 		);
 	}
 }

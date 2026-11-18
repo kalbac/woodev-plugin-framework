@@ -337,6 +337,23 @@ final class Settings_Page_Registry {
 				if ( '' !== $section->get_actions_layout() ) {
 					$entry['actions_layout'] = $section->get_actions_layout();
 				}
+
+				// Actions the client tucks into a collapsed block (Settings_Section::with_advanced_actions()); likewise opt-in.
+				$advanced = $section->get_advanced_action_ids();
+				if ( [] !== $advanced ) {
+					foreach ( $entry['actions'] as $index => $action ) {
+						if ( in_array( (string) ( $action['id'] ?? '' ), $advanced, true ) ) {
+							$entry['actions'][ $index ]['advanced'] = true;
+						}
+					}
+
+					$entry['advanced_actions_label'] = $section->get_advanced_actions_label();
+				}
+			}
+
+			// A value to copy, drawn above the description (Settings_Section::with_copy_field()); only a section that asked for one carries it.
+			if ( [] !== $section->get_copy_field() ) {
+				$entry['copy_field'] = $section->get_copy_field();
 			}
 
 			// Titled cards gathering some of those fields and actions (Settings_Section::with_groups()).

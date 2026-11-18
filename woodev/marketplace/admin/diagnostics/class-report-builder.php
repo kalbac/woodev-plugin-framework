@@ -10,12 +10,15 @@ namespace Woodev\Framework\Marketplace\Admin\Diagnostics;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Account\Health_Result;
+use Woodev\Framework\Marketplace\Account\Key_Expiry;
+use Woodev\Framework\Marketplace\Admin\Shared\Notification_State_Text;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
 use Woodev\Framework\Marketplace\Diagnostics\Support_Report;
+use Woodev\Framework\Marketplace\Intake\Event_Names;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
@@ -117,6 +120,13 @@ final class Report_Builder {
 	private $clock;
 
 	/**
+	 * Address of the settings tab that holds the full notification address (`function (): string`).
+	 *
+	 * @var callable|null
+	 */
+	private $notifications_url;
+
+	/**
 	 * Creates the report builder.
 	 *
 	 * @since 2.1.2
@@ -132,6 +142,7 @@ final class Report_Builder {
 	 * @param Notification_Account_Reader|null $notification_accounts Notification account reader (when push is supported).
 	 * @param Last_Notification_Reader|null    $last_notifications    Latest notification reader (when push is supported).
 	 * @param callable|null                    $clock                 `function (): int`, defaults to `time`.
+	 * @param callable|null                    $notifications_url     `function (): string`, the settings tab where the full notification address can be copied; none = no link.
 	 */
 	public function __construct(
 		Marketplace_Adapter $adapter,
@@ -144,7 +155,8 @@ final class Report_Builder {
 		Site_Facts $site,
 		?Notification_Account_Reader $notification_accounts = null,
 		?Last_Notification_Reader $last_notifications = null,
-		?callable $clock = null
+		?callable $clock = null,
+		?callable $notifications_url = null
 	) {
 		$this->adapter               = $adapter;
 		$this->accounts              = $accounts;
@@ -157,6 +169,7 @@ final class Report_Builder {
 		$this->notification_accounts = $notification_accounts;
 		$this->last_notifications    = $last_notifications;
 		$this->clock                 = $clock ?? 'time';
+		$this->notifications_url     = $notifications_url;
 	}
 
 	/**
@@ -179,8 +192,8 @@ final class Report_Builder {
 			__( 'Лицензия', 'woodev-plugin-framework' ),
 			[
 				__( 'Состояние', 'woodev-plugin-framework' ) => $this->license->is_in_force()
-					? __( 'действует', 'woodev-plugin-framework' )
-					: __( 'недействительна — фоновые задачи остановлены', 'woodev-plugin-framework' ),
+					? __( 'Действует', 'woodev-plugin-framework' )
+					: __( 'Недействительна — фоновые задачи остановлены', 'woodev-plugin-framework' ),
 			]
 		);
 
@@ -190,7 +203,7 @@ final class Report_Builder {
 				/* translators: %s: marketplace name. */
 				sprintf( __( 'Аккаунты %s', 'woodev-plugin-framework' ), $marketplace ),
 				[
-					__( 'Состояние', 'woodev-plugin-framework' ) => __( 'ни один аккаунт ещё не добавлен', 'woodev-plugin-framework' ),
+					__( 'Состояние', 'woodev-plugin-framework' ) => __( 'Ни один аккаунт ещё не добавлен', 'woodev-plugin-framework' ),
 				]
 			);
 
@@ -374,14 +387,16 @@ final class Report_Builder {
 		$lines = [
 			$id_label                                                 => Support_Report::mask_identifier( $external_id ),
 			__( 'Аккаунт', 'woodev-plugin-framework' )                => $account->is_enabled()
-				? __( 'включён', 'woodev-plugin-framework' )
-				: __( 'выключен', 'woodev-plugin-framework' ),
+				? __( 'Включён', 'woodev-plugin-framework' )
+				: __( 'Выключен', 'woodev-plugin-framework' ),
 			__( 'Состояние подключения', 'woodev-plugin-framework' )  => $this->status_text( $status, $marketplace ),
 		];
 
+		// The marketplace's own sentence on a healthy key repeats the facts below (key date, currency, role) and carries a day count frozen at
+		// the last check, so it is shown only when something is wrong: its text is then the explanation. The expiry line is computed now.
 		$message = $unreadable
 			? $descriptor->unreadable_secrets_message()
-			: ( null !== $health ? trim( $health->message() ) : '' );
+			: ( null !== $health && ! $health->is_ok() ? trim( $health->message() ) : '' );
 
 		if ( '' !== $message ) {
 			/* translators: %s: marketplace name. */
@@ -399,7 +414,7 @@ final class Report_Builder {
 
 		$expires_at = $account->expires_at();
 		if ( null !== $expires_at ) {
-			$lines[ __( 'Ключ действует до', 'woodev-plugin-framework' ) ] = (string) wp_date( 'd.m.Y', $expires_at->getTimestamp() );
+			$lines[ __( 'Ключ действует до', 'woodev-plugin-framework' ) ] = $this->expiry_text( $expires_at, $now );
 		}
 
 		$currency = trim( (string) $account->setting( 'currency', '' ) );
@@ -414,25 +429,63 @@ final class Report_Builder {
 			$lines[ __( 'Склад по умолчанию', 'woodev-plugin-framework' ) ] = $warehouse;
 		}
 
+		$presentation = [];
+
 		if ( $this->adapter->supports( Capability::PUSH_NOTIFICATIONS ) ) {
 			/* translators: %s: marketplace name. */
 			$push_label           = sprintf( __( 'Уведомления %s', 'woodev-plugin-framework' ), $marketplace );
 			$lines[ $push_label ] = $this->push_summary( $account->id(), $notification_account, $now );
 
 			if ( null !== $notification_account ) {
-				$raw_url = Notification_Url::for_account( $this->adapter->id(), $notification_account );
-				$lines[ __( 'Адрес уведомлений', 'woodev-plugin-framework' ) ] = Report_Redactor::redact_text(
+				$address_label = __( 'Адрес для уведомлений', 'woodev-plugin-framework' );
+				$raw_url       = Notification_Url::for_account( $this->adapter->id(), $notification_account );
+
+				// The address stays masked here: this card is shared with support. The real one is copied on the Notifications tab.
+				$lines[ $address_label ]        = Report_Redactor::redact_text(
 					$raw_url,
 					$redaction['fields'],
 					$redaction['literals']
 				);
+				$presentation[ $address_label ] = [ 'monospace' => true ];
+
+				$tab_url = null === $this->notifications_url ? '' : (string) call_user_func( $this->notifications_url );
+				if ( '' !== $tab_url ) {
+					$presentation[ $address_label ]['link'] = [
+						'text' => __( 'Скопировать адрес — в настройках уведомлений', 'woodev-plugin-framework' ),
+						'url'  => $tab_url,
+					];
+				}
 			}
 		}
 
 		return new Report_Section(
 			/* translators: %s: account display label. */
 			sprintf( __( 'Аккаунт «%s»', 'woodev-plugin-framework' ), $this->account_title( $account ) ),
-			$lines
+			$lines,
+			$presentation
+		);
+	}
+
+	/**
+	 * The key's last day and the days left, counted now from the stored expiry date: «06.02.2027 (дней: 79)», or «06.02.2027 (срок истёк)».
+	 *
+	 * @param \DateTimeImmutable $expires_at Expiry.
+	 * @param int                $now        Current timestamp.
+	 * @return string
+	 */
+	private function expiry_text( \DateTimeImmutable $expires_at, int $now ): string {
+		$date = (string) wp_date( 'd.m.Y', $expires_at->getTimestamp() );
+
+		if ( $expires_at->getTimestamp() <= $now ) {
+			/* translators: %s: key expiry date in d.m.Y format. */
+			return sprintf( __( '%s (срок истёк)', 'woodev-plugin-framework' ), $date );
+		}
+
+		return sprintf(
+			/* translators: 1: key expiry date in d.m.Y format, 2: whole days remaining. */
+			__( '%1$s (дней: %2$d)', 'woodev-plugin-framework' ),
+			$date,
+			Key_Expiry::days_left( $expires_at, new \DateTimeImmutable( '@' . $now ) )
 		);
 	}
 
@@ -687,19 +740,19 @@ final class Report_Builder {
 	private function status_text( string $status, string $marketplace ): string {
 		switch ( $status ) {
 			case Health_Result::OK:
-				return __( 'подключено', 'woodev-plugin-framework' );
+				return __( 'Подключено', 'woodev-plugin-framework' );
 			case Health_Result::AUTH_FAILED:
-				return __( 'ключ неверный или не читается', 'woodev-plugin-framework' );
+				return __( 'Ключ неверный или не читается', 'woodev-plugin-framework' );
 			case Health_Result::ROLE_MISSING:
-				return __( 'у ключа нет нужных прав', 'woodev-plugin-framework' );
+				return __( 'У ключа нет нужных прав', 'woodev-plugin-framework' );
 			case Health_Result::KEY_EXPIRED:
-				return __( 'ключ истёк', 'woodev-plugin-framework' );
+				return __( 'Ключ истёк', 'woodev-plugin-framework' );
 			case Health_Result::UNREACHABLE:
 				/* translators: %s: marketplace name. */
 				return sprintf( __( '%s не отвечает', 'woodev-plugin-framework' ), $marketplace );
 		}
 
-		return __( 'ещё не проверялось', 'woodev-plugin-framework' );
+		return __( 'Ещё не проверялось', 'woodev-plugin-framework' );
 	}
 
 	/**
@@ -711,30 +764,11 @@ final class Report_Builder {
 	 * @return string
 	 */
 	private function push_summary( int $account_id, ?Notification_Account $notification_account, int $now ): string {
-		$state = null !== $notification_account ? $notification_account->state() : [];
-		$admin = $this->adapter->push_admin( $account_id );
-
-		if ( [] === $state ) {
-			$head = __( 'не проверялось', 'woodev-plugin-framework' );
-		} elseif ( null !== $admin ) {
-			$head = $admin->describe_state( $state );
-		} elseif ( empty( $state['enabled'] ) ) {
-			$head = __( 'отключены', 'woodev-plugin-framework' );
-		} else {
-			$head = __( 'включены', 'woodev-plugin-framework' );
-		}
-
-		$latest = null !== $this->last_notifications ? $this->last_notifications->latest( $account_id ) : null;
-		if ( null === $latest ) {
-			return $head;
-		}
-
-		return sprintf(
-			/* translators: 1: registration state, 2: event type, 3: relative time. */
-			__( '%1$s; последнее: %2$s (%3$s)', 'woodev-plugin-framework' ),
-			$head,
-			$latest['type'],
-			Diagnostics_Reader::age_text( $latest['received_at'], $now )
+		return ( new Notification_State_Text( new Event_Names( $this->adapter->push_protocol() ) ) )->describe(
+			null !== $notification_account ? $notification_account->state() : [],
+			$this->adapter->push_admin( $account_id ),
+			null !== $this->last_notifications ? $this->last_notifications->latest( $account_id ) : null,
+			$now
 		);
 	}
 

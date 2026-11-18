@@ -76,11 +76,11 @@ final class Settings_Module {
 		$section_providers = [ $accounts_sections, $defaults ];
 		$tabs              = [
 			new Settings_Tab( 'connection', __( 'Подключение', 'woodev-plugin-framework' ), [ $accounts_sections, 'connection_sections' ] ),
-			new Settings_Tab( 'parameters', __( 'Параметры', 'woodev-plugin-framework' ), [ $accounts_sections, 'parameter_sections' ] ),
+			new Settings_Tab( 'parameters', __( 'Параметры аккаунта', 'woodev-plugin-framework' ), [ $accounts_sections, 'parameter_sections' ] ),
 		];
 
 		if ( $defaults->has_fields() ) {
-			$tabs[] = new Settings_Tab( 'defaults', __( 'Общие', 'woodev-plugin-framework' ), [ $defaults, 'sections' ] );
+			$tabs[] = new Settings_Tab( 'defaults', __( 'Значения по умолчанию', 'woodev-plugin-framework' ), [ $defaults, 'sections' ] );
 		}
 
 		if ( $adapter->supports( Capability::PUSH_NOTIFICATIONS ) ) {
@@ -162,7 +162,11 @@ final class Settings_Module {
 			$reader,
 			$site,
 			$notif_accounts,
-			$last_notifications
+			$last_notifications,
+			null,
+			static function () use ( $plugin ): string {
+				return $plugin->get_settings_tab_url( 'notifications' );
+			}
 		);
 	}
 }

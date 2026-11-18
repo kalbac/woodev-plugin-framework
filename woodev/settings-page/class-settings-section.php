@@ -86,6 +86,27 @@ final class Settings_Section {
 	private string $actions_layout = '';
 
 	/**
+	 * Ids of the actions the client tucks into a collapsed block — see {@see self::with_advanced_actions()}.
+	 *
+	 * @var string[]
+	 */
+	private array $advanced_action_ids = [];
+
+	/**
+	 * Heading of the collapsed block of advanced actions.
+	 *
+	 * @var string
+	 */
+	private string $advanced_actions_label = '';
+
+	/**
+	 * A fact the merchant copies — `[ label, value ]`, empty when none. See {@see self::with_copy_field()}.
+	 *
+	 * @var array{label:string,value:string}|array{}
+	 */
+	private array $copy_field = [];
+
+	/**
 	 * Titled cards that gather some of this section's fields and actions — see {@see self::with_groups()}.
 	 * Always empty for a connection or tools block.
 	 *
@@ -285,6 +306,78 @@ final class Settings_Section {
 		}
 
 		return $copy;
+	}
+
+	/**
+	 * A copy whose row of action buttons keeps some of them out of sight: the named actions (already added with
+	 * {@see self::with_actions()}) go into a collapsed block under `$label`, each with its one-line explanation, so the
+	 * everyday buttons stay few. Meant for the {@see self::ACTIONS_ROW} layout.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param string[] $action_ids Ids of the actions to tuck away.
+	 * @param string   $label      Heading of the collapsed block, «Дополнительно».
+	 * @return self
+	 */
+	public function with_advanced_actions( array $action_ids, string $label ): self {
+		$copy                         = clone $this;
+		$copy->advanced_action_ids    = array_values( array_map( 'strval', $action_ids ) );
+		$copy->advanced_actions_label = $label;
+
+		return $copy;
+	}
+
+	/**
+	 * Ids of the actions the client collapses under {@see self::get_advanced_actions_label()}.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string[]
+	 */
+	public function get_advanced_action_ids(): array {
+		return $this->advanced_action_ids;
+	}
+
+	/**
+	 * Heading of the collapsed block of advanced actions, empty when there is none.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string
+	 */
+	public function get_advanced_actions_label(): string {
+		return $this->advanced_actions_label;
+	}
+
+	/**
+	 * A copy that shows one value in a read-only field with a «Копировать» button, above the section's description: the address
+	 * the merchant pastes into another service. A plain text cannot carry a button (the description is filtered markup).
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param string $label Name of the value, shown in the label column.
+	 * @param string $value The value, plain text.
+	 * @return self
+	 */
+	public function with_copy_field( string $label, string $value ): self {
+		$copy             = clone $this;
+		$copy->copy_field = [
+			'label' => $label,
+			'value' => $value,
+		];
+
+		return $copy;
+	}
+
+	/**
+	 * The copyable value, empty when the section has none.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return array{label:string,value:string}|array{}
+	 */
+	public function get_copy_field(): array {
+		return $this->copy_field;
 	}
 
 	/**
