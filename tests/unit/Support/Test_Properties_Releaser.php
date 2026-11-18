@@ -62,7 +62,10 @@ final class Test_Properties_Releaser implements TestListener {
 				self::$names[ $declaring ] = [];
 
 				foreach ( $class->getProperties() as $property ) {
-					if ( ! $property->isStatic() && $property->getDeclaringClass()->getName() === $declaring ) {
+					// A readonly property cannot be unset once initialised (PHP 8.1+): leave it.
+					$readonly = method_exists( $property, 'isReadOnly' ) && $property->isReadOnly();
+
+					if ( ! $property->isStatic() && ! $readonly && $property->getDeclaringClass()->getName() === $declaring ) {
 						self::$names[ $declaring ][] = $property->getName();
 					}
 				}
