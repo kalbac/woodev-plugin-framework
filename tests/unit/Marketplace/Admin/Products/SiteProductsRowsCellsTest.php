@@ -112,4 +112,60 @@ final class SiteProductsRowsCellsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'error', $cells );
 		$this->assertArrayNotHasKey( 'sync', $cells );
 	}
+
+	/**
+	 * The state cell of a variable product with the given variation groups, one variation per entry.
+	 *
+	 * @param string[] $groups Group of each variation; a variation of the group `error` carries an error text.
+	 * @return string[] The labels of the state cell.
+	 */
+	private function parent_state_labels( array $groups ): array {
+		$offers = [];
+
+		foreach ( $groups as $index => $group ) {
+			$offers[] = [
+				'product_id'   => 30 + $index,
+				'label'        => '',
+				'link_id'      => 5 + $index,
+				'group'        => $group,
+				'sku'          => 'V-' . $index,
+				'offer_id'     => 'V-' . $index,
+				'site_stock'   => 1,
+				'remote_stock' => null,
+				'site_price'   => '100',
+				'remote_price' => null,
+				'sync_stock'   => true,
+				'sync_price'   => true,
+				'warehouse_id' => null,
+				'error'        => 'error' === $group ? 'Не заполнен бренд' : '',
+				'stock_pool'   => null,
+			];
+		}
+
+		$rows = new Site_Products_Rows(
+			'Тестмаркет',
+			[],
+			static function ( int $id ): string {
+				return 'https://shop.test/edit/' . $id;
+			}
+		);
+		$cells = $rows->parent( 1, [ 'id' => 10, 'title' => 'Футболка', 'sku' => '', 'is_variable' => true, 'offers' => $offers ], [] )['cells'];
+
+		return array_column( array_column( $cells['state'], 'value' ), 'label' );
+	}
+
+	public function test_a_variable_product_shows_every_state_group_of_its_variations_up_to_the_stack_limit(): void {
+		// Four groups, the biggest first; none of them is dropped to make room for lines a parent never has.
+		$this->assertSame(
+			[ 'Создан × 4', 'Не связан × 3', 'В очереди × 2', 'В архиве' ],
+			$this->parent_state_labels( [ 'created', 'created', 'created', 'created', 'unlinked', 'unlinked', 'unlinked', 'queued', 'queued', 'archived' ] )
+		);
+	}
+
+	public function test_a_variable_product_keeps_a_place_for_the_error_summary_only_when_there_is_an_error(): void {
+		$labels = $this->parent_state_labels( [ 'created', 'created', 'created', 'created', 'unlinked', 'unlinked', 'unlinked', 'queued', 'queued', 'archived', 'error' ] );
+
+		$this->assertCount( 5, $labels, 'The engine holds five lines: four badges and the error summary.' );
+		$this->assertSame( 'Ошибка у 1 варианта', end( $labels ) );
+	}
 }

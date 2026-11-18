@@ -859,16 +859,18 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   WooCommerce status stays in the order); an order with no marketplace status shows the WooCommerce badge.
 - **Row actions are one nowrap group.** `RowActions` draws the buttons in `.woodev-records__buttons`; a descriptor may carry
   `short_label` («Открыть» for «Открыть заказ»), which is shown while the full label stays the accessible name and tooltip. The
-  actions column is `position: sticky; right: 0`, so a wide table scrolls under it. A finished posting is simply not offered
+  actions column is an ordinary last column (a sticky one lay over its neighbour whenever the table was wider than its card), so a wide
+  table scrolls, bar always drawn, and no column sits under another. A finished posting is simply not offered
   «Отменить отправление» (no disabled button, no sentence). The «Этикетки» column is gone: the label action hands over a stored document at once.
 - **Every column has a class** (`woodev-records__col-<id>`, `TableCard`'s `cellClassName`) and `style.scss` sizes by it: numbers, dates,
-  badges and the posting number never wrap, the name and article have a floor. Cells pad 12 px a side (WooCommerce's 24 px lost 380 px).
+  badges and the posting number never wrap, the name, article and state have a floor. Cells pad 12 px a side (WooCommerce's 24 px lost 380 px).
   The scrolling card always draws its scrollbar, and WooCommerce's edge fade over the last column is off (it made «Изменить товар» look disabled).
   Dates are `d.m.Y H:i` in the site's timezone.
-- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs (it wraps to two lines at most). The table has
-  five data columns and fits 1040 px: «Синхронизация» and «Ошибка» are lines of the «Состояние» cell — the state badge, «Остатки · Цены»
+- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs (at most two lines: the stack text is clipped to two, its full value is the line's `title`). The table has
+  five data columns and fits 1040 px (measured: 985 px at the floors, with 60-character articles, long names and error badges; the
+  stock and price headings wrap): «Синхронизация» and «Ошибка» are lines of the «Состояние» cell — the state badge, «Остатки · Цены»
   listing only what is on («—» when none), «Склад: …» only for a product with a warehouse of its own, and the error as a red badge
-  (a long one wraps inside 240 px). A variable product's cell shows up to three state badges and «Ошибка у N варианта».
+  (a long one wraps inside 240 px). A variable product's cell shows one badge per state group, up to the stack's five lines (four when a variation has an error, which adds «Ошибка у N варианта»).
 - **Bulk select.** An action descriptor may declare `group`; `BulkActionSelect` draws one `<optgroup>` per group («Выгрузка», «Синхронизация»,
   «Связи и архив») and «Выбрано: N» (`selected_count`) beside the button; its place is kept (the element is drawn empty) while nothing is
   ticked, so the buttons after it do not jump. The account-wide buttons («Связать по артикулу», «Обновить список»)

@@ -67,3 +67,13 @@ describe( 'a badge', () => {
 		} );
 	} );
 } );
+
+describe( 'a stack text line', () => {
+	test( 'carries its full text as the title, for a column that clips it', () => {
+		const sku = 'SKU-1234567890-1234567890-1234567890-1234567890-1234567890';
+
+		render( <div>{ renderCell( 'stack', [ { type: 'text', value: sku } ] ) }</div> );
+
+		expect( screen.getByText( sku ) ).toHaveAttribute( 'title', sku );
+	} );
+} );

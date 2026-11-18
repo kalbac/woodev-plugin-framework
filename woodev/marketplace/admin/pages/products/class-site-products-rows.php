@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
+use Woodev\Framework\Admin\Records\Row_Normalizer;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -24,12 +26,6 @@ final class Site_Products_Rows {
 	 * Longest text of a cell, in characters.
 	 */
 	private const CLIP = 200;
-
-	/**
-	 * Most state badges in one cell. The engine's stack holds five items; a synchronised offer adds up to two lines under its badge
-	 * and an error one more, so the badges of a variable product stop at three.
-	 */
-	private const MAX_BADGES = 3;
 
 	/**
 	 * Marketplace name for the «Маркетплейс» side of stock and price.
@@ -174,6 +170,9 @@ final class Site_Products_Rows {
 	 */
 	private function parent_cells( array $product, array $offers ): array {
 		$errors = array_filter( array_column( $offers, 'error' ) );
+		// The engine's stack holds `MAX_STACK_ITEMS` items: the badges of the state groups take them all, less the one line
+		// that summarises the errors, which is there only when a variation has one.
+		$room = Row_Normalizer::MAX_STACK_ITEMS - ( [] === $errors ? 0 : 1 );
 
 		return [
 			'name'      => $this->clip( $product['title'] ),
@@ -184,7 +183,7 @@ final class Site_Products_Rows {
 				],
 			],
 			'state'     => array_merge(
-				$this->state_badges( $offers ),
+				$this->state_badges( $offers, $room ),
 				[] === $errors ? [] : $this->error_items( sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) ) )
 			),
 			'stock'     => $this->pair_cell( $this->site_stock_sum( $offers ), $this->remote_stock_sum( $offers ) ),
@@ -197,14 +196,15 @@ final class Site_Products_Rows {
 	 * One badge per state group present among the variations, the biggest group first.
 	 *
 	 * @param array<int,array<string,mixed>> $offers Offers.
+	 * @param int                            $room   Most badges the cell has room for.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private function state_badges( array $offers ): array {
+	private function state_badges( array $offers, int $room ): array {
 		$counts = array_count_values( array_column( $offers, 'group' ) );
 		arsort( $counts );
 		$badges = [];
 
-		foreach ( array_slice( $counts, 0, self::MAX_BADGES, true ) as $group => $count ) {
+		foreach ( array_slice( $counts, 0, $room, true ) as $group => $count ) {
 			$badges[] = [
 				'type'  => 'badge',
 				'value' => State_Groups::badge( (string) $group, $count ),

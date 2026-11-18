@@ -12120,3 +12120,7 @@ msgstr ""
 #: marketplace/admin/product/class-panel-view.php:599
 msgid "Подсказки"
 msgstr ""
+
+#: src/marketplace-admin/views/mappings/mapping-editor.tsx:238
+msgid "Например: Футболки"
+msgstr ""

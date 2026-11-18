@@ -84,17 +84,33 @@
 	}
 
 	// Columns. A class per column id is on its header and every cell (`TableCard`'s `cellClassName`). Numbers, dates, the
-	// posting number, badges and the actions never break across lines: a cell that wraps mid-number is unreadable and
-	// makes every row three lines tall. The names, article and error take what is left.
+	// posting number and the order's status never break across lines: a cell that wraps mid-number is unreadable and makes
+	// every row three lines tall. The names, article and state take what is left (a state badge is nowrap by itself, the
+	// lines under it wrap).
 	.woodev-records__col-posting,
 	.woodev-records__col-date,
 	.woodev-records__col-order,
 	.woodev-records__col-total,
-	.woodev-records__col-status,
-	.woodev-records__col-state,
-	.woodev-records__col-stock,
-	.woodev-records__col-price {
+	.woodev-records__col-status {
 		white-space: nowrap;
+	}
+
+	// The stock and price of a product keep «На сайте: 12 490,00» on one line, but their headings («Остаток: сайт / Ozon Seller»)
+	// are sentences and wrap: WooCommerce sets nowrap on the sort button and its label, and that alone held each of the two
+	// columns 60px wider than its figures.
+	.woocommerce-table__item.woodev-records__col-stock,
+	.woocommerce-table__item.woodev-records__col-price {
+		white-space: nowrap;
+	}
+
+	.woocommerce-table__header.woodev-records__col-stock,
+	.woocommerce-table__header.woodev-records__col-price {
+		.components-button,
+		.components-button span {
+			height: auto;
+			text-align: left;
+			white-space: normal;
+		}
 	}
 
 	// WooCommerce pads a cell 24px each side; eight columns lose 380px to it, which is what pushed the actions off a 1024px screen.
@@ -104,27 +120,38 @@
 		padding-right: 12px;
 	}
 
-	// The row's buttons are one group on one line, and the column stays at the right edge of the card while the rest of a wide
-	// table scrolls under it: the actions are never the part that is cut off.
+	// The row's buttons are one group on one line. The column is an ordinary one, last in the row: a sticky column lies over the
+	// one beside it whenever the table is wider than its card (at 784px it covered the stock), so a table that does not fit
+	// scrolls, bar always drawn, and no column ever sits under another.
 	.woodev-records__col-actions {
-		background: #fff;
-		position: sticky;
-		right: 0;
-	}
-
-	.woocommerce-table__table tr:hover .woodev-records__col-actions {
-		background: #f6f7f7;
+		white-space: nowrap;
 	}
 
 	// The product name and the article read as text, so they have a floor to wrap against instead of a few letters a line. The
-	// floor of the article is wide enough that a 30-character article breaks into two lines, never three.
+	// floors are what lets «Товары сайта» fit a 1040px card with its six columns.
 	.woodev-records__col-name {
-		min-width: 200px;
+		min-width: 160px;
 	}
 
+	// The state cell holds a badge, the synchronisation lines and, for a failed offer, an error sentence in a red badge: a floor
+	// keeps that sentence from breaking into one word a line.
+	.woodev-records__col-state {
+		min-width: 180px;
+	}
+
+	// An article of any length takes at most two lines (the full value is the item's `title`): a 60-character one broke into
+	// five and made its row as tall as a screen of text.
 	.woodev-records__col-sku {
-		min-width: 170px;
-		overflow-wrap: anywhere;
+		min-width: 150px;
+
+		.woodev-records__stack > span > span {
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 2;
+			display: -webkit-box;
+			line-clamp: 2;
+			overflow: hidden;
+			overflow-wrap: anywhere;
+		}
 	}
 
 	// «Выбрано: 3» beside the bulk group. Its place is kept while nothing is ticked (the element is always drawn, empty), so the

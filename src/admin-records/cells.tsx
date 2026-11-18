@@ -19,8 +19,8 @@ const DATE_ONLY_LENGTH = 'YYYY-MM-DD'.length;
 const DATE_FORMAT = 'd.m.Y';
 const DATETIME_FORMAT = 'd.m.Y H:i';
 
-function TextValue( { value }: { value: string | number } ) {
-	return <span>{ String( value ) }</span>;
+function TextValue( { value, title }: { value: string | number; title?: string } ) {
+	return <span title={ title }>{ String( value ) }</span>;
 }
 
 /** A badge longer than this is a sentence (an error text), not a state: it wraps instead of widening the column. */
@@ -73,7 +73,8 @@ function Progress( { value }: { value: ProgressCell } ) {
 }
 
 const STACK_RENDERERS: Record< StackItem[ 'type' ], CellRenderer > = {
-	text: ( value ) => <TextValue value={ value as string } />,
+	// The full text is the line's `title`: a column may clip a long one (the article, to two lines).
+	text: ( value ) => <TextValue value={ value as string } title={ value as string } />,
 	badge: ( value ) => <Badge value={ value as BadgeCell } />,
 	link: ( value ) => <LinkValue value={ value as LinkCell } />,
 };
