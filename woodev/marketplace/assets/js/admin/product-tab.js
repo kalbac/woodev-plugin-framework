@@ -28,6 +28,16 @@
 	}
 
 	/**
+	 * Drops the pending confirmation of a button and cancels its timer, so the timer cannot act on a later prompt.
+	 *
+	 * @param {jQuery} $button The button.
+	 */
+	function disarm( $button ) {
+		window.clearTimeout( $button.data( 'armTimer' ) );
+		$button.data( { armed: false, armTimer: null } ).removeClass( 'is-armed' );
+	}
+
+	/**
 	 * Asks for a second click on «Архивировать» and «Снять связь».
 	 *
 	 * The question goes to the result line beside the buttons (a button may be showing only its icon, so a question written on it
@@ -46,14 +56,17 @@
 
 		$button.data( 'armed', true ).addClass( 'is-armed' );
 		$result.removeClass( 'woodev-mp-result--error' ).text( question );
-		window.setTimeout(
-			function () {
-				if ( $button.data( 'armed' ) ) {
-					$button.data( 'armed', false ).removeClass( 'is-armed' );
-					$result.text( '' );
-				}
-			},
-			CONFIRM_MS
+		$button.data(
+			'armTimer',
+			window.setTimeout(
+				function () {
+					disarm( $button );
+					if ( $result.text() === question ) {
+						$result.text( '' );
+					}
+				},
+				CONFIRM_MS
+			)
 		);
 
 		return false;
@@ -69,11 +82,19 @@
 
 			event.preventDefault();
 
+			// The result line is shared by the block's buttons: whatever is armed elsewhere in the block loses its prompt now.
+			$block.find( '[data-woodev-mp-op]' ).not( $button ).each(
+				function () {
+					disarm( $( this ) );
+				}
+			);
+
 			if ( ! confirmed( $button, $result ) ) {
 				return;
 			}
 
-			$button.prop( 'disabled', true ).data( 'armed', false ).removeClass( 'is-armed' );
+			disarm( $button );
+			$button.prop( 'disabled', true );
 			$result.removeClass( 'woodev-mp-result--error' ).text( settings.texts.working );
 
 			$.post(

@@ -283,7 +283,7 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 
 .woodev-mp-tab .woodev-mp-buttons .woodev-mp-result {
 	display: block;
-	margin: 6px 0 0 212px;
+	margin: 6px 0 0;
 }
 
 /* The intro of a variable product: a paragraph across the whole tab, not squeezed into the control column. */
@@ -386,10 +386,6 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 }
 
 @media screen and (max-width: 782px) {
-	.woodev-mp-tab .woodev-mp-buttons .woodev-mp-result {
-		margin-left: 0;
-	}
-
 	.woodev-mp-issues {
 		max-width: 100%;
 	}
