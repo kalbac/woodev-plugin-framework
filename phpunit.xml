@@ -26,6 +26,12 @@
 
 	</testsuites>
 
+	<!-- A finished unit test lets go of its own properties (#1842): PHPUnit keeps every test object
+		 alive until the end of the run, and fakes held in them cost ~50 MB on the marketplace tests alone. -->
+	<listeners>
+		<listener class="Woodev\Tests\Unit\Support\Test_Properties_Releaser"/>
+	</listeners>
+
 	<!-- =====================================================
 		 Coverage: какой код измеряем
 		 Указываем папку фреймворка ./woodev
@@ -48,15 +54,23 @@
 		<ini name="display_errors" value="1"/>
 		<ini name="error_reporting" value="-1"/>
 
-		<!-- #632. The unit suite peaks around 126 MB and a typical local php.ini allows 128M.
-			 While the run is GREEN that gap is invisible. On a RED run it is not: PHPUnit holds
-			 the error objects, hits the ceiling, and dies with a fatal inside Patchwork instead
-			 of printing the failures — so the symptom hides the cause. Measured in s102, where
-			 the real cause was 268 errors from a WC() stub leaking process-wide and the first
-			 thing the run showed was a fatal in someone else's library.
+		<!-- #632 / #1842. The ceiling is explicit so that a RED run prints its failures instead of
+			 dying on a limit that happens to be lower on this machine. On a red run PHPUnit also holds
+			 the error objects, hits the ceiling, and dies with a fatal inside Patchwork instead of
+			 printing them — the symptom hides the cause (s102: 268 errors from a WC() stub leaking
+			 process-wide, and the first thing the run showed was a fatal in someone else's library).
 			 Invisible in CI, which is the point: setup-php sets memory_limit=-1 there.
-			 Operator decision on #632. -->
-		<ini name="memory_limit" value="512M"/>
+
+			 Measured on PHP 7.4 in #1842 (18.11.2026, 10 787 tests): the green run peaks at ~450 MB
+			 (~520 MB before the listener above freed finished tests). ~220 MB of it is already there when the
+			 first test starts (most likely the whole suite, Patchwork-instrumented, compiled while PHPUnit
+			 builds it); the rest is class code PHP never gives back (Mockery's generated mock
+			 classes, framework classes loaded on first use). 512M left no room at all: the run died
+			 in the result-cache write at 99 %. A red run costs nothing measurable more (40 errors vs none
+			 stayed inside the run-to-run noise of a few MB), so the ceiling needs headroom for growth
+			 of the suite, not for errors: 1G is ~2.2x today's peak, and
+			 still a real ceiling — a runaway test dies at 1 GB, not at the machine's. -->
+		<ini name="memory_limit" value="1G"/>
 	</php>
 
 </phpunit>
