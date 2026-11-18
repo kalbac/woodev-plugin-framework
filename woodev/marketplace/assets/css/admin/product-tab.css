@@ -337,6 +337,13 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 	background: transparent;
 }
 
+/* WordPress's `.striped` rows are opaque too; the stripes would hide the edge shadows on every other row. */
+.woodev-mp-tab .woodev-mp-variations > thead > tr,
+.woodev-mp-tab .woodev-mp-variations > tbody > tr,
+.woodev-mp-tab .woodev-mp-variations > tbody > tr:nth-child(odd) {
+	background: transparent;
+}
+
 .woodev-mp-tab .woodev-mp-variations td,
 .woodev-mp-tab .woodev-mp-variations th {
 	padding: 6px 8px;
