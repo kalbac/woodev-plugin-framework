@@ -505,7 +505,7 @@ What the code settled, where the text above left it open:
 
 The screen is five tabs on the plugin's own page, not one tab with a row of sections (operator decision 12.11.2026):
 
-- **Tabs.** «Подключение» · «Параметры» · «Общие» · «Уведомления» · «Дополнительно». `Settings_Module::handler_for()` gives the
+- **Tabs.** «Подключение» · «Параметры аккаунта» · «Значения по умолчанию» · «Уведомления» · «Дополнительно» (the last two renamed from «Параметры» / «Общие» in 2.1.13, titles only: ids, slugs and section ids are unchanged; the prose below still says «Общие» for the defaults tab). `Settings_Module::handler_for()` gives the
   handler a `Settings_Tab` per tab (a thin view over the provider that owns the fields) and `Settings_Handler::get_settings_providers()`
   lists one `Settings_Provider` per tab, all over the same handler, so a field keeps one owner and a save reaches it through whichever tab
   shows it. The first tab keeps the handler's id (`{plugin id}`, so the old address opens the page) and the `legacy_page`; the others are
@@ -513,8 +513,7 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   `PUSH_NOTIFICATIONS`. The page heading is `Page::get_heading()` («Настройки {plugin name}») over a menu entry that stays «Настройки»; it is also the last crumb of
   the manifest, which is what the wc-admin header shows (`Menu::build_manifest()`).
 - **«Подключение»** draws a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.tsx`): title, identifier, stored
-  status, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение»), «Выключить» (saves
-  `enabled` at once) and «Удалить» (enabled for a **switched-off** account only; an enabled one keeps it disabled with the hint «Сначала выключите аккаунт.»; see «Account deletion as built» below). No account: one big «Добавить аккаунт» button. This is
+  status, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение») and «Удалить» (enabled for a **switched-off** account only; an enabled one keeps it disabled with the visible hint «Чтобы удалить аккаунт, сначала выключите его.» under the buttons; see «Account deletion as built» below). There is no on/off button in the header since 2.1.13: the switch is the form's own «Аккаунт включён» and is saved with «Сохранить». An open form says the stored connection message once (under «Проверить подключение»; the header drops it), opening «Добавить аккаунт» collapses an open edit form (and the other way round), and Esc closes the open form. No account: one big «Добавить аккаунт» button. This is
   the one part the PHP-driven renderer cannot express: one section holds one connection block, and a card needs buttons and an expand.
 - **«Параметры»** is one section per account, **stacked** one after another under the account's name with its identifier in muted text
   (`Settings_Section::stacked()`, `src/settings-page/stacked-view.tsx`; no sub-tabs). With none, a notice «Подключите аккаунт на вкладке „Подключение“».
@@ -538,6 +537,33 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   `Cancel_Ajax::require_usable()`, `Site_Orders_Cancel::refusal()`, and `Notification_Account_Reader` (an optional `Effective_Settings`; `Flow_Wiring` and
   `Settings_Module` pass it). A reader that still reads `Account::setting( 'price_rule' | 'orders_enabled' | 'import_enabled' )` sees the
   account's own value, which is only wrong for an account switched to «как в Общих».
+
+### Settings and diagnostics polish as built (s237, 2.1.13)
+
+- **The marketplace look hangs on one class.** The settings body embedded in a marketplace page (it receives `bootstrap.placement`) carries
+  `woodev-settings--marketplace`; the Woodev page of the delivery and payment plugins mounts the same body without it and is unchanged. Under
+  the class: the label column is 280 px (`--woodev-label-col`, 200 px elsewhere), ⓘ is #757575 and aligned with the first label line, a switch's
+  explanation is a grey line under its label, «Очистить сохранённое» is a link, and «Сохранить» with nothing to save is the neutral secondary
+  button (disabled, 7:1 text) with a grey «Нет изменений» beside it, turning primary on the first change. The diagnostics view carries it too.
+- **A switch's explanation is its `description`, not its `tooltip`** (`Field_Kit::add_toggle()`, the notification and advanced switches): a long one
+  (over 140 characters) is folded into a «Подробнее» spoiler by PHP.
+- **Two additive `Settings_Section` features** (shared registry, opt-in, schema unchanged for a section that does not ask): `with_copy_field( label, value )`
+  → `copy_field`, drawn by `copy-field.tsx` as a read-only field with «Копировать» (the notification address of an account); and
+  `with_advanced_actions( ids, label )` → `advanced: true` on those actions plus `advanced_actions_label`, drawn by `ToolsRow` as a collapsed
+  «Дополнительно» block with each tool's `desc` as its one-line explanation («Обновить типы событий», «Возобновить уведомления»).
+- **Notifications card.** The state is two sentences (`Admin\Shared\Notification_State_Text`, shared with the diagnostics page): «Связь не проверялась.
+  Последнее уведомление: отмена отправления, 3 дня назад.» An event type is named by the adapter: its optional `Intake\Names_Event_Types::event_names()` (every type the decoder handles, including those
+  with no switch — the `Push_Protocol` implements it next to `webhook_types()`), else its switch label (`Intake\Event_Names`; a type nobody named stays as
+  the decoder gave it). «Нужные события» lists the switches that are on (a stock switch is left out for an account in stock mode `off`),
+  no longer the adapter's `wanted_descriptions()` (kept in `Push_Admin`, unused by this card). An address inside a cabinet-location sentence becomes a link
+  with the site's name as text; an adapter that registers the address itself gets ONE sentence instead of the location lines.
+- **Diagnostics.** The notification address stays masked (the card is shared with support): label «Адрес для уведомлений», value in monospace, then a link
+  «Скопировать адрес — в настройках уведомлений» to the Notifications tab (`Report_Section` presentation `monospace` / `link`, no Copy button). The marketplace's own message of a **healthy** key is no longer a line (it repeated the key date, currency and role and carried a day
+  count frozen at the last check); a failing key keeps it. «Ключ действует до» shows `date (дней: N)` counted at render from the stored expiry, like the
+  settings status. Values start with a capital. The notification address stays masked there (the full one, with a «Копировать» field, is on the
+  notifications tab).
+- **Price example** (the account's price card footnote) is «Например: на сайте товар за 1 000 ₽ (было 1 200 ₽) → на {marketplace} цена …, старая цена …», amounts through
+  `wc_price()`. «Минимальная цена, %» says its default in the label («по умолчанию не отправляется»: an empty field sends no minimum price) and has no placeholder number.
 
 ### Account deletion as built (#1733)
 
@@ -851,6 +877,29 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
 - **«Связать по артикулу» dialog.** The searchable category field is one control: a labelled box with the field's `placeholder`
   («Начните вводить название категории») and the server's list under it; picking writes the label into the box, typing drops the pick.
   Field labels are sentence case (`.woodev-records__fields`); the first button is `preview_label` («Проверить связи»), the confirm is «Связать».
+
+### Polish s237 (framework 2.1.13): selects, lists and the product tab
+
+- **One select look.** `PageBody` wraps every marketplace view in `.woodev-marketplace-view`; `src/components/_select-look.scss`
+  (included by `src/marketplace-admin/style.scss`) draws WordPress's `SelectControl` and `SearchControl` in that wrapper as the settings'
+  own select (`.woodev-select__trigger`): 40px, 1px `$line` border, 8px radius, 14px text, 18px muted chevron. It is scoped to the wrapper,
+  never to `.woodev-settings`, which the delivery plugins share. The empty choice of a marketplace select reads «Не выбрано» (the mapping
+  editor passes it to `SelectField`; the profile select, the account warehouse select); the shared `SelectField` / `SearchSelectField`
+  default stays «Выберите…», because the delivery plugins' screens use them too.
+- **Lists.** The tab above a list names it, so the card draws no heading (`TableCard` still needs a `title`: it is the caption; the
+  stylesheet hides the visible heading). A count column shows `0` (a number cell is written as a string: a falsy `display` draws nothing)
+  and is as narrow as its heading. The marketplace category search is a `SearchControl` (magnifier).
+- **Product tab markup.** Every row is `form-field` markup printed by `Panel_View::row()` — **including the adapter's own groups**
+  (`Extension_Group` / `Extension_Field`, e.g. Ozon's «Купить на Ozon»): a plugin never prints its own row, so it inherits the label column
+  and the first-line alignment and needs no hook. The label column is 190px (`product-tab.css`); WooCommerce gives a label a 40px line
+  height, which spaces a two-line label 40px apart, so the stylesheet resets it. A «?» is **inside** the label. A row that holds a
+  `<details>` is a `fieldset.form-field` with a `legend` (a `<details>` cannot sit in a `<p>`). Notes use `.woodev-mp-note`, never WooCommerce's
+  `.description` (it clears the floated label and drops below it).
+- **Buttons.** One group of adjacent buttons in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
+  (`.woodev-mp-btn__text`). A container query shows the words only when the control column is at least 720px; below that only the icons show,
+  with the name in `aria-label` and the explanation in the tooltip. «Архивировать» and «Снять связь» ask twice: the question appears in the result
+  line and the button turns red for five seconds. The help under the buttons is one closed «Подсказки» block. The check is a closed
+  `details` under «Исправить перед выгрузкой (N)»; the marks (✓ ✗ !) are CSS masks, not characters.
 
 ## Card importer (framework 2.1.6)
 

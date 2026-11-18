@@ -7,6 +7,10 @@
 export interface DiagnosticsLine {
 	label: string;
 	value: string;
+	/** Show the value as code (an address the merchant reads, never types). */
+	monospace?: boolean;
+	/** A link shown after the value. */
+	link?: { text: string; url: string };
 }
 
 export interface DiagnosticsSection {

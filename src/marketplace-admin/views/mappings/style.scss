@@ -31,10 +31,23 @@
 		display: none;
 	}
 
-	&__title {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 600;
+	// The tab above the list names it: the card draws no heading of its own. `TableCard` needs a `title` (it is the table's
+	// caption, which is what names the table to a screen reader), so the visible heading is hidden, not omitted, and the add
+	// button stays at the right end of the header.
+	.woocommerce-card__title {
+		display: none;
+	}
+
+	.woocommerce-card__header {
+		justify-content: flex-end;
+	}
+
+	// The count column is a number: as wide as its heading and the figure, right-aligned, not half the table.
+	.woocommerce-table__header.is-numeric,
+	.woocommerce-table__item.is-numeric {
+		width: 1%;
+		white-space: nowrap;
+		text-align: right;
 	}
 
 	&__empty {
@@ -43,7 +56,7 @@
 	}
 
 	&--empty .components-card__header {
-		justify-content: space-between;
+		justify-content: flex-end;
 	}
 }
 

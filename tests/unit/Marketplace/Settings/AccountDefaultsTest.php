@@ -62,6 +62,12 @@ final class AccountDefaultsTest extends TestCase {
 		$this->options = [];
 
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'wc_price' )->alias(
+			static function ( $amount, array $args = [] ): string {
+				return number_format( (float) $amount, (int) ( $args['decimals'] ?? 2 ), ',', ' ' ) . '&nbsp;' . ( $args['currency'] ?? '' );
+			}
+		);
 		Functions\when( 'wp_parse_args' )->alias(
 			static function ( $args, array $defaults = [] ): array {
 				return array_merge( $defaults, (array) $args );
@@ -724,7 +730,7 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertSame( '777', $card['identifier'] );
 		$this->assertSame( "account_{$id}_enabled", $card['enabled_field'] );
 		$this->assertTrue( $card['enabled'] );
-		$this->assertNotSame( '', $card['delete_hint'], 'the delete button is disabled with a hint: deletion is a later card' );
+		$this->assertSame( 'Чтобы удалить аккаунт, сначала выключите его.', $card['delete_hint'], 'an enabled account says what to do first' );
 		$this->assertSame( [ 'new' => true ], $sections[1]->get_card() );
 	}
 

@@ -33,7 +33,9 @@ export function PageBody( { page, menu, query }: PageViewProps ) {
 			{ View ? (
 				<>
 					<HelpLink help={ page.help } className="woodev-marketplace-page__help" />
-					<View page={ page } menu={ menu } query={ query } />
+					<div className="woodev-marketplace-view">
+						<View page={ page } menu={ menu } query={ query } />
+					</div>
 				</>
 			) : (
 				<div className="woodev-marketplace-page" data-page={ page.id }>

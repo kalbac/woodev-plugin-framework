@@ -1,11 +1,12 @@
 /**
- * Search box for the marketplace category: types, waits, lists what the server found.
+ * Search box for the marketplace category: types, waits, lists what the server found. It is a `SearchControl` (magnifier
+ * icon) so it does not read as a free-text field.
  *
  * @package woodev-plugin-framework
  */
 
 import { useEffect, useState } from '@wordpress/element';
-import { Button, TextControl } from '@wordpress/components';
+import { Button, SearchControl } from '@wordpress/components';
 import { errorLines, type MappingsApi } from './api';
 import { Notices } from './notices';
 import type { CategoryChoice, MappingCategory, Messages } from './types';
@@ -73,7 +74,8 @@ export function CategoryPicker( { api, messages, value, onChange }: Props ) {
 
 	return (
 		<div className="woodev-category-picker">
-			<TextControl __next40pxDefaultSize
+			<SearchControl
+				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 				label={ messages.marketplaceCategory }
 				hideLabelFromVision

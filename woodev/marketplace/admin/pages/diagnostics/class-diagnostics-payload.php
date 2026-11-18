@@ -20,12 +20,13 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Diagnostics_Payload {
 	/**
-	 * Sections as `[ 'title' => string, 'lines' => [ [ 'label' => string, 'value' => string ], … ] ]`.
+	 * Sections as `[ 'title' => string, 'lines' => [ [ 'label' => string, 'value' => string ], … ] ]`; a line can also carry
+	 * `monospace` (true) and `link` (`[ 'text' => string, 'url' => string ]`) when the section asked for them.
 	 *
 	 * @since 2.1.5
 	 *
 	 * @param Report_Section[] $sections Sections of the report builder.
-	 * @return array<int,array{title:string,lines:array<int,array{label:string,value:string}>}>
+	 * @return array<int,array{title:string,lines:array<int,array<string,mixed>>}>
 	 */
 	public static function sections( array $sections ): array {
 		$payload = [];
@@ -33,7 +34,7 @@ final class Diagnostics_Payload {
 		foreach ( $sections as $section ) {
 			$payload[] = [
 				'title' => $section->title(),
-				'lines' => self::lines( $section->lines() ),
+				'lines' => self::lines( $section->lines(), $section->presentation() ),
 			];
 		}
 
@@ -45,17 +46,30 @@ final class Diagnostics_Payload {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param array<string|int,mixed> $lines Lines keyed by label.
-	 * @return array<int,array{label:string,value:string}>
+	 * @param array<string|int,mixed>           $lines        Lines keyed by label.
+	 * @param array<string,array<string,mixed>> $presentation How some lines are shown, by label.
+	 * @return array<int,array<string,mixed>>
 	 */
-	private static function lines( array $lines ): array {
+	private static function lines( array $lines, array $presentation ): array {
 		$rows = [];
 
 		foreach ( $lines as $label => $value ) {
-			$rows[] = [
+			$row = [
 				'label' => (string) $label,
 				'value' => (string) $value,
 			];
+
+			$shown = $presentation[ (string) $label ] ?? [];
+
+			if ( ! empty( $shown['monospace'] ) ) {
+				$row['monospace'] = true;
+			}
+
+			if ( ! empty( $shown['link'] ) ) {
+				$row['link'] = $shown['link'];
+			}
+
+			$rows[] = $row;
 		}
 
 		return $rows;

@@ -19,9 +19,17 @@
 // 31.08.2026, and it must stay ONE number: the select rows and the boolean
 // rows both read it, and they misalign the moment only one of them changes.
 $settings-label-col: 200px;
+// A marketplace plugin's settings (`.woodev-settings--marketplace`) have longer labels («Импортировать новые карточки автоматически»):
+// the column is 280px there. Every rule below reads the width through this property, so the two surfaces share one set of rules.
+$marketplace-label-col: 280px;
 
 .woodev-settings {
 	// Full-width (zam.1) — no fixed max-width; the Card frames the content.
+	--woodev-label-col: #{ $settings-label-col };
+
+	&--marketplace {
+		--woodev-label-col: #{ $marketplace-label-col };
+	}
 
 	// Notices (save success/error) need breathing room from the adjacent block.
 	.components-notice {
@@ -67,7 +75,7 @@ $settings-label-col: 200px;
 		// Declared HERE and reused by the boolean row below — the first pass changed
 		// only the boolean row and the two columns stopped matching, which is exactly
 		// the misalignment this was meant to fix. One number, two call sites.
-		grid-template-columns: $settings-label-col minmax( 0, wd.$control-col );
+		grid-template-columns: var( --woodev-label-col ) minmax( 0, wd.$control-col );
 		align-items: start;
 		gap: wd.$gap-lg;
 		margin: 0;
@@ -100,10 +108,10 @@ $settings-label-col: 200px;
 	// one, rather than discovering it cramped.
 	.woodev-field__toggle-row {
 		display: grid;
-		grid-template-columns: $settings-label-col minmax( 0, wd.$control-col );
+		grid-template-columns: var( --woodev-label-col ) minmax( 0, wd.$control-col );
 		align-items: start;
 		gap: wd.$gap-lg;
-		max-width: calc( #{ $settings-label-col } + #{ wd.$control-col } + #{ wd.$gap-lg } );
+		max-width: calc( var( --woodev-label-col ) + #{ wd.$control-col } + #{ wd.$gap-lg } );
 		padding: wd.$gap 0;
 
 		.woodev-field__toggle-meta {
@@ -314,7 +322,7 @@ $settings-label-col: 200px;
 // control column. A records table in the 425px control column clipped «Удалить» and wrapped every address.
 .woodev-settings .woodev-boxes-field .woodev-field,
 .woodev-settings .woodev-records-field .woodev-field {
-	grid-template-columns: $settings-label-col minmax( 0, 1fr );
+	grid-template-columns: var( --woodev-label-col ) minmax( 0, 1fr );
 	@media ( max-width: 782px ) { grid-template-columns: 1fr; }
 }
 
@@ -522,9 +530,17 @@ $settings-label-col: 200px;
 		line-height: 1.5;
 	}
 
+	// A value that is an address: monospace, wrapping anywhere, no background strip of its own.
+	&__code {
+		padding: 0;
+		background: none;
+		font-size: 13px;
+		overflow-wrap: anywhere;
+	}
+
 	@media ( min-width: 783px ) {
 		display: grid;
-		grid-template-columns: $settings-label-col minmax( 0, 1fr );
+		grid-template-columns: var( --woodev-label-col, #{ $settings-label-col } ) minmax( 0, 1fr );
 		column-gap: wd.$gap-lg;
 
 		// The first line of a value sits level with its label, like a settings row.
@@ -563,4 +579,166 @@ $settings-label-col: 200px;
 	display: block;
 	width: 100%;
 	margin-top: wd.$gap;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Marketplace settings (`.woodev-settings--marketplace`, set when the body is embedded in a marketplace plugin's own page).
+// Nothing below reaches the delivery and payment plugins' settings, which mount the same body without that class.
+// ---------------------------------------------------------------------------------------------------------------------------
+.woodev-settings--marketplace {
+	// «Сохранить» with nothing to save: a neutral button that reads as a button (WordPress's disabled primary is blue at 40 %,
+	// about 2:1), plus a grey «Нет изменений» beside it. Text #50575e on #f6f7f7 is 7:1.
+	.woodev-settings__actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: wd.$gap;
+	}
+
+	.woodev-settings__save.is-idle:disabled {
+		opacity: 1;
+		background: #f6f7f7;
+		border-color: #c3c4c7;
+		box-shadow: inset 0 0 0 1px #c3c4c7;
+		color: #50575e;
+		cursor: default;
+	}
+
+	.woodev-settings__no-changes {
+		color: wd.$muted; // 5.7:1 on white
+		font-size: 13px;
+	}
+
+	// ⓘ and the control line up with the FIRST line of a label that wraps; the icon is darker (white on #757575 is 4.6:1).
+	.woodev-field__label,
+	.woodev-field__toggle-label {
+		align-items: flex-start;
+	}
+
+	.woodev-field__tip {
+		margin-top: 1px;
+		background: wd.$ink-muted;
+	}
+
+	.woodev-field__tip:hover,
+	.woodev-field__tip:focus {
+		background: wd.$accent-strong;
+	}
+
+	// A switch's explanation is a grey line under its label, across the row (the text is the field's own help, not an icon's tip).
+	// A long one is folded by PHP into a «Подробнее» spoiler, so the line never turns into a paragraph.
+	.woodev-field__toggle-row {
+		.woodev-field__toggle-desc,
+		.woodev-field__disabled-reason {
+			grid-column: 1 / -1;
+			margin-top: 0;
+			color: wd.$muted;
+			font-size: 13px;
+			line-height: 1.5;
+		}
+
+		.woodev-field__toggle-desc {
+			grid-row: 2;
+		}
+
+		.woodev-field__disabled-reason {
+			grid-row: 3;
+		}
+
+		.woodev-field__toggle-desc summary {
+			width: fit-content;
+			color: #2271b1;
+			cursor: pointer;
+		}
+	}
+
+	// «Очистить сохранённое» is a link, not grey text.
+	.woodev-field__secret-clear-link,
+	.woodev-field__secret-cancel {
+		color: #2271b1;
+		text-decoration: underline;
+
+		&:hover,
+		&:focus {
+			color: #135e96;
+		}
+	}
+}
+
+// The account card's buttons sit in one row with the reason «Удалить» waits under them.
+.woodev-account-card__controls {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: wd.$gap-xs;
+}
+
+.woodev-account-card__hint {
+	margin: 0;
+	color: wd.$muted;
+	font-size: 13px;
+}
+
+// A value to copy: the read-only field takes the row, the button sits beside it and never wraps its label.
+.woodev-copy-field {
+	margin-bottom: 0;
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+
+		.components-button {
+			flex: 0 0 auto;
+			white-space: nowrap;
+		}
+	}
+
+	&__input {
+		flex: 1 1 auto;
+		min-width: 0;
+		font-family: Menlo, Consolas, monospace;
+		font-size: 13px;
+		background: wd.$disabled-bg;
+	}
+
+	&__note {
+		margin: wd.$gap-xs 0 0;
+		color: wd.$muted;
+		font-size: 13px;
+	}
+}
+
+// The seldom-needed buttons of a row of actions, folded away with a line of explanation each.
+.woodev-tools-row__more {
+	margin-top: wd.$gap;
+
+	summary {
+		width: fit-content;
+		color: #2271b1;
+		cursor: pointer;
+	}
+
+	&-list {
+		margin: wd.$gap-sm 0 0;
+		padding: 0;
+		list-style: none;
+
+		li {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: wd.$gap-xs wd.$gap;
+			margin: 0 0 wd.$gap-sm;
+		}
+
+		.components-button {
+			white-space: nowrap;
+		}
+	}
+
+	&-desc {
+		color: wd.$muted;
+		font-size: 13px;
+	}
 }

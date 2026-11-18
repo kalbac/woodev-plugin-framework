@@ -357,7 +357,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		}
 
 		/**
-		 * Returns the default settings tabs («Подключение», «Параметры», «Общие», «Уведомления», «Дополнительно») placed on this plugin's own menu.
+		 * Returns the default settings tabs («Подключение», «Параметры аккаунта», «Значения по умолчанию», «Уведомления», «Дополнительно») placed on this plugin's own menu.
 		 *
 		 * @since 2.1.2
 		 *

@@ -160,8 +160,10 @@ export default function App( { bootstrap = null } ) {
 	const [ showErrors, setShowErrors ] = useState( {} ); // { providerId: bool }
 	const [ fieldErrors, setFieldErrors ] = useState( {} ); // { providerId: { settingId: message } }
 	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
-	const [ busySection, setBusySection ] = useState( '' ); // account card whose on/off switch is being saved.
 	const [ noticeSection, setNoticeSection ] = useState( '' ); // section whose save the inline notices report (stacked tabs).
+	// A body embedded in a marketplace plugin's own page gets `bootstrap`; the Woodev page (delivery and payment plugins) gets none.
+	// The marketplace look (wider label column, visible switch explanations, a Save that reads as a button at rest) hangs on this.
+	const isMarketplace = !! ( bootstrap && bootstrap.placement );
 
 	// Native WP snackbar notices (created on save via the notices store).
 	const snackbars = useSelect(
@@ -378,28 +380,6 @@ export default function App( { bootstrap = null } ) {
 			} );
 	};
 
-	// «Выключить» / «Включить» on an account card saves the account's `enabled` field at once.
-	const onToggleEnabled = ( tab, section ) => {
-		setBusySection( section.id );
-		saveTab( tab.id, { [ section.card.enabled_field ]: ! section.card.enabled } )
-			.then( () => {
-				dispatch( noticesStore ).createSuccessNotice( __( 'Настройки сохранены.', 'woodev-plugin-framework' ), { type: 'snackbar' } );
-				return fetchSchema();
-			} )
-			.then( ( res ) => {
-				if ( res && res.tabs ) {
-					setTabs( res.tabs );
-				}
-			} )
-			.catch( ( err ) => {
-				dispatch( noticesStore ).createErrorNotice(
-					( err && err.message ) || __( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' ),
-					{ type: 'snackbar' }
-				);
-			} )
-			.finally( () => setBusySection( '' ) );
-	};
-
 	// The deletion dialog changes the cards (an account is gone, or a deletion is running): read them again.
 	const refreshTabs = () => {
 		fetchSchema()
@@ -483,13 +463,19 @@ export default function App( { bootstrap = null } ) {
 					{ sectionHasSaveButton( section ) && (
 						<div className="woodev-settings__actions">
 							<Button
-								variant="primary"
+								// Marketplace screens: a button with nothing to save is the neutral secondary one (WordPress's faded blue
+								// primary read as broken), and a grey line beside it says why it waits; it turns primary on the first change.
+								variant={ isMarketplace && ! hasChanges && ! isSavingThis ? 'secondary' : 'primary' }
+								className={ isMarketplace && ! hasChanges ? 'woodev-settings__save is-idle' : undefined }
 								isBusy={ isSavingThis }
 								disabled={ saving === tab.id || ! hasChanges || hasProviderMismatch }
 								onClick={ () => onSave( tab.id, tab, section ) }
 							>
 								{ __( 'Сохранить', 'woodev-plugin-framework' ) }
 							</Button>
+							{ isMarketplace && ! hasChanges && saving !== tab.id && (
+								<span className="woodev-settings__no-changes">{ __( 'Нет изменений', 'woodev-plugin-framework' ) }</span>
+							) }
 						</div>
 					) }
 				</CardBody>
@@ -498,7 +484,7 @@ export default function App( { bootstrap = null } ) {
 	};
 
 	return (
-		<div className="woodev-settings">
+		<div className={ 'woodev-settings' + ( isMarketplace ? ' woodev-settings--marketplace' : '' ) }>
 			<TabsNav
 				tabs={ tabs }
 				renderSection={ ( tab, sectionId ) =>
@@ -506,8 +492,6 @@ export default function App( { bootstrap = null } ) {
 						<AccountsView
 							tab={ tab }
 							renderSection={ renderSection }
-							onToggleEnabled={ onToggleEnabled }
-							busySection={ busySection }
 							onAccountsChanged={ refreshTabs }
 						/>
 					) : isStackedTab( tab ) ? (

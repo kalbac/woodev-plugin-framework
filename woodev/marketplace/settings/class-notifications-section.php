@@ -8,10 +8,12 @@
 namespace Woodev\Framework\Marketplace\Settings;
 
 use Woodev\Framework\Help\Help_Links;
-use Woodev\Framework\Marketplace\Admin\Diagnostics\Diagnostics_Reader;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
+use Woodev\Framework\Marketplace\Admin\Shared\Notification_State_Text;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Data\Uninstaller;
+use Woodev\Framework\Marketplace\Intake\Event_Names;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
@@ -22,6 +24,7 @@ use Woodev\Framework\Marketplace\Intake\Tokenless_Seen;
 use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
 use Woodev\Framework\Marketplace\Intake\Webhook_Type;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
+use Woodev\Framework\Marketplace\Sync\Stock_Mode;
 use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Framework\Shipping\Settings\Shipping_Tool;
 use Woodev\Framework\Shipping\Settings\Tool_Result;
@@ -152,8 +155,9 @@ final class Notifications_Section implements Settings_Section_Provider {
 				$id,
 				\Woodev_Control::TYPE_TOGGLE,
 				[
-					'label'   => $type->label(),
-					'tooltip' => $type->purpose(),
+					'label'       => $type->label(),
+					// Shown as a grey line under the switch's name, so the merchant need not hover an icon to learn what it does.
+					'description' => esc_html( $type->purpose() ),
 				]
 			);
 		}
@@ -215,39 +219,38 @@ final class Notifications_Section implements Settings_Section_Provider {
 		return null === $protocol ? [] : $protocol->webhook_types();
 	}
 
-	/**
-	 * Explains the switches: the intro sentence, where in the marketplace cabinet the address goes, and whether the
-	 * adapter registers the address itself or the merchant copies it.
-	 *
-	 * @param Webhook_Type[] $types       Types.
-	 * @param string         $marketplace Marketplace name.
-	 * @param bool           $registers   Whether the adapter registers the address in the cabinet by itself.
-	 * @return string
-	 */
 	private function webhooks_html( array $types, string $marketplace, bool $registers ): string {
 		if ( [] === $types ) {
 			return '';
 		}
 
-		return sprintf(
-			'<p>%1$s</p>%2$s<p>%3$s</p>',
+		$intro = sprintf(
+			'<p>%s</p>',
 			/* translators: %s: marketplace name. */
-			esc_html( sprintf( __( 'Включите уведомления, которые вам нужны: %s сообщит о них сайту сразу, а выключенные сайт не станет принимать.', 'woodev-plugin-framework' ), $marketplace ) ),
-			$this->location_sentences( $types ),
-			$registers
-				? esc_html__( 'Адрес сайта для уведомлений показан в карточках аккаунтов ниже; кнопка «Зарегистрировать адрес» сама передаёт его в личный кабинет, вписывать его вручную не нужно.', 'woodev-plugin-framework' )
-				: esc_html__( 'Скопируйте адрес сайта для уведомлений из карточки аккаунта ниже и впишите его в личном кабинете там, где это указано выше.', 'woodev-plugin-framework' )
+			esc_html( sprintf( __( 'Включите уведомления, которые вам нужны: %s сообщит о них сайту сразу, а выключенные сайт не станет принимать.', 'woodev-plugin-framework' ), $marketplace ) )
+		);
+
+		// An adapter that registers the address itself needs no instruction about the cabinet: ONE sentence says where the address
+		// is and that nothing has to be typed in. Otherwise the merchant is told where in the cabinet it goes, then to copy it.
+		if ( $registers ) {
+			return $intro . sprintf(
+				'<p>%s</p>',
+				esc_html(
+					sprintf(
+						/* translators: %s: marketplace name. */
+						__( 'Адрес сайта для уведомлений показан в карточке аккаунта ниже; кнопка «Зарегистрировать адрес» сама передаёт его в личный кабинет %s, вписывать его вручную не нужно.', 'woodev-plugin-framework' ),
+						$marketplace
+					)
+				)
+			);
+		}
+
+		return $intro . $this->location_sentences( $types ) . sprintf(
+			'<p>%s</p>',
+			esc_html__( 'Скопируйте адрес сайта для уведомлений из карточки аккаунта ниже и впишите его в личном кабинете там, где это указано выше.', 'woodev-plugin-framework' )
 		);
 	}
 
-	/**
-	 * Says where in the cabinet the address goes: ONE sentence when every type shares the place, otherwise one per place naming its types.
-	 *
-	 * What a type is for sits in its switch's tooltip, so nothing is repeated here.
-	 *
-	 * @param Webhook_Type[] $types Types.
-	 * @return string HTML paragraphs, '' when no type names a place.
-	 */
 	private function location_sentences( array $types ): string {
 		$by_location = [];
 
@@ -259,23 +262,45 @@ final class Notifications_Section implements Settings_Section_Provider {
 
 		if ( 1 === count( $by_location ) && count( $types ) === count( reset( $by_location ) ) ) {
 			/* translators: %s: place in the marketplace cabinet. */
-			return '<p>' . esc_html( sprintf( __( 'Где указать адрес: %s.', 'woodev-plugin-framework' ), (string) key( $by_location ) ) ) . '</p>';
+			return '<p>' . self::linkify( esc_html( sprintf( __( 'Где указать адрес: %s.', 'woodev-plugin-framework' ), (string) key( $by_location ) ) ) ) . '</p>';
 		}
 
 		$html = '';
 
 		foreach ( $by_location as $location => $labels ) {
-			$html .= '<p>' . esc_html(
-				sprintf(
-					/* translators: 1: names of notification types in quotes, 2: place in the marketplace cabinet. */
-					__( 'Где указать адрес для %1$s: %2$s.', 'woodev-plugin-framework' ),
-					'«' . implode( '», «', $labels ) . '»',
-					(string) $location
+			$html .= '<p>' . self::linkify(
+				esc_html(
+					sprintf(
+						/* translators: 1: names of notification types in quotes, 2: place in the marketplace cabinet. */
+						__( 'Где указать адрес для %1$s: %2$s.', 'woodev-plugin-framework' ),
+						'«' . implode( '», «', $labels ) . '»',
+						(string) $location
+					)
 				)
 			) . '</p>';
 		}
 
 		return $html;
+	}
+
+	/**
+	 * Turns an address written into an already escaped sentence («seller.ozon.ru/app/settings/integrations») into a link whose text
+	 * is the site's name: a merchant never reads a raw address in running text, and a link opens the page.
+	 *
+	 * @param string $escaped The sentence, escaped for HTML.
+	 * @return string
+	 */
+	private static function linkify( string $escaped ): string {
+		return (string) preg_replace_callback(
+			'~\(?\b((?:https?://)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})(?:/[^\s()<]*)?)\)?~iu',
+			static function ( array $match ): string {
+				$address = $match[1];
+				$href    = 0 === stripos( $address, 'http' ) ? $address : 'https://' . $address;
+
+				return sprintf( '<a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a>', esc_url( $href ), esc_html( $match[2] ) );
+			},
+			$escaped
+		);
 	}
 
 	/**
@@ -291,25 +316,20 @@ final class Notifications_Section implements Settings_Section_Provider {
 			return '';
 		}
 
+		// The sentence that matters opens a spoiler; the how-to stays folded so the switches are not buried under a paragraph.
 		return sprintf(
-			'<p>%s</p>',
+			'<details><summary>%1$s</summary><p>%2$s</p></details>',
+			esc_html__( 'Сайт работает за прокси или CDN, а уведомления до сих пор приходят на старый адрес без секретного ключа.', 'woodev-plugin-framework' ),
 			esc_html(
 				sprintf(
 					/* translators: %s: name of the filter. */
-					__( 'Сайт работает за прокси или CDN, а уведомления до сих пор приходят на старый адрес без секретного ключа. Такой адрес проверяет отправителя по IP, а за прокси сайт видит адрес прокси, поэтому настоящие уведомления могут отклоняться. Замените в личном кабинете старый адрес на новый — с секретным ключом (он показан в карточках ниже): по нему уведомления принимаются и за прокси. Разработчик может указать адреса своих прокси фильтром %s.', 'woodev-plugin-framework' ),
+					__( 'Такой адрес проверяет отправителя по IP, а за прокси сайт видит адрес прокси, поэтому настоящие уведомления могут отклоняться. Замените в личном кабинете старый адрес на новый — с секретным ключом (он показан в карточках ниже): по нему уведомления принимаются и за прокси. Разработчик может указать адреса своих прокси фильтром %s.', 'woodev-plugin-framework' ),
 					'woodev_' . str_replace( '-', '_', $this->adapter->id() ) . '_push_trusted_proxies'
 				)
 			)
 		);
 	}
 
-	/**
-	 * Builds the notification card and four remote action buttons for one account.
-	 *
-	 * @param Notification_Account $account Account.
-	 * @param int                  $now     Current timestamp.
-	 * @return Settings_Section
-	 */
 	private function account_section( Notification_Account $account, int $now ): Settings_Section {
 		$id         = $account->id();
 		// The full address, token included: the merchant copies it into the marketplace cabinet (v1 showed it too). The settings
@@ -317,35 +337,9 @@ final class Notifications_Section implements Settings_Section_Provider {
 		$url   = Notification_Url::for_account( $this->adapter->id(), $account );
 		$admin = $this->adapter->push_admin( $id );
 
-		$wanted = null !== $admin ? $admin->wanted_descriptions( $account ) : [];
-		$state  = $account->state();
-
-		if ( [] === $state ) {
-			$state_text = __( 'ещё не проверялось', 'woodev-plugin-framework' );
-		} elseif ( null !== $admin ) {
-			$state_text = $admin->describe_state( $state );
-		} else {
-			$state_text = ! empty( $state['enabled'] )
-				? __( 'уведомления включены', 'woodev-plugin-framework' )
-				: __( 'уведомления отключены', 'woodev-plugin-framework' );
-		}
-
-		$latest      = $this->last_notifications->latest( $id );
-		$latest_text = null === $latest
-			? __( 'пока не поступало', 'woodev-plugin-framework' )
-			: sprintf( '%s (%s)', $latest['type'], Diagnostics_Reader::age_text( $latest['received_at'], $now ) );
-
-		$wanted_text = [] === $wanted
-			? __( 'по текущим настройкам аккаунта push-события не требуются', 'woodev-plugin-framework' )
-			: implode( ', ', $wanted );
-
 		$facts = [
-			__( 'Адрес', 'woodev-plugin-framework' )         => '<code>' . esc_html( $url ) . '</code>',
-			__( 'Состояние', 'woodev-plugin-framework' )     => esc_html(
-				/* translators: 1: registration state, 2: the latest notification received. */
-				sprintf( __( '%1$s · последнее: %2$s', 'woodev-plugin-framework' ), $state_text, $latest_text )
-			),
-			__( 'Нужные события', 'woodev-plugin-framework' ) => esc_html( $wanted_text ),
+			__( 'Состояние', 'woodev-plugin-framework' )      => esc_html( $this->state_sentence( $account, $admin, $now ) ),
+			__( 'Нужные события', 'woodev-plugin-framework' ) => esc_html( $this->wanted_events( $account ) ),
 		];
 
 		return Settings_Section::create(
@@ -353,7 +347,50 @@ final class Notifications_Section implements Settings_Section_Provider {
 			$this->account_title( $account ),
 			[],
 			$this->facts_html( $facts )
-		)->stacked( $this->identifier_line( $account ) )->with_actions( $this->tools_for_account( $id ), Settings_Section::ACTIONS_ROW )->with_help( self::problems_help() );
+		)->with_copy_field( __( 'Адрес', 'woodev-plugin-framework' ), $url )->stacked( $this->identifier_line( $account ) )->with_actions( $this->tools_for_account( $id ), Settings_Section::ACTIONS_ROW )->with_advanced_actions(
+			[ $this->tool_id( $id, 'update_types' ), $this->tool_id( $id, 'enable' ) ],
+			__( 'Дополнительно', 'woodev-plugin-framework' )
+		)->with_help( self::problems_help() );
+	}
+
+	/**
+	 * «Связь не проверялась. Последнее уведомление: отмена отправления, 3 дня назад.» — see {@see Notification_State_Text}.
+	 *
+	 * @param Notification_Account $account Account.
+	 * @param Push_Admin|null      $admin   The adapter's registration helper, if it has one.
+	 * @param int                  $now     Current timestamp.
+	 * @return string
+	 */
+	private function state_sentence( Notification_Account $account, ?Push_Admin $admin, int $now ): string {
+		return ( new Notification_State_Text( new Event_Names( $this->adapter->push_protocol() ) ) )->describe(
+			$account->state(),
+			$admin,
+			$this->last_notifications->latest( $account->id() ),
+			$now
+		);
+	}
+
+	/**
+	 * The notifications the merchant switched on, as a list of their names — the same switches the card above shows, so the two
+	 * never disagree. A stock notification is left out for an account that does not sync stock (it would be dropped).
+	 *
+	 * @param Notification_Account $account Account.
+	 * @return string
+	 */
+	private function wanted_events( Notification_Account $account ): string {
+		$types    = $this->webhook_types();
+		$switches = new Webhook_Switches( $types, Uninstaller::option_prefix( $this->plugin_id ) );
+		$names    = [];
+
+		foreach ( $types as $type ) {
+			if ( $switches->is_enabled( $type->id() ) && ! ( $type->is_stock() && Stock_Mode::OFF === $account->stock_mode() ) ) {
+				$names[] = ( new Event_Names( $this->adapter->push_protocol() ) )->name( $type->id() );
+			}
+		}
+
+		return [] === $names
+			? __( 'Ни одно уведомление не включено.', 'woodev-plugin-framework' )
+			: Notification_State_Text::sentence( implode( ', ', $names ) );
 	}
 
 	/**

@@ -10920,6 +10920,7 @@ msgstr ""
 
 #: assets/build/settings-page/index.js:7
 msgid "Удаляется…"
+msgstr ""
 
 #: marketplace/admin/pages/products/class-remote-cards-actions.php:268
 msgid "Пара будет убрана из списка, товар и карточка останутся несвязанными. Эта пара не вернётся при следующем поиске по артикулу, пока артикул не изменится."
@@ -11217,6 +11218,7 @@ msgstr ""
 
 #: marketplace/admin/pages/products/class-remote-cards-definition.php:343
 msgid "Карточек"
+msgstr ""
 
 #: marketplace/admin/pages/mappings/class-profile-choices.php:140
 msgid "Описание"
@@ -11880,4 +11882,245 @@ msgstr ""
 #: marketplace/class-marketplace-plugin.php:230
 #, php-format
 msgid "Карточки %s"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:185
+msgid "Действует"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:186
+msgid "Недействительна — фоновые задачи остановлены"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:196
+msgid "Ни один аккаунт ещё не добавлен"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:380
+msgid "Включён"
+msgstr ""
+
+#. translators: %s: key expiry date in d.m.Y format.
+#: marketplace/admin/diagnostics/class-report-builder.php:456
+#, php-format
+msgid "%s (срок истёк)"
+msgstr ""
+
+#. translators: 1: key expiry date in d.m.Y format, 2: whole days remaining.
+#: marketplace/admin/diagnostics/class-report-builder.php:461
+#, php-format
+msgid "%1$s (дней: %2$d)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:720
+msgid "Ключ неверный или не читается"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:722
+msgid "У ключа нет нужных прав"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:724
+msgid "Ключ истёк"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:730
+msgid "Ещё не проверялось"
+msgstr ""
+
+#: marketplace/admin/shared/class-notification-state-text.php:55
+msgid "Связь не проверялась."
+msgstr ""
+
+#: marketplace/admin/shared/class-notification-state-text.php:60
+msgid "Уведомления включены."
+msgstr ""
+
+#: marketplace/admin/shared/class-notification-state-text.php:61
+msgid "Уведомления отключены."
+msgstr ""
+
+#: marketplace/admin/shared/class-notification-state-text.php:65
+msgid "Уведомления пока не поступали."
+msgstr ""
+
+#. translators: 1: name of the notification type, 2: relative time, «3 дня назад».
+#: marketplace/admin/shared/class-notification-state-text.php:70
+#, php-format
+msgid "Последнее уведомление: %1$s, %2$s."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:713
+#: marketplace/settings/class-accounts-sections.php:718
+msgid "Правило для этого аккаунта"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:738
+msgid "Как на вкладке «Значения по умолчанию»"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:741
+msgid "Значения берутся с вкладки «Значения по умолчанию» или задаются для этого аккаунта отдельно."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:909
+msgid "Чтобы удалить аккаунт, сначала выключите его."
+msgstr ""
+
+#. translators: %s: calculated marketplace price, formatted.
+#: marketplace/settings/class-accounts-sections.php:945
+#, php-format
+msgid "цена %s"
+msgstr ""
+
+#. translators: %s: calculated old price, formatted.
+#: marketplace/settings/class-accounts-sections.php:953
+#, php-format
+msgid "старая цена %s"
+msgstr ""
+
+#. translators: %s: calculated minimum price, formatted.
+#: marketplace/settings/class-accounts-sections.php:961
+#, php-format
+msgid "минимальная цена %s"
+msgstr ""
+
+#. translators: 1: price on the site, formatted, 2: regular price on the site, formatted, 3: marketplace name, 4: comma-separated calculated prices.
+#: marketplace/settings/class-accounts-sections.php:968
+#, php-format
+msgid "Например: на сайте товар за %1$s (было %2$s) → на %3$s %4$s."
+msgstr ""
+
+#: marketplace/settings/class-advanced-section.php:69
+msgid "Работает при удалении плагина со страницы «Плагины»; деактивация данные не трогает."
+msgstr ""
+
+#: marketplace/settings/class-advanced-section.php:69
+msgid "Удалит аккаунты, связи и настройки без возможности восстановления."
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:172
+#: marketplace/settings/class-settings-module.php:83
+msgid "Значения по умолчанию"
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:174
+msgid "Значения по умолчанию для всех аккаунтов. На вкладке «Параметры аккаунта» каждый аккаунт может использовать их или задать свои."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:241
+#, php-format
+msgid "Адрес сайта для уведомлений показан в карточке аккаунта ниже; кнопка «Зарегистрировать адрес» сама передаёт его в личный кабинет %s, вписывать его вручную не нужно."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:322
+msgid "Сайт работает за прокси или CDN, а уведомления до сих пор приходят на старый адрес без секретного ключа."
+msgstr ""
+
+#. translators: %s: name of the filter.
+#: marketplace/settings/class-notifications-section.php:326
+#, php-format
+msgid "Такой адрес проверяет отправителя по IP, а за прокси сайт видит адрес прокси, поэтому настоящие уведомления могут отклоняться. Замените в личном кабинете старый адрес на новый — с секретным ключом (он показан в карточках ниже): по нему уведомления принимаются и за прокси. Разработчик может указать адреса своих прокси фильтром %s."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:392
+msgid "Ни одно уведомление не включено."
+msgstr ""
+
+#: marketplace/settings/class-settings-module.php:79
+msgid "Параметры аккаунта"
+msgstr ""
+
+#: marketplace/settings/class-shared-fields.php:164
+msgid "Минимальная цена, % (по умолчанию не отправляется)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:438
+msgid "Адрес для уведомлений"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:448
+msgid "Скопировать адрес — в настройках уведомлений"
+msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "Копировать"
+msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "Браузер не дал скопировать сам — адрес выделен, нажмите Ctrl+C."
+msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "Нет изменений"
+msgstr ""
+
+#. translators: %d: number of remarks.
+#: marketplace/admin/product/class-panel-view.php:295
+#, php-format
+msgid "Проверьте перед выгрузкой (%d)"
+msgstr ""
+
+#. translators: %d: number of errors.
+#: marketplace/admin/product/class-panel-view.php:296
+#, php-format
+msgid "Исправить перед выгрузкой (%d)"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:418
+msgid "Не показывается"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:427
+msgid "Не задана"
+msgstr ""
+
+#. translators: %s: name of the mapping.
+#: marketplace/admin/product/class-panel-view.php:447
+#, php-format
+msgid "По категории: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:447
+msgid "По категории: сопоставления нет"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:463
+#, php-format
+msgid "Точно архивировать на %s? Нажмите ещё раз."
+msgstr ""
+
+#. translators: %s: name of a button.
+#: marketplace/admin/product/class-panel-view.php:486
+#, php-format
+msgid "Кнопки работают с уже сохранённым товаром: если меняли поля выше, сначала сохраните товар («Обновить» справа), затем нажмите «%s»."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:532
+#, php-format
+msgid "Архивировать на %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:686
+msgid "Исправить"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:193
+#: marketplace/settings/class-accounts-sections.php:1455
+msgid "Не выбрано"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:496
+msgid "Действия с карточкой"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:619
+msgid "Включите «Логирование» в настройках, чтобы увидеть, почему остатки и цены этого товара не отправляются."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:599
+msgid "Подсказки"
 msgstr ""
