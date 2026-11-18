@@ -485,6 +485,7 @@ final class Wpdb_Link_Store implements Link_Store {
 
 	/**
 	 * Finds a link by one of its remote identifiers, whatever the adapter calls it (`product_id`, `nmID`, …). The value is compared as text.
+	 * Only identifier rows whose link still exists count: a leftover row of a deleted link must not shadow the live link that holds the same value.
 	 *
 	 * @param int        $account_id Account id.
 	 * @param string     $key        Identifier name.
@@ -499,7 +500,7 @@ final class Wpdb_Link_Store implements Link_Store {
 		}
 
 		$link_id = $this->db->get_var(
-			$this->db->prepare( 'SELECT link_id FROM %i WHERE account_id = %d AND id_name = %s AND id_value = %s ORDER BY link_id ASC LIMIT 1', $this->ids_table, $account_id, $key, $value ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+			$this->db->prepare( 'SELECT ids.link_id FROM %i AS ids INNER JOIN %i AS links ON links.link_id = ids.link_id WHERE ids.account_id = %d AND ids.id_name = %s AND ids.id_value = %s ORDER BY ids.link_id ASC LIMIT 1', $this->ids_table, $this->table, $account_id, $key, $value ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
 		);
 
 		if ( null === $link_id ) {

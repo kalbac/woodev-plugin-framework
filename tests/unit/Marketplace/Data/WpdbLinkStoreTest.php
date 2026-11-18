@@ -272,6 +272,43 @@ final class WpdbLinkStoreTest extends TestCase {
 	}
 
 	/**
+	 * A leftover identifier row of a link that no longer exists, with a lower link id, does not shadow the live link that holds
+	 * the same value (card 1844): the lookup counts only identifier rows whose link exists.
+	 *
+	 * @return void
+	 */
+	public function test_an_orphan_identifier_row_does_not_shadow_the_live_link(): void {
+		$gone = $this->store->save( new Product_Link( 1, 100, 0, 'GONE', [ 'sku' => 5935109069 ], 'created' ) );
+		$live = $this->store->save( new Product_Link( 1, 101, 0, 'LIVE', [ 'sku' => 5935109069 ], 'created' ) );
+
+		$this->assertLessThan( $live, $gone );
+
+		// The link row goes; its identifier rows stay behind (a manual clean-up, an old build).
+		$this->db->query( 'DELETE FROM ' . Sqlite_Tables::table( 'links' ) . ' WHERE link_id = ' . $gone );
+
+		$this->assertNotSame( [], $this->db->rows( 'SELECT * FROM ' . Sqlite_Tables::table( 'link_ids' ) . ' WHERE link_id = ' . $gone ), 'the orphan row is there' );
+
+		$found = $this->store->by_remote_id( 1, 'sku', 5935109069 );
+
+		$this->assertInstanceOf( Product_Link::class, $found );
+		$this->assertSame( $live, $found->link_id() );
+		$this->assertSame( 101, $found->wc_product_id() );
+	}
+
+	/**
+	 * With only an orphan row left, the lookup finds nothing rather than a link that does not exist.
+	 *
+	 * @return void
+	 */
+	public function test_an_orphan_identifier_row_alone_finds_nothing(): void {
+		$gone = $this->store->save( new Product_Link( 1, 100, 0, 'GONE', [ 'sku' => 42 ], 'created' ) );
+
+		$this->db->query( 'DELETE FROM ' . Sqlite_Tables::table( 'links' ) . ' WHERE link_id = ' . $gone );
+
+		$this->assertNull( $this->store->by_remote_id( 1, 'sku', 42 ) );
+	}
+
+	/**
 	 * A string identifier is not turned into zero, and a number that is a string stays a string.
 	 *
 	 * @return void
