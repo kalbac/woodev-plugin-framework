@@ -93,7 +93,7 @@ final class Required_Fields_Rule implements Validation_Rule {
 				$report = $report->with_issue(
 					Validation_Report::ERROR,
 					self::CODE_EMPTY,
-					'У товара нет значения для обязательного поля «' . $field->name() . '» — заполните его в карточке товара или укажите значение по умолчанию в сопоставлении.',
+					'Нет значения для обязательного поля «' . $field->name() . '» — заполните его в товаре или укажите значение по умолчанию в сопоставлении.',
 					$field->id(),
 					Validation_Report::FIX_PRODUCT,
 					'не заполнено поле «' . $field->name() . '»'

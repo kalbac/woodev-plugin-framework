@@ -1,0 +1,64 @@
+// One select look for the marketplace admin screens: the look of the settings' own select (`.woodev-select__trigger`, see
+// `_field.scss`) drawn on WordPress's `SelectControl` / `SearchControl`, so a mapping form, a profile form, the orders and
+// products filters and the tools page show the same control: 40px tall, 1px `$line` border, 8px radius, 14px text, an 18px
+// muted chevron at the right.
+//
+// Scoped to `.woodev-marketplace-view` (the wrapper `PageBody` puts around every marketplace page), never to `.woodev-settings`,
+// which the delivery plugins' settings share. The root class is said twice: `SelectControl`'s emotion rules write the backdrop
+// and the input with three-class selectors, which a one-class root plus two would only tie.
+//
+// @use '../components/select-look';
+//
+// @package woodev-plugin-framework
+
+@use './tokens' as wd;
+
+.woodev-marketplace-view.woodev-marketplace-view {
+	.components-select-control .components-input-control__container,
+	.components-search-control .components-input-control__container {
+		min-height: 40px;
+	}
+
+	.components-select-control .components-select-control__input {
+		min-height: 40px;
+		padding-left: 12px;
+		padding-right: 36px;
+		font-size: 14px;
+		color: wd.$ink;
+	}
+
+	.components-select-control .components-input-control__backdrop,
+	.components-search-control .components-input-control__backdrop {
+		border: 1px solid wd.$line;
+		border-radius: wd.$radius-sm;
+		box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.05 );
+	}
+
+	.components-select-control .components-input-control__container:hover .components-input-control__backdrop,
+	.components-search-control .components-input-control__container:hover .components-input-control__backdrop {
+		border-color: wd.$accent;
+	}
+
+	.components-select-control .components-input-control__container:focus-within .components-input-control__backdrop,
+	.components-search-control .components-input-control__container:focus-within .components-input-control__backdrop {
+		border-color: wd.$accent;
+		box-shadow: 0 0 0 1px wd.$accent;
+	}
+
+	// The same chevron as the settings select: 18px, muted.
+	.components-select-control .components-input-control__suffix {
+		color: wd.$muted;
+
+		svg {
+			width: 18px;
+			height: 18px;
+			fill: currentColor;
+		}
+	}
+
+	.components-select-control select:disabled ~ .components-input-control__backdrop {
+		background: wd.$disabled-bg;
+		border-color: wd.$disabled-line;
+		box-shadow: none;
+	}
+}

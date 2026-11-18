@@ -38,7 +38,7 @@ final class MappingRulesTest extends Validator_Test_Case {
 		$error  = $report->first_error();
 
 		$this->assertSame( 'category_not_mapped', $error['code'] );
-		$this->assertSame( 'Категория товара не сопоставлена с категорией Ozon — откройте «Сопоставление».', $error['message'] );
+		$this->assertSame( 'Категория товара не сопоставлена с категорией Ozon.', $error['message'] );
 		$this->assertSame( Validation_Report::FIX_MAPPING, $error['fix'] );
 		$this->assertSame( array( 'category_not_mapped' ), $this->error_codes( $report ), 'the category-dependent rules stay silent without a category' );
 	}

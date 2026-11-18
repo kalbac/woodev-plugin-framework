@@ -8,6 +8,7 @@
  * @package woodev-plugin-framework
  */
 
+import './style.scss';
 import { addFilter } from '@wordpress/hooks';
 import { readManifest } from './manifest';
 import { buildAdminPages } from './pages';

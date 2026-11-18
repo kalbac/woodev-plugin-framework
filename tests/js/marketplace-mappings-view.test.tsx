@@ -71,7 +71,7 @@ const MESSAGES: Record< string, string > = {
 	categoryUnavailable: 'Категории больше нет',
 	noResults: 'Ничего не найдено',
 	profile: 'Профиль выгрузки',
-	profileNone: '— не выбран —',
+	profileNone: 'Не выбрано',
 	attributes: 'Характеристики',
 	attributesLoading: 'Загружаем характеристики…',
 	attributesEmpty: 'Выберите категорию',
@@ -278,7 +278,7 @@ function openViewWithUrl( start: Query = {} ) {
 
 /** Opens the shop-category dropdown and returns its option of that name. */
 async function shopCategoryOption( name: string | RegExp ) {
-	await userEvent.click( screen.getByRole( 'button', { name: /Выберите…|Одежда|Обувь/ } ) );
+	await userEvent.click( screen.getByRole( 'button', { name: /Не выбрано|Одежда|Обувь/ } ) );
 
 	return screen.findByRole( 'option', { name } );
 }
@@ -319,6 +319,27 @@ describe( 'lists', () => {
 		expect( within( profiles ).getByRole( 'button', { name: 'Основной' } ) ).toBeInTheDocument();
 		expect( within( profiles ).getByText( '1' ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'button', { name: 'Добавить профиль' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'a count of zero is drawn, not left as an empty cell', async () => {
+		serve( { 'GET ': { ...STATE, mappings: [ { ...STATE.mappings[ 0 ], products: 0 } ], profiles: [ { id: 3, name: 'Основной', mappings: 0 } ] } } );
+		openView();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		expect( within( mappings ).getByText( '0' ) ).toBeInTheDocument();
+
+		await userEvent.click( screen.getByRole( 'tab', { name: 'Профили' } ) );
+		const profiles = await screen.findByRole( 'table', { name: 'Профили' } );
+		expect( within( profiles ).getByText( '0' ) ).toBeInTheDocument();
+	} );
+
+	test( 'the category search is a search box (it has the magnifier), not a bare text field', async () => {
+		serve( { 'GET ': STATE } );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Добавить сопоставление' } ) );
+
+		expect( await screen.findByRole( 'searchbox', { name: 'Категория маркетплейса' } ) ).toBeInTheDocument();
 	} );
 
 	test( 'a list with no rows is a card with the PHP sentence and the add button, not a table', async () => {

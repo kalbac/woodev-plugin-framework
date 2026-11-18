@@ -181,7 +181,8 @@ final class Panel_View {
 			$this->validation( $block['validation'], $screen );
 			$this->settings_fields( $block, $base, $id, true, $screen );
 			$this->buttons( $block, $screen );
-			$this->why( $block );
+			$this->hints( $block, $screen );
+			$this->why( $block, false );
 		}
 
 		echo '</div>';
@@ -197,10 +198,11 @@ final class Panel_View {
 	 * @return void
 	 */
 	private function parent_fields( array $block, string $base, string $id, array $screen ): void {
-		echo '<p class="form-field"><span class="description">' . esc_html__( 'Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой. Остатки, цены, склад и проверка товара — у каждого варианта, во вкладке «Вариации». Кнопка «Экспортировать» проверит все варианты сразу и покажет, что мешает.', 'woodev-plugin-framework' ) . '</span></p>';
+		echo '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">' . esc_html__( 'Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой. Остатки, цены, склад и проверка товара — у каждого варианта, во вкладке «Вариации». Кнопка «Экспортировать» проверит все варианты сразу и покажет, что мешает.', 'woodev-plugin-framework' ) . '</span></p>';
 
 		$this->mapping_field( $block['mapping'], $base, $id, $screen );
 		$this->buttons( $block, $screen );
+		$this->hints( $block, $screen );
 		$this->variation_table( $block );
 	}
 
@@ -216,7 +218,8 @@ final class Panel_View {
 			return;
 		}
 
-		echo '<table class="widefat striped woodev-mp-variations"><thead><tr>';
+		// The wrapper scrolls on a narrow screen: the cells keep to one line each (an article and its «(будет отправлен)» stay together).
+		echo '<div class="woodev-mp-variations-wrap"><table class="widefat striped woodev-mp-variations"><thead><tr>';
 
 		$headings = [
 			__( 'Вариант', 'woodev-plugin-framework' ),
@@ -237,13 +240,13 @@ final class Panel_View {
 				'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td>%5$s</td></tr>',
 				esc_html( '' !== $row['name'] ? $row['name'] : '#' . $row['id'] ),
 				$this->badge( $row['badge'] ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in badge().
-				esc_html( $row['offer_id'] ) . ( $row['planned'] ? ' <span class="description">' . esc_html__( '(будет отправлен)', 'woodev-plugin-framework' ) . '</span>' : '' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped on the same line.
+				esc_html( $row['offer_id'] ) . ( $row['planned'] ? ' <span class="woodev-mp-note">' . esc_html__( '(будет отправлен)', 'woodev-plugin-framework' ) . '</span>' : '' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped on the same line.
 				'' === $row['stock'] ? '—' : esc_html( $row['stock'] ),
 				'' === $row['price'] ? '—' : esc_html( trim( $row['price'] . ' ' . $row['currency'] ) )
 			);
 		}
 
-		echo '</tbody></table>';
+		echo '</tbody></table></div>';
 	}
 
 	/**
@@ -278,7 +281,7 @@ final class Panel_View {
 	}
 
 	/**
-	 * Prints the result of the validator over one product.
+	 * Prints the result of the validator over one product: a collapsed list under a counted heading, one short line per issue.
 	 *
 	 * @param array<string,mixed> $validation Validation of the block.
 	 * @param array<string,mixed> $screen     Screen.
@@ -288,22 +291,26 @@ final class Panel_View {
 		$label = __( 'Проверка', 'woodev-plugin-framework' );
 
 		if ( $validation['failed'] ) {
-			$this->row( '', $label, '<span class="description">' . esc_html__( 'Проверить товар сейчас не удалось. Откройте «Сопоставление» и убедитесь, что категории загружены.', 'woodev-plugin-framework' ) . '</span>', '' );
+			$this->row( '', $label, '<span class="woodev-mp-note">' . esc_html__( 'Проверить товар сейчас не удалось. Откройте «Сопоставление» и убедитесь, что категории загружены.', 'woodev-plugin-framework' ) . '</span>', '' );
 			return;
 		}
 
 		if ( [] === $validation['errors'] && [] === $validation['warnings'] ) {
-			$this->row( '', $label, '<span class="woodev-mp-ok">✓ ' . esc_html__( 'Товар готов к выгрузке.', 'woodev-plugin-framework' ) . '</span>', __( 'Проверка идёт по данным сайта и не обращается к маркетплейсу.', 'woodev-plugin-framework' ) );
+			$this->row( '', $label, '<span class="woodev-mp-ok">' . esc_html__( 'Товар готов к выгрузке.', 'woodev-plugin-framework' ) . '</span>', __( 'Проверка идёт по данным сайта и не обращается к маркетплейсу.', 'woodev-plugin-framework' ) );
 			return;
 		}
 
-		$html = '<span class="woodev-mp-issues">';
+		// Collapsed: the heading says how many things block the export, the short lines are one click away.
+		$summary = [] === $validation['errors']
+			? sprintf( /* translators: %d: number of remarks. */ __( 'Проверьте перед выгрузкой (%d)', 'woodev-plugin-framework' ), count( $validation['warnings'] ) )
+			: sprintf( /* translators: %d: number of errors. */ __( 'Исправить перед выгрузкой (%d)', 'woodev-plugin-framework' ), count( $validation['errors'] ) );
+		$html    = '<details class="woodev-mp-issues"><summary class="woodev-mp-issues__summary' . ( [] === $validation['errors'] ? '' : ' woodev-mp-issues__summary--error' ) . '">' . esc_html( $summary ) . '</summary>';
 
 		foreach ( array_merge( $validation['errors'], $validation['warnings'] ) as $issue ) {
 			$html .= '<span class="woodev-mp-issue woodev-mp-issue--' . esc_attr( $issue['level'] ) . '">' . esc_html( $issue['message'] ) . $this->fix_link( (string) ( $issue['fix'] ?? '' ), $screen ) . '</span>';
 		}
 
-		$this->row( '', $label, $html . '</span>', __( 'Проверка идёт по данным сайта и не обращается к маркетплейсу. Ошибки нужно исправить до выгрузки.', 'woodev-plugin-framework' ) );
+		$this->row( '', $label, $html . '</details>', __( 'Проверка идёт по данным сайта и не обращается к маркетплейсу. Ошибки нужно исправить до выгрузки.', 'woodev-plugin-framework' ), true );
 	}
 
 	/**
@@ -375,7 +382,7 @@ final class Panel_View {
 				$options .= sprintf( '<option value="%1$s"%2$s>%3$s</option>', esc_attr( $value ), selected( $kind, $value, false ), esc_html( $label ) );
 			}
 
-			$placeholder = '' !== $price['computed'][ $name ] ? trim( $price['computed'][ $name ] . ' ' . $price['currency'] ) : '';
+			$placeholder = '' !== $price['computed'][ $name ] ? $this->money( $price['computed'][ $name ], $price['currency'] ) : (string) $field['empty'];
 			$control     = sprintf(
 				'<select name="%1$s" class="select short woodev-mp-kind">%2$s</select> <input type="text" inputmode="decimal" class="short woodev-mp-value" name="%3$s" value="%4$s" placeholder="%5$s" />',
 				esc_attr( $base . '[price][' . $name . '][kind]' ),
@@ -394,9 +401,10 @@ final class Panel_View {
 	}
 
 	/**
-	 * Declares the three price fields: label, the kinds a merchant may pick and the tooltip.
+	 * Declares the three price fields: label, the kinds a merchant may pick, what the box says while the rule gives no figure
+	 * for it (`empty`) and the tooltip.
 	 *
-	 * @return array<string,array{label:string,kinds:array<string,string>,tip:string}>
+	 * @return array<string,array{label:string,kinds:array<string,string>,empty:string,tip:string}>
 	 */
 	private function price_field_specs(): array {
 		return [
@@ -407,6 +415,7 @@ final class Panel_View {
 					Price_Override::KIND_PERCENT => __( 'Наценка, %', 'woodev-plugin-framework' ),
 					Price_Override::KIND_NONE    => __( 'Без наценки', 'woodev-plugin-framework' ),
 				],
+				'empty' => '',
 				'tip'   => __( 'По умолчанию цена на маркетплейсе считается по правилу из настроек аккаунта или профиля. Здесь можно задать свою цену именно для этого товара. В сером — цена, которая получится по правилу.', 'woodev-plugin-framework' ),
 			],
 			Price_Override::FIELD_OLD_PRICE => [
@@ -416,6 +425,7 @@ final class Panel_View {
 					Price_Override::KIND_PERCENT => __( 'Выше цены на, %', 'woodev-plugin-framework' ),
 					Price_Override::KIND_NONE    => __( 'Не показывать', 'woodev-plugin-framework' ),
 				],
+				'empty' => __( 'Не показывается', 'woodev-plugin-framework' ),
 				'tip'   => __( 'Зачёркнутая цена на маркетплейсе. «Не показывать» убирает её у этого товара.', 'woodev-plugin-framework' ),
 			],
 			Price_Override::FIELD_MIN_PRICE => [
@@ -424,13 +434,27 @@ final class Panel_View {
 					Price_Override::KIND_FIXED   => __( 'Своя сумма', 'woodev-plugin-framework' ),
 					Price_Override::KIND_PERCENT => __( '% от цены', 'woodev-plugin-framework' ),
 				],
+				'empty' => __( 'Не задана', 'woodev-plugin-framework' ),
 				'tip'   => __( 'Ниже этой цены маркетплейс не опустит цену в акциях.', 'woodev-plugin-framework' ),
 			],
 		];
 	}
 
 	/**
-	 * Prints the explicit mapping select.
+	 * Formats an amount the way WooCommerce does (the shop's separators and currency position), as plain text for a placeholder.
+	 *
+	 * @param string $amount   Amount.
+	 * @param string $currency Currency code of the account.
+	 * @return string E.g. «99,00 ₽».
+	 */
+	private function money( string $amount, string $currency ): string {
+		$text = wp_strip_all_tags( wc_price( (float) $amount, [ 'currency' => $currency ] ) );
+
+		return trim( str_replace( "\u{A0}", ' ', html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) );
+	}
+
+	/**
+	 * Prints the explicit mapping select, with the link to the mappings page on a line under it.
 	 *
 	 * @param array<string,mixed> $mapping Mapping facts.
 	 * @param string              $base    Name base.
@@ -439,35 +463,37 @@ final class Panel_View {
 	 * @return void
 	 */
 	private function mapping_field( array $mapping, string $base, string $id, array $screen ): void {
-		$default = '' !== $mapping['resolved'] ? sprintf( /* translators: %s: name of the mapping. */ __( 'По категории (сейчас: %s)', 'woodev-plugin-framework' ), $mapping['resolved'] ) : __( 'По категории (сопоставления для категории нет)', 'woodev-plugin-framework' );
+		$default = '' !== $mapping['resolved'] ? sprintf( /* translators: %s: name of the mapping. */ __( 'По категории: %s', 'woodev-plugin-framework' ), $mapping['resolved'] ) : __( 'По категории: сопоставления нет', 'woodev-plugin-framework' );
 		$options = '<option value="">' . esc_html( $default ) . '</option>';
 
 		foreach ( $mapping['options'] as $option ) {
 			$options .= sprintf( '<option value="%1$s"%2$s>%3$s</option>', esc_attr( $option['value'] ), selected( (string) $mapping['selected'], $option['value'], false ), esc_html( $option['label'] ) );
 		}
 
-		$link = isset( $screen['mappings_url'] ) ? ' <a href="' . esc_url( (string) $screen['mappings_url'] ) . '">' . esc_html__( 'Открыть «Сопоставление»', 'woodev-plugin-framework' ) . '</a>' : '';
+		// The link goes under the select, on a line of its own: beside it, it squeezed the select's text.
+		$link = isset( $screen['mappings_url'] ) ? '<span class="woodev-mp-row-link"><a href="' . esc_url( (string) $screen['mappings_url'] ) . '">' . esc_html__( 'Открыть «Сопоставление»', 'woodev-plugin-framework' ) . '</a></span>' : '';
 
 		$this->row( $id . 'mapping_id', __( 'Сопоставление', 'woodev-plugin-framework' ), sprintf( '<select id="%1$s" name="%2$s" class="select short woodev-mp-wide">%3$s</select>%4$s', esc_attr( $id . 'mapping_id' ), esc_attr( $base . '[mapping_id]' ), $options, $link ), __( 'Какой категории маркетплейса и какому набору характеристик соответствует товар. Обычно подходит «По категории»: сопоставление берётся из категории товара на сайте.', 'woodev-plugin-framework' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
 	}
 
 	/**
-	 * Prints the action buttons.
+	 * Prints the action buttons as one group in one row.
 	 *
 	 * @param array<string,mixed> $block  Block.
 	 * @param array<string,mixed> $screen Screen (`ops`).
 	 * @return void
 	 */
 	private function buttons( array $block, array $screen ): void {
-		$account = $block['account'];
 		$labels  = $this->button_labels( $block, (string) ( $screen['link_scope'] ?? '' ) );
 		$tips    = $this->button_tips();
 		$confirm = [
-			'archive' => sprintf( /* translators: %s: marketplace name. */ __( 'Точно архивировать: %s? Нажмите ещё раз.', 'woodev-plugin-framework' ), $this->names->name() ),
+			'archive' => sprintf( /* translators: %s: marketplace name. */ __( 'Точно архивировать на %s? Нажмите ещё раз.', 'woodev-plugin-framework' ), $this->names->name() ),
 			'detach'  => __( 'Точно снять связь? Нажмите ещё раз.', 'woodev-plugin-framework' ),
 		];
 
-		echo '<p class="form-field woodev-mp-buttons"><label></label><span class="woodev-mp-buttons__row">';
+		// One group of adjacent buttons, one row, never two. A button is an icon and its words; the stylesheet shows only the icon while the row is too
+		// narrow for the words (a container query), so the name goes in `aria-label` and the explanation in the tooltip.
+		echo '<p class="form-field woodev-mp-buttons"><span class="woodev-mp-buttons__row" role="group" aria-label="' . esc_attr__( 'Действия с карточкой', 'woodev-plugin-framework' ) . '">';
 
 		foreach ( $labels as $op => $label ) {
 			if ( ! isset( $screen['ops'][ $op ] ) ) {
@@ -475,25 +501,58 @@ final class Panel_View {
 			}
 
 			printf(
-				'<button type="button" class="button%1$s" data-woodev-mp-op="%2$s" data-action="%3$s" data-nonce="%4$s" data-product="%5$d" data-account="%6$d" title="%7$s" data-confirm="%8$s">%9$s</button> ',
+				'<button type="button" class="button woodev-mp-btn%1$s" %2$s data-confirm="%3$s" title="%4$s" aria-label="%5$s">%6$s<span class="woodev-mp-btn__text">%5$s</span></button>',
 				'export' === $op ? ' button-primary' : '',
-				esc_attr( $op ),
-				esc_attr( $this->names->product_action() ),
-				esc_attr( (string) $screen['ops'][ $op ] ),
-				(int) $block['product_id'],
-				(int) $account->id(),
-				esc_attr( $tips[ $op ] ),
+				$this->op_attributes( $op, $block, $screen ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in op_attributes().
 				esc_attr( $confirm[ $op ] ?? '' ),
-				esc_html( $label )
+				esc_attr( $label . '. ' . $tips[ $op ] ),
+				esc_attr( $label ),
+				$this->op_icon( $op, $this->export_is_new( $block ) ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static markup.
 			);
 		}
 
-		echo '</span><span class="woodev-mp-result description" role="status" aria-live="polite"></span></p>';
-		echo '<p class="form-field"><span class="description">' . esc_html__( 'Кнопки работают с уже сохранённым товаром: сначала нажмите «Обновить», если меняли поля выше.', 'woodev-plugin-framework' ) . '</span></p>';
+		echo '</span><span class="woodev-mp-result woodev-mp-note" role="status" aria-live="polite"></span></p>';
+	}
 
-		if ( isset( $screen['ops']['link'] ) ) {
-			$this->link_scope_line( (string) ( $screen['link_scope'] ?? '' ) );
-		}
+	private function op_attributes( string $op, array $block, array $screen ): string {
+		return sprintf(
+			'data-woodev-mp-op="%1$s" data-action="%2$s" data-nonce="%3$s" data-product="%4$d" data-account="%5$d"',
+			esc_attr( $op ),
+			esc_attr( $this->names->product_action() ),
+			esc_attr( (string) $screen['ops'][ $op ] ),
+			(int) $block['product_id'],
+			(int) $block['account']->id()
+		);
+	}
+
+	/**
+	 * Tells whether the export button is «Экспортировать» (the card has not been sent) and not «Обновить карточку».
+	 *
+	 * @param array<string,mixed> $block Block.
+	 * @return bool
+	 */
+	private function export_is_new( array $block ): bool {
+		return 'offer' === $block['kind'] ? Card_State_Badge::is_unsent( $block['state'] ) : true;
+	}
+
+	/**
+	 * Returns the icon of a button: an inline SVG that draws with the button's text colour, so it needs no icon font.
+	 *
+	 * @param string $op     Action.
+	 * @param bool   $is_new Whether the export button sends a card for the first time.
+	 * @return string Static markup.
+	 */
+	private function op_icon( string $op, bool $is_new ): string {
+		$paths = [
+			'export'  => $is_new
+				? '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'
+				: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+			'link'    => '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+			'archive' => '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
+			'detach'  => '<path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/>',
+		];
+
+		return '<svg class="woodev-mp-btn__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . ( $paths[ $op ] ?? '' ) . '</svg>';
 	}
 
 	/**
@@ -505,14 +564,14 @@ final class Panel_View {
 	 */
 	private function button_labels( array $block, string $scope ): array {
 		$is_offer = 'offer' === $block['kind'];
-		$is_new   = $is_offer ? Card_State_Badge::is_unsent( $block['state'] ) : true;
+		$is_new   = $this->export_is_new( $block );
 		$labels   = [
 			'export' => $is_new ? __( 'Экспортировать', 'woodev-plugin-framework' ) : __( 'Обновить карточку', 'woodev-plugin-framework' ),
 			'link'   => '' !== $scope ? __( 'Связать категорию по артикулу', 'woodev-plugin-framework' ) : __( 'Связать все товары по артикулу', 'woodev-plugin-framework' ),
 		];
 
 		if ( $is_offer ? $block['can_archive'] : $block['any_created'] ) {
-			$labels['archive'] = sprintf( /* translators: %s: marketplace name. */ __( 'Архивировать: %s', 'woodev-plugin-framework' ), $this->names->name() );
+			$labels['archive'] = sprintf( /* translators: %s: marketplace name. */ __( 'Архивировать на %s', 'woodev-plugin-framework' ), $this->names->name() );
 		}
 
 		if ( $is_offer ? $block['can_detach'] : $block['any_linked'] ) {
@@ -537,17 +596,36 @@ final class Panel_View {
 	}
 
 	/**
-	 * Says, in plain sight, what «Связать по артикулу» works on: it is a category-wide search, not a search for this one product.
+	 * Prints the help under the buttons as one collapsed «Подсказки» block: that the buttons work with the saved product, what «Связать по
+	 * артикулу» works on (a category-wide search, not a search for this one product) and, when the reasons are hidden, how to see them.
 	 *
-	 * @param string $scope Name of the product's category, '' when it has none.
+	 * @param array<string,mixed> $block  Block.
+	 * @param array<string,mixed> $screen Screen (`ops`, `link_scope`).
 	 * @return void
 	 */
-	private function link_scope_line( string $scope ): void {
-		$text = '' !== $scope
-			? sprintf( /* translators: %s: category name. */ __( 'Кнопка «Связать категорию по артикулу» ищет карточки маркетплейса для всех товаров категории «%s», а не только для этого товара.', 'woodev-plugin-framework' ), $scope )
-			: __( 'У товара нет категории, поэтому кнопка «Связать все товары по артикулу» ищет карточки маркетплейса для всех товаров магазина, а не только для этого.', 'woodev-plugin-framework' );
+	private function hints( array $block, array $screen ): void {
+		$scope = (string) ( $screen['link_scope'] ?? '' );
+		$hints = [
+			sprintf( /* translators: %s: name of a button. */ __( 'Кнопки работают с уже сохранённым товаром: если меняли поля выше, сначала сохраните товар («Обновить» справа), затем нажмите «%s».', 'woodev-plugin-framework' ), $this->button_labels( $block, $scope )['export'] ),
+		];
 
-		echo '<p class="form-field"><span class="description">' . esc_html( $text ) . '</span></p>';
+		if ( isset( $screen['ops']['link'] ) ) {
+			$hints[] = '' !== $scope
+				? sprintf( /* translators: %s: category name. */ __( 'Кнопка «Связать категорию по артикулу» ищет карточки маркетплейса для всех товаров категории «%s», а не только для этого товара.', 'woodev-plugin-framework' ), $scope )
+				: __( 'У товара нет категории, поэтому кнопка «Связать все товары по артикулу» ищет карточки маркетплейса для всех товаров магазина, а не только для этого.', 'woodev-plugin-framework' );
+		}
+
+		if ( 0 !== ( $block['link_id'] ?? 0 ) && ! ( $block['reasons']['visible'] ?? true ) ) {
+			$hints[] = __( 'Включите «Логирование» в настройках, чтобы увидеть, почему остатки и цены этого товара не отправляются.', 'woodev-plugin-framework' );
+		}
+
+		echo '<fieldset class="form-field woodev-mp-hints"><details><summary>' . esc_html__( 'Подсказки', 'woodev-plugin-framework' ) . '</summary>';
+
+		foreach ( $hints as $hint ) {
+			echo '<span class="woodev-mp-note">' . esc_html( $hint ) . '</span>';
+		}
+
+		echo '</details></fieldset>';
 	}
 
 	/**
@@ -565,12 +643,14 @@ final class Panel_View {
 	}
 
 	/**
-	 * Prints «Почему не синхронизируется», or the line that says how to see it. Only while «Логирование» is on.
+	 * Prints «Почему не синхронизируется». While «Логирование» is off there is nothing to show: a tab says how to turn it on in its «Подсказки»
+	 * ({@see Panel_View::hints()}); a variation has no such block and keeps the line.
 	 *
-	 * @param array<string,mixed> $block Block.
+	 * @param array<string,mixed> $block     Block.
+	 * @param bool                $hint_line Whether to print the line that says how to see the reasons when they are hidden.
 	 * @return void
 	 */
-	private function why( array $block ): void {
+	private function why( array $block, bool $hint_line = true ): void {
 		if ( 0 === $block['link_id'] ) {
 			return;
 		}
@@ -578,12 +658,15 @@ final class Panel_View {
 		$label = __( 'Почему не синхронизируется', 'woodev-plugin-framework' );
 
 		if ( ! $block['reasons']['visible'] ) {
-			$this->row( '', $label, '<span class="description">' . esc_html__( 'Включите «Логирование» в настройках, чтобы увидеть разбор причин', 'woodev-plugin-framework' ) . '</span>', '' );
+			if ( $hint_line ) {
+				$this->row( '', $label, '<span class="woodev-mp-note">' . esc_html__( 'Включите «Логирование» в настройках, чтобы увидеть разбор причин', 'woodev-plugin-framework' ) . '</span>', '' );
+			}
+
 			return;
 		}
 
 		if ( [] === $block['reasons']['list'] ) {
-			$this->row( '', $label, '<span class="woodev-mp-ok">✓ ' . esc_html__( 'Причин не найдено: остатки и цены этого товара отправляются.', 'woodev-plugin-framework' ) . '</span>', '' );
+			$this->row( '', $label, '<span class="woodev-mp-ok">' . esc_html__( 'Причин не найдено: остатки и цены этого товара отправляются.', 'woodev-plugin-framework' ) . '</span>', '' );
 			return;
 		}
 
@@ -597,23 +680,27 @@ final class Panel_View {
 	}
 
 	/**
-	 * Prints one `form-field` row.
+	 * Prints one `form-field` row, the tooltip inside the label.
 	 *
 	 * @param string $target  Id of the control the label belongs to, '' for none.
 	 * @param string $label   Label text.
 	 * @param string $control Escaped markup of the control.
-	 * @param string $tip     Tooltip text.
+	 * @param string $tip         Tooltip text.
+	 * @param bool   $collapsible Whether the control holds a `<details>`: the row is then a `fieldset`.
 	 * @return void
 	 */
-	private function row( string $target, string $label, string $control, string $tip ): void {
+	private function row( string $target, string $label, string $control, string $tip, bool $collapsible = false ): void {
+		// The «?» sits inside the label, so it stays beside the label's text whatever the control's own width is.
 		$tooltip = '' === $tip ? '' : sprintf( '<span class="woocommerce-help-tip" tabindex="0" aria-label="%1$s" data-tip="%1$s"></span>', esc_attr( $tip ) );
 
+		// A `<details>` cannot sit in a `<p>` (the parser would close the paragraph before it), so a row that holds one is a `fieldset` with a `legend`:
+		// WooCommerce styles `fieldset.form-field` and `legend` exactly like `p.form-field` and `label`.
 		printf(
-			'<p class="form-field"><label%1$s>%2$s</label>%3$s%4$s</p>',
+			$collapsible ? '<fieldset class="form-field"><legend>%2$s%3$s</legend>%4$s</fieldset>' : '<p class="form-field"><label%1$s>%2$s%3$s</label>%4$s</p>',
 			'' === $target ? '' : ' for="' . esc_attr( $target ) . '"', // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped on this line.
 			esc_html( $label ),
-			$control, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped by the caller.
-			$tooltip // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
+			$tooltip, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
+			$control // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped by the caller.
 		);
 	}
 
@@ -663,7 +750,7 @@ final class Panel_View {
 	}
 
 	/**
-	 * Builds the link that says where an issue is fixed.
+	 * Builds the «Исправить» link that says where an issue is fixed.
 	 *
 	 * @param string              $fix    `Validation_Report::FIX_*` or ''.
 	 * @param array<string,mixed> $screen Screen.
@@ -671,16 +758,16 @@ final class Panel_View {
 	 */
 	private function fix_link( string $fix, array $screen ): string {
 		$targets = [
-			'mapping'    => [ (string) ( $screen['mappings_url'] ?? '' ), __( 'Сопоставление', 'woodev-plugin-framework' ) ],
-			'dictionary' => [ (string) ( $screen['mappings_url'] ?? '' ), __( 'Сопоставление', 'woodev-plugin-framework' ) ],
-			'profile'    => [ (string) ( $screen['mappings_url'] ?? '' ), __( 'Профили', 'woodev-plugin-framework' ) ],
-			'account'    => [ (string) ( $screen['settings_url'] ?? '' ), __( 'Настройки', 'woodev-plugin-framework' ) ],
+			'mapping'    => (string) ( $screen['mappings_url'] ?? '' ),
+			'dictionary' => (string) ( $screen['mappings_url'] ?? '' ),
+			'profile'    => (string) ( $screen['mappings_url'] ?? '' ),
+			'account'    => (string) ( $screen['settings_url'] ?? '' ),
 		];
 
-		if ( ! isset( $targets[ $fix ] ) || '' === $targets[ $fix ][0] ) {
+		if ( '' === ( $targets[ $fix ] ?? '' ) ) {
 			return '';
 		}
 
-		return ' <a href="' . esc_url( $targets[ $fix ][0] ) . '">' . esc_html( sprintf( /* translators: %s: name of the page. */ __( 'Исправить: %s', 'woodev-plugin-framework' ), $targets[ $fix ][1] ) ) . '</a>';
+		return ' <a href="' . esc_url( $targets[ $fix ] ) . '">' . esc_html__( 'Исправить', 'woodev-plugin-framework' ) . '</a>';
 	}
 }

@@ -190,7 +190,7 @@ final class View_Config {
 			'noResults'           => __( 'Ничего не найдено', 'woodev-plugin-framework' ),
 			'searching'           => __( 'Поиск…', 'woodev-plugin-framework' ),
 			'profile'             => __( 'Профиль выгрузки', 'woodev-plugin-framework' ),
-			'profileNone'         => __( '— не выбран —', 'woodev-plugin-framework' ),
+			'profileNone'         => __( 'Не выбрано', 'woodev-plugin-framework' ),
 			'attributes'          => __( 'Характеристики', 'woodev-plugin-framework' ),
 			'attributesLoading'   => __( 'Загружаем характеристики…', 'woodev-plugin-framework' ),
 			'attributesEmpty'     => __( 'Выберите категорию маркетплейса — здесь появятся её характеристики.', 'woodev-plugin-framework' ),

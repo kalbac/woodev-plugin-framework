@@ -11752,3 +11752,72 @@ msgstr ""
 #, php-format
 msgid "%s (откроется в новой вкладке)"
 msgstr ""
+
+#. translators: %d: number of remarks.
+#: marketplace/admin/product/class-panel-view.php:295
+#, php-format
+msgid "Проверьте перед выгрузкой (%d)"
+msgstr ""
+
+#. translators: %d: number of errors.
+#: marketplace/admin/product/class-panel-view.php:296
+#, php-format
+msgid "Исправить перед выгрузкой (%d)"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:418
+msgid "Не показывается"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:427
+msgid "Не задана"
+msgstr ""
+
+#. translators: %s: name of the mapping.
+#: marketplace/admin/product/class-panel-view.php:447
+#, php-format
+msgid "По категории: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:447
+msgid "По категории: сопоставления нет"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:463
+#, php-format
+msgid "Точно архивировать на %s? Нажмите ещё раз."
+msgstr ""
+
+#. translators: %s: name of a button.
+#: marketplace/admin/product/class-panel-view.php:486
+#, php-format
+msgid "Кнопки работают с уже сохранённым товаром: если меняли поля выше, сначала сохраните товар («Обновить» справа), затем нажмите «%s»."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:532
+#, php-format
+msgid "Архивировать на %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:686
+msgid "Исправить"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:193
+#: marketplace/settings/class-accounts-sections.php:1455
+msgid "Не выбрано"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:496
+msgid "Действия с карточкой"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:619
+msgid "Включите «Логирование» в настройках, чтобы увидеть, почему остатки и цены этого товара не отправляются."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:599
+msgid "Подсказки"
+msgstr ""

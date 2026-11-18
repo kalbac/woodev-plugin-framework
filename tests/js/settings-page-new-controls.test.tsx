@@ -166,7 +166,7 @@ test( 'search-select shows errors and ignores late results after the query chang
 
 test( 'a disabled search-select cannot open and an unknown saved value has no invented label', () => {
 	render( <SearchSelectField value={ 999 } savedValue={ 999 } valueLabel="" searchUrl="https://example.test/search" disabled onChange={ jest.fn() } /> );
-	expect( screen.getByRole( 'button', { name: 'Выберите…' } ) ).toBeDisabled();
+	expect( screen.getByRole( 'button', { name: 'Не выбрано' } ) ).toBeDisabled();
 	expect( fetchMock ).not.toHaveBeenCalled();
 } );
 

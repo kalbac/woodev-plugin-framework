@@ -1,8 +1,8 @@
 /**
- * The marketplace tab of the product edit screen: the three buttons of a block.
+ * The marketplace tab of the product edit screen: the buttons of a block.
  *
- * Each button posts to `admin-ajax.php` with its own nonce and shows the answer in the line beside it. «Снять связь» asks twice:
- * the first click changes the button, a second click within five seconds does it.
+ * Each button posts to `admin-ajax.php` with its own nonce and shows the answer in the line beside it. «Архивировать» and «Снять связь» ask twice:
+ * the first click shows the question and arms the button, a second click within five seconds does it.
  */
 ( function ( $ ) {
 	'use strict';
@@ -28,22 +28,30 @@
 	}
 
 	/**
-	 * Asks for a second click on «Снять связь».
+	 * Asks for a second click on «Архивировать» and «Снять связь».
+	 *
+	 * The question goes to the result line beside the buttons (a button may be showing only its icon, so a question written on it
+	 * would not be seen) and the button turns red until the time is up.
 	 *
 	 * @param {jQuery} $button The button.
+	 * @param {jQuery} $result The result line of the block.
 	 * @return {boolean} True when the second click came in time.
 	 */
-	function confirmed( $button ) {
+	function confirmed( $button, $result ) {
 		var question = $button.data( 'confirm' );
 
 		if ( ! question || $button.data( 'armed' ) ) {
 			return true;
 		}
 
-		$button.data( 'armed', true ).data( 'label', $button.text() ).text( question );
+		$button.data( 'armed', true ).addClass( 'is-armed' );
+		$result.removeClass( 'woodev-mp-result--error' ).text( question );
 		window.setTimeout(
 			function () {
-				$button.data( 'armed', false ).text( $button.data( 'label' ) );
+				if ( $button.data( 'armed' ) ) {
+					$button.data( 'armed', false ).removeClass( 'is-armed' );
+					$result.text( '' );
+				}
 			},
 			CONFIRM_MS
 		);
@@ -61,11 +69,11 @@
 
 			event.preventDefault();
 
-			if ( ! confirmed( $button ) ) {
+			if ( ! confirmed( $button, $result ) ) {
 				return;
 			}
 
-			$button.prop( 'disabled', true ).data( 'armed', false );
+			$button.prop( 'disabled', true ).data( 'armed', false ).removeClass( 'is-armed' );
 			$result.removeClass( 'woodev-mp-result--error' ).text( settings.texts.working );
 
 			$.post(
@@ -93,7 +101,7 @@
 			)
 			.always(
 				function () {
-					$button.prop( 'disabled', false ).text( $button.data( 'label' ) || $button.text() );
+					$button.prop( 'disabled', false );
 				}
 			);
 		}

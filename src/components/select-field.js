@@ -32,7 +32,7 @@ import { ChevronIcon, CheckFilledIcon } from './icons';
 export default function SelectField( { value, options = [], multi = false, onChange, placeholder, disabled = false } ) {
 	const [ search, setSearch ] = useState( '' );
 	const triggerRef = useRef( null );
-	const ph = placeholder || __( 'Выберите…', 'woodev-plugin-framework' );
+	const ph = placeholder || __( 'Не выбрано', 'woodev-plugin-framework' );
 
 	const selected = multi
 		? ( Array.isArray( value ) ? value.map( String ) : [] )
