@@ -9,7 +9,7 @@ import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import { Sections } from '../../src/marketplace-admin/views/diagnostics/diagnostics-view';
 
-const masked = 'https://shop.example/wp-json/woodev/v1/ozon-seller/notifications/12/[скрыто]';
+const masked = 'https://shop.example/wp-json/woodev/v1/ozon-seller/notifications/12/••••';
 
 const sections = [
 	{
@@ -21,7 +21,7 @@ const sections = [
 				value: masked,
 				monospace: true,
 				link: {
-					text: 'Скопировать адрес — в настройках уведомлений',
+					text: 'Скопировать адрес можно во вкладке «Уведомления»',
 					url: 'https://shop.example/wp-admin/admin.php?page=ozon&tab=notifications',
 				},
 			},
@@ -35,10 +35,13 @@ describe( 'Diagnostics sections', () => {
 
 		const code = container.querySelector( 'code.woodev-facts__code' );
 		expect( code ).toHaveTextContent( masked );
-		expect( container.textContent ).not.toMatch( /notifications\/12\/(?!\[скрыто\])/ );
+		expect( container.textContent ).not.toMatch( /notifications\/12\/(?!••••)/ );
 
-		const link = screen.getByRole( 'link', { name: 'Скопировать адрес — в настройках уведомлений' } );
+		const link = screen.getByRole( 'link', { name: 'Скопировать адрес можно во вкладке «Уведомления»' } );
 		expect( link ).toHaveAttribute( 'href', expect.stringContaining( 'tab=notifications' ) );
+		// The link is a block of its own under the address, not text running on after it.
+		expect( link.parentElement ).toHaveClass( 'woodev-facts__link' );
+		expect( code.parentElement ).toBe( link.parentElement?.parentElement );
 	} );
 
 	it( 'has no copy button, and a plain line stays plain text', () => {

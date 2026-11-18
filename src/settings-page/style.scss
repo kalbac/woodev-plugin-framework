@@ -628,6 +628,9 @@ $marketplace-label-col: 280px;
 	// A switch's explanation is a grey line under its label, across the row (the text is the field's own help, not an icon's tip).
 	// A long one is folded by PHP into a «Подробнее» spoiler, so the line never turns into a paragraph.
 	.woodev-field__toggle-row {
+		// The row's 24px grid gap is for the columns; between the name and its explanation (a grey line or a «Подробнее» spoiler) it is 4px.
+		row-gap: wd.$gap-xs;
+
 		.woodev-field__toggle-desc,
 		.woodev-field__disabled-reason {
 			grid-column: 1 / -1;
@@ -649,6 +652,29 @@ $marketplace-label-col: 280px;
 			width: fit-content;
 			color: #2271b1;
 			cursor: pointer;
+		}
+	}
+
+	// Fields outside a group card (the switches of «Уведомления» and «Дополнительно») start where the fields inside a card start — past its border
+	// and padding — so the labels and the switches keep one x when the merchant moves from tab to tab.
+	.woodev-settings__section > .woodev-field,
+	.woodev-settings__section > .woodev-field__toggle-row {
+		margin-left: calc( #{ wd.$gap-lg } + 1px );
+	}
+
+	// An account's form sits in the account's own card: the settings card inside it gives up its border and padding, so the form is the card
+	// plus the connection box, two frames at most (a third made the «Сохранить» float between three borders).
+	.woodev-account-card__body,
+	.woodev-accounts__form {
+		.woodev-settings__card {
+			border: 0;
+			border-radius: 0;
+			box-shadow: none;
+			background: transparent;
+		}
+
+		.woodev-settings__card .components-card__body {
+			padding: 0;
 		}
 	}
 

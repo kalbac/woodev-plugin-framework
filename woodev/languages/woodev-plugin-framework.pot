@@ -12124,3 +12124,31 @@ msgstr ""
 #: src/marketplace-admin/views/mappings/mapping-editor.tsx:238
 msgid "Например: Футболки"
 msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:458
+msgid "Скопировать адрес можно во вкладке «Уведомления»"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:201
+msgid "Остатки, цены и проверка — у каждого варианта, во вкладке «Вариации»."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:280
+#, php-format
+msgid "Открыть на %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:609
+msgid "Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой. Остатки, цены, склад и проверка товара — у каждого варианта. Кнопка «Экспортировать» проверит все варианты сразу и покажет, что мешает."
+msgstr ""
+
+#. translators: %s: category name.
+#: marketplace/admin/product/class-panel-view.php:644
+#, php-format
+msgid "Ищет карточки маркетплейса с таким же артикулом для всех товаров категории «%s», а не только для этого товара."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:645
+msgid "У товара нет категории, поэтому поиск карточек маркетплейса с таким же артикулом идёт по всем товарам магазина, а не только по этому."
+msgstr ""

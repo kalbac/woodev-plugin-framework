@@ -545,8 +545,9 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   the class: the label column is 280 px (`--woodev-label-col`, 200 px elsewhere), ⓘ is #757575 and aligned with the first label line, a switch's
   explanation is a grey line under its label, «Очистить сохранённое» is a link, and «Сохранить» with nothing to save is the neutral secondary
   button (disabled, 7:1 text) with a grey «Нет изменений» beside it, turning primary on the first change. The diagnostics view carries it too.
-- **A switch's explanation is its `description`, not its `tooltip`** (`Field_Kit::add_toggle()`, the notification and advanced switches): a long one
-  (over 140 characters) is folded into a «Подробнее» spoiler by PHP.
+- **A switch's explanation is its `description`, not its `tooltip`** (`Field_Kit::add_toggle()`, the notification and advanced switches): one rule for every
+  switch: up to 100 characters stays a grey line, a longer one is folded into a «Подробнее» spoiler by PHP (`Field_Kit::explanation_html()`). Fields
+  outside a group card are indented past a card's border and padding, so a switch keeps one x on every tab.
 - **Two additive `Settings_Section` features** (shared registry, opt-in, schema unchanged for a section that does not ask): `with_copy_field( label, value )`
   → `copy_field`, drawn by `copy-field.tsx` as a read-only field with «Копировать» (the notification address of an account); and
   `with_advanced_actions( ids, label )` → `advanced: true` on those actions plus `advanced_actions_label`, drawn by `ToolsRow` as a collapsed
@@ -904,8 +905,11 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   `.description` (it clears the floated label and drops below it).
 - **Buttons.** One group of adjacent buttons in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
   (`.woodev-mp-btn__text`). A container query shows the words only when the control column is at least 720px; below that only the icons show,
-  with the name in `aria-label` and the explanation in the tooltip. «Архивировать» and «Снять связь» ask twice: the question appears in the result
-  line and the button turns red for five seconds. The help under the buttons is one closed «Подсказки» block. The check is a closed
+  with the name alone in `aria-label` and the tooltip (the explanations are in «Подсказки»). «Архивировать» and «Снять связь» ask twice: the question
+  appears in the result line and the button turns red for five seconds. The category-wide «Связать по артикулу» is not one of the icons (it works on
+  many products): it is a text button (`.woodev-mp-link-op`, the same `data-woodev-mp-op` handler) inside «Подсказки». The help under the buttons
+  is one closed «Подсказки» block: the save-first note, one line per offered button, the link. «Почему не синхронизируется» is shown only while
+  «Логирование» is on (a diagnostics hint is never shown to a merchant who has not turned it on); no line invites the merchant to turn it on. The check is a closed
   `details` under «Исправить перед выгрузкой (N)»; the marks (✓ ✗ !) are CSS masks, not characters.
 
 ## Card importer (framework 2.1.6)

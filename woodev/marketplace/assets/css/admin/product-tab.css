@@ -78,16 +78,37 @@
 	margin-right: 4px;
 }
 
+/*
+ * The selects keep a readable width whatever the panel is: a percentage alone left them ~70px wide once WooCommerce gave the panel ~480px
+ * (1024px screen), and the chosen value («По категории: сопоставление…») was cut. Under 1100px the mode and its value stack, each on its own line.
+ */
 .woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-kind {
 	width: 28%;
+	min-width: 180px;
+	max-width: 320px;
 }
 
 .woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-value {
 	width: 20%;
+	min-width: 110px;
 }
 
 .woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-wide {
-	width: 62%;
+	width: 100%;
+	max-width: 320px;
+}
+
+@media screen and (max-width: 1100px) {
+	.woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-kind,
+	.woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-value {
+		display: block;
+		width: 100%;
+		margin: 0 0 4px;
+	}
+
+	.woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-value {
+		max-width: 160px;
+	}
 }
 
 /* A link under a select (the mapping's «Открыть «Сопоставление»»). */
@@ -295,34 +316,56 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 	padding-top: 0;
 }
 
-/* The variants: one line per cell, the table scrolls sideways on a narrow screen instead of breaking an article from its note. */
+/*
+ * The variants: one line per cell, tight cells, and the table scrolls sideways when it still does not fit. The shadows at the edges (they follow
+ * the scroll position) show that there is more to scroll to, where a system scrollbar is hidden.
+ */
 .woodev-mp-tab .woodev-mp-variations-wrap {
 	margin: 12px;
 	overflow-x: auto;
+	background:
+		linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)) left center / 24px 100% no-repeat local,
+		linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)) right center / 24px 100% no-repeat local,
+		linear-gradient(to right, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0)) left center / 10px 100% no-repeat scroll,
+		linear-gradient(to left, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0)) right center / 10px 100% no-repeat scroll;
 }
 
 .woodev-mp-tab .woodev-mp-variations {
 	width: 100%;
 	margin: 0;
+	/* Transparent, so the wrapper's edge shadows above stay visible: WordPress paints `.widefat` white. */
+	background: transparent;
+}
+
+/* WordPress's `.striped` rows are opaque too; the stripes would hide the edge shadows on every other row. */
+.woodev-mp-tab .woodev-mp-variations > thead > tr,
+.woodev-mp-tab .woodev-mp-variations > tbody > tr,
+.woodev-mp-tab .woodev-mp-variations > tbody > tr:nth-child(odd) {
+	background: transparent;
 }
 
 .woodev-mp-tab .woodev-mp-variations td,
 .woodev-mp-tab .woodev-mp-variations th {
+	padding: 6px 8px;
 	white-space: nowrap;
 }
 
+/* «(будет отправлен)» goes under the article: the widest column gets narrower and the pair stays together. */
 .woodev-mp-tab .woodev-mp-variations .woodev-mp-note {
-	margin-left: 4px;
+	display: block;
+	margin: 0;
 }
 
 .woodev-mp-tab .woodev-mp-variations .woodev-mp-badge {
 	margin-left: 0;
 }
 
+/* The marketplace's block inside a variation: a rule above it and a heading like the tab's, so it does not read as WooCommerce's own fields. */
 .woodev-mp-variation {
-	margin: 0 0 12px;
-	padding: 0 12px;
-	border-top: 1px solid #dcdcde;
+	clear: both;
+	margin: 16px 0 12px;
+	padding: 12px 12px 0;
+	border-top: 1px solid #c3c4c7;
 }
 
 .woodev-mp-variation .form-field {
@@ -370,6 +413,14 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 	max-width: 100%;
 }
 
+/* Like WooCommerce's own variation fields: a native 30px select whose text stops short of the chevron. */
+.woodev-mp-variation .form-field select {
+	min-width: 220px;
+	min-height: 30px;
+	padding-right: 28px;
+	text-overflow: ellipsis;
+}
+
 .woodev-mp-variation .form-field .woodev-mp-check {
 	display: inline-block;
 	float: none;
@@ -382,7 +433,9 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 }
 
 .woodev-mp-block--variation h4 {
-	margin: 8px 0 4px;
+	margin: 0 0 4px;
+	font-size: 14px;
+	font-weight: 600;
 }
 
 @media screen and (max-width: 782px) {

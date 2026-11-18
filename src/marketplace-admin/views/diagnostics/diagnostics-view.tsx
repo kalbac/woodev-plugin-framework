@@ -145,13 +145,13 @@ export function Sections( { sections }: { sections: DiagnosticsSection[] } ) {
 										) : (
 											line.value
 										) }
+										{ /* The link is a line of its own: beside the address it wrapped into it. */ }
 										{ line.link && (
-											<>
-												{ ' ' }
+											<div className="woodev-facts__link">
 												<a href={ line.link.url }>
 													{ line.link.text }
 												</a>
-											</>
+											</div>
 										) }
 									</dd>
 								</Fragment>
