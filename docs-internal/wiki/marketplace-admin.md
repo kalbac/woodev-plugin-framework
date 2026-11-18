@@ -901,8 +901,8 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   with the name alone in `aria-label` and the tooltip (the explanations are in «Подсказки»). «Архивировать» and «Снять связь» ask twice: the question
   appears in the result line and the button turns red for five seconds. The category-wide «Связать по артикулу» is not one of the icons (it works on
   many products): it is a text button (`.woodev-mp-link-op`, the same `data-woodev-mp-op` handler) inside «Подсказки». The help under the buttons
-  is one closed «Подсказки» block: the save-first note, one line per offered button, the link. «Почему не синхронизируется» and its «Включите
-  «Логирование»» line are shown only while «Логирование» is on (a diagnostics hint is never shown to a merchant who has not turned it on). The check is a closed
+  is one closed «Подсказки» block: the save-first note, one line per offered button, the link. «Почему не синхронизируется» is shown only while
+  «Логирование» is on (a diagnostics hint is never shown to a merchant who has not turned it on); no line invites the merchant to turn it on. The check is a closed
   `details` under «Исправить перед выгрузкой (N)»; the marks (✓ ✗ !) are CSS masks, not characters.
 
 ## Card importer (framework 2.1.6)

@@ -333,6 +333,8 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 .woodev-mp-tab .woodev-mp-variations {
 	width: 100%;
 	margin: 0;
+	/* Transparent, so the wrapper's edge shadows above stay visible: WordPress paints `.widefat` white. */
+	background: transparent;
 }
 
 .woodev-mp-tab .woodev-mp-variations td,
