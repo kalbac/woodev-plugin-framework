@@ -41,8 +41,9 @@
 	}
 
 	// The card heading repeats the page title or the tab above it («Заказы» under «Заказы»): it stays in the DOM for the card's
-	// accessibility name and leaves the screen, so the header is the toolbar alone.
-	.woocommerce-table > .components-card__header > h2 {
+	// accessibility name and leaves the screen, so the header is the toolbar alone. WooCommerce's Card wraps the header in a Content
+	// element, so the header is a descendant of the table, not its child.
+	.woocommerce-table .components-card__header > h2 {
 		border: 0;
 		clip-path: inset( 50% );
 		height: 1px;

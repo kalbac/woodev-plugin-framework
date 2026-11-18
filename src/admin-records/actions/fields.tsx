@@ -135,7 +135,13 @@ function SearchableField( props: FieldProps ) {
 	}, [ current ] );
 
 	const options = chosen && ! source.options.some( ( option ) => option.value === chosen.value ) ? [ chosen, ...source.options ] : source.options;
+	// A disabled fieldset disables its form controls, not the list items inside it. While the action is busy the flow refuses
+	// edits, so a pick made then would change the box but not the payload: the list is not drawn and a pick is ignored.
 	const pick = ( option: Option ) => {
+		if ( disabled ) {
+			return;
+		}
+
 		setChosen( option );
 		setTyped( option.label );
 		setOpen( false );
@@ -164,7 +170,7 @@ function SearchableField( props: FieldProps ) {
 					}
 				} }
 			/>
-			{ open && options.length > 0 && (
+			{ open && ! disabled && options.length > 0 && (
 				<ul role="listbox" aria-label={ field.label } className="woodev-records__listbox">
 					{ options.map( ( option, index ) => (
 						<li

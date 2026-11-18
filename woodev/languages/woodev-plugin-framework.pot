@@ -11840,6 +11840,14 @@ msgstr ""
 msgid "Не принято"
 msgstr ""
 
+#: marketplace/admin/shared/class-posting-status-text.php:75
+msgid "Создано"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:96
+msgid "Отменено при разделении"
+msgstr ""
+
 #: marketplace/admin/shared/class-posting-status-text.php:85
 msgid "Другой статус"
 msgstr ""

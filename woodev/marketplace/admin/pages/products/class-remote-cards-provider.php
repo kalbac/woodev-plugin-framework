@@ -547,7 +547,10 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			),
 			'total'            => $found['total'],
 			'account_activity' => $this->account_activity( $account->id(), $this->import_state( $account->id() )['importing'] ),
-			'messages'         => [ 'summary' => trim( Remote_Cards_Summary::near_explained() . ' ' . Remote_Cards_Summary::last_run( $this->reports->last_run( $account->id() ) ) ) ],
+			'messages'         => [
+				'summary'       => trim( Remote_Cards_Summary::near_explained() . ' ' . Remote_Cards_Summary::last_run( $this->reports->last_run( $account->id() ) ) ),
+				'summary_label' => _n( 'карточка', 'карточек', $found['total'], 'woodev-plugin-framework' ),
+			],
 		];
 	}
 

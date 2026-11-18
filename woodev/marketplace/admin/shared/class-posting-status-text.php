@@ -23,22 +23,24 @@ final class Posting_Status_Text {
 	 * Badge tone of a status: finished well, finished badly, a dispute, a step the shop must act on, or a step the marketplace is on.
 	 */
 	private const TONES = [
-		'delivered'              => 'success',
-		'cancelled'              => 'danger',
-		'not_accepted'           => 'danger',
-		'arbitration'            => 'warning',
-		'client_arbitration'     => 'warning',
-		'awaiting_registration'  => 'warning',
-		'awaiting_approve'       => 'warning',
-		'awaiting_packaging'     => 'warning',
-		'awaiting_deliver'       => 'warning',
-		'new'                    => 'warning',
-		'awaiting_shipment'      => 'warning',
-		'acceptance_in_progress' => 'info',
-		'delivering'             => 'info',
-		'driver_pickup'          => 'info',
-		'sent_by_seller'         => 'info',
-		'shipped'                => 'info',
+		'delivered'                    => 'success',
+		'cancelled'                    => 'danger',
+		'not_accepted'                 => 'danger',
+		'cancelled_from_split_pending' => 'danger',
+		'arbitration'                  => 'warning',
+		'client_arbitration'           => 'warning',
+		'awaiting_registration'        => 'warning',
+		'awaiting_approve'             => 'warning',
+		'awaiting_packaging'           => 'warning',
+		'awaiting_deliver'             => 'warning',
+		'new'                          => 'warning',
+		'awaiting_verification'        => 'warning',
+		'awaiting_shipment'            => 'warning',
+		'acceptance_in_progress'       => 'info',
+		'delivering'                   => 'info',
+		'driver_pickup'                => 'info',
+		'sent_by_seller'               => 'info',
+		'shipped'                      => 'info',
 	];
 
 	/**
@@ -46,10 +48,17 @@ final class Posting_Status_Text {
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param string $status The marketplace's status, as stored.
-	 * @return string Translated word; a generic one for a code the map does not know.
+	 * @param string                    $status The marketplace's status, as stored.
+	 * @param Posting_Status_Names|null $names  The adapter's own names; asked first when given.
+	 * @return string Translated word; a generic one for a code neither the adapter nor the map knows.
 	 */
-	public static function label( string $status ): string {
+	public static function label( string $status, ?Posting_Status_Names $names = null ): string {
+		$own = null === $names ? '' : trim( $names->posting_status_name( $status ) );
+
+		if ( '' !== $own && $own !== $status ) {
+			return $own;
+		}
+
 		switch ( self::normalise( $status ) ) {
 			case 'awaiting_registration':
 				return __( 'Ожидает регистрации', 'woodev-plugin-framework' );
@@ -62,6 +71,8 @@ final class Posting_Status_Text {
 			case 'awaiting_deliver':
 			case 'awaiting_shipment':
 				return __( 'Ожидает отгрузки', 'woodev-plugin-framework' );
+			case 'awaiting_verification':
+				return __( 'Создано', 'woodev-plugin-framework' );
 			case 'new':
 				return __( 'Новое', 'woodev-plugin-framework' );
 			case 'arbitration':
@@ -81,6 +92,8 @@ final class Posting_Status_Text {
 				return __( 'Отменено', 'woodev-plugin-framework' );
 			case 'not_accepted':
 				return __( 'Не принято', 'woodev-plugin-framework' );
+			case 'cancelled_from_split_pending':
+				return __( 'Отменено при разделении', 'woodev-plugin-framework' );
 			default:
 				return __( 'Другой статус', 'woodev-plugin-framework' );
 		}

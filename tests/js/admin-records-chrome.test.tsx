@@ -349,6 +349,18 @@ describe( 'the polish of s237', () => {
 		expect( document.querySelector( '.woodev-table-views' ) ).toBeNull();
 	} );
 
+	test( 'the view the definition opens on is no choice: an empty list still shows no row (the remote cards open on «Нет на сайте»)', async () => {
+		const base = definition();
+		serve( () => fixtureList( [], { total: 0, facets: { state: ZEROES } } ), {
+			...base,
+			filters: base.filters.map( ( filter ) => ( filter.id === 'state' ? { ...filter, default: 'draft' } : filter ) ),
+		} );
+		render( <Page /> );
+		await screen.findByText( 'Товаров пока нет' );
+
+		expect( document.querySelector( '.woodev-table-views' ) ).toBeNull();
+	} );
+
 	test( 'a view the merchant chose stays on screen even when it is empty', async () => {
 		serve( () => fixtureList( [], { total: 0, facets: { state: ZEROES } } ) );
 		render( <Page query={ { filter_state: 'draft' } } /> );

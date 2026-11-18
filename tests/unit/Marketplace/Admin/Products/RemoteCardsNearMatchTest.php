@@ -122,6 +122,13 @@ final class RemoteCardsNearMatchTest extends Remote_Cards_Test_Case {
 		$this->assertStringContainsString( 'отличаются только регистром', $body['messages']['summary'] );
 	}
 
+	public function test_the_report_view_keeps_the_counted_footer_label(): void {
+		$this->assertSame( 'карточек', $this->list_body( [ 'show' => 'near' ] )['messages']['summary_label'], 'Two pairs: the plural form.' );
+
+		$one = $this->cards_provider()->query( $this->context(), [ 'page' => 1, 'per_page' => 20, 'search' => 'карточка xyz', 'filters' => [ 'show' => 'near' ] ] );
+		$this->assertSame( 'карточка', $one['messages']['summary_label'], 'One pair: the singular form.' );
+	}
+
 	public function test_the_report_view_can_be_searched_by_the_cards_name_or_either_article(): void {
 		$result = $this->cards_provider()->query( $this->context(), [ 'page' => 1, 'per_page' => 20, 'search' => 'карточка xyz', 'filters' => [ 'show' => 'near' ] ] );
 		$this->assertSame( 1, $result['total'] );

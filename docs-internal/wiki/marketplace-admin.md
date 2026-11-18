@@ -827,7 +827,9 @@ C2 tabs and the mapping/profile forms. Delivery code was not touched (invariant 
 What the UI audit of 18.11.2026 changed in the records shell and the two pages (behaviour, not a redesign):
 
 - **Posting status is one Russian badge.** `Admin\Shared\Posting_Status_Text` maps the marketplace's status code («awaiting_packaging»,
-  «delivered») to a word and a tone; an unknown code is «Другой статус», never the code. The «Заказы» status cell is that one badge (the
+  «delivered») to a word and a tone; an unknown code is «Другой статус», never the code. An adapter that already names its statuses
+  implements the optional `Admin\Shared\Posting_Status_Names` (`posting_status_name()`, empty string for a code it does not name):
+  its word wins, the framework map is the fallback, the tone stays the framework's. The «Заказы» status cell is that one badge (the
   WooCommerce status stays in the order); an order with no marketplace status shows the WooCommerce badge.
 - **Row actions are one nowrap group.** `RowActions` draws the buttons in `.woodev-records__buttons`; a descriptor may carry
   `short_label` («Открыть» for «Открыть заказ»), which is shown while the full label stays the accessible name and tooltip. The

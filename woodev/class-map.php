@@ -151,6 +151,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Admin\\Product\\Product_Tab' => 'woodev/marketplace/admin/product/class-product-tab.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Product\\Product_Tab_Facts' => 'woodev/marketplace/admin/product/interface-product-tab-facts.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Product\\Screen_Names' => 'woodev/marketplace/admin/product/class-screen-names.php',
+	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Posting_Status_Names' => 'woodev/marketplace/admin/shared/interface-posting-status-names.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Posting_Status_Text' => 'woodev/marketplace/admin/shared/class-posting-status-text.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Sync_Reason_Text' => 'woodev/marketplace/admin/shared/class-sync-reason-text.php',
 	'Woodev\\Framework\\Marketplace\\Capabilities\\Capability' => 'woodev/marketplace/capabilities/class-capability.php',

@@ -248,9 +248,6 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 				$can,
 				static function ( \WC_Order $order ) use ( $cancel ): bool {
 					return null !== $cancel && $cancel->is_finished( $order );
-				},
-				function ( int $document_id ): string {
-					return $this->label_url( $document_id );
 				}
 			),
 			new Site_Orders_Activity( $this->clock() ),

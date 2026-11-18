@@ -366,8 +366,11 @@ export function ViewsRow( { definition, query, facets, messages, total, onChange
 	const current = typeof value === 'string' ? value : ANY;
 
 	// An empty list has nothing to switch between: a row of «Нет на сайте (0)» only invites a click that shows the same nothing.
-	// A view the merchant has already chosen stays, so there is always a way back to «Все».
-	if ( current === ANY && counts.every( ( entry ) => entry.count === 0 ) ) {
+	// A view the merchant has chosen stays, so there is always a way back to «Все»; the view the definition opens on is not a
+	// choice (the remote cards open on «Нет на сайте»), so it goes with the rest.
+	const implicit = current === ANY || current === filter.default;
+
+	if ( implicit && counts.every( ( entry ) => entry.count === 0 ) ) {
 		return null;
 	}
 

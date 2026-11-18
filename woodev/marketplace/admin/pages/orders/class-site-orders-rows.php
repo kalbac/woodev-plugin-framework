@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
 
 defined( 'ABSPATH' ) || exit;
@@ -55,18 +56,27 @@ final class Site_Orders_Rows {
 	private $is_finished;
 
 	/**
+	 * The adapter's own names of posting statuses; null when it has none.
+	 *
+	 * @var Posting_Status_Names|null
+	 */
+	private $status_names;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param string[] $offered     Row action ids the table declares.
-	 * @param callable $can_edit    `function ( int $order_id ): bool`, the object right to edit an order.
-	 * @param callable $is_finished `function ( \WC_Order $order ): bool`, whether the posting can no longer be cancelled.
+	 * @param string[]                  $offered     Row action ids the table declares.
+	 * @param callable                  $can_edit    `function ( int $order_id ): bool`, the object right to edit an order.
+	 * @param callable                  $is_finished `function ( \WC_Order $order ): bool`, whether the posting can no longer be cancelled.
+	 * @param Posting_Status_Names|null $status_names The adapter's own names of posting statuses, when it has them.
 	 */
-	public function __construct( array $offered, callable $can_edit, callable $is_finished ) {
-		$this->offered     = $offered;
-		$this->can_edit    = $can_edit;
-		$this->is_finished = $is_finished;
+	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null ) {
+		$this->offered      = $offered;
+		$this->can_edit     = $can_edit;
+		$this->is_finished  = $is_finished;
+		$this->status_names = $status_names;
 	}
 
 	/**
@@ -153,7 +163,7 @@ final class Site_Orders_Rows {
 				[
 					'type'  => 'badge',
 					'value' => [
-						'label' => Posting_Status_Text::label( $status_raw ),
+						'label' => Posting_Status_Text::label( $status_raw, $this->status_names ),
 						'tone'  => Posting_Status_Text::tone( $status_raw ),
 					],
 				],
