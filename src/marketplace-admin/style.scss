@@ -1,0 +1,5 @@
+// Rules shared by every marketplace admin view; a view's own rules stay in its folder (e.g. `views/mappings/style.scss`).
+//
+// @package woodev-plugin-framework
+
+@use '../components/select-look';

@@ -1469,7 +1469,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 * @return array<int,array{value:string,label:string}>
 	 */
 	private function warehouse_options( int $account_id, string $setting = 'warehouse_id' ): array {
-		$pairs   = [ Field_Kit::option( '0', __( '— Выберите склад —', 'woodev-plugin-framework' ) ) ];
+		$pairs   = [ Field_Kit::option( '0', __( 'Не выбрано', 'woodev-plugin-framework' ) ) ];
 		$cached  = $this->warehouses->for_account( $account_id, 'oversize_warehouse_id' === $setting );
 		$account = $this->accounts()[ $account_id ] ?? null;
 		$stored  = null !== $account ? (int) $account->setting( $setting, 0 ) : 0;

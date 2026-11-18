@@ -2,6 +2,9 @@
  * The two lists of the «Сопоставление» page: mappings and profiles, each a WooCommerce table card with the «Добавить…»
  * button in its header. Every row is on one page; the name opens the form.
  *
+ * The tab above a list already names it, so the list draws no heading of its own. `TableCard` still needs a `title`: it
+ * becomes the table's caption (the accessible name), and the stylesheet hides the visible heading.
+ *
  * @package woodev-plugin-framework
  */
 
@@ -56,10 +59,7 @@ function List( { title, addLabel, emptyText, headers, items, onAdd }: ListProps 
 	if ( items.length === 0 ) {
 		return (
 			<Card className="woodev-mappings-list woodev-mappings-list--empty">
-				<CardHeader>
-					<h2 className="woodev-mappings-list__title">{ title }</h2>
-					{ add }
-				</CardHeader>
+				<CardHeader>{ add }</CardHeader>
 				<CardBody>
 					<p className="woodev-mappings-list__empty">{ emptyText }</p>
 				</CardBody>
@@ -123,7 +123,7 @@ export function MappingsList( { state, onOpen }: TabProps ) {
 			id: mapping.id,
 			name: mapping.name,
 			values: { name: mapping.name, category, profile, products: mapping.products },
-			cells: [ <NameButton key="name" name={ mapping.name } onClick={ () => onOpen( mapping.id ) } />, category, profile, mapping.products ],
+			cells: [ <NameButton key="name" name={ mapping.name } onClick={ () => onOpen( mapping.id ) } />, category, profile, String( mapping.products ) ],
 		};
 	} );
 
@@ -151,7 +151,7 @@ export function ProfilesList( { state, onOpen }: TabProps ) {
 		id: profile.id,
 		name: profile.name,
 		values: { name: profile.name, mappings: profile.mappings },
-		cells: [ <NameButton key="name" name={ profile.name } onClick={ () => onOpen( profile.id ) } />, profile.mappings ],
+		cells: [ <NameButton key="name" name={ profile.name } onClick={ () => onOpen( profile.id ) } />, String( profile.mappings ) ],
 	} ) );
 
 	return (

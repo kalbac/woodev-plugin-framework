@@ -102,25 +102,156 @@ final class PanelViewTest extends TestCase {
 		$this->assertFalse( Card_State_Badge::is_unsent( Link_Record::STATE_CREATED ) );
 	}
 
+	public function test_the_mapping_option_is_short_and_its_link_goes_under_the_select(): void {
+		$block                       = $this->block();
+		$block['mapping']['resolved'] = 'Платья';
+		$html                        = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( '>По категории: Платья</option>', $html );
+		$this->assertMatchesRegularExpression( '#</select><span class="woodev-mp-row-link"><a href="https://example.test/mappings">Открыть «Сопоставление»</a></span>#u', $html );
+	}
+
+	public function test_the_four_actions_are_one_group_of_buttons_with_a_name_a_tooltip_and_an_icon_each(): void {
+		$ops  = [
+			'export'  => 't1',
+			'link'    => 't2',
+			'archive' => 't3',
+			'detach'  => 't4',
+		];
+		$html = $this->render_tab( [ $this->block() ], $ops );
+
+		$this->assertSame( 1, substr_count( $html, 'class="woodev-mp-buttons__row" role="group"' ) );
+		preg_match( '#<span class="woodev-mp-buttons__row".*?</span><span class="woodev-mp-result#us', $html, $row );
+		$this->assertSame( 4, substr_count( $row[0], '<button' ) );
+		$this->assertSame( 4, substr_count( $row[0], '<svg class="woodev-mp-btn__icon"' ) );
+		$this->assertStringContainsString( 'aria-label="Архивировать на Fake"', $row[0] );
+		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Связать все товары по артикулу</span>', $row[0] );
+		$this->assertMatchesRegularExpression( '#title="Снять связь\. Сайт забудет связь#u', $row[0] );
+		$this->assertStringNotContainsString( 'Архивировать:', $html );
+		$this->assertStringNotContainsString( '<label></label>', $html );
+	}
+
+	public function test_the_help_under_the_buttons_is_one_collapsed_block(): void {
+		$html = $this->render_tab( [ $this->block() ], [ 'link' => 't2' ], false, [ 'link_scope' => 'Платья' ] );
+
+		$this->assertMatchesRegularExpression( '#<fieldset class="form-field woodev-mp-hints"><details><summary>Подсказки</summary>#u', $html );
+		$this->assertStringNotContainsString( '<details open', $html );
+		$this->assertStringContainsString( 'сначала сохраните товар («Обновить» справа), затем нажмите «Обновить карточку».', $html );
+		$this->assertStringContainsString( 'Кнопка «Связать категорию по артикулу» ищет карточки маркетплейса для всех товаров категории «Платья»', $html );
+		$this->assertSame( 1, substr_count( $html, '<details>' ), 'The help is one block, not one per paragraph.' );
+	}
+
+	public function test_the_logging_hint_is_in_the_spoiler_when_reasons_are_hidden(): void {
+		$block            = $this->block();
+		$block['link_id'] = 7;
+		$html             = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( 'Включите «Логирование» в настройках, чтобы увидеть, почему остатки и цены этого товара не отправляются.', $html );
+		$this->assertStringNotContainsString( 'Почему не синхронизируется', $html );
+	}
+
+	public function test_the_check_is_collapsed_under_a_counted_heading_with_a_short_fix_link(): void {
+		$block                           = $this->block();
+		$block['validation']['errors']   = [
+			[
+				'level'   => 'error',
+				'message' => 'Не указан вес',
+				'fix'     => 'mapping',
+			],
+			[
+				'level'   => 'error',
+				'message' => 'Нет главного фото',
+				'fix'     => 'product',
+			],
+		];
+		$html                            = $this->render_tab( [ $block ], [] );
+
+		$this->assertMatchesRegularExpression( '#<fieldset class="form-field"><legend>Проверка<span class="woocommerce-help-tip"[^>]*></span></legend><details class="woodev-mp-issues">#u', $html );
+		$this->assertStringNotContainsString( '<details class="woodev-mp-issues" open', $html );
+		$this->assertStringContainsString( '>Исправить перед выгрузкой (2)</summary>', $html );
+		$this->assertStringContainsString( 'Не указан вес <a href="https://example.test/mappings">Исправить</a>', $html );
+		$this->assertStringContainsString( 'Нет главного фото</span>', $html );
+	}
+
+	public function test_a_variable_product_has_an_intro_across_the_tab_and_variants_whose_notes_stay_on_their_line(): void {
+		$block         = $this->block();
+		$block['kind'] = 'parent';
+		$block['counts']      = [ 'Не связан' => 1 ];
+		$block['any_created'] = false;
+		$block['any_linked']  = false;
+		$block['rows']        = [
+			[
+				'id'       => 5,
+				'name'     => 'S',
+				'badge'    => Card_State_Badge::of( Link_Record::STATE_UNLINKED ),
+				'offer_id' => 'ART-S',
+				'planned'  => true,
+				'stock'    => '',
+				'price'    => '',
+				'currency' => 'RUB',
+			],
+		];
+		$html = $this->render_tab( [ $block ], [ 'export' => 't1' ] );
+
+		$this->assertStringContainsString( '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">Это вариативный товар:', $html );
+		$this->assertStringContainsString( '<div class="woodev-mp-variations-wrap"><table class="widefat striped woodev-mp-variations">', $html );
+		$this->assertStringContainsString( 'ART-S <span class="woodev-mp-note">(будет отправлен)</span>', $html );
+		$this->assertStringContainsString( '</table></div>', $html );
+		$this->assertStringContainsString( '<summary>Подсказки</summary>', $html );
+	}
+
+	public function test_a_tooltip_sits_inside_its_label(): void {
+		$block                     = $this->block();
+		$block['ids']['summary']   = 'ID 1';
+		$html                      = $this->render_tab( [ $block ], [] );
+
+		$this->assertMatchesRegularExpression( '#<label for="[^"]*remote_ids">Номера: Fake<span class="woocommerce-help-tip"[^>]*></span></label>#u', $html );
+	}
+
+	public function test_the_price_boxes_show_the_computed_price_with_the_shops_currency_formatting(): void {
+		Functions\when( 'wc_price' )->alias(
+			static function ( $amount, $args = [] ): string {
+				return '<span class="amount"><bdi>' . number_format( (float) $amount, 2, ',', '' ) . '&nbsp;<span class="symbol">&#8381;</span></bdi></span>';
+			}
+		);
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+
+		$block                      = $this->block();
+		$block['price']['computed'] = [
+			'price'     => '99.00',
+			'old_price' => '120.5',
+			'min_price' => '',
+		];
+		$html                       = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( 'placeholder="99,00 ₽"', $html );
+		$this->assertStringContainsString( 'placeholder="120,50 ₽"', $html );
+		$this->assertStringContainsString( 'placeholder="Не задана"', $html );
+	}
+
 	/**
 	 * Renders the tab.
 	 *
 	 * @param array<int,array<string,mixed>> $blocks   Blocks.
 	 * @param array<string,string>           $ops      Nonces of the buttons.
 	 * @param bool                           $oversize Whether the marketplace has an oversize flag.
+	 * @param array<string,mixed>            $extra    Keys of the screen to add or replace.
 	 * @return string
 	 */
-	private function render_tab( array $blocks, array $ops, bool $oversize = false ): string {
+	private function render_tab( array $blocks, array $ops, bool $oversize = false, array $extra = [] ): string {
 		ob_start();
 		( new Panel_View( new Screen_Names( 'fake', 'Fake' ), $oversize ) )->render_tab(
-			[
-				'blocks'       => $blocks,
-				'nonce'        => 'save-nonce',
-				'ops'          => $ops,
-				'link_scope'   => '',
-				'settings_url' => 'https://example.test/settings',
-				'mappings_url' => 'https://example.test/mappings',
-			]
+			array_merge(
+				[
+					'blocks'       => $blocks,
+					'nonce'        => 'save-nonce',
+					'ops'          => $ops,
+					'link_scope'   => '',
+					'settings_url' => 'https://example.test/settings',
+					'mappings_url' => 'https://example.test/mappings',
+				],
+				$extra
+			)
 		);
 
 		return (string) ob_get_clean();

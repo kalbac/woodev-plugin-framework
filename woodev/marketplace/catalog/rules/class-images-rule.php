@@ -65,7 +65,7 @@ final class Images_Rule implements Validation_Rule {
 			return $report->with_issue(
 				Validation_Report::ERROR,
 				self::CODE_MISSING,
-				'У товара нет изображения — добавьте главное фото в карточке товара: ' . $context->marketplace( 'маркетплейс' ) . ' скачивает картинки по ссылке.',
+				'Нет главного фото — ' . $context->marketplace( 'маркетплейс' ) . ' скачивает картинки по ссылке.',
 				null,
 				Validation_Report::FIX_PRODUCT,
 				'нет фото'

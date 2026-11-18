@@ -43,7 +43,7 @@ final class Category_Mapped_Rule implements Validation_Rule {
 		return $report->with_issue(
 			Validation_Report::ERROR,
 			self::CODE,
-			'Категория товара не сопоставлена с категорией ' . $context->marketplace( 'маркетплейса' ) . ' — откройте «Сопоставление».',
+			'Категория товара не сопоставлена с категорией ' . $context->marketplace( 'маркетплейса' ) . '.',
 			null,
 			Validation_Report::FIX_MAPPING,
 			'не сопоставлена категория'

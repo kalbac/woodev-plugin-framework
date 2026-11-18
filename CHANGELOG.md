@@ -1,6 +1,32 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.12] — 2026-11-18
+### Bug Fixes
+- **marketplace**: Count put-offs in a row, not over a whole walk (#1835)
+
+- **marketplace**: Stock reconcile reports progress and resumes from the reconciled page (#1835)
+
+- **marketplace**: Find links only through live rows, store whole events up to 256 KB
+
+
+### Documentation
+- Save session s235 — framework 2.1.11, Ozon order block and weekly notification check
+
+- Save session s236 — Ozon Delivery API answers recorded
+
+
+### Features
+- **marketplace**: A ceiling on throttle and wait put-offs in Account_Job (#1835)
+
+
+### Tests
+- Free finished tests' properties and raise the unit memory limit to 1G
+
+- Leave readonly properties alone in the properties releaser
+
+
+
 ## [2.1.11] — 2026-11-17
 ### Bug Fixes
 - **help**: Problems link on framework errors and notes, CLI unknown plugin, GET fallback on 501 (#1789)

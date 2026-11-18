@@ -1,8 +1,8 @@
 /**
- * The marketplace tab of the product edit screen: the three buttons of a block.
+ * The marketplace tab of the product edit screen: the buttons of a block.
  *
- * Each button posts to `admin-ajax.php` with its own nonce and shows the answer in the line beside it. «Снять связь» asks twice:
- * the first click changes the button, a second click within five seconds does it.
+ * Each button posts to `admin-ajax.php` with its own nonce and shows the answer in the line beside it. «Архивировать» and «Снять связь» ask twice:
+ * the first click shows the question and arms the button, a second click within five seconds does it.
  */
 ( function ( $ ) {
 	'use strict';
@@ -28,24 +28,45 @@
 	}
 
 	/**
-	 * Asks for a second click on «Снять связь».
+	 * Drops the pending confirmation of a button and cancels its timer, so the timer cannot act on a later prompt.
 	 *
 	 * @param {jQuery} $button The button.
+	 */
+	function disarm( $button ) {
+		window.clearTimeout( $button.data( 'armTimer' ) );
+		$button.data( { armed: false, armTimer: null } ).removeClass( 'is-armed' );
+	}
+
+	/**
+	 * Asks for a second click on «Архивировать» and «Снять связь».
+	 *
+	 * The question goes to the result line beside the buttons (a button may be showing only its icon, so a question written on it
+	 * would not be seen) and the button turns red until the time is up.
+	 *
+	 * @param {jQuery} $button The button.
+	 * @param {jQuery} $result The result line of the block.
 	 * @return {boolean} True when the second click came in time.
 	 */
-	function confirmed( $button ) {
+	function confirmed( $button, $result ) {
 		var question = $button.data( 'confirm' );
 
 		if ( ! question || $button.data( 'armed' ) ) {
 			return true;
 		}
 
-		$button.data( 'armed', true ).data( 'label', $button.text() ).text( question );
-		window.setTimeout(
-			function () {
-				$button.data( 'armed', false ).text( $button.data( 'label' ) );
-			},
-			CONFIRM_MS
+		$button.data( 'armed', true ).addClass( 'is-armed' );
+		$result.removeClass( 'woodev-mp-result--error' ).text( question );
+		$button.data(
+			'armTimer',
+			window.setTimeout(
+				function () {
+					disarm( $button );
+					if ( $result.text() === question ) {
+						$result.text( '' );
+					}
+				},
+				CONFIRM_MS
+			)
 		);
 
 		return false;
@@ -61,11 +82,19 @@
 
 			event.preventDefault();
 
-			if ( ! confirmed( $button ) ) {
+			// The result line is shared by the block's buttons: whatever is armed elsewhere in the block loses its prompt now.
+			$block.find( '[data-woodev-mp-op]' ).not( $button ).each(
+				function () {
+					disarm( $( this ) );
+				}
+			);
+
+			if ( ! confirmed( $button, $result ) ) {
 				return;
 			}
 
-			$button.prop( 'disabled', true ).data( 'armed', false );
+			disarm( $button );
+			$button.prop( 'disabled', true );
 			$result.removeClass( 'woodev-mp-result--error' ).text( settings.texts.working );
 
 			$.post(
@@ -93,7 +122,7 @@
 			)
 			.always(
 				function () {
-					$button.prop( 'disabled', false ).text( $button.data( 'label' ) || $button.text() );
+					$button.prop( 'disabled', false );
 				}
 			);
 		}

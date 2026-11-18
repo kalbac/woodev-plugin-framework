@@ -54,7 +54,7 @@ final class Selling_Price_Rule implements Validation_Rule {
 			return $report->with_issue(
 				Validation_Report::ERROR,
 				self::CODE_PRICE,
-				'У товара не указана цена (или она равна нулю) — заполните «Базовую цену» на вкладке «Основные» в карточке товара.',
+				'Не указана цена (или она равна нулю) — заполните «Базовую цену» на вкладке «Основные».',
 				null,
 				Validation_Report::FIX_PRODUCT,
 				'нет цены'
