@@ -111,7 +111,7 @@ final class PanelViewTest extends TestCase {
 		$this->assertMatchesRegularExpression( '#</select><span class="woodev-mp-row-link"><a href="https://example.test/mappings">Открыть «Сопоставление»</a></span>#u', $html );
 	}
 
-	public function test_the_four_actions_are_one_group_of_buttons_with_a_name_a_tooltip_and_an_icon_each(): void {
+	public function test_the_actions_on_this_product_are_one_group_of_icon_buttons_with_a_short_name(): void {
 		$ops  = [
 			'export'  => 't1',
 			'link'    => 't2',
@@ -122,31 +122,50 @@ final class PanelViewTest extends TestCase {
 
 		$this->assertSame( 1, substr_count( $html, 'class="woodev-mp-buttons__row" role="group"' ) );
 		preg_match( '#<span class="woodev-mp-buttons__row".*?</span><span class="woodev-mp-result#us', $html, $row );
-		$this->assertSame( 4, substr_count( $row[0], '<button' ) );
-		$this->assertSame( 4, substr_count( $row[0], '<svg class="woodev-mp-btn__icon"' ) );
+		$this->assertSame( 3, substr_count( $row[0], '<button' ), 'export, archive, detach: the category-wide link is not an icon of this product' );
+		$this->assertSame( 3, substr_count( $row[0], '<svg class="woodev-mp-btn__icon"' ) );
 		$this->assertStringContainsString( 'aria-label="Архивировать на Fake"', $row[0] );
-		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Связать все товары по артикулу</span>', $row[0] );
-		$this->assertMatchesRegularExpression( '#title="Снять связь\. Сайт забудет связь#u', $row[0] );
+		$this->assertStringContainsString( 'title="Архивировать на Fake"', $row[0] );
+		$this->assertStringContainsString( 'title="Снять связь" aria-label="Снять связь"', $row[0], 'the tooltip is the verb only, not the explanation' );
+		$this->assertStringNotContainsString( 'Связать', $row[0] );
+		$this->assertStringNotContainsString( 'Сайт забудет связь', $row[0] );
 		$this->assertStringNotContainsString( 'Архивировать:', $html );
 		$this->assertStringNotContainsString( '<label></label>', $html );
 	}
 
-	public function test_the_help_under_the_buttons_is_one_collapsed_block(): void {
-		$html = $this->render_tab( [ $this->block() ], [ 'link' => 't2' ], false, [ 'link_scope' => 'Платья' ] );
+	public function test_the_help_under_the_buttons_is_one_collapsed_block_with_the_category_link_in_it(): void {
+		$html = $this->render_tab( [ $this->block() ], [ 'export' => 't1', 'link' => 't2', 'detach' => 't4' ], false, [ 'link_scope' => 'Платья' ] );
 
 		$this->assertMatchesRegularExpression( '#<fieldset class="form-field woodev-mp-hints"><details><summary>Подсказки</summary>#u', $html );
 		$this->assertStringNotContainsString( '<details open', $html );
 		$this->assertStringContainsString( 'сначала сохраните товар («Обновить» справа), затем нажмите «Обновить карточку».', $html );
-		$this->assertStringContainsString( 'Кнопка «Связать категорию по артикулу» ищет карточки маркетплейса для всех товаров категории «Платья»', $html );
+		$this->assertStringContainsString( '«Снять связь»: Сайт забудет связь с карточкой маркетплейса.', $html );
+		$this->assertStringNotContainsString( '«Архивировать на Fake»:', $html, 'a button the user has no nonce for is not explained' );
+		$this->assertStringContainsString( 'для всех товаров категории «Платья», а не только для этого товара.', $html );
+		$this->assertMatchesRegularExpression( '#<button type="button" class="button-link woodev-mp-link-op" data-woodev-mp-op="link"[^>]*>Связать категорию по артикулу</button>#u', $html );
 		$this->assertSame( 1, substr_count( $html, '<details>' ), 'The help is one block, not one per paragraph.' );
 	}
 
-	public function test_the_logging_hint_is_in_the_spoiler_when_reasons_are_hidden(): void {
+	public function test_the_category_link_is_not_offered_without_its_nonce(): void {
+		$html = $this->render_tab( [ $this->block() ], [ 'export' => 't1' ], false, [ 'link_scope' => 'Платья' ] );
+
+		$this->assertStringNotContainsString( 'woodev-mp-link-op', $html );
+		$this->assertStringNotContainsString( 'Платья', $html );
+	}
+
+	public function test_a_product_without_a_category_links_the_whole_shop(): void {
+		$html = $this->render_tab( [ $this->block() ], [ 'link' => 't2' ] );
+
+		$this->assertStringContainsString( '>Связать все товары по артикулу</button>', $html );
+		$this->assertStringContainsString( 'идёт по всем товарам магазина', $html );
+	}
+
+	public function test_the_logging_hint_is_never_shown_to_a_merchant_who_has_not_turned_logging_on(): void {
 		$block            = $this->block();
 		$block['link_id'] = 7;
 		$html             = $this->render_tab( [ $block ], [] );
 
-		$this->assertStringContainsString( 'Включите «Логирование» в настройках, чтобы увидеть, почему остатки и цены этого товара не отправляются.', $html );
+		$this->assertStringNotContainsString( 'Включите «Логирование»', $html );
 		$this->assertStringNotContainsString( 'Почему не синхронизируется', $html );
 	}
 
@@ -193,11 +212,29 @@ final class PanelViewTest extends TestCase {
 		];
 		$html = $this->render_tab( [ $block ], [ 'export' => 't1' ] );
 
-		$this->assertStringContainsString( '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">Это вариативный товар:', $html );
+		$this->assertStringContainsString( '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">Остатки, цены и проверка — у каждого варианта, во вкладке «Вариации».</span></p>', $html );
+		$this->assertStringContainsString( 'Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой.', $html );
+		$this->assertMatchesRegularExpression( '#<summary>Подсказки</summary><span class="woodev-mp-note">Это вариативный товар#u', $html, 'the rest of the explanation is in «Подсказки»' );
 		$this->assertStringContainsString( '<div class="woodev-mp-variations-wrap"><table class="widefat striped woodev-mp-variations">', $html );
 		$this->assertStringContainsString( 'ART-S <span class="woodev-mp-note">(будет отправлен)</span>', $html );
 		$this->assertStringContainsString( '</table></div>', $html );
 		$this->assertStringContainsString( '<summary>Подсказки</summary>', $html );
+	}
+
+	public function test_the_numbers_end_on_the_last_number_and_the_link_names_the_marketplace(): void {
+		$block                     = $this->block();
+		$block['ids']['summary']   = 'ID 1 · SKU 2 · ';
+		$block['ids']['card_url']  = 'https://example.test/card/1';
+		$html                      = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( '<span>ID 1 · SKU 2 · <a href="https://example.test/card/1"', $html );
+		$this->assertStringContainsString( '>Открыть на Fake</a>', $html );
+		$this->assertStringNotContainsString( '· </span>', $html );
+
+		$block['ids']['card_url'] = '';
+		$html                     = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( '<span>ID 1 · SKU 2</span>', $html, 'no separator dangles after the last number' );
 	}
 
 	public function test_a_tooltip_sits_inside_its_label(): void {

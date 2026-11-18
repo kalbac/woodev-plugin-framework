@@ -157,7 +157,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 				[
 					'label'       => $type->label(),
 					// Shown as a grey line under the switch's name, so the merchant need not hover an icon to learn what it does.
-					'description' => esc_html( $type->purpose() ),
+					'description' => Field_Kit::explanation_html( $type->purpose() ),
 				]
 			);
 		}

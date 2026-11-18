@@ -118,3 +118,22 @@ describe( 'product tab confirmations', () => {
 		expect( detach.classList.contains( 'is-armed' ) ).toBe( false );
 	} );
 } );
+
+describe( 'a text link in the hints', () => {
+	test( 'the category-wide «Связать по артикулу» link posts its own op and answers on the block\'s result line', () => {
+		document.body.innerHTML = `
+			<div class="woodev-mp-block">
+				<p class="woodev-mp-buttons"><span class="woodev-mp-result" role="status"></span></p>
+				<details><summary>Hints</summary>
+					<button type="button" class="button-link woodev-mp-link-op" data-woodev-mp-op="link" data-action="woodev_mp"
+						data-nonce="n" data-product="7" data-account="2">Link by SKU</button>
+				</details>
+			</div>`;
+
+		document.querySelector( '.woodev-mp-link-op' ).click();
+
+		expect( global.jQuery.post.mock.calls[ 0 ][ 1 ] ).toMatchObject( { op: 'link', product_id: 7, account_id: 2 } );
+		request.resolve( { data: { message: 'Linked 3' } } );
+		expect( document.querySelector( '.woodev-mp-result' ).textContent ).toBe( 'Linked 3' );
+	} );
+} );

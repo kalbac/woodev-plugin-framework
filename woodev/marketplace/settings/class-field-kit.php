@@ -20,9 +20,10 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Field_Kit {
 	/**
-	 * Longest switch explanation, in characters, that is shown as a line; a longer one is folded into a spoiler.
+	 * Longest switch explanation, in characters, that is shown as a line; a longer one is folded into a spoiler. One rule for every
+	 * switch of the settings: the grey line under a switch is one line (about 110 characters fit across the row), never two.
 	 */
-	private const LONG_EXPLANATION = 140;
+	private const LONG_EXPLANATION = 100;
 
 	/**
 	 * Builds one `{value, label}` pair for `Woodev_Setting::set_options()`.
@@ -180,10 +181,12 @@ final class Field_Kit {
 	/**
 	 * A switch's explanation as HTML: one line as it is, a long one folded into a «Подробнее» spoiler so it never grows into a paragraph.
 	 *
+	 * @since 2.1.13
+	 *
 	 * @param string $text Plain text.
 	 * @return string
 	 */
-	private static function explanation_html( string $text ): string {
+	public static function explanation_html( string $text ): string {
 		if ( mb_strlen( $text ) <= self::LONG_EXPLANATION ) {
 			return esc_html( $text );
 		}
