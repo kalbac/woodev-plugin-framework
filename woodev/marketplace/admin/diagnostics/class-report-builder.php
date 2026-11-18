@@ -120,6 +120,13 @@ final class Report_Builder {
 	private $clock;
 
 	/**
+	 * Address of the settings tab that holds the full notification address (`function (): string`).
+	 *
+	 * @var callable|null
+	 */
+	private $notifications_url;
+
+	/**
 	 * Creates the report builder.
 	 *
 	 * @since 2.1.2
@@ -135,6 +142,7 @@ final class Report_Builder {
 	 * @param Notification_Account_Reader|null $notification_accounts Notification account reader (when push is supported).
 	 * @param Last_Notification_Reader|null    $last_notifications    Latest notification reader (when push is supported).
 	 * @param callable|null                    $clock                 `function (): int`, defaults to `time`.
+	 * @param callable|null                    $notifications_url     `function (): string`, the settings tab where the full notification address can be copied; none = no link.
 	 */
 	public function __construct(
 		Marketplace_Adapter $adapter,
@@ -147,7 +155,8 @@ final class Report_Builder {
 		Site_Facts $site,
 		?Notification_Account_Reader $notification_accounts = null,
 		?Last_Notification_Reader $last_notifications = null,
-		?callable $clock = null
+		?callable $clock = null,
+		?callable $notifications_url = null
 	) {
 		$this->adapter               = $adapter;
 		$this->accounts              = $accounts;
@@ -160,6 +169,7 @@ final class Report_Builder {
 		$this->notification_accounts = $notification_accounts;
 		$this->last_notifications    = $last_notifications;
 		$this->clock                 = $clock ?? 'time';
+		$this->notifications_url     = $notifications_url;
 	}
 
 	/**
@@ -419,25 +429,40 @@ final class Report_Builder {
 			$lines[ __( 'Склад по умолчанию', 'woodev-plugin-framework' ) ] = $warehouse;
 		}
 
+		$presentation = [];
+
 		if ( $this->adapter->supports( Capability::PUSH_NOTIFICATIONS ) ) {
 			/* translators: %s: marketplace name. */
 			$push_label           = sprintf( __( 'Уведомления %s', 'woodev-plugin-framework' ), $marketplace );
 			$lines[ $push_label ] = $this->push_summary( $account->id(), $notification_account, $now );
 
 			if ( null !== $notification_account ) {
-				$raw_url = Notification_Url::for_account( $this->adapter->id(), $notification_account );
-				$lines[ __( 'Адрес уведомлений', 'woodev-plugin-framework' ) ] = Report_Redactor::redact_text(
+				$address_label = __( 'Адрес для уведомлений', 'woodev-plugin-framework' );
+				$raw_url       = Notification_Url::for_account( $this->adapter->id(), $notification_account );
+
+				// The address stays masked here: this card is shared with support. The real one is copied on the Notifications tab.
+				$lines[ $address_label ]        = Report_Redactor::redact_text(
 					$raw_url,
 					$redaction['fields'],
 					$redaction['literals']
 				);
+				$presentation[ $address_label ] = [ 'monospace' => true ];
+
+				$tab_url = null === $this->notifications_url ? '' : (string) call_user_func( $this->notifications_url );
+				if ( '' !== $tab_url ) {
+					$presentation[ $address_label ]['link'] = [
+						'text' => __( 'Скопировать адрес — в настройках уведомлений', 'woodev-plugin-framework' ),
+						'url'  => $tab_url,
+					];
+				}
 			}
 		}
 
 		return new Report_Section(
 			/* translators: %s: account display label. */
 			sprintf( __( 'Аккаунт «%s»', 'woodev-plugin-framework' ), $this->account_title( $account ) ),
-			$lines
+			$lines,
+			$presentation
 		);
 	}
 

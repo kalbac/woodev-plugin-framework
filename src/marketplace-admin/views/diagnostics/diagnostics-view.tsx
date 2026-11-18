@@ -126,7 +126,7 @@ export function DiagnosticsView( { menu }: PageViewProps ) {
 	);
 }
 
-function Sections( { sections }: { sections: DiagnosticsSection[] } ) {
+export function Sections( { sections }: { sections: DiagnosticsSection[] } ) {
 	return (
 		<>
 			{ sections.map( ( section ) => (
@@ -137,7 +137,23 @@ function Sections( { sections }: { sections: DiagnosticsSection[] } ) {
 							{ section.lines.map( ( line ) => (
 								<Fragment key={ line.label }>
 									<dt>{ line.label }</dt>
-									<dd>{ line.value }</dd>
+									<dd>
+										{ line.monospace ? (
+											<code className="woodev-facts__code">
+												{ line.value }
+											</code>
+										) : (
+											line.value
+										) }
+										{ line.link && (
+											<>
+												{ ' ' }
+												<a href={ line.link.url }>
+													{ line.link.text }
+												</a>
+											</>
+										) }
+									</dd>
 								</Fragment>
 							) ) }
 						</dl>

@@ -162,7 +162,11 @@ final class Settings_Module {
 			$reader,
 			$site,
 			$notif_accounts,
-			$last_notifications
+			$last_notifications,
+			null,
+			static function () use ( $plugin ): string {
+				return $plugin->get_settings_tab_url( 'notifications' );
+			}
 		);
 	}
 }

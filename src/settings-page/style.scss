@@ -530,6 +530,14 @@ $marketplace-label-col: 280px;
 		line-height: 1.5;
 	}
 
+	// A value that is an address: monospace, wrapping anywhere, no background strip of its own.
+	&__code {
+		padding: 0;
+		background: none;
+		font-size: 13px;
+		overflow-wrap: anywhere;
+	}
+
 	@media ( min-width: 783px ) {
 		display: grid;
 		grid-template-columns: var( --woodev-label-col, #{ $settings-label-col } ) minmax( 0, 1fr );

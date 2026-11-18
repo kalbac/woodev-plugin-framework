@@ -9,6 +9,7 @@ namespace Woodev\Tests\Unit\Marketplace\Intake;
 
 use Woodev\Framework\Marketplace\Intake\Event_Names;
 use Woodev\Framework\Marketplace\Intake\Webhook_Type;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Named_Push_Protocol;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Push_Protocol;
 use Woodev\Tests\Unit\TestCase;
 
@@ -35,5 +36,33 @@ final class EventNamesTest extends TestCase {
 
 		$this->assertSame( 'TYPE_UNKNOWN', $names->name( 'TYPE_UNKNOWN' ) );
 		$this->assertSame( 'whatever', ( new Event_Names( null ) )->name( 'whatever' ), 'a marketplace that pushes nothing declares no names' );
+	}
+
+	public function test_a_handled_type_without_a_switch_is_named_by_the_adapter(): void {
+		$names = new Event_Names(
+			new Fake_Named_Push_Protocol(
+				new Fake_Push_Protocol( '', [ new Webhook_Type( 'TYPE_POSTING_CANCELLED', 'Отмена отправления', 'p', '' ) ] ),
+				[
+					'TYPE_DELIVERY_DATE_CHANGED' => 'Изменение даты доставки',
+					'TYPE_CREATE_ITEM'           => 'Создание товара',
+				]
+			)
+		);
+
+		$this->assertSame( 'изменение даты доставки', $names->name( 'TYPE_DELIVERY_DATE_CHANGED' ), 'absent from webhook_types(), still named' );
+		$this->assertSame( 'создание товара', $names->name( 'type_create_item' ) );
+		$this->assertSame( 'отмена отправления', $names->name( 'TYPE_POSTING_CANCELLED' ), 'the switchable types keep their switch names' );
+		$this->assertSame( 'TYPE_UNKNOWN', $names->name( 'TYPE_UNKNOWN' ), 'a type nobody named stays as the decoder gave it' );
+	}
+
+	public function test_the_adapters_own_name_wins_over_the_switch_label(): void {
+		$names = new Event_Names(
+			new Fake_Named_Push_Protocol(
+				new Fake_Push_Protocol( '', [ new Webhook_Type( 'TYPE_POSTING_CANCELLED', 'Отмена', 'p', '' ) ] ),
+				[ 'TYPE_POSTING_CANCELLED' => 'Отмена отправления' ]
+			)
+		);
+
+		$this->assertSame( 'отмена отправления', $names->name( 'TYPE_POSTING_CANCELLED' ) );
 	}
 }

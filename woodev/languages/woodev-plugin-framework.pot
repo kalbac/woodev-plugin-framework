@@ -11883,3 +11883,23 @@ msgstr ""
 #: marketplace/settings/class-shared-fields.php:164
 msgid "Минимальная цена, % (по умолчанию не отправляется)"
 msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:438
+msgid "Адрес для уведомлений"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:448
+msgid "Скопировать адрес — в настройках уведомлений"
+msgstr ""
+
+#: src/settings-page/copy-field.tsx
+msgid "Копировать"
+msgstr ""
+
+#: src/settings-page/copy-field.tsx
+msgid "Браузер не дал скопировать сам — адрес выделен, нажмите Ctrl+C."
+msgstr ""
+
+#: src/settings-page/app.js
+msgid "Нет изменений"
+msgstr ""

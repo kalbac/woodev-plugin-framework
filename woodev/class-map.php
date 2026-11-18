@@ -268,6 +268,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Intake\\Intake_Response' => 'woodev/marketplace/intake/class-intake-response.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Ip_Ranges' => 'woodev/marketplace/intake/class-ip-ranges.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Last_Notification_Reader' => 'woodev/marketplace/intake/class-last-notification-reader.php',
+	'Woodev\\Framework\\Marketplace\\Intake\\Names_Event_Types' => 'woodev/marketplace/intake/interface-names-event-types.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Notification_Account' => 'woodev/marketplace/intake/class-notification-account.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Notification_Account_Reader' => 'woodev/marketplace/intake/class-notification-account-reader.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Notification_Intake' => 'woodev/marketplace/intake/class-notification-intake.php',

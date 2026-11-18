@@ -552,11 +552,13 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   `with_advanced_actions( ids, label )` → `advanced: true` on those actions plus `advanced_actions_label`, drawn by `ToolsRow` as a collapsed
   «Дополнительно» block with each tool's `desc` as its one-line explanation («Обновить типы событий», «Возобновить уведомления»).
 - **Notifications card.** The state is two sentences (`Admin\Shared\Notification_State_Text`, shared with the diagnostics page): «Связь не проверялась.
-  Последнее уведомление: отмена отправления, 3 дня назад.» An event type is named by the adapter's own switch label (`Intake\Event_Names`; a type nobody
-  declared stays as the decoder gave it). «Нужные события» lists the switches that are on (a stock switch is left out for an account in stock mode `off`),
+  Последнее уведомление: отмена отправления, 3 дня назад.» An event type is named by the adapter: its optional `Intake\Names_Event_Types::event_names()` (every type the decoder handles, including those
+  with no switch — the `Push_Protocol` implements it next to `webhook_types()`), else its switch label (`Intake\Event_Names`; a type nobody named stays as
+  the decoder gave it). «Нужные события» lists the switches that are on (a stock switch is left out for an account in stock mode `off`),
   no longer the adapter's `wanted_descriptions()` (kept in `Push_Admin`, unused by this card). An address inside a cabinet-location sentence becomes a link
   with the site's name as text; an adapter that registers the address itself gets ONE sentence instead of the location lines.
-- **Diagnostics.** The marketplace's own message of a **healthy** key is no longer a line (it repeated the key date, currency and role and carried a day
+- **Diagnostics.** The notification address stays masked (the card is shared with support): label «Адрес для уведомлений», value in monospace, then a link
+  «Скопировать адрес — в настройках уведомлений» to the Notifications tab (`Report_Section` presentation `monospace` / `link`, no Copy button). The marketplace's own message of a **healthy** key is no longer a line (it repeated the key date, currency and role and carried a day
   count frozen at the last check); a failing key keeps it. «Ключ действует до» shows `date (дней: N)` counted at render from the stored expiry, like the
   settings status. Values start with a capital. The notification address stays masked there (the full one, with a «Копировать» field, is on the
   notifications tab).
