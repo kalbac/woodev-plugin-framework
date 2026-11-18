@@ -65,6 +65,10 @@ export const MESSAGE_KEYS = {
 	bulkPlaceholder: 'bulk_placeholder',
 	bulkApply: 'bulk_apply',
 	bulkLabel: 'bulk_label',
+	/** Beside the bulk group once rows are ticked: `{count}` rows. */
+	selectedCount: 'selected_count',
+	/** Name of the column menu's icon button. */
+	columnsMenu: 'columns_menu',
 	/** The counted row's entry that clears the filter. */
 	viewsAll: 'views_all',
 	/** Label of the count in the card footer («Товаров»). */

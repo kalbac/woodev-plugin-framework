@@ -160,8 +160,7 @@ final class Site_Products_Rows {
 			],
 			'stock'     => $this->pair_cell( $this->count( $offer['site_stock'] ), null === $offer['remote_stock'] ? null : (string) $offer['remote_stock'] ),
 			'price'     => $this->pair_cell( $this->price( $offer['site_price'] ), $this->price( $offer['remote_price'] ) ),
-			'warehouse' => $linked ? $this->warehouse_name( $offer['warehouse_id'] ) : null,
-			'sync'      => $linked ? $this->sync_text( $offer ) : null,
+			'sync'      => $linked ? $this->sync_cell( $offer ) : null,
 			'error'     => '' === $offer['error'] ? null : $this->clip( $offer['error'] ),
 			'actions'   => null,
 		];
@@ -188,7 +187,6 @@ final class Site_Products_Rows {
 			'state'     => $this->state_badges( $offers ),
 			'stock'     => $this->pair_cell( $this->site_stock_sum( $offers ), $this->remote_stock_sum( $offers ) ),
 			'price'     => $this->pair_cell( $this->price_range( array_column( $offers, 'site_price' ) ), null ),
-			'warehouse' => null,
 			'sync'      => null,
 			'error'     => [] === $errors ? null : $this->clip( sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) ) ),
 			'actions'   => null,
@@ -217,19 +215,19 @@ final class Site_Products_Rows {
 	}
 
 	/**
+	 * The site's article and, only when the marketplace's offer id is another one, the offer id under it.
+	 *
 	 * @param array<string,mixed> $offer Offer.
 	 * @return array<int,array<string,mixed>>|null
 	 */
 	private function sku_cell( array $offer ): ?array {
 		$items = [];
 
-		foreach ( [ $offer['sku'], $offer['offer_id'] ] as $text ) {
-			if ( '' !== $text ) {
-				$items[] = [
-					'type' => 'text',
-					'value' => $this->clip( $text ),
-				];
-			}
+		foreach ( array_unique( array_filter( [ $offer['sku'], $offer['offer_id'] ], 'strlen' ) ) as $text ) {
+			$items[] = [
+				'type'  => 'text',
+				'value' => $this->clip( $text ),
+			];
 		}
 
 		return [] === $items ? null : $items;
@@ -263,27 +261,46 @@ final class Site_Products_Rows {
 	}
 
 	/**
+	 * What is synchronised and, when the product has a warehouse of its own, which: «Остатки · Цены» listing only what is on («—» when
+	 * nothing is), and under it «Склад: …».
+	 *
 	 * @param array<string,mixed> $offer Offer.
-	 * @return string
+	 * @return array<int,array<string,mixed>>
 	 */
-	private function sync_text( array $offer ): string {
-		return sprintf(
-			/* translators: 1: «да» or «нет» for stock, 2: for price. */
-			__( 'Остатки: %1$s · Цены: %2$s', 'woodev-plugin-framework' ),
-			$offer['sync_stock'] ? __( 'да', 'woodev-plugin-framework' ) : __( 'нет', 'woodev-plugin-framework' ),
-			$offer['sync_price'] ? __( 'да', 'woodev-plugin-framework' ) : __( 'нет', 'woodev-plugin-framework' )
-		);
+	private function sync_cell( array $offer ): array {
+		$on = [];
+
+		if ( $offer['sync_stock'] ) {
+			$on[] = __( 'Остатки', 'woodev-plugin-framework' );
+		}
+
+		if ( $offer['sync_price'] ) {
+			$on[] = __( 'Цены', 'woodev-plugin-framework' );
+		}
+
+		$items = [
+			[
+				'type'  => 'text',
+				'value' => [] === $on ? '—' : implode( ' · ', $on ),
+			],
+		];
+
+		if ( null !== $offer['warehouse_id'] && $offer['warehouse_id'] > 0 ) {
+			$items[] = [
+				'type'  => 'text',
+				/* translators: %s: warehouse name. */
+				'value' => sprintf( __( 'Склад: %s', 'woodev-plugin-framework' ), $this->warehouse_name( $offer['warehouse_id'] ) ),
+			];
+		}
+
+		return $items;
 	}
 
 	/**
-	 * @param int|null $warehouse_id Override, null for the account's default.
+	 * @param int $warehouse_id The product's own warehouse.
 	 * @return string
 	 */
-	private function warehouse_name( ?int $warehouse_id ): string {
-		if ( null === $warehouse_id || $warehouse_id <= 0 ) {
-			return __( 'По умолчанию', 'woodev-plugin-framework' );
-		}
-
+	private function warehouse_name( int $warehouse_id ): string {
 		return $this->clip( $this->warehouses[ (string) $warehouse_id ] ?? '#' . $warehouse_id );
 	}
 

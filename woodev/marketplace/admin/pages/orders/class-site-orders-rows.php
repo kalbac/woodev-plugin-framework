@@ -7,6 +7,9 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -18,7 +21,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Site_Orders_Rows {
 	/**
-	 * Order status (without `wc-`) => badge tone. A status of another plugin is neutral.
+	 * Order status (without `wc-`) => badge tone, for an order the marketplace has sent no status for. A status of another plugin is
+	 * neutral.
 	 */
 	private const TONES = [
 		'pending'    => 'warning',
@@ -52,27 +56,27 @@ final class Site_Orders_Rows {
 	private $is_finished;
 
 	/**
-	 * The download address of a label document: `function ( int $document_id ): string`.
+	 * The adapter's own names of posting statuses; null when it has none.
 	 *
-	 * @var callable
+	 * @var Posting_Status_Names|null
 	 */
-	private $label_url;
+	private $status_names;
 
 	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param string[] $offered     Row action ids the table declares.
-	 * @param callable $can_edit    `function ( int $order_id ): bool`, the object right to edit an order.
-	 * @param callable $is_finished `function ( \WC_Order $order ): bool`, whether the posting can no longer be cancelled.
-	 * @param callable $label_url   `function ( int $document_id ): string`.
+	 * @param string[]                  $offered     Row action ids the table declares.
+	 * @param callable                  $can_edit    `function ( int $order_id ): bool`, the object right to edit an order.
+	 * @param callable                  $is_finished `function ( \WC_Order $order ): bool`, whether the posting can no longer be cancelled.
+	 * @param Posting_Status_Names|null $status_names The adapter's own names of posting statuses, when it has them.
 	 */
-	public function __construct( array $offered, callable $can_edit, callable $is_finished, callable $label_url ) {
-		$this->offered     = $offered;
-		$this->can_edit    = $can_edit;
-		$this->is_finished = $is_finished;
-		$this->label_url   = $label_url;
+	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null ) {
+		$this->offered      = $offered;
+		$this->can_edit     = $can_edit;
+		$this->is_finished  = $is_finished;
+		$this->status_names = $status_names;
 	}
 
 	/**
@@ -80,17 +84,16 @@ final class Site_Orders_Rows {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param int                                                 $account_id Account.
-	 * @param array<string,mixed>                                 $item       The registry item.
-	 * @param \WC_Order                                           $order      Its WooCommerce order.
-	 * @param array{document_id:int,open_task:int,failure:string} $label      Label state of its posting number.
-	 * @param array<string,mixed>                                 $activity   Activity of the row.
+	 * @param int                 $account_id Account.
+	 * @param array<string,mixed> $item       The registry item.
+	 * @param \WC_Order           $order      Its WooCommerce order.
+	 * @param array<string,mixed> $activity   Activity of the row.
 	 * @return array<string,mixed>
 	 */
-	public function row( int $account_id, array $item, \WC_Order $order, array $label, array $activity ): array {
+	public function row( int $account_id, array $item, \WC_Order $order, array $activity ): array {
 		$editable = true === call_user_func( $this->can_edit, $item['order_id'] );
 		$url      = $editable ? (string) $order->get_edit_order_url() : '';
-		$cells    = $this->cells( $item, $order, $url, $label );
+		$cells    = $this->cells( $item, $order, $url );
 
 		return [
 			'id'           => Site_Orders_Ids::row_id( $account_id, $item['order_id'] ),
@@ -104,14 +107,13 @@ final class Site_Orders_Rows {
 	}
 
 	/**
-	 * @param array<string,mixed>                                 $item  Item.
-	 * @param \WC_Order                                           $order Order.
-	 * @param string                                              $url   Edit address; empty without the right.
-	 * @param array{document_id:int,open_task:int,failure:string} $label Label state.
+	 * @param array<string,mixed> $item  Item.
+	 * @param \WC_Order           $order Order.
+	 * @param string              $url   Edit address; empty without the right.
 	 * @return array<string,mixed>
 	 */
-	private function cells( array $item, \WC_Order $order, string $url, array $label ): array {
-		$cells = [
+	private function cells( array $item, \WC_Order $order, string $url ): array {
+		return [
 			'order'    => [ $this->order_number( $order, $url ) ],
 			'posting'  => $item['external_key'],
 			'status'   => $this->status_items( $order, $item['status_raw'] ),
@@ -120,12 +122,6 @@ final class Site_Orders_Rows {
 			'total'    => $this->total( $order ),
 			'actions'  => null,
 		];
-
-		if ( in_array( Site_Orders_Definition::LABEL, $this->offered, true ) ) {
-			$cells['label'] = $label['document_id'] > 0 ? $this->label_link( $label['document_id'] ) : null;
-		}
-
-		return $cells;
 	}
 
 	/**
@@ -155,15 +151,28 @@ final class Site_Orders_Rows {
 	}
 
 	/**
-	 * The WooCommerce status as a badge and, under it, the marketplace's own status.
+	 * One badge: the marketplace's own status in Russian. An order the marketplace has sent no status for shows the WooCommerce one.
 	 *
 	 * @param \WC_Order $order      Order.
 	 * @param string    $status_raw The marketplace's status.
 	 * @return array<int,array{type:string,value:mixed}>
 	 */
 	private function status_items( \WC_Order $order, string $status_raw ): array {
+		if ( '' !== $status_raw ) {
+			return [
+				[
+					'type'  => 'badge',
+					'value' => [
+						'label' => Posting_Status_Text::label( $status_raw, $this->status_names ),
+						'tone'  => Posting_Status_Text::tone( $status_raw ),
+					],
+				],
+			];
+		}
+
 		$status = (string) $order->get_status();
-		$items  = [
+
+		return [
 			[
 				'type'  => 'badge',
 				'value' => [
@@ -172,15 +181,6 @@ final class Site_Orders_Rows {
 				],
 			],
 		];
-
-		if ( '' !== $status_raw ) {
-			$items[] = [
-				'type'  => 'text',
-				'value' => $status_raw,
-			];
-		}
-
-		return $items;
 	}
 
 	/**
@@ -214,18 +214,7 @@ final class Site_Orders_Rows {
 	}
 
 	/**
-	 * @param int $document_id Document id.
-	 * @return array{label:string,url:string}
-	 */
-	private function label_link( int $document_id ): array {
-		return [
-			'label' => __( 'Скачать', 'woodev-plugin-framework' ),
-			'url'   => (string) call_user_func( $this->label_url, $document_id ),
-		];
-	}
-
-	/**
-	 * The actions of a row, each with a reason when it is off.
+	 * The actions of a row, each with a reason when it is off. The cancel action is left out of a finished posting's row.
 	 *
 	 * @param \WC_Order $order    Order.
 	 * @param bool      $editable Whether the user may edit the order.
@@ -236,6 +225,11 @@ final class Site_Orders_Rows {
 		$actions = [];
 
 		foreach ( $this->offered as $id ) {
+			// A finished posting cannot be cancelled: the row does not offer the action at all.
+			if ( Site_Orders_Definition::CANCEL === $id && $editable && true === call_user_func( $this->is_finished, $order ) ) {
+				continue;
+			}
+
 			$actions[] = $this->action( $id, $order, $editable, $url );
 		}
 
@@ -263,14 +257,6 @@ final class Site_Orders_Rows {
 				'id'      => $id,
 				'enabled' => false,
 				'reason'  => __( 'Нет права изменять этот заказ.', 'woodev-plugin-framework' ),
-			];
-		}
-
-		if ( Site_Orders_Definition::CANCEL === $id && true === call_user_func( $this->is_finished, $order ) ) {
-			return [
-				'id'      => $id,
-				'enabled' => false,
-				'reason'  => __( 'Это отправление уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ),
 			];
 		}
 

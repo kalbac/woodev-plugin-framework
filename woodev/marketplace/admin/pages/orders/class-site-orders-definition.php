@@ -56,7 +56,7 @@ final class Site_Orders_Definition {
 				'options' => $accounts,
 				'default' => (string) ( $accounts[0]['value'] ?? '' ),
 			],
-			'columns'     => self::columns( in_array( self::LABEL, $offered, true ) ),
+			'columns'     => self::columns(),
 			'filters'     => self::filters( $statuses ),
 			'sorts'       => [
 				'keys'    => Site_Orders_Storage::SORT_KEYS,
@@ -84,11 +84,10 @@ final class Site_Orders_Definition {
 	}
 
 	/**
-	 * @param bool $with_label Whether the table has the label column.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function columns( bool $with_label ): array {
-		$columns = [
+	private static function columns(): array {
+		return [
 			[
 				'id'        => 'order',
 				'label'     => __( 'Заказ', 'woodev-plugin-framework' ),
@@ -126,23 +125,12 @@ final class Site_Orders_Definition {
 				'sort_key'  => 'total',
 				'align'     => 'right',
 			],
+			[
+				'id'        => 'actions',
+				'label'     => '',
+				'cell_type' => 'actions',
+			],
 		];
-
-		if ( $with_label ) {
-			$columns[] = [
-				'id'        => 'label',
-				'label'     => __( 'Этикетки', 'woodev-plugin-framework' ),
-				'cell_type' => 'link',
-			];
-		}
-
-		$columns[] = [
-			'id'        => 'actions',
-			'label'     => '',
-			'cell_type' => 'actions',
-		];
-
-		return $columns;
 	}
 
 	/**
@@ -205,12 +193,14 @@ final class Site_Orders_Definition {
 			self::OPEN   => [
 				'id'          => self::OPEN,
 				'label'       => __( 'Открыть заказ', 'woodev-plugin-framework' ),
+				'short_label' => __( 'Открыть', 'woodev-plugin-framework' ),
 				'effect'      => 'read',
 				'interaction' => 'link',
 			],
 			self::LABEL  => [
 				'id'           => self::LABEL,
 				'label'        => __( 'Скачать этикетки', 'woodev-plugin-framework' ),
+				'short_label'  => __( 'Этикетки', 'woodev-plugin-framework' ),
 				'effect'       => 'mutate',
 				'interaction'  => 'download',
 				'capability'   => self::EDIT,
@@ -219,6 +209,7 @@ final class Site_Orders_Definition {
 			self::CANCEL => [
 				'id'             => self::CANCEL,
 				'label'          => __( 'Отменить отправление', 'woodev-plugin-framework' ),
+				'short_label'    => __( 'Отменить', 'woodev-plugin-framework' ),
 				'tone'           => 'danger',
 				'effect'         => 'mutate',
 				'interaction'    => 'dialog',
@@ -266,7 +257,6 @@ final class Site_Orders_Definition {
 	 */
 	private static function own_messages(): array {
 		return [
-			'summary_label'          => __( 'Заказов', 'woodev-plugin-framework' ),
 			'empty'                  => __( 'Заказов не найдено. Заказы появятся здесь, когда маркетплейс пришлёт их на сайт.', 'woodev-plugin-framework' ),
 			'empty_filtered'         => __( 'По этим фильтрам заказов нет.', 'woodev-plugin-framework' ),
 			'error'                  => __( 'Не удалось загрузить заказы. Повторите чуть позже.', 'woodev-plugin-framework' ),
@@ -290,7 +280,7 @@ final class Site_Orders_Definition {
 			'action_failed'          => __( 'Не удалось', 'woodev-plugin-framework' ),
 			'action_status_done'     => __( 'Готово.', 'woodev-plugin-framework' ),
 			'action_status_partial'  => __( 'Выполнено частично: причины перечислены ниже.', 'woodev-plugin-framework' ),
-			'action_status_queued'   => __( 'Этикетки запрошены у маркетплейса. Ссылка появится в столбце «Этикетки», когда они будут готовы.', 'woodev-plugin-framework' ),
+			'action_status_queued'   => __( 'Этикетки запрошены у маркетплейса. Когда они будут готовы, нажмите «Скачать этикетки» ещё раз.', 'woodev-plugin-framework' ),
 			'action_status_failed'   => __( 'Ничего не выполнено: причины перечислены ниже.', 'woodev-plugin-framework' ),
 			'action_group_skipped'   => __( 'Пропущено', 'woodev-plugin-framework' ),
 			'action_group_failed'    => __( 'Не удалось', 'woodev-plugin-framework' ),

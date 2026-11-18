@@ -268,6 +268,8 @@ function columnHeader( column: Column, messages: Messages ): TableHeader {
 		isNumeric: column.align === 'right',
 		required: column.required,
 		visible: column.visible,
+		// WooCommerce puts this class on the header and on every cell of the column: the stylesheet sizes a column by it.
+		cellClassName: `woodev-records__col woodev-records__col-${ column.id }`,
 	};
 	const fallbackName = column.cell_type === 'actions' ? message( messages, MESSAGE_KEYS.actionsColumn ) : '';
 

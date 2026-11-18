@@ -224,7 +224,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			$tables = [ 'products' => __( 'Товары сайта', 'woodev-plugin-framework' ) ];
 
 			if ( $this->get_marketplace_adapter()->supports( Capabilities\Capability::IMPORT_PRODUCTS ) ) {
-				$tables['remote_cards'] = __( 'Карточки на маркетплейсе', 'woodev-plugin-framework' );
+				$name = trim( $this->get_marketplace_adapter()->settings_descriptor()->marketplace_name() );
+
+				/* translators: %s: marketplace name, for example «Ozon». */
+				$tables['remote_cards'] = '' === $name ? __( 'Карточки на маркетплейсе', 'woodev-plugin-framework' ) : sprintf( __( 'Карточки %s', 'woodev-plugin-framework' ), $name );
 			}
 
 			return $tables;

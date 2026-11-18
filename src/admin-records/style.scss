@@ -40,6 +40,97 @@
 		height: 40px;
 	}
 
+	// The card heading repeats the page title or the tab above it («Заказы» under «Заказы»): it stays in the DOM for the card's
+	// accessibility name and leaves the screen, so the header is the toolbar alone. WooCommerce's Card wraps the header in a Content
+	// element, so the header is a descendant of the table, not its child.
+	.woocommerce-table .components-card__header > h2 {
+		border: 0;
+		clip-path: inset( 50% );
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		padding: 0;
+		position: absolute;
+		white-space: nowrap;
+		width: 1px;
+	}
+
+	// A wide table scrolls inside its card. WooCommerce fades the edge and draws no bar (macOS hides overlay scrollbars
+	// altogether), so a merchant with a clipped column never learns it is there: the bar is always drawn.
+	.woocommerce-table__table {
+		scrollbar-color: #8c8f94 #f0f0f1;
+		scrollbar-width: auto;
+
+		&::-webkit-scrollbar {
+			height: 12px;
+		}
+
+		&::-webkit-scrollbar-track {
+			background: #f0f0f1;
+		}
+
+		&::-webkit-scrollbar-thumb {
+			background: #8c8f94;
+			border: 2px solid #f0f0f1;
+			border-radius: 6px;
+		}
+	}
+
+	// Columns. A class per column id is on its header and every cell (`TableCard`'s `cellClassName`). Numbers, dates, the
+	// posting number, badges and the actions never break across lines: a cell that wraps mid-number is unreadable and
+	// makes every row three lines tall. The names, article and error take what is left.
+	.woodev-records__col-posting,
+	.woodev-records__col-date,
+	.woodev-records__col-order,
+	.woodev-records__col-total,
+	.woodev-records__col-status,
+	.woodev-records__col-state,
+	.woodev-records__col-stock,
+	.woodev-records__col-price,
+	.woodev-records__col-sync {
+		white-space: nowrap;
+	}
+
+	// WooCommerce pads a cell 24px each side; eight columns lose 380px to it, which is what pushed the actions off a 1024px screen.
+	.woocommerce-table__header,
+	.woocommerce-table__item {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+
+	// The row's buttons are one group on one line, and the column stays at the right edge of the card while the rest of a wide
+	// table scrolls under it: the actions are never the part that is cut off.
+	.woodev-records__col-actions {
+		background: #fff;
+		position: sticky;
+		right: 0;
+	}
+
+	.woocommerce-table__table tr:hover .woodev-records__col-actions {
+		background: #f6f7f7;
+	}
+
+	// The product name and the article read as text, so they have a floor to wrap against instead of a few letters a line.
+	.woodev-records__col-name {
+		min-width: 220px;
+	}
+
+	.woodev-records__col-sku {
+		min-width: 120px;
+		overflow-wrap: anywhere;
+	}
+
+	.woodev-records__col-error {
+		min-width: 160px;
+	}
+
+	// «Выбрано: 3» beside the bulk group.
+	.woodev-table-bulk__selected {
+		color: wd.$muted;
+		font-size: 13px;
+		white-space: nowrap;
+	}
+
 	// The empty result, in the frame of the table it stands for: what `TableCard` itself is made of.
 	&__empty-card {
 		border: 1px solid wd.$border;
@@ -88,6 +179,45 @@
 		&__search {
 			flex-basis: 100%;
 			order: -1;
+		}
+	}
+}
+
+// The action dialog is a portal: it sits outside `.woodev-records`, so its rules stand on their own.
+//
+// Field labels in sentence case, like every other form of the admin. A labelled control draws its label with the
+// InputControl's own emotion class, which writes its rule as `&&&` — upper case at 11px — so this selector says the label
+// class three times to win (the same rule the filter row of the table follows).
+.woodev-records__fields {
+	.components-input-control__label.components-input-control__label.components-input-control__label,
+	.components-base-control__label {
+		font-size: 13px;
+		font-weight: 500;
+		text-transform: none;
+	}
+}
+
+// The list under a searchable field's box: part of the same control, so it takes the box's width and edge.
+.woodev-records__listbox {
+	background: #fff;
+	border: 1px solid wd.$border;
+	border-radius: 0 0 wd.$radius-sm wd.$radius-sm;
+	border-top: 0;
+	list-style: none;
+	margin: -1px 0 0;
+	max-height: 220px;
+	overflow-y: auto;
+	padding: 0;
+
+	li {
+		cursor: pointer;
+		margin: 0;
+		padding: 8px 12px;
+
+		&:hover,
+		&:focus-visible,
+		&[aria-selected='true'] {
+			background: #f0f6fc;
 		}
 	}
 }

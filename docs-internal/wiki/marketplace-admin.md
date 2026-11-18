@@ -848,13 +848,44 @@ C2 tabs and the mapping/profile forms. Delivery code was not touched (invariant 
   unit option names the shop's unit («как в магазине (см)», read by PHP in `View_Config::shop_unit_label()`). VAT moved into «Цена».
   Every new word is a `View_Config` message; `chooseMapping`, `chooseProfile` and `unitDefault` are gone.
 
+### «Заказы» and «Товары» tables after the s237 polish (framework 2.1.13)
+
+What the UI audit of 18.11.2026 changed in the records shell and the two pages (behaviour, not a redesign):
+
+- **Posting status is one Russian badge.** `Admin\Shared\Posting_Status_Text` maps the marketplace's status code («awaiting_packaging»,
+  «delivered») to a word and a tone; an unknown code is «Другой статус», never the code. An adapter that already names its statuses
+  implements the optional `Admin\Shared\Posting_Status_Names` (`posting_status_name()`, empty string for a code it does not name):
+  its word wins, the framework map is the fallback, the tone stays the framework's. The «Заказы» status cell is that one badge (the
+  WooCommerce status stays in the order); an order with no marketplace status shows the WooCommerce badge.
+- **Row actions are one nowrap group.** `RowActions` draws the buttons in `.woodev-records__buttons`; a descriptor may carry
+  `short_label` («Открыть» for «Открыть заказ»), which is shown while the full label stays the accessible name and tooltip. The
+  actions column is `position: sticky; right: 0`, so a wide table scrolls under it. A finished posting is simply not offered
+  «Отменить отправление» (no disabled button, no sentence). The «Этикетки» column is gone: the label action hands over a stored document at once.
+- **Every column has a class** (`woodev-records__col-<id>`, `TableCard`'s `cellClassName`) and `style.scss` sizes by it: numbers, dates,
+  badges and the posting number never wrap, the name and article have a floor. Cells pad 12 px a side (WooCommerce's 24 px lost 380 px).
+  The scrolling card always draws its scrollbar. Dates are `d.m.Y H:i` in the site's timezone.
+- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs. «Склад» and «Синхронизация» are one
+  `sync` column: «Остатки · Цены» listing only what is on («—» when none), and «Склад: …» only for a product with a warehouse of its own.
+- **Bulk select.** An action descriptor may declare `group`; `BulkActionSelect` draws one `<optgroup>` per group («Выгрузка», «Синхронизация»,
+  «Связи и архив») and «Выбрано: N» (`selected_count`) beside the button. The account-wide buttons («Связать по артикулу», «Обновить список»)
+  sit in the card header next to the select, on both tabs. The column-menu button is named from `columns_menu`.
+- **Card heading and summary.** The card title repeats the page title or the tab, so it is visually hidden (kept for assistive
+  technology); a long `summary` keeps its first sentence and folds the rest into a `<details>`. The footer word is pluralised per
+  list (`summary_label` in the list response). The counted view row is not drawn while every count is zero.
+- **«Карточки {marketplace}».** The tab takes the name from the adapter's `settings_descriptor()->marketplace_name()`. Before the first
+  load the table says once «Список карточек ещё не загружен. Нажмите «Обновить список».»; the list is never loaded on open (that calls the marketplace).
+- **«Связать по артикулу» dialog.** The searchable category field is one control: a labelled box with the field's `placeholder`
+  («Начните вводить название категории») and the server's list under it; picking writes the label into the box, typing drops the pick.
+  Field labels are sentence case (`.woodev-records__fields`); the first button is `preview_label` («Проверить связи»), the confirm is «Связать».
+
 ### Polish s237 (framework 2.1.13): selects, lists and the product tab
 
 - **One select look.** `PageBody` wraps every marketplace view in `.woodev-marketplace-view`; `src/components/_select-look.scss`
   (included by `src/marketplace-admin/style.scss`) draws WordPress's `SelectControl` and `SearchControl` in that wrapper as the settings'
   own select (`.woodev-select__trigger`): 40px, 1px `$line` border, 8px radius, 14px text, 18px muted chevron. It is scoped to the wrapper,
-  never to `.woodev-settings`, which the delivery plugins share. The empty choice of every select reads «Не выбрано» (`SelectField`,
-  `SearchSelectField`, the profile select, the account warehouse select).
+  never to `.woodev-settings`, which the delivery plugins share. The empty choice of a marketplace select reads «Не выбрано» (the mapping
+  editor passes it to `SelectField`; the profile select, the account warehouse select); the shared `SelectField` / `SearchSelectField`
+  default stays «Выберите…», because the delivery plugins' screens use them too.
 - **Lists.** The tab above a list names it, so the card draws no heading (`TableCard` still needs a `title`: it is the caption; the
   stylesheet hides the visible heading). A count column shows `0` (a number cell is written as a string: a falsy `display` draws nothing)
   and is as narrow as its heading. The marketplace category search is a `SearchControl` (magnifier).

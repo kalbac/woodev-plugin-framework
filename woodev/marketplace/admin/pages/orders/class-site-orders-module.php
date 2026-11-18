@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
@@ -120,9 +121,7 @@ final class Site_Orders_Module {
 				static function ( \WC_Order $order ) use ( $cancel ): bool {
 					return null !== $cancel && $cancel->is_finished( $order );
 				},
-				static function ( int $document_id ) use ( $labels ): string {
-					return null === $labels ? '' : $labels->url( $document_id );
-				}
+				$adapter instanceof Posting_Status_Names ? $adapter : null
 			),
 			new Site_Orders_Activity(),
 			$labels,

@@ -211,7 +211,10 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			'total'            => $page['total'],
 			'facets'           => [ 'on_site' => $this->on_site_facets( Remote_Cards_Query::on_site_counts( $cards, $linked, $search ) ) ],
 			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
-			'messages'         => [ 'summary' => $this->summary( $account->id(), $snapshot ) ],
+			'messages'         => [
+				'summary'       => $this->summary( $account->id(), $snapshot ),
+				'summary_label' => _n( 'карточка', 'карточек', $page['total'], 'woodev-plugin-framework' ),
+			] + ( null === $snapshot ? [] : [ 'empty' => __( 'В кабинете нет ни одной карточки.', 'woodev-plugin-framework' ) ] ),
 		];
 	}
 
@@ -514,8 +517,6 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 				wp_date( 'd.m.Y H:i', $snapshot['fetched_at'] ),
 				count( $snapshot['cards'] )
 			);
-		} elseif ( ! $this->snapshots->is_refreshing( $account_id ) ) {
-			$sentences[] = __( 'Список карточек не загружен или устарел. Нажмите «Обновить список».', 'woodev-plugin-framework' );
 		}
 
 		$sentences[] = Remote_Cards_Summary::last_run( $this->reports->last_run( $account_id ) );
@@ -546,7 +547,10 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			),
 			'total'            => $found['total'],
 			'account_activity' => $this->account_activity( $account->id(), $this->import_state( $account->id() )['importing'] ),
-			'messages'         => [ 'summary' => trim( Remote_Cards_Summary::near_explained() . ' ' . Remote_Cards_Summary::last_run( $this->reports->last_run( $account->id() ) ) ) ],
+			'messages'         => [
+				'summary'       => trim( Remote_Cards_Summary::near_explained() . ' ' . Remote_Cards_Summary::last_run( $this->reports->last_run( $account->id() ) ) ),
+				'summary_label' => _n( 'карточка', 'карточек', $found['total'], 'woodev-plugin-framework' ),
+			],
 		];
 	}
 

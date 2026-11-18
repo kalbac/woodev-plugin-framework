@@ -227,6 +227,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			'total'            => $page['total'],
 			'facets'           => [ 'state' => $this->state_facets( $filter, $page['total'] ) ],
 			'account_activity' => $this->activity->account( $account->id() ),
+			'messages'         => [ 'summary_label' => _n( 'товар', 'товаров', $page['total'], 'woodev-plugin-framework' ) ],
 		];
 	}
 

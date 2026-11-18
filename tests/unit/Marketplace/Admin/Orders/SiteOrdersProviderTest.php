@@ -248,9 +248,6 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 				$can,
 				static function ( \WC_Order $order ) use ( $cancel ): bool {
 					return null !== $cancel && $cancel->is_finished( $order );
-				},
-				function ( int $document_id ): string {
-					return $this->label_url( $document_id );
 				}
 			),
 			new Site_Orders_Activity( $this->clock() ),
@@ -352,7 +349,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$definition = $this->definition()->to_array();
 		$actions    = array_column( $definition['row_actions'], null, 'id' );
 
-		$this->assertSame( [ 'order', 'posting', 'status', 'date', 'customer', 'total', 'label', 'actions' ], array_column( $definition['columns'], 'id' ) );
+		$this->assertSame( [ 'order', 'posting', 'status', 'date', 'customer', 'total', 'actions' ], array_column( $definition['columns'], 'id' ) );
 		$this->assertSame( [ 'open', 'label', 'cancel' ], array_column( $definition['row_actions'], 'id' ) );
 		$this->assertSame( [], $definition['bulk_actions'] );
 		$this->assertSame( [ 'date', 'order', 'posting', 'status', 'total' ], $definition['sorts']['keys'] );
@@ -361,7 +358,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( 'date_range', $definition['filters'][3]['type'] );
 		$this->assertTrue( $definition['filters'][1]['views'], 'The posting state is the counted row.' );
 		$this->assertSame( 'Всё время', $definition['messages']['period_all'], 'The date range is the period picker, which needs its words.' );
-		$this->assertSame( 'Заказов', $definition['messages']['summary_label'] );
+		$this->assertArrayNotHasKey( 'summary_label', $definition['messages'], 'The count word comes with each list, in the right plural form.' );
 		$this->assertSame( '2026-11-15', $definition['filters'][3]['today'], 'The period picker counts «Сегодня» from the site\'s day.' );
 		$this->assertSame( [ [ 'value' => (string) $this->account_id, 'label' => 'Основной' ] ], $definition['context']['options'] );
 		$this->assertNull( $definition['children'] );
@@ -405,6 +402,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( 4, $body['total'] );
 		$this->assertSame( [ $this->row_id( 104 ), $this->row_id( 103 ), $this->row_id( 102 ), $this->row_id( 101 ) ], array_column( $body['rows'], 'id' ) );
 		$this->assertArrayNotHasKey( 'summary', $body['messages'] ?? [], 'The card footer counts the rows; no sentence repeats it.' );
+		$this->assertSame( 'заказов', $body['messages']['summary_label'], 'The footer\'s word travels with the list, so it can follow the count.' );
 
 		$cells = $rows[ $this->row_id( 104 ) ]['cells'];
 
@@ -412,15 +410,16 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( '№ 104', $cells['order'][0]['value']['label'] );
 		$this->assertSame( 'https://shop.test/wp-admin/post.php?post=104&action=edit', $cells['order'][0]['value']['url'] );
 		$this->assertSame( 'P-104', $cells['posting'] );
-		$this->assertSame( [ 'label' => 'Processing', 'tone' => 'info' ], $cells['status'][0]['value'] );
-		$this->assertSame( 'delivering', $cells['status'][1]['value'], 'The marketplace\'s own status is shown under the WooCommerce one.' );
+		$this->assertCount( 1, $cells['status'], 'One badge: the marketplace\'s own status, the WooCommerce one stays in the order.' );
+		$this->assertSame( [ 'label' => 'Доставляется', 'tone' => 'info' ], $cells['status'][0]['value'], 'A Russian word, never the code.' );
 		$this->assertSame( '2026-11-07T08:30:00Z', $cells['date'] );
 		$this->assertNull( $cells['customer'], 'An order with no buyer name has an empty cell.' );
 		$this->assertStringContainsString( '250', $cells['total'] );
 		$this->assertStringNotContainsString( '<', $cells['total'], 'The price is plain text.' );
-		$this->assertNull( $cells['label'] );
+		$this->assertArrayNotHasKey( 'label', $cells, 'The table has no label column; the action downloads them.' );
 		$this->assertSame( 'Борис Лебедев', $rows[ $this->row_id( 102 ) ]['cells']['customer'] );
-		$this->assertSame( 'danger', $rows[ $this->row_id( 103 ) ]['cells']['status'][0]['value']['tone'] );
+		$this->assertSame( [ 'label' => 'Отменено', 'tone' => 'danger' ], $rows[ $this->row_id( 103 ) ]['cells']['status'][0]['value'] );
+		$this->assertSame( [ 'label' => 'Доставлено', 'tone' => 'success' ], $rows[ $this->row_id( 102 ) ]['cells']['status'][0]['value'] );
 		$this->assertFalse( $rows[ $this->row_id( 104 ) ]['selectable'] );
 	}
 
@@ -485,25 +484,28 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( 'Нет права изменять этот заказ.', $row['actions'][1]['reason'] );
 	}
 
-	public function test_a_finished_posting_cannot_be_cancelled_and_says_why(): void {
+	public function test_a_finished_posting_is_not_offered_the_cancel_action_at_all(): void {
 		$this->stock( false );
 
 		$rows = $this->by_id( $this->list_body() );
 
+		$this->assertSame( [ 'open', 'label', 'cancel' ], array_column( $rows[ $this->row_id( 104 ) ]['actions'], 'id' ) );
 		$this->assertSame( [ true, true, true ], array_column( $rows[ $this->row_id( 104 ) ]['actions'], 'enabled' ) );
-		$this->assertSame( [ true, true, false ], array_column( $rows[ $this->row_id( 103 ) ]['actions'], 'enabled' ) );
-		$this->assertSame( 'Это отправление уже завершено или отменено, отменить его нельзя.', $rows[ $this->row_id( 103 ) ]['actions'][2]['reason'] );
+		$this->assertSame( [ 'open', 'label' ], array_column( $rows[ $this->row_id( 103 ) ]['actions'], 'id' ), 'No disabled button and no sentence: the action is simply not there.' );
+		$this->assertSame( [ true, true ], array_column( $rows[ $this->row_id( 103 ) ]['actions'], 'enabled' ) );
 	}
 
-	public function test_a_ready_label_document_is_a_link_in_the_label_column(): void {
+	public function test_a_ready_label_document_is_handed_over_by_the_label_action(): void {
 		$this->stock( false );
 		$document = $this->document( [ 'P-104', 'P-101' ] );
 
-		$rows = $this->by_id( $this->list_body() );
+		foreach ( [ 104, 101 ] as $order ) {
+			$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( $order ) ], [] ) );
 
-		$this->assertSame( [ 'label' => 'Скачать', 'url' => $this->label_url( $document ) ], $rows[ $this->row_id( 104 ) ]['cells']['label'] );
-		$this->assertSame( [ 'label' => 'Скачать', 'url' => $this->label_url( $document ) ], $rows[ $this->row_id( 101 ) ]['cells']['label'], 'One set covers every order it was made for.' );
-		$this->assertNull( $rows[ $this->row_id( 102 ) ]['cells']['label'] );
+			$this->assertSame( $this->label_url( $document ), $body['download']['url'], 'One set covers every order it was made for.' );
+		}
+
+		$this->assertSame( [], $this->provider_calls(), 'Nothing is asked of the marketplace again.' );
 	}
 
 	public function test_a_busy_account_does_not_push_a_posting_out_of_view_and_a_similar_number_is_not_the_same_posting(): void {
@@ -515,13 +517,9 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			$this->document( [ 'Q-' . $i ] );
 		}
 
-		$rows = $this->by_id( $this->list_body() );
-
-		$this->assertSame( [ 'label' => 'Скачать', 'url' => $this->label_url( $document ) ], $rows[ $this->row_id( 104 ) ]['cells']['label'], 'More than 300 newer documents of the account do not hide it.' );
-
 		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
 
-		$this->assertSame( $this->label_url( $document ), $body['download']['url'], 'The stored document is handed over, not asked for again.' );
+		$this->assertSame( $this->label_url( $document ), $body['download']['url'], 'The stored document is handed over, not asked for again — more than 300 newer documents of the account do not hide it.' );
 		$this->assertSame( [], $this->provider_calls() );
 	}
 

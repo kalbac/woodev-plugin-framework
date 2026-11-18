@@ -138,6 +138,8 @@ final class Site_Products_Definition {
 		$action = [
 			'id'             => Site_Products_Bulk::LINK_BY_ARTICLE,
 			'label'          => __( 'Связать по артикулу', 'woodev-plugin-framework' ),
+			'preview_label'  => __( 'Проверить связи', 'woodev-plugin-framework' ),
+			'confirm_label'  => __( 'Связать', 'woodev-plugin-framework' ),
 			'effect'         => 'mutate',
 			'interaction'    => 'dialog',
 			'scope'          => 'account',
@@ -184,7 +186,8 @@ final class Site_Products_Definition {
 				'type'           => 'select',
 				'options_source' => true,
 				'searchable'     => true,
-				'help'           => __( 'Нужна, когда выбрана одна категория. Начните вводить название.', 'woodev-plugin-framework' ),
+				'placeholder'    => __( 'Начните вводить название категории', 'woodev-plugin-framework' ),
+				'help'           => __( 'Нужна, когда выбрана одна категория.', 'woodev-plugin-framework' ),
 			],
 		];
 	}
@@ -228,14 +231,9 @@ final class Site_Products_Definition {
 				'sort_key'  => 'price',
 			],
 			[
-				'id'        => 'warehouse',
-				'label'     => __( 'Склад', 'woodev-plugin-framework' ),
-				'cell_type' => 'text',
-			],
-			[
 				'id'        => 'sync',
 				'label'     => __( 'Синхронизация', 'woodev-plugin-framework' ),
-				'cell_type' => 'text',
+				'cell_type' => 'stack',
 			],
 			[
 				'id'        => 'error',
@@ -258,17 +256,20 @@ final class Site_Products_Definition {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private static function bulk_actions( string $marketplace, array $withheld ): array {
+		$export = __( 'Выгрузка', 'woodev-plugin-framework' );
+		$sync   = __( 'Синхронизация', 'woodev-plugin-framework' );
+		$links  = __( 'Связи и архив', 'woodev-plugin-framework' );
 		$actions = [
-			self::action( Site_Products_Bulk::EXPORT, self::label_of( Site_Products_Bulk::EXPORT ), __( 'Товары, прошедшие проверку, уйдут в очередь на отправку. Остальные останутся как есть — исправьте причину и повторите.', 'woodev-plugin-framework' ) ),
+			self::action( Site_Products_Bulk::EXPORT, self::label_of( Site_Products_Bulk::EXPORT ), __( 'Товары, прошедшие проверку, уйдут в очередь на отправку. Остальные останутся как есть — исправьте причину и повторите.', 'woodev-plugin-framework' ), $export ),
 			self::link_by_article( null, true ),
-			self::action( Site_Products_Bulk::SEND_STOCK, self::label_of( Site_Products_Bulk::SEND_STOCK ), __( 'Текущий остаток с сайта будет отправлен на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
-			self::action( Site_Products_Bulk::SEND_PRICE, self::label_of( Site_Products_Bulk::SEND_PRICE ), __( 'Текущая цена с сайта будет отправлена на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ) ),
-			self::action( Site_Products_Bulk::SYNC_STOCK_ON, self::label_of( Site_Products_Bulk::SYNC_STOCK_ON ) ),
-			self::action( Site_Products_Bulk::SYNC_STOCK_OFF, self::label_of( Site_Products_Bulk::SYNC_STOCK_OFF ) ),
-			self::action( Site_Products_Bulk::SYNC_PRICE_ON, self::label_of( Site_Products_Bulk::SYNC_PRICE_ON ) ),
-			self::action( Site_Products_Bulk::SYNC_PRICE_OFF, self::label_of( Site_Products_Bulk::SYNC_PRICE_OFF ) ),
+			self::action( Site_Products_Bulk::SEND_STOCK, self::label_of( Site_Products_Bulk::SEND_STOCK ), __( 'Текущий остаток с сайта будет отправлен на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ), $export ),
+			self::action( Site_Products_Bulk::SEND_PRICE, self::label_of( Site_Products_Bulk::SEND_PRICE ), __( 'Текущая цена с сайта будет отправлена на маркетплейс в ближайшее время.', 'woodev-plugin-framework' ), $export ),
+			self::action( Site_Products_Bulk::SYNC_STOCK_ON, self::label_of( Site_Products_Bulk::SYNC_STOCK_ON ), '', $sync ),
+			self::action( Site_Products_Bulk::SYNC_STOCK_OFF, self::label_of( Site_Products_Bulk::SYNC_STOCK_OFF ), '', $sync ),
+			self::action( Site_Products_Bulk::SYNC_PRICE_ON, self::label_of( Site_Products_Bulk::SYNC_PRICE_ON ), '', $sync ),
+			self::action( Site_Products_Bulk::SYNC_PRICE_OFF, self::label_of( Site_Products_Bulk::SYNC_PRICE_OFF ), '', $sync ),
 			array_merge(
-				self::action( Site_Products_Bulk::SET_WAREHOUSE, self::label_of( Site_Products_Bulk::SET_WAREHOUSE ), __( 'Остатки этих товаров будут отправляться на выбранный склад.', 'woodev-plugin-framework' ) ),
+				self::action( Site_Products_Bulk::SET_WAREHOUSE, self::label_of( Site_Products_Bulk::SET_WAREHOUSE ), __( 'Остатки этих товаров будут отправляться на выбранный склад.', 'woodev-plugin-framework' ), $sync ),
 				[
 					'fields' => [
 						[
@@ -281,27 +282,29 @@ final class Site_Products_Definition {
 					],
 				]
 			),
+			self::action(
+				Site_Products_Bulk::PULL_PRICES,
+				self::label_of( Site_Products_Bulk::PULL_PRICES ),
+				/* translators: %s: marketplace name. */
+				sprintf( __( 'Цены созданных карточек будут прочитаны с %s и записаны в товары сайта: цена на сайте заменится ценой с маркетплейса. Действие разовое, настройка направления цен не меняется.', 'woodev-plugin-framework' ), $marketplace ),
+				$sync
+			),
 			array_merge(
 				self::action(
 					Site_Products_Bulk::ARCHIVE,
 					self::label_of( Site_Products_Bulk::ARCHIVE ),
 					/* translators: %s: marketplace name. */
-					sprintf( __( 'Остаток на маркетплейсе станет нулевым, затем карточка уйдёт в архив %s. Товар на сайте не меняется.', 'woodev-plugin-framework' ), $marketplace )
+					sprintf( __( 'Остаток на маркетплейсе станет нулевым, затем карточка уйдёт в архив %s. Товар на сайте не меняется.', 'woodev-plugin-framework' ), $marketplace ),
+					$links
 				),
 				[ 'tone' => 'danger' ]
 			),
 			array_merge(
-				self::action( Site_Products_Bulk::DETACH, self::label_of( Site_Products_Bulk::DETACH ), __( 'Сайт забудет карточку: товар можно будет выгрузить заново или связать с другой карточкой. Карточка на маркетплейсе не меняется.', 'woodev-plugin-framework' ) ),
+				self::action( Site_Products_Bulk::DETACH, self::label_of( Site_Products_Bulk::DETACH ), __( 'Сайт забудет карточку: товар можно будет выгрузить заново или связать с другой карточкой. Карточка на маркетплейсе не меняется.', 'woodev-plugin-framework' ), $links ),
 				[ 'tone' => 'danger' ]
 			),
-			self::action( Site_Products_Bulk::RESET, self::label_of( Site_Products_Bulk::RESET ), __( 'Товар снова станет «Не связан». На маркетплейсе ничего не меняется: карточка остаётся там как была.', 'woodev-plugin-framework' ) ),
-			self::action( Site_Products_Bulk::RESET_PRICE, self::label_of( Site_Products_Bulk::RESET_PRICE ), __( 'У товаров своя цена для маркетплейса будет удалена: цена снова считается по правилу аккаунта. Цены на сайте не меняются.', 'woodev-plugin-framework' ) ),
-			self::action(
-				Site_Products_Bulk::PULL_PRICES,
-				self::label_of( Site_Products_Bulk::PULL_PRICES ),
-				/* translators: %s: marketplace name. */
-				sprintf( __( 'Цены созданных карточек будут прочитаны с %s и записаны в товары сайта: цена на сайте заменится ценой с маркетплейса. Действие разовое, настройка направления цен не меняется.', 'woodev-plugin-framework' ), $marketplace )
-			),
+			self::action( Site_Products_Bulk::RESET, self::label_of( Site_Products_Bulk::RESET ), __( 'Товар снова станет «Не связан». На маркетплейсе ничего не меняется: карточка остаётся там как была.', 'woodev-plugin-framework' ), $links ),
+			self::action( Site_Products_Bulk::RESET_PRICE, self::label_of( Site_Products_Bulk::RESET_PRICE ), __( 'У товаров своя цена для маркетплейса будет удалена: цена снова считается по правилу аккаунта. Цены на сайте не меняются.', 'woodev-plugin-framework' ), $links ),
 		];
 
 		$actions = array_merge( $actions, self::run_actions() );
@@ -322,12 +325,14 @@ final class Site_Products_Definition {
 	 * @param string $id       Action id.
 	 * @param string $label    Label.
 	 * @param string $sentence Sentence under the title of the confirmation window, empty for none.
+	 * @param string $group    Heading the action is listed under in the toolbar's select, empty for none.
 	 * @return array<string,mixed>
 	 */
-	private static function action( string $id, string $label, string $sentence = '' ): array {
+	private static function action( string $id, string $label, string $sentence = '', string $group = '' ): array {
 		return [
 			'id'             => $id,
 			'label'          => $label,
+			'group'          => $group,
 			'effect'         => 'mutate',
 			'interaction'    => 'dialog',
 			'scope'          => 'selection',
@@ -450,7 +455,6 @@ final class Site_Products_Definition {
 			'selection_limit'       => __( 'Выбрано предельное число товаров. Выполните действие и выберите остальные.', 'woodev-plugin-framework' ),
 			'filter_any'            => __( 'Любое', 'woodev-plugin-framework' ),
 			'per_page'              => __( 'Товаров на странице', 'woodev-plugin-framework' ),
-			'summary_label'         => __( 'Товаров', 'woodev-plugin-framework' ),
 			'activity_stale'        => __( 'Данные о ходе работы устарели: обновляем.', 'woodev-plugin-framework' ),
 			'activity_failed'       => __( 'Не удаётся получить ход работы. Попробуем ещё раз.', 'woodev-plugin-framework' ),
 		];

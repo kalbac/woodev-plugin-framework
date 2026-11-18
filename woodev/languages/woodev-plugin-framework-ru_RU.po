@@ -11755,6 +11755,135 @@ msgstr ""
 msgid "%s (откроется в новой вкладке)"
 msgstr ""
 
+#: admin/records/class-standard-messages.php:33
+msgid "Выбрано: {count}"
+msgstr ""
+
+#: admin/records/class-standard-messages.php:67
+msgid "Столбцы таблицы"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:196
+msgid "Открыть"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:284
+msgid "Этикетки запрошены у маркетплейса. Когда они будут готовы, нажмите «Скачать этикетки» ещё раз."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:235
+msgid "заказ"
+msgid_plural "заказов"
+msgstr[0] "заказ"
+msgstr[1] "заказа"
+msgstr[2] "заказов"
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:376
+msgid "Список карточек ещё не загружен. Нажмите «Обновить список»."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:216
+msgid "карточка"
+msgid_plural "карточек"
+msgstr[0] "карточка"
+msgstr[1] "карточки"
+msgstr[2] "карточек"
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:217
+msgid "В кабинете нет ни одной карточки."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:141
+msgid "Проверить связи"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:190
+msgid "Нужна, когда выбрана одна категория."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:261
+msgid "Связи и архив"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:230
+msgid "товар"
+msgid_plural "товаров"
+msgstr[0] "товар"
+msgstr[1] "товара"
+msgstr[2] "товаров"
+
+#. translators: %s: warehouse name.
+#: marketplace/admin/pages/products/class-site-products-rows.php:292
+#, php-format
+msgid "Склад: %s"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:55
+msgid "Ожидает регистрации"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:57
+msgid "Идёт приёмка"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:59
+msgid "Ожидает подтверждения"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:61
+msgid "Ожидает упаковки"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:64
+msgid "Ожидает отгрузки"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:66
+msgid "Новое"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:68
+msgid "Арбитраж"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:70
+msgid "Спор с покупателем"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:72
+msgid "Доставляется"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:74
+msgid "Передано водителю"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:77
+msgid "Отправлено"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:83
+msgid "Не принято"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:75
+msgid "Создано"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:96
+msgid "Отменено при разделении"
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-status-text.php:85
+msgid "Другой статус"
+msgstr ""
+
+#. translators: %s: marketplace name, for example «Ozon».
+#: marketplace/class-marketplace-plugin.php:230
+#, php-format
+msgid "Карточки %s"
+msgstr ""
+
 #: marketplace/admin/diagnostics/class-report-builder.php:185
 msgid "Действует"
 msgstr ""

@@ -33,6 +33,7 @@ const PRODUCT: ActionField = {
 	options: [],
 	options_source: true,
 	searchable: true,
+	placeholder: 'Начните вводить название',
 	help: '',
 };
 
@@ -130,6 +131,10 @@ function previews() {
 	return fetchMock.mock.calls.map( ( [ options ] ) => options ).filter( ( options ) => String( options.path ).endsWith( '/preview' ) );
 }
 
+function applies() {
+	return fetchMock.mock.calls.map( ( [ options ] ) => options ).filter( ( options ) => String( options.path ).endsWith( '/actions/link_to' ) );
+}
+
 async function openDialog(): Promise< HTMLElement > {
 	render( <Page /> );
 	await screen.findByRole( 'table', { name: 'Карточки' } );
@@ -152,6 +157,9 @@ beforeEach( () => {
 		}
 		if ( route.endsWith( '/preview' ) ) {
 			return Promise.resolve( PLAN );
+		}
+		if ( route.endsWith( '/actions/link_to' ) ) {
+			return Promise.resolve( { status: 'done', rows: [], removed_ids: [], requested: 1, accepted: 1, skipped: 0, failed: 0, groups: [], messages: {} } );
 		}
 
 		return Promise.resolve(
@@ -246,6 +254,7 @@ describe( 'a searchable select field', () => {
 		const dialog = await openDialog();
 		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
 		await waitFor( () => expect( optionReads() ).toHaveLength( 1 ) );
+		fireEvent.focus( input );
 		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Ещё товары' } ) );
 		await within( dialog ).findByRole( 'option', { name: 'Кружка красная (#12)' } );
 
@@ -280,26 +289,80 @@ describe( 'a searchable select field', () => {
 		await waitFor( () => expect( within( dialog ).queryByRole( 'status' ) ).not.toBeInTheDocument() );
 	} );
 
-	test( 'sends the chosen product and still names it after another search replaced the list', async () => {
+	test( 'is one control: a labelled box with the placeholder, and the list of what the server found under it', async () => {
 		const dialog = await openDialog();
 		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
-		const list = await within( dialog ).findByRole( 'combobox', { name: 'Товар сайта' } );
-		await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } );
 
-		fireEvent.change( list, { target: { value: '11' } } );
-		await waitFor( () => expect( list ).toHaveValue( '11' ) );
+		expect( input ).toHaveAttribute( 'placeholder', 'Начните вводить название' );
+		expect( within( dialog ).queryByRole( 'combobox' ) ).not.toBeInTheDocument();
+		await waitFor( () => expect( optionReads() ).toHaveLength( 1 ) );
 
-		fireEvent.change( input, { target: { value: 'Футб' } } );
-		await act( async () => {
-			await new Promise( ( resolve ) => setTimeout( resolve, SEARCH_DELAY_MS * 2 ) );
-		} );
+		fireEvent.focus( input );
+		expect( await within( dialog ).findByRole( 'listbox', { name: 'Товар сайта' } ) ).toBeInTheDocument();
+		expect( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) ).toBeInTheDocument();
+	} );
 
-		expect( list ).toHaveValue( '11' ); // The search replaced the list; the chosen product stays in it.
-		expect( within( list ).getByRole( 'option', { name: 'Кружка синяя (#11)' } ) ).toBeInTheDocument();
+	test( 'a picked product is written into the box, closes the list and is what is sent', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+
+		fireEvent.focus( input );
+		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
+
+		expect( input ).toHaveValue( 'Кружка синяя (#11)' );
+		expect( within( dialog ).queryByRole( 'listbox' ) ).not.toBeInTheDocument();
 		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
 		await waitFor( () => expect( previews() ).toHaveLength( 1 ) );
 
 		expect( previews()[ 0 ].data ).toMatchObject( { ids: [ 'c1' ], payload: { product: '11' } } );
+	} );
+
+	test( 'while the plan is being made the list cannot be used, so the box always names what is confirmed', async () => {
+		let answer: ( plan: unknown ) => void = () => undefined;
+		const base = fetchMock.getMockImplementation() as ( request: { path: string } ) => Promise< unknown >;
+		fetchMock.mockImplementation( ( request: { path: string } ) =>
+			decodeURIComponent( request.path ).split( '?' )[ 0 ].endsWith( '/preview' )
+				? new Promise( ( resolve ) => {
+						answer = resolve;
+				  } )
+				: base( request )
+		);
+
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+
+		fireEvent.focus( input );
+		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
+		fireEvent.focus( input ); // The merchant reopens the list, then asks for the plan.
+		await within( dialog ).findByRole( 'option', { name: 'Кружка красная (#12)' } );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
+
+		// Planning: the list is gone, and a pick made on a list that was already in hand changes nothing.
+		await waitFor( () => expect( within( dialog ).queryByRole( 'option' ) ).not.toBeInTheDocument() );
+		expect( input ).toBeDisabled();
+		expect( input ).toHaveValue( 'Кружка синяя (#11)' );
+
+		await act( async () => answer( PLAN ) );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Связать с…' } ) );
+		await waitFor( () => expect( applies() ).toHaveLength( 1 ) );
+
+		expect( input ).toHaveValue( 'Кружка синяя (#11)' );
+		expect( previews()[ 0 ].data ).toMatchObject( { payload: { product: '11' } } );
+		expect( applies()[ 0 ].data ).toMatchObject( { payload: { product: '11' } } );
+	} );
+
+	test( 'typing again drops the pick: the box no longer names it', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+
+		fireEvent.focus( input );
+		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
+		fireEvent.change( input, { target: { value: 'Футб' } } );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
+
+		await waitFor( () => expect( previews() ).toHaveLength( 1 ) );
+		expect( previews()[ 0 ].data.payload ).toEqual( {} ); // The pick is gone: the server is asked with no product and refuses it.
+		expect( await within( dialog ).findByRole( 'listbox', { name: 'Товар сайта' } ) ).toBeInTheDocument();
 	} );
 
 	test( 'lists what the server found for a several-word search, even when no label holds the whole phrase', async () => {

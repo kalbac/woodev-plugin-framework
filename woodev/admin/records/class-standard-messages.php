@@ -29,6 +29,8 @@ final class Standard_Messages {
 			'bulk_placeholder' => __( 'Выберите действие', 'woodev-plugin-framework' ),
 			'bulk_apply'       => __( 'Применить', 'woodev-plugin-framework' ),
 			'bulk_label'       => __( 'Массовые действия', 'woodev-plugin-framework' ),
+			// `{count}` is the number of ticked rows; the shell writes it beside the button.
+			'selected_count'   => __( 'Выбрано: {count}', 'woodev-plugin-framework' ),
 		];
 	}
 
@@ -53,7 +55,7 @@ final class Standard_Messages {
 	}
 
 	/**
-	 * The counted view row: the entry that clears the filter.
+	 * The counted view row (the entry that clears the filter) and the name of the table's column menu.
 	 *
 	 * @since 2.1.6
 	 *
@@ -61,7 +63,8 @@ final class Standard_Messages {
 	 */
 	public static function views(): array {
 		return [
-			'views_all' => __( 'Все', 'woodev-plugin-framework' ),
+			'views_all'    => __( 'Все', 'woodev-plugin-framework' ),
+			'columns_menu' => __( 'Столбцы таблицы', 'woodev-plugin-framework' ),
 		];
 	}
 

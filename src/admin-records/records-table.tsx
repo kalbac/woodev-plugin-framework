@@ -13,7 +13,7 @@
 
 import type { MutableRefObject, ReactNode } from 'react';
 import { SelectControl } from '@wordpress/components';
-import { useMemo, useRef, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { createRecordsApi } from './api';
 import type { RecordsExtensions, TableHandle } from './extensions';
 import { FiltersBar, SearchBox, ViewsRow, isNarrowed } from './filters';
@@ -65,6 +65,36 @@ function useRoute( route: RouteQuery, navigate?: Navigate ): [ RouteQuery, Navig
 	return [ merged, ( patch ) => setLocal( ( known ) => ( { ...known, ...patch } ) ) ];
 }
 
+/** A summary longer than this is a paragraph of explanation, not a status line. */
+const LONG_SUMMARY = 160;
+
+/**
+ * The sentence above the table. A short one is shown as it is; a long one keeps its first sentence on screen and folds the rest
+ * into a collapsed «details», so the table starts near the top instead of under a paragraph.
+ *
+ * @param text PHP's summary.
+ */
+function Summary( { text }: { text: string } ) {
+	const split = text.search( /[.!?»]\s/ );
+	const head = split < 0 ? text : text.slice( 0, split + 1 );
+	const rest = split < 0 ? '' : text.slice( split + 1 ).trim();
+
+	if ( text.length <= LONG_SUMMARY || rest === '' ) {
+		return (
+			<p className="woodev-records__summary" style={ STYLES.summary }>
+				{ text }
+			</p>
+		);
+	}
+
+	return (
+		<details className="woodev-records__summary" style={ STYLES.summary }>
+			<summary>{ head }</summary>
+			<p>{ rest }</p>
+		</details>
+	);
+}
+
 interface TableBodyProps {
 	title: string;
 	/** The card header's own controls, bulk group and search; `null` when the table has neither. */
@@ -105,6 +135,20 @@ function TableBody( {
 	const latest = useRef( query );
 	latest.current = query;
 	const dropClampedPage = useRef( false );
+	const columnsMenu = message( messages, MESSAGE_KEYS.columnsMenu );
+
+	// `TableCard` names its column menu with an English string of its own and takes no prop to change it: PHP's name is
+	// written on the icon button after every render (React leaves an attribute alone while its own prop is unchanged).
+	useEffect( () => {
+		if ( columnsMenu === '' ) {
+			return;
+		}
+
+		document.querySelectorAll( '.woodev-records .woocommerce-ellipsis-menu__toggle' ).forEach( ( button ) => {
+			button.setAttribute( 'aria-label', columnsMenu );
+			button.setAttribute( 'title', columnsMenu );
+		} );
+	} );
 
 	if ( ! TableCard ) {
 		return null;
@@ -279,18 +323,17 @@ interface HeaderActionsProps {
 
 /**
  * The card header's controls in one element: the card gives each entry of `actions` its own full-width slot, so two
- * entries would be two stacked controls. Bulk group first, search after it and filling the rest of the row.
+ * entries would be two stacked controls. Bulk group first, then the account-wide buttons (they belong to the table
+ * they sit on, not to a row of their own above its filters), search after them and filling the rest of the row.
  */
 function HeaderActions( { definition, query, selection, handle, extensions, hasBulk, restoreFocus, onChange }: HeaderActionsProps ) {
 	const search = searchFilter( definition );
+	const chosen = { selectedIds: selection.selectedIds, matching: selection.matchingQuery, clear: selection.clear };
 
 	return (
 		<div className="woodev-table-toolbar">
-			{ hasBulk &&
-				extensions.renderBulkActions?.(
-					{ selectedIds: selection.selectedIds, matching: selection.matchingQuery, clear: selection.clear },
-					handle
-				) }
+			{ hasBulk && extensions.renderBulkActions?.( chosen, handle ) }
+			{ hasBulk && extensions.renderAccountActions?.( chosen, handle ) }
 			{ search && (
 				<SearchBox
 					filter={ search }
@@ -401,15 +444,6 @@ export function RecordsTable( {
 
 	return (
 		<div className="woodev-records" data-owner={ owner } data-table={ table }>
-			{ hasBulk &&
-				extensions.renderAccountActions?.(
-					{
-						selectedIds: selection.selectedIds,
-						matching: selection.matchingQuery,
-						clear: selection.clear,
-					},
-					handle
-				) }
 			<FiltersBar
 				definition={ definition }
 				account={ envelope.context.account_id }
@@ -441,11 +475,7 @@ export function RecordsTable( {
 					facets={ records.list.data.facets }
 				/>
 			) }
-			{ summary !== '' && records.list.status === 'ready' && (
-				<p className="woodev-records__summary" style={ STYLES.summary }>
-					{ summary }
-				</p>
-			) }
+			{ summary !== '' && records.list.status === 'ready' && <Summary text={ summary } /> }
 			<Result
 				title={ title }
 				headerActions={ headerActions }

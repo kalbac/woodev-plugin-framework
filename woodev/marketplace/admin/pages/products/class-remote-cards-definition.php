@@ -373,7 +373,7 @@ final class Remote_Cards_Definition {
 			Standard_Messages::matching( __( 'карточки', 'woodev-plugin-framework' ) ),
 			Standard_Messages::views(),
 			[
-				'empty'                  => __( 'Карточек не найдено. Нажмите «Обновить список» или измените фильтры.', 'woodev-plugin-framework' ),
+				'empty'                  => __( 'Список карточек ещё не загружен. Нажмите «Обновить список».', 'woodev-plugin-framework' ),
 				'empty_filtered'         => __( 'По этим фильтрам карточек нет.', 'woodev-plugin-framework' ),
 				/* translators: %s: marketplace name. */
 				'error'                  => sprintf( __( 'Не удалось показать список карточек %s. Повторите чуть позже.', 'woodev-plugin-framework' ), $marketplace ),
@@ -385,7 +385,6 @@ final class Remote_Cards_Definition {
 				'selection_limit'        => __( 'Выбрано предельное число карточек. Выполните действие и выберите остальные.', 'woodev-plugin-framework' ),
 				'filter_any'             => __( 'Все карточки', 'woodev-plugin-framework' ),
 				'per_page'               => __( 'Карточек на странице', 'woodev-plugin-framework' ),
-				'summary_label'          => __( 'Карточек', 'woodev-plugin-framework' ),
 				'action_planning'        => __( 'Проверяем…', 'woodev-plugin-framework' ),
 				'action_recovery'        => __( 'Ответа нет: действие могло выполниться. Мы обновили таблицу — проверьте её.', 'woodev-plugin-framework' ),
 				'action_options_loading' => __( 'Ищем товары…', 'woodev-plugin-framework' ),

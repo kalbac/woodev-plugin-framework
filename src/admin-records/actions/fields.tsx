@@ -112,14 +112,17 @@ function useSettled( typed: string ): string {
 }
 
 /**
- * A select whose options the server filters by what the merchant types (a product of the shop, say). The merchant types in a
- * search box and picks from the list below it; the list is exactly what the server returned, never filtered again here (a
- * client-side filter would hide a match the server found by another word of the query or by a field the label does not show).
- * The chosen option is kept next to the listed ones, so the control still names it after another search replaced the list.
+ * A select whose options the server filters by what the merchant types (a product of the shop, say). It is ONE control: a
+ * search box that carries the field's label and placeholder, and the list of what the server returned right under it. Picking
+ * an entry writes its label into the box and closes the list; typing again opens it and drops the pick. The list is exactly
+ * what the server returned, never filtered again here (a client-side filter would hide a match the server found by another
+ * word of the query or by a field the label does not show). The chosen option is kept next to the listed ones, so the field
+ * still names it after another search replaced the list.
  */
 function SearchableField( props: FieldProps ) {
 	const { table, messages, action, rowId, field, value, error, disabled, onChange } = props;
 	const [ typed, setTyped ] = useState( '' );
+	const [ open, setOpen ] = useState( false );
 	const search = useSettled( typed );
 	const source = useFieldOptions( table, action, field.id, rowId, search );
 	const [ chosen, setChosen ] = useState< Option | null >( null );
@@ -132,34 +135,62 @@ function SearchableField( props: FieldProps ) {
 	}, [ current ] );
 
 	const options = chosen && ! source.options.some( ( option ) => option.value === chosen.value ) ? [ chosen, ...source.options ] : source.options;
-	const placeholder = { value: '', label: actionMessage( messages, ACTION_MESSAGE_KEYS.choose ) };
+	// A disabled fieldset disables its form controls, not the list items inside it. While the action is busy the flow refuses
+	// edits, so a pick made then would change the box but not the payload: the list is not drawn and a pick is ignored.
+	const pick = ( option: Option ) => {
+		if ( disabled ) {
+			return;
+		}
+
+		setChosen( option );
+		setTyped( option.label );
+		setOpen( false );
+		onChange( field.id, option.value );
+	};
 
 	return (
-		<fieldset disabled={ disabled } style={ STYLES.fieldset }>
+		<fieldset disabled={ disabled } style={ STYLES.fieldset } className="woodev-records__searchable">
 			<TextControl
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 				type="search"
 				label={ field.label }
+				placeholder={ field.placeholder ?? '' }
 				value={ typed }
-				onChange={ setTyped }
-			/>
-			<SelectControl
-				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-				hideLabelFromVision
-				label={ field.label }
-				value={ current }
-				options={ [ placeholder, ...options ] }
-				disabled={ source.status === 'loading' }
 				help={ helpOf( field, error ) }
 				aria-invalid={ error !== '' }
 				aria-required={ field.required }
+				onFocus={ () => setOpen( true ) }
 				onChange={ ( next: string ) => {
-					setChosen( options.find( ( option ) => option.value === next ) ?? null );
-					onChange( field.id, next );
+					setTyped( next );
+					setOpen( true );
+					if ( current !== '' ) {
+						// The text no longer names the pick.
+						onChange( field.id, '' );
+					}
 				} }
 			/>
+			{ open && ! disabled && options.length > 0 && (
+				<ul role="listbox" aria-label={ field.label } className="woodev-records__listbox">
+					{ options.map( ( option, index ) => (
+						<li
+							key={ `${ index }:${ option.value }` }
+							role="option"
+							tabIndex={ 0 }
+							aria-selected={ option.value === current }
+							onClick={ () => pick( option ) }
+							onKeyDown={ ( event ) => {
+								if ( event.key === 'Enter' || event.key === ' ' ) {
+									event.preventDefault();
+									pick( option );
+								}
+							} }
+						>
+							{ option.label }
+						</li>
+					) ) }
+				</ul>
+			) }
 			{ source.status === 'loading' && (
 				<span role="status" aria-label={ actionMessage( messages, ACTION_MESSAGE_KEYS.optionsLoading ) }>
 					<Spinner />
