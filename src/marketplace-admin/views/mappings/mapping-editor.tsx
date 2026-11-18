@@ -4,6 +4,7 @@
  * @package woodev-plugin-framework
  */
 
+import { __ } from '@wordpress/i18n';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { Button, SelectControl, Spinner, TextControl } from '@wordpress/components';
 import FieldRow from '../../../components/field-row';
@@ -242,7 +243,7 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 
 				<Group title={ messages.groupCategories }>
 					<FieldRow label={ messages.shopCategories } description={ messages.shopCategoriesHelp }>
-						<SelectField multi value={ draft.terms.map( String ) } options={ categoryOptions } onChange={ setTerms } />
+						<SelectField multi placeholder={ __( 'Не выбрано', 'woodev-plugin-framework' ) } value={ draft.terms.map( String ) } options={ categoryOptions } onChange={ setTerms } />
 					</FieldRow>
 					<FieldRow label={ messages.marketplaceCategory }>
 						<CategoryPicker api={ api } messages={ messages } value={ draft.category } onChange={ chooseCategory } />

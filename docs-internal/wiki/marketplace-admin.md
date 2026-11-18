@@ -822,6 +822,28 @@ C2 tabs and the mapping/profile forms. Delivery code was not touched (invariant 
   unit option names the shop's unit («как в магазине (см)», read by PHP in `View_Config::shop_unit_label()`). VAT moved into «Цена».
   Every new word is a `View_Config` message; `chooseMapping`, `chooseProfile` and `unitDefault` are gone.
 
+### Polish s237 (framework 2.1.13): selects, lists and the product tab
+
+- **One select look.** `PageBody` wraps every marketplace view in `.woodev-marketplace-view`; `src/components/_select-look.scss`
+  (included by `src/marketplace-admin/style.scss`) draws WordPress's `SelectControl` and `SearchControl` in that wrapper as the settings'
+  own select (`.woodev-select__trigger`): 40px, 1px `$line` border, 8px radius, 14px text, 18px muted chevron. It is scoped to the wrapper,
+  never to `.woodev-settings`, which the delivery plugins share. The empty choice of every select reads «Не выбрано» (`SelectField`,
+  `SearchSelectField`, the profile select, the account warehouse select).
+- **Lists.** The tab above a list names it, so the card draws no heading (`TableCard` still needs a `title`: it is the caption; the
+  stylesheet hides the visible heading). A count column shows `0` (a number cell is written as a string: a falsy `display` draws nothing)
+  and is as narrow as its heading. The marketplace category search is a `SearchControl` (magnifier).
+- **Product tab markup.** Every row is `form-field` markup printed by `Panel_View::row()` — **including the adapter's own groups**
+  (`Extension_Group` / `Extension_Field`, e.g. Ozon's «Купить на Ozon»): a plugin never prints its own row, so it inherits the label column
+  and the first-line alignment and needs no hook. The label column is 190px (`product-tab.css`); WooCommerce gives a label a 40px line
+  height, which spaces a two-line label 40px apart, so the stylesheet resets it. A «?» is **inside** the label. A row that holds a
+  `<details>` is a `fieldset.form-field` with a `legend` (a `<details>` cannot sit in a `<p>`). Notes use `.woodev-mp-note`, never WooCommerce's
+  `.description` (it clears the floated label and drops below it).
+- **Buttons.** One group of adjacent buttons in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
+  (`.woodev-mp-btn__text`). A container query shows the words only when the control column is at least 720px; below that only the icons show,
+  with the name in `aria-label` and the explanation in the tooltip. «Архивировать» and «Снять связь» ask twice: the question appears in the result
+  line and the button turns red for five seconds. The help under the buttons is one closed «Подсказки» block. The check is a closed
+  `details` under «Исправить перед выгрузкой (N)»; the marks (✓ ✗ !) are CSS masks, not characters.
+
 ## Card importer (framework 2.1.6)
 
 A marketplace card becomes a WooCommerce product through one job, started two ways. The design

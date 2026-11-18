@@ -42,7 +42,7 @@ final class Dimensions_Rule implements Validation_Rule {
 			$report = $report->with_issue(
 				Validation_Report::ERROR,
 				self::CODE_WEIGHT,
-				'У товара не указан вес — заполните его на вкладке «Доставка» в карточке товара или задайте вес по умолчанию в профиле.',
+				'Не указан вес — заполните его на вкладке «Доставка» или задайте вес по умолчанию в профиле.',
 				null,
 				Validation_Report::FIX_PRODUCT,
 				'нет веса'
@@ -63,7 +63,7 @@ final class Dimensions_Rule implements Validation_Rule {
 		return $report->with_issue(
 			Validation_Report::ERROR,
 			self::CODE_DIMENSIONS,
-			'У товара не указаны размеры (' . implode( ', ', $missing ) . ') — заполните их на вкладке «Доставка» в карточке товара или задайте размеры по умолчанию в профиле.',
+			'Не указаны размеры (' . implode( ', ', $missing ) . ') — заполните их на вкладке «Доставка» или задайте размеры по умолчанию в профиле.',
 			null,
 			Validation_Report::FIX_PRODUCT,
 			'нет размеров'
