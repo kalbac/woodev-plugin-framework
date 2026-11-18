@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
@@ -213,7 +214,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
 			'messages'         => [
 				'summary'       => $this->summary( $account->id(), $snapshot ),
-				'summary_label' => _n( 'карточка', 'карточек', $page['total'], 'woodev-plugin-framework' ),
+				'summary_label' => Russian_Plural::pick( $page['total'], __( 'карточка', 'woodev-plugin-framework' ), __( 'карточки', 'woodev-plugin-framework' ), __( 'карточек', 'woodev-plugin-framework' ) ),
 			] + ( null === $snapshot ? [] : [ 'empty' => __( 'В кабинете нет ни одной карточки.', 'woodev-plugin-framework' ) ] ),
 		];
 	}
@@ -549,7 +550,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			'account_activity' => $this->account_activity( $account->id(), $this->import_state( $account->id() )['importing'] ),
 			'messages'         => [
 				'summary'       => trim( Remote_Cards_Summary::near_explained() . ' ' . Remote_Cards_Summary::last_run( $this->reports->last_run( $account->id() ) ) ),
-				'summary_label' => _n( 'карточка', 'карточек', $found['total'], 'woodev-plugin-framework' ),
+				'summary_label' => Russian_Plural::pick( $found['total'], __( 'карточка', 'woodev-plugin-framework' ), __( 'карточки', 'woodev-plugin-framework' ), __( 'карточек', 'woodev-plugin-framework' ) ),
 			],
 		];
 	}

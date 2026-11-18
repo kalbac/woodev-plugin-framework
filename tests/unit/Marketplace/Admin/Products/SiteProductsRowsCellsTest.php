@@ -69,20 +69,47 @@ final class SiteProductsRowsCellsTest extends TestCase {
 		$this->assertSame( [ 'OZ-10' ], array_column( $this->cells( [ 'sku' => '', 'offer_id' => 'OZ-10' ] )['sku'], 'value' ) );
 	}
 
-	public function test_the_sync_cell_lists_only_what_is_on(): void {
-		$this->assertSame( [ 'Остатки · Цены' ], array_column( $this->cells( [] )['sync'], 'value' ) );
-		$this->assertSame( [ 'Остатки' ], array_column( $this->cells( [ 'sync_price' => false ] )['sync'], 'value' ) );
-		$this->assertSame( [ 'Цены' ], array_column( $this->cells( [ 'sync_stock' => false ] )['sync'], 'value' ) );
-		$this->assertSame( [ '—' ], array_column( $this->cells( [ 'sync_stock' => false, 'sync_price' => false ] )['sync'], 'value' ), 'Nothing on is a dash, not a sentence.' );
+	/**
+	 * The text lines of the «Состояние» cell: what is synchronised, under the state badge.
+	 *
+	 * @param array<string,mixed> $offer Offer keys to override.
+	 * @return string[]
+	 */
+	private function sync_lines( array $offer ): array {
+		$items = array_filter(
+			$this->cells( $offer )['state'],
+			static function ( array $item ): bool {
+				return 'text' === $item['type'];
+			}
+		);
+
+		return array_values( array_column( $items, 'value' ) );
+	}
+
+	public function test_the_state_cell_lists_only_what_is_synchronised(): void {
+		$this->assertSame( [ 'Остатки · Цены' ], $this->sync_lines( [] ) );
+		$this->assertSame( [ 'Остатки' ], $this->sync_lines( [ 'sync_price' => false ] ) );
+		$this->assertSame( [ 'Цены' ], $this->sync_lines( [ 'sync_stock' => false ] ) );
+		$this->assertSame( [ '—' ], $this->sync_lines( [ 'sync_stock' => false, 'sync_price' => false ] ), 'Nothing on is a dash, not a sentence.' );
 	}
 
 	public function test_the_warehouse_is_written_only_when_the_product_has_one_of_its_own(): void {
-		$this->assertSame( [ 'Остатки · Цены', 'Склад: Основной склад' ], array_column( $this->cells( [ 'warehouse_id' => 22 ] )['sync'], 'value' ) );
-		$this->assertSame( [ 'Остатки · Цены', 'Склад: #99' ], array_column( $this->cells( [ 'warehouse_id' => 99 ] )['sync'], 'value' ), 'A warehouse the account no longer lists is named by its number.' );
-		$this->assertCount( 1, $this->cells( [ 'warehouse_id' => 0 ] )['sync'] );
+		$this->assertSame( [ 'Остатки · Цены', 'Склад: Основной склад' ], $this->sync_lines( [ 'warehouse_id' => 22 ] ) );
+		$this->assertSame( [ 'Остатки · Цены', 'Склад: #99' ], $this->sync_lines( [ 'warehouse_id' => 99 ] ), 'A warehouse the account no longer lists is named by its number.' );
+		$this->assertCount( 1, $this->sync_lines( [ 'warehouse_id' => 0 ] ) );
 	}
 
-	public function test_an_unlinked_product_has_no_sync_cell(): void {
-		$this->assertNull( $this->cells( [ 'link_id' => null ] )['sync'] );
+	public function test_an_unlinked_product_has_only_its_badge_in_the_state_cell(): void {
+		$this->assertCount( 1, $this->cells( [ 'link_id' => null ] )['state'] );
+	}
+
+	public function test_the_error_is_a_red_badge_in_the_state_cell_and_there_is_no_error_or_sync_column(): void {
+		$cells = $this->cells( [ 'error' => 'Не заполнен бренд' ] );
+		$last  = end( $cells['state'] );
+
+		$this->assertSame( 'badge', $last['type'] );
+		$this->assertSame( [ 'label' => 'Не заполнен бренд', 'tone' => 'danger' ], $last['value'] );
+		$this->assertArrayNotHasKey( 'error', $cells );
+		$this->assertArrayNotHasKey( 'sync', $cells );
 	}
 }

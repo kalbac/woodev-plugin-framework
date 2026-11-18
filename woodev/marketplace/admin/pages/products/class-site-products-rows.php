@@ -7,8 +7,6 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
-use Woodev\Framework\Admin\Records\Row_Normalizer;
-
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -28,9 +26,10 @@ final class Site_Products_Rows {
 	private const CLIP = 200;
 
 	/**
-	 * Most state badges in one cell: the engine's stack limit.
+	 * Most state badges in one cell. The engine's stack holds five items; a synchronised offer adds up to two lines under its badge
+	 * and an error one more, so the badges of a variable product stop at three.
 	 */
-	private const MAX_BADGES = Row_Normalizer::MAX_STACK_ITEMS;
+	private const MAX_BADGES = 3;
 
 	/**
 	 * Marketplace name for the «Маркетплейс» side of stock and price.
@@ -140,7 +139,8 @@ final class Site_Products_Rows {
 	}
 
 	/**
-	 * Cells of a single offer: a simple product or a variation.
+	 * Cells of a single offer: a simple product or a variation. The «Состояние» cell carries the state badge, what is synchronised
+	 * and, in red, the error — one column instead of three, so the table fits a 1024px screen without a hidden column.
 	 *
 	 * @param string              $name  Name.
 	 * @param array<string,mixed> $offer Offer.
@@ -148,20 +148,19 @@ final class Site_Products_Rows {
 	 */
 	private function offer_cells( string $name, array $offer ): array {
 		$linked = null !== $offer['link_id'];
+		$state  = [
+			[
+				'type'  => 'badge',
+				'value' => State_Groups::badge( $offer['group'] ),
+			],
+		];
 
 		return [
 			'name'      => $this->clip( $name ),
 			'sku'       => $this->sku_cell( $offer ),
-			'state'     => [
-				[
-					'type' => 'badge',
-					'value' => State_Groups::badge( $offer['group'] ),
-				],
-			],
+			'state'     => array_merge( $state, $linked ? $this->sync_cell( $offer ) : [], $this->error_items( $offer['error'] ) ),
 			'stock'     => $this->pair_cell( $this->count( $offer['site_stock'] ), null === $offer['remote_stock'] ? null : (string) $offer['remote_stock'] ),
 			'price'     => $this->pair_cell( $this->price( $offer['site_price'] ), $this->price( $offer['remote_price'] ) ),
-			'sync'      => $linked ? $this->sync_cell( $offer ) : null,
-			'error'     => '' === $offer['error'] ? null : $this->clip( $offer['error'] ),
 			'actions'   => null,
 		];
 	}
@@ -184,11 +183,12 @@ final class Site_Products_Rows {
 					'value' => $this->clip( $product['sku'] ),
 				],
 			],
-			'state'     => $this->state_badges( $offers ),
+			'state'     => array_merge(
+				$this->state_badges( $offers ),
+				[] === $errors ? [] : $this->error_items( sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) ) )
+			),
 			'stock'     => $this->pair_cell( $this->site_stock_sum( $offers ), $this->remote_stock_sum( $offers ) ),
 			'price'     => $this->pair_cell( $this->price_range( array_column( $offers, 'site_price' ) ), null ),
-			'sync'      => null,
-			'error'     => [] === $errors ? null : $this->clip( sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) ) ),
 			'actions'   => null,
 		];
 	}
@@ -261,8 +261,30 @@ final class Site_Products_Rows {
 	}
 
 	/**
+	 * The error of an offer as a red badge under its state; nothing when there is none.
+	 *
+	 * @param string $error Error text of the offer, or the parent's summary of its variations' errors.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function error_items( string $error ): array {
+		if ( '' === $error ) {
+			return [];
+		}
+
+		return [
+			[
+				'type'  => 'badge',
+				'value' => [
+					'label' => $this->clip( $error ),
+					'tone'  => 'danger',
+				],
+			],
+		];
+	}
+
+	/**
 	 * What is synchronised and, when the product has a warehouse of its own, which: «Остатки · Цены» listing only what is on («—» when
-	 * nothing is), and under it «Склад: …».
+	 * nothing is), and under it «Склад: …». Lines of the «Состояние» cell, under the state badge.
 	 *
 	 * @param array<string,mixed> $offer Offer.
 	 * @return array<int,array<string,mixed>>

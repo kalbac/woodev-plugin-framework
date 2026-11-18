@@ -364,7 +364,9 @@ describe( 'lists', () => {
 
 		await userEvent.click( await screen.findByRole( 'button', { name: 'Платья' } ) );
 		expect( history[ history.length - 1 ] ).toEqual( { mapping: '1' } );
-		expect( await screen.findByLabelText( 'Название сопоставления' ) ).toHaveValue( 'Платья' );
+		const nameField = await screen.findByLabelText( 'Название сопоставления' );
+		expect( nameField ).toHaveValue( 'Платья' );
+		expect( nameField ).toHaveAttribute( 'placeholder', 'Например: Футболки' );
 		expect( screen.queryByRole( 'table', { name: 'Сопоставления' } ) ).not.toBeInTheDocument();
 
 		await back();

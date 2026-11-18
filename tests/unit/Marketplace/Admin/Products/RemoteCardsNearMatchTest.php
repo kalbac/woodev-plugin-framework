@@ -123,7 +123,7 @@ final class RemoteCardsNearMatchTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_report_view_keeps_the_counted_footer_label(): void {
-		$this->assertSame( 'карточек', $this->list_body( [ 'show' => 'near' ] )['messages']['summary_label'], 'Two pairs: the plural form.' );
+		$this->assertSame( 'карточки', $this->list_body( [ 'show' => 'near' ] )['messages']['summary_label'], 'Two pairs: the plural form.' );
 
 		$one = $this->cards_provider()->query( $this->context(), [ 'page' => 1, 'per_page' => 20, 'search' => 'карточка xyz', 'filters' => [ 'show' => 'near' ] ] );
 		$this->assertSame( 'карточка', $one['messages']['summary_label'], 'One pair: the singular form.' );

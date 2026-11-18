@@ -11756,6 +11756,14 @@ msgid_plural "заказов"
 msgstr[0] ""
 msgstr[1] ""
 
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:236
+msgid "заказа"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:236
+msgid "заказов"
+msgstr ""
+
 #: marketplace/admin/pages/products/class-remote-cards-definition.php:376
 msgid "Список карточек ещё не загружен. Нажмите «Обновить список»."
 msgstr ""
@@ -11765,6 +11773,10 @@ msgid "карточка"
 msgid_plural "карточек"
 msgstr[0] ""
 msgstr[1] ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:217
+msgid "карточек"
+msgstr ""
 
 #: marketplace/admin/pages/products/class-remote-cards-provider.php:217
 msgid "В кабинете нет ни одной карточки."
@@ -11787,6 +11799,14 @@ msgid "товар"
 msgid_plural "товаров"
 msgstr[0] ""
 msgstr[1] ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:231
+msgid "товара"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-provider.php:231
+msgid "товаров"
+msgstr ""
 
 #. translators: %s: warehouse name.
 #: marketplace/admin/pages/products/class-site-products-rows.php:292

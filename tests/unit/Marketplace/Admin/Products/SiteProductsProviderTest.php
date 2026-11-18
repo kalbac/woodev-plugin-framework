@@ -331,8 +331,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( 'Кроссовки', $parent['cells']['name'] );
 		$this->assertSame( 'На сайте: 7', $parent['cells']['stock'][0]['value'], 'Three plus four.' );
 		$this->assertSame( 'На сайте: 200 – 250', $parent['cells']['price'][0]['value'] );
-		$this->assertSame( 'Ошибка у 1 варианта', $parent['cells']['error'] );
-		$this->assertSame( [ 'Ошибка', 'Не связан' ], array_column( array_column( $parent['cells']['state'], 'value' ), 'label' ) );
+		$this->assertSame( [ 'Ошибка', 'Не связан', 'Ошибка у 1 варианта' ], array_column( array_column( $parent['cells']['state'], 'value' ), 'label' ), 'The error of a variation is the last line of the state cell.' );
 		$this->assertSame( 'https://example.test/wp-admin/post.php?post=20&action=edit', $parent['actions'][0]['url'] );
 	}
 
@@ -346,7 +345,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( 'success', $row['cells']['state'][0]['value']['tone'] );
 		$this->assertSame( [ 'P-10', 'OZ-10' ], array_column( $row['cells']['sku'], 'value' ), 'The offer id differs from the article: both are shown.' );
 		$this->assertSame( [ 'На сайте: 5', 'Тестмаркет: 7' ], array_column( $row['cells']['stock'], 'value' ) );
-		$this->assertSame( [ 'Остатки · Цены' ], array_column( $row['cells']['sync'], 'value' ), 'Only what is on is listed; the default warehouse is not written out.' );
+		$this->assertSame( [ 'Остатки · Цены' ], array_column( array_slice( $row['cells']['state'], 1 ), 'value' ), 'Only what is on is listed under the badge; the default warehouse is not written out.' );
 		$this->assertArrayNotHasKey( 'warehouse', $row['cells'] );
 	}
 
@@ -372,7 +371,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( 2, $body['total'] );
 		$this->assertSame( [ $this->row_id( 21 ), $this->row_id( 22 ) ], array_column( $body['rows'], 'id' ) );
 		$this->assertSame( [ 'красный', 'синий' ], array_column( array_column( $body['rows'], 'cells' ), 'name' ) );
-		$this->assertSame( 'Не заполнен бренд', $body['rows'][0]['cells']['error'] );
+		$this->assertSame( 'Не заполнен бренд', end( $body['rows'][0]['cells']['state'] )['value']['label'] );
 		$this->assertSame( 'Ошибка', $body['rows'][0]['cells']['state'][0]['value']['label'] );
 		$this->assertSame( 'https://example.test/wp-admin/post.php?post=20&action=edit', $body['rows'][0]['actions'][0]['url'], 'A variation is edited on its parent.' );
 		$this->assertFalse( $body['rows'][0]['has_children'] );
@@ -541,7 +540,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$row = $this->by_id( $this->list_body() )[ $this->row_id( 30 ) ];
 
 		$this->assertSame( 'Не связан', $row['cells']['state'][0]['value']['label'] );
-		$this->assertNull( $row['cells']['sync'] );
+		$this->assertCount( 1, $row['cells']['state'], 'Unlinked: the badge alone, no synchronisation line.' );
 	}
 
 	public function test_the_table_id_is_the_page_table(): void {

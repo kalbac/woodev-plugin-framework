@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Refused;
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flows\Label_Exception;
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
@@ -232,7 +233,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			'rows'     => $this->build_rows( $account, $page['items'] ),
 			'total'    => $page['total'],
 			'facets'   => [ 'state' => $this->state_facets( $filter ) ],
-			'messages' => [ 'summary_label' => _n( 'заказ', 'заказов', $page['total'], 'woodev-plugin-framework' ) ],
+			'messages' => [ 'summary_label' => Russian_Plural::pick( $page['total'], __( 'заказ', 'woodev-plugin-framework' ), __( 'заказа', 'woodev-plugin-framework' ), __( 'заказов', 'woodev-plugin-framework' ) ) ],
 		];
 	}
 

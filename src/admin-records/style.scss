@@ -61,6 +61,13 @@
 		scrollbar-color: #8c8f94 #f0f0f1;
 		scrollbar-width: auto;
 
+		// WooCommerce's edge fade (a 60px white gradient over the right and left edge) washes out the button of the last
+		// column, which looks disabled; the always-drawn bar above already says the table scrolls.
+		&::before,
+		&::after {
+			display: none;
+		}
+
 		&::-webkit-scrollbar {
 			height: 12px;
 		}
@@ -86,8 +93,7 @@
 	.woodev-records__col-status,
 	.woodev-records__col-state,
 	.woodev-records__col-stock,
-	.woodev-records__col-price,
-	.woodev-records__col-sync {
+	.woodev-records__col-price {
 		white-space: nowrap;
 	}
 
@@ -110,24 +116,23 @@
 		background: #f6f7f7;
 	}
 
-	// The product name and the article read as text, so they have a floor to wrap against instead of a few letters a line.
+	// The product name and the article read as text, so they have a floor to wrap against instead of a few letters a line. The
+	// floor of the article is wide enough that a 30-character article breaks into two lines, never three.
 	.woodev-records__col-name {
-		min-width: 220px;
+		min-width: 200px;
 	}
 
 	.woodev-records__col-sku {
-		min-width: 120px;
+		min-width: 170px;
 		overflow-wrap: anywhere;
 	}
 
-	.woodev-records__col-error {
-		min-width: 160px;
-	}
-
-	// «Выбрано: 3» beside the bulk group.
+	// «Выбрано: 3» beside the bulk group. Its place is kept while nothing is ticked (the element is always drawn, empty), so the
+	// buttons after it stay where they are when the first row is ticked.
 	.woodev-table-bulk__selected {
 		color: wd.$muted;
 		font-size: 13px;
+		min-width: 7em;
 		white-space: nowrap;
 	}
 

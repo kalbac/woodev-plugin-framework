@@ -26,7 +26,7 @@ export interface BulkActionLabels {
 	apply: string;
 	/** The select's accessible name (the label is not drawn). */
 	label: string;
-	/** Written beside the group while rows are ticked («Выбрано: 3»); empty for none. */
+	/** Written beside the group while rows are ticked («Выбрано: 3»); empty while none is, and `undefined` when there is no such sentence. */
 	selected?: string;
 }
 
@@ -115,7 +115,7 @@ export function BulkActionSelect( {
 					{ labels.apply }
 				</Button>
 			</div>
-			{ labels.selected && (
+			{ labels.selected !== undefined && (
 				<span role="status" className="woodev-table-bulk__selected">
 					{ labels.selected }
 				</span>

@@ -863,15 +863,20 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   «Отменить отправление» (no disabled button, no sentence). The «Этикетки» column is gone: the label action hands over a stored document at once.
 - **Every column has a class** (`woodev-records__col-<id>`, `TableCard`'s `cellClassName`) and `style.scss` sizes by it: numbers, dates,
   badges and the posting number never wrap, the name and article have a floor. Cells pad 12 px a side (WooCommerce's 24 px lost 380 px).
-  The scrolling card always draws its scrollbar. Dates are `d.m.Y H:i` in the site's timezone.
-- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs. «Склад» and «Синхронизация» are one
-  `sync` column: «Остатки · Цены» listing only what is on («—» when none), and «Склад: …» only for a product with a warehouse of its own.
+  The scrolling card always draws its scrollbar, and WooCommerce's edge fade over the last column is off (it made «Изменить товар» look disabled).
+  Dates are `d.m.Y H:i` in the site's timezone.
+- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs (it wraps to two lines at most). The table has
+  five data columns and fits 1040 px: «Синхронизация» and «Ошибка» are lines of the «Состояние» cell — the state badge, «Остатки · Цены»
+  listing only what is on («—» when none), «Склад: …» only for a product with a warehouse of its own, and the error as a red badge
+  (a long one wraps inside 240 px). A variable product's cell shows up to three state badges and «Ошибка у N варианта».
 - **Bulk select.** An action descriptor may declare `group`; `BulkActionSelect` draws one `<optgroup>` per group («Выгрузка», «Синхронизация»,
-  «Связи и архив») and «Выбрано: N» (`selected_count`) beside the button. The account-wide buttons («Связать по артикулу», «Обновить список»)
+  «Связи и архив») and «Выбрано: N» (`selected_count`) beside the button; its place is kept (the element is drawn empty) while nothing is
+  ticked, so the buttons after it do not jump. The account-wide buttons («Связать по артикулу», «Обновить список»)
   sit in the card header next to the select, on both tabs. The column-menu button is named from `columns_menu`.
 - **Card heading and summary.** The card title repeats the page title or the tab, so it is visually hidden (kept for assistive
   technology); a long `summary` keeps its first sentence and folds the rest into a `<details>`. The footer word is pluralised per
-  list (`summary_label` in the list response). The counted view row is not drawn while every count is zero.
+  list (`summary_label` in the list response) by `Russian_Plural::pick()` — the Russian rule whatever the site's locale (`_n()` follows the
+  locale's rule, and a site not set to Russian printed «4 заказов»). The counted view row is not drawn while every count is zero.
 - **«Карточки {marketplace}».** The tab takes the name from the adapter's `settings_descriptor()->marketplace_name()`. Before the first
   load the table says once «Список карточек ещё не загружен. Нажмите «Обновить список».»; the list is never loaded on open (that calls the marketplace).
 - **«Связать по артикулу» dialog.** The searchable category field is one control: a labelled box with the field's `placeholder`
