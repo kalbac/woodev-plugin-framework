@@ -25,10 +25,9 @@ const account = ( id, overrides = {} ) => ( {
 
 const adder = { id: 'account_connection_new', label: 'Подключение', is_connection: true, card: { new: true } };
 
-const view = ( sections, onToggleEnabled = jest.fn() ) => render( createElement( AccountsView, {
+const view = ( sections ) => render( createElement( AccountsView, {
 	tab: { id: 'ozon-seller', sections },
 	renderSection: ( tab, id ) => createElement( 'div', { 'data-testid': `block-${ id }` } ),
-	onToggleEnabled,
 } ) );
 
 test( 'a tab is the accounts tab when a section carries a card', () => {
@@ -72,15 +71,18 @@ test( 'a card shows title, identifier and status, and opens its fields on «Ре
 	expect( screen.getByTestId( 'block-account_connection_1' ) ).toBeInTheDocument();
 } );
 
-test( '«Удалить» of an enabled account is disabled and the hint is its tooltip, not text under every card', () => {
-	view( [ account( 1, { delete_url: '/wp-json/x/deletion', delete_hint: 'Сначала выключите аккаунт.' } ), adder ] );
+test( '«Удалить» of an enabled account is disabled and the reason is visible text under the buttons', () => {
+	view( [ account( 1, { delete_url: '/wp-json/x/deletion', delete_hint: 'Чтобы удалить аккаунт, сначала выключите его.' } ), adder ] );
 
-	const button = screen.getByRole( 'button', { name: 'Удалить' } );
+	expect( screen.getByRole( 'button', { name: 'Удалить' } ) ).toBeDisabled();
+	expect( screen.getByText( 'Чтобы удалить аккаунт, сначала выключите его.' ) ).toBeVisible();
+} );
 
-	expect( button ).toBeDisabled();
-	expect( button ).toHaveAttribute( 'title', 'Сначала выключите аккаунт.' );
-	expect( button.parentElement ).toHaveAttribute( 'title', 'Сначала выключите аккаунт.' );
-	expect( screen.queryByText( 'Сначала выключите аккаунт.' ) ).not.toBeInTheDocument();
+test( 'a card that can be deleted shows no hint', () => {
+	view( [ account( 1, { enabled: false, delete_url: '/wp-json/x/deletion', delete_hint: '' } ), adder ] );
+
+	expect( screen.getByRole( 'button', { name: 'Удалить' } ) ).toBeEnabled();
+	expect( document.querySelector( '.woodev-account-card__hint' ) ).toBeNull();
 } );
 
 test( '«Удалить» is available for a switched-off account only when the screen offers deleting', () => {
@@ -96,7 +98,6 @@ test( 'pressing «Удалить» on a switched-off account opens the deletion 
 	render( createElement( AccountsView, {
 		tab: { id: 'ozon-seller', sections: [ account( 1, { enabled: false, delete_url: '/wp-json/x/deletion', delete_hint: '' } ), adder ] },
 		renderSection: () => null,
-		onToggleEnabled: jest.fn(),
 		onAccountsChanged,
 	} ) );
 
@@ -107,30 +108,52 @@ test( 'pressing «Удалить» on a switched-off account opens the deletion 
 	expect( onAccountsChanged ).toHaveBeenCalledTimes( 1 );
 } );
 
-test( '«Выключить» hands the section to the page, and an off account offers «Включить»', () => {
-	const onToggle = jest.fn();
-	const { unmount } = view( [ account( 1 ), adder ], onToggle );
+test( 'the header has no on/off button any more: the switch lives in the form', () => {
+	view( [ account( 1 ), account( 2, { enabled: false } ), adder ] );
 
-	fireEvent.click( screen.getByRole( 'button', { name: 'Выключить' } ) );
-
-	expect( onToggle ).toHaveBeenCalledTimes( 1 );
-	expect( onToggle.mock.calls[ 0 ][ 1 ].card.enabled_field ).toBe( 'account_1_enabled' );
-
-	unmount();
-	view( [ account( 1, { enabled: false } ), adder ] );
-
-	expect( screen.getByRole( 'button', { name: 'Включить' } ) ).toBeInTheDocument();
+	expect( screen.queryByRole( 'button', { name: 'Выключить' } ) ).not.toBeInTheDocument();
+	expect( screen.queryByRole( 'button', { name: 'Включить' } ) ).not.toBeInTheDocument();
+	expect( screen.getByText( 'Выключен' ) ).toBeInTheDocument();
 } );
 
-test( '«Включить» is disabled while the account\'s data is being deleted', () => {
-	const onToggle = jest.fn();
-	view( [ account( 1, { enabled: false, delete_url: '/x/1', deletion: 'running' } ), adder ], onToggle );
+test( 'opening the form puts the connection message away from the header: it is said once, under «Проверить подключение»', () => {
+	view( [ account( 1 ), adder ] );
 
-	const button = screen.getByRole( 'button', { name: 'Включить' } );
+	expect( screen.getByText( 'Подключено' ) ).toBeInTheDocument();
 
-	expect( button ).toBeDisabled();
-	expect( button ).toHaveAttribute( 'title', 'Аккаунт удаляется — включить его нельзя.' );
-	expect( button.parentElement ).toHaveAttribute( 'title', 'Аккаунт удаляется — включить его нельзя.' );
-	fireEvent.click( button );
-	expect( onToggle ).not.toHaveBeenCalled();
+	fireEvent.click( screen.getByRole( 'button', { name: 'Редактировать' } ) );
+
+	expect( screen.queryByText( 'Подключено' ) ).not.toBeInTheDocument();
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Свернуть' } ) );
+
+	expect( screen.getByText( 'Подключено' ) ).toBeInTheDocument();
+} );
+
+test( 'adding an account collapses the open edit form, and opening an edit puts the new-account form away', () => {
+	view( [ account( 1 ), adder ] );
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Редактировать' } ) );
+	expect( screen.getByTestId( 'block-account_connection_1' ) ).toBeInTheDocument();
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Добавить аккаунт' } ) );
+	expect( screen.queryByTestId( 'block-account_connection_1' ) ).not.toBeInTheDocument();
+	expect( screen.getByTestId( 'block-account_connection_new' ) ).toBeInTheDocument();
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Редактировать' } ) );
+	expect( screen.getByTestId( 'block-account_connection_1' ) ).toBeInTheDocument();
+	expect( screen.queryByTestId( 'block-account_connection_new' ) ).not.toBeInTheDocument();
+} );
+
+test( 'Esc closes the open form', () => {
+	view( [ account( 1 ), adder ] );
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Редактировать' } ) );
+	fireEvent.keyDown( screen.getByTestId( 'block-account_connection_1' ), { key: 'Escape' } );
+	expect( screen.queryByTestId( 'block-account_connection_1' ) ).not.toBeInTheDocument();
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Добавить аккаунт' } ) );
+	fireEvent.keyDown( screen.getByTestId( 'block-account_connection_new' ), { key: 'Escape' } );
+	expect( screen.queryByTestId( 'block-account_connection_new' ) ).not.toBeInTheDocument();
+	expect( screen.getByRole( 'button', { name: 'Добавить аккаунт' } ) ).toBeInTheDocument();
 } );

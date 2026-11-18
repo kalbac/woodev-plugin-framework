@@ -218,10 +218,20 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertCount( 2, $sections, 'the switches card and one account card' );
 		$this->assertSame( 'notifications_webhooks', $sections[0]->get_id() );
 		$desc = $sections[1]->get_description();
-		$this->assertStringContainsString( '<code>https://shop.example/wp-json/woodev/v1/marketplace/' . Sqlite_Tables::MARKETPLACE_ID . '/notifications/' . $acc_id . '/' . $raw_token . '</code>', $desc, 'the merchant copies the full address into the cabinet' );
+		$this->assertSame(
+			[
+				'label' => 'Адрес',
+				'value' => 'https://shop.example/wp-json/woodev/v1/marketplace/' . Sqlite_Tables::MARKETPLACE_ID . '/notifications/' . $acc_id . '/' . $raw_token,
+			],
+			$sections[1]->get_copy_field(),
+			'the merchant copies the full address into the cabinet from a read-only field with a button'
+		);
 		$this->assertStringNotContainsString( '[скрыто]', $desc );
+		$this->assertStringNotContainsString( '<code>', $desc, 'the address is no longer raw text among the facts' );
 		$this->assertStringContainsString( 'вписывать его вручную не нужно', $sections[0]->get_description(), 'this adapter registers the address itself' );
-		$this->assertStringContainsString( 'Новые заказы, Остатки', $desc );
+		$this->assertStringContainsString( 'в личный кабинет PushMarket, вписывать его', $sections[0]->get_description(), 'one sentence, naming the marketplace' );
+		$this->assertStringNotContainsString( 'Где указать адрес', $sections[0]->get_description(), 'an adapter that registers the address itself needs no place to type it' );
+		$this->assertStringContainsString( 'Новый заказ, изменение заказа, остатки.', $desc, 'the wanted events are the switches that are on' );
 
 		// Execute all 4 tools when licence is valid; state is refreshed in DB.
 		$actions = $sections[1]->get_actions();
@@ -351,7 +361,7 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 
 		$this->assertStringContainsString( 'Скопируйте адрес сайта для уведомлений', $sections[0]->get_description() );
 		$this->assertStringNotContainsString( 'Зарегистрировать адрес', $sections[0]->get_description() );
-		$this->assertStringContainsString( '/notifications/', $sections[1]->get_description(), 'the address to copy is in the account card' );
+		$this->assertStringContainsString( '/notifications/', $sections[1]->get_copy_field()['value'], 'the address to copy is in the account card' );
 	}
 
 	public function test_types_that_share_one_cabinet_location_get_ONE_location_sentence(): void {
@@ -430,13 +440,21 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		);
 
 		$block       = $notif->sections()[1];
+		$block_id    = (int) substr( $block->get_id(), strlen( 'notifications_account_' ) );
 		$description = $block->get_description();
 
 		$this->assertStringStartsWith( '<dl class="woodev-facts">', $description );
 		$this->assertStringNotContainsString( '<strong>', $description, 'no bold-label paragraphs any more' );
-		$this->assertSame( 3, substr_count( $description, '<dt>' ), 'address, state, wanted events' );
-		$this->assertStringContainsString( '<dt>Состояние</dt><dd>ещё не проверялось · последнее: пока не поступало</dd>', $description, 'registration state and the last notification are ONE line' );
+		$this->assertSame( 2, substr_count( $description, '<dt>' ), 'state, wanted events — the address has its own field' );
+		$this->assertSame( 'Адрес', $block->get_copy_field()['label'] );
+		$this->assertStringContainsString( '<dt>Состояние</dt><dd>Связь не проверялась. Уведомления пока не поступали.</dd>', $description, 'registration state and the last notification are ONE line of two sentences' );
 		$this->assertSame( \Woodev\Framework\Settings\Settings_Section::ACTIONS_ROW, $block->get_actions_layout() );
+		$this->assertSame(
+			[ 'woodev_fake_mp_notifications_' . $block_id . '_update_types', 'woodev_fake_mp_notifications_' . $block_id . '_enable' ],
+			$block->get_advanced_action_ids(),
+			'the two rarely needed buttons go into the collapsed block'
+		);
+		$this->assertSame( 'Дополнительно', $block->get_advanced_actions_label() );
 		$this->assertSame(
 			[ 'Зарегистрировать адрес', 'Проверить связь', 'Обновить типы событий', 'Возобновить уведомления' ],
 			array_map(
@@ -608,5 +626,44 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertSame( 'yes', $this->options['woodev_fake_mp_advanced_logging'] ?? null );
 		$this->assertSame( 'yes', $this->options['woodev_fake_mp_advanced_delete_data_on_uninstall'] ?? null );
 		$this->assertSame( 'woodev_fake_mp_' . Uninstaller::DELETE_DATA_SETTING, 'woodev_fake_mp_advanced_delete_data_on_uninstall', 'the id the Uninstaller reads' );
+	}
+
+	public function test_the_wanted_events_line_lists_only_the_switches_that_are_on_and_follows_the_stock_mode(): void {
+		$notif = $this->push_section( new Fake_Push_Protocol() );
+		$store = new Wpdb_Account_Store(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt' ),
+			Sqlite_Tables::MARKETPLACE_ID,
+			new Credential_Fields( 'cabinet_id', [ 'api_token' ] )
+		);
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop', true, [ 'cabinet_id' => 'CAB-1', 'api_token' => 'sec-1' ] ) );
+
+		$this->options['woodev_fake_mp_webhook_order_changed'] = 'no';
+
+		$this->assertStringContainsString( '<dt>Нужные события</dt><dd>Новый заказ, остатки.</dd>', $notif->sections()[1]->get_description(), 'a switched-off type is not wanted' );
+
+		$this->options['woodev_fake_mp_webhook_order_created'] = 'no';
+		$this->options['woodev_fake_mp_webhook_stock_changed'] = 'no';
+
+		$this->assertStringContainsString( '<dd>Ни одно уведомление не включено.</dd>', $notif->sections()[1]->get_description() );
+	}
+
+	public function test_a_web_address_in_the_cabinet_location_becomes_a_link_with_text_never_a_raw_address(): void {
+		$types = [ new Webhook_Type( 'new_order', 'Новый заказ', 'p', 'Личный кабинет → Интеграции (seller.example.ru/app/settings/integrations)' ) ];
+
+		$description = $this->push_section( new Fake_Push_Protocol( '203.0.113.0/24', $types ) )->sections()[0]->get_description();
+
+		$this->assertStringContainsString( '<a href="https://seller.example.ru/app/settings/integrations" target="_blank" rel="noopener noreferrer">seller.example.ru</a>', $description );
+		$this->assertStringNotContainsString( '(seller.example.ru/app', $description, 'the raw address is gone from the sentence' );
+	}
+
+	public function test_a_switchs_explanation_is_its_visible_description_not_a_tooltip(): void {
+		$handler = new Settings_Handler( 'fake_mp', [ $this->push_section( new Fake_Push_Protocol() ), new Advanced_Section() ] );
+		$schema  = \Woodev\Framework\Settings\Field_Schema::from_handler( $handler );
+
+		$this->assertSame( 'Сообщает о новом заказе.', $schema['webhook_order_created']['description'] ?? null );
+		$this->assertArrayNotHasKey( 'tooltip', array_filter( $schema['webhook_order_created'] ?? [] ), 'no icon to hover for it any more' );
+		$this->assertStringContainsString( 'Удалит аккаунты, связи и настройки без возможности восстановления.', $schema[ Advanced_Section::DELETE_DATA_ID ]['description'] ?? '' );
 	}
 }

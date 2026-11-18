@@ -2,14 +2,14 @@
  * The «Подключение» tab of a marketplace plugin: one card per connected account, and the way to add another.
  *
  * Sections that carry a `card` (`Settings_Section::with_card()`) are drawn here instead of as sub-tabs. A card shows the
- * account's title, identifier and stored status with «Редактировать» / «Выключить» / «Удалить»; opening it renders the
+ * account's title, identifier and stored status with «Редактировать» / «Удалить»; opening it renders the
  * section's own connection block (fields and «Проверить подключение») through `renderSection`, so saving and testing are the
  * settings page's, unchanged. With no account the tab is one big «Добавить аккаунт» button that opens the form.
  *
  * @package woodev-plugin-framework
  */
 
-import type { ReactNode } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
@@ -27,6 +27,7 @@ export interface AccountCardSchema {
 	identifier_label: string;
 	identifier: string;
 	enabled: boolean;
+	/** The setting that switches the account (the form's «Аккаунт включён»); the page saves it with the form. */
 	enabled_field: string;
 	/** Why «Удалить» is unavailable (an enabled account must be switched off first); empty when it is available. */
 	delete_hint?: string;
@@ -110,9 +111,7 @@ export function cardStatus( section: CardSection ): CardStatus {
 interface AccountCardProps {
 	section: CardSection;
 	open: boolean;
-	busy: boolean;
 	onToggleOpen: () => void;
-	onToggleEnabled: () => void;
 	onDelete: () => void;
 	children?: ReactNode;
 }
@@ -127,10 +126,13 @@ export function canDelete( card: AccountCardSchema ): boolean {
 	return ! card.enabled && !! card.delete_url;
 }
 
-function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, onDelete, children }: AccountCardProps ) {
+function AccountCard( { section, open, onToggleOpen, onDelete, children }: AccountCardProps ) {
 	const card = section.card;
 	const status = cardStatus( section );
-	const switchHint = 'running' === card.deletion ? __( 'Аккаунт удаляется — включить его нельзя.', 'woodev-plugin-framework' ) : undefined;
+	// An open form shows the stored connection message under «Проверить подключение»: the header does not say it a second time.
+	const statusShownBelow = open && card.enabled && !! section.status?.message;
+	// The reason «Удалить» waits, as visible text: a disabled button shows no tooltip of its own.
+	const deleteHint = ! canDelete( card ) && card.delete_hint ? card.delete_hint : '';
 
 	return (
 		<div className={ 'woodev-account-card' + ( open ? ' is-open' : '' ) + ( card.enabled ? '' : ' is-disabled' ) }>
@@ -140,33 +142,22 @@ function AccountCard( { section, open, busy, onToggleOpen, onToggleEnabled, onDe
 					<span className="woodev-account-card__identifier">
 						{ card.identifier_label }: { card.identifier }
 					</span>
-					<span className={ `woodev-account-card__status is-${ status.ok ? 'ok' : 'error' }` }>
-						{ status.text }
-					</span>
+					{ ! statusShownBelow && (
+						<span className={ `woodev-account-card__status is-${ status.ok ? 'ok' : 'error' }` }>
+							{ status.text }
+						</span>
+					) }
 				</div>
-				<div className="woodev-account-card__actions">
-					<Button variant="secondary" aria-expanded={ open } onClick={ onToggleOpen }>
-						{ open ? __( 'Свернуть', 'woodev-plugin-framework' ) : __( 'Редактировать', 'woodev-plugin-framework' ) }
-					</Button>
-					{ /* While the data is being deleted the account stays off: the server ignores a switch-on, so the button does not offer it. */ }
-					{ /* A disabled button shows no tooltip of its own in Chrome: the wrapper carries the hint, as with «Удалить». */ }
-					<span title={ switchHint }>
-						<Button
-							variant="secondary"
-							isBusy={ busy }
-							disabled={ busy || 'running' === card.deletion }
-							title={ switchHint }
-							onClick={ onToggleEnabled }
-						>
-							{ card.enabled ? __( 'Выключить', 'woodev-plugin-framework' ) : __( 'Включить', 'woodev-plugin-framework' ) }
+				<div className="woodev-account-card__controls">
+					<div className="woodev-account-card__actions">
+						<Button variant="secondary" aria-expanded={ open } onClick={ onToggleOpen }>
+							{ open ? __( 'Свернуть', 'woodev-plugin-framework' ) : __( 'Редактировать', 'woodev-plugin-framework' ) }
 						</Button>
-					</span>
-					{ /* A disabled button shows no tooltip of its own in every browser: the wrapper carries the hint. */ }
-					<span title={ card.delete_hint }>
-						<Button variant="secondary" isDestructive disabled={ ! canDelete( card ) } title={ card.delete_hint } onClick={ onDelete }>
+						<Button variant="secondary" isDestructive disabled={ ! canDelete( card ) } onClick={ onDelete }>
 							{ 'running' === card.deletion ? __( 'Удаляется…', 'woodev-plugin-framework' ) : __( 'Удалить', 'woodev-plugin-framework' ) }
 						</Button>
-					</span>
+					</div>
+					{ deleteHint && <p className="woodev-account-card__hint">{ deleteHint }</p> }
 				</div>
 			</div>
 			{ open && <div className="woodev-account-card__body">{ children }</div> }
@@ -179,10 +170,6 @@ interface AccountsViewProps {
 	tab: AccountsTab;
 	/** The connection block of one section. */
 	renderSection: ( tab: AccountsTab, sectionId: string ) => ReactNode;
-	/** Switches the account on or off and saves. */
-	onToggleEnabled: ( tab: AccountsTab, section: CardSection ) => void;
-	/** Id of the section whose switch is being saved. */
-	busySection?: string;
 	/** Reloads the cards after the deletion dialog closes (the account may be gone, or a deletion may be running). */
 	onAccountsChanged?: () => void;
 }
@@ -192,7 +179,7 @@ interface AccountsViewProps {
  *
  * @param {AccountsViewProps} props the view props.
  */
-export default function AccountsView( { tab, renderSection, onToggleEnabled, busySection = '', onAccountsChanged }: AccountsViewProps ) {
+export default function AccountsView( { tab, renderSection, onAccountsChanged }: AccountsViewProps ) {
 	const { accounts, adder } = splitAccountSections( tab );
 	const [ openId, setOpenId ] = useState( '' );
 	const [ adding, setAdding ] = useState( false );
@@ -202,16 +189,34 @@ export default function AccountsView( { tab, renderSection, onToggleEnabled, bus
 	// A saved new account turns into a card: the add form has done its job.
 	useEffect( () => setAdding( false ), [ accounts.length ] );
 
+	// Esc closes the open form (an edit or a new account); the edits stay staged in the page, so nothing typed is lost.
+	// The deletion dialog is a modal of its own and answers Esc itself.
+	const closeOnEscape = ( event: KeyboardEvent< HTMLDivElement > ) => {
+		if ( 'Escape' !== event.key || event.defaultPrevented || deletingId || ( ! openId && ! adding ) ) {
+			return;
+		}
+
+		// Esc inside an open dropdown closes the dropdown, not the form behind it.
+		if ( ( event.target as HTMLElement ).closest( '.components-popover, [aria-haspopup][aria-expanded="true"]' ) ) {
+			return;
+		}
+
+		setOpenId( '' );
+		setAdding( false );
+	};
+
 	return (
-		<div className="woodev-accounts">
+		<div className="woodev-accounts" onKeyDown={ closeOnEscape }>
 			{ accounts.map( ( section ) => (
 				<AccountCard
 					key={ section.id }
 					section={ section }
 					open={ openId === section.id }
-					busy={ busySection === section.id }
-					onToggleOpen={ () => setOpenId( openId === section.id ? '' : section.id ) }
-					onToggleEnabled={ () => onToggleEnabled( tab, section ) }
+					onToggleOpen={ () => {
+						// Two forms never stack: opening an edit puts the new-account form away.
+						setAdding( false );
+						setOpenId( openId === section.id ? '' : section.id );
+					} }
 					onDelete={ () => setDeletingId( section.id ) }
 				>
 					{ renderSection( tab, section.id ) }
@@ -233,7 +238,11 @@ export default function AccountsView( { tab, renderSection, onToggleEnabled, bus
 					<Button
 						variant={ 0 === accounts.length ? 'primary' : 'secondary' }
 						className="woodev-accounts__add-button"
-						onClick={ () => setAdding( true ) }
+						onClick={ () => {
+							// Two forms never stack: adding an account collapses the open edit form.
+							setOpenId( '' );
+							setAdding( true );
+						} }
 					>
 						{ __( 'Добавить аккаунт', 'woodev-plugin-framework' ) }
 					</Button>

@@ -12,6 +12,7 @@ import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
 import ToolsBlock, { ToolsRow } from './tools-block';
 import FieldsTable from './fields-table';
+import CopyField from './copy-field';
 import GroupCard, { arrangeFields } from './group-card';
 import { isFieldVisible } from '../components/validate';
 import HelpLink from '../components/help-link';
@@ -85,6 +86,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 
 	return (
 		<div className="woodev-settings__section">
+			{ section.copy_field && <CopyField field={ section.copy_field } /> }
 			{ section.description && (
 				<div className="woodev-settings__section-desc"><RawHTML>{ section.description }</RawHTML></div>
 			) }
@@ -121,7 +123,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 			{ /* Buttons under the fields (Settings_Section::with_actions()) — «Обновить статусы сейчас» and alike. */ }
 			{ ungroupedActions.length > 0 && (
 				'row' === section.actions_layout
-					? <ToolsRow providerId={ providerId } tools={ ungroupedActions } />
+					? <ToolsRow providerId={ providerId } tools={ ungroupedActions } advancedLabel={ section.advanced_actions_label } />
 					: <ToolsBlock providerId={ providerId } section={ { tools: ungroupedActions } } />
 			) }
 		</div>

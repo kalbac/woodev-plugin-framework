@@ -47,8 +47,9 @@ final class Advanced_Section implements Settings_Section_Provider {
 			self::LOGGING_ID,
 			\Woodev_Control::TYPE_TOGGLE,
 			[
-				'label'   => __( 'Логирование', 'woodev-plugin-framework' ),
-				'tooltip' => __( 'Записывать отладочные события обмена и показывать расширенную диагностику и отчёт для поддержки.', 'woodev-plugin-framework' ),
+				'label'       => __( 'Логирование', 'woodev-plugin-framework' ),
+				// The line under the switch's name (a switch's explanation is read, not hovered).
+				'description' => esc_html__( 'Записывать отладочные события обмена и показывать расширенную диагностику и отчёт для поддержки.', 'woodev-plugin-framework' ),
 			]
 		);
 
@@ -64,8 +65,8 @@ final class Advanced_Section implements Settings_Section_Provider {
 			self::DELETE_DATA_ID,
 			\Woodev_Control::TYPE_TOGGLE,
 			[
-				'label'   => __( 'Удалять данные при удалении плагина', 'woodev-plugin-framework' ),
-				'tooltip' => __( 'Если включено, при удалении плагина со страницы «Плагины» будут удалены его таблицы, связки товаров и настройки. Деактивация плагина данные не трогает.', 'woodev-plugin-framework' ),
+				'label'       => __( 'Удалять данные при удалении плагина', 'woodev-plugin-framework' ),
+				'description' => esc_html__( 'Работает при удалении плагина со страницы «Плагины»; деактивация данные не трогает.', 'woodev-plugin-framework' ) . ' ' . esc_html__( 'Удалит аккаунты, связи и настройки без возможности восстановления.', 'woodev-plugin-framework' ),
 			]
 		);
 	}

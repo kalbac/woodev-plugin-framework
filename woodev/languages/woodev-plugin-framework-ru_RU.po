@@ -11752,3 +11752,155 @@ msgstr ""
 #, php-format
 msgid "%s (откроется в новой вкладке)"
 msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:185
+msgid "Действует"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:186
+msgid "Недействительна — фоновые задачи остановлены"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:196
+msgid "Ни один аккаунт ещё не добавлен"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:380
+msgid "Включён"
+msgstr ""
+
+#. translators: %s: key expiry date in d.m.Y format.
+#: marketplace/admin/diagnostics/class-report-builder.php:456
+#, php-format
+msgid "%s (срок истёк)"
+msgstr ""
+
+#. translators: 1: key expiry date in d.m.Y format, 2: whole days remaining.
+#: marketplace/admin/diagnostics/class-report-builder.php:461
+#, php-format
+msgid "%1$s (дней: %2$d)"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:720
+msgid "Ключ неверный или не читается"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:722
+msgid "У ключа нет нужных прав"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:724
+msgid "Ключ истёк"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:730
+msgid "Ещё не проверялось"
+msgstr ""
+
+#: marketplace/admin/shared/class-notification-state-text.php:55
+msgid "Связь не проверялась."
+msgstr ""
+
+#: marketplace/admin/shared/class-notification-state-text.php:60
+msgid "Уведомления включены."
+msgstr ""
+
+#: marketplace/admin/shared/class-notification-state-text.php:61
+msgid "Уведомления отключены."
+msgstr ""
+
+#: marketplace/admin/shared/class-notification-state-text.php:65
+msgid "Уведомления пока не поступали."
+msgstr ""
+
+#. translators: 1: name of the notification type, 2: relative time, «3 дня назад».
+#: marketplace/admin/shared/class-notification-state-text.php:70
+#, php-format
+msgid "Последнее уведомление: %1$s, %2$s."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:713
+#: marketplace/settings/class-accounts-sections.php:718
+msgid "Правило для этого аккаунта"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:738
+msgid "Как на вкладке «Значения по умолчанию»"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:741
+msgid "Значения берутся с вкладки «Значения по умолчанию» или задаются для этого аккаунта отдельно."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:909
+msgid "Чтобы удалить аккаунт, сначала выключите его."
+msgstr ""
+
+#. translators: %s: calculated marketplace price, formatted.
+#: marketplace/settings/class-accounts-sections.php:945
+#, php-format
+msgid "цена %s"
+msgstr ""
+
+#. translators: %s: calculated old price, formatted.
+#: marketplace/settings/class-accounts-sections.php:953
+#, php-format
+msgid "старая цена %s"
+msgstr ""
+
+#. translators: %s: calculated minimum price, formatted.
+#: marketplace/settings/class-accounts-sections.php:961
+#, php-format
+msgid "минимальная цена %s"
+msgstr ""
+
+#. translators: 1: price on the site, formatted, 2: regular price on the site, formatted, 3: marketplace name, 4: comma-separated calculated prices.
+#: marketplace/settings/class-accounts-sections.php:968
+#, php-format
+msgid "Например: на сайте товар за %1$s (было %2$s) → на %3$s %4$s."
+msgstr ""
+
+#: marketplace/settings/class-advanced-section.php:69
+msgid "Работает при удалении плагина со страницы «Плагины»; деактивация данные не трогает."
+msgstr ""
+
+#: marketplace/settings/class-advanced-section.php:69
+msgid "Удалит аккаунты, связи и настройки без возможности восстановления."
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:172
+#: marketplace/settings/class-settings-module.php:83
+msgid "Значения по умолчанию"
+msgstr ""
+
+#: marketplace/settings/class-defaults-section.php:174
+msgid "Значения по умолчанию для всех аккаунтов. На вкладке «Параметры аккаунта» каждый аккаунт может использовать их или задать свои."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/settings/class-notifications-section.php:241
+#, php-format
+msgid "Адрес сайта для уведомлений показан в карточке аккаунта ниже; кнопка «Зарегистрировать адрес» сама передаёт его в личный кабинет %s, вписывать его вручную не нужно."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:322
+msgid "Сайт работает за прокси или CDN, а уведомления до сих пор приходят на старый адрес без секретного ключа."
+msgstr ""
+
+#. translators: %s: name of the filter.
+#: marketplace/settings/class-notifications-section.php:326
+#, php-format
+msgid "Такой адрес проверяет отправителя по IP, а за прокси сайт видит адрес прокси, поэтому настоящие уведомления могут отклоняться. Замените в личном кабинете старый адрес на новый — с секретным ключом (он показан в карточках ниже): по нему уведомления принимаются и за прокси. Разработчик может указать адреса своих прокси фильтром %s."
+msgstr ""
+
+#: marketplace/settings/class-notifications-section.php:392
+msgid "Ни одно уведомление не включено."
+msgstr ""
+
+#: marketplace/settings/class-settings-module.php:79
+msgid "Параметры аккаунта"
+msgstr ""
+
+#: marketplace/settings/class-shared-fields.php:164
+msgid "Минимальная цена, % (по умолчанию не отправляется)"
+msgstr ""

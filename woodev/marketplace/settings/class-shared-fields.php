@@ -160,11 +160,12 @@ final class Shared_Fields {
 		Field_Kit::add_text(
 			$handler,
 			$id_for( 'price_min_percent' ),
-			__( 'Минимальная цена, %', 'woodev-plugin-framework' ),
+			// The default (empty: no minimum price is sent) is said in the label: a grey number in the box read as a value.
+			__( 'Минимальная цена, % (по умолчанию не отправляется)', 'woodev-plugin-framework' ),
 			'',
 			/* translators: %s: marketplace name. */
 			sprintf( __( 'Процент от цены, ниже которого %s не опустит цену в акциях. Пусто — минимальная цена не отправляется.', 'woodev-plugin-framework' ), $marketplace ),
-			'80',
+			'',
 			$setting_extra
 		);
 	}

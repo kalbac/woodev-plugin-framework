@@ -710,12 +710,12 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				$price_options,
 				$this->price_direction_tooltip( $marketplace )
 			);
-			$this->register_override_switch( $handler, $key, self::OVERRIDE_PRICES, __( 'Правило цены', 'woodev-plugin-framework' ) );
+			$this->register_override_switch( $handler, $key, self::OVERRIDE_PRICES, __( 'Правило для этого аккаунта', 'woodev-plugin-framework' ) );
 			Shared_Fields::register_price_rule( $handler, $id_for, $this->adapter, $this->shown_when_own( $key, self::OVERRIDE_PRICES ) );
 		}
 
 		if ( [] !== Shared_Fields::exchange_field_names( $this->adapter ) ) {
-			$this->register_override_switch( $handler, $key, self::OVERRIDE_EXCHANGE, __( 'Заказы и карточки', 'woodev-plugin-framework' ) );
+			$this->register_override_switch( $handler, $key, self::OVERRIDE_EXCHANGE, __( 'Правило для этого аккаунта', 'woodev-plugin-framework' ) );
 			Shared_Fields::register_exchange( $handler, $id_for, $this->adapter, $this->shown_when_own( $key, self::OVERRIDE_EXCHANGE ) );
 		}
 	}
@@ -735,10 +735,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			self::setting_id( $key, $field ),
 			$label,
 			[
-				Field_Kit::option( self::SOURCE_DEFAULTS, __( 'Как на вкладке «Общие»', 'woodev-plugin-framework' ) ),
+				Field_Kit::option( self::SOURCE_DEFAULTS, __( 'Как на вкладке «Значения по умолчанию»', 'woodev-plugin-framework' ) ),
 				Field_Kit::option( self::SOURCE_OWN, __( 'Свои значения для этого аккаунта', 'woodev-plugin-framework' ) ),
 			],
-			__( 'Значения берутся с вкладки «Общие» или задаются для этого аккаунта отдельно.', 'woodev-plugin-framework' )
+			__( 'Значения берутся с вкладки «Значения по умолчанию» или задаются для этого аккаунта отдельно.', 'woodev-plugin-framework' )
 		);
 	}
 
@@ -906,7 +906,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 */
 	private function delete_hint( Account $account ): string {
 		if ( $account->is_enabled() ) {
-			return __( 'Сначала выключите аккаунт.', 'woodev-plugin-framework' );
+			return __( 'Чтобы удалить аккаунт, сначала выключите его.', 'woodev-plugin-framework' );
 		}
 
 		return null === $this->deletion ? __( 'Удаление аккаунта недоступно.', 'woodev-plugin-framework' ) : '';
@@ -924,12 +924,6 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return null !== $state && Account_Deletion_Progress::RUNNING === $state['state'];
 	}
 
-	/**
-	 * Formats a live price calculation example (`1 000 -> ...`) from the account's saved `Price_Rule`.
-	 *
-	 * @param Account $account Account.
-	 * @return string
-	 */
 	private function price_example_html( Account $account ): string {
 		$currency = trim( (string) $account->setting( 'currency', '' ) );
 		$currency = '' !== $currency ? $currency : 'RUB';
@@ -947,39 +941,62 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		$parts = [
 			sprintf(
-				/* translators: 1: Calculated marketplace price, 2: Currency code. */
-				__( 'цена %1$s %2$s', 'woodev-plugin-framework' ),
-				$pair->price()->to_string(),
-				$currency
+				/* translators: %s: calculated marketplace price, formatted. */
+				__( 'цена %s', 'woodev-plugin-framework' ),
+				self::format_money( $pair->price() )
 			),
 		];
 
 		if ( null !== $pair->old_price() ) {
 			$parts[] = sprintf(
-				/* translators: 1: Calculated old price, 2: Currency code. */
-				__( 'зачёркнутая %1$s %2$s', 'woodev-plugin-framework' ),
-				$pair->old_price()->to_string(),
-				$currency
+				/* translators: %s: calculated old price, formatted. */
+				__( 'старая цена %s', 'woodev-plugin-framework' ),
+				self::format_money( $pair->old_price() )
 			);
 		}
 
 		if ( null !== $pair->min_price() ) {
 			$parts[] = sprintf(
-				/* translators: 1: Calculated minimum price, 2: Currency code. */
-				__( 'минимальная %1$s %2$s', 'woodev-plugin-framework' ),
-				$pair->min_price()->to_string(),
-				$currency
+				/* translators: %s: calculated minimum price, formatted. */
+				__( 'минимальная цена %s', 'woodev-plugin-framework' ),
+				self::format_money( $pair->min_price() )
 			);
 		}
 
 		$summary = sprintf(
-			/* translators: 1: Currency code, 2: Comma-separated calculated prices. */
-			__( 'Пример по текущему правилу (товар на сайте за 1000 %1$s со скидкой от 1200 %1$s): %2$s.', 'woodev-plugin-framework' ),
-			$currency,
+			/* translators: 1: price on the site, formatted, 2: regular price on the site, formatted, 3: marketplace name, 4: comma-separated calculated prices. */
+			__( 'Например: на сайте товар за %1$s (было %2$s) → на %3$s %4$s.', 'woodev-plugin-framework' ),
+			self::format_money( Money::from_string( '1000', $currency ) ),
+			self::format_money( Money::from_string( '1200', $currency ) ),
+			$this->adapter->settings_descriptor()->marketplace_name(),
 			implode( ', ', $parts )
 		);
 
 		return '<p>' . esc_html( $summary ) . '</p>';
+	}
+
+	/**
+	 * An amount as the shop writes prices («1 000 ₽»): WooCommerce's own formatting, as plain text, with no decimals when the amount is whole.
+	 *
+	 * @param Money $money Amount.
+	 * @return string
+	 */
+	private static function format_money( Money $money ): string {
+		$amount = (float) $money->to_string();
+
+		return html_entity_decode(
+			wp_strip_all_tags(
+				(string) wc_price(
+					$amount,
+					[
+						'currency' => $money->currency(),
+						'decimals' => floor( $amount ) === $amount ? 0 : 2,
+					]
+				)
+			),
+			ENT_QUOTES,
+			'UTF-8'
+		);
 	}
 
 	/**

@@ -85,7 +85,7 @@ export function DiagnosticsView( { menu }: PageViewProps ) {
 	};
 
 	return (
-		<div className="woodev-settings woodev-diagnostics-view">
+		<div className="woodev-settings woodev-settings--marketplace woodev-diagnostics-view">
 			{ notice && (
 				<Notice status={ notice.status } onRemove={ () => setNotice( null ) }>
 					{ notice.lines.join( ' ' ) }

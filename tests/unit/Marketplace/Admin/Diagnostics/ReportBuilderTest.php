@@ -387,6 +387,56 @@ final class ReportBuilderTest extends TestCase {
 		$this->assertGreaterThan( 0, $acc_id );
 	}
 
+	public function test_a_healthy_key_shows_no_stored_sentence_and_the_days_left_are_counted_from_the_expiry_date_now(): void {
+		$fields  = new Credential_Fields( 'cabinet_code', [ 'vendor_key' ] );
+		$adapter = $this->make_adapter( $fields, [] );
+		$store   = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-a' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+
+		$expires = ( new \DateTimeImmutable( '@' . ( self::NOW + 79 * 86400 + 3600 ) ) );
+		$acc_id  = $store->save(
+			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Cabinet One', true, [ 'cabinet_code' => 'CAB-12345678', 'vendor_key' => 'secret-1' ], $expires, [ 'currency' => 'RUB' ] )
+		);
+		// The sentence the marketplace gave at the last check, with a day count frozen in it.
+		$store->set_health( $acc_id, new Health_Result( Health_Result::OK, 'Подключено. Ключ действует до 06.02.2027 (81 день). Валюта кабинета: RUB.', $expires ) );
+
+		$lines = $this->make_builder( $adapter, $store, false )->operational_sections()[1]->lines();
+
+		$this->assertArrayNotHasKey( 'Сообщение Acme Market', $lines, 'the frozen sentence repeats the key date and the currency below' );
+		$this->assertSame( gmdate( 'd.m.Y', self::NOW + 79 * 86400 + 3600 ) . ' (дней: 79)', $lines['Ключ действует до'], 'counted now, from the stored date' );
+		$this->assertSame( 'RUB', $lines['Валюта кабинета'] );
+		$this->assertSame( 'Включён', $lines['Аккаунт'], 'values start with a capital' );
+		$this->assertSame( 'Подключено', $lines['Состояние подключения'] );
+	}
+
+	public function test_a_failing_key_keeps_the_marketplaces_sentence_because_it_is_the_explanation(): void {
+		$fields  = new Credential_Fields( 'cabinet_code', [ 'vendor_key' ] );
+		$adapter = $this->make_adapter( $fields, [] );
+		$store   = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-a' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$acc_id  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Cabinet One', true, [ 'cabinet_code' => 'CAB-1', 'vendor_key' => 'secret-1' ] ) );
+		$store->set_health( $acc_id, new Health_Result( Health_Result::ROLE_MISSING, 'Роль ключа не подходит' ) );
+
+		$lines = $this->make_builder( $adapter, $store, false )->operational_sections()[1]->lines();
+
+		$this->assertSame( 'Роль ключа не подходит', $lines['Сообщение Acme Market'] );
+		$this->assertSame( 'У ключа нет нужных прав', $lines['Состояние подключения'] );
+	}
+
 	/**
 	 * @param Credential_Fields $fields       Credential fields.
 	 * @param string[]          $capabilities Capabilities.

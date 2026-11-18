@@ -169,9 +169,9 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 		return [
 			Settings_Section::create(
 				self::SECTION_ID,
-				__( 'Общие', 'woodev-plugin-framework' ),
+				__( 'Значения по умолчанию', 'woodev-plugin-framework' ),
 				array_merge( $price_ids, $exchange_ids, $extra_ids ),
-				'<p>' . esc_html__( 'Значения по умолчанию для всех аккаунтов. На вкладке «Параметры» каждый аккаунт может использовать их или задать свои.', 'woodev-plugin-framework' ) . '</p>'
+				'<p>' . esc_html__( 'Значения по умолчанию для всех аккаунтов. На вкладке «Параметры аккаунта» каждый аккаунт может использовать их или задать свои.', 'woodev-plugin-framework' ) . '</p>'
 			)->with_groups( $groups ),
 		];
 	}

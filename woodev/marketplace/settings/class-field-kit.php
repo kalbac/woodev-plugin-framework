@@ -20,6 +20,11 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Field_Kit {
 	/**
+	 * Longest switch explanation, in characters, that is shown as a line; a longer one is folded into a spoiler.
+	 */
+	private const LONG_EXPLANATION = 140;
+
+	/**
 	 * Builds one `{value, label}` pair for `Woodev_Setting::set_options()`.
 	 *
 	 * @since 2.1.5
@@ -150,7 +155,7 @@ final class Field_Kit {
 	 * @param string              $setting_id    Setting id.
 	 * @param string              $label         Label.
 	 * @param bool                $default       Default boolean state.
-	 * @param string              $tooltip       Tooltip.
+	 * @param string              $tooltip       What the switch does, plain text; drawn as a line under the label.
 	 * @param array<string,mixed> $setting_extra Extra setting args (`show_if`).
 	 * @return void
 	 */
@@ -167,7 +172,22 @@ final class Field_Kit {
 				$setting_extra
 			),
 			\Woodev_Control::TYPE_TOGGLE,
-			array_filter( [ 'tooltip' => $tooltip ], 'strlen' )
+			// A switch's explanation is the line under its name, not a hidden tip: the merchant reads it without hovering an icon.
+			array_filter( [ 'description' => self::explanation_html( $tooltip ) ], 'strlen' )
 		);
+	}
+
+	/**
+	 * A switch's explanation as HTML: one line as it is, a long one folded into a «Подробнее» spoiler so it never grows into a paragraph.
+	 *
+	 * @param string $text Plain text.
+	 * @return string
+	 */
+	private static function explanation_html( string $text ): string {
+		if ( mb_strlen( $text ) <= self::LONG_EXPLANATION ) {
+			return esc_html( $text );
+		}
+
+		return '<details><summary>' . esc_html__( 'Подробнее', 'woodev-plugin-framework' ) . '</summary>' . esc_html( $text ) . '</details>';
 	}
 }

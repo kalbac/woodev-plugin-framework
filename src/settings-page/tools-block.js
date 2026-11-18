@@ -138,16 +138,22 @@ function ToolCard( { providerId, tool } ) {
  * section whose actions are one account's operations (`Settings_Section::ACTIONS_ROW`); the default layout
  * stays one card per tool ({@see ToolsBlock}).
  *
+ * Tools flagged `advanced` (`Settings_Section::with_advanced_actions()`) are not buttons of the row: they sit in a collapsed
+ * block under `advancedLabel`, each with its one-line explanation (the tool's `desc`).
+ *
  * @param {Object}   props
- * @param {string}   props.providerId the settings tab id.
- * @param {Object[]} props.tools      `Shipping_Tool::to_array()` rows.
+ * @param {string}   props.providerId    the settings tab id.
+ * @param {Object[]} props.tools         `Shipping_Tool::to_array()` rows.
+ * @param {string}   props.advancedLabel heading of the collapsed block.
  */
-export function ToolsRow( { providerId, tools } ) {
+export function ToolsRow( { providerId, tools, advancedLabel } ) {
 	const [ busyId, setBusyId ] = useState( '' );
 	const [ result, setResult ] = useState( null );
 	// Each selector-backed tool keeps its own selected value, like a ToolCard does.
 	const [ selected, setSelected ] = useState( {} );
 	const selectedOf = ( tool ) => ( tool.id in selected ? selected[ tool.id ] : selectorDefault( tool.selector ) );
+	const everyday = tools.filter( ( tool ) => ! tool.advanced );
+	const advanced = tools.filter( ( tool ) => tool.advanced );
 	const notes = tools
 		.filter( ( tool ) => tool.disabled && tool.status_text )
 		.map( ( tool ) => tool.status_text )
@@ -184,7 +190,7 @@ export function ToolsRow( { providerId, tools } ) {
 				/>
 			) ) }
 			<div className="woodev-tools-row__buttons">
-				{ tools.map( ( tool, index ) => (
+				{ everyday.map( ( tool, index ) => (
 					<Button
 						key={ tool.id }
 						variant={ 0 === index ? 'primary' : 'secondary' }
@@ -197,6 +203,26 @@ export function ToolsRow( { providerId, tools } ) {
 					</Button>
 				) ) }
 			</div>
+			{ advanced.length > 0 && (
+				<details className="woodev-tools-row__more">
+					<summary>{ advancedLabel || __( 'Дополнительно', 'woodev-plugin-framework' ) }</summary>
+					<ul className="woodev-tools-row__more-list">
+						{ advanced.map( ( tool ) => (
+							<li key={ tool.id }>
+								<Button
+									variant="secondary"
+									isBusy={ busyId === tool.id }
+									disabled={ '' !== busyId || tool.disabled }
+									onClick={ () => run( tool ) }
+								>
+									{ tool.button }
+								</Button>
+								{ tool.desc && <span className="woodev-tools-row__more-desc">{ tool.desc }</span> }
+							</li>
+						) ) }
+					</ul>
+				</details>
+			) }
 			{ notes.map( ( line ) => (
 				<p key={ line } className="woodev-tools-row__note">{ line }</p>
 			) ) }
