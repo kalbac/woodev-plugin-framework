@@ -48,7 +48,7 @@ export default function SearchSelectField( { value, valueLabel = '', savedValue,
 
 	const label = String( value ) === String( savedValue ) ? valueLabel
 		: ( picked && String( picked.value ) === String( value ) ? picked.label : '' );
-	const placeholder = __( 'Не выбрано', 'woodev-plugin-framework' );
+	const placeholder = __( 'Выберите…', 'woodev-plugin-framework' );
 	return (
 		<Dropdown
 			className="woodev-select"
