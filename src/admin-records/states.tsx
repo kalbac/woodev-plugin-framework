@@ -51,7 +51,7 @@ export function EmptyCard( { title, actions, text }: EmptyCardProps ) {
 	return (
 		<Card className="woodev-records__empty-card">
 			<CardHeader className="woodev-records__empty-header">
-				<h2 className="woodev-records__empty-title">{ title }</h2>
+				<h2 className="woodev-records__empty-title screen-reader-text">{ title }</h2>
 				{ actions }
 			</CardHeader>
 			<CardBody>

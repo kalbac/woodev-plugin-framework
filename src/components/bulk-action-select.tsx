@@ -15,6 +15,8 @@ import { Button, SelectControl } from '@wordpress/components';
 export interface BulkActionOption {
 	value: string;
 	label: string;
+	/** Heading the option is listed under; options with none come first, unheaded. */
+	group?: string;
 }
 
 export interface BulkActionLabels {
@@ -24,6 +26,8 @@ export interface BulkActionLabels {
 	apply: string;
 	/** The select's accessible name (the label is not drawn). */
 	label: string;
+	/** Written beside the group while rows are ticked («Выбрано: 3»); empty for none. */
+	selected?: string;
 }
 
 export interface BulkActionSelectProps {
@@ -40,6 +44,41 @@ export interface BulkActionSelectProps {
 }
 
 const REASON_ID = 'woodev-table-bulk-reason';
+
+/**
+ * The options, with a heading (`<optgroup>`) per group in the order the groups first appear. `SelectControl` takes option
+ * elements as `children` in every WordPress that ships it, which `options` has no way to express.
+ *
+ * @param actions The actions, in the order PHP declared them.
+ * @param placeholder The empty entry.
+ */
+function renderOptions( actions: BulkActionOption[], placeholder: string ) {
+	const groups: string[] = [];
+
+	actions.forEach( ( action ) => {
+		if ( action.group && ! groups.includes( action.group ) ) {
+			groups.push( action.group );
+		}
+	} );
+
+	const option = ( entry: BulkActionOption ) => (
+		<option key={ entry.value } value={ entry.value }>
+			{ entry.label }
+		</option>
+	);
+
+	return (
+		<>
+			<option value="">{ placeholder }</option>
+			{ actions.filter( ( entry ) => ! entry.group ).map( option ) }
+			{ groups.map( ( group ) => (
+				<optgroup key={ group } label={ group }>
+					{ actions.filter( ( entry ) => entry.group === group ).map( option ) }
+				</optgroup>
+			) ) }
+		</>
+	);
+}
 
 export function BulkActionSelect( {
 	actions,
@@ -61,9 +100,10 @@ export function BulkActionSelect( {
 					hideLabelFromVision
 					label={ labels.label }
 					value={ value }
-					options={ [ { value: '', label: labels.placeholder }, ...actions ] }
 					onChange={ ( next: string ) => onChange( next ) }
-				/>
+				>
+					{ renderOptions( actions, labels.placeholder ) }
+				</SelectControl>
 				<Button
 					className="woodev-table-bulk__apply"
 					variant="secondary"
@@ -75,6 +115,11 @@ export function BulkActionSelect( {
 					{ labels.apply }
 				</Button>
 			</div>
+			{ labels.selected && (
+				<span role="status" className="woodev-table-bulk__selected">
+					{ labels.selected }
+				</span>
+			) }
 			{ blocked && (
 				<span id={ REASON_ID } className="woodev-table-bulk__reason">
 					{ disabledReason }

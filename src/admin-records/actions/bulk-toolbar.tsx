@@ -17,7 +17,7 @@ import { BulkActionSelect } from '../../components/bulk-action-select';
 import { accountBlockedReason, createActivityState, useActivityState, type ActivityExtensions } from '../activity';
 import type { ActivityHealth } from '../activity';
 import type { SelectionHandle, TableHandle } from '../extensions';
-import { MESSAGE_KEYS, message } from '../messages';
+import { MESSAGE_KEYS, fillMessage, message } from '../messages';
 import type { ActionDescriptor } from '../types';
 import { STYLES } from './styles';
 import type { ActionFlow } from './use-action-flow';
@@ -83,7 +83,7 @@ export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarPr
 
 	return (
 		<BulkActionSelect
-			actions={ actions.map( ( entry ) => ( { value: entry.id, label: entry.label } ) ) }
+			actions={ actions.map( ( entry ) => ( { value: entry.id, label: entry.label, group: entry.group } ) ) }
 			value={ action ? action.id : '' }
 			onChange={ setChosen }
 			onApply={ () =>
@@ -98,6 +98,13 @@ export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarPr
 				placeholder: message( table.messages, MESSAGE_KEYS.bulkPlaceholder ),
 				apply: message( table.messages, MESSAGE_KEYS.bulkApply ),
 				label: message( table.messages, MESSAGE_KEYS.bulkLabel ),
+				// «Every row under the filter» has its own bar below; the count here is for ticked rows.
+				selected:
+					selection.matching === null && selection.selectedIds.length > 0
+						? fillMessage( message( table.messages, MESSAGE_KEYS.selectedCount ), {
+								count: String( selection.selectedIds.length ),
+						  } )
+						: '',
 			} }
 		/>
 	);
@@ -113,7 +120,7 @@ export function AccountActions( { flow, selection, table, activity }: BulkToolba
 	}
 
 	return (
-		<div className="woodev-records__account-actions" style={ STYLES.bulk }>
+		<div className="woodev-records__account-actions" style={ { ...STYLES.bulk, margin: 0 } }>
 			{ actions.map( ( action ) => {
 				const reason = blockedReason( action, selection.selectedIds, table, health );
 				const reasonId = `woodev-records-bulk-reason-${ action.id }`;

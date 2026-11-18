@@ -119,9 +119,6 @@ final class Site_Orders_Module {
 				$can_edit,
 				static function ( \WC_Order $order ) use ( $cancel ): bool {
 					return null !== $cancel && $cancel->is_finished( $order );
-				},
-				static function ( int $document_id ) use ( $labels ): string {
-					return null === $labels ? '' : $labels->url( $document_id );
 				}
 			),
 			new Site_Orders_Activity(),

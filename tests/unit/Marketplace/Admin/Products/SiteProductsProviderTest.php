@@ -80,7 +80,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$definition = $this->definition()->to_array();
 
 		$this->assertSame(
-			[ 'export', 'link_by_article', 'send_stock', 'send_price', 'sync_stock_on', 'sync_stock_off', 'sync_price_on', 'sync_price_off', 'set_warehouse', 'archive', 'detach', 'reset', 'reset_price', 'pull_prices', 'bulk_stop', 'bulk_report' ],
+			[ 'export', 'link_by_article', 'send_stock', 'send_price', 'sync_stock_on', 'sync_stock_off', 'sync_price_on', 'sync_price_off', 'set_warehouse', 'pull_prices', 'archive', 'detach', 'reset', 'reset_price', 'bulk_stop', 'bulk_report' ],
 			array_column( $definition['bulk_actions'], 'id' )
 		);
 		$this->assertSame( 'account', $definition['bulk_actions'][1]['scope'], 'Linking by article names its reach.' );
@@ -89,7 +89,14 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertNotNull( $definition['children'] );
 		$this->assertNull( $definition['analytics'] );
 		$this->assertSame( [ 'state' ], array_column( array_filter( $definition['filters'], static fn( array $filter ): bool => ! empty( $filter['views'] ) ), 'id' ), 'The state is the counted row.' );
-		$this->assertSame( 'Товаров', $definition['messages']['summary_label'] );
+		$this->assertArrayNotHasKey( 'summary_label', $definition['messages'], 'The count word comes with each list, in the right plural form.' );
+		$this->assertSame(
+			[ 'Выгрузка', 'Выгрузка', 'Выгрузка', 'Синхронизация', 'Синхронизация', 'Синхронизация', 'Синхронизация', 'Синхронизация', 'Синхронизация', 'Связи и архив', 'Связи и архив', 'Связи и архив', 'Связи и архив' ],
+			array_column( array_filter( $definition['bulk_actions'], static fn( array $action ): bool => 'selection' === $action['scope'] ), 'group' ),
+			'The select lists the actions under three headings, in this order.'
+		);
+		$this->assertSame( 'Проверить связи', $definition['bulk_actions'][1]['preview_label'] );
+		$this->assertSame( 'Начните вводить название категории', $definition['bulk_actions'][1]['fields'][1]['placeholder'] );
 		$this->assertSame( 'Выберите действие', $definition['messages']['bulk_placeholder'] );
 	}
 
@@ -337,10 +344,10 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertFalse( $row['has_children'] );
 		$this->assertSame( 'Создан', $row['cells']['state'][0]['value']['label'] );
 		$this->assertSame( 'success', $row['cells']['state'][0]['value']['tone'] );
-		$this->assertSame( [ 'P-10', 'OZ-10' ], array_column( $row['cells']['sku'], 'value' ) );
+		$this->assertSame( [ 'P-10', 'OZ-10' ], array_column( $row['cells']['sku'], 'value' ), 'The offer id differs from the article: both are shown.' );
 		$this->assertSame( [ 'На сайте: 5', 'Тестмаркет: 7' ], array_column( $row['cells']['stock'], 'value' ) );
-		$this->assertSame( 'По умолчанию', $row['cells']['warehouse'] );
-		$this->assertSame( 'Остатки: да · Цены: да', $row['cells']['sync'] );
+		$this->assertSame( [ 'Остатки · Цены' ], array_column( $row['cells']['sync'], 'value' ), 'Only what is on is listed; the default warehouse is not written out.' );
+		$this->assertArrayNotHasKey( 'warehouse', $row['cells'] );
 	}
 
 	public function test_filters_reach_the_provider_as_typed_values(): void {
@@ -534,7 +541,7 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$row = $this->by_id( $this->list_body() )[ $this->row_id( 30 ) ];
 
 		$this->assertSame( 'Не связан', $row['cells']['state'][0]['value']['label'] );
-		$this->assertNull( $row['cells']['warehouse'] );
+		$this->assertNull( $row['cells']['sync'] );
 	}
 
 	public function test_the_table_id_is_the_page_table(): void {

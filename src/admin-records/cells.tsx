@@ -9,13 +9,15 @@
  */
 
 import type { ReactNode } from 'react';
-import { dateI18n, getSettings } from '@wordpress/date';
+import { dateI18n } from '@wordpress/date';
 import { STYLES, badgeStyle } from './styles';
 import type { BadgeCell, CellType, LinkCell, ProgressCell, StackItem } from './types';
 
 type CellRenderer = ( value: unknown ) => ReactNode;
 
 const DATE_ONLY_LENGTH = 'YYYY-MM-DD'.length;
+const DATE_FORMAT = 'd.m.Y';
+const DATETIME_FORMAT = 'd.m.Y H:i';
 
 function TextValue( { value }: { value: string | number } ) {
 	return <span>{ String( value ) }</span>;
@@ -33,12 +35,18 @@ function LinkValue( { value }: { value: LinkCell } ) {
 	return <a href={ value.url }>{ value.label }</a>;
 }
 
-/** A date in the site's own format; a value without a time is shown without one. */
+/**
+ * A date as «15.11.2026 23:24» (a value without a time as «15.11.2026»), in the site's timezone and on one line — the
+ * format a site picks for its blog posts is a sentence («November 15, 2026 11:24 pm») that a table cell cannot hold.
+ */
 function DateValue( { value }: { value: string } ) {
-	const { formats } = getSettings();
-	const format = value.length === DATE_ONLY_LENGTH ? formats.date : formats.datetime;
+	const format = value.length === DATE_ONLY_LENGTH ? DATE_FORMAT : DATETIME_FORMAT;
 
-	return <time dateTime={ value }>{ dateI18n( format, value, undefined ) }</time>;
+	return (
+		<time dateTime={ value } style={ STYLES.nowrap }>
+			{ dateI18n( format, value, undefined ) }
+		</time>
+	);
 }
 
 /** Measured progress, or an indeterminate bar when PHP could not measure it. The sentence is always visible. */

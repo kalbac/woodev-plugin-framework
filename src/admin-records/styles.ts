@@ -22,6 +22,7 @@ export function badgeStyle( tone: Tone ): CSSProperties {
 
 	return {
 		display: 'inline-block',
+		whiteSpace: 'nowrap',
 		padding: '2px 8px',
 		borderRadius: '2px',
 		background: colours.background,
@@ -38,8 +39,11 @@ export const HIDE_VENDOR_PAGE_SIZE = '.woodev-records .woocommerce-pagination__p
 
 export const STYLES = {
 	toolbar: { display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', marginBottom: '16px' },
+	nowrap: { whiteSpace: 'nowrap' },
 	stack: { display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' },
 	actions: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' },
+	// The buttons of one row: one group on one line — a row of buttons never wraps under itself.
+	buttons: { display: 'inline-flex', flexWrap: 'nowrap', gap: '4px', alignItems: 'center' },
 	reason: { display: 'block', flexBasis: '100%', color: '#50575e' },
 	childCell: { display: 'block', paddingLeft: '24px' },
 	dateRange: { display: 'flex', gap: '8px', alignItems: 'flex-end', border: 0, margin: 0, padding: 0 },

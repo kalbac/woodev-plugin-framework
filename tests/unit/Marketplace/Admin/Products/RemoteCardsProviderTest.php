@@ -191,7 +191,9 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_summary_says_when_the_list_was_loaded_or_what_to_do(): void {
-		$this->assertStringContainsString( 'Обновить список', $this->list_body()['messages']['summary'], 'No list yet.' );
+		$body = $this->list_body();
+		$this->assertStringNotContainsString( 'Обновить список', $body['messages']['summary'], 'No list yet: the empty table says so once, the line above it stays quiet.' );
+		$this->assertArrayNotHasKey( 'empty', $body['messages'], 'The definition\'s own empty sentence («Список карточек ещё не загружен…») stands.' );
 
 		$this->put_snapshot( [ $this->card( 'A-1' ), $this->card( 'B-2' ) ], 1700000000 );
 		$this->assertStringContainsString( '14.11.2023 22:13', $this->list_body()['messages']['summary'] );

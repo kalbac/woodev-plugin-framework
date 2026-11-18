@@ -163,7 +163,7 @@ function Footer( { flow, table, messages }: ActionDialogProps & { messages: Mess
 			) }
 			{ forward === 'preview' && (
 				<Button variant="primary" disabled={ busy } accessibleWhenDisabled onClick={ () => void flow.preview( table ) }>
-					{ actionMessage( messages, ACTION_MESSAGE_KEYS.preview ) || confirmLabel }
+					{ action.preview_label || actionMessage( messages, ACTION_MESSAGE_KEYS.preview ) || confirmLabel }
 				</Button>
 			) }
 			{ forward === 'confirm' && (

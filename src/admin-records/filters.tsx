@@ -364,6 +364,13 @@ export function ViewsRow( { definition, query, facets, messages, total, onChange
 
 	const value = query.filters[ filter.id ];
 	const current = typeof value === 'string' ? value : ANY;
+
+	// An empty list has nothing to switch between: a row of «Нет на сайте (0)» only invites a click that shows the same nothing.
+	// A view the merchant has already chosen stays, so there is always a way back to «Все».
+	if ( current === ANY && counts.every( ( entry ) => entry.count === 0 ) ) {
+		return null;
+	}
+
 	// The options may overlap (a variable product can sit in several states at once), so the sum of the counts can exceed
 	// the rows. PHP then sends the real number as the entry with the empty value; the list's own total is the same number
 	// while no view is chosen; the sum is the last resort, exact for options that partition the rows.

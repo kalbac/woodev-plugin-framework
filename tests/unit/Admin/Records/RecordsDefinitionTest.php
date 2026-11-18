@@ -121,6 +121,21 @@ class RecordsDefinitionTest extends TestCase {
 		$this->assertFalse( $definition->get_action( 'send' )['fields'][0]['searchable'], 'an existing field stays what it was' );
 	}
 
+	public function test_an_action_may_name_its_group_and_preview_button_and_a_field_its_placeholder(): void {
+		$action = array_merge(
+			self::searchable_action( [ 'placeholder' => 'Начните вводить название' ] ),
+			[ 'group' => 'Связи и архив', 'preview_label' => 'Проверить связи' ]
+		);
+
+		$parsed = Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ $action, array_merge( self::searchable_action( [] ), [ 'id' => 'plain' ] ) ] ] ) );
+
+		$this->assertSame( 'Связи и архив', $parsed->get_action( 'link' )['group'] );
+		$this->assertSame( 'Проверить связи', $parsed->get_action( 'link' )['preview_label'] );
+		$this->assertSame( 'Начните вводить название', $parsed->get_action( 'link' )['fields'][0]['placeholder'] );
+		$this->assertSame( '', $parsed->get_action( 'plain' )['group'], 'an action that names none is listed unheaded' );
+		$this->assertSame( '', $parsed->get_action( 'plain' )['fields'][0]['placeholder'] );
+	}
+
 	public function test_a_select_can_be_the_counted_view_row_and_the_flag_is_only_sent_when_it_is_set(): void {
 		$filters = Records_Definitions::standard()['filters'];
 		$plain   = Records_Definition::from_array( Records_Definitions::standard() )->to_array()['filters'];

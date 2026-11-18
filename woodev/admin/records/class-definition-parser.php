@@ -425,7 +425,7 @@ final class Definition_Parser {
 	private static function action( array $action, string $path, bool $bulk ): array {
 		self::allow_keys(
 			$action,
-			[ 'id', 'label', 'tone', 'capability', 'effect', 'interaction', 'scope', 'scope_sentence', 'fields', 'skip_preview', 'confirm_label', 'all_matching' ],
+			[ 'id', 'label', 'tone', 'capability', 'effect', 'interaction', 'scope', 'scope_sentence', 'fields', 'skip_preview', 'confirm_label', 'preview_label', 'short_label', 'all_matching', 'group' ],
 			$path
 		);
 
@@ -439,6 +439,9 @@ final class Definition_Parser {
 			'scope'          => self::one_of( $action, 'scope', $path, Records_Definition::SCOPES, 'selection' ),
 			'scope_sentence' => self::text( $action, 'scope_sentence', $path, true ),
 			'confirm_label'  => self::text( $action, 'confirm_label', $path, true ),
+			'group'          => self::text( $action, 'group', $path, true, 64 ),
+			'preview_label'  => self::text( $action, 'preview_label', $path, true ),
+			'short_label'    => self::text( $action, 'short_label', $path, true, 32 ),
 			'skip_preview'   => self::flag( $action, 'skip_preview', $path, false ),
 			'all_matching'   => self::flag( $action, 'all_matching', $path, false ),
 			'fields'         => self::action_fields( $action['fields'] ?? [], "$path.fields" ),
@@ -468,7 +471,7 @@ final class Definition_Parser {
 		foreach ( self::list( $raw, $path, 0, Records_Definition::MAX_ACTION_FIELDS ) as $i => $field ) {
 			$field_path = "{$path}[$i]";
 			$field      = self::map( $field, $field_path );
-			self::allow_keys( $field, [ 'id', 'label', 'type', 'required', 'options', 'options_source', 'searchable', 'help' ], $field_path );
+			self::allow_keys( $field, [ 'id', 'label', 'type', 'required', 'options', 'options_source', 'searchable', 'placeholder', 'help' ], $field_path );
 
 			$entry = [
 				'id'             => self::slug( $field, 'id', $field_path ),
@@ -478,6 +481,7 @@ final class Definition_Parser {
 				'options'        => [],
 				'options_source' => self::flag( $field, 'options_source', $field_path, false ),
 				'searchable'     => self::flag( $field, 'searchable', $field_path, false ),
+				'placeholder'    => self::text( $field, 'placeholder', $field_path, true ),
 				'help'           => self::text( $field, 'help', $field_path, true ),
 			];
 

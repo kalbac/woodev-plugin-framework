@@ -124,7 +124,7 @@ describe( 'the card header', () => {
 		expect( cardProps.at( -1 )?.hasSearch ).toBe( true );
 	} );
 
-	test( 'only the selection actions are in the select; an account action is a button above the filters', async () => {
+	test( 'only the selection actions are in the select; an account action is a button in the card header, beside the select', async () => {
 		serve( () => fixtureList( [ mug ] ) );
 		render( <Page /> );
 		await screen.findByRole( 'table', { name: 'Товары' } );
@@ -132,11 +132,12 @@ describe( 'the card header', () => {
 		const select = screen.getByRole( 'combobox', { name: 'Массовые действия' } );
 		const options = within( select ).getAllByRole( 'option' ).map( ( option ) => option.textContent );
 		const accountRow = document.querySelector( '.woodev-records__account-actions' ) as HTMLElement;
-		const filters = document.querySelector( '.woodev-records__toolbar' ) as HTMLElement;
+		const header = screen.getByTestId( 'card-header' );
 
 		expect( options ).toEqual( [ 'Выберите действие', 'Отправить' ] );
 		expect( within( accountRow ).getByRole( 'button', { name: 'Связать по артикулу' } ) ).toBeInTheDocument();
-		expect( accountRow.compareDocumentPosition( filters ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+		expect( header ).toContainElement( accountRow );
+		expect( select.compareDocumentPosition( accountRow ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
 	} );
 
 	test( 'the select runs a selection action only for a selected row', async () => {
@@ -331,5 +332,117 @@ describe( 'an empty result', () => {
 		await screen.findByText( 'По этим условиям ничего не найдено' );
 
 		expect( screen.getByRole( 'searchbox', { name: 'Поиск по товарам' } ) ).not.toHaveFocus();
+	} );
+} );
+
+describe( 'the polish of s237', () => {
+	const ZEROES = [
+		{ value: 'draft', label: 'Черновик', count: 0 },
+		{ value: 'linked', label: 'Связан', count: 0 },
+	];
+
+	test( 'an empty list shows no row of zero counts', async () => {
+		serve( () => fixtureList( [], { total: 0, facets: { state: ZEROES } } ) );
+		render( <Page /> );
+		await screen.findByText( 'Товаров пока нет' );
+
+		expect( document.querySelector( '.woodev-table-views' ) ).toBeNull();
+	} );
+
+	test( 'a view the merchant chose stays on screen even when it is empty', async () => {
+		serve( () => fixtureList( [], { total: 0, facets: { state: ZEROES } } ) );
+		render( <Page query={ { filter_state: 'draft' } } /> );
+
+		expect( await screen.findByRole( 'link', { name: 'Черновик (0)' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'the bulk select lists actions under their headings and says how many rows are ticked', async () => {
+		const base = definition();
+		serve( () => fixtureList( [ mug, shirt ] ), {
+			...base,
+			bulk_actions: [ action( 'send', 'Отправить', { group: 'Выгрузка' } ), action( 'archive', 'Архивировать', { group: 'Связи и архив' } ) ],
+			messages: { ...base.messages, selected_count: 'Выбрано: {count}' },
+		} );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const select = screen.getByRole( 'combobox', { name: 'Массовые действия' } );
+		const groups = Array.from( select.querySelectorAll( 'optgroup' ) );
+
+		expect( groups.map( ( group ) => group.label ) ).toEqual( [ 'Выгрузка', 'Связи и архив' ] );
+		expect( within( groups[ 1 ] as HTMLElement ).getByRole( 'option', { name: 'Архивировать' } ) ).toBeInTheDocument();
+		expect( screen.queryByText( /Выбрано:/ ) ).not.toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Футболка/ } ) );
+
+		expect( screen.getByText( 'Выбрано: 2' ) ).toBeInTheDocument();
+	} );
+
+	test( 'a row button with a short label shows it and keeps the full one as its name', async () => {
+		const base = definition();
+		serve( () => fixtureList( [ fixtureRow( 'p1', 'Кружка', { actions: [ { id: 'cancel', enabled: true, reason: '' } ] } ) ] ), {
+			...base,
+			row_actions: [ action( 'cancel', 'Отменить отправление', { short_label: 'Отменить' } ) ],
+		} );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const button = screen.getByRole( 'button', { name: 'Отменить отправление' } );
+
+		expect( button ).toHaveTextContent( /^Отменить$/ );
+		expect( button ).toHaveAttribute( 'title', 'Отменить отправление' );
+	} );
+
+	test( 'a column carries its own class on the header and the cells, so the stylesheet can size it', async () => {
+		serve( () => fixtureList( [ mug ] ) );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const declared = cardProps.at( -1 )?.headers.filter( ( header ) => ! header.key.startsWith( '_' ) ) ?? [];
+
+		expect( declared.length ).toBeGreaterThan( 0 );
+		expect( declared.every( ( header ) => ( header.cellClassName ?? '' ).includes( `woodev-records__col-${ header.key }` ) ) ).toBe( true );
+	} );
+
+	test( 'a date is «д.м.г ч:м» on one line, whatever format the site picked for its posts', async () => {
+		serve( () => fixtureList( [ mug ] ) );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const date = document.querySelector( 'time' ) as HTMLElement;
+
+		expect( date.textContent ).toMatch( /^\d{2}\.\d{2}\.2026 \d{2}:\d{2}$/ );
+		expect( date ).toHaveStyle( { whiteSpace: 'nowrap' } );
+	} );
+
+	test( 'a long summary keeps its first sentence and folds the rest', async () => {
+		const first = 'Список загружен 14.11.2023 22:13: карточек — 120.';
+		const rest = 'Последняя связь по артикулу связала 40 товаров, 12 пропущено: у них нет артикула. Ещё 3 пары ждут ответа в отчёте о похожих артикулах.';
+		serve( () => fixtureList( [ mug ], { messages: { summary: `${ first } ${ rest }` } } ) );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const details = document.querySelector( 'details.woodev-records__summary' ) as HTMLDetailsElement;
+
+		expect( details ).not.toBeNull();
+		expect( details.open ).toBe( false );
+		expect( within( details ).getByText( first ) ).toBeInTheDocument();
+	} );
+
+	test( 'a short summary stays a plain line', async () => {
+		serve( () => fixtureList( [ mug ], { messages: { summary: 'Список загружен.' } } ) );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		expect( document.querySelector( 'details.woodev-records__summary' ) ).toBeNull();
+		expect( screen.getByText( 'Список загружен.' ) ).toBeInTheDocument();
+	} );
+
+	test( 'the empty card keeps its title for assistive technology only', async () => {
+		serve( () => fixtureList( [], { total: 0 } ) );
+		render( <Page /> );
+
+		expect( await screen.findByRole( 'heading', { name: 'Товары' } ) ).toHaveClass( 'screen-reader-text' );
 	} );
 } );

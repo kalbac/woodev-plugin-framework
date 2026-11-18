@@ -229,9 +229,10 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		$page   = $this->reader->page( $filter, (int) $query['page'], (int) $query['per_page'] );
 
 		return [
-			'rows'   => $this->build_rows( $account, $page['items'] ),
-			'total'  => $page['total'],
-			'facets' => [ 'state' => $this->state_facets( $filter ) ],
+			'rows'     => $this->build_rows( $account, $page['items'] ),
+			'total'    => $page['total'],
+			'facets'   => [ 'state' => $this->state_facets( $filter ) ],
+			'messages' => [ 'summary_label' => _n( 'заказ', 'заказов', $page['total'], 'woodev-plugin-framework' ) ],
 		];
 	}
 
@@ -650,7 +651,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	}
 
 	/**
-	 * Builds the rows of listed items, with the label state and the activity of each. An item whose order cannot be loaded (deleted
+	 * Builds the rows of listed items, with the activity of each. An item whose order cannot be loaded (deleted
 	 * between the query and now) is left out.
 	 *
 	 * @param Account                        $account Account.
@@ -669,7 +670,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 
 		foreach ( $items as $item ) {
 			if ( isset( $orders[ $item['order_id'] ] ) ) {
-				$rows[] = $this->rows->row( $account->id(), $item, $orders[ $item['order_id'] ], $states[ $item['external_key'] ] ?? Site_Orders_Labels::none(), $activity[ $item['order_id'] ] );
+				$rows[] = $this->rows->row( $account->id(), $item, $orders[ $item['order_id'] ], $activity[ $item['order_id'] ] );
 			}
 		}
 

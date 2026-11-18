@@ -86,12 +86,20 @@ export interface ActionField {
 	options_source: boolean;
 	/** A select whose options are listed by the server may be searched: the merchant types, the server filters. */
 	searchable?: boolean;
+	/** What an empty text field or search box says it wants («Начните вводить название категории»). */
+	placeholder?: string;
 	help: string;
 }
 
 export interface ActionDescriptor {
 	id: string;
 	label: string;
+	/** Heading the action is listed under in the bulk select; empty (or absent) for none. */
+	group?: string;
+	/** The dialog's first button when the action asks for a preview («Проверить связи»); the shared «Проверить» when empty. */
+	preview_label?: string;
+	/** What a row button shows when the full label does not fit in a table row; the full label stays its name and tooltip. */
+	short_label?: string;
 	tone: Tone;
 	capability: string;
 	effect: 'read' | 'mutate';

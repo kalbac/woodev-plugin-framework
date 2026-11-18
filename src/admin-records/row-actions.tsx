@@ -36,63 +36,80 @@ interface ActionButtonProps {
 }
 
 function ActionButton( { action, reason, reasonId, canRun, href, onClick }: ActionButtonProps ) {
+	// A short label keeps the buttons of a row on one line; the full one stays the accessible name and the tooltip.
+	const short = action.short_label !== undefined && action.short_label !== '' && action.short_label !== action.label;
+
 	return (
-		<>
-			<Button
-				size="small"
-				variant={ action.tone === 'primary' ? 'primary' : 'secondary' }
-				isDestructive={ action.tone === 'danger' }
-				disabled={ ! canRun }
-				href={ canRun ? href : undefined }
-				accessibleWhenDisabled
-				aria-describedby={ reason === '' ? undefined : reasonId }
-				data-action={ action.id }
-				onClick={ onClick }
-			>
-				{ action.label }
-			</Button>
-			{ reason !== '' && (
-				<span id={ reasonId } className="woodev-records__reason" style={ STYLES.reason }>
-					{ reason }
-				</span>
-			) }
-		</>
+		<Button
+			size="small"
+			variant={ action.tone === 'primary' ? 'primary' : 'secondary' }
+			isDestructive={ action.tone === 'danger' }
+			disabled={ ! canRun }
+			href={ canRun ? href : undefined }
+			accessibleWhenDisabled
+			aria-describedby={ reason === '' ? undefined : reasonId }
+			aria-label={ short ? action.label : undefined }
+			title={ short ? action.label : undefined }
+			data-action={ action.id }
+			onClick={ onClick }
+		>
+			{ short ? action.short_label : action.label }
+		</Button>
 	);
+}
+
+interface RowButton {
+	action: ActionDescriptor;
+	state: RowActionState;
+	reason: string;
+	isLink: boolean;
 }
 
 export function RowActions( { row, rowKey, descriptors, onAction, blockedReason, children }: RowActionsProps ) {
 	const describe = ( state: RowActionState ) => descriptors.find( ( action ) => action.id === state.id );
 	const reasonFor = ( action: ActionDescriptor, state: RowActionState ) =>
 		state.enabled ? blockedReason?.( action, row ) ?? '' : state.reason;
+	const reasonId = ( action: ActionDescriptor ) => `woodev-records-reason-${ rowKey }-${ action.id }`;
+
+	const buttons: RowButton[] = [];
+	row.actions.forEach( ( state ) => {
+		const action = describe( state );
+		// PHP dropped the descriptor when the user lacks the action's capability.
+		if ( ! action ) {
+			return;
+		}
+
+		const isLink = action.interaction === 'link';
+		// A link needs a destination; without one there is nothing to follow and nothing to run.
+		if ( isLink && ! state.url ) {
+			return;
+		}
+
+		buttons.push( { action, state, reason: reasonFor( action, state ), isLink } );
+	} );
 
 	return (
 		<span className="woodev-records__actions" style={ STYLES.actions }>
-			{ row.actions.map( ( state ) => {
-				const action = describe( state );
-				if ( ! action ) {
-					// PHP dropped the descriptor: the user lacks the action's capability.
-					return null;
-				}
-
-				const reason = reasonFor( action, state );
-				const isLink = action.interaction === 'link';
-				if ( isLink && ! state.url ) {
-					// A link needs a destination; without one there is nothing to follow and nothing to run.
-					return null;
-				}
-
-				return (
+			<span className="woodev-records__buttons" style={ STYLES.buttons }>
+				{ buttons.map( ( { action, state, reason, isLink } ) => (
 					<ActionButton
 						key={ action.id }
 						action={ action }
 						reason={ reason }
-						reasonId={ `woodev-records-reason-${ rowKey }-${ action.id }` }
+						reasonId={ reasonId( action ) }
 						canRun={ reason === '' && ( isLink || onAction !== undefined ) }
 						href={ isLink ? state.url : undefined }
 						onClick={ () => ( isLink ? undefined : onAction?.( action, row ) ) }
 					/>
-				);
-			} ) }
+				) ) }
+			</span>
+			{ buttons
+				.filter( ( { reason } ) => reason !== '' )
+				.map( ( { action, reason } ) => (
+					<span key={ action.id } id={ reasonId( action ) } className="woodev-records__reason" style={ STYLES.reason }>
+						{ reason }
+					</span>
+				) ) }
 			{ children }
 		</span>
 	);
