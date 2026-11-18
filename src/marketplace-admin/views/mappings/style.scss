@@ -31,11 +31,21 @@
 		display: none;
 	}
 
-	// The tab above the list names it: the card draws no heading of its own. `TableCard` needs a `title` (it is the table's
-	// caption, which is what names the table to a screen reader), so the visible heading is hidden, not omitted, and the add
-	// button stays at the right end of the header.
-	.woocommerce-card__title {
-		display: none;
+	// The tab above the list names it: the card draws no heading of its own («Профили» under the tab «Профили»). `TableCard` needs a
+	// `title` (it is the table's caption, which is what names the table to a screen reader), so the visible heading leaves the
+	// screen, not the DOM, and the add button stays at the right end of the header. The heading is an `h2` inside the card's header
+	// (WooCommerce's own class on it is not stable), which is the selector the records table hides its heading by.
+	.woocommerce-card__title,
+	.components-card__header > h2 {
+		border: 0;
+		clip-path: inset( 50% );
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		padding: 0;
+		position: absolute;
+		white-space: nowrap;
+		width: 1px;
 	}
 
 	.woocommerce-card__header {

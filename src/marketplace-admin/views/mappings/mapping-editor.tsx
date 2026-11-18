@@ -235,6 +235,7 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 							__nextHasNoMarginBottom
 							label={ messages.mappingName }
 							hideLabelFromVision
+							placeholder={ __( 'Например: Футболки', 'woodev-plugin-framework' ) }
 							value={ draft.name }
 							onChange={ ( name ) => setDraft( { ...draft, name } ) }
 						/>

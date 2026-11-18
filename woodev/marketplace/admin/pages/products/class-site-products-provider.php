@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Catalog\Bulk_Validation_Report;
 use Woodev\Framework\Marketplace\Data\Bulk_Run;
 use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
@@ -227,7 +228,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			'total'            => $page['total'],
 			'facets'           => [ 'state' => $this->state_facets( $filter, $page['total'] ) ],
 			'account_activity' => $this->activity->account( $account->id() ),
-			'messages'         => [ 'summary_label' => _n( 'товар', 'товаров', $page['total'], 'woodev-plugin-framework' ) ],
+			'messages'         => [ 'summary_label' => Russian_Plural::pick( $page['total'], __( 'товар', 'woodev-plugin-framework' ), __( 'товара', 'woodev-plugin-framework' ), __( 'товаров', 'woodev-plugin-framework' ) ) ],
 		];
 	}
 

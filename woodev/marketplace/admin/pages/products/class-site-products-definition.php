@@ -231,16 +231,6 @@ final class Site_Products_Definition {
 				'sort_key'  => 'price',
 			],
 			[
-				'id'        => 'sync',
-				'label'     => __( 'Синхронизация', 'woodev-plugin-framework' ),
-				'cell_type' => 'stack',
-			],
-			[
-				'id'        => 'error',
-				'label'     => __( 'Ошибка', 'woodev-plugin-framework' ),
-				'cell_type' => 'text',
-			],
-			[
 				'id'        => 'actions',
 				'label'     => '',
 				'cell_type' => 'actions',
@@ -490,7 +480,7 @@ final class Site_Products_Definition {
 			'action_warnings'       => __( 'Предупреждения', 'woodev-plugin-framework' ),
 			'action_recovery'       => __( 'Ответа нет: действие могло выполниться. Мы обновили таблицу — проверьте состояние товаров.', 'woodev-plugin-framework' ),
 			'action_error'          => __( 'Не удалось выполнить запрос. Повторите чуть позже.', 'woodev-plugin-framework' ),
-			'action_choose'         => __( 'Выберите…', 'woodev-plugin-framework' ),
+			'action_choose'         => __( 'Не выбрано', 'woodev-plugin-framework' ),
 			'action_options_more'   => __( 'Показать ещё', 'woodev-plugin-framework' ),
 			'action_options_error'  => __( 'Не удалось загрузить список.', 'woodev-plugin-framework' ),
 			'action_options_loading' => __( 'Загружаем список…', 'woodev-plugin-framework' ),

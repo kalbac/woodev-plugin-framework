@@ -402,7 +402,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( 4, $body['total'] );
 		$this->assertSame( [ $this->row_id( 104 ), $this->row_id( 103 ), $this->row_id( 102 ), $this->row_id( 101 ) ], array_column( $body['rows'], 'id' ) );
 		$this->assertArrayNotHasKey( 'summary', $body['messages'] ?? [], 'The card footer counts the rows; no sentence repeats it.' );
-		$this->assertSame( 'заказов', $body['messages']['summary_label'], 'The footer\'s word travels with the list, so it can follow the count.' );
+		$this->assertSame( 'заказа', $body['messages']['summary_label'], 'The footer\'s word travels with the list, in the Russian form of the count (4 заказа).' );
 
 		$cells = $rows[ $this->row_id( 104 ) ]['cells'];
 

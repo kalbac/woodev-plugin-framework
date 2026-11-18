@@ -28,11 +28,6 @@ final class Site_Products_Rows {
 	private const CLIP = 200;
 
 	/**
-	 * Most state badges in one cell: the engine's stack limit.
-	 */
-	private const MAX_BADGES = Row_Normalizer::MAX_STACK_ITEMS;
-
-	/**
 	 * Marketplace name for the «Маркетплейс» side of stock and price.
 	 *
 	 * @var string
@@ -140,7 +135,8 @@ final class Site_Products_Rows {
 	}
 
 	/**
-	 * Cells of a single offer: a simple product or a variation.
+	 * Cells of a single offer: a simple product or a variation. The «Состояние» cell carries the state badge, what is synchronised
+	 * and, in red, the error — one column instead of three, so the table fits a 1024px screen without a hidden column.
 	 *
 	 * @param string              $name  Name.
 	 * @param array<string,mixed> $offer Offer.
@@ -148,20 +144,19 @@ final class Site_Products_Rows {
 	 */
 	private function offer_cells( string $name, array $offer ): array {
 		$linked = null !== $offer['link_id'];
+		$state  = [
+			[
+				'type'  => 'badge',
+				'value' => State_Groups::badge( $offer['group'] ),
+			],
+		];
 
 		return [
 			'name'      => $this->clip( $name ),
 			'sku'       => $this->sku_cell( $offer ),
-			'state'     => [
-				[
-					'type' => 'badge',
-					'value' => State_Groups::badge( $offer['group'] ),
-				],
-			],
+			'state'     => array_merge( $state, $linked ? $this->sync_cell( $offer ) : [], $this->error_items( $offer['error'] ) ),
 			'stock'     => $this->pair_cell( $this->count( $offer['site_stock'] ), null === $offer['remote_stock'] ? null : (string) $offer['remote_stock'] ),
 			'price'     => $this->pair_cell( $this->price( $offer['site_price'] ), $this->price( $offer['remote_price'] ) ),
-			'sync'      => $linked ? $this->sync_cell( $offer ) : null,
-			'error'     => '' === $offer['error'] ? null : $this->clip( $offer['error'] ),
 			'actions'   => null,
 		];
 	}
@@ -175,6 +170,9 @@ final class Site_Products_Rows {
 	 */
 	private function parent_cells( array $product, array $offers ): array {
 		$errors = array_filter( array_column( $offers, 'error' ) );
+		// The engine's stack holds `MAX_STACK_ITEMS` items: the badges of the state groups take them all, less the one line
+		// that summarises the errors, which is there only when a variation has one.
+		$room = Row_Normalizer::MAX_STACK_ITEMS - ( [] === $errors ? 0 : 1 );
 
 		return [
 			'name'      => $this->clip( $product['title'] ),
@@ -184,11 +182,12 @@ final class Site_Products_Rows {
 					'value' => $this->clip( $product['sku'] ),
 				],
 			],
-			'state'     => $this->state_badges( $offers ),
+			'state'     => array_merge(
+				$this->state_badges( $offers, $room ),
+				[] === $errors ? [] : $this->error_items( sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) ) )
+			),
 			'stock'     => $this->pair_cell( $this->site_stock_sum( $offers ), $this->remote_stock_sum( $offers ) ),
 			'price'     => $this->pair_cell( $this->price_range( array_column( $offers, 'site_price' ) ), null ),
-			'sync'      => null,
-			'error'     => [] === $errors ? null : $this->clip( sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) ) ),
 			'actions'   => null,
 		];
 	}
@@ -197,14 +196,15 @@ final class Site_Products_Rows {
 	 * One badge per state group present among the variations, the biggest group first.
 	 *
 	 * @param array<int,array<string,mixed>> $offers Offers.
+	 * @param int                            $room   Most badges the cell has room for.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private function state_badges( array $offers ): array {
+	private function state_badges( array $offers, int $room ): array {
 		$counts = array_count_values( array_column( $offers, 'group' ) );
 		arsort( $counts );
 		$badges = [];
 
-		foreach ( array_slice( $counts, 0, self::MAX_BADGES, true ) as $group => $count ) {
+		foreach ( array_slice( $counts, 0, $room, true ) as $group => $count ) {
 			$badges[] = [
 				'type'  => 'badge',
 				'value' => State_Groups::badge( (string) $group, $count ),
@@ -261,8 +261,30 @@ final class Site_Products_Rows {
 	}
 
 	/**
+	 * The error of an offer as a red badge under its state; nothing when there is none.
+	 *
+	 * @param string $error Error text of the offer, or the parent's summary of its variations' errors.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function error_items( string $error ): array {
+		if ( '' === $error ) {
+			return [];
+		}
+
+		return [
+			[
+				'type'  => 'badge',
+				'value' => [
+					'label' => $this->clip( $error ),
+					'tone'  => 'danger',
+				],
+			],
+		];
+	}
+
+	/**
 	 * What is synchronised and, when the product has a warehouse of its own, which: «Остатки · Цены» listing only what is on («—» when
-	 * nothing is), and under it «Склад: …».
+	 * nothing is), and under it «Склад: …». Lines of the «Состояние» cell, under the state badge.
 	 *
 	 * @param array<string,mixed> $offer Offer.
 	 * @return array<int,array<string,mixed>>

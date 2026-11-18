@@ -68,6 +68,25 @@ function formActions( table: TableHandle, scope: ActionDescriptor[ 'scope' ] ): 
 }
 
 /**
+ * «Выбрано: 3» for the ticked rows: empty while none is ticked or the whole filter is taken (that has its own bar below),
+ * `undefined` when PHP sent no such sentence.
+ *
+ * @param table     The table on screen.
+ * @param selection The selection.
+ */
+function selectedText( table: TableHandle, selection: SelectionHandle ): string | undefined {
+	const sentence = message( table.messages, MESSAGE_KEYS.selectedCount );
+
+	if ( sentence === '' ) {
+		return undefined;
+	}
+
+	return selection.matching === null && selection.selectedIds.length > 0
+		? fillMessage( sentence, { count: String( selection.selectedIds.length ) } )
+		: '';
+}
+
+/**
  * The select of the selection actions, for the table card's header. While «every row under the filter» is on, only the
  * actions that declared `all_matching` are listed: the others have no way to reach rows that are not on screen.
  */
@@ -99,12 +118,9 @@ export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarPr
 				apply: message( table.messages, MESSAGE_KEYS.bulkApply ),
 				label: message( table.messages, MESSAGE_KEYS.bulkLabel ),
 				// «Every row under the filter» has its own bar below; the count here is for ticked rows.
-				selected:
-					selection.matching === null && selection.selectedIds.length > 0
-						? fillMessage( message( table.messages, MESSAGE_KEYS.selectedCount ), {
-								count: String( selection.selectedIds.length ),
-						  } )
-						: '',
+				// `undefined` when the table has no such sentence: nothing is reserved for it. With one, the counter's place is
+				// kept while nothing is ticked, so the buttons after it do not jump when the first row is.
+				selected: selectedText( table, selection ),
 			} }
 		/>
 	);
