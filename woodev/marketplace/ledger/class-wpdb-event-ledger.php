@@ -39,9 +39,15 @@ class Wpdb_Event_Ledger implements Event_Ledger {
 	public const CLAIM_TTL = 120;
 
 	/**
-	 * Largest payload stored; a bigger one is kept as its scalar fields plus a marker (spec 3.1).
+	 * Largest payload stored for an event that will be processed; a bigger one is kept as its scalar fields plus a marker (spec 3.1).
+	 *
+	 * Equal to the largest body an adapter's decoder accepts (256 KB), so a processable event is never shortened: a stock
+	 * notification of a big shop carries hundreds of items, and losing them would end the event as «done» with nothing applied.
+	 * The `payload` column is `mediumtext`, which holds it.
+	 *
+	 * @since 2.1.12
 	 */
-	public const PAYLOAD_CAP = 65536;
+	public const PAYLOAD_CAP = 262144;
 
 	/**
 	 * Largest payload kept for an event that is stored but never processed. Such rows exist only for diagnostics, and

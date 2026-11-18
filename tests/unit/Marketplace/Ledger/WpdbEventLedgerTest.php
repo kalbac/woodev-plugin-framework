@@ -342,7 +342,42 @@ final class WpdbEventLedgerTest extends TestCase {
 	}
 
 	/**
-	 * A payload over the cap is stored as its scalar fields plus a marker (spec 3.1).
+	 * A stock notification of a big shop (about 216 KB, 1400 items in the field case of card 1845) is stored whole: the payload cap
+	 * equals the largest body a decoder accepts, so a processable event never loses its items.
+	 *
+	 * @return void
+	 */
+	public function test_a_payload_up_to_the_decoder_limit_is_stored_whole(): void {
+		$items = array();
+
+		for ( $i = 0; $i < 1400; $i++ ) {
+			$items[] = array(
+				'product_id' => 123456789 + $i,
+				'sku'        => 987654321 + $i,
+				'updated_at' => '2026-11-08T10:00:00Z',
+				'note'       => str_repeat( 'x', 70 ),
+			);
+		}
+
+		$body = array(
+			'message_type' => 'TYPE_STOCKS_CHANGED',
+			'items'        => $items,
+		);
+
+		$this->assertGreaterThan( 65536, strlen( (string) json_encode( $body ) ), 'the case is over the old 64 KB cap' );
+		$this->assertLessThanOrEqual( 262144, strlen( (string) json_encode( $body ) ) );
+
+		$this->ledger->record( $this->event( 5, 'big', $body ) );
+
+		$payload = $this->ledger->claim( 5, 1 )->events()[0]->payload();
+
+		$this->assertArrayNotHasKey( '_truncated', $payload );
+		$this->assertCount( 1400, $payload['items'] );
+		$this->assertSame( 987654321 + 1399, $payload['items'][1399]['sku'], 'the last item survives' );
+	}
+
+	/**
+	 * A payload over the cap (the decoder limit, 256 KB) is stored as its scalar fields plus a marker (spec 3.1).
 	 *
 	 * @return void
 	 */
