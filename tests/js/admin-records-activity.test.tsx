@@ -7,7 +7,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import { RecordsTable, type RecordsExtensions, type RecordsTableProps } from '../../src/admin-records';
 import {
@@ -26,7 +26,7 @@ import {
 	fixtureList,
 	fixtureRow,
 } from '../../src/admin-records/testing/fixture';
-import type { AdminRecord, Definition, ListEnvelope } from '../../src/admin-records/types';
+import type { ActionDescriptor, AdminRecord, Definition, ListEnvelope } from '../../src/admin-records/types';
 import type { TableCardProps } from '../../src/admin-records/wc-runtime';
 
 jest.mock( '@wordpress/api-fetch' );
@@ -44,7 +44,7 @@ function FakeTableCard( props: TableCardProps ) {
 	return (
 		<>
 			<div className="fake-card-header">{ props.actions }</div>
-		<table aria-label={ props.title }>
+		<table aria-label={ props.title } data-loading={ String( props.isLoading ) }>
 			<tbody>
 				{ props.rows.map( ( row, index ) => (
 					<tr key={ props.rowKey( row, index ) } data-key={ props.rowKey( row, index ) }>
@@ -806,6 +806,156 @@ describe( 'old answers never overwrite newer rows', () => {
 		} );
 
 		expect( document.querySelector( 'tr[data-key="p9"]' ) ).toBeNull();
+	} );
+} );
+
+const BULK_EXPORT: ActionDescriptor = {
+	id: 'bulk_export',
+	label: 'Выгрузить выбранные',
+	tone: 'neutral',
+	capability: '',
+	effect: 'mutate',
+	interaction: 'dialog',
+	scope: 'selection',
+	scope_sentence: '',
+	confirm_label: '',
+	skip_preview: false,
+	fields: [],
+};
+
+describe( 'the account work finishes', () => {
+	const LOADING = 'Список карточек загружается с маркетплейса.';
+
+	/** The first list read says the load runs; the second, after it finished, brings the new rows. */
+	function serveLoad( second: () => ListEnvelope | Promise< ListEnvelope >, definition: Partial< Definition > = {} ) {
+		let listReads = 0;
+
+		serve( {
+			listAnswer: () => {
+				listReads++;
+
+				return listReads === 1
+					? fixtureList( [ row( 'p1', 'Кружка' ) ], { account_activity: account( { active: true, text: LOADING } ) } )
+					: second();
+			},
+			activity: () => answer( [ row( 'p1', 'Кружка' ) ], { account_activity: account() } ),
+			definition,
+		} );
+
+		return () => listReads;
+	}
+
+	const table = () => screen.getByRole( 'table', { name: 'Товары' } );
+
+	test( 'the list is read again by itself, silently, and the line goes with the new rows', async () => {
+		const slow = defer< ListEnvelope >();
+		const listReads = serveLoad( () => slow.promise );
+		await renderTable();
+
+		expect( screen.getByText( LOADING ) ).toBeVisible();
+		expect( listReads() ).toBe( 1 );
+
+		await wait( LIMITS.refresh_ms );
+
+		// The load is over: the list is being read again, and nothing on screen has moved yet.
+		expect( listReads() ).toBe( 2 );
+		expect( screen.getByText( LOADING ) ).toBeVisible();
+		expect( table() ).toHaveAttribute( 'data-loading', 'false' );
+		expect( tableRow( 'p1' ) ).toBeVisible();
+
+		await act( async () => {
+			slow.resolve( fixtureList( [ row( 'p1', 'Кружка' ), row( 'p3', 'Чашка' ) ], { account_activity: account() } ) );
+		} );
+		await flush();
+
+		expect( screen.queryByText( LOADING ) ).toBeNull();
+		expect( tableRow( 'p3' ) ).toBeVisible();
+		expect( table() ).toHaveAttribute( 'data-loading', 'false' );
+	} );
+
+	test( 'no activity read starts from the rows that are about to be replaced', async () => {
+		const slow = defer< ListEnvelope >();
+		serveLoad( () => slow.promise );
+		await renderTable();
+
+		await wait( LIMITS.refresh_ms );
+		const before = reads.length;
+		await wait( LIMITS.refresh_ms * 3 );
+
+		expect( reads ).toHaveLength( before );
+
+		await act( async () => {
+			slow.resolve( fixtureList( [ row( 'p1', 'Кружка' ) ], { account_activity: account() } ) );
+		} );
+		await flush();
+		await wait( LIMITS.refresh_ms );
+
+		expect( reads.length ).toBeGreaterThan( before );
+	} );
+
+	test( 'what the merchant selected stays selected through the reload', async () => {
+		const slow = defer< ListEnvelope >();
+		serveLoad( () => slow.promise, {
+			bulk_actions: [ BULK_EXPORT ],
+			pagination: { default_per_page: 25, per_page_options: [ 25 ], max_per_page: 25, max_selection: 10 },
+		} );
+		const extensions: RecordsExtensions = {
+			...activity.extensions,
+			renderBulkActions: ( chosen ) => <output aria-label="selected">{ chosen.selectedIds.join( ',' ) }</output>,
+		};
+		render( <RecordsTable { ...tableProps( { extensions } ) } /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+		await flush();
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
+		expect( screen.getByLabelText( 'selected' ) ).toHaveTextContent( 'p1' );
+
+		await wait( LIMITS.refresh_ms );
+		expect( table() ).toHaveAttribute( 'data-loading', 'false' );
+		expect( screen.getByLabelText( 'selected' ) ).toHaveTextContent( 'p1' );
+
+		await act( async () => {
+			slow.resolve( fixtureList( [ row( 'p1', 'Кружка' ), row( 'p3', 'Чашка' ) ], { account_activity: account() } ) );
+		} );
+		await flush();
+
+		expect( tableRow( 'p3' ) ).toBeVisible();
+		expect( screen.getByLabelText( 'selected' ) ).toHaveTextContent( 'p1' );
+	} );
+
+	test( 'a list that finishes with nothing to say does not reload again and again', async () => {
+		const listReads = serveLoad( () => fixtureList( [ row( 'p1', 'Кружка' ) ], { account_activity: account() } ) );
+		await renderTable();
+
+		await wait( LIMITS.refresh_ms * 5 );
+
+		expect( listReads() ).toBe( 2 );
+	} );
+
+	test( 'work that was never on screen reloads nothing', async () => {
+		let listReads = 0;
+		serve( {
+			listAnswer: () => {
+				listReads++;
+
+				return undefined;
+			},
+		} );
+		await renderTable();
+		await wait( LIMITS.refresh_ms * 3 );
+
+		expect( listReads ).toBe( 1 );
+	} );
+
+	test( 'a failed silent read shows the error state, not stale rows', async () => {
+		const listReads = serveLoad( () => Promise.reject( new Error( 'down' ) ) );
+		await renderTable();
+
+		await wait( LIMITS.refresh_ms );
+		await flush();
+
+		expect( listReads() ).toBe( 2 );
+		expect( screen.queryByRole( 'table', { name: 'Товары' } ) ).toBeNull();
 	} );
 } );
 

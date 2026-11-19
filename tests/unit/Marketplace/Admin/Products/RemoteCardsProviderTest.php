@@ -213,10 +213,12 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$body = $this->list_body();
 		$this->assertTrue( $body['account_activity']['active'], 'The account line says the list is being loaded.' );
 		$this->assertSame( [ 'refresh_list' ], $body['account_activity']['blocked_actions'] );
+		$this->assertStringNotContainsString( 'обновите страницу', $body['account_activity']['text'], 'The table refreshes itself when the load ends (#1873).' );
 
 		$this->card_store()->fail( $this->account_id, 'Маркетплейс не ответил' );
 		$summary = $this->list_body()['messages']['summary'];
 		$this->assertStringContainsString( 'Маркетплейс не ответил', $summary );
+		$this->assertFalse( $this->list_body()['account_activity']['active'], 'A finished load, failed or not, ends the account line: that is what makes the screen read the list again.' );
 	}
 
 	public function test_reading_the_table_never_calls_the_marketplace_nor_queues_anything(): void {
@@ -290,6 +292,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertSame( 0, $plan['eligible'] );
 		$this->assertSame( 1, $second['skipped'] );
 		$this->assertStringContainsString( 'уже загружается', $second['groups'][0]['reason'] );
+		$this->assertStringNotContainsString( 'обновите страницу', $second['groups'][0]['reason'] );
 		$this->assertCount( 1, $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->refresh_hook() ) );
 	}
 

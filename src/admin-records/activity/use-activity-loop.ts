@@ -9,6 +9,8 @@
  *   loop waits a full interval after the list read instead of asking again at once.
  * - A failed read backs off (cadence × 2ⁿ up to `max_refresh_ms`); after `stale_after_ms` without a good read the
  *   table is marked stale. Staleness only adds PHP's sentence — nothing is enabled because data got old.
+ * - When the account's work ends (the account line goes from active to idle) the list is read again silently: the rows,
+ *   the counts and the summary swap when the read answers, and the line goes with them — no loading skeleton, no gap.
  * - Rows are written through `patchRows`, and only the rows nobody else wrote since the read was sent
  *   ({@link Ownership}).
  *
@@ -116,11 +118,23 @@ export function useActivityLoop( table: TableHandle, state: ActivityState, owner
 			const onScreen = new Set( ids );
 			const writable = ( id: string ) => onScreen.has( id ) && ownership.mayWrite( id, versions );
 
-			state.set( { account: answer.account_activity } );
+			// The account's work was running on screen and is over: the list, its counts and its summary are older than the
+			// work. They come from a list read, which also brings the account line it ends with — so the line that said
+			// "loading" stays until then and goes in one step with the new rows, never a gap between.
+			const finished = state.get().account?.active === true && ! answer.account_activity.active;
+
+			if ( ! finished ) {
+				state.set( { account: answer.account_activity } );
+			}
+
 			tableRef.current.patchRows(
 				answer.rows.filter( ( row ) => writable( row.id ) ),
 				answer.removed_ids.filter( writable )
 			);
+
+			if ( finished ) {
+				tableRef.current.reload( { silent: true } );
+			}
 		};
 
 		const schedule = ( delay: number ) => {

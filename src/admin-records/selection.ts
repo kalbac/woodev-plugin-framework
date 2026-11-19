@@ -57,7 +57,7 @@ function remove( known: SelectionState, ids: string[] ): SelectionState {
 
 /**
  * @param limit The table's `max_selection`.
- * @param epoch Changes with every list read.
+ * @param epoch Changes with every list read that replaces the rows; a silent reload keeps the selection.
  */
 export function useSelection( limit: number, epoch: number ): Selection {
 	const [ state, setState ] = useState< SelectionState >( NOTHING );
