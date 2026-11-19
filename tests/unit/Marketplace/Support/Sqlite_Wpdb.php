@@ -250,7 +250,12 @@ final class Sqlite_Wpdb extends \wpdb {
 	private static function to_sqlite( string $sql ): string {
 		$sql = (string) preg_replace( '/^INSERT IGNORE/', 'INSERT OR IGNORE', $sql );
 		$sql = 'START TRANSACTION' === $sql ? 'BEGIN' : $sql;
-		$sql = str_replace( 'ON DUPLICATE KEY UPDATE', 'ON CONFLICT(account_id, bucket) DO UPDATE SET', $sql );
+		if ( false !== strpos( $sql, 'ON DUPLICATE KEY UPDATE' ) ) {
+			// The conflict target is the table's key: the cards list (#1863) is keyed by the article's hash, the throttle by its bucket.
+			$target = 1 === preg_match( '/^INSERT INTO \S*_cards /', $sql ) ? 'account_id, card_key' : 'account_id, bucket';
+			$sql    = str_replace( 'ON DUPLICATE KEY UPDATE', 'ON CONFLICT(' . $target . ') DO UPDATE SET', $sql );
+			$sql    = (string) preg_replace( '/VALUES\((\w+)\)/', 'excluded.$1', $sql );
+		}
 		// SQLite has no `DELETE … LIMIT` unless it was compiled with it: bound the delete by the rowids it would have taken.
 		$sql = (string) preg_replace( '/^DELETE FROM (\S+) WHERE (.+) LIMIT (\d+)$/s', 'DELETE FROM $1 WHERE rowid IN (SELECT rowid FROM $1 WHERE $2 LIMIT $3)', $sql );
 

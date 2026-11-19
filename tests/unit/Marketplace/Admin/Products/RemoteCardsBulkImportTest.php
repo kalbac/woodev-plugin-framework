@@ -113,7 +113,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	private function wire(): void {
 		$this->runs   = new Bulk_Run_Store( $this->db, Sqlite_Tables::table( 'bulk_runs' ), $this->clock() );
 		$this->lock   = new Scripted_Bulk_Run_Lock();
-		$matching     = new Remote_Cards_Matching( $this->snapshots(), $this->links() );
+		$matching     = new Remote_Cards_Matching( $this->card_store() );
 		$this->feeder = $this->new_feeder();
 		$this->runner = $this->runner_over( $this->feeder );
 		$this->run_actions = new Remote_Cards_Run_Actions(
@@ -137,7 +137,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		return new Bulk_Import_Feeder(
 			$this->runs,
 			$this->import_scheduler(),
-			[ new Remote_Cards_Matching( $this->snapshots(), $this->links() ), 'entries' ],
+			[ new Remote_Cards_Matching( $this->card_store() ), 'entries' ],
 			function ( array $articles ): array {
 				$this->lookups[] = count( $articles );
 
@@ -372,7 +372,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	// The preview and the start.
 
 	public function test_the_preview_counts_the_cards_under_the_filter_and_plans_nothing(): void {
-		$this->put_snapshot( $this->cards( 30 ) );
+		$this->put_cards( $this->cards( 30 ) );
 		$this->put_on_site( 'A-1', 41 );
 		$this->put_on_site( 'A-2', 42 );
 
@@ -395,19 +395,20 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_count_follows_the_search_and_the_on_site_filter_like_the_table_does(): void {
-		$this->put_snapshot( array_merge( $this->cards( 5 ), [ $this->card( 'B-1', 'Платье красное' ) ] ) );
+		$this->put_cards( array_merge( $this->cards( 5 ), [ $this->card( 'B-1', 'Платье красное' ) ] ) );
 		$this->put_on_site( 'A-3', 43 );
 
-		$matching = new Remote_Cards_Matching( $this->snapshots(), $this->links() );
+		$matching = new Remote_Cards_Matching( $this->card_store() );
 
 		$this->assertSame( 6, $matching->count( $this->account_id, $this->query() ), 'No filter: every card.' );
 		$this->assertSame( 5, $matching->count( $this->account_id, $this->query( [ 'on_site' => 'no' ] ) ) );
 		$this->assertSame( 1, $matching->count( $this->account_id, $this->query( [ 'on_site' => 'yes' ] ) ) );
-		$this->assertSame( 1, $matching->count( $this->account_id, [ 'search' => 'платье', 'filters' => [ 'on_site' => 'no' ] ] ), 'The search looks in the name too.' );
+		// SQLite's LIKE ignores the case of Latin letters only; MySQL's collation ignores it for Cyrillic too (CardStoreMysqlTest).
+		$this->assertSame( 1, $matching->count( $this->account_id, [ 'search' => 'Платье', 'filters' => [ 'on_site' => 'no' ] ] ), 'The search looks in the name too.' );
 	}
 
 	public function test_apply_stores_a_run_and_queues_its_first_tick_and_nothing_else(): void {
-		$this->put_snapshot( $this->cards( 30 ) );
+		$this->put_cards( $this->cards( 30 ) );
 
 		$answer = $this->matching_provider()->apply_matching( $this->context(), Remote_Cards_Definition::IMPORT_SELECTED, $this->query( [ 'on_site' => 'no' ] ), [] );
 		$run    = $this->runs->find( $this->account_id );
@@ -426,7 +427,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_import_may_not_start_without_a_licence_a_list_a_card_or_in_the_near_match_view(): void {
-		$this->put_snapshot( $this->cards( 3 ) );
+		$this->put_cards( $this->cards( 3 ) );
 
 		$this->licensed = false;
 		$this->assertRefused( 'Лиценз' );
@@ -434,7 +435,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 
 		$this->assertRefused( 'Похожие артикулы', [ 'show' => 'near' ] );
 		$this->assertRefused( 'Список карточек устарел', [], false );
-		$this->put_snapshot( [] );
+		$this->put_cards( [] );
 		$this->assertRefused( 'карточек нет' );
 		$this->assertNull( $this->runs->find( $this->account_id ), 'A refused start stores nothing.' );
 	}
@@ -447,7 +448,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	 */
 	private function assertRefused( string $fragment, array $filters = [], bool $listed = true ): void {
 		if ( ! $listed ) {
-			$this->transients = [];
+			$this->forget_cards();
 		}
 
 		foreach ( [ 'preview_matching', 'apply_matching' ] as $method ) {
@@ -461,7 +462,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_second_start_while_a_run_is_going_is_refused_with_its_name(): void {
-		$this->put_snapshot( $this->cards( 3 ) );
+		$this->put_cards( $this->cards( 3 ) );
 		$this->start_run( $this->query() );
 
 		$this->expectException( Action_State_Exception::class );
@@ -471,7 +472,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_only_import_runs_over_every_card_and_only_when_the_adapter_can_import(): void {
-		$this->put_snapshot( $this->cards( 3 ) );
+		$this->put_cards( $this->cards( 3 ) );
 
 		$this->expectException( Action_State_Exception::class );
 
@@ -481,7 +482,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	// The freeze and the feed.
 
 	public function test_the_first_tick_freezes_the_cards_and_the_next_parts_feed_the_import_job(): void {
-		$this->put_snapshot( $this->cards( 25 ) );
+		$this->put_cards( $this->cards( 25 ) );
 		$run_id = $this->start_run( $this->query() );
 
 		$run = $this->drive( $run_id );
@@ -496,7 +497,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_part_never_queues_more_than_ten_import_actions_and_the_parts_are_a_second_apart(): void {
-		$this->put_snapshot( $this->cards( 300 ) );
+		$this->put_cards( $this->cards( 300 ) );
 		$this->start_run( $this->query() );
 		$run = $this->runs->find( $this->account_id );
 		$this->assertNotNull( $run );
@@ -536,7 +537,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_snapshot_expiring_between_the_freeze_and_the_feed_changes_nothing(): void {
-		$this->put_snapshot( $this->cards( 12 ) );
+		$this->put_cards( $this->cards( 12 ) );
 		$this->start_run( $this->query() );
 		$run     = $this->runs->find( $this->account_id );
 		$account = $this->account_now();
@@ -547,7 +548,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 
 		$frozen = $this->freeze( $run );
 
-		$this->transients = []; // The 600 s of the snapshot are over.
+		$this->forget_cards(); // The list is gone.
 
 		$fed = $this->new_feeder()->part( $account, $run, $frozen['cursor'], $owns );
 
@@ -565,24 +566,24 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		return [
 			'expired'                   => [
 				function (): void {
-					$this->transients = [];
+					$this->forget_cards();
 				},
 			],
 			'refreshed to no cards'     => [
 				function (): void {
-					$this->put_snapshot( [] );
+					$this->put_cards( [] );
 				},
 			],
 			'refreshed to other cards'  => [
 				function (): void {
-					$this->put_snapshot( $this->cards( 3, 'Z-' ) );
+					$this->put_cards( $this->cards( 3, 'Z-' ) );
 				},
 			],
 		];
 	}
 
 	public function test_a_tick_that_dies_before_the_freeze_is_saved_leaves_a_run_that_has_frozen_nothing(): void {
-		$this->put_snapshot( $this->cards( 12 ) );
+		$this->put_cards( $this->cards( 12 ) );
 		$run_id = $this->start_run( $this->query() );
 
 		// The freeze was computed; the process dies before the runner's one write of the list and the position.
@@ -611,7 +612,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_run_that_froze_nothing_before_its_tick_died_stops_with_the_apply_sentence_when_the_list_is_gone(): void {
-		$this->put_snapshot( $this->cards( 12 ) );
+		$this->put_cards( $this->cards( 12 ) );
 		$run_id = $this->start_run( $this->query() );
 
 		$this->interrupted_runner(
@@ -620,7 +621,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 				throw new Bulk_Run_Lost( 'The tick died after part ' . $call );
 			}
 		)->tick( $this->account_id, $run_id );
-		$this->transients = [];
+		$this->forget_cards();
 
 		$this->runner_over( $this->new_feeder() )->tick( $this->account_id, $run_id );
 		$run = $this->runs->find( $this->account_id );
@@ -637,7 +638,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	 * @return void
 	 */
 	public function test_a_tick_that_dies_after_the_freeze_is_saved_still_feeds_the_frozen_cards_once_whatever_the_snapshot_became( callable $change ): void {
-		$this->put_snapshot( $this->cards( 12 ) );
+		$this->put_cards( $this->cards( 12 ) );
 		$run_id = $this->start_run( $this->query() );
 
 		// The freeze part is saved; the process dies at the start of the next part, before anything is fed.
@@ -656,7 +657,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [ 'frozen' => true, 'index' => 0 ], $run->cursor(), '… with the position that says so.' );
 		$this->assertSame( [], $this->queued_articles(), 'Nothing was fed yet.' );
 
-		$change();
+		\Closure::fromCallable( $change )->call( $this ); // The data provider's closures are bound to the provider's instance.
 		$this->runner_over( $this->new_feeder() )->tick( $this->account_id, $run_id );
 		$done = $this->runs->find( $this->account_id );
 
@@ -669,7 +670,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_tick_that_dies_after_the_freeze_keeps_the_counters_and_the_report_of_the_freeze(): void {
-		$this->put_snapshot( $this->cards( 5 ) );
+		$this->put_cards( $this->cards( 5 ) );
 		$this->put_on_site( 'A-2', 42 );
 		$run_id = $this->start_run( $this->query() );
 
@@ -681,7 +682,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 			},
 			null
 		)->tick( $this->account_id, $run_id );
-		$this->put_snapshot( [] );
+		$this->put_cards( [] );
 
 		$this->runner_over( $this->new_feeder() )->tick( $this->account_id, $run_id );
 		$done = $this->runs->find( $this->account_id );
@@ -694,7 +695,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_refused_freeze_save_stores_nothing_and_queues_nothing(): void {
-		$this->put_snapshot( $this->cards( 12 ) );
+		$this->put_cards( $this->cards( 12 ) );
 		$run_id = $this->start_run( $this->query() );
 
 		// Another tick takes the run between the freeze and its save.
@@ -716,7 +717,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_refused_freeze_save_does_not_finish_a_run_with_nothing_to_import(): void {
-		$this->put_snapshot( $this->cards( 3 ) );
+		$this->put_cards( $this->cards( 3 ) );
 
 		foreach ( [ 'A-1' => 41, 'A-2' => 42, 'A-3' => 43 ] as $article => $product ) {
 			$this->put_on_site( $article, $product );
@@ -739,10 +740,10 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_run_whose_list_expired_before_the_freeze_stops_with_the_apply_sentence(): void {
-		$this->put_snapshot( $this->cards( 5 ) );
+		$this->put_cards( $this->cards( 5 ) );
 		$run_id = $this->start_run( $this->query() );
 
-		$this->transients = [];
+		$this->forget_cards();
 
 		$this->runner->tick( $this->account_id, $run_id );
 		$run = $this->runs->find( $this->account_id );
@@ -763,7 +764,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 			$this->card( 'U-1', '', [ 'group' => [ 'key' => 'grp-1' ] ] ),
 		];
 		$this->half_made = [ 'R-1' ];
-		$this->put_snapshot( $cards );
+		$this->put_cards( $cards );
 		$run_id = $this->start_run( $this->query() );
 
 		$this->drive( $run_id );
@@ -776,7 +777,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_marker_lookup_goes_in_batches(): void {
-		$this->put_snapshot( $this->cards( 2300 ) );
+		$this->put_cards( $this->cards( 2300 ) );
 		$run_id = $this->start_run( $this->query() );
 
 		$this->drive( $run_id );
@@ -786,7 +787,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_card_a_product_carries_is_left_out_with_its_reason(): void {
-		$this->put_snapshot( $this->cards( 5 ) );
+		$this->put_cards( $this->cards( 5 ) );
 		$this->put_on_site( 'A-2', 42 );
 		$run_id = $this->start_run( $this->query( [] ) );
 
@@ -800,7 +801,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_near_match_pairs_are_never_imported(): void {
-		$this->put_snapshot( $this->cards( 3 ) );
+		$this->put_cards( $this->cards( 3 ) );
 		$this->reports()->replace_near_matches( $this->account_id, [ $this->near_entry( 41, 'abc-001', 'NEAR-1' ) ] );
 		$run_id = $this->start_run( $this->query( [ 'on_site' => 'no' ] ) );
 
@@ -812,12 +813,12 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_new_start_clears_the_list_of_the_run_before(): void {
-		$this->put_snapshot( $this->cards( 4 ) );
+		$this->put_cards( $this->cards( 4 ) );
 		$first = $this->start_run( $this->query() );
 		$this->drive( $first );
 		$this->assertCount( 4, (array) $this->runs->items( $this->account_id, $first ) );
 
-		$this->put_snapshot( $this->cards( 2, 'B-' ) );
+		$this->put_cards( $this->cards( 2, 'B-' ) );
 		$second = $this->start_run( $this->query() );
 
 		$this->assertNull( $this->runs->items( $this->account_id, $second ), 'The new run starts with no list.' );
@@ -829,7 +830,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_tick_that_lost_the_run_feeds_nothing(): void {
-		$this->put_snapshot( $this->cards( 4 ) );
+		$this->put_cards( $this->cards( 4 ) );
 		$run_id = $this->start_run( $this->query() );
 		$run    = $this->runs->find( $this->account_id );
 		$this->assertNotNull( $run );
@@ -853,7 +854,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_user_who_lost_the_right_stops_the_run(): void {
-		$this->put_snapshot( $this->cards( 4 ) );
+		$this->put_cards( $this->cards( 4 ) );
 		$run_id = $this->start_run( $this->query() );
 
 		Functions\when( 'user_can' )->justReturn( false );
@@ -876,9 +877,9 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 			];
 		}
 
-		$this->put_snapshot( $cards );
+		$this->put_cards( $cards );
 		unset( $cards );
-		$matching = new Remote_Cards_Matching( $this->snapshots(), $this->links() );
+		$matching = new Remote_Cards_Matching( $this->card_store() );
 
 		$this->assertSame( 50000, $matching->count( $this->account_id, $this->query( [ 'on_site' => 'no' ] ) ) );
 
@@ -896,7 +897,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	// The account line and its buttons.
 
 	public function test_the_account_line_speaks_in_cards_and_carries_stop_and_report(): void {
-		$this->put_snapshot( $this->cards( 30 ) );
+		$this->put_cards( $this->cards( 30 ) );
 		$run_id = $this->start_run( $this->query() );
 
 		$running = $this->matching_provider()->get_activity( $this->context(), [] )['account_activity'];
@@ -916,7 +917,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_finished_run_of_the_products_table_does_not_hide_the_imports_that_are_going(): void {
-		$this->put_snapshot( $this->cards( 5 ) );
+		$this->put_cards( $this->cards( 5 ) );
 
 		// «Включить синхронизацию остатков» finished a minute ago and its result stays on the line for a day.
 		$this->assertTrue( $this->runs->start( $this->account_id, 'old-run', 'sync_stock_on', [], [ 'search' => '', 'filters' => [] ], 3, 5 ) );
@@ -933,7 +934,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_running_import_does_not_say_it_twice(): void {
-		$this->put_snapshot( $this->cards( 5 ) );
+		$this->put_cards( $this->cards( 5 ) );
 		$this->start_run( $this->query() );
 		$this->import_scheduler()->import( $this->account_id, [ 'A-1' ] );
 
@@ -945,7 +946,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_products_table_reads_an_import_run_in_cards_too(): void {
-		$this->put_snapshot( $this->cards( 3 ) );
+		$this->put_cards( $this->cards( 3 ) );
 		$this->start_run( $this->query() );
 
 		$line = Site_Products_Run_Line::line( $this->runs->find( $this->account_id ), time() );
@@ -956,7 +957,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_report_button_shows_the_stored_groups_and_stop_ends_a_run_nobody_works_on(): void {
-		$this->put_snapshot( $this->cards( 5 ) );
+		$this->put_cards( $this->cards( 5 ) );
 		$this->put_on_site( 'A-1', 41 );
 		$run_id = $this->start_run( $this->query() );
 		$this->drive( $run_id );
@@ -966,7 +967,7 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		$this->assertSame( 'Уже на сайте', $report['groups'][0]['reason'] );
 		$this->assertFalse( $report['can_apply'] );
 
-		$this->put_snapshot( $this->cards( 5, 'C-' ) );
+		$this->put_cards( $this->cards( 5, 'C-' ) );
 		$next = $this->start_run( $this->query() );
 
 		$stopped = $this->matching_provider()->apply( $this->context(), Site_Products_Bulk::RUN_STOP, [], [ Site_Products_Bulk::RUN_FIELD => $next ] );

@@ -8,7 +8,6 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Standard_Messages;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -16,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * Declares the table for the records engine: columns, the filters (the «Показать» filter swaps the cards for the near-match report), the two
  * account-wide actions, the row action «Связать с…», the report's two answers and every sentence the page shows. The engine validates the result ({@see \Woodev\Framework\Admin\Records\Records_Definition::from_array()}).
  *
- * The table lists a snapshot, in the marketplace's order, so it declares no sorting.
+ * The table lists the stored list, in the marketplace's order, so it declares no sorting.
  *
  * @since 2.1.5
  */
@@ -392,10 +391,9 @@ final class Remote_Cards_Definition {
 			'scope'          => 'account',
 			'capability'     => 'manage_woocommerce',
 			'scope_sentence' => sprintf(
-				/* translators: 1: marketplace name, 2: how many minutes the list is kept. */
-				__( 'Весь аккаунт — список карточек загрузится с маркетплейса %1$s заново и будет храниться %2$d минут. Товары на сайте и карточки на маркетплейсе не меняются.', 'woodev-plugin-framework' ),
-				$marketplace,
-				(int) ( Cards_Snapshot_Store::TTL / 60 )
+				/* translators: %s: marketplace name. */
+				__( 'Весь аккаунт — список карточек загрузится с маркетплейса %s заново. Он обновляется и сам: раз в сутки и когда маркетплейс сообщает о новой или изменённой карточке. Товары на сайте и карточки на маркетплейсе не меняются.', 'woodev-plugin-framework' ),
+				$marketplace
 			),
 		];
 	}

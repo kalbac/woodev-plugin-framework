@@ -10,8 +10,8 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_State_Exception;
 use Woodev\Framework\Marketplace\Account\Account;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
@@ -30,14 +30,14 @@ defined( 'ABSPATH' ) || exit;
  * | `import`, `import_selected` | «Импортировать»: sorts the selected cards ({@see Remote_Cards_Import_Plan}) and queues the eligible ones on {@see Import_Scheduler}; the job itself reads the marketplace | `manage_woocommerce` |
  * | `import_selected` over every card under the filter | «Импортировать все по фильтру»: stores a bulk run and queues its first tick; the cards are frozen and fed to the import job in the background ({@see Remote_Cards_Run_Actions}) | `manage_woocommerce` |
  * | `bulk_stop`, `bulk_report` | the buttons of the account line of a bulk run | `manage_woocommerce` |
- * | `refresh_list` | marks the snapshot as being refreshed and queues the job that fills it | `manage_woocommerce` |
+ * | `refresh_list` | marks the list as being refreshed and queues the job that refreshes it | `manage_woocommerce` |
  * | `link_by_article` | the account-wide job of {@see Site_Products_Bulk}, the same as on the products table | `manage_woocommerce` |
  * | `link_to` | links the one card to the product the merchant picked ({@see Card_Linker}); a link settles the pair in the near-match report | `edit_products`, and `edit_post` on the product |
  * | `near_confirm` | «Это тот же товар»: links a pair of the near-match report from the report's own copy of the card | `edit_products`, and `edit_post` on the product |
  * | `near_dismiss` | «Нет, это разные»: takes the pair out of the report and keeps the answer ({@see Link_Report_Store::dismiss_near_match()}) | `edit_products`, and `edit_post` on the product |
  *
- * The card for `link_to` is read from **this account's** snapshot, never from the request: a row id names a card by the key of its
- * article, and a card that is not in the snapshot any more (the list expired) is refused as a stale list.
+ * The card for `link_to` is read from **this account's** stored list, never from the request: a row id names a card by the key of its
+ * article, and a card that is not in the list any more (a refresh found it deleted) is refused as a stale list.
  *
  * `link_to`, `near_confirm` and `near_dismiss` act on one card: the table lets the merchant select many rows for «Импортировать», so each of
  * them refuses more than one id, at preview and at apply, instead of acting on the first.
@@ -48,9 +48,9 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Remote_Cards_Actions {
 	/**
-	 * @var Cards_Snapshot_Store
+	 * @var Wpdb_Card_Store
 	 */
-	private $snapshots;
+	private $cards;
 
 	/**
 	 * @var Wpdb_Link_Store
@@ -118,7 +118,7 @@ final class Remote_Cards_Actions {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param Cards_Snapshot_Store          $snapshots Snapshot of the cabinet's cards.
+	 * @param Wpdb_Card_Store               $cards     The stored list of the cabinet's cards.
 	 * @param Wpdb_Link_Store               $links     Links.
 	 * @param Link_Report_Store             $reports   The near-match report, which a link settles.
 	 * @param Card_Linker                   $linker    The one place that writes a card's link.
@@ -131,8 +131,8 @@ final class Remote_Cards_Actions {
 	 * @param Remote_Cards_Import_Plan|null $plan Sorts the cards of an import, null when the adapter cannot import cards.
 	 * @param Remote_Cards_Run_Actions|null $runs The import by filter and its account line, null when the adapter cannot import cards.
 	 */
-	public function __construct( Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Card_Linker $linker, Link_Scheduler $scheduler, Site_Products_Bulk $bulk, License_Gate $license, Remote_Cards_Products $products, Remote_Cards_Rows $rows, ?Import_Scheduler $importer = null, ?Remote_Cards_Import_Plan $plan = null, ?Remote_Cards_Run_Actions $runs = null ) {
-		$this->snapshots = $snapshots;
+	public function __construct( Wpdb_Card_Store $cards, Wpdb_Link_Store $links, Link_Report_Store $reports, Card_Linker $linker, Link_Scheduler $scheduler, Site_Products_Bulk $bulk, License_Gate $license, Remote_Cards_Products $products, Remote_Cards_Rows $rows, ?Import_Scheduler $importer = null, ?Remote_Cards_Import_Plan $plan = null, ?Remote_Cards_Run_Actions $runs = null ) {
+		$this->cards     = $cards;
 		$this->links     = $links;
 		$this->reports   = $reports;
 		$this->linker    = $linker;
@@ -303,7 +303,7 @@ final class Remote_Cards_Actions {
 	}
 
 	/**
-	 * What «Импортировать» will do with the selected cards. Reads the snapshot, the links, the shop's products and the import queue:
+	 * What «Импортировать» will do with the selected cards. Reads the stored list, the links, the shop's products and the import queue:
 	 * nothing is written and nothing is sent to the marketplace.
 	 *
 	 * @param Account  $account Account.
@@ -374,12 +374,17 @@ final class Remote_Cards_Actions {
 	 * @return array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int}
 	 */
 	private function import_plan( Account $account, array $ids ): array {
-		$snapshot = $this->snapshots->get( $account->id() );
-		$cards    = [];
+		$keys = [];
 
 		foreach ( array_values( array_unique( $ids ) ) as $row_id ) {
-			$key     = Remote_Cards_Ids::key_of( (string) $row_id, $account->id() );
-			$cards[] = null === $key || null === $snapshot ? null : Remote_Cards_Query::find( $snapshot['cards'], $key );
+			$keys[] = Remote_Cards_Ids::key_of( (string) $row_id, $account->id() );
+		}
+
+		$found = $this->cards->find_many( $account->id(), array_filter( $keys ) );
+		$cards = [];
+
+		foreach ( $keys as $key ) {
+			$cards[] = null === $key ? null : $found[ $key ] ?? null;
 		}
 
 		return $this->plan->build( $cards, Remote_Cards_Query::linked_offers( $this->links->identity_map( $account->id() ) ), $this->importer->pending_offer_ids( $account->id() ), $account->id() );
@@ -482,11 +487,11 @@ final class Remote_Cards_Actions {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private function locked_rows( Account $account, array $offers ): array {
-		$snapshot = $this->snapshots->get( $account->id() );
-		$rows     = [];
+		$found = $this->cards->find_many( $account->id(), array_map( [ Remote_Cards_Ids::class, 'key' ], $offers ) );
+		$rows  = [];
 
 		foreach ( $offers as $offer_id ) {
-			$card = null === $snapshot ? null : Remote_Cards_Query::find( $snapshot['cards'], Remote_Cards_Ids::key( $offer_id ) );
+			$card = $found[ Remote_Cards_Ids::key( $offer_id ) ] ?? null;
 
 			if ( null !== $card ) {
 				$rows[] = $this->rows->row( $account->id(), array_merge( $card, [ 'wc_product_id' => 0 ] ), null, true );
@@ -793,7 +798,7 @@ final class Remote_Cards_Actions {
 	 * @return array<string,mixed>
 	 */
 	private function preview_refresh( Account $account ): array {
-		if ( $this->snapshots->is_refreshing( $account->id() ) ) {
+		if ( $this->cards->is_refreshing( $account->id() ) ) {
 			return $this->refused_preview( $this->already_refreshing() );
 		}
 
@@ -805,22 +810,22 @@ final class Remote_Cards_Actions {
 	}
 
 	/**
-	 * Marks the snapshot as being refreshed, then queues the job: the mark comes first so that two clicks do not queue two reads.
+	 * Marks the list as being refreshed, then queues the job: the mark comes first so that two clicks do not queue two reads.
 	 *
 	 * @param Account $account Account.
 	 * @return array<string,mixed>
 	 * @throws Action_State_Exception When Action Scheduler refuses the job.
 	 */
 	private function apply_refresh( Account $account ): array {
-		if ( $this->snapshots->is_refreshing( $account->id() ) ) {
+		if ( $this->cards->is_refreshing( $account->id() ) ) {
 			return $this->refused_apply( $this->already_refreshing(), '' );
 		}
 
-		$this->snapshots->mark_refreshing( $account->id() );
+		$this->cards->mark_refreshing( $account->id() );
 
 		if ( ! $this->scheduler->refresh_cards( $account->id() ) ) {
 			$text = __( 'Не удалось поставить загрузку списка в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler), и повторите.', 'woodev-plugin-framework' );
-			$this->snapshots->fail( $account->id(), $text );
+			$this->cards->fail( $account->id(), $text );
 
 			throw new Action_State_Exception( $text );
 		}
@@ -838,17 +843,15 @@ final class Remote_Cards_Actions {
 	}
 
 	/**
-	 * The card of a row, read from the account's snapshot.
+	 * The card of a row, read from the account's stored list.
 	 *
 	 * @param Account $account Account.
 	 * @param string  $row_id  Row id.
-	 * @return array<string,mixed>|null Null when the snapshot has expired or no longer holds the card.
+	 * @return array<string,mixed>|null Null when the list does not hold the card.
 	 */
 	private function card( Account $account, string $row_id ): ?array {
 		$key      = Remote_Cards_Ids::key_of( $row_id, $account->id() );
-		$snapshot = null === $key ? null : $this->snapshots->get( $account->id() );
-
-		return null === $snapshot ? null : Remote_Cards_Query::find( $snapshot['cards'], (string) $key );
+		return null === $key ? null : $this->cards->find( $account->id(), $key );
 	}
 
 	/**

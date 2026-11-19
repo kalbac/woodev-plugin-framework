@@ -81,6 +81,8 @@ final class FlowWiringTest extends TestCase {
 		'woodev_%s_link_cards'                    => 1,
 		'woodev_%s_import_cards'                  => 1,
 		'woodev_%s_refresh_cards'                 => 1,
+		'woodev_%s_refresh_card_rows'             => 1,
+		'woodev_%s_refresh_cards_daily'           => 1,
 		'woodev_%s_refresh_catalog'               => 1,
 		'woodev_%s_refresh_posting'               => 1,
 		'woodev_%s_poll_postings'                 => 1,
@@ -200,8 +202,9 @@ final class FlowWiringTest extends TestCase {
 			Actions\expectAdded( $name )->times( $times );
 		}
 
-		// The schedule checks: stock and price sender, daily stock reconcile, posting poll, label prune, export sweep, weekly catalogue refresh.
-		Actions\expectAdded( 'action_scheduler_init' )->times( 6 );
+		// The schedule checks: stock and price sender, daily stock reconcile, posting poll, label prune, export sweep, weekly catalogue refresh,
+		// daily cards list refresh.
+		Actions\expectAdded( 'action_scheduler_init' )->times( 7 );
 		// A changed price rule is named after the adapter, not the plugin.
 		Actions\expectAdded( 'woodev_fake_wildberries_profile_price_changed' )->once();
 		// The settings screen fires this one after saving an account's markup or price direction.
@@ -330,6 +333,21 @@ final class FlowWiringTest extends TestCase {
 
 		$this->assertInstanceOf( Card_Event_Handler::class, $seen->for_type( 'CARD_CHANGED' ), 'the plugin finds the framework handler in place and may replace it' );
 		$this->assertInstanceOf( Noop_Event_Handler::class, $seen->for_type( 'ORDER_CHANGED' ), 'and no other type got it' );
+	}
+
+	public function test_a_resolver_that_reads_single_cards_wraps_its_card_event_types_so_the_list_follows_them(): void {
+		$seen = null;
+
+		Actions\expectDone( 'woodev_fake_seller_event_handlers' )->once()->whenHappen(
+			static function ( $registry ) use ( &$seen ): void {
+				$seen = $registry;
+			}
+		);
+
+		$this->wiring( self::PLUGIN, $this->adapter( [ 'link_resolver' => new \Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Paged_Link_Resolver() ] ) )->register();
+
+		$this->assertInstanceOf( \Woodev\Framework\Marketplace\Jobs\Card_List_Event_Handler::class, $seen->for_type( 'card_changed' ), 'the list part names its own types' );
+		$this->assertInstanceOf( Card_Event_Handler::class, $seen->for_type( 'CARD_CHANGED' ), 'the importer\'s type keeps its handler' );
 	}
 
 	/**

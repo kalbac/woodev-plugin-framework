@@ -15,10 +15,9 @@ use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
-use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 
 defined( 'ABSPATH' ) || exit;
@@ -29,8 +28,9 @@ defined( 'ABSPATH' ) || exit;
  * {@see Remote_Cards_Rows}, the product picker in {@see Remote_Cards_Products} and the actions in {@see Remote_Cards_Actions}. The «Показать → Похожие артикулы» view lists the
  * near-match report of the last «Связать по артикулу» run instead of the cards ({@see Link_Report_Store}).
  *
- * **A read of this table never calls the marketplace.** It reads the snapshot (a transient the job fills) and our link table; the only
- * way to a fresh list is the guarded job «Обновить список».
+ * **A read of this table never calls the marketplace.** It reads the stored list ({@see Wpdb_Card_Store}, which the refresh job, the
+ * daily run and the card notifications fill) and our link table, one SQL page at a time; the way to a fresh list is the guarded job
+ * «Обновить список».
  *
  * @since 2.1.5
  */
@@ -46,14 +46,9 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	private $accounts;
 
 	/**
-	 * @var Cards_Snapshot_Store
+	 * @var Wpdb_Card_Store
 	 */
-	private $snapshots;
-
-	/**
-	 * @var Wpdb_Link_Store
-	 */
-	private $links;
+	private $cards;
 
 	/**
 	 * @var Link_Report_Store
@@ -102,8 +97,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @since 2.1.5
 	 *
 	 * @param Wpdb_Account_Store    $accounts  Accounts.
-	 * @param Cards_Snapshot_Store  $snapshots Snapshot of the cabinet's cards.
-	 * @param Wpdb_Link_Store       $links     Links.
+	 * @param Wpdb_Card_Store       $cards     The stored list of the cabinet's cards.
 	 * @param Link_Report_Store     $reports   The last link run's summary and near-match report.
 	 * @param Remote_Cards_Rows     $rows      Row builder.
 	 * @param Remote_Cards_Products $products  The shop's products.
@@ -112,10 +106,9 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @param Import_Scheduler|null $importer  Reads the import queue; null when the adapter cannot import cards, and the table then offers no «Импортировать».
 	 * @param callable|null         $clock     Returns the Unix time; the system clock when null.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null, ?callable $clock = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Wpdb_Card_Store $cards, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null, ?callable $clock = null ) {
 		$this->accounts  = $accounts;
-		$this->snapshots = $snapshots;
-		$this->links     = $links;
+		$this->cards     = $cards;
 		$this->reports   = $reports;
 		$this->rows      = $rows;
 		$this->products  = $products;
@@ -171,7 +164,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * Reads one page of the snapshot, filtered. Local reads only: the snapshot and the links.
+	 * Reads one page of the stored list, filtered, in SQL. Local reads only: the list and the links.
 	 *
 	 * @since 2.1.5
 	 *
@@ -195,12 +188,17 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			return $this->near_matches( $account, (string) ( $filters['q'] ?? $query['search'] ?? '' ), (int) $query['page'], (int) $query['per_page'] );
 		}
 
-		$snapshot = $this->snapshots->get( $account->id() );
-		$state    = $this->import_state( $account->id() );
-		$cards    = null === $snapshot ? [] : $snapshot['cards'];
-		$linked   = $this->linked_offers( $account->id() );
-		$search   = (string) ( $filters['q'] ?? $query['search'] ?? '' );
-		$page     = Remote_Cards_Query::page( $cards, $linked, (string) ( $filters['on_site'] ?? '' ), $search, (int) $query['page'], (int) $query['per_page'] );
+		$loaded = $this->cards->has_list( $account->id() );
+		$state  = $this->import_state( $account->id() );
+		$search = (string) ( $filters['q'] ?? $query['search'] ?? '' );
+		$page   = $loaded ? $this->cards->page( $account->id(), Remote_Cards_Query::on_site_flag( (string) ( $filters['on_site'] ?? '' ) ), $search, (int) $query['page'], (int) $query['per_page'] ) : [
+			'cards' => [],
+			'total' => 0,
+		];
+		$counts = $loaded ? $this->cards->on_site_counts( $account->id(), $search ) : [
+			'on_site'     => 0,
+			'not_on_site' => 0,
+		];
 
 		return [
 			'rows'             => array_map(
@@ -210,19 +208,19 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 				$page['cards']
 			),
 			'total'            => $page['total'],
-			'facets'           => [ 'on_site' => $this->on_site_facets( Remote_Cards_Query::on_site_counts( $cards, $linked, $search ) ) ],
+			'facets'           => [ 'on_site' => $this->on_site_facets( $counts ) ],
 			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
 			'messages'         => [
-				'summary'       => $this->summary( $account->id(), $snapshot ),
+				'summary'       => $this->summary( $account->id(), $loaded ),
 				'summary_label' => Russian_Plural::pick( $page['total'], __( 'карточка', 'woodev-plugin-framework' ), __( 'карточки', 'woodev-plugin-framework' ), __( 'карточек', 'woodev-plugin-framework' ) ),
-			] + ( null === $snapshot ? [] : [ 'empty' => __( 'В кабинете нет ни одной карточки.', 'woodev-plugin-framework' ) ] ),
+			] + $this->refreshed_message( $account->id() ) + ( $loaded ? [ 'empty' => __( 'В кабинете нет ни одной карточки.', 'woodev-plugin-framework' ) ] : [] ),
 		];
 	}
 
 	/**
 	 * The numbers of the «На сайте» view row.
 	 *
-	 * @param array<string,int> $counts {@see Remote_Cards_Query::on_site_counts()}.
+	 * @param array{on_site:int,not_on_site:int} $counts {@see Wpdb_Card_Store::on_site_counts()}.
 	 * @return array<int,array{value:string,label:string,count:int}>
 	 */
 	private function on_site_facets( array $counts ): array {
@@ -230,12 +228,12 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 			[
 				'value' => Remote_Cards_Query::NOT_ON_SITE,
 				'label' => __( 'Нет на сайте', 'woodev-plugin-framework' ),
-				'count' => $counts[ Remote_Cards_Query::NOT_ON_SITE ],
+				'count' => $counts['not_on_site'],
 			],
 			[
 				'value' => Remote_Cards_Query::ON_SITE,
 				'label' => __( 'Уже на сайте', 'woodev-plugin-framework' ),
-				'count' => $counts[ Remote_Cards_Query::ON_SITE ],
+				'count' => $counts['on_site'],
 			],
 		];
 	}
@@ -323,7 +321,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 
 	/**
 	 * The current rows of the asked ids and the account line: a row's import lock, its import note and where it now stands on the site.
-	 * Local reads only: the snapshot, the links, the notes and the import queue.
+	 * Local reads only: the stored list, the links, the notes and the import queue.
 	 *
 	 * @since 2.1.5
 	 *
@@ -406,7 +404,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @return array<string,mixed> Shape of {@see Activity_Normalizer::account()}.
 	 */
 	private function snapshot_and_import_line( int $account_id, array $importing_ids ): array {
-		$refreshing = $this->snapshots->is_refreshing( $account_id );
+		$refreshing = $this->cards->is_refreshing( $account_id );
 		$importing  = [] !== $importing_ids;
 
 		if ( ! $refreshing && ! $importing ) {
@@ -454,7 +452,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * One row of a card.
 	 *
 	 * @param int                 $account_id Account id.
-	 * @param array<string,mixed> $card       Snapshot card with `wc_product_id`.
+	 * @param array<string,mixed> $card       Card of the stored list with `wc_product_id`.
 	 * @param array<string,mixed> $state      {@see self::import_state()}.
 	 * @return array<string,mixed>
 	 */
@@ -465,7 +463,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * The rows of the asked ids that are cards of the snapshot, as the table would list them now.
+	 * The rows of the asked ids that are cards of the stored list, as the table would list them now: one indexed read for all of them.
 	 *
 	 * @param Account             $account Account.
 	 * @param string[]            $ids     Row ids.
@@ -473,21 +471,22 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @return array<int,array<string,mixed>> No row for the id of a near-match pair or of a card the list no longer holds.
 	 */
 	private function current_rows( Account $account, array $ids, array $state ): array {
-		$snapshot = $this->snapshots->get( $account->id() );
-
-		if ( null === $snapshot ) {
-			return [];
-		}
-
-		$linked = $this->linked_offers( $account->id() );
-		$rows   = [];
+		$keys = [];
 
 		foreach ( $ids as $row_id ) {
-			$key  = Remote_Cards_Ids::key_of( (string) $row_id, $account->id() );
-			$card = null === $key ? null : Remote_Cards_Query::find( $snapshot['cards'], $key );
+			$key = Remote_Cards_Ids::key_of( (string) $row_id, $account->id() );
 
-			if ( null !== $card ) {
-				$rows[] = $this->card_row( $account->id(), array_merge( $card, [ 'wc_product_id' => $linked[ (string) $card['offer_id'] ] ?? 0 ] ), $state );
+			if ( null !== $key ) {
+				$keys[] = $key;
+			}
+		}
+
+		$found = $this->cards->find_many( $account->id(), $keys );
+		$rows  = [];
+
+		foreach ( $keys as $key ) {
+			if ( isset( $found[ $key ] ) ) {
+				$rows[] = $this->card_row( $account->id(), $found[ $key ], $state );
 			}
 		}
 
@@ -495,35 +494,59 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * One sentence about the list: when it was loaded and how many cards it holds, why it could not be loaded, or that there is none;
-	 * then the summary of the last «link by article» run and the number of look-alike pairs that wait.
+	 * The summary line: when the list was last refreshed and how many cards it holds, why the last refresh failed; then the summary
+	 * of the last «link by article» run and the number of look-alike pairs that wait.
 	 *
-	 * @param int                                                             $account_id Account id.
-	 * @param array{fetched_at:int,cards:array<int,array<string,mixed>>}|null $snapshot   The stored list.
+	 * @param int  $account_id Account id.
+	 * @param bool $loaded     Whether the account has a list.
 	 * @return string
 	 */
-	private function summary( int $account_id, ?array $snapshot ): string {
+	private function summary( int $account_id, bool $loaded ): string {
 		$sentences = [];
-		$error     = $this->snapshots->last_error( $account_id );
+		$error     = $this->cards->last_error( $account_id );
 
 		if ( '' !== $error ) {
 			/* translators: %s: the reason the list could not be loaded. */
-			$sentences[] = sprintf( __( 'Не удалось загрузить список: %s', 'woodev-plugin-framework' ), $error );
+			$sentences[] = sprintf( __( 'Не удалось обновить список: %s', 'woodev-plugin-framework' ), $error );
 		}
 
-		if ( null !== $snapshot ) {
+		if ( $loaded ) {
+			$count       = $this->cards->count( $account_id );
+			$refreshed   = $this->refreshed_message( $account_id );
 			$sentences[] = sprintf(
-				/* translators: 1: time the list was loaded, 2: number of cards in it. */
-				_n( 'Список загружен %1$s: %2$d карточка.', 'Список загружен %1$s: карточек — %2$d.', count( $snapshot['cards'] ), 'woodev-plugin-framework' ),
-				wp_date( 'd.m.Y H:i', $snapshot['fetched_at'] ),
-				count( $snapshot['cards'] )
+				/* translators: %d: number of cards in the list. */
+				_n( 'В списке %d карточка.', 'В списке карточек: %d.', $count, 'woodev-plugin-framework' ),
+				$count
 			);
+
+			if ( [] !== $refreshed ) {
+				array_unshift( $sentences, $refreshed['refreshed_at'] . '.' );
+			}
 		}
 
 		$sentences[] = Remote_Cards_Summary::last_run( $this->reports->last_run( $account_id ) );
 		$sentences[] = Remote_Cards_Summary::waiting( count( $this->reports->near_matches( $account_id ) ) );
 
 		return implode( ' ', array_filter( $sentences ) );
+	}
+
+	/**
+	 * «Список обновлён в …»: when the last full refresh finished, for the screen's summary area. No entry before the first one.
+	 *
+	 * @param int $account_id Account id.
+	 * @return array<string,string> `refreshed_at` => the sentence without a final stop, or nothing.
+	 */
+	private function refreshed_message( int $account_id ): array {
+		$at = $this->cards->refreshed_at( $account_id );
+
+		if ( $at <= 0 ) {
+			return [];
+		}
+
+		return [
+			/* translators: 1: date, 2: time the list was last refreshed. */
+			'refreshed_at' => sprintf( __( 'Список обновлён %1$s в %2$s', 'woodev-plugin-framework' ), wp_date( 'd.m.Y', $at ), wp_date( 'H:i', $at ) ),
+		];
 	}
 
 	/**
@@ -553,16 +576,6 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 				'summary_label' => Russian_Plural::pick( $found['total'], __( 'карточка', 'woodev-plugin-framework' ), __( 'карточки', 'woodev-plugin-framework' ), __( 'карточек', 'woodev-plugin-framework' ) ),
 			],
 		];
-	}
-
-	/**
-	 * Articles our link table knows: the product that carries each.
-	 *
-	 * @param int $account_id Account id.
-	 * @return array<string,int> Product id by article.
-	 */
-	private function linked_offers( int $account_id ): array {
-		return Remote_Cards_Query::linked_offers( $this->links->identity_map( $account_id ) );
 	}
 
 	/**

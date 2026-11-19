@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -18,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Remote_Cards_Ids {
 	/**
-	 * Builds the key of a card.
+	 * Builds the key of a card: the one the stored list is keyed by ({@see Wpdb_Card_Store::key()}).
 	 *
 	 * @since 2.1.5
 	 *
@@ -26,7 +28,7 @@ final class Remote_Cards_Ids {
 	 * @return string 32 hexadecimal characters.
 	 */
 	public static function key( string $offer_id ): string {
-		return substr( hash( 'sha256', $offer_id ), 0, 32 );
+		return Wpdb_Card_Store::key( $offer_id );
 	}
 
 	/**

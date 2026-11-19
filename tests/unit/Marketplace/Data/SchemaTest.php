@@ -45,6 +45,7 @@ final class SchemaTest extends TestCase {
 			'profiles'      => [ 'profile_id', 'name', 'settings' ],
 			'catalog_cache' => [ 'cache_key', 'payload', 'fetched_at' ],
 			'bulk_runs'     => [ 'account_id', 'run_id', 'state', 'cancel', 'tick', 'action', 'payload', 'filter', 'user_id', 'cursor', 'items', 'counts', 'report', 'started_at', 'finished_at' ],
+			'cards'         => [ 'account_id', 'card_key', 'offer_id', 'name', 'image', 'state', 'is_created', 'failed', 'archived', 'details_ok', 'status_text', 'price', 'stock', 'remote_ids', 'group_key', 'group_size', 'position', 'seen_run', 'updated_at' ],
 		];
 	}
 

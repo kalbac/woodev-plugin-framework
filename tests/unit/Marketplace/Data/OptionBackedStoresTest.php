@@ -10,7 +10,6 @@ namespace Woodev\Tests\Unit\Marketplace\Data;
 use Brain\Monkey;
 use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Progress_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Uninstaller;
@@ -104,10 +103,6 @@ final class OptionBackedStoresTest extends TestCase {
 		( new Link_Progress_Store( $family ) )->save( 3, Link_Progress_Store::KIND_LINK, [ 'started_at' => 1, 'scope' => 0, 'state' => [] ] );
 		( new Link_Report_Store( $family ) )->replace_near_matches( 3, [ [ 'wc_product_id' => 1, 'card' => [ 'offer_id' => 'A' ] ] ] );
 		( new Link_Report_Store( $family ) )->save_run( 3, [ 'linked' => 2 ] );
-		$snapshots = new Cards_Snapshot_Store( $family );
-		$snapshots->put( 3, [ [ 'offer_id' => 'A' ] ], 100 );
-		$snapshots->mark_refreshing( 3 );
-		$snapshots->fail( 3, 'x' );
 
 		$names = array_merge( $this->written['option'], $this->written['transient'] );
 		$this->assertNotEmpty( $names );
@@ -268,35 +263,5 @@ final class OptionBackedStoresTest extends TestCase {
 		$store->replace_near_matches( 3, [] );
 		$this->assertSame( [], $store->near_matches( 3 ) );
 		$this->assertNull( $store->last_run( 3 ) );
-	}
-
-	/**
-	 * The cards snapshot: stored with its time, a refresh mark that a stored snapshot clears, and the last error.
-	 *
-	 * @return void
-	 */
-	public function test_the_cards_snapshot_lifecycle(): void {
-		$store = new Cards_Snapshot_Store( 'woodev_one_' );
-
-		$this->assertNull( $store->get( 3 ) );
-
-		$store->mark_refreshing( 3 );
-		$this->assertTrue( $store->is_refreshing( 3 ) );
-
-		$store->fail( 3, 'Маркетплейс не ответил' );
-		$this->assertFalse( $store->is_refreshing( 3 ) );
-		$this->assertSame( 'Маркетплейс не ответил', $store->last_error( 3 ) );
-
-		$this->assertTrue( $store->put( 3, [ [ 'offer_id' => 'A' ] ], 100 ) );
-		$this->assertSame(
-			[
-				'fetched_at' => 100,
-				'cards'      => [ [ 'offer_id' => 'A' ] ],
-			],
-			$store->get( 3 )
-		);
-		$this->assertSame( '', $store->last_error( 3 ), 'a stored snapshot clears the last error' );
-
-		$this->assertNull( ( new Cards_Snapshot_Store( 'woodev_two_' ) )->get( 3 ), 'another plugin has none' );
 	}
 }

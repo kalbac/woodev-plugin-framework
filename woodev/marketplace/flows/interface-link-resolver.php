@@ -95,7 +95,7 @@ interface Link_Resolver {
 	 * @param string              $context Job hook.
 	 * @param callable            $renew   `function (): void`, extends the account claim or throws.
 	 * @param array<string,mixed> $state   Cursor of the read; updated as it advances.
-	 * @return array<int,array<string,mixed>> Cards for {@see \Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store::put()}. An adapter
+	 * @return array<int,array<string,mixed>> Cards for the stored list ({@see \Woodev\Framework\Marketplace\Data\Wpdb_Card_Store::upsert()}); a resolver that is a {@see Card_List_Source} is read by page instead. An adapter
 	 *                                        that imports cards of a group as one product also gives each card its `group`
 	 *                                        (`key`, `size` — the members of {@see \Woodev\Framework\Marketplace\Catalog\Card_Content::group()}):
 	 *                                        the preview of «Импортировать» counts products from it, with no call to the marketplace.
