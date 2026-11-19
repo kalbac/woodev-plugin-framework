@@ -1154,7 +1154,7 @@ visible failure; the explicit, queued, checked, visible change here is the fix o
 does not change. An adapter without either keeps the old frozen article, the old help text and no job (`Flow_Wiring::offer_id_renames()` hooks the job, `Embedded_Screens::product_tab()` switches the screen).
 The adapter answers for every pair; a pair it does not answer for is treated as refused. A request that fails as a whole throws, and the adapter's `Error_Classifier` decides.
 
-**State lives on the link row** (schema revision 2): `links.pending_offer_id` (the article the merchant asked for), `links.rename_error` (the marketplace's answer when it refused) and `links.rename_confirmed` (the marketplace already changed the card; only the shop's move is left),
+**State lives on the link row** (schema revision 3): `links.pending_offer_id` (the article the merchant asked for), `links.rename_error` (the marketplace's answer when it refused) and `links.rename_confirmed` (the marketplace already changed the card; only the shop's move is left),
 kept apart from `last_error_*` because export and poll writes wipe those. `offer_id` itself changes in exactly one statement (`Wpdb_Link_Store::finish_offer_id_rename()`), so the unique
 `(account_id, offer_id)` index is the arbiter of a clash and a row is never half-moved. The three columns are left out of `Link_Record::to_columns()`, so an insert works on a site whose tables
 are not yet at revision 2.
@@ -1176,6 +1176,37 @@ state clears the waiting change. A cleared field leaves a sent card's article al
 **Failure paths.** A database error after the marketplace confirmed is not «the link is gone»: `finish_offer_id_rename()` answers `error`, the row keeps the destination with `rename_confirmed = 1` and a readable error, the request is never sent again and the job retries the move (5 minutes). A change whose card is queued/submitted (an update is being exported) keeps its visible state and the job comes back every 2 minutes; a card the marketplace refused turns the change into a failed one. A job that gives up for good (refused key, lapsed licence, put-off ceiling, a request that cannot be repeated) marks **every** waiting change of the account failed with the reason (`fail_waiting_offer_id_renames()`); saving the article again asks again.
 
 **Known limits.** The framework checks uniqueness against the shop's own links only; a card of the same seller that is not linked to any product is the marketplace's answer to give (it arrives as the refusal text). The refusal text is the marketplace's, shown as it came. At most 25 stuck confirmed rows are looked at per batch.
+
+## Bulk actions of the Variations tab (framework 2.1.13, #1859)
+
+The «Bulk actions» select of a variable product's Variations tab gets one optgroup per enabled account, named after the marketplace
+(`Screen_Names::name()`, the account's name added when there are several). `Variation_Bulk_Actions` (`admin/product/`) hooks
+WooCommerce's own flow: `woocommerce_variable_product_bulk_edit_actions` prints the options, `woocommerce_bulk_edit_variations` runs
+the chosen one. It is registered by `Embedded_Screens` for an adapter that has the product tab.
+
+- **WooCommerce hands the hook EVERY variation of the product**, not a selection (`WC_AJAX::bulk_edit_variations()`), and fires it after
+  its own handler for any action, then syncs the product and reloads page 1. The class therefore never ends the request, ignores any
+  value that is not `woodev_{adapter id}_bulk_{account id}_{action}`, catches `\Throwable` (an exception would skip WooCommerce's
+  `WC_Product_Variable::sync()`) and prints the answer instead of returning it.
+- **The actions are the table's.** `Site_Products_Bulk::apply()` (built by `Site_Products_Module::bulk_for()`, lazily, only when an
+  action is chosen) plans from the stored links and queues: export (`Export_Scheduler`), send prices / stock and the one-time price pull
+  (intents and `Price_Scheduler`) are Action Scheduler work, the sync switches and unlinking write local data. No remote call in the
+  request. Which actions an adapter cannot serve is `Site_Products_Module::withheld_actions()`, shared with the table's toolbar.
+- **Nine of v1's eleven.** Taken: export, unlink, enable/disable price sync, send prices, load prices, enable/disable stock sync, send
+  stock. Dropped: «Обновить SKU» (v2 writes the marketplace ids when an export finishes and when cards are linked or imported) and
+  «Загрузить остатки» (the account's stock mode «Маркетплейс — главный» mirrors them continuously with a daily reconcile; a one-off
+  overwrite of hundreds of variations' shop stock is a hazard). v2-only table actions stay in the table: warehouse choice needs a
+  dialog, archive is destructive, linking by article is account-wide.
+- **Rights and licence.** `edit_product` on the parent for every action; the ones that write to the marketplace (the table's
+  `license_phrase()` is non-null) also need `manage_woocommerce` and a licence in force — the product tab's rule. A refusal is a notice,
+  never an exception.
+- **The notice.** The bulk request answers with nothing WooCommerce reads, so the handler prints
+  `<!--woodev-bulk:{tone,text,url,link}-->` into the response (JSON with `JSON_HEX_TAG`, so the text cannot close the comment) and
+  `variation-bulk.js` draws a WooCommerce `notice inline` first in `#variable_product_options_inner`, replacing the previous one. The
+  text is the table's own sentence («Принято в работу: N товаров…»), the reasons for what was left out (three at most) and, for queued
+  work, a link to the «Товары» page, where the «Состояние» column shows progress. A failed request draws a generic error.
+- **Limit.** The table's `MAX_OFFERS` (500). A product with more variations is refused with a pointer to «Товары», whose bulk runs have
+  no limit.
 
 ## Verification
 

@@ -7,12 +7,14 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Product;
 
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Metabox;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Modal;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
@@ -117,6 +119,7 @@ final class Embedded_Screens {
 
 		if ( $capabilities['product_tab'] ) {
 			self::product_tab( $plugin, $adapter, $accounts, $db, $guard, $names, $assets_url )->register();
+			self::variation_bulk( $plugin, $adapter, $accounts, $db, $names, $assets_url )->register();
 		}
 
 		if ( $capabilities['order_cancel'] ) {
@@ -150,6 +153,38 @@ final class Embedded_Screens {
 			}
 		) )->register();
 		( new Cancel_Metabox( $names, $adapter, $modal ) )->register();
+	}
+
+	/**
+	 * Builds the marketplace group of the variation panel's bulk actions. The table's own bulk actions run behind it, built only when
+	 * the merchant chooses one.
+	 *
+	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin     Plugin.
+	 * @param Marketplace_Adapter                              $adapter    Adapter.
+	 * @param Wpdb_Account_Store                               $accounts   Account store.
+	 * @param \wpdb                                            $db         Database.
+	 * @param Screen_Names                                     $names      Names.
+	 * @param string                                           $assets_url Assets folder URL.
+	 * @return Variation_Bulk_Actions
+	 */
+	private static function variation_bulk( $plugin, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, Screen_Names $names, string $assets_url ): Variation_Bulk_Actions {
+		return new Variation_Bulk_Actions(
+			$accounts,
+			License_Gate::for_plugin( $plugin ),
+			$names,
+			static function ( Account $account, string $action, array $offers, array $editable ) use ( $plugin, $accounts, $db ): array {
+				return Site_Products_Module::bulk_for( $plugin, $accounts, $db )->apply( $account, $action, $offers, $editable );
+			},
+			[
+				'products' => $plugin->get_marketplace_page_url( 'products' ),
+				'assets'   => $assets_url,
+			],
+			$plugin->get_version(),
+			Site_Products_Module::withheld_actions( $adapter ),
+			static function ( string $line ) use ( $plugin ): void {
+				$plugin->log_error( $line );
+			}
+		);
 	}
 
 	/**

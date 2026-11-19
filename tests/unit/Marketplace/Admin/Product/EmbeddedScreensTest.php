@@ -84,6 +84,7 @@ final class EmbeddedScreensTest extends TestCase {
 		Actions\expectAdded( 'wp_ajax_woodev_fake_cancel_posting' )->once();
 		Actions\expectAdded( 'add_meta_boxes' )->once();
 		Actions\expectAdded( 'wp_ajax_woodev_fake_product' )->never();
+		Actions\expectAdded( 'woocommerce_bulk_edit_variations' )->never();
 		Filters\expectAdded( 'woocommerce_product_data_tabs' )->never();
 
 		Embedded_Screens::register( $this->plugin( $adapter ), $this->accounts(), new Sqlite_Wpdb() );
@@ -101,10 +102,14 @@ final class EmbeddedScreensTest extends TestCase {
 		$adapter->shouldReceive( 'stock_policy' )->andReturn( new Stock_Policy( Stock_Policy::FORMULA_WC_ONLY ) );
 		$adapter->shouldReceive( 'supports_oversize' )->andReturn( false );
 		$adapter->shouldReceive( 'price_pusher' )->andReturn( null );
+		$adapter->shouldReceive( 'price_reader' )->andReturn( null );
 		$adapter->shouldReceive( 'supports' )->andReturn( false );
 
 		Filters\expectAdded( 'woocommerce_product_data_tabs' )->once();
 		Actions\expectAdded( 'wp_ajax_woodev_fake_product' )->once();
+		// The variation panel's «Bulk actions» group rides on the tab: both hooks of WooCommerce's own flow, nothing else.
+		Actions\expectAdded( 'woocommerce_variable_product_bulk_edit_actions' )->once();
+		Actions\expectAdded( 'woocommerce_bulk_edit_variations' )->once();
 		Actions\expectAdded( 'wp_ajax_woodev_fake_cancel_posting' )->never();
 		Actions\expectAdded( 'add_meta_boxes' )->never();
 
