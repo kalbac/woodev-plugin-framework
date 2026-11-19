@@ -34,7 +34,7 @@ final class RemoteCardsNearMatchTest extends Remote_Cards_Test_Case {
 
 		$this->add_product( [ 'id' => 41, 'sku' => 'ABC-001' ] );
 		$this->add_product( [ 'id' => 42, 'sku' => 'XYZ-9' ] );
-		$this->put_snapshot( [ $this->card( 'abc-001', 'Кружка' ), $this->card( 'xyz-9', 'Тарелка' ) ] );
+		$this->put_cards( [ $this->card( 'abc-001', 'Кружка' ), $this->card( 'xyz-9', 'Тарелка' ) ] );
 		$this->reports()->replace_near_matches(
 			$this->account_id,
 			[

@@ -12253,3 +12253,31 @@ msgstr ""
 #, php-format
 msgid "Синхронизируются: %s"
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:395
+#, php-format
+msgid "Весь аккаунт — список карточек загрузится с маркетплейса %s заново. Он обновляется и сам: раз в сутки и когда маркетплейс сообщает о новой или изменённой карточке. Товары на сайте и карточки на маркетплейсе не меняются."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:510
+#, php-format
+msgid "Не удалось обновить список: %s"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:518
+#, php-format
+msgid "В списке %d карточка."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:548
+#, php-format
+msgid "Список обновлён %1$s в %2$s"
+msgstr ""
+
+#: marketplace/jobs/class-link-jobs.php:339
+msgid "Не удалось поставить ежедневное обновление списка в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler)."
+msgstr ""
+
+#: marketplace/jobs/class-link-jobs.php:693
+msgid "Не удалось поставить продолжение загрузки списка в очередь."
+msgstr ""

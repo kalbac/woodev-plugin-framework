@@ -47,7 +47,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 			'CUT-1'  => Remote_Cards_Import_Plan::SKU_MARKED,
 		];
 
-		$this->put_snapshot(
+		$this->put_cards(
 			[
 				$this->card( 'NEW-1' ),
 				$this->card( 'NEW-2' ),
@@ -138,7 +138,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 
 	public function test_a_table_whose_adapter_cannot_import_has_no_import_action_and_no_selection(): void {
 		$this->importable = false;
-		$this->put_snapshot( [ $this->card( 'NEW-1' ) ] );
+		$this->put_cards( [ $this->card( 'NEW-1' ) ] );
 
 		$definition = $this->cards_definition()->to_array();
 
@@ -149,7 +149,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_an_importing_table_declares_the_action_as_a_row_and_a_bulk_action_and_selects_a_page(): void {
-		$this->put_snapshot( [ $this->card( 'NEW-1' ) ] );
+		$this->put_cards( [ $this->card( 'NEW-1' ) ] );
 
 		$definition = $this->cards_definition();
 		$row        = $definition->get_action( Remote_Cards_Definition::IMPORT );
@@ -232,7 +232,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_preview_counts_the_cards_of_one_group_as_one_product(): void {
-		$this->put_snapshot( [ $this->colour( 'RED' ), $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
+		$this->put_cards( [ $this->colour( 'RED' ), $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
 
 		$plan = $this->preview( 'import_selected', [ 'RED', 'BLACK', 'GREEN' ] );
 
@@ -257,7 +257,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 
 	public function test_a_card_whose_group_has_a_product_on_the_site_adds_no_product(): void {
 		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::READY;
-		$this->put_snapshot( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
+		$this->put_cards( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ), $this->card( 'SOLO' ) ] );
 
 		$plan = $this->preview( 'import_selected', [ 'BLACK', 'GREEN', 'SOLO' ] );
 
@@ -275,7 +275,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 	public function test_a_card_whose_group_is_half_made_is_left_out_unless_the_half_made_card_is_selected_too(): void {
 		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::BUILDING;
 		$this->sku_kinds['RED']                               = Remote_Cards_Import_Plan::SKU_MARKED;
-		$this->put_snapshot( [ $this->colour( 'RED' ), $this->colour( 'BLACK' ), $this->colour( 'GREEN' ) ] );
+		$this->put_cards( [ $this->colour( 'RED' ), $this->colour( 'BLACK' ), $this->colour( 'GREEN' ) ] );
 
 		$alone = $this->preview( 'import_selected', [ 'BLACK', 'GREEN' ] );
 
@@ -301,7 +301,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 	public function test_a_resumed_variation_of_a_finished_group_is_counted_as_joining_not_as_a_new_product(): void {
 		$this->group_states[ $this->account_id . ':model-7' ] = Group_Assembler::READY;
 		$this->sku_kinds['BLACK']                             = Remote_Cards_Import_Plan::SKU_MARKED;
-		$this->put_snapshot( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ) ] );
+		$this->put_cards( [ $this->colour( 'BLACK' ), $this->colour( 'GREEN' ) ] );
 
 		$both = $this->preview( 'import_selected', [ 'GREEN', 'BLACK' ] );
 
@@ -317,7 +317,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 
 	public function test_only_the_cards_the_import_takes_are_counted_in_a_group(): void {
 		$this->add_link( $this->add_product( [ 'id' => 41, 'sku' => 'RED' ] ), Link_Record::STATE_CREATED, [ 'offer_id' => 'RED' ] );
-		$this->put_snapshot(
+		$this->put_cards(
 			[
 				$this->colour( 'RED' ),
 				$this->colour( 'BLACK' ),
@@ -341,7 +341,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_card_the_list_no_longer_holds_is_left_out_with_its_reason(): void {
-		$this->put_snapshot( [ $this->card( 'NEW-1' ) ] );
+		$this->put_cards( [ $this->card( 'NEW-1' ) ] );
 
 		$plan = $this->preview( 'import', [ 'GONE-9' ] );
 

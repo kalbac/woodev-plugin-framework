@@ -78,9 +78,9 @@ final class StoresDeleteByAccountTest extends TestCase {
 	 * @return void
 	 */
 	public function test_sync_state_is_deleted_after_the_links(): void {
-		$names = array_keys( Deletion_Module::stores( $this->db, Sqlite_Tables::schema() ) );
+		$names = array_keys( Deletion_Module::stores( $this->db, Sqlite_Tables::schema(), 'woodev_test_' ) );
 
-		$this->assertSame( [ 'links', 'sync_state', 'tasks', 'postings', 'documents', 'throttle', 'api_errors', 'bulk_runs' ], $names );
+		$this->assertSame( [ 'links', 'sync_state', 'tasks', 'postings', 'documents', 'throttle', 'api_errors', 'bulk_runs', 'cards' ], $names );
 		$this->assertGreaterThan( array_search( 'links', $names, true ), array_search( 'sync_state', $names, true ) );
 	}
 
