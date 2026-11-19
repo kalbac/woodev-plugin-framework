@@ -7,7 +7,10 @@
 
 namespace Woodev\Tests\Unit\Marketplace\Admin\Product;
 
+use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
+use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Product\Link_Form_Input;
 use Woodev\Framework\Marketplace\Admin\Product\Link_Settings_Writer;
@@ -282,6 +285,50 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 		$this->assertSame( 'Fake', $tabs['woodev_fake']['label'] );
 		$this->assertSame( 'woodev_fake_product_data', $tabs['woodev_fake']['target'] );
 		$this->assertContains( 'show_if_variable', $tabs['woodev_fake']['class'] );
+	}
+
+	public function test_a_variations_collapsed_header_is_hooked(): void {
+		Actions\expectAdded( 'woocommerce_variation_header' )->once();
+
+		$this->tab()->register();
+
+		$this->addToAssertionCount( 1 ); // expectAdded() is verified when the test ends.
+	}
+
+	public function test_the_tab_opens_on_the_first_enabled_account_that_is_connected(): void {
+		$second = $this->accounts()->save(
+			new Account(
+				0,
+				'fake',
+				'Второй',
+				true,
+				[
+					'cabinet_ref' => 'cabinet-5528',
+					'api_token'   => 'tok-2222-3333',
+				],
+				null,
+				[ 'currency' => 'RUB' ]
+			)
+		);
+
+		$tab     = $this->tab();
+		$pick    = new \ReflectionMethod( Product_Tab::class, 'default_account_id' );
+		$enabled = $this->accounts()->all( 'fake', true );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$pick->setAccessible( true ); // Needed before PHP 8.1, deprecated after it.
+		}
+
+		$this->assertSame( $this->account_id, $pick->invoke( $tab, $enabled ), 'no check has run yet: the first one' );
+
+		$this->accounts()->set_health( $this->account_id, new Health_Result( Health_Result::AUTH_FAILED, 'Ключ отклонён' ) );
+
+		$this->assertSame( $second, $pick->invoke( $tab, $enabled ), 'the first one is refused by the marketplace: the first connected one' );
+
+		$this->accounts()->set_health( $second, new Health_Result( Health_Result::UNREACHABLE ) );
+
+		$this->assertSame( $this->account_id, $pick->invoke( $tab, $enabled ), 'none is connected: the first enabled one' );
+		$this->assertSame( 0, $pick->invoke( $tab, [] ) );
 	}
 
 	/**
