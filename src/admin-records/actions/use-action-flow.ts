@@ -85,6 +85,17 @@ export function needsPreview( action: ActionDescriptor ): boolean {
 	return action.effect === 'mutate' && ! action.skip_preview;
 }
 
+/**
+ * An action that runs on the click and has nothing to show: account-wide, no preview, no field to fill. «Обновить список» is one:
+ * counts of «selected 1 / accepted 1» mean nothing for it, and its progress is the account line above the table. Its dialog stays
+ * closed unless something went wrong.
+ *
+ * @param action The action.
+ */
+export function isQuiet( action: ActionDescriptor ): boolean {
+	return action.scope === 'account' && action.skip_preview && visibleFields( action ).length === 0;
+}
+
 /** An unchecked box is a real `false`, not a field that was left out. */
 function initialPayload( action: ActionDescriptor ): Payload {
 	return Object.fromEntries(

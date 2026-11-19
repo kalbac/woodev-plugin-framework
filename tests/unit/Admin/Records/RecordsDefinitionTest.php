@@ -151,6 +151,36 @@ class RecordsDefinitionTest extends TestCase {
 		$this->assertSame( '', $parsed->get_action( 'plain' )['fields'][0]['placeholder'] );
 	}
 
+	public function test_a_column_may_carry_a_help_sentence_and_an_action_an_icon(): void {
+		$standard = Records_Definitions::standard();
+		$columns  = $standard['columns'];
+		$columns[1]['help'] = 'Цена на сайте / цена на маркетплейсе.';
+		$actions  = [ [ 'id' => 'edit', 'label' => 'Изменить', 'effect' => 'read', 'interaction' => 'link', 'icon' => 'edit' ], [ 'id' => 'plain', 'label' => 'Другое', 'effect' => 'read', 'interaction' => 'link' ] ];
+
+		$parsed = Records_Definition::from_array( Records_Definitions::standard( [ 'columns' => $columns, 'row_actions' => $actions ] ) )->to_array();
+
+		$this->assertSame( 'Цена на сайте / цена на маркетплейсе.', $parsed['columns'][1]['help'] );
+		$this->assertSame( '', $parsed['columns'][0]['help'], 'a column that says nothing has an empty help' );
+		$this->assertSame( [ 'edit', '' ], array_column( $parsed['row_actions'], 'icon' ) );
+	}
+
+	public function test_an_account_wide_bulk_action_may_skip_the_preview_a_selection_action_may_not(): void {
+		$account = [ 'id' => 'refresh', 'label' => 'Обновить', 'effect' => 'mutate', 'interaction' => 'dialog', 'scope' => 'account', 'scope_sentence' => 'Весь аккаунт.', 'skip_preview' => true ];
+
+		$parsed = Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ $account ] ] ) );
+
+		$this->assertTrue( $parsed->get_action( 'refresh' )['skip_preview'] );
+
+		$this->expectException( \InvalidArgumentException::class );
+		Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ array_merge( $account, [ 'scope' => 'selection', 'tone' => 'neutral' ] ) ] ] ) );
+	}
+
+	public function test_an_icon_is_a_slug_not_markup(): void {
+		$this->expectException( \InvalidArgumentException::class );
+
+		Records_Definition::from_array( Records_Definitions::standard( [ 'row_actions' => [ [ 'id' => 'edit', 'label' => 'Изменить', 'effect' => 'read', 'interaction' => 'link', 'icon' => '<b>x</b>' ] ] ] ) );
+	}
+
 	public function test_a_select_can_be_the_counted_view_row_and_the_flag_is_only_sent_when_it_is_set(): void {
 		$filters = Records_Definitions::standard()['filters'];
 		$plain   = Records_Definition::from_array( Records_Definitions::standard() )->to_array()['filters'];

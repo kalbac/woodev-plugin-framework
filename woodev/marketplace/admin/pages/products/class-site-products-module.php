@@ -314,7 +314,7 @@ final class Site_Products_Module {
 		$ledger   = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
 		$products = new Remote_Cards_Products( Remote_Cards_Products::woocommerce_search() );
 		$importer = $adapter instanceof Card_Importer && $adapter->supports( Capability::IMPORT_PRODUCTS ) ? new Import_Scheduler( new Job_Names( $plugin->get_id() ) ) : null;
-		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer );
+		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer, $adapter instanceof Remote_Card_Address ? [ $adapter, 'remote_card_url' ] : null );
 		$options  = Uninstaller::option_prefix( $plugin->get_id() );
 		$store    = new Cards_Snapshot_Store( $options );
 		$reports  = new Link_Report_Store( $options );

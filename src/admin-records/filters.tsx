@@ -8,7 +8,7 @@
  */
 
 import type { ComponentType, FormEvent, MutableRefObject } from 'react';
-import { Button, CheckboxControl, SearchControl, SelectControl } from '@wordpress/components';
+import { Button, SearchControl, SelectControl, ToggleControl } from '@wordpress/components';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { CountLinks, withAllEntry } from '../components/count-links';
 import { PeriodPicker, type PeriodLabels } from '../components/period-picker/period-picker';
@@ -97,11 +97,14 @@ function MultiSelectFilter( { filter, value, facets, onChange }: FilterControlPr
 	);
 }
 
-/** Ticked sends `true`; unticked sends nothing at all, which is not the same request as `false`. */
+/**
+ * A switch, not a checkbox: «Расширенные фильтры» of «Заказы доставки» is one, on its own row under the selects. On sends
+ * `true`; off sends nothing at all, which is not the same request as `false`.
+ */
 function BooleanFilter( { filter, value, onChange }: FilterControlProps ) {
 	return (
 		<div className="woodev-records__boolean">
-			<CheckboxControl
+			<ToggleControl
 				__nextHasNoMarginBottom
 				label={ filter.label }
 				checked={ value === true }
@@ -306,35 +309,40 @@ export function FiltersBar( { definition, account, query, facets, messages, onCh
 	const canReset = resetLabel !== '' && isNarrowed( definition, query );
 	const reset = () => onChange( changeQuery( query, { search: '', filters: defaultFilters( definition ) } ) );
 	const counted = viewsFilter( definition );
+	const controls = valueFilters( definition ).filter( ( filter ) => filter !== counted );
+	const pickers = controls.filter( ( filter ) => filter.type !== 'boolean' );
+	const switches = controls.filter( ( filter ) => filter.type === 'boolean' );
+	const draw = ( filter: Filter ) => {
+		const Control = FILTER_CONTROLS[ filter.type ];
+
+		return Control ? (
+			<Control
+				key={ filter.id }
+				filter={ filter }
+				value={ query.filters[ filter.id ] }
+				facets={ facets[ filter.id ] ?? [] }
+				messages={ messages }
+				onChange={ ( value ) => onChange( changeFilter( query, filter.id, value ) ) }
+			/>
+		) : null;
+	};
 
 	return (
-		<div className="woodev-records__toolbar" style={ STYLES.toolbar }>
-			<AccountSelect
-				definition={ definition }
-				account={ account }
-				onChange={ ( next ) => onChange( changeQuery( query, { account: next } ) ) }
-			/>
-			{ valueFilters( definition )
-				.filter( ( filter ) => filter !== counted )
-				.map( ( filter ) => {
-					const Control = FILTER_CONTROLS[ filter.type ];
-
-					return Control ? (
-						<Control
-							key={ filter.id }
-							filter={ filter }
-							value={ query.filters[ filter.id ] }
-							facets={ facets[ filter.id ] ?? [] }
-							messages={ messages }
-							onChange={ ( value ) => onChange( changeFilter( query, filter.id, value ) ) }
-						/>
-					) : null;
-				} ) }
-			{ canReset && (
-				<Button __next40pxDefaultSize variant="tertiary" onClick={ reset }>
-					{ resetLabel }
-				</Button>
-			) }
+		<div className="woodev-records__filters">
+			<div className="woodev-records__toolbar" style={ STYLES.toolbar }>
+				<AccountSelect
+					definition={ definition }
+					account={ account }
+					onChange={ ( next ) => onChange( changeQuery( query, { account: next } ) ) }
+				/>
+				{ pickers.map( draw ) }
+				{ canReset && (
+					<Button __next40pxDefaultSize variant="tertiary" onClick={ reset }>
+						{ resetLabel }
+					</Button>
+				) }
+			</div>
+			{ switches.length > 0 && <div className="woodev-records__switches">{ switches.map( draw ) }</div> }
 		</div>
 	);
 }

@@ -766,6 +766,22 @@ describe( 'expandable children', () => {
 		expect( screen.queryByRole( 'button', { name: 'Показать вариации: Кружка' } ) ).not.toBeInTheDocument();
 	} );
 
+	test( 'the expander is a chevron icon button with the verb as its title, not a text glyph', async () => {
+		await renderTable();
+
+		const closed = expander( 'Показать вариации: Футболка' );
+
+		expect( closed ).toHaveAttribute( 'title', 'Показать вариации' );
+		expect( closed.querySelector( '.dashicons-arrow-right-alt2' ) ).not.toBeNull();
+		expect( closed.textContent ).toBe( '' );
+
+		fireEvent.click( closed );
+		const open = await screen.findByRole( 'button', { name: 'Скрыть вариации: Футболка' } );
+
+		expect( open ).toHaveAttribute( 'title', 'Скрыть вариации' );
+		expect( open.querySelector( '.dashicons-arrow-down-alt2' ) ).not.toBeNull();
+	} );
+
 	test( 'expanding reads the children and places them right after their parent', async () => {
 		await renderTable();
 

@@ -124,7 +124,7 @@ describe( 'the card header', () => {
 		expect( cardProps.at( -1 )?.hasSearch ).toBe( true );
 	} );
 
-	test( 'only the selection actions are in the select; an account action is a button in the card header, beside the select', async () => {
+	test( 'only the selection actions are in the select; an account action is a button at the top of the page, above the filters, not in the card', async () => {
 		serve( () => fixtureList( [ mug ] ) );
 		render( <Page /> );
 		await screen.findByRole( 'table', { name: 'Товары' } );
@@ -136,8 +136,12 @@ describe( 'the card header', () => {
 
 		expect( options ).toEqual( [ 'Выберите действие', 'Отправить' ] );
 		expect( within( accountRow ).getByRole( 'button', { name: 'Связать по артикулу' } ) ).toBeInTheDocument();
-		expect( header ).toContainElement( accountRow );
-		expect( select.compareDocumentPosition( accountRow ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+		expect( header ).not.toContainElement( accountRow );
+		expect( accountRow ).toHaveClass( 'is-page-top' );
+		// Above the filters and above the card: the place of «Создать заказ» on the delivery page.
+		const filters = document.querySelector( '.woodev-records__filters' ) as HTMLElement;
+		expect( accountRow.compareDocumentPosition( filters ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+		expect( accountRow.compareDocumentPosition( select ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
 	} );
 
 	test( 'the select runs a selection action only for a selected row', async () => {
@@ -377,6 +381,10 @@ describe( 'the polish of s237', () => {
 		} );
 		render( <Page /> );
 		await screen.findByRole( 'table', { name: 'Товары' } );
+		// The selection is cleared by the effect that follows the first list read: let that read finish and the effect run before the first tick.
+		await waitFor( () => expect( screen.getByRole( 'checkbox', { name: /Кружка/ } ) ).toBeInTheDocument() );
+		await waitFor( () => expect( cardProps.at( -1 )?.isLoading ).toBe( false ) );
+		await act( async () => {} );
 
 		const select = screen.getByRole( 'combobox', { name: 'Массовые действия' } );
 		const groups = Array.from( select.querySelectorAll( 'optgroup' ) );
@@ -451,10 +459,97 @@ describe( 'the polish of s237', () => {
 		expect( screen.getByText( 'Список загружен.' ) ).toBeInTheDocument();
 	} );
 
-	test( 'the empty card keeps its title for assistive technology only', async () => {
+	test( 'the empty card shows its title, like the table card does', async () => {
 		serve( () => fixtureList( [], { total: 0 } ) );
 		render( <Page /> );
 
-		expect( await screen.findByRole( 'heading', { name: 'Товары' } ) ).toHaveClass( 'screen-reader-text' );
+		const heading = await screen.findByRole( 'heading', { name: 'Товары' } );
+
+		expect( heading ).toBeVisible();
+		expect( heading ).not.toHaveClass( 'screen-reader-text' );
+	} );
+
+	test( 'a boolean filter is a switch on its own row under the selects, not a checkbox in their row', async () => {
+		const base = definition();
+		serve( () => fixtureList( [ mug ] ), {
+			...base,
+			filters: [
+				...base.filters,
+				{ id: 'only_errors', label: 'Только с ошибками', type: 'boolean', options: [], options_source: false },
+			],
+		} );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const toggle = screen.getByRole( 'checkbox', { name: 'Только с ошибками' } );
+		const pickers = document.querySelector( '.woodev-records__toolbar' ) as HTMLElement;
+		const switches = document.querySelector( '.woodev-records__switches' ) as HTMLElement;
+
+		expect( toggle ).toHaveClass( 'components-form-toggle__input' );
+		expect( switches ).toContainElement( toggle );
+		expect( pickers ).not.toContainElement( toggle );
+		expect( pickers.compareDocumentPosition( switches ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+	} );
+
+	test( 'the empty table offers the account action PHP names, as a button in its own body', async () => {
+		const base = definition();
+		serve( () => fixtureList( [], { total: 0 } ), {
+			...base,
+			messages: { ...base.messages, empty: 'Список ещё не загружен.', empty_action: 'link' },
+		} );
+		render( <Page /> );
+
+		const body = ( await screen.findByText( 'Список ещё не загружен.' ) ).closest( '.woodev-records__state' ) as HTMLElement;
+
+		expect( within( body ).getByRole( 'button', { name: 'Связать по артикулу' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'a column with a help sentence has a «?» beside its heading, and the sentence is its name', async () => {
+		const base = definition();
+		serve( () => fixtureList( [ mug ] ), {
+			...base,
+			columns: base.columns.map( ( column, index ) => ( index === 0 ? { ...column, help: 'Остаток на сайте / на маркетплейсе.' } : column ) ),
+		} );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		// The fake card does not draw its headers: draw the label the shell handed it.
+		const header = cardProps.at( -1 )?.headers.find( ( entry ) => entry.key === base.columns[ 0 ].id );
+		render( <div>{ header?.label }</div> );
+
+		expect( screen.getByRole( 'img', { name: 'Остаток на сайте / на маркетплейсе.' } ) ).toHaveTextContent( '?' );
+	} );
+
+	test( 'the row header is the first required column, so a photo column in front of the name does not take its place', async () => {
+		const base = definition();
+		const photo = { ...base.columns[ 0 ], id: 'photo', label: 'Фото', required: false };
+		serve( () => fixtureList( [ mug ] ), {
+			...base,
+			columns: [ photo, ...base.columns.map( ( column, index ) => ( { ...column, required: index === 0 } ) ) ],
+		} );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const props = cardProps.at( -1 );
+		const named = props?.headers.findIndex( ( header ) => header.key === base.columns[ 0 ].id );
+
+		expect( props?.rowHeader ).toBe( named );
+	} );
+
+	test( 'a row action with an icon is an icon-only button named by its label, in one group', async () => {
+		const base = definition();
+		serve( () => fixtureList( [ fixtureRow( 'p1', 'Кружка', { actions: [ { id: 'edit', enabled: true, reason: '', url: '/wp-admin/post.php?post=1' } ] } ) ] ), {
+			...base,
+			row_actions: [ action( 'edit', 'Изменить товар', { icon: 'edit', interaction: 'link' } ) ],
+		} );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const button = screen.getByRole( 'link', { name: 'Изменить товар' } );
+
+		expect( button ).toHaveClass( 'woodev-records__icon-button' );
+		expect( button ).toHaveTextContent( '' );
+		expect( button.querySelector( '.dashicons-edit' ) ).not.toBeNull();
+		expect( button.closest( '.woodev-records__buttons' ) ).toHaveClass( 'is-group' );
 	} );
 } );

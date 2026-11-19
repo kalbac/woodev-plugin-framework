@@ -70,56 +70,64 @@ final class SiteProductsRowsCellsTest extends TestCase {
 	}
 
 	/**
-	 * The text lines of the «Состояние» cell: what is synchronised, under the state badge.
+	 * The tooltip of the state badge: what is synchronised, the warehouse and the error, one sentence a line.
 	 *
 	 * @param array<string,mixed> $offer Offer keys to override.
 	 * @return string[]
 	 */
-	private function sync_lines( array $offer ): array {
-		$items = array_filter(
-			$this->cells( $offer )['state'],
-			static function ( array $item ): bool {
-				return 'text' === $item['type'];
-			}
-		);
+	private function tooltip_lines( array $offer ): array {
+		$badge = $this->cells( $offer )['state'][0]['value'];
 
-		return array_values( array_column( $items, 'value' ) );
+		return isset( $badge['tooltip'] ) ? explode( "\n", $badge['tooltip'] ) : [];
 	}
 
-	public function test_the_state_cell_lists_only_what_is_synchronised(): void {
-		$this->assertSame( [ 'Остатки · Цены' ], $this->sync_lines( [] ) );
-		$this->assertSame( [ 'Остатки' ], $this->sync_lines( [ 'sync_price' => false ] ) );
-		$this->assertSame( [ 'Цены' ], $this->sync_lines( [ 'sync_stock' => false ] ) );
-		$this->assertSame( [ '—' ], $this->sync_lines( [ 'sync_stock' => false, 'sync_price' => false ] ), 'Nothing on is a dash, not a sentence.' );
+	public function test_the_state_cell_is_one_badge_whose_tooltip_lists_what_is_synchronised(): void {
+		$this->assertCount( 1, $this->cells( [] )['state'] );
+		$this->assertSame( 'badge', $this->cells( [] )['state'][0]['type'] );
+		$this->assertSame( [ 'Синхронизируются: остатки, цены' ], $this->tooltip_lines( [] ) );
+		$this->assertSame( [ 'Синхронизируются: остатки' ], $this->tooltip_lines( [ 'sync_price' => false ] ) );
+		$this->assertSame( [ 'Синхронизируются: цены' ], $this->tooltip_lines( [ 'sync_stock' => false ] ) );
+		$this->assertSame( [ 'Синхронизация выключена' ], $this->tooltip_lines( [ 'sync_stock' => false, 'sync_price' => false ] ) );
 	}
 
 	public function test_the_warehouse_is_written_only_when_the_product_has_one_of_its_own(): void {
-		$this->assertSame( [ 'Остатки · Цены', 'Склад: Основной склад' ], $this->sync_lines( [ 'warehouse_id' => 22 ] ) );
-		$this->assertSame( [ 'Остатки · Цены', 'Склад: #99' ], $this->sync_lines( [ 'warehouse_id' => 99 ] ), 'A warehouse the account no longer lists is named by its number.' );
-		$this->assertCount( 1, $this->sync_lines( [ 'warehouse_id' => 0 ] ) );
+		$this->assertSame( [ 'Синхронизируются: остатки, цены', 'Склад: Основной склад' ], $this->tooltip_lines( [ 'warehouse_id' => 22 ] ) );
+		$this->assertSame( [ 'Синхронизируются: остатки, цены', 'Склад: #99' ], $this->tooltip_lines( [ 'warehouse_id' => 99 ] ), 'A warehouse the account no longer lists is named by its number.' );
+		$this->assertCount( 1, $this->tooltip_lines( [ 'warehouse_id' => 0 ] ) );
 	}
 
-	public function test_an_unlinked_product_has_only_its_badge_in_the_state_cell(): void {
-		$this->assertCount( 1, $this->cells( [ 'link_id' => null ] )['state'] );
+	public function test_an_unlinked_product_has_a_bare_badge_and_says_nothing_about_synchronisation(): void {
+		$state = $this->cells( [ 'link_id' => null ] )['state'];
+
+		$this->assertCount( 1, $state );
+		$this->assertArrayNotHasKey( 'tooltip', $state[0]['value'] );
 	}
 
-	public function test_the_error_is_a_red_badge_in_the_state_cell_and_there_is_no_error_or_sync_column(): void {
+	public function test_the_error_is_the_last_line_of_the_badge_tooltip_and_there_is_no_error_or_sync_column(): void {
 		$cells = $this->cells( [ 'error' => 'Не заполнен бренд' ] );
-		$last  = end( $cells['state'] );
+		$lines = $this->tooltip_lines( [ 'error' => 'Не заполнен бренд' ] );
 
-		$this->assertSame( 'badge', $last['type'] );
-		$this->assertSame( [ 'label' => 'Не заполнен бренд', 'tone' => 'danger' ], $last['value'] );
+		$this->assertCount( 1, $cells['state'], 'One badge, not a badge and a red one under it.' );
+		$this->assertSame( 'Ошибка: Не заполнен бренд', end( $lines ) );
 		$this->assertArrayNotHasKey( 'error', $cells );
 		$this->assertArrayNotHasKey( 'sync', $cells );
+	}
+
+	public function test_stock_and_price_are_one_text_site_slash_marketplace_with_a_dash_for_a_missing_side(): void {
+		$this->assertSame( '5 / —', $this->cells( [] )['stock'] );
+		$this->assertSame( '100 / —', $this->cells( [] )['price'] );
+		$this->assertSame( '5 / 4', $this->cells( [ 'remote_stock' => 4 ] )['stock'] );
+		$this->assertSame( '100 / 120', $this->cells( [ 'remote_price' => '120' ] )['price'] );
+		$this->assertSame( '— / —', $this->cells( [ 'site_stock' => null, 'site_price' => null ] )['stock'] );
 	}
 
 	/**
 	 * The state cell of a variable product with the given variation groups, one variation per entry.
 	 *
 	 * @param string[] $groups Group of each variation; a variation of the group `error` carries an error text.
-	 * @return string[] The labels of the state cell.
+	 * @return array<string,mixed> The cells of the parent row.
 	 */
-	private function parent_state_labels( array $groups ): array {
+	private function parent_cells( array $groups ): array {
 		$offers = [];
 
 		foreach ( $groups as $index => $group ) {
@@ -149,9 +157,16 @@ final class SiteProductsRowsCellsTest extends TestCase {
 				return 'https://shop.test/edit/' . $id;
 			}
 		);
-		$cells = $rows->parent( 1, [ 'id' => 10, 'title' => 'Футболка', 'sku' => '', 'is_variable' => true, 'offers' => $offers ], [] )['cells'];
 
-		return array_column( array_column( $cells['state'], 'value' ), 'label' );
+		return $rows->parent( 1, [ 'id' => 10, 'title' => 'Футболка', 'sku' => '', 'is_variable' => true, 'offers' => $offers ], [] )['cells'];
+	}
+
+	/**
+	 * @param string[] $groups Group of each variation.
+	 * @return string[] The labels of the state cell.
+	 */
+	private function parent_state_labels( array $groups ): array {
+		return array_column( array_column( $this->parent_cells( $groups )['state'], 'value' ), 'label' );
 	}
 
 	public function test_a_variable_product_shows_every_state_group_of_its_variations_up_to_the_stack_limit(): void {
@@ -162,10 +177,18 @@ final class SiteProductsRowsCellsTest extends TestCase {
 		);
 	}
 
-	public function test_a_variable_product_keeps_a_place_for_the_error_summary_only_when_there_is_an_error(): void {
-		$labels = $this->parent_state_labels( [ 'created', 'created', 'created', 'created', 'unlinked', 'unlinked', 'unlinked', 'queued', 'queued', 'archived', 'error' ] );
+	public function test_a_variable_product_says_the_errors_of_its_variations_once_in_the_tooltip_of_its_first_badge(): void {
+		$cells = $this->parent_cells( [ 'created', 'created', 'created', 'created', 'unlinked', 'unlinked', 'unlinked', 'queued', 'queued', 'archived', 'error', 'error' ] );
+		$state = array_column( $cells['state'], 'value' );
 
-		$this->assertCount( 5, $labels, 'The engine holds five lines: four badges and the error summary.' );
-		$this->assertSame( 'Ошибка у 1 варианта', end( $labels ) );
+		$this->assertCount( 5, $state, 'All five lines the engine holds are state badges.' );
+		$this->assertSame( 'Ошибка у 2 вариантов', $state[0]['tooltip'] );
+		$this->assertArrayNotHasKey( 'tooltip', $state[1] );
+	}
+
+	public function test_a_variable_product_without_an_error_has_no_tooltip(): void {
+		$state = array_column( $this->parent_cells( [ 'created', 'unlinked' ] )['state'], 'value' );
+
+		$this->assertArrayNotHasKey( 'tooltip', $state[0] );
 	}
 }

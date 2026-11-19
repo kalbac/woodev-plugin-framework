@@ -8,7 +8,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Button } from '@wordpress/components';
+import { Button, Tooltip } from '@wordpress/components';
 import { STYLES } from './styles';
 import type { ActionDescriptor, AdminRecord, RowActionState } from './types';
 
@@ -35,7 +35,47 @@ interface ActionButtonProps {
 	onClick: () => void;
 }
 
+function isIconOnly( action: ActionDescriptor ): boolean {
+	return action.icon !== undefined && action.icon !== '';
+}
+
+/** The delivery page's colour per tone: the main action green, the destructive one red, the rest grey. */
+function toneClass( action: ActionDescriptor ): string {
+	if ( action.tone === 'danger' ) {
+		return 'is-stop';
+	}
+
+	return action.tone === 'primary' ? 'is-go' : 'is-neutral';
+}
+
 function ActionButton( { action, reason, reasonId, canRun, href, onClick }: ActionButtonProps ) {
+	if ( isIconOnly( action ) ) {
+		// An icon-only button is named by its label: the tooltip says it on hover, the accessible name on focus. A blocked one
+		// adds why, in the tooltip, instead of a sentence under every row.
+		const title = reason === '' ? action.label : `${ action.label }: ${ reason }`;
+		// An address on another site (the marketplace's cabinet) opens in a new tab, so the table stays where it was.
+		const external = canRun && href !== undefined && /^https?:\/\//.test( href ) && ! href.startsWith( window.location.origin );
+
+		return (
+			<Tooltip text={ title } delay={ 150 }>
+				<Button
+					className={ `woodev-records__icon-button ${ toneClass( action ) }` }
+					icon={ <span className={ `dashicons dashicons-${ action.icon }` } aria-hidden="true" /> }
+					label={ title }
+					showTooltip={ false }
+					disabled={ ! canRun }
+					href={ canRun ? href : undefined }
+					target={ external ? '_blank' : undefined }
+					rel={ external ? 'noopener noreferrer' : undefined }
+					accessibleWhenDisabled
+					aria-describedby={ reason === '' ? undefined : reasonId }
+					data-action={ action.id }
+					onClick={ onClick }
+				/>
+			</Tooltip>
+		);
+	}
+
 	// A short label keeps the buttons of a row on one line; the full one stays the accessible name and the tooltip.
 	const short = action.short_label !== undefined && action.short_label !== '' && action.short_label !== action.label;
 
@@ -88,9 +128,11 @@ export function RowActions( { row, rowKey, descriptors, onAction, blockedReason,
 		buttons.push( { action, state, reason: reasonFor( action, state ), isLink } );
 	} );
 
+	const grouped = buttons.length > 0 && buttons.every( ( { action } ) => isIconOnly( action ) );
+
 	return (
 		<span className="woodev-records__actions" style={ STYLES.actions }>
-			<span className="woodev-records__buttons" style={ STYLES.buttons }>
+			<span className={ `woodev-records__buttons${ grouped ? ' is-group' : '' }` } style={ STYLES.buttons }>
 				{ buttons.map( ( { action, state, reason, isLink } ) => (
 					<ActionButton
 						key={ action.id }
@@ -106,7 +148,12 @@ export function RowActions( { row, rowKey, descriptors, onAction, blockedReason,
 			{ buttons
 				.filter( ( { reason } ) => reason !== '' )
 				.map( ( { action, reason } ) => (
-					<span key={ action.id } id={ reasonId( action ) } className="woodev-records__reason" style={ STYLES.reason }>
+					<span
+						key={ action.id }
+						id={ reasonId( action ) }
+						className={ `woodev-records__reason${ isIconOnly( action ) ? ' screen-reader-text' : '' }` }
+						style={ isIconOnly( action ) ? undefined : STYLES.reason }
+					>
 						{ reason }
 					</span>
 				) ) }

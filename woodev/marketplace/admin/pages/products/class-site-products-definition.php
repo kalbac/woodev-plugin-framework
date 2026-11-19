@@ -101,6 +101,7 @@ final class Site_Products_Definition {
 				[
 					'id'          => 'edit',
 					'label'       => __( 'Изменить товар', 'woodev-plugin-framework' ),
+					'icon'        => 'edit',
 					'effect'      => 'read',
 					'interaction' => 'link',
 				],
@@ -209,21 +210,23 @@ final class Site_Products_Definition {
 			],
 			[
 				'id'        => 'stock',
-				/* translators: %s: marketplace name. */
-				'label'     => sprintf( __( 'Остаток: сайт / %s', 'woodev-plugin-framework' ), $marketplace ),
-				'cell_type' => 'stack',
+				'label'     => __( 'Остатки', 'woodev-plugin-framework' ),
+				'cell_type' => 'text',
 				'sort_key'  => 'stock',
+				/* translators: %s: marketplace name. */
+				'help'      => sprintf( __( 'Остаток на сайте / остаток на %s. «—» значит, что значения нет: например, товар ещё не выгружен.', 'woodev-plugin-framework' ), $marketplace ),
 			],
 			[
 				'id'        => 'price',
-				/* translators: %s: marketplace name. */
-				'label'     => sprintf( __( 'Цена: сайт / %s', 'woodev-plugin-framework' ), $marketplace ),
-				'cell_type' => 'stack',
+				'label'     => __( 'Цены', 'woodev-plugin-framework' ),
+				'cell_type' => 'text',
 				'sort_key'  => 'price',
+				/* translators: %s: marketplace name. */
+				'help'      => sprintf( __( 'Цена на сайте / цена на %s. «—» значит, что значения нет: например, товар ещё не выгружен.', 'woodev-plugin-framework' ), $marketplace ),
 			],
 			[
 				'id'        => 'actions',
-				'label'     => '',
+				'label'     => __( 'Действия', 'woodev-plugin-framework' ),
 				'cell_type' => 'actions',
 			],
 		];
