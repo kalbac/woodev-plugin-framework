@@ -496,4 +496,21 @@ describe( 'a switch that hides a required field', () => {
 		expect( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		await waitFor( () => expect( within( dialog ).queryByRole( 'status' ) ).not.toBeInTheDocument() ); // The list it reads again.
 	} );
+
+	test( 'a category picked before the switch went on and off is gone: the box is empty and the button waits', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Категория' } );
+		fireEvent.focus( input );
+		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
+		expect( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+
+		fireEvent.click( within( dialog ).getByRole( 'checkbox', { name: 'Весь магазин' } ) );
+		fireEvent.click( within( dialog ).getByRole( 'checkbox', { name: 'Весь магазин' } ) );
+
+		expect( await within( dialog ).findByRole( 'searchbox', { name: 'Категория' } ) ).toHaveValue( '' );
+		expect( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
+		expect( previews() ).toHaveLength( 0 );
+		await waitFor( () => expect( within( dialog ).queryByRole( 'status' ) ).not.toBeInTheDocument() );
+	} );
 } );

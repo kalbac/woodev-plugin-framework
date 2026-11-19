@@ -320,8 +320,13 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 			// A changed input makes the plan on screen a plan of something else: ask again.
 			const errors = { ...flow.fieldErrors };
 			delete errors[ fieldId ];
+			const payload: Payload = { ...flow.payload, [ fieldId ]: value };
+			// Fields a switch has just hidden start empty when it is turned off again: the box they come back in is blank too.
+			if ( value === true ) {
+				flow.action.fields.filter( ( field ) => field.hidden_when === fieldId ).forEach( ( field ) => delete payload[ field.id ] );
+			}
 			patch( {
-				payload: { ...flow.payload, [ fieldId ]: value },
+				payload,
 				fieldErrors: errors,
 				stage: flow.stage === 'previewed' ? 'input' : flow.stage,
 				plan: null,
