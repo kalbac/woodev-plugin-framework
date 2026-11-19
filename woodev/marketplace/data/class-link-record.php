@@ -68,6 +68,24 @@ final class Link_Record {
 	];
 
 	/**
+	 * States in which the marketplace knows the card, so a change of its article can be sent: the lifecycle states after the import, `created`
+	 * and `archived` (an archived card keeps its article, and the marketplace counts it for uniqueness). Before that the article has only been
+	 * submitted, and a card the import refused is not one.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @var string[]
+	 */
+	public const RENAMEABLE_STATES = [
+		self::STATE_OFFER_VALIDATED,
+		self::STATE_PICS_DELIVERED,
+		self::STATE_SKU_CREATED,
+		self::STATE_PRICE_SENT,
+		self::STATE_CREATED,
+		self::STATE_ARCHIVED,
+	];
+
+	/**
 	 * Column => value.
 	 *
 	 * @var array<string,mixed>
@@ -148,6 +166,8 @@ final class Link_Record {
 				'wc_parent_id'        => (int) ( $row['wc_parent_id'] ?? 0 ),
 				'kind'                => self::KIND_PARENT === ( $row['kind'] ?? self::KIND_OFFER ) ? self::KIND_PARENT : self::KIND_OFFER,
 				'offer_id'            => null === $offer_id || '' === $offer_id ? null : (string) $offer_id,
+				'pending_offer_id'    => self::nullable_text( $row['pending_offer_id'] ?? null ),
+				'rename_error'        => self::nullable_text( $row['rename_error'] ?? null ),
 				'remote_ids'          => self::clean_ids( (array) ( $row['remote_ids'] ?? [] ) ),
 				'card_state'          => (string) ( $row['card_state'] ?? self::STATE_UNLINKED ),
 				'is_created'          => (int) ( $row['is_created'] ?? 0 ),
@@ -180,7 +200,9 @@ final class Link_Record {
 	 */
 	public function to_columns(): array {
 		$columns = $this->fields;
-		unset( $columns['link_id'], $columns['remote_ids'] );
+		// The rename columns are written only by the rename flow's own statements: leaving them out keeps an insert working on a site whose
+		// tables are not yet at the schema revision that added them.
+		unset( $columns['link_id'], $columns['remote_ids'], $columns['pending_offer_id'], $columns['rename_error'] );
 
 		foreach ( [ 'price_rule_override', 'attribute_overrides' ] as $json ) {
 			$columns[ $json ] = null === $columns[ $json ] ? null : (string) wp_json_encode( $columns[ $json ] );
@@ -241,6 +263,40 @@ final class Link_Record {
 	 */
 	public function offer_id(): ?string {
 		return $this->fields['offer_id'];
+	}
+
+	/**
+	 * Tells whether the marketplace knows this card, so its article could be changed there.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return bool
+	 */
+	public function can_rename_offer_id(): bool {
+		return $this->is_offer() && null !== $this->offer_id() && in_array( $this->card_state(), self::RENAMEABLE_STATES, true );
+	}
+
+	/**
+	 * The article the merchant changed the sent card to, until the marketplace confirms it. While it is set the card is still known to the
+	 * marketplace as {@see self::offer_id()}.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string|null
+	 */
+	public function pending_offer_id(): ?string {
+		return $this->fields['pending_offer_id'];
+	}
+
+	/**
+	 * What the marketplace answered when it refused {@see self::pending_offer_id()}; null while the change is waiting or was never asked for.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string|null
+	 */
+	public function rename_error(): ?string {
+		return $this->fields['rename_error'];
 	}
 
 	/**
@@ -368,6 +424,16 @@ final class Link_Record {
 	 */
 	public function mapping_id(): ?int {
 		return $this->fields['mapping_id'];
+	}
+
+	/**
+	 * Converts a nullable text column; '' is NULL.
+	 *
+	 * @param mixed $value Column value.
+	 * @return string|null
+	 */
+	private static function nullable_text( $value ): ?string {
+		return is_string( $value ) && '' !== $value ? $value : null;
 	}
 
 	/**

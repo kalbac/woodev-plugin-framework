@@ -36,6 +36,8 @@ use Woodev\Framework\Marketplace\Flows\Label_Download;
 use Woodev\Framework\Marketplace\Flows\Legacy_Order_Lines;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
+use Woodev\Framework\Marketplace\Flows\Offer_Id_Renamer;
+use Woodev\Framework\Marketplace\Flows\Offer_Id_Renames;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
@@ -66,8 +68,10 @@ use Woodev\Framework\Marketplace\Jobs\Poll_Task_Runner;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Jobs\Price_Flush_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Recompute_Runner;
+use Woodev\Framework\Marketplace\Jobs\Rename_Offer_Ids_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Refresh_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Scheduler;
+use Woodev\Framework\Marketplace\Jobs\Rename_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Runner;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Runner;
@@ -298,6 +302,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->export( $sync_state_store );
 			$this->links_and_catalog();
 			$this->import();
+			$this->offer_id_renames();
 			$this->postings();
 			$this->labels();
 			$this->intake();
@@ -563,6 +568,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 
 			$this->importer = $adapter;
 			$this->imports  = $scheduler;
+		}
+
+		/**
+		 * The job that sends an article the merchant changed after the export. Wired only for an adapter that is an {@see Offer_Id_Renamer} and reports
+		 * {@see Capability::RENAME_SKU}; any other adapter gets no job and its articles stay frozen once sent.
+		 *
+		 * @return void
+		 */
+		private function offer_id_renames(): void {
+			$adapter = $this->adapter;
+
+			if ( ! $adapter instanceof Offer_Id_Renamer || ! $adapter->supports( Capability::RENAME_SKU ) ) {
+				return;
+			}
+
+			$renames = Offer_Id_Renames::for_plugin( $this->links, $this->names, new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() ), $this->log_error );
+
+			( new Rename_Offer_Ids_Runner( $this->gate, $renames, $adapter, new Rename_Scheduler( $this->names ), $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
 		}
 
 		/**

@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * | key           | shape                                                                  | result                          |
  * |---------------|------------------------------------------------------------------------|---------------------------------|
- * | `offer_id`    | text the marketplace's article policy accepts; absent when not editable | `offer_id`: string or null      |
+ * | `offer_id`    | text the marketplace's article policy accepts; absent when the article is frozen (a sent card of an adapter that cannot change it) | `offer_id`: string or null |
  * | `sync_stock`  | `'0'` or `'1'`                                                         | `sync_stock`: bool              |
  * | `sync_price`  | `'0'` or `'1'`                                                         | `sync_price`: bool              |
  * | `is_oversize` | `'0'` or `'1'`                                                         | `is_oversize`: bool             |

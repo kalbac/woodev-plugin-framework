@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
+use Woodev\Framework\Marketplace\Flows\Offer_Id_Renames;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
@@ -26,13 +27,15 @@ defined( 'ABSPATH' ) || exit;
  *   ({@see Wpdb_Link_Store::update_settings()});
  * - the price override is the link's `price_rule_override`, written by {@see Price_Intents::change_override()}, which also works the
  *   new price out again (a change of the override is a price intent);
- * - the article typed before the first export is {@see Pinned_Offer_Id}.
+ * - the article typed before the first export is {@see Pinned_Offer_Id};
+ * - the article typed for a card the marketplace already has (only for an adapter that can change it there) is a *waiting change* of the link,
+ *   recorded and queued by {@see Offer_Id_Renames::request()}; the link keeps its old article until the marketplace confirms the new one.
  *
  * A product that has no row yet gets one only when the form asks for something other than what a new row would hold (both
  * switches on, nothing else set), so saving a product the merchant never configured creates nothing. A row of a variable product is
  * the *parent* row: it holds the mapping its variations inherit, and nothing else is written to it.
  *
- * It never calls the marketplace.
+ * It never calls the marketplace: even a changed article only queues the job that sends it.
  *
  * @since 2.1.2
  */
@@ -83,24 +86,33 @@ final class Link_Settings_Writer {
 	private $pinned;
 
 	/**
+	 * Changes of the article of a sent card; null for an adapter that cannot change it, whose article stays frozen once sent.
+	 *
+	 * @var Offer_Id_Renames|null
+	 */
+	private $renames;
+
+	/**
 	 * Creates the writer.
 	 *
 	 * @since 2.1.2
 	 *
-	 * @param Wpdb_Link_Store    $links      Links.
-	 * @param Price_Intents      $intents    Price intents.
-	 * @param Wpdb_Mapping_Store $mappings   Mappings.
-	 * @param Warehouse_Options  $warehouses Warehouses.
-	 * @param Stock_Intents      $stock      Stock intents.
-	 * @param Pinned_Offer_Id    $pinned     The chosen articles.
+	 * @param Wpdb_Link_Store       $links      Links.
+	 * @param Price_Intents         $intents    Price intents.
+	 * @param Wpdb_Mapping_Store    $mappings   Mappings.
+	 * @param Warehouse_Options     $warehouses Warehouses.
+	 * @param Stock_Intents         $stock      Stock intents.
+	 * @param Pinned_Offer_Id       $pinned     The chosen articles.
+	 * @param Offer_Id_Renames|null $renames Changes of the article of a sent card, null when the adapter cannot make them.
 	 */
-	public function __construct( Wpdb_Link_Store $links, Price_Intents $intents, Wpdb_Mapping_Store $mappings, Warehouse_Options $warehouses, Stock_Intents $stock, Pinned_Offer_Id $pinned ) {
+	public function __construct( Wpdb_Link_Store $links, Price_Intents $intents, Wpdb_Mapping_Store $mappings, Warehouse_Options $warehouses, Stock_Intents $stock, Pinned_Offer_Id $pinned, ?Offer_Id_Renames $renames = null ) {
 		$this->links      = $links;
 		$this->intents    = $intents;
 		$this->mappings   = $mappings;
 		$this->warehouses = $warehouses;
 		$this->stock      = $stock;
 		$this->pinned     = $pinned;
+		$this->renames    = $renames;
 	}
 
 	/**
@@ -111,7 +123,7 @@ final class Link_Settings_Writer {
 	 * @param Account             $account Account the settings are for (the caller has checked that it exists and is enabled).
 	 * @param \WC_Product         $product Product or variation.
 	 * @param array<string,mixed> $values  What {@see Link_Form_Input::parse()} accepted.
-	 * @return string[] Sentences for what could not be saved; empty when everything was.
+	 * @return string[] Sentences for what could not be saved (the rest of the form is saved all the same); empty when everything was.
 	 * @throws \Woodev\Framework\Marketplace\Data\Persistence_Exception When the database refuses the new row.
 	 * @throws \RuntimeException When the database refuses a write.
 	 */
@@ -123,20 +135,31 @@ final class Link_Settings_Writer {
 			return $errors;
 		}
 
-		if ( array_key_exists( Link_Form_Input::KEY_OFFER_ID, $values ) && self::article_is_editable( $row ) ) {
-			$this->pinned->store( $product, $account->id(), $values[ Link_Form_Input::KEY_OFFER_ID ] );
+		$notes = [];
+
+		if ( array_key_exists( Link_Form_Input::KEY_OFFER_ID, $values ) ) {
+			if ( self::article_is_editable( $row ) ) {
+				$this->pinned->store( $product, $account->id(), $values[ Link_Form_Input::KEY_OFFER_ID ] );
+			} elseif ( null !== $this->renames && null !== $row && $row->can_rename_offer_id() && null !== $values[ Link_Form_Input::KEY_OFFER_ID ] ) {
+				// A cleared field leaves a sent card's article alone: «follow the SKU» does not exist once the card is on the marketplace.
+				$problem = $this->renames->request( $account, $row, $values[ Link_Form_Input::KEY_OFFER_ID ] );
+
+				if ( null !== $problem ) {
+					$notes[] = $problem;
+				}
+			}
 		}
 
 		if ( null === $row ) {
 			if ( ! self::asks_for_a_row( $values ) ) {
-				return [];
+				return $notes;
 			}
 
 			$row = $this->create_row( $account, $product );
 		}
 
 		if ( null === $row ) {
-			return [ __( 'Не удалось сохранить настройки товара. Повторите чуть позже.', 'woodev-plugin-framework' ) ];
+			return array_merge( [ __( 'Не удалось сохранить настройки товара. Повторите чуть позже.', 'woodev-plugin-framework' ) ], $notes );
 		}
 
 		$this->links->update_settings( (int) $row->link_id(), array_intersect_key( $values, array_flip( $row->is_offer() ? self::ROW_KEYS : self::PARENT_KEYS ) ) );
@@ -147,7 +170,7 @@ final class Link_Settings_Writer {
 			$this->recompute_prices_of_variations( $account, $product );
 		}
 
-		return [];
+		return $notes;
 	}
 
 	/**

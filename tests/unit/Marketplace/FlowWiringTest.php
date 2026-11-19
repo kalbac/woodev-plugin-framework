@@ -17,6 +17,7 @@ use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flow_Wiring;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
+use Woodev\Framework\Marketplace\Flows\Offer_Id_Renamer;
 use Woodev\Framework\Marketplace\Jobs\Card_Event_Handler;
 use Woodev\Framework\Marketplace\Jobs\Event_Handler_Registry;
 use Woodev\Framework\Marketplace\Jobs\Noop_Event_Handler;
@@ -379,6 +380,47 @@ final class FlowWiringTest extends TestCase {
 
 		$this->assertTrue( $this->wiring( self::PLUGIN, $this->adapter( [ 'capabilities' => [ Capability::PUSH_NOTIFICATIONS ] ] ) )->register() );
 		$this->assertInstanceOf( Noop_Event_Handler::class, $seen->for_type( 'CARD_CHANGED' ) );
+	}
+
+	/**
+	 * An adapter that is an {@see Offer_Id_Renamer} and reports the capability (or does not).
+	 *
+	 * @param string[] $capabilities What it reports.
+	 * @return Marketplace_Adapter
+	 */
+	private function renaming_adapter( array $capabilities ): Marketplace_Adapter {
+		$fake   = $this->adapter( [ 'capabilities' => $capabilities ] );
+		$mirror = \Mockery::mock( Marketplace_Adapter::class, Offer_Id_Renamer::class );
+
+		foreach ( get_class_methods( Marketplace_Adapter::class ) as $method ) {
+			$mirror->shouldReceive( $method )->andReturnUsing( [ $fake, $method ] );
+		}
+
+		$mirror->shouldReceive( 'max_renames_per_request' )->andReturn( 25 );
+
+		return $mirror;
+	}
+
+	public function test_the_article_change_job_is_hooked_only_for_a_renaming_adapter_that_reports_the_capability(): void {
+		Actions\expectAdded( 'woodev_fake_seller_rename_offer_ids' )->once();
+
+		$this->assertTrue( $this->wiring( self::PLUGIN, $this->renaming_adapter( [ Capability::RENAME_SKU ] ) )->register() );
+	}
+
+	public function test_an_adapter_that_claims_the_capability_without_the_contract_gets_no_article_change_job(): void {
+		Actions\expectAdded( 'woodev_fake_seller_rename_offer_ids' )->never();
+
+		$adapter = $this->adapter( [ 'capabilities' => [ Capability::RENAME_SKU ] ] );
+
+		$this->assertTrue( $adapter->supports( Capability::RENAME_SKU ), 'it claims the capability' );
+		$this->assertNotInstanceOf( Offer_Id_Renamer::class, $adapter );
+		$this->assertTrue( $this->wiring( self::PLUGIN, $adapter )->register() );
+	}
+
+	public function test_a_renaming_adapter_without_the_capability_gets_no_article_change_job(): void {
+		Actions\expectAdded( 'woodev_fake_seller_rename_offer_ids' )->never();
+
+		$this->assertTrue( $this->wiring( self::PLUGIN, $this->renaming_adapter( [] ) )->register() );
 	}
 
 	public function test_the_import_job_does_not_need_push(): void {

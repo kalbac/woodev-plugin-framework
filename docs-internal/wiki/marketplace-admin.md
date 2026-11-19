@@ -1106,6 +1106,38 @@ recorded too, and an intent that cannot be stored throws instead of counting as 
 **Rig phase.** The 10 000-product scale test is generated and measured by `tests/integration/fixtures/bulk-run/` (see its README); the
 coordinator runs it, the PR carries the numbers.
 
+## Changing the article after the export (framework 2.1.13, #1860)
+
+Before 2.1.13 the article (`offer_id`) was frozen once a card was sent. Operator decision 19.11.2026: it stays changeable, and the change goes to the marketplace by its own
+offer-id update method, never as a side effect of a SKU edit (v1 renamed on every SKU change, synchronously, inside the product-save hook, with no uniqueness check and no
+visible failure; the explicit, queued, checked, visible change here is the fix of that).
+
+**Capability.** An optional contract, like `Product_Tab_Facts` / `Order_Canceller`: the adapter implements `Flows\Offer_Id_Renamer`
+(`max_renames_per_request()`, `rename_offer_ids( Account, current => new, context ): array<current, Offer_Id_Rename_Outcome>`) **and** reports `Capability::RENAME_SKU`. `Marketplace_Adapter`
+does not change. An adapter without either keeps the old frozen article, the old help text and no job (`Flow_Wiring::offer_id_renames()` hooks the job, `Embedded_Screens::product_tab()` switches the screen).
+The adapter answers for every pair; a pair it does not answer for is treated as refused. A request that fails as a whole throws, and the adapter's `Error_Classifier` decides.
+
+**State lives on the link row** (schema revision 2): `links.pending_offer_id` (the article the merchant asked for) and `links.rename_error` (the marketplace's answer when it refused),
+kept apart from `last_error_*` because export and poll writes wipe those. `offer_id` itself changes in exactly one statement (`Wpdb_Link_Store::finish_offer_id_rename()`), so the unique
+`(account_id, offer_id)` index is the arbiter of a clash and a row is never half-moved. Both columns are left out of `Link_Record::to_columns()`, so an insert works on a site whose tables
+are not yet at revision 2.
+
+| Step | Where | What happens |
+|---|---|---|
+| Edit | product tab / variation panel, «Артикул: … · изменить» | the input starts on the article the card has (or the one a change waits for) |
+| Save | `Link_Settings_Writer` → `Offer_Id_Renames::request()` | the card must be known to the marketplace (`Link_Record::RENAMEABLE_STATES`); the article must be free in the account (no row holds it, no other row waits for it — a refused change frees it); the link keeps its old article, `pending_offer_id` is set, the job is queued. A save never waits for the marketplace |
+| Job | `Rename_Offer_Ids_Runner` (`woodev_{plugin id}_rename_offer_ids`) | `Account_Job` skeleton (licence, pause, claim, the adapter's verdict), plus the plugin's write gate; reads the waiting rows, sends ≤ `max_renames_per_request()` pairs per request, up to 20 requests per run |
+| Success | `finish_offer_id_rename()` + `Offer_Id_Renames::for_plugin()` closure | link article, waiting request and error move together; the article chosen on the product (`Pinned_Offer_Id`) follows, only if the product had one; one log line |
+| Refusal | `fail_offer_id_rename()` | the old article stays linked; `rename_error` holds the marketplace's words; the badge gets the orange «!» and the problems dialog a «Смена артикула» section; the field's line says «не удалось сменить на …» |
+| Take back | typing the card's current article | clears a waiting or refused change; typing the refused article again asks again |
+
+Variations are rows like any other: each variation's panel posts its own `offer_id`, the parent's variations table notes «(меняется на …)» / «(не удалось сменить на …)». A detach or a reset of the
+state clears the waiting change. A cleared field leaves a sent card's article alone («follow the SKU» has no meaning once the card is on the marketplace).
+
+**Known limits.** The framework checks uniqueness against the shop's own links only; a card of the same seller that is not linked to any product is the marketplace's answer to give
+(it arrives as the refusal text). The refusal text is the marketplace's, shown as it came. If the marketplace changed the card but a database write then failed, the row keeps the old article
+and shows the error: the next «Связать по артикулу» run is the way back.
+
 ## Verification
 
 Implementation evidence: PHP 7.4 syntax/static analysis, unit and contract tests, Jest

@@ -906,7 +906,7 @@ final class Wpdb_Link_Store implements Link_Store {
 		}
 
 		$sql = $this->db->prepare(
-			'UPDATE %i SET card_state = %s, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE account_id = %d AND kind = %s AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+			'UPDATE %i SET card_state = %s, pending_offer_id = NULL, rename_error = NULL, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE account_id = %d AND kind = %s AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 			array_merge( [ $this->table, Link_Record::STATE_UNLINKED, $this->format_time( $this->now() ), $account_id, Link_Record::KIND_OFFER ], $ids )
 		);
 
@@ -1036,7 +1036,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 */
 	public function detach( int $account_id, int $link_id ): bool {
 		$sql = $this->db->prepare(
-			'UPDATE %i SET card_state = %s, offer_id = NULL, is_created = 0, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND card_state <> %s',
+			'UPDATE %i SET card_state = %s, offer_id = NULL, pending_offer_id = NULL, rename_error = NULL, is_created = 0, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND card_state <> %s',
 			$this->table,
 			Link_Record::STATE_UNLINKED,
 			$this->format_time( $this->now() ),
@@ -1206,6 +1206,192 @@ final class Wpdb_Link_Store implements Link_Store {
 		if ( false === $this->db->update( $this->table, $columns, [ 'link_id' => $link_id ] ) ) {
 			throw new \RuntimeException( 'The product settings could not be saved.' );
 		}
+	}
+
+	/**
+	 * Tells whether another row of the account already owns an article or has been asked to change to it. A change that the marketplace
+	 * refused (it carries its error) no longer holds the article.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int    $account_id     Account id.
+	 * @param string $offer_id       Article.
+	 * @param int    $except_link_id The row that wants the article (0 for none).
+	 * @return bool
+	 */
+	public function offer_id_is_taken( int $account_id, string $offer_id, int $except_link_id ): bool {
+		$found = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+			$this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+				'SELECT link_id FROM %i WHERE account_id = %d AND link_id <> %d AND ( offer_id = %s OR ( pending_offer_id = %s AND rename_error IS NULL ) ) LIMIT 1',
+				$this->table,
+				$account_id,
+				$except_link_id,
+				$offer_id,
+				$offer_id
+			)
+		);
+
+		return null !== $found && '' !== $found;
+	}
+
+	/**
+	 * Records that the merchant changed the article of a card the marketplace knows. Nothing is sent here: the rename job does. A row whose
+	 * card is not on the marketplace yet (or one that already carries this article) is left alone.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int    $account_id Account id.
+	 * @param int    $link_id    Link id.
+	 * @param string $offer_id   The new article.
+	 * @return bool True when the row now waits for the change.
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function request_offer_id_rename( int $account_id, int $link_id, string $offer_id ): bool {
+		$sql = $this->db->prepare(
+			'UPDATE %i SET pending_offer_id = %s, rename_error = NULL, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND offer_id IS NOT NULL AND offer_id <> %s AND card_state IN (' . $this->placeholders( Link_Record::RENAMEABLE_STATES ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+			array_merge( [ $this->table, $offer_id, $this->format_time( $this->now() ), $link_id, $account_id, Link_Record::KIND_OFFER, $offer_id ], Link_Record::RENAMEABLE_STATES )
+		);
+
+		return 1 === $this->affected_or_fail( $sql, 'The article change could not be saved.' );
+	}
+
+	/**
+	 * Lists the rows of an account that wait for the marketplace to change their article (oldest first).
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows.
+	 * @return Link_Record[]
+	 */
+	public function pending_offer_id_renames( int $account_id, int $limit ): array {
+		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+			$this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+				'SELECT * FROM %i WHERE account_id = %d AND kind = %s AND offer_id IS NOT NULL AND pending_offer_id IS NOT NULL AND rename_error IS NULL AND card_state IN (' . $this->placeholders( Link_Record::RENAMEABLE_STATES ) . ') ORDER BY link_id ASC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge( [ $this->table, $account_id, Link_Record::KIND_OFFER ], Link_Record::RENAMEABLE_STATES, [ max( 1, $limit ) ] )
+			),
+			'ARRAY_A'
+		);
+
+		return is_array( $rows ) ? $this->with_ids( $rows ) : [];
+	}
+
+	/**
+	 * Tells whether an account has a row that waits for the marketplace to change its article, so a job is worth queueing.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int $account_id Account id.
+	 * @return bool
+	 */
+	public function has_pending_offer_id_renames( int $account_id ): bool {
+		return [] !== $this->pending_offer_id_renames( $account_id, 1 );
+	}
+
+	/**
+	 * Moves a row to the article the marketplace confirmed. This is the one statement that changes `offer_id` after the export, so the
+	 * unique `(account_id, offer_id)` index decides a clash and the row is never half-moved: the old article, the request waiting for it and its
+	 * error are all replaced together.
+	 *
+	 * A request for yet another article that the merchant made while this one was on its way is kept.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int    $link_id Link id.
+	 * @param string $previous  The article the row carried when the request left.
+	 * @param string $confirmed The article the marketplace now knows the card by.
+	 * @return string `done`, `gone` (the row no longer carries `$old`: it was detached or deleted) or `taken` (another row of the account holds `$confirmed`).
+	 */
+	public function finish_offer_id_rename( int $link_id, string $previous, string $confirmed ): string {
+		$sql = $this->db->prepare(
+			'UPDATE %i SET offer_id = %s, rename_error = CASE WHEN pending_offer_id = %s THEN NULL ELSE rename_error END, pending_offer_id = CASE WHEN pending_offer_id = %s THEN NULL ELSE pending_offer_id END, updated_at = %s WHERE link_id = %d AND offer_id = %s',
+			$this->table,
+			$confirmed,
+			$confirmed,
+			$confirmed,
+			$this->format_time( $this->now() ),
+			$link_id,
+			$previous
+		);
+
+		$changed = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
+
+		if ( false === $changed ) {
+			// The unique index refused the move: another row of the account owns the new article (the database's wording of that differs, so ask the table).
+			$row    = $this->get( $link_id );
+			$holder = null === $row ? null : $this->find_by_offer_id( $row->account_id(), $confirmed );
+
+			return null !== $holder && $holder->link_id() !== $link_id ? 'taken' : 'gone';
+		}
+
+		return 1 === (int) $changed ? 'done' : 'gone';
+	}
+
+	/**
+	 * Keeps what the marketplace answered when it refused a change. The row keeps its old article.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int    $link_id Link id.
+	 * @param string $offer_id The article that was refused.
+	 * @param string $text     The marketplace's answer, as the merchant should read it.
+	 * @return bool False when the row no longer waits for that article.
+	 */
+	public function fail_offer_id_rename( int $link_id, string $offer_id, string $text ): bool {
+		$sql = $this->db->prepare(
+			'UPDATE %i SET rename_error = %s, updated_at = %s WHERE link_id = %d AND pending_offer_id = %s',
+			$this->table,
+			'' === $text ? '-' : $text,
+			$this->format_time( $this->now() ),
+			$link_id,
+			$offer_id
+		);
+
+		return 1 === $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+	}
+
+	/**
+	 * Drops a waiting or refused change of the article (the merchant typed the current article back).
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int $link_id Link id.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function clear_offer_id_rename( int $link_id ): void {
+		$this->affected_or_fail(
+			$this->db->prepare( 'UPDATE %i SET pending_offer_id = NULL, rename_error = NULL, updated_at = %s WHERE link_id = %d', $this->table, $this->format_time( $this->now() ), $link_id ),
+			'The article change could not be cleared.'
+		);
+	}
+
+	/**
+	 * Runs a write and returns the rows it changed.
+	 *
+	 * @param string $sql     Prepared statement.
+	 * @param string $failure What to say when the database refuses it.
+	 * @return int
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	private function affected_or_fail( string $sql, string $failure ): int {
+		$changed = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared by the caller.
+
+		if ( false === $changed ) {
+			throw new \RuntimeException( $failure . ' ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		return (int) $changed;
+	}
+
+	/**
+	 * Builds the placeholders of a list of strings.
+	 *
+	 * @param string[] $values Values.
+	 * @return string
+	 */
+	private function placeholders( array $values ): string {
+		return implode( ', ', array_fill( 0, count( $values ), '%s' ) );
 	}
 
 	/**

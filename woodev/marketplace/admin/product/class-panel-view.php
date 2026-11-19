@@ -46,6 +46,13 @@ final class Panel_View {
 	private $prices;
 
 	/**
+	 * Whether the adapter can change the article of a card that was sent.
+	 *
+	 * @var bool
+	 */
+	private $renames;
+
+	/**
 	 * Creates the view.
 	 *
 	 * @since 2.1.2
@@ -53,11 +60,13 @@ final class Panel_View {
 	 * @param Screen_Names $names    Names.
 	 * @param bool         $oversize Whether the marketplace has an oversize flag ({@see Product_Tab_Facts::supports_oversize()}).
 	 * @param bool         $prices   Whether the marketplace takes prices; false hides the price fields.
+	 * @param bool         $renames  Whether the adapter changes the article of a sent card ({@see \Woodev\Framework\Marketplace\Flows\Offer_Id_Renamer}).
 	 */
-	public function __construct( Screen_Names $names, bool $oversize = false, bool $prices = true ) {
+	public function __construct( Screen_Names $names, bool $oversize = false, bool $prices = true, bool $renames = false ) {
 		$this->names    = $names;
 		$this->oversize = $oversize;
 		$this->prices   = $prices;
+		$this->renames  = $renames;
 	}
 
 	/**
@@ -265,6 +274,31 @@ final class Panel_View {
 	}
 
 	/**
+	 * Words what a variation's article is waiting for, for the table of the variations.
+	 *
+	 * @param array<string,mixed> $row Row of the variation.
+	 * @return string Escaped markup, '' when there is nothing to say.
+	 */
+	private function article_note( array $row ): string {
+		if ( $row['planned'] ) {
+			return ' <span class="woodev-mp-note">' . esc_html__( '(будет отправлен)', 'woodev-plugin-framework' ) . '</span>';
+		}
+
+		$pending = (string) ( $row['pending'] ?? '' );
+		$failed  = ! empty( $row['rename_failed'] );
+
+		if ( '' === $pending ) {
+			return '';
+		}
+
+		return ' <span class="woodev-mp-note' . ( $failed ? ' woodev-mp-error' : '' ) . '">' . esc_html(
+			$failed
+				? sprintf( /* translators: %s: article. */ __( '(не удалось сменить на «%s»)', 'woodev-plugin-framework' ), $pending )
+				: sprintf( /* translators: %s: article. */ __( '(меняется на «%s»)', 'woodev-plugin-framework' ), $pending )
+		) . '</span>';
+	}
+
+	/**
 	 * Prints the table of the variations.
 	 *
 	 * @param array<string,mixed> $block Parent block.
@@ -298,13 +332,50 @@ final class Panel_View {
 				'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td>%5$s</td></tr>',
 				esc_html( '' !== $row['name'] ? $row['name'] : '#' . $row['id'] ),
 				$this->badge( $row['badge'] ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in badge().
-				esc_html( $row['offer_id'] ) . ( $row['planned'] ? ' <span class="woodev-mp-note">' . esc_html__( '(будет отправлен)', 'woodev-plugin-framework' ) . '</span>' : '' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped on the same line.
+				esc_html( $row['offer_id'] ) . $this->article_note( $row ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in article_note().
 				'' === $row['stock'] ? '—' : esc_html( $row['stock'] ),
 				'' === $row['price'] ? '—' : esc_html( trim( $row['price'] . ' ' . $row['currency'] ) )
 			);
 		}
 
 		echo '</tbody></table></div>';
+	}
+
+	/**
+	 * Prints the article of a card the marketplace already has, when the adapter can change it there: the same line with «изменить» as before the export. The
+	 * marketplace keeps the old article until it confirms the new one, so the line says which of the two it is waiting on, and what the marketplace answered when it refused.
+	 *
+	 * @param array<string,mixed> $ids  The article section of the block.
+	 * @param string              $base  Name base.
+	 * @param string              $id    Id prefix.
+	 * @return void
+	 */
+	private function renamable_article( array $ids, string $base, string $id ): void {
+		$waiting = '' !== $ids['pending'] && '' === $ids['rename_error'];
+		$failed  = '' !== $ids['pending'] && '' !== $ids['rename_error'];
+		$note    = '';
+
+		if ( $waiting ) {
+			$note = sprintf( /* translators: 1: new article, 2: marketplace name, 3: current article. */ __( 'меняется на «%1$s»: %2$s пока знает товар по артикулу «%3$s»', 'woodev-plugin-framework' ), $ids['pending'], $this->names->name(), $ids['offer_id'] );
+		} elseif ( $failed ) {
+			$note = sprintf( /* translators: %s: article. */ __( 'не удалось сменить на «%s», подробности — в значке «!» у статуса', 'woodev-plugin-framework' ), $ids['pending'] );
+		}
+
+		$this->row(
+			$id . 'offer_id',
+			__( 'Артикул', 'woodev-plugin-framework' ),
+			sprintf(
+				'<span class="woodev-mp-article"><span class="woodev-mp-article__value">%1$s</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="%2$s">%3$s</button>%7$s</span><input type="text" class="short woodev-mp-article__input" id="%2$s" name="%4$s" value="%5$s" placeholder="%6$s" maxlength="50" hidden />',
+				esc_html( $waiting ? $ids['pending'] : $ids['offer_id'] ),
+				esc_attr( $id . 'offer_id' ),
+				esc_html__( 'изменить', 'woodev-plugin-framework' ),
+				esc_attr( $base . '[offer_id]' ),
+				esc_attr( '' !== $ids['pending'] ? $ids['pending'] : $ids['offer_id'] ),
+				esc_attr( $ids['offer_id'] ),
+				'' === $note ? '' : ' <span class="woodev-mp-note' . ( $failed ? ' woodev-mp-error' : '' ) . '">(' . esc_html( $note ) . ')</span>'
+			),
+			sprintf( /* translators: %s: marketplace name. */ __( 'Артикул товара на маркетплейсе. Его можно изменить и после отправки: новый артикул уйдёт на %s отдельным запросом, а до подтверждения товар остаётся под прежним. Если артикул занят или не подходит, останется прежний, а ответ маркетплейса будет в значке «!» у статуса.', 'woodev-plugin-framework' ), $this->names->name() )
+		);
 	}
 
 	/**
@@ -335,8 +406,12 @@ final class Panel_View {
 					esc_attr( $ids['offer_id'] ),
 					esc_attr( $ids['auto'] )
 				),
-				__( 'Артикул товара на маркетплейсе. По умолчанию берётся артикул (SKU) товара; нажмите «изменить», чтобы задать другой. После отправки артикул уже не меняется.', 'woodev-plugin-framework' )
+				$this->renames
+					? __( 'Артикул товара на маркетплейсе. По умолчанию берётся артикул (SKU) товара; нажмите «изменить», чтобы задать другой. После отправки артикул тоже можно изменить.', 'woodev-plugin-framework' )
+					: __( 'Артикул товара на маркетплейсе. По умолчанию берётся артикул (SKU) товара; нажмите «изменить», чтобы задать другой. После отправки артикул уже не меняется.', 'woodev-plugin-framework' )
 			);
+		} elseif ( $ids['renamable'] ) {
+			$this->renamable_article( $ids, $base, $id );
 		} else {
 			$this->row( $id . 'offer_id', __( 'Артикул', 'woodev-plugin-framework' ), '<span>' . esc_html( $ids['offer_id'] ) . '</span>', __( 'Артикул уже отправлен на маркетплейс и больше не меняется.', 'woodev-plugin-framework' ) );
 		}
@@ -396,6 +471,11 @@ final class Panel_View {
 			}
 
 			$html .= '<h3>' . esc_html( $heading ) . '</h3><ul class="woodev-mp-problems__list">' . $items . '</ul>';
+		}
+
+		if ( '' !== $block['ids']['rename_error'] ) {
+			++$count;
+			$html .= '<h3>' . esc_html__( 'Смена артикула', 'woodev-plugin-framework' ) . '</h3><p class="woodev-mp-error">' . esc_html( sprintf( /* translators: 1: article, 2: marketplace name. */ __( 'Не удалось сменить артикул на «%1$s». Ответ: %2$s', 'woodev-plugin-framework' ), $block['ids']['pending'], $this->names->name() ) ) . '<br />' . nl2br( esc_html( $block['ids']['rename_error'] ) ) . '</p>';
 		}
 
 		if ( '' !== $block['remote_error'] ) {
