@@ -177,6 +177,13 @@ final class Product_Tab {
 	private $extension;
 
 	/**
+	 * Blocks of the variations read in this request, by variation id.
+	 *
+	 * @var array<int,array<int,array<string,mixed>>>
+	 */
+	private $read_variations = [];
+
+	/**
 	 * Creates the tab.
 	 *
 	 * @since 2.1.2
@@ -230,6 +237,7 @@ final class Product_Tab {
 		add_filter( 'woocommerce_product_data_tabs', [ $this, 'add_tab' ] );
 		add_action( 'woocommerce_product_data_panels', [ $this, 'render_panel' ] );
 		add_action( 'woocommerce_product_after_variable_attributes', [ $this, 'render_variation' ], 10, 3 );
+		add_action( 'woocommerce_variation_header', [ $this, 'render_variation_header' ] );
 		add_action( 'woocommerce_process_product_meta', [ $this, 'save_product' ] );
 		add_action( 'woocommerce_save_product_variation', [ $this, 'save_variation' ], 10, 2 );
 		add_action( 'wp_ajax_' . $this->names->product_action(), [ $this, 'handle_ajax' ] );
@@ -270,14 +278,16 @@ final class Product_Tab {
 			return;
 		}
 
-		$blocks = [];
+		$blocks   = [];
+		$accounts = $this->accounts->all( $this->names->id(), true );
 
-		foreach ( $this->accounts->all( $this->names->id(), true ) as $account ) {
+		foreach ( $accounts as $account ) {
 			$blocks[] = $product->is_type( 'variable' ) ? $this->reader->parent_block( $account, $product ) : $this->reader->offer_block( $account, $product );
 		}
 
 		$screen = [
-			'blocks'       => $blocks,
+			'blocks'          => $blocks,
+			'default_account' => $this->default_account_id( $accounts ),
 			'nonce'        => wp_create_nonce( $this->names->save_nonce() ),
 			'ops'          => $this->op_nonces(),
 			'link_scope'   => $this->link_scope_name( $product ),
@@ -309,14 +319,8 @@ final class Product_Tab {
 			return;
 		}
 
-		$blocks = [];
-
-		foreach ( $this->accounts->all( $this->names->id(), true ) as $account ) {
-			$blocks[] = $this->reader->offer_block( $account, $product );
-		}
-
 		$screen = [
-			'blocks'       => $blocks,
+			'blocks'       => $this->variation_blocks( $product ),
 			'nonce'        => wp_create_nonce( $this->names->save_nonce() ),
 			'loop'         => (int) $loop,
 			'settings_url' => $this->urls['settings'],
@@ -328,6 +332,76 @@ final class Product_Tab {
 		}
 
 		$this->view->render_variation( $screen );
+	}
+
+	/**
+	 * Prints the state of one variation in its collapsed header (WooCommerce's `woocommerce_variation_header`), so it can be told without opening
+	 * the variation whether the variation is on the marketplace and whether anything is wrong with it. It is the same badge, with the same problems
+	 * dialog, as inside the opened variation; the blocks are read once per request ({@see self::variation_blocks()}).
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param mixed $variation The variation's post.
+	 * @return void
+	 */
+	public function render_variation_header( $variation = null ): void {
+		$product = $variation instanceof \WP_Post ? wc_get_product( $variation->ID ) : null;
+
+		if ( ! $product instanceof \WC_Product || ! $this->may_edit( $product ) ) {
+			return;
+		}
+
+		$blocks = $this->variation_blocks( $product );
+
+		if ( [] !== $blocks ) {
+			$this->view->render_variation_header(
+				[
+					'blocks'       => $blocks,
+					'settings_url' => $this->urls['settings'],
+					'mappings_url' => $this->urls['mappings'],
+				]
+			);
+		}
+	}
+
+	/**
+	 * Reads the blocks of a variation, one per enabled account. The header and the opened panel of a variation are printed in one request and
+	 * show the same state, so the validator runs once per variation.
+	 *
+	 * @param \WC_Product $variation Variation.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function variation_blocks( \WC_Product $variation ): array {
+		$id = (int) $variation->get_id();
+
+		if ( ! isset( $this->read_variations[ $id ] ) ) {
+			$this->read_variations[ $id ] = [];
+
+			foreach ( $this->accounts->all( $this->names->id(), true ) as $account ) {
+				$this->read_variations[ $id ][] = $this->reader->offer_block( $account, $variation );
+			}
+		}
+
+		return $this->read_variations[ $id ];
+	}
+
+	/**
+	 * Picks the account the tab shows first: the first enabled account whose saved connection check is fine (or has not run yet), as Ozon Seller
+	 * 1.1.7 did with its «first enabled and connected store»; the first enabled one when none is.
+	 *
+	 * @param Account[] $accounts Enabled accounts of this marketplace.
+	 * @return int Account id, 0 when there is none.
+	 */
+	private function default_account_id( array $accounts ): int {
+		foreach ( $accounts as $account ) {
+			$health = $this->accounts->health( $account->id() );
+
+			if ( null === $health || $health->is_ok() ) {
+				return (int) $account->id();
+			}
+		}
+
+		return [] === $accounts ? 0 : (int) reset( $accounts )->id();
 	}
 
 	/**
@@ -443,6 +517,7 @@ final class Product_Tab {
 			'woodevMarketplaceProduct',
 			[
 				'texts' => [
+					'close'   => __( 'Закрыть', 'woodev-plugin-framework' ),
 					'working' => __( 'Выполняем…', 'woodev-plugin-framework' ),
 					'failed'  => __( 'Не получилось: страница не ответила. Обновите её и повторите.', 'woodev-plugin-framework' ),
 				],

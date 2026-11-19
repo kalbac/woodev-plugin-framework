@@ -85,6 +85,9 @@ class RecordsDefinitionTest extends TestCase {
 			'searchable text field'            => [ [ 'bulk_actions' => [ self::searchable_action( [ 'type' => 'text', 'options_source' => false ] ) ] ] ],
 			'searchable multi select'          => [ [ 'bulk_actions' => [ self::searchable_action( [ 'type' => 'multi_select' ] ) ] ] ],
 			'searchable that is not a boolean' => [ [ 'bulk_actions' => [ self::searchable_action( [ 'searchable' => 'yes' ] ) ] ] ],
+			'toggle that is not a boolean'     => [ [ 'bulk_actions' => [ self::searchable_action( [ 'toggle' => true ] ) ] ] ],
+			'hidden_when names no field'       => [ [ 'bulk_actions' => [ self::searchable_action( [ 'hidden_when' => 'nowhere' ] ) ] ] ],
+			'hidden_when names a non-boolean'  => [ [ 'bulk_actions' => [ self::searchable_action( [ 'hidden_when' => 'product' ] ) ] ] ],
 			'account default outside options'  => [ [ 'context' => [ 'label' => 'A', 'options' => [ [ 'value' => 'a1', 'label' => 'A' ] ], 'default' => 'zz' ] ] ],
 		];
 	}
@@ -119,6 +122,18 @@ class RecordsDefinitionTest extends TestCase {
 
 		$this->assertTrue( $definition->get_action( 'link' )['fields'][0]['searchable'] );
 		$this->assertFalse( $definition->get_action( 'send' )['fields'][0]['searchable'], 'an existing field stays what it was' );
+	}
+
+	public function test_a_boolean_can_be_a_toggle_and_hide_another_field(): void {
+		$action = self::searchable_action( [ 'id' => 'category', 'hidden_when' => 'whole_shop', 'required' => true ] );
+		array_unshift( $action['fields'], [ 'id' => 'whole_shop', 'label' => 'Весь магазин', 'type' => 'boolean', 'toggle' => true ] );
+
+		$fields = Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ $action ] ] ) )->get_action( 'link' )['fields'];
+
+		$this->assertTrue( $fields[0]['toggle'] );
+		$this->assertSame( '', $fields[0]['hidden_when'] );
+		$this->assertFalse( $fields[1]['toggle'] );
+		$this->assertSame( 'whole_shop', $fields[1]['hidden_when'] );
 	}
 
 	public function test_an_action_may_name_its_group_and_preview_button_and_a_field_its_placeholder(): void {

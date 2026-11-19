@@ -12152,3 +12152,45 @@ msgstr ""
 #: marketplace/admin/product/class-panel-view.php:645
 msgid "У товара нет категории, поэтому поиск карточек маркетплейса с таким же артикулом идёт по всем товарам магазина, а не только по этому."
 msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:245
+#, php-format
+msgid "Аккаунт %s:"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:286
+msgid "Остаток"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:333
+msgid "изменить"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:338
+msgid "Артикул товара на маркетплейсе. По умолчанию берётся артикул (SKU) товара; нажмите «изменить», чтобы задать другой. После отправки артикул уже не меняется."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:382
+msgid "Исправить перед выгрузкой"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:383
+msgid "Проверьте перед выгрузкой"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:445
+msgid "Проблем не найдено"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:448
+#, php-format
+msgid "Замечаний: %d. Нажмите, чтобы посмотреть."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:454
+msgid "Проверка товара"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:621
+msgid "Перейти на страницу сопоставлений"
+msgstr ""

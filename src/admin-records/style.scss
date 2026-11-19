@@ -642,6 +642,17 @@
 		font-weight: 500;
 		text-transform: none;
 	}
+
+	// The toggle's label reads like the other field labels, not as a lone control.
+	.components-toggle-control__label {
+		font-size: 13px;
+		font-weight: 500;
+	}
+
+	// The place of a field a switch has turned off (a label and a 40px box): keeping it means the dialog does not jump.
+	.woodev-records__field-reserved {
+		min-height: 68px;
+	}
 }
 
 // The list under a searchable field's box: part of the same control, so it takes the box's width and edge.

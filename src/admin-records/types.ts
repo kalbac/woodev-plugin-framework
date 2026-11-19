@@ -90,6 +90,10 @@ export interface ActionField {
 	searchable?: boolean;
 	/** What an empty text field or search box says it wants («Начните вводить название категории»). */
 	placeholder?: string;
+	/** A boolean drawn as a switch instead of a checkbox. */
+	toggle?: boolean;
+	/** The id of a boolean field of the same action; while that one is on, this field is not asked (it is not required and is not sent). */
+	hidden_when?: string;
 	help: string;
 }
 

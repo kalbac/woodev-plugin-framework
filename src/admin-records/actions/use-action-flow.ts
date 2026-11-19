@@ -113,11 +113,32 @@ export function visibleFields( action: ActionDescriptor ): ActionDescriptor[ 'fi
 	return action.fields.filter( ( field ) => field.type !== 'hidden' );
 }
 
-/** Empty text and empty lists are left out, so the server's own "required" sentence is the one that answers. */
-function sendable( payload: Payload ): Payload {
+/** A field a switch of the same dialog has turned off: not asked, not required, not sent. */
+export function isHidden( field: ActionDescriptor[ 'fields' ][ number ], payload: Payload ): boolean {
+	return field.hidden_when !== undefined && field.hidden_when !== '' && payload[ field.hidden_when ] === true;
+}
+
+/** Empty text and empty lists are left out, so the server's own "required" sentence is the one that answers. A hidden field is left out too. */
+function sendable( action: ActionDescriptor, payload: Payload ): Payload {
+	const hidden = new Set( action.fields.filter( ( field ) => isHidden( field, payload ) ).map( ( field ) => field.id ) );
+
 	return Object.fromEntries(
-		Object.entries( payload ).filter( ( [ , value ] ) => ! ( value === '' || ( Array.isArray( value ) && value.length === 0 ) ) )
+		Object.entries( payload ).filter(
+			( [ id, value ] ) => ! hidden.has( id ) && ! ( value === '' || ( Array.isArray( value ) && value.length === 0 ) )
+		)
 	);
+}
+
+/** Whether a field the merchant must fill is still empty: the dialog's forward button waits for it. */
+export function hasEmptyRequired( action: ActionDescriptor, payload: Payload ): boolean {
+	return action.fields.some( ( field ) => {
+		if ( ! field.required || field.type === 'hidden' || field.type === 'boolean' || isHidden( field, payload ) ) {
+			return false;
+		}
+		const value = payload[ field.id ];
+
+		return value === undefined || ( typeof value === 'string' ? value.trim() === '' : Array.isArray( value ) && value.length === 0 );
+	} );
 }
 
 /**
@@ -199,7 +220,7 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 					table.context,
 					flow.action.id,
 					targetOf( flow ),
-					sendable( flow.payload ),
+					sendable( flow.action, flow.payload ),
 					abort.current.signal
 				);
 				if ( mine === ticket.current ) {
@@ -238,7 +259,7 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 					table.context,
 					flow.action.id,
 					targetOf( flow ),
-					sendable( flow.payload )
+					sendable( flow.action, flow.payload )
 				);
 				if ( mine === ticket.current ) {
 					showResult( flow, result, table );
@@ -310,8 +331,13 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 			// A changed input makes the plan on screen a plan of something else: ask again.
 			const errors = { ...flow.fieldErrors };
 			delete errors[ fieldId ];
+			const payload: Payload = { ...flow.payload, [ fieldId ]: value };
+			// Fields a switch has just hidden start empty when it is turned off again: the box they come back in is blank too.
+			if ( value === true ) {
+				flow.action.fields.filter( ( field ) => field.hidden_when === fieldId ).forEach( ( field ) => delete payload[ field.id ] );
+			}
 			patch( {
-				payload: { ...flow.payload, [ fieldId ]: value },
+				payload,
 				fieldErrors: errors,
 				stage: flow.stage === 'previewed' ? 'input' : flow.stage,
 				plan: null,
