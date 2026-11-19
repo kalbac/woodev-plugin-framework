@@ -1143,6 +1143,37 @@ recorded too, and an intent that cannot be stored throws instead of counting as 
 **Rig phase.** The 10 000-product scale test is generated and measured by `tests/integration/fixtures/bulk-run/` (see its README); the
 coordinator runs it, the PR carries the numbers.
 
+## Bulk actions of the Variations tab (framework 2.1.13, #1859)
+
+The «Bulk actions» select of a variable product's Variations tab gets one optgroup per enabled account, named after the marketplace
+(`Screen_Names::name()`, the account's name added when there are several). `Variation_Bulk_Actions` (`admin/product/`) hooks
+WooCommerce's own flow: `woocommerce_variable_product_bulk_edit_actions` prints the options, `woocommerce_bulk_edit_variations` runs
+the chosen one. It is registered by `Embedded_Screens` for an adapter that has the product tab.
+
+- **WooCommerce hands the hook EVERY variation of the product**, not a selection (`WC_AJAX::bulk_edit_variations()`), and fires it after
+  its own handler for any action, then syncs the product and reloads page 1. The class therefore never ends the request, ignores any
+  value that is not `woodev_{adapter id}_bulk_{account id}_{action}`, catches `\Throwable` (an exception would skip WooCommerce's
+  `WC_Product_Variable::sync()`) and prints the answer instead of returning it.
+- **The actions are the table's.** `Site_Products_Bulk::apply()` (built by `Site_Products_Module::bulk_for()`, lazily, only when an
+  action is chosen) plans from the stored links and queues: export (`Export_Scheduler`), send prices / stock and the one-time price pull
+  (intents and `Price_Scheduler`) are Action Scheduler work, the sync switches and unlinking write local data. No remote call in the
+  request. Which actions an adapter cannot serve is `Site_Products_Module::withheld_actions()`, shared with the table's toolbar.
+- **Nine of v1's eleven.** Taken: export, unlink, enable/disable price sync, send prices, load prices, enable/disable stock sync, send
+  stock. Dropped: «Обновить SKU» (v2 writes the marketplace ids when an export finishes and when cards are linked or imported) and
+  «Загрузить остатки» (the account's stock mode «Маркетплейс — главный» mirrors them continuously with a daily reconcile; a one-off
+  overwrite of hundreds of variations' shop stock is a hazard). v2-only table actions stay in the table: warehouse choice needs a
+  dialog, archive is destructive, linking by article is account-wide.
+- **Rights and licence.** `edit_product` on the parent for every action; the ones that write to the marketplace (the table's
+  `license_phrase()` is non-null) also need `manage_woocommerce` and a licence in force — the product tab's rule. A refusal is a notice,
+  never an exception.
+- **The notice.** The bulk request answers with nothing WooCommerce reads, so the handler prints
+  `<!--woodev-bulk:{tone,text,url,link}-->` into the response (JSON with `JSON_HEX_TAG`, so the text cannot close the comment) and
+  `variation-bulk.js` draws a WooCommerce `notice inline` first in `#variable_product_options_inner`, replacing the previous one. The
+  text is the table's own sentence («Принято в работу: N товаров…»), the reasons for what was left out (three at most) and, for queued
+  work, a link to the «Товары» page, where the «Состояние» column shows progress. A failed request draws a generic error.
+- **Limit.** The table's `MAX_OFFERS` (500). A product with more variations is refused with a pointer to «Товары», whose bulk runs have
+  no limit.
+
 ## Verification
 
 Implementation evidence: PHP 7.4 syntax/static analysis, unit and contract tests, Jest

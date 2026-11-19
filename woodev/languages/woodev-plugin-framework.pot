@@ -12254,6 +12254,32 @@ msgstr ""
 msgid "Синхронизируются: %s"
 msgstr ""
 
+#: marketplace/admin/product/class-variation-bulk-actions.php:238
+msgid "Скрыть это уведомление."
+msgstr ""
+
+#: marketplace/admin/product/class-variation-bulk-actions.php:262
+msgid "У вас нет прав на это действие."
+msgstr ""
+
+#: marketplace/admin/product/class-variation-bulk-actions.php:277
+#, php-format
+msgid "У товара слишком много вариаций для одного раза: можно обработать не больше %d. Выполните действие на странице «Товары» — там оно идёт в фоне и справляется с любым числом."
+msgstr ""
+
+#: marketplace/admin/product/class-variation-bulk-actions.php:292
+msgid "Не удалось выполнить действие. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/product/class-variation-bulk-actions.php:316
+#, php-format
+msgid "Не обработано: %s."
+msgstr ""
+
+#: marketplace/admin/product/class-variation-bulk-actions.php:341
+msgid "Открыть «Товары»"
+msgstr ""
+
 #: marketplace/admin/pages/products/class-remote-cards-definition.php:395
 #, php-format
 msgid "Весь аккаунт — список карточек загрузится с маркетплейса %s заново. Он обновляется и сам: раз в сутки и когда маркетплейс сообщает о новой или изменённой карточке. Товары на сайте и карточки на маркетплейсе не меняются."
