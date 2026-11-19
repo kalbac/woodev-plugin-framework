@@ -113,17 +113,17 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( '0', $options['options'][0]['value'], 'The first choice is the account default.' );
 	}
 
-	public function test_linking_by_article_asks_where_and_which_category(): void {
+	public function test_linking_by_article_asks_the_whole_shop_switch_and_which_category(): void {
 		$actions = array_column( $this->definition()->to_array()['bulk_actions'], null, 'id' );
 		$fields  = array_column( $actions['link_by_article']['fields'], null, 'id' );
 
-		$this->assertSame( [ 'where', 'category' ], array_keys( $fields ) );
-		$this->assertSame( 'select', $fields['where']['type'] );
-		$this->assertSame( [ 'shop', 'category' ], array_column( $fields['where']['options'], 'value' ) );
-		$this->assertFalse( $fields['where']['required'], 'Nothing chosen is the whole shop, as before.' );
+		$this->assertSame( [ 'whole_shop', 'category' ], array_keys( $fields ) );
+		$this->assertSame( 'boolean', $fields['whole_shop']['type'] );
+		$this->assertTrue( $fields['whole_shop']['toggle'] );
 		$this->assertTrue( $fields['category']['options_source'] );
 		$this->assertTrue( $fields['category']['searchable'] );
-		$this->assertFalse( $fields['category']['required'], 'Only «одна категория» needs it; the provider checks that.' );
+		$this->assertTrue( $fields['category']['required'], 'The category is needed while the switch is off.' );
+		$this->assertSame( 'whole_shop', $fields['category']['hidden_when'], 'The switch hides it.' );
 		$this->assertArrayNotHasKey( 'fields', Site_Products_Definition::link_by_article(), 'A table that cannot list categories keeps the plain action.' );
 	}
 
@@ -163,12 +163,12 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 	public function test_one_category_reaches_the_bulk_as_the_term_and_the_whole_shop_as_none(): void {
 		$this->shop_has_category_seven();
 
-		$this->provider()->preview( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '7' ] );
-		$this->provider()->apply( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '7' ] );
-		$this->provider()->preview( $this->context(), 'link_by_article', [], [] );
-		$this->provider()->preview( $this->context(), 'link_by_article', [], [ 'where' => 'shop', 'category' => '7' ] );
+		$this->provider()->preview( $this->context(), 'link_by_article', [], [ 'whole_shop' => false, 'category' => '7' ] );
+		$this->provider()->apply( $this->context(), 'link_by_article', [], [ 'whole_shop' => false, 'category' => '7' ] );
+		$this->provider()->preview( $this->context(), 'link_by_article', [], [ 'whole_shop' => true ] );
+		$this->provider()->preview( $this->context(), 'link_by_article', [], [ 'whole_shop' => true, 'category' => '7' ] );
 
-		$this->assertSame( [ 7, 7, null, null ], $this->candidates_asked, 'The apply replans with the category; «весь магазин» ignores a category left in the form.' );
+		$this->assertSame( [ 7, 7, null, null ], $this->candidates_asked, 'The apply replans with the category; the switch ignores a category left in the form.' );
 		$queued = $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() );
 		$this->assertSame( [ $this->account_id, 7, 0 ], $queued[0]['args'] );
 	}
@@ -178,12 +178,13 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 	 */
 	public function bad_categories(): array {
 		return [
-			'none chosen'      => [ [ 'where' => 'category' ] ],
-			'empty'            => [ [ 'where' => 'category', 'category' => '' ] ],
-			'not a number'     => [ [ 'where' => 'category', 'category' => 'shoes' ] ],
-			'zero'             => [ [ 'where' => 'category', 'category' => '0' ] ],
-			'negative'         => [ [ 'where' => 'category', 'category' => '-7' ] ],
-			'not a product_cat' => [ [ 'where' => 'category', 'category' => '99' ] ],
+			'none chosen'      => [ [] ],
+			'switch off'       => [ [ 'whole_shop' => false ] ],
+			'empty'            => [ [ 'whole_shop' => false, 'category' => '' ] ],
+			'not a number'     => [ [ 'whole_shop' => false, 'category' => 'shoes' ] ],
+			'zero'             => [ [ 'whole_shop' => false, 'category' => '0' ] ],
+			'negative'         => [ [ 'whole_shop' => false, 'category' => '-7' ] ],
+			'not a product_cat' => [ [ 'whole_shop' => false, 'category' => '99' ] ],
 		];
 	}
 

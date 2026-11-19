@@ -706,7 +706,11 @@ describe( 'input fields', () => {
 		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
 		fireEvent.click( toolbarButton( 'Выгрузить выбранные' ) );
 		const dialog = await screen.findByRole( 'dialog' );
-		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Показать, что изменится' } ) );
+		// The warehouse is required: the forward button waits until one is chosen, then the server may still refuse it.
+		expect( await within( dialog ).findByRole( 'button', { name: 'Показать, что изменится' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		await within( dialog ).findByRole( 'option', { name: 'Москва' } );
+		fireEvent.change( within( dialog ).getByRole( 'combobox', { name: 'Склад' } ), { target: { value: 'w1' } } );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Показать, что изменится' } ) );
 
 		const alert = await within( dialog ).findByText( 'Заполните это поле.' );
 		expect( alert ).toHaveAttribute( 'role', 'alert' );
