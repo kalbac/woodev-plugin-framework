@@ -425,7 +425,7 @@ export function RecordsTable( {
 		children: rows.flatMap( ( row ) => records.children[ row.id ]?.rows ?? [] ),
 		visibleIds: visibleRowIds( rows, records.children ),
 		epoch: records.epoch,
-		loading: records.list.status === 'loading',
+		loading: records.list.status === 'loading' || records.silentRead,
 		accountActivity: records.list.data?.account_activity ?? null,
 		reload: records.reload,
 		patchRows: records.patchRows,
@@ -509,7 +509,7 @@ export function RecordsTable( {
 				handle={ handle }
 				extensions={ extensions }
 				onChange={ change }
-				onRetry={ records.reload }
+				onRetry={ () => records.reload() }
 				emptyButton={ emptyButton }
 			/>
 		</div>

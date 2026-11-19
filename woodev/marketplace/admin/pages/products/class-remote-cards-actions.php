@@ -830,7 +830,7 @@ final class Remote_Cards_Actions {
 			throw new Action_State_Exception( $text );
 		}
 
-		$text = __( 'Список карточек загружается. Это займёт от нескольких секунд до пары минут — обновите страницу чуть позже.', 'woodev-plugin-framework' );
+		$text = __( 'Список карточек загружается. Это займёт от нескольких секунд до пары минут. Таблица обновится сама, когда загрузка закончится.', 'woodev-plugin-framework' );
 
 		return [
 			'requested' => 1,
@@ -882,7 +882,7 @@ final class Remote_Cards_Actions {
 	 * @return string
 	 */
 	private function already_refreshing(): string {
-		return __( 'Список уже загружается. Дождитесь окончания и обновите страницу.', 'woodev-plugin-framework' );
+		return __( 'Список уже загружается. Дождитесь окончания: таблица обновится сама.', 'woodev-plugin-framework' );
 	}
 
 	/**

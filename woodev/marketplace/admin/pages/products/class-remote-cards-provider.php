@@ -414,7 +414,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		$text = [];
 
 		if ( $refreshing ) {
-			$text[] = __( 'Список карточек загружается с маркетплейса. Когда загрузка закончится, обновите страницу.', 'woodev-plugin-framework' );
+			$text[] = __( 'Список карточек загружается с маркетплейса.', 'woodev-plugin-framework' );
 		}
 
 		if ( $importing ) {

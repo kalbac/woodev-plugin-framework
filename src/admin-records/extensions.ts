@@ -10,6 +10,7 @@
 
 import type { ReactNode } from 'react';
 import type { RecordsApi } from './api';
+import type { ReloadOptions } from './use-records';
 import type { AccountActivity } from './activity/types';
 import type { ActionDescriptor, AdminRecord, Definition, MatchingQuery, Messages, RecordsContext, RecordsQuery } from './types';
 
@@ -36,8 +37,8 @@ export interface TableHandle {
 	loading: boolean;
 	/** The account-wide activity the last list read carried; the activity part keeps it fresh after that. */
 	accountActivity: AccountActivity | null;
-	/** Reads the current page again. */
-	reload: () => void;
+	/** Reads the current page again. `silent` keeps the rows, counts and summary on screen until the answer replaces them. */
+	reload: ( options?: ReloadOptions ) => void;
 	/** Replaces rows by id and removes the ids given, without a list read. */
 	patchRows: ( rows: AdminRecord[], removedIds?: string[] ) => void;
 	/**

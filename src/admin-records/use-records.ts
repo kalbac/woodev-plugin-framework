@@ -82,6 +82,14 @@ function patchList( rows: AdminRecord[], fresh: Map< string, AdminRecord >, remo
 const NO_CHILDREN_BY_ID: Record< string, ChildrenState > = {};
 const NO_EXPANDED: string[] = [];
 
+export interface ReloadOptions {
+	/**
+	 * Keep the rows, the counts and the summary on screen while the read runs, and swap them when it answers — no loading
+	 * skeleton, nothing flickers. A failed silent read still shows the error state.
+	 */
+	silent?: boolean;
+}
+
 export interface Records {
 	definition: DefinitionState;
 	/** The query on screen; `null` until a definition has been read. */
@@ -93,8 +101,13 @@ export interface Records {
 	epoch: number;
 	/** Reads the definition again after it failed. */
 	retryDefinition: () => void;
+	/**
+	 * A read of the list that keeps the rows on screen is in flight ({@link ReloadOptions.silent}). `list.status` stays `ready`
+	 * meanwhile, so an extension that must not start from rows about to be replaced reads this one too.
+	 */
+	silentRead: boolean;
 	/** Reads the current page again; expanded rows that are still there stay expanded. */
-	reload: () => void;
+	reload: ( options?: ReloadOptions ) => void;
 	toggle: ( parentId: string ) => void;
 	/** Reads the next page of a row's children; after a failed read, the page that failed. */
 	readMoreChildren: ( parentId: string ) => void;
@@ -120,6 +133,9 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 	const [ definitionAttempt, setDefinitionAttempt ] = useState( 0 );
 	const [ listAttempt, setListAttempt ] = useState( 0 );
 	const [ epoch, setEpoch ] = useState( 0 );
+	const [ silentRead, setSilentRead ] = useState( false );
+	/** Set by a silent {@link Records.reload}, consumed by the list read it triggers. */
+	const silentRef = useRef( false );
 
 	const definitionGate = useRef( createGate() ).current;
 	const listGate = useRef( createGate() ).current;
@@ -257,7 +273,9 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 		const ticket = listGate.open();
 		const controller = new AbortController();
 
-		if ( scopeRef.current !== envelope ) {
+		const scopeChanged = scopeRef.current !== envelope;
+
+		if ( scopeChanged ) {
 			// Another account, owner or table: ids are only unique inside one context, so nothing read for the old
 			// scope may stay on screen under the new one. Same-scope reloads keep their expansion ({@see keepExpanded}).
 			scopeRef.current = envelope;
@@ -268,18 +286,27 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 			setList( ( known ) => ( { ...known, data: null } ) );
 		}
 
+		// Silent only for the same scope's rows that are on screen: another account, query or table starts from nothing.
+		const silent = silentRef.current && ! scopeChanged;
+		silentRef.current = false;
+
 		setEpoch( ticket );
-		setList( ( known ) => ( { ...known, status: 'loading', message: '' } ) );
+		setSilentRead( silent );
+		if ( ! silent ) {
+			setList( ( known ) => ( { ...known, status: 'loading', message: '' } ) );
+		}
 
 		api.rows( envelope.context, request, controller.signal ).then(
 			( data ) => {
 				if ( listGate.isCurrent( ticket ) ) {
+					setSilentRead( false );
 					setList( { status: 'ready', data, message: '' } );
 					keepExpanded( data.rows );
 				}
 			},
 			( error ) => {
 				if ( listGate.isCurrent( ticket ) && ! isAbort( error ) ) {
+					setSilentRead( false );
 					setList( { status: 'error', data: null, message: errorMessage( error ) } );
 				}
 			}
@@ -356,7 +383,11 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 		expanded: inScope ? expanded : NO_EXPANDED,
 		epoch,
 		retryDefinition: useCallback( () => setDefinitionAttempt( ( attempt ) => attempt + 1 ), [] ),
-		reload: useCallback( () => setListAttempt( ( attempt ) => attempt + 1 ), [] ),
+		silentRead,
+		reload: useCallback( ( options?: ReloadOptions ) => {
+			silentRef.current = options?.silent === true;
+			setListAttempt( ( attempt ) => attempt + 1 );
+		}, [] ),
 		toggle,
 		readMoreChildren,
 		patchRows,
