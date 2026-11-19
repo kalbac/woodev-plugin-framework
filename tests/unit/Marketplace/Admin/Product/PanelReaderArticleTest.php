@@ -46,6 +46,14 @@ final class PanelReaderArticleTest extends TestCase {
 		$this->assertSame( '', $this->ids( $waiting, false )['pending'], 'an adapter without the capability shows no change' );
 	}
 
+	public function test_a_waiting_change_stays_visible_while_the_card_is_being_exported(): void {
+		$row = Link_Record::offer( 3, 41, 0, 'ART-1', [ 'card_state' => Link_Record::STATE_QUEUED, 'pending_offer_id' => 'ART-NEW' ] );
+		$ids = $this->ids( $row, true );
+
+		$this->assertFalse( $ids['renamable'], 'the field is not editable while the card is exported' );
+		$this->assertSame( 'ART-NEW', $ids['pending'], 'but the change is still shown' );
+	}
+
 	/**
 	 * Reads the article section the way the reader does.
 	 *

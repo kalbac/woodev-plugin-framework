@@ -311,7 +311,7 @@ final class Export_Context_Builder implements Price_Context {
 			'shop_currency'    => self::shop_currency(),
 			'account_currency' => self::cabinet_currency( $this->facts->account_currency( $account ) ),
 			'offer_id_owner'   => function ( string $offer_id ) use ( $account_id ): ?int {
-				$owner = $this->links->find_by_offer_id( $account_id, $offer_id );
+				$owner = $this->links->owner_of_article( $account_id, $offer_id );
 
 				return null === $owner ? null : $owner->wc_product_id();
 			},

@@ -357,6 +357,8 @@ final class Panel_View {
 
 		if ( $waiting ) {
 			$note = sprintf( /* translators: 1: new article, 2: marketplace name, 3: current article. */ __( 'меняется на «%1$s»: %2$s пока знает товар по артикулу «%3$s»', 'woodev-plugin-framework' ), $ids['pending'], $this->names->name(), $ids['offer_id'] );
+		} elseif ( $failed && ! empty( $ids['rename_confirmed'] ) ) {
+			$note = sprintf( /* translators: %s: article. */ __( 'на маркетплейсе уже «%s», сайт запишет это позже, подробности — в значке «!» у статуса', 'woodev-plugin-framework' ), $ids['pending'] );
 		} elseif ( $failed ) {
 			$note = sprintf( /* translators: %s: article. */ __( 'не удалось сменить на «%s», подробности — в значке «!» у статуса', 'woodev-plugin-framework' ), $ids['pending'] );
 		}
@@ -413,7 +415,18 @@ final class Panel_View {
 		} elseif ( $ids['renamable'] ) {
 			$this->renamable_article( $ids, $base, $id );
 		} else {
-			$this->row( $id . 'offer_id', __( 'Артикул', 'woodev-plugin-framework' ), '<span>' . esc_html( $ids['offer_id'] ) . '</span>', __( 'Артикул уже отправлен на маркетплейс и больше не меняется.', 'woodev-plugin-framework' ) );
+			$this->row(
+				$id . 'offer_id',
+				__( 'Артикул', 'woodev-plugin-framework' ),
+				'<span>' . esc_html( $ids['offer_id'] ) . '</span>' . $this->article_note(
+					[
+						'planned' => false,
+						'pending' => $ids['pending'] ?? '',
+						'rename_failed' => ! empty( $ids['rename_error'] ),
+					]
+				),
+				__( 'Артикул уже отправлен на маркетплейс и больше не меняется.', 'woodev-plugin-framework' )
+			); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in article_note().
 		}
 
 		if ( '' === $ids['summary'] ) {
@@ -475,7 +488,9 @@ final class Panel_View {
 
 		if ( '' !== $block['ids']['rename_error'] ) {
 			++$count;
-			$html .= '<h3>' . esc_html__( 'Смена артикула', 'woodev-plugin-framework' ) . '</h3><p class="woodev-mp-error">' . esc_html( sprintf( /* translators: 1: article, 2: marketplace name. */ __( 'Не удалось сменить артикул на «%1$s». Ответ: %2$s', 'woodev-plugin-framework' ), $block['ids']['pending'], $this->names->name() ) ) . '<br />' . nl2br( esc_html( $block['ids']['rename_error'] ) ) . '</p>';
+			$html .= '<h3>' . esc_html__( 'Смена артикула', 'woodev-plugin-framework' ) . '</h3><p class="woodev-mp-error">' . ( empty( $block['ids']['rename_confirmed'] )
+				? esc_html( sprintf( /* translators: 1: article, 2: marketplace name. */ __( 'Не удалось сменить артикул на «%1$s». Ответ: %2$s', 'woodev-plugin-framework' ), $block['ids']['pending'], $this->names->name() ) ) . '<br />'
+				: '' ) . nl2br( esc_html( $block['ids']['rename_error'] ) ) . '</p>';
 		}
 
 		if ( '' !== $block['remote_error'] ) {

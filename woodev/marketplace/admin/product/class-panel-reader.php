@@ -333,13 +333,15 @@ final class Panel_Reader {
 		// A sent card keeps its article unless the adapter can change it there: then the article is a line with «изменить» again, showing the article the
 		// merchant asked for while the marketplace has not answered (or has refused), and the answer of a refusal.
 		$renamable = $this->renames_articles && null !== $record && $record->can_rename_offer_id();
-		$pending   = $renamable ? (string) $record->pending_offer_id() : '';
+		// A change that waits stays visible while its card is being exported or refused (then the line is not editable, but it says what is coming).
+		$pending   = $this->renames_articles && null !== $record ? (string) $record->pending_offer_id() : '';
 
 		return [
 			'editable'     => $editable,
 			'renamable'    => $renamable,
 			'pending'      => $pending,
-			'rename_error' => $renamable && '' !== $pending ? (string) $record->rename_error() : '',
+			'rename_error' => '' !== $pending ? (string) $record->rename_error() : '',
+			'rename_confirmed' => '' !== $pending && $record->rename_confirmed(),
 			'offer_id'     => $editable ? (string) $pinned : (string) $shown->offer_id(),
 			'auto'     => $auto,
 			'summary'  => $this->tab_facts->identifier_summary( $shown ),
@@ -659,8 +661,8 @@ final class Panel_Reader {
 				'badge'    => Card_State_Badge::of( $state ),
 				'offer_id' => null === $record || null === $record->offer_id() ? $this->contexts->offer_id( $account, $child, $record ?? Link_Record::offer( $account->id(), $child_id, (int) $child->get_parent_id(), '' ) ) : (string) $record->offer_id(),
 				'planned'  => null === $record || null === $record->frozen_offer_id(),
-				'pending'  => $this->renames_articles && null !== $record && $record->can_rename_offer_id() ? (string) $record->pending_offer_id() : '',
-				'rename_failed' => $this->renames_articles && null !== $record && $record->can_rename_offer_id() && null !== $record->pending_offer_id() && null !== $record->rename_error(),
+				'pending'  => $this->renames_articles && null !== $record ? (string) $record->pending_offer_id() : '',
+				'rename_failed' => $this->renames_articles && null !== $record && null !== $record->pending_offer_id() && null !== $record->rename_error(),
 				'stock'    => null !== $stock && null !== $stock['present'] ? (string) ( (int) $stock['present'] - (int) ( $stock['reserved'] ?? 0 ) ) : '',
 				'price'    => is_array( $sent ) && isset( $sent['price'] ) ? (string) $sent['price'] : '',
 				'currency' => is_array( $sent ) && isset( $sent['currency_code'] ) ? (string) $sent['currency_code'] : '',

@@ -8,6 +8,8 @@
 namespace Woodev\Tests\Unit\Marketplace\Jobs;
 
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Jobs\Account_Job;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Offer_Id_Renames;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
@@ -304,6 +306,133 @@ final class RenameOfferIdsTest extends Sync_Test_Case {
 		$this->assertSame( 'C2', $this->link_of( $ids[2] )->offer_id() );
 	}
 
+	public function test_a_destination_waiting_for_the_marketplace_is_not_given_to_another_product_by_any_assignment(): void {
+		$a = $this->stock_product( 'A', 7001 );
+		$this->renames()->request( $this->account_now(), $this->link_of( $a ), 'DEST' );
+		$b = $this->product( 10 );
+
+		$this->assertSame( $a, $this->links()->owner_of_article( $this->account_id, 'DEST' )->wc_product_id(), 'the export validator and the linker see the owner' );
+		$this->assertFalse( $this->links()->insert_if_absent( Link_Record::offer( $this->account_id, $b, 0, 'DEST' ) ), 'an export creating the row' );
+		$this->assertNull( $this->links()->find( $this->account_id, $b ) );
+
+		$this->assertTrue( $this->links()->insert_if_absent( Link_Record::offer( $this->account_id, $b, 0, '' ) ) );
+		$row = $this->link_of( $b );
+		$this->assertFalse( $this->links()->queue( (int) $row->link_id(), 'DEST' ), 'an export queueing the row' );
+		$this->assertFalse( $this->links()->adopt_card( (int) $row->link_id(), [ 'offer_id' => 'DEST', 'remote_ids' => [ 'product_id' => 9 ], 'state' => 'created' ] ), 'linking an existing card' );
+		$this->assertSame( \Woodev\Framework\Marketplace\Data\Wpdb_Link_Store::EXISTS, $this->links()->insert_card( Link_Record::offer( $this->account_id, 999, 0, 'DEST', [ 'card_state' => 'created' ] ) ), 'importing a card' );
+		$this->assertSame( Card_Linker::CARD_LINKED, ( new Card_Linker( $this->links() ) )->link( $this->account_id, $b, 0, [ 'offer_id' => 'DEST', 'remote_ids' => [ 'product_id' => 9 ] ] ), 'link by article treats it as owned' );
+		$this->assertNull( $this->link_of( $b )->offer_id() );
+	}
+
+	public function test_a_refused_change_releases_the_destination_for_every_assignment(): void {
+		$a = $this->stock_product( 'A', 7001 );
+		$this->renamer->refuse['A'] = 'нет';
+		$this->renames()->request( $this->account_now(), $this->link_of( $a ), 'DEST' );
+		$this->run_job();
+		$b = $this->product( 10 );
+
+		$this->assertTrue( $this->links()->insert_if_absent( Link_Record::offer( $this->account_id, $b, 0, 'DEST' ) ) );
+		$this->assertNull( $this->links()->owner_of_article( $this->account_id, 'MISSING' ) );
+	}
+
+	public function test_a_database_error_after_the_marketplace_confirmed_keeps_the_destination_and_is_retried_without_sending_again(): void {
+		$id = $this->stock_product( 'A', 7001 );
+		$this->renames()->request( $this->account_now(), $this->link_of( $id ), 'DEST' );
+		$this->db->define( 'CREATE TRIGGER reject_rename BEFORE UPDATE OF offer_id ON ' . Sqlite_Tables::table( 'links' ) . " WHEN NEW.offer_id = 'DEST' BEGIN SELECT RAISE(ABORT, 'database write failed'); END" );
+
+		$this->run_job();
+
+		$row = $this->link_of( $id );
+		$this->assertSame( 'A', $row->offer_id() );
+		$this->assertSame( 'DEST', $row->pending_offer_id(), 'the destination is kept' );
+		$this->assertTrue( $row->rename_confirmed() );
+		$this->assertStringContainsString( 'Маркетплейс уже сменил артикул на «DEST»', (string) $row->rename_error() );
+		$this->assertStringNotContainsString( 'had gone', implode( "\n", $this->log ) );
+		$this->assertCount( 2, $this->scheduler->of( $this->hook() ), 'the retry is scheduled' );
+		$this->assertTrue( $this->links()->offer_id_is_reserved( $this->account_id, 'DEST' ), 'the destination stays reserved' );
+
+		$this->db->query( 'DROP TRIGGER reject_rename' );
+		$this->run_job();
+
+		$this->assertSame( [ [ 'A' => 'DEST' ] ], $this->renamer->calls, 'the remote request is not sent again' );
+		$row = $this->link_of( $id );
+		$this->assertSame( 'DEST', $row->offer_id() );
+		$this->assertNull( $row->pending_offer_id() );
+		$this->assertFalse( $row->rename_confirmed() );
+		$this->assertNull( $row->rename_error() );
+	}
+
+	public function test_saving_the_confirmed_destination_again_retries_the_move_and_resets_nothing(): void {
+		$id = $this->stock_product( 'A', 7001 );
+		$this->renames()->request( $this->account_now(), $this->link_of( $id ), 'DEST' );
+		$this->links()->confirm_offer_id_rename( (int) $this->link_of( $id )->link_id(), 'DEST', 'сайт не записал' );
+
+		$this->assertNull( $this->renames()->request( $this->account_now(), $this->link_of( $id ), 'DEST' ) );
+		$this->assertTrue( $this->link_of( $id )->rename_confirmed(), 'the confirmation survives a save' );
+		$this->run_job();
+
+		$this->assertSame( [], $this->renamer->calls );
+		$this->assertSame( 'DEST', $this->link_of( $id )->offer_id() );
+	}
+
+	public function test_a_job_that_runs_while_the_card_is_being_exported_comes_back_and_sends_afterwards(): void {
+		$id = $this->stock_product( 'A', 7001 );
+		$this->renames()->request( $this->account_now(), $this->link_of( $id ), 'DEST' );
+		$link_id = (int) $this->link_of( $id )->link_id();
+		$this->assertTrue( $this->links()->queue( $link_id, 'A' ) );
+
+		$this->run_job();
+
+		$this->assertSame( [], $this->renamer->calls, 'nothing is sent for a queued card' );
+		$this->assertCount( 2, $this->scheduler->of( $this->hook() ), 'the job comes back for the waiting change' );
+		$this->assertSame( 'DEST', $this->link_of( $id )->pending_offer_id() );
+		$this->assertNull( $this->link_of( $id )->rename_error() );
+
+		$this->links()->set_state( $link_id, Link_Record::STATE_CREATED );
+		$this->run_job();
+
+		$this->assertSame( 'DEST', $this->link_of( $id )->offer_id() );
+	}
+
+	public function test_a_change_whose_card_the_marketplace_refused_says_so_instead_of_waiting_for_ever(): void {
+		$id = $this->stock_product( 'A', 7001 );
+		$this->renames()->request( $this->account_now(), $this->link_of( $id ), 'DEST' );
+		$this->links()->set_state( (int) $this->link_of( $id )->link_id(), Link_Record::STATE_FAILED, 'нет' );
+
+		$this->run_job();
+
+		$this->assertStringContainsString( 'Карточка сейчас не принята', (string) $this->link_of( $id )->rename_error() );
+		$this->assertCount( 1, $this->scheduler->of( $this->hook() ) );
+	}
+
+	public function test_a_request_that_fails_for_good_marks_the_batches_it_never_reached_too(): void {
+		$ids = [];
+
+		for ( $i = 1; $i <= 26; $i++ ) {
+			$ids[] = $this->stock_product( 'ART-' . $i, 7000 + $i );
+			$this->renames()->request( $this->account_now(), $this->link_of( end( $ids ) ), 'NEW-' . $i );
+		}
+
+		$this->renamer->throw = Fake_Remote_Exception::of( Remote_Error::FAIL, 'validation error' );
+		$this->run_job();
+
+		$this->assertCount( 25, $this->renamer->calls[0] );
+		$this->assertStringContainsString( 'validation error', (string) $this->link_of( $ids[25] )->rename_error(), 'the 26th change is not left looking queued' );
+		$this->assertSame( 'NEW-26', $this->link_of( $ids[25] )->pending_offer_id(), 'saving it again asks again' );
+	}
+
+	public function test_a_job_that_gives_up_before_sending_marks_every_waiting_change(): void {
+		$id = $this->stock_product( 'A', 7001 );
+		$this->renames()->request( $this->account_now(), $this->link_of( $id ), 'DEST' );
+		$this->licensed = false;
+
+		$this->run_job( Account_Job::MAX_PUT_OFFS );
+
+		$this->assertSame( [], $this->renamer->calls );
+		$this->assertNotNull( $this->link_of( $id )->rename_error(), 'the product shows why the change will not happen' );
+		$this->assertSame( 'A', $this->link_of( $id )->offer_id() );
+	}
+
 	public function test_a_variation_is_changed_like_a_simple_product(): void {
 		$parent    = $this->product( null );
 		$variation = $this->stock_product( 'VAR-1', 7201 );
@@ -345,9 +474,10 @@ final class RenameOfferIdsTest extends Sync_Test_Case {
 	/**
 	 * Runs the job of the account once, as Action Scheduler would.
 	 *
+	 * @param int $put_offs Waits the action already had.
 	 * @return void
 	 */
-	private function run_job(): void {
+	private function run_job( int $put_offs = 0 ): void {
 		$scheduler = new Rename_Scheduler( $this->names() );
 		$gate      = $this->job_gate();
 
@@ -359,7 +489,7 @@ final class RenameOfferIdsTest extends Sync_Test_Case {
 			$this->classifier,
 			new Api_Error_Ring( $this->db, Sqlite_Tables::table( 'api_errors' ), $this->clock() ),
 			[ $this, 'log_line' ]
-		) )->run( $this->account_id, 0, 0 );
+		) )->run( $this->account_id, 0, $put_offs );
 	}
 
 	/**

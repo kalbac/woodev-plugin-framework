@@ -177,6 +177,10 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @return bool True when the row now holds the card.
 	 */
 	public function adopt_card( int $link_id, array $card, ?Claim_Fence $fence = null ): bool {
+		if ( $this->offer_id_is_reserved( $this->account_of( $link_id ), (string) $card['offer_id'], $link_id ) ) {
+			return false; // Another product waits for the marketplace to give its card this article.
+		}
+
 		list( $fence_sql, $fence_args ) = $this->fence_clause( $fence );
 
 		$error         = (string) ( $card['error_text'] ?? '' );
@@ -247,6 +251,10 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @throws Persistence_Exception When the database refuses the insert.
 	 */
 	private function insert_ignore( Link_Record $record ): bool {
+		if ( null !== $record->offer_id() && $this->offer_id_is_reserved( $record->account_id(), $record->offer_id() ) ) {
+			return false; // The article is spoken for by a change that waits for the marketplace.
+		}
+
 		$columns               = $record->to_columns();
 		$columns['updated_at'] = $this->format_time( $this->now() );
 		$columns['card_state'] = '' === $columns['card_state'] ? Link_Record::STATE_UNLINKED : $columns['card_state'];
@@ -316,6 +324,10 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @throws Persistence_Exception When the database refuses the insert.
 	 */
 	private function insert_card_row( Link_Record $record, string $error_text, ?Claim_Fence $fence ): string {
+		if ( null !== $record->offer_id() && $this->offer_id_is_reserved( $record->account_id(), $record->offer_id() ) ) {
+			return self::EXISTS; // The article is spoken for by a change that waits for the marketplace.
+		}
+
 		$columns               = $record->to_columns();
 		$columns['updated_at'] = $this->format_time( $this->now() );
 		$columns['card_state'] = '' === $columns['card_state'] ? Link_Record::STATE_UNLINKED : $columns['card_state'];
@@ -583,6 +595,10 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @return bool True when the row is now queued.
 	 */
 	public function queue( int $link_id, string $offer_id ): bool {
+		if ( $this->offer_id_is_reserved( $this->account_of( $link_id ), $offer_id, $link_id ) ) {
+			return false; // The article is spoken for by a change that waits for the marketplace.
+		}
+
 		$now = $this->format_time( $this->now() );
 		$sql = $this->db->prepare(
 			'UPDATE %i SET card_state = %s, offer_id = CASE WHEN NOT EXISTS (SELECT 1 FROM %i AS known WHERE known.link_id = %i.link_id) AND card_state IN (%s, %s, %s) THEN %s ELSE offer_id END, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND kind = %s AND card_state NOT IN (%s, %s)',
@@ -906,7 +922,7 @@ final class Wpdb_Link_Store implements Link_Store {
 		}
 
 		$sql = $this->db->prepare(
-			'UPDATE %i SET card_state = %s, pending_offer_id = NULL, rename_error = NULL, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE account_id = %d AND kind = %s AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+			'UPDATE %i SET card_state = %s, pending_offer_id = NULL, rename_error = NULL, rename_confirmed = 0, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE account_id = %d AND kind = %s AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 			array_merge( [ $this->table, Link_Record::STATE_UNLINKED, $this->format_time( $this->now() ), $account_id, Link_Record::KIND_OFFER ], $ids )
 		);
 
@@ -1036,7 +1052,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 */
 	public function detach( int $account_id, int $link_id ): bool {
 		$sql = $this->db->prepare(
-			'UPDATE %i SET card_state = %s, offer_id = NULL, pending_offer_id = NULL, rename_error = NULL, is_created = 0, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND card_state <> %s',
+			'UPDATE %i SET card_state = %s, offer_id = NULL, pending_offer_id = NULL, rename_error = NULL, rename_confirmed = 0, is_created = 0, last_task_id = NULL, last_error_code = NULL, last_error_text = NULL, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND card_state <> %s',
 			$this->table,
 			Link_Record::STATE_UNLINKED,
 			$this->format_time( $this->now() ),
@@ -1222,16 +1238,15 @@ final class Wpdb_Link_Store implements Link_Store {
 	public function offer_id_is_taken( int $account_id, string $offer_id, int $except_link_id ): bool {
 		$found = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
 			$this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
-				'SELECT link_id FROM %i WHERE account_id = %d AND link_id <> %d AND ( offer_id = %s OR ( pending_offer_id = %s AND rename_error IS NULL ) ) LIMIT 1',
+				'SELECT link_id FROM %i WHERE account_id = %d AND link_id <> %d AND offer_id = %s LIMIT 1',
 				$this->table,
 				$account_id,
 				$except_link_id,
-				$offer_id,
 				$offer_id
 			)
 		);
 
-		return null !== $found && '' !== $found;
+		return ( null !== $found && '' !== $found ) || $this->offer_id_is_reserved( $account_id, $offer_id, $except_link_id );
 	}
 
 	/**
@@ -1248,7 +1263,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 */
 	public function request_offer_id_rename( int $account_id, int $link_id, string $offer_id ): bool {
 		$sql = $this->db->prepare(
-			'UPDATE %i SET pending_offer_id = %s, rename_error = NULL, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND offer_id IS NOT NULL AND offer_id <> %s AND card_state IN (' . $this->placeholders( Link_Record::RENAMEABLE_STATES ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+			'UPDATE %i SET pending_offer_id = %s, rename_error = NULL, rename_confirmed = 0, updated_at = %s WHERE link_id = %d AND account_id = %d AND kind = %s AND offer_id IS NOT NULL AND offer_id <> %s AND card_state IN (' . $this->placeholders( Link_Record::RENAMEABLE_STATES ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 			array_merge( [ $this->table, $offer_id, $this->format_time( $this->now() ), $link_id, $account_id, Link_Record::KIND_OFFER, $offer_id ], Link_Record::RENAMEABLE_STATES )
 		);
 
@@ -1267,7 +1282,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	public function pending_offer_id_renames( int $account_id, int $limit ): array {
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
 			$this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
-				'SELECT * FROM %i WHERE account_id = %d AND kind = %s AND offer_id IS NOT NULL AND pending_offer_id IS NOT NULL AND rename_error IS NULL AND card_state IN (' . $this->placeholders( Link_Record::RENAMEABLE_STATES ) . ') ORDER BY link_id ASC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				'SELECT * FROM %i WHERE account_id = %d AND kind = %s AND offer_id IS NOT NULL AND pending_offer_id IS NOT NULL AND ( rename_error IS NULL OR rename_confirmed = 1 ) AND card_state IN (' . $this->placeholders( Link_Record::RENAMEABLE_STATES ) . ') ORDER BY link_id ASC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 				array_merge( [ $this->table, $account_id, Link_Record::KIND_OFFER ], Link_Record::RENAMEABLE_STATES, [ max( 1, $limit ) ] )
 			),
 			'ARRAY_A'
@@ -1300,12 +1315,13 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @param int    $link_id Link id.
 	 * @param string $previous  The article the row carried when the request left.
 	 * @param string $confirmed The article the marketplace now knows the card by.
-	 * @return string `done`, `gone` (the row no longer carries `$old`: it was detached or deleted) or `taken` (another row of the account holds `$confirmed`).
+	 * @return string `done`, `gone` (the row no longer carries `$previous`: it was detached or deleted), `taken` (another row of the account holds `$confirmed`) or `error` (the database refused; the row is unchanged).
 	 */
 	public function finish_offer_id_rename( int $link_id, string $previous, string $confirmed ): string {
 		$sql = $this->db->prepare(
-			'UPDATE %i SET offer_id = %s, rename_error = CASE WHEN pending_offer_id = %s THEN NULL ELSE rename_error END, pending_offer_id = CASE WHEN pending_offer_id = %s THEN NULL ELSE pending_offer_id END, updated_at = %s WHERE link_id = %d AND offer_id = %s',
+			'UPDATE %i SET offer_id = %s, rename_error = CASE WHEN pending_offer_id = %s THEN NULL ELSE rename_error END, rename_confirmed = CASE WHEN pending_offer_id = %s THEN 0 ELSE rename_confirmed END, pending_offer_id = CASE WHEN pending_offer_id = %s THEN NULL ELSE pending_offer_id END, updated_at = %s WHERE link_id = %d AND offer_id = %s',
 			$this->table,
+			$confirmed,
 			$confirmed,
 			$confirmed,
 			$confirmed,
@@ -1316,15 +1332,139 @@ final class Wpdb_Link_Store implements Link_Store {
 
 		$changed = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
 
-		if ( false === $changed ) {
-			// The unique index refused the move: another row of the account owns the new article (the database's wording of that differs, so ask the table).
-			$row    = $this->get( $link_id );
-			$holder = null === $row ? null : $this->find_by_offer_id( $row->account_id(), $confirmed );
-
-			return null !== $holder && $holder->link_id() !== $link_id ? 'taken' : 'gone';
+		if ( false !== $changed ) {
+			return 1 === (int) $changed ? 'done' : 'gone';
 		}
 
-		return 1 === (int) $changed ? 'done' : 'gone';
+		// The statement failed: ask the table why, because a database error must never read as «the link is gone».
+		$row = $this->get( $link_id );
+
+		if ( null === $row || $row->offer_id() !== $previous ) {
+			return 'gone';
+		}
+
+		$holder = $this->find_by_offer_id( $row->account_id(), $confirmed );
+
+		return null !== $holder && $holder->link_id() !== $link_id ? 'taken' : 'error';
+	}
+
+	/**
+	 * Remembers that the marketplace already changed the card, when the shop's own move failed: the request is not sent again, the row keeps the
+	 * destination and an error the merchant can read, and the move is retried.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int    $link_id  Link id.
+	 * @param string $offer_id The article the marketplace confirmed.
+	 * @param string $text     What the merchant reads.
+	 * @return bool False when the row no longer waits for that article.
+	 */
+	public function confirm_offer_id_rename( int $link_id, string $offer_id, string $text ): bool {
+		$sql = $this->db->prepare(
+			'UPDATE %i SET rename_confirmed = 1, rename_error = %s, updated_at = %s WHERE link_id = %d AND pending_offer_id = %s',
+			$this->table,
+			$text,
+			$this->format_time( $this->now() ),
+			$link_id,
+			$offer_id
+		);
+
+		return 1 === $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+	}
+
+	/**
+	 * Puts every change of an account that waits and has not been refused into the failed state with one text, when the job that would have sent
+	 * them stops for good (a refused key, a lapsed licence, a put-off ceiling, a request that cannot be repeated). A change the marketplace already
+	 * confirmed is left to its retry.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $text       What the merchant reads.
+	 * @return int Rows changed.
+	 */
+	public function fail_waiting_offer_id_renames( int $account_id, string $text ): int {
+		return $this->affected( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+			$this->db->prepare(
+				'UPDATE %i SET rename_error = %s, updated_at = %s WHERE account_id = %d AND pending_offer_id IS NOT NULL AND rename_error IS NULL',
+				$this->table,
+				'' === $text ? '-' : $text,
+				$this->format_time( $this->now() ),
+				$account_id
+			)
+		);
+	}
+
+	/**
+	 * Lists the rows that wait for a change while their card is not in a state the marketplace can rename (an update is being exported, or the
+	 * card was refused).
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int $account_id Account id.
+	 * @return Link_Record[]
+	 */
+	public function waiting_offer_id_renames_not_ready( int $account_id ): array {
+		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+			$this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+				'SELECT * FROM %i WHERE account_id = %d AND kind = %s AND pending_offer_id IS NOT NULL AND rename_error IS NULL AND card_state NOT IN (' . $this->placeholders( Link_Record::RENAMEABLE_STATES ) . ') ORDER BY link_id ASC',
+				array_merge( [ $this->table, $account_id, Link_Record::KIND_OFFER ], Link_Record::RENAMEABLE_STATES )
+			),
+			'ARRAY_A'
+		);
+
+		return is_array( $rows ) ? $this->with_ids( $rows ) : [];
+	}
+
+	/**
+	 * Finds the row an article belongs to: the one that carries it, else the one a change that waits for the marketplace has reserved it for.
+	 * The export's «who holds this article» question and the linking of existing cards ask this, so a destination is never given away.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $offer_id   Article.
+	 * @return Link_Record|null
+	 */
+	public function owner_of_article( int $account_id, string $offer_id ): ?Link_Record {
+		$carrier = $this->find_by_offer_id( $account_id, $offer_id );
+
+		if ( null !== $carrier || '' === $offer_id ) {
+			return $carrier;
+		}
+
+		return $this->one(
+			$this->db->prepare( 'SELECT * FROM %i WHERE account_id = %d AND pending_offer_id = %s AND ( rename_error IS NULL OR rename_confirmed = 1 ) LIMIT 1', $this->table, $account_id, $offer_id ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+		);
+	}
+
+	/**
+	 * Tells whether another row has been asked to change to an article and the marketplace has not refused it: the article is spoken for, so no
+	 * product may be given it. {@see self::offer_id_is_taken()} adds the rows that already carry it. Every statement that assigns an article asks this.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int    $account_id     Account id.
+	 * @param string $offer_id       Article.
+	 * @param int    $except_link_id The row that wants the article (0 for none).
+	 * @return bool
+	 */
+	public function offer_id_is_reserved( int $account_id, string $offer_id, int $except_link_id = 0 ): bool {
+		if ( '' === $offer_id ) {
+			return false;
+		}
+
+		$found = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+			$this->db->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+				'SELECT link_id FROM %i WHERE account_id = %d AND link_id <> %d AND pending_offer_id = %s AND ( rename_error IS NULL OR rename_confirmed = 1 ) LIMIT 1',
+				$this->table,
+				$account_id,
+				$except_link_id,
+				$offer_id
+			)
+		);
+
+		return null !== $found && '' !== $found;
 	}
 
 	/**
@@ -1339,7 +1479,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 */
 	public function fail_offer_id_rename( int $link_id, string $offer_id, string $text ): bool {
 		$sql = $this->db->prepare(
-			'UPDATE %i SET rename_error = %s, updated_at = %s WHERE link_id = %d AND pending_offer_id = %s',
+			'UPDATE %i SET rename_error = %s, rename_confirmed = 0, updated_at = %s WHERE link_id = %d AND pending_offer_id = %s',
 			$this->table,
 			'' === $text ? '-' : $text,
 			$this->format_time( $this->now() ),
@@ -1361,7 +1501,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 */
 	public function clear_offer_id_rename( int $link_id ): void {
 		$this->affected_or_fail(
-			$this->db->prepare( 'UPDATE %i SET pending_offer_id = NULL, rename_error = NULL, updated_at = %s WHERE link_id = %d', $this->table, $this->format_time( $this->now() ), $link_id ),
+			$this->db->prepare( 'UPDATE %i SET pending_offer_id = NULL, rename_error = NULL, rename_confirmed = 0, updated_at = %s WHERE link_id = %d', $this->table, $this->format_time( $this->now() ), $link_id ),
 			'The article change could not be cleared.'
 		);
 	}

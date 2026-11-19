@@ -1128,9 +1128,9 @@ visible failure; the explicit, queued, checked, visible change here is the fix o
 does not change. An adapter without either keeps the old frozen article, the old help text and no job (`Flow_Wiring::offer_id_renames()` hooks the job, `Embedded_Screens::product_tab()` switches the screen).
 The adapter answers for every pair; a pair it does not answer for is treated as refused. A request that fails as a whole throws, and the adapter's `Error_Classifier` decides.
 
-**State lives on the link row** (schema revision 2): `links.pending_offer_id` (the article the merchant asked for) and `links.rename_error` (the marketplace's answer when it refused),
+**State lives on the link row** (schema revision 2): `links.pending_offer_id` (the article the merchant asked for), `links.rename_error` (the marketplace's answer when it refused) and `links.rename_confirmed` (the marketplace already changed the card; only the shop's move is left),
 kept apart from `last_error_*` because export and poll writes wipe those. `offer_id` itself changes in exactly one statement (`Wpdb_Link_Store::finish_offer_id_rename()`), so the unique
-`(account_id, offer_id)` index is the arbiter of a clash and a row is never half-moved. Both columns are left out of `Link_Record::to_columns()`, so an insert works on a site whose tables
+`(account_id, offer_id)` index is the arbiter of a clash and a row is never half-moved. The three columns are left out of `Link_Record::to_columns()`, so an insert works on a site whose tables
 are not yet at revision 2.
 
 | Step | Where | What happens |
@@ -1145,9 +1145,11 @@ are not yet at revision 2.
 Variations are rows like any other: each variation's panel posts its own `offer_id`, the parent's variations table notes «(меняется на …)» / «(не удалось сменить на …)». A detach or a reset of the
 state clears the waiting change. A cleared field leaves a sent card's article alone («follow the SKU» has no meaning once the card is on the marketplace).
 
-**Known limits.** The framework checks uniqueness against the shop's own links only; a card of the same seller that is not linked to any product is the marketplace's answer to give
-(it arrives as the refusal text). The refusal text is the marketplace's, shown as it came. If the marketplace changed the card but a database write then failed, the row keeps the old article
-and shows the error: the next «Связать по артикулу» run is the way back.
+**One reservation rule.** A destination a change waits for belongs to that row until the marketplace refuses it (`Wpdb_Link_Store::offer_id_is_reserved()` / `owner_of_article()`). Every statement that assigns an article asks it: `insert_if_absent`, `insert_card`, `adopt_card`, `queue`; the export validator's «who holds this article» and `Card_Linker` use `owner_of_article()`. A check before the statement is not serialised against a concurrent request; the last guard is the unique index, whose clash after the marketplace confirmed is reported (`taken`), never half-applied.
+
+**Failure paths.** A database error after the marketplace confirmed is not «the link is gone»: `finish_offer_id_rename()` answers `error`, the row keeps the destination with `rename_confirmed = 1` and a readable error, the request is never sent again and the job retries the move (5 minutes). A change whose card is queued/submitted (an update is being exported) keeps its visible state and the job comes back every 2 minutes; a card the marketplace refused turns the change into a failed one. A job that gives up for good (refused key, lapsed licence, put-off ceiling, a request that cannot be repeated) marks **every** waiting change of the account failed with the reason (`fail_waiting_offer_id_renames()`); saving the article again asks again.
+
+**Known limits.** The framework checks uniqueness against the shop's own links only; a card of the same seller that is not linked to any product is the marketplace's answer to give (it arrives as the refusal text). The refusal text is the marketplace's, shown as it came. At most 25 stuck confirmed rows are looked at per batch.
 
 ## Verification
 

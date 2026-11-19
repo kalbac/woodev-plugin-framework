@@ -168,6 +168,7 @@ final class Link_Record {
 				'offer_id'            => null === $offer_id || '' === $offer_id ? null : (string) $offer_id,
 				'pending_offer_id'    => self::nullable_text( $row['pending_offer_id'] ?? null ),
 				'rename_error'        => self::nullable_text( $row['rename_error'] ?? null ),
+				'rename_confirmed'    => (int) ( $row['rename_confirmed'] ?? 0 ),
 				'remote_ids'          => self::clean_ids( (array) ( $row['remote_ids'] ?? [] ) ),
 				'card_state'          => (string) ( $row['card_state'] ?? self::STATE_UNLINKED ),
 				'is_created'          => (int) ( $row['is_created'] ?? 0 ),
@@ -202,7 +203,7 @@ final class Link_Record {
 		$columns = $this->fields;
 		// The rename columns are written only by the rename flow's own statements: leaving them out keeps an insert working on a site whose
 		// tables are not yet at the schema revision that added them.
-		unset( $columns['link_id'], $columns['remote_ids'], $columns['pending_offer_id'], $columns['rename_error'] );
+		unset( $columns['link_id'], $columns['remote_ids'], $columns['pending_offer_id'], $columns['rename_error'], $columns['rename_confirmed'] );
 
 		foreach ( [ 'price_rule_override', 'attribute_overrides' ] as $json ) {
 			$columns[ $json ] = null === $columns[ $json ] ? null : (string) wp_json_encode( $columns[ $json ] );
@@ -297,6 +298,17 @@ final class Link_Record {
 	 */
 	public function rename_error(): ?string {
 		return $this->fields['rename_error'];
+	}
+
+	/**
+	 * Whether the marketplace already changed the card to {@see self::pending_offer_id()} and only the shop's own move is left.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return bool
+	 */
+	public function rename_confirmed(): bool {
+		return 1 === $this->fields['rename_confirmed'];
 	}
 
 	/**

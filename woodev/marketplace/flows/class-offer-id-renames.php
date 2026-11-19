@@ -65,11 +65,17 @@ final class Offer_Id_Renames {
 	private $log;
 
 	/**
-	 * The rows of the batch that is on its way: link id => the article it waits for.
+	 * Rows this run already looked at (link id => true), so a row whose local move keeps failing is not retried again within one run.
 	 *
-	 * @var array<int,string>
+	 * @var array<int,true>
 	 */
-	private $in_flight = [];
+	private $seen = [];
+
+	/**
+	 * Seconds the job waits before it retries a local move that the database refused, or looks again at a card that is being exported.
+	 */
+	public const RETRY_AFTER = 300;
+	public const UNREADY_WAIT = 120;
 
 	/**
 	 * Creates the service.
@@ -145,7 +151,7 @@ final class Offer_Id_Renames {
 			return null;
 		}
 
-		if ( $offer_id === $row->pending_offer_id() && null === $row->rename_error() ) {
+		if ( $offer_id === $row->pending_offer_id() && ( null === $row->rename_error() || $row->rename_confirmed() ) ) {
 			return $this->queue( $account );
 		}
 
@@ -176,56 +182,85 @@ final class Offer_Id_Renames {
 	 * @throws \Throwable When the request fails as a whole.
 	 */
 	public function send( Account $account, Offer_Id_Renamer $renamer, string $context ): int {
-		$this->in_flight = [];
-		$waiting         = $this->links->pending_offer_id_renames( $account->id(), max( 1, $renamer->max_renames_per_request() ) );
-		$pairs           = [];
-		$rows            = [];
+		$waiting = array_values(
+			array_filter(
+				$this->links->pending_offer_id_renames( $account->id(), max( 1, $renamer->max_renames_per_request() ) ),
+				function ( Link_Record $row ): bool {
+					return ! isset( $this->seen[ (int) $row->link_id() ] );
+				}
+			)
+		);
+		$pairs   = [];
+		$rows    = [];
 
 		foreach ( $waiting as $row ) {
 			$old = (string) $row->offer_id();
 			$new = (string) $row->pending_offer_id();
+
+			$this->seen[ (int) $row->link_id() ] = true;
+
+			if ( $row->rename_confirmed() ) {
+				// The marketplace already changed this card: only the shop's own move is left, and the request is not sent again.
+				$this->settle( $account, $row, $new, Offer_Id_Rename_Outcome::renamed() );
+				continue;
+			}
 
 			if ( '' === $new || $new === $old || isset( $pairs[ $old ] ) || in_array( $new, $pairs, true ) ) {
 				$this->links->fail_offer_id_rename( (int) $row->link_id(), $new, __( 'Артикул уже занят другим изменением. Выберите другой.', 'woodev-plugin-framework' ) );
 				continue;
 			}
 
-			$pairs[ $old ]                  = $new;
-			$rows[ $old ]                   = $row;
-			$this->in_flight[ (int) $row->link_id() ] = $new;
+			$pairs[ $old ] = $new;
+			$rows[ $old ]  = $row;
 		}
 
-		if ( [] === $pairs ) {
-			$this->in_flight = [];
+		if ( [] !== $pairs ) {
+			$answers = $renamer->rename_offer_ids( $account, $pairs, $context );
 
-			return count( $waiting );
+			foreach ( $rows as $old => $row ) {
+				$this->settle( $account, $row, $pairs[ $old ], $answers[ $old ] ?? null );
+			}
 		}
-
-		$answers = $renamer->rename_offer_ids( $account, $pairs, $context );
-
-		foreach ( $rows as $old => $row ) {
-			$this->settle( $account, $row, $pairs[ $old ], $answers[ $old ] ?? null );
-		}
-
-		$this->in_flight = [];
 
 		return count( $waiting );
 	}
 
 	/**
-	 * Gives the batch that was on its way up: its rows keep the old article and the reason.
+	 * Puts every change of the account that waits and was not refused into the failed state, when the job stops for good. The merchant sees the
+	 * reason on the product and saving the article again asks again.
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param string $text What went wrong, as the merchant should read it.
+	 * @param int    $account_id Account id.
+	 * @param string $text       What went wrong, as the merchant should read it.
 	 * @return void
 	 */
-	public function fail_in_flight( string $text ): void {
-		foreach ( $this->in_flight as $link_id => $offer_id ) {
-			$this->links->fail_offer_id_rename( $link_id, $offer_id, $text );
+	public function fail_waiting( int $account_id, string $text ): void {
+		$this->links->fail_waiting_offer_id_renames( $account_id, $text );
+	}
+
+	/**
+	 * Deals with the changes whose card is not renamable right now: while an update of the card is exported or polled they keep waiting (the job
+	 * looks again later), a card the marketplace refused cannot be renamed and the change says so.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param Account $account Account.
+	 * @return bool True when some change still waits for its card, so the job must come back.
+	 */
+	public function settle_unready( Account $account ): bool {
+		$again = false;
+
+		foreach ( $this->links->waiting_offer_id_renames_not_ready( $account->id() ) as $row ) {
+			if ( in_array( $row->card_state(), [ Link_Record::STATE_QUEUED, Link_Record::STATE_SUBMITTED ], true ) ) {
+				$again = true;
+				continue;
+			}
+
+			$this->links->fail_offer_id_rename( (int) $row->link_id(), (string) $row->pending_offer_id(), __( 'Карточка сейчас не принята маркетплейсом, поэтому сменить артикул нельзя. Исправьте карточку и сохраните артикул ещё раз.', 'woodev-plugin-framework' ) );
 		}
 
-		$this->in_flight = [];
+		return $again;
 	}
 
 	/**
@@ -244,6 +279,20 @@ final class Offer_Id_Renames {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Schedules the job again for a local move that failed.
+	 *
+	 * @param Account $account Account.
+	 * @return void
+	 */
+	private function retry_move( Account $account ): void {
+		try {
+			$this->scheduler->again( $account->id(), self::RETRY_AFTER, 0, 0 );
+		} catch ( \RuntimeException $e ) {
+			call_user_func( $this->log, 'rename_offer_ids: account ' . $account->id() . ': the retry was not scheduled: ' . $e->getMessage() );
+		}
 	}
 
 	/**
@@ -285,6 +334,23 @@ final class Offer_Id_Renames {
 			);
 			$this->links->fail_offer_id_rename( $link_id, $wanted, $text );
 			call_user_func( $this->log, sprintf( 'rename_offer_ids: account %d: article %s was changed to %s on the marketplace but the shop already holds %s', $account->id(), $old, $wanted, $wanted ) );
+
+			return;
+		}
+
+		if ( 'error' === $moved ) {
+			// The marketplace changed the card but the shop's own write failed: keep the destination, never send the request again, show it, retry the move.
+			$this->links->confirm_offer_id_rename(
+				$link_id,
+				$wanted,
+				sprintf(
+					/* translators: %s: article. */
+					__( 'Маркетплейс уже сменил артикул на «%s», но сайт не смог это записать. Запись будет повторена; если ошибка остаётся, сохраните товар ещё раз.', 'woodev-plugin-framework' ),
+					$wanted
+				)
+			);
+			call_user_func( $this->log, sprintf( 'rename_offer_ids: account %d: article %s was changed to %s on the marketplace but the shop could not write it; the move will be retried', $account->id(), $old, $wanted ) );
+			$this->retry_move( $account );
 
 			return;
 		}

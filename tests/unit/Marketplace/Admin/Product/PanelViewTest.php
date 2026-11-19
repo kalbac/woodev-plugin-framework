@@ -337,6 +337,28 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( 'value="TAKEN"', $html, 'saving again asks for the same article again' );
 	}
 
+	public function test_a_waiting_change_is_noted_on_the_frozen_article_while_its_card_is_exported(): void {
+		$block                   = $this->block();
+		$block['ids']['pending'] = 'ART-NEW';
+		$html                    = $this->render_tab( [ $block ], [], false, [], true );
+
+		$this->assertStringContainsString( '<span>ART-1</span> <span class="woodev-mp-note">(меняется на «ART-NEW»)</span>', $html );
+		$this->assertStringNotContainsString( 'woodev-mp-article__edit', $html );
+	}
+
+	public function test_a_change_the_marketplace_made_but_the_shop_could_not_write_says_so_in_the_line_and_the_dialog(): void {
+		$block                             = $this->block();
+		$block['ids']['renamable']         = true;
+		$block['ids']['pending']           = 'DEST';
+		$block['ids']['rename_error']      = 'Маркетплейс уже сменил артикул на «DEST», но сайт не смог это записать.';
+		$block['ids']['rename_confirmed']  = true;
+		$html                              = $this->render_tab( [ $block ], [], false, [], true );
+
+		$this->assertStringContainsString( '(на маркетплейсе уже «DEST», сайт запишет это позже', $html );
+		$this->assertStringContainsString( '<h3>Смена артикула</h3><p class="woodev-mp-error">Маркетплейс уже сменил артикул', $html );
+		$this->assertStringNotContainsString( 'Не удалось сменить артикул на', $html );
+	}
+
 	public function test_the_variants_table_says_which_articles_are_changing(): void {
 		$block                = $this->block();
 		$block['kind']        = 'parent';

@@ -48,7 +48,7 @@ final class Schema {
 	 * the tables was itself updated. A site that never stored one is at revision 0.
 	 *
 	 * 1: `bulk_runs` and `sync_state.pending_source` (2.1.8–2.1.10).
-	 * 2: `links.pending_offer_id` and `links.rename_error` (the article changed after export, #1860).
+	 * 2: `links.pending_offer_id`, `links.rename_error` and `links.rename_confirmed` (the article changed after export, #1860).
 	 *
 	 * @since 2.1.10
 	 *
@@ -63,7 +63,7 @@ final class Schema {
 	 * (its existence is checked); a column added to an existing table gets one in the same change that raises {@see self::REVISION}.
 	 *
 	 * 1: `sync_state.pending_source`.
-	 * 2: `links.pending_offer_id`, `links.rename_error`.
+	 * 2: `links.pending_offer_id`, `links.rename_error`, `links.rename_confirmed`.
 	 *
 	 * @since 2.1.10
 	 *
@@ -71,7 +71,7 @@ final class Schema {
 	 */
 	private const REQUIRED_COLUMNS = [
 		'sync_state' => [ 'pending_source' ],
-		'links'      => [ 'pending_offer_id', 'rename_error' ],
+		'links'      => [ 'pending_offer_id', 'rename_error', 'rename_confirmed' ],
 	];
 
 	/**
@@ -256,7 +256,7 @@ final class Schema {
 	 * never makes a product push to a live marketplace on its own. The marketplace's identifiers are in `link_ids`. `offer_id` is
 	 * the seller article, as wide as the widest article policy an adapter may declare. `pending_offer_id` is the article the merchant
 	 * changed a sent card to and the marketplace has not confirmed yet; `rename_error` is the marketplace's answer when it refused (the
-	 * old `offer_id` stays in force), kept apart from `last_error_*` so an export or a poll never wipes it.
+	 * old `offer_id` stays in force), kept apart from `last_error_*` so an export or a poll never wipes it; `rename_confirmed` says the marketplace already changed the card, so only the shop's own move is still to do and the request is never sent again.
 	 *
 	 * @param string $table   Full table name.
 	 * @param string $charset Charset clause.
@@ -284,6 +284,7 @@ final class Schema {
 			last_error_text text NULL,
 			pending_offer_id varchar(191) NULL DEFAULT NULL,
 			rename_error text NULL,
+			rename_confirmed tinyint(1) NOT NULL DEFAULT 0,
 			last_pushed_stock int(11) NULL DEFAULT NULL,
 			last_pushed_stock_at datetime NULL DEFAULT NULL,
 			last_pushed_price decimal(12,2) NULL DEFAULT NULL,

@@ -126,7 +126,7 @@ final class Rename_Offer_Ids_Runner {
 				return true;
 			},
 			function ( string $text ) use ( $account_id ): void {
-				$this->renames->fail_in_flight( $text );
+				$this->renames->fail_waiting( $account_id, $text );
 				call_user_func( $this->log_error, 'rename_offer_ids: account ' . $account_id . ' gave up: ' . $text );
 			},
 			max( 0, (int) $attempt ),
@@ -153,6 +153,11 @@ final class Rename_Offer_Ids_Runner {
 
 		for ( $batch = 0; $batch < Offer_Id_Renames::MAX_BATCHES; $batch++ ) {
 			if ( 0 === $this->renames->send( $account, $this->renamer, $this->scheduler->hook() ) ) {
+				// Nothing is ready to send. A change whose card is being exported keeps waiting: the job comes back for it.
+				if ( $this->renames->settle_unready( $account ) ) {
+					$this->scheduler->again( $account->id(), Offer_Id_Renames::UNREADY_WAIT, 0, 0 );
+				}
+
 				return;
 			}
 
