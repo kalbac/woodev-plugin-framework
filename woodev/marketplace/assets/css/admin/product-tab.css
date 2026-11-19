@@ -125,15 +125,30 @@
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	max-width: 360px;
+	max-width: 100%;
 }
 
+/* The select takes the width that is left up to the icon (its text, «По категории: …», is long), up to a comfortable size. */
 .woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-with-action .woodev-mp-wide {
 	flex: 1 1 auto;
 	width: auto;
 	min-width: 0;
-	max-width: 320px;
+	max-width: 420px;
 	margin-right: 0;
+}
+
+/* A narrow panel (a small screen, or the side column of the product screen): a slimmer label column leaves the controls the room. */
+@media screen and (max-width: 1100px) {
+	.woocommerce_options_panel.woodev-mp-tab p.form-field,
+	.woocommerce_options_panel.woodev-mp-tab fieldset.form-field {
+		padding-left: 172px !important;
+	}
+
+	.woocommerce_options_panel.woodev-mp-tab .form-field > label,
+	.woocommerce_options_panel.woodev-mp-tab .form-field > legend {
+		width: 150px;
+		margin-left: -160px;
+	}
 }
 
 .woodev-mp-row-link {
@@ -544,6 +559,11 @@ button.woodev-mp-badge--problem:focus {
 .woodev-mp-tab .woodev-mp-variations th {
 	padding: 6px 8px;
 	white-space: nowrap;
+}
+
+/* The variant's own name may be long («Цвет: красный, размер: XL»): it wraps, the other cells keep one line. */
+.woodev-mp-tab .woodev-mp-variations td:first-child {
+	white-space: normal;
 }
 
 /* «(будет отправлен)» goes under the article: the widest column gets narrower and the pair stays together. */

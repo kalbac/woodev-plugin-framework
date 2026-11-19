@@ -915,11 +915,13 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
 - **Account select (2.1.13).** One account: no account name on the tab. Two or more: `account_switch()` prints a select that the script moves
   into the «Product data» header (right of Virtual / Downloadable) and shows only while the marketplace tab is open; every account's block
   stays in the form (so «Обновить» saves each) and only the chosen one is shown. The default is the account used last in this browser
-  (`localStorage`), else the first enabled one: it is a view preference, so there is no server write.
+  (`localStorage`), else the first enabled account whose saved connection check is fine (as Ozon Seller 1.1.7's «first connected store»), else the first
+  enabled one (`Product_Tab::default_account_id()`): it is a view preference, so there is no server write.
 - **Article line.** While the article may still change (`Link_Settings_Writer::article_is_editable()`), the row reads «<article> изменить»
   and the input appears on click; an already sent article is plain text with a hint. The tab only follows that rule — see #1860 for lifting it.
-- **Variation header.** `woocommerce_variation_header` → `Product_Tab::render_variation_header()` → `Panel_Reader::header_badge()`: a plain
-  state badge per account from the link row only (no validator: fifteen headers must stay cheap).
+- **Variation header.** `woocommerce_variation_header` → `Product_Tab::render_variation_header()`: the same `state_badge()` (check, or orange «!»
+  with the problems dialog) as inside the opened variation. The header and the panel are printed in one request, so `Product_Tab::variation_blocks()`
+  reads each variation's blocks once. The dialog trigger listens in the capture phase: the header is an `<h3>` that WooCommerce toggles on click.
 - **Buttons.** One WordPress `.button-group` in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
   (`.woodev-mp-btn__text`), centred on each other with a gap. A container query shows the words only when the control column is at least 720px;
   below that only the icons show, with the name alone in `aria-label` and the tooltip, so four or more buttons still fit one row.

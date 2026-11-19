@@ -19,7 +19,11 @@ final class PanelViewTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		Functions\when( 'selected' )->justReturn( '' );
+		Functions\when( 'selected' )->alias(
+			static function ( $selected, $current = true, $display = true ) {
+				return (string) $selected === (string) $current ? ' selected="selected"' : '';
+			}
+		);
 		Functions\when( 'checked' )->justReturn( '' );
 	}
 
@@ -261,7 +265,7 @@ final class PanelViewTest extends TestCase {
 
 		$this->assertSame( 1, substr_count( $html, 'class="woodev-mp-account-switch"' ) );
 		$this->assertStringContainsString( '<label for="woodev_fake_account">Аккаунт Fake:</label>', $html );
-		$this->assertStringContainsString( '<option value="3">Основной</option><option value="5">Магазин два</option>', $html );
+		$this->assertStringContainsString( '<option value="3" selected="selected">Основной</option><option value="5">Магазин два</option>', $html );
 		$this->assertStringContainsString( 'Аккаунт Fake: Основной', $html );
 		$this->assertMatchesRegularExpression( '#data-account="3"><h3#', $html, 'the first account is shown at first' );
 		$this->assertMatchesRegularExpression( '#data-account="5" hidden><h3#', $html, 'the others stay in the form (so they are saved) but are hidden' );
@@ -325,42 +329,83 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( 'woodev-mp-article__edit', $html );
 	}
 
-	public function test_a_variations_collapsed_header_shows_a_plain_state_badge_per_account(): void {
+	public function test_a_variations_collapsed_header_shows_the_same_badge_as_the_opened_variation(): void {
+		$clean = $this->block();
+
 		ob_start();
 		( new Panel_View( new Screen_Names( 'fake', 'Fake' ) ) )->render_variation_header(
 			[
-				'badges' => [
-					[
-						'account' => new Account( 3, 'fake', 'Основной', true ),
-						'badge'   => Card_State_Badge::of( Link_Record::STATE_CREATED ),
-					],
-				],
+				'blocks'       => [ $clean ],
+				'settings_url' => 'https://example.test/settings',
+				'mappings_url' => 'https://example.test/mappings',
 			]
 		);
 		$one = (string) ob_get_clean();
 
-		$this->assertSame( '<span class="woodev-mp-header-state"><span class="woodev-mp-header-state__name">Fake</span> <span class="woodev-mp-badge woodev-mp-badge--ok">Создан</span></span>', $one );
+		$this->assertStringStartsWith( '<span class="woodev-mp-header-state"><span class="woodev-mp-header-state__name">Fake</span> <span class="woodev-mp-badge woodev-mp-badge--ok" title="Проблем не найдено">', $one );
+
+		$sick                         = $this->block();
+		$sick['state']                = Link_Record::STATE_UNLINKED;
+		$sick['badge']                = Card_State_Badge::of( Link_Record::STATE_UNLINKED );
+		$sick['validation']['errors'] = [
+			[
+				'level'   => 'error',
+				'message' => 'Не указан вес',
+				'fix'     => 'mapping',
+			],
+		];
+		$second            = $sick;
+		$second['account'] = new Account( 5, 'fake', 'Два', true );
 
 		ob_start();
 		( new Panel_View( new Screen_Names( 'fake', 'Fake' ) ) )->render_variation_header(
 			[
-				'badges' => [
-					[
-						'account' => new Account( 3, 'fake', 'Основной', true ),
-						'badge'   => Card_State_Badge::of( Link_Record::STATE_CREATED ),
-					],
-					[
-						'account' => new Account( 5, 'fake', 'Два', true ),
-						'badge'   => Card_State_Badge::of( Link_Record::STATE_UNLINKED ),
-					],
-				],
+				'blocks'       => [ $clean, $second ],
+				'settings_url' => 'https://example.test/settings',
+				'mappings_url' => 'https://example.test/mappings',
 			]
 		);
 		$two = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'Fake · Основной', $two );
 		$this->assertStringContainsString( 'Fake · Два', $two );
-		$this->assertStringContainsString( 'Не связан', $two );
+		$this->assertMatchesRegularExpression( '#Fake · Два</span> <button type="button" class="woodev-mp-badge woodev-mp-badge--problem woodev-mp-badge--button" data-woodev-mp-dialog#u', $two, 'a problem shows in the header, orange, with the dialog' );
+		$this->assertStringContainsString( 'Не указан вес <a href="https://example.test/mappings"', $two );
+		$this->assertStringContainsString( '<span class="woodev-mp-badge__label">Не связан</span></button><template', $two );
+	}
+
+	public function test_the_default_account_is_the_one_the_screen_names_and_the_variants_headings_are_short(): void {
+		$second            = $this->block();
+		$second['account'] = new Account( 5, 'fake', 'Магазин два', true );
+		$html              = $this->render_tab( [ $this->block(), $second ], [], false, [ 'default_account' => 5 ] );
+
+		$this->assertStringContainsString( '<option value="3">Основной</option><option value="5" selected="selected">Магазин два</option>', $html );
+		$this->assertMatchesRegularExpression( '#data-account="3" hidden><h3#', $html );
+		$this->assertMatchesRegularExpression( '#data-account="5"><h3#', $html );
+	}
+
+	public function test_the_variants_table_has_short_headings(): void {
+		$block                = $this->block();
+		$block['kind']        = 'parent';
+		$block['counts']      = [];
+		$block['any_created'] = false;
+		$block['any_linked']  = false;
+		$block['rows']        = [
+			[
+				'id'       => 5,
+				'name'     => 'S',
+				'badge'    => Card_State_Badge::of( Link_Record::STATE_UNLINKED ),
+				'offer_id' => 'ART-S',
+				'planned'  => false,
+				'stock'    => '',
+				'price'    => '',
+				'currency' => 'RUB',
+			],
+		];
+		$html                 = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( '<th scope="col">Остаток</th><th scope="col">Цена</th>', $html );
+		$this->assertStringNotContainsString( 'Цена: Fake', $html );
 	}
 
 	public function test_a_variable_product_has_an_intro_across_the_tab_and_variants_whose_notes_stay_on_their_line(): void {

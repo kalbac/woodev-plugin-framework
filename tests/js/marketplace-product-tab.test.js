@@ -172,6 +172,20 @@ describe( 'the dialogs of a block', () => {
 		expect( document.querySelector( '.woodev-mp-dialog__body' ).textContent ).not.toContain( 'No weight' );
 	} );
 
+	test( 'a badge in a variation header opens the dialog without the header\'s own click handler running', () => {
+		document.body.innerHTML = `
+			<div class="woocommerce_variation"><h3 id="header">
+				<button type="button" class="woodev-mp-badge" data-woodev-mp-dialog>State</button><template data-title="Check"><p>No weight</p></template>
+			</h3></div>`;
+		const toggled = jest.fn();
+		document.getElementById( 'header' ).addEventListener( 'click', toggled );
+
+		document.querySelector( '.woodev-mp-badge' ).click();
+
+		expect( toggled ).not.toHaveBeenCalled();
+		expect( document.querySelector( 'dialog .woodev-mp-dialog__body' ).textContent ).toBe( 'No weight' );
+	} );
+
 	test( 'the close button closes the dialog', () => {
 		const { badge } = renderDialogs();
 

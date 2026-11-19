@@ -176,13 +176,22 @@
 		}
 	}
 
-	$( document ).on(
+	// In the capture phase: a badge in a variation's collapsed header sits in the `<h3>` that WooCommerce opens and closes on a click, and the click
+	// must open the dialog only.
+	document.addEventListener(
 		'click',
-		'[data-woodev-mp-dialog]',
 		function ( event ) {
+			var trigger = event.target.closest ? event.target.closest( '[data-woodev-mp-dialog]' ) : null;
+
+			if ( ! trigger ) {
+				return;
+			}
+
 			event.preventDefault();
-			openDialog( $( this ) );
-		}
+			event.stopPropagation();
+			openDialog( $( trigger ) );
+		},
+		true
 	);
 
 	// «Артикул»: the line with «изменить» gives way to the input.

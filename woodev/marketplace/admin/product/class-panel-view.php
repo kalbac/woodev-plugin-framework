@@ -88,12 +88,16 @@ final class Panel_View {
 		// shown at a time (all of them stay in the form, so «Обновить» saves every account's fields).
 		$several = count( $screen['blocks'] ) > 1;
 
+		// The one shown at first: `default_account` (the first enabled account that is connected), else the first block.
+		$default = (int) ( $screen['default_account'] ?? 0 );
+		$default = $default > 0 ? $default : (int) reset( $screen['blocks'] )['account']->id();
+
 		if ( $several ) {
-			$this->account_switch( $screen['blocks'] );
+			$this->account_switch( $screen['blocks'], $default );
 		}
 
-		foreach ( array_values( $screen['blocks'] ) as $index => $block ) {
-			$this->block( $block, $screen, $several, 0 === $index );
+		foreach ( $screen['blocks'] as $block ) {
+			$this->block( $block, $screen, $several, $default === (int) $block['account']->id() );
 		}
 
 		$this->extension_groups( $screen['extension'] ?? null, 'h3' );
@@ -140,9 +144,10 @@ final class Panel_View {
 
 	/**
 	 * Prints the state of the variation in its collapsed header (WooCommerce's `woocommerce_variation_header`), so the merchant sees without
-	 * opening the variation whether it is on the marketplace: one badge per account.
+	 * opening the variation whether it is on the marketplace and whether anything is wrong: one badge per account, the same badge (check, or
+	 * orange «!» with the problems dialog) as inside the opened variation.
 	 *
-	 * Keys of `$screen`: `badges`, a list of `account` ({@see \Woodev\Framework\Marketplace\Account\Account}) and `badge` (`{label, tone}`).
+	 * Keys of `$screen`: `blocks` (one per account, from {@see Panel_Reader}), `settings_url`, `mappings_url`.
 	 *
 	 * @since 2.1.13
 	 *
@@ -150,13 +155,13 @@ final class Panel_View {
 	 * @return void
 	 */
 	public function render_variation_header( array $screen ): void {
-		$several = count( $screen['badges'] ) > 1;
+		$several = count( $screen['blocks'] ) > 1;
 
-		foreach ( $screen['badges'] as $entry ) {
+		foreach ( $screen['blocks'] as $block ) {
 			printf(
 				'<span class="woodev-mp-header-state"><span class="woodev-mp-header-state__name">%1$s</span> %2$s</span>',
-				esc_html( $several ? $this->names->name() . ' · ' . $entry['account']->name() : $this->names->name() ),
-				$this->badge( $entry['badge'] ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in badge().
+				esc_html( $several ? $this->names->name() . ' · ' . $block['account']->name() : $this->names->name() ),
+				$this->state_badge( $block['badge'], $this->problems( $block, $screen ) ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in state_badge().
 			);
 		}
 	}
@@ -222,15 +227,16 @@ final class Panel_View {
 	 * Prints the select of the account the tab shows. It is printed at the top of the tab; the script moves it into the header of «Product data»
 	 * (right of Virtual / Downloadable) and shows it only while this tab is open.
 	 *
-	 * @param array<int,array<string,mixed>> $blocks Blocks, one per account; the first is the one shown until the merchant picks another.
+	 * @param array<int,array<string,mixed>> $blocks  Blocks, one per account.
+	 * @param int                            $default Account shown until the merchant picks another.
 	 * @return void
 	 */
-	private function account_switch( array $blocks ): void {
+	private function account_switch( array $blocks, int $default ): void {
 		$id      = $this->names->tab_key() . '_account';
 		$options = '';
 
 		foreach ( $blocks as $block ) {
-			$options .= sprintf( '<option value="%1$d">%2$s</option>', (int) $block['account']->id(), esc_html( $block['account']->name() ) );
+			$options .= sprintf( '<option value="%1$d"%3$s>%2$s</option>', (int) $block['account']->id(), esc_html( $block['account']->name() ), selected( $default, (int) $block['account']->id(), false ) );
 		}
 
 		printf(
@@ -277,8 +283,8 @@ final class Panel_View {
 			__( 'Вариант', 'woodev-plugin-framework' ),
 			__( 'Состояние', 'woodev-plugin-framework' ),
 			__( 'Артикул', 'woodev-plugin-framework' ),
-			sprintf( /* translators: %s: marketplace name. */ __( 'Остаток: %s', 'woodev-plugin-framework' ), $this->names->name() ),
-			sprintf( /* translators: %s: marketplace name. */ __( 'Цена: %s', 'woodev-plugin-framework' ), $this->names->name() ),
+			__( 'Остаток', 'woodev-plugin-framework' ),
+			__( 'Цена', 'woodev-plugin-framework' ),
 		];
 
 		foreach ( $headings as $heading ) {
