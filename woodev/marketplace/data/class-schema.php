@@ -48,13 +48,14 @@ final class Schema {
 	 * the tables was itself updated. A site that never stored one is at revision 0.
 	 *
 	 * 1: `bulk_runs` and `sync_state.pending_source` (2.1.8–2.1.10).
-	 * 2: `links.pending_offer_id`, `links.rename_error` and `links.rename_confirmed` (the article changed after export, #1860).
+	 * 2: `cards`, the stored list of the marketplace's cards (#1863).
+	 * 3: `links.pending_offer_id`, `links.rename_error` and `links.rename_confirmed` (the article changed after export, #1860).
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var int
 	 */
-	public const REVISION = 2;
+	public const REVISION = 3;
 
 	/**
 	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
@@ -63,7 +64,7 @@ final class Schema {
 	 * (its existence is checked); a column added to an existing table gets one in the same change that raises {@see self::REVISION}.
 	 *
 	 * 1: `sync_state.pending_source`.
-	 * 2: `links.pending_offer_id`, `links.rename_error`, `links.rename_confirmed`.
+	 * 3: `links.pending_offer_id`, `links.rename_error`, `links.rename_confirmed`.
 	 *
 	 * @since 2.1.10
 	 *

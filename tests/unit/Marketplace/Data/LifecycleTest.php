@@ -291,6 +291,32 @@ final class LifecycleTest extends TestCase {
 	}
 
 	/**
+	 * A site that stored an earlier revision (the interim one that only added the cards table included) is brought to the current one: the article
+	 * change columns of `links` come with `dbDelta`, and the revision moves on.
+	 *
+	 * @return void
+	 */
+	public function test_a_site_at_an_earlier_revision_is_brought_up_to_the_current_one(): void {
+		$this->use_transient_store();
+
+		foreach ( [ 0, 1, 2 ] as $stored ) {
+			$this->delta_batches = [];
+			$this->use_option_store(
+				[
+					'woodev_fake-seller_version'         => '2.0.0',
+					'woodev_fake-seller_schema_revision' => $stored,
+				]
+			);
+
+			$this->lifecycle->bring_schema_up_to_date();
+
+			$this->assertCount( 1, $this->delta_batches, "revision {$stored} is synchronised" );
+			$this->assertSame( Schema::REVISION, $this->options['woodev_fake-seller_schema_revision'] );
+			$this->assertStringContainsString( 'rename_confirmed', implode( "\n", $this->delta_batches[0] ) );
+		}
+	}
+
+	/**
 	 * A site already at the framework's revision, a site that is not installed yet, and a held lock cost nothing.
 	 *
 	 * @return void
