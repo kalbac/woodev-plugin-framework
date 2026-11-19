@@ -29,6 +29,8 @@ use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
+use Woodev\Framework\Marketplace\Flows\Offer_Id_Renamer;
+use Woodev\Framework\Marketplace\Flows\Offer_Id_Renames;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
@@ -239,13 +241,25 @@ final class Embedded_Screens {
 		/** @var Product_Tab_Facts $facts */
 		$facts = $adapter;
 
+		// A card that was sent keeps its article unless the adapter can change it on the marketplace (the same test as the job's wiring).
+		$renames = $adapter instanceof Offer_Id_Renamer && $adapter->supports( Capability::RENAME_SKU )
+			? Offer_Id_Renames::for_plugin(
+				$links,
+				$job_names,
+				$pinned,
+				function ( string $line ) use ( $plugin ): void {
+					$plugin->log_error( $line );
+				}
+			)
+			: null;
+
 		return new Product_Tab(
 			$guard,
 			$accounts,
 			$links,
-			new Panel_Reader( $links, $contexts, $adapter->export_facts(), $validator, $mappings, $warehouses, $store, $accounts, $license, Logging::for_plugin( $plugin ), $pinned, $adapter->article_policy(), $facts ),
-			new Panel_View( $names, $facts->supports_oversize(), null !== $adapter->price_pusher() ),
-			new Link_Settings_Writer( $links, $intents, $mappings, $warehouses, $stock, $pinned ),
+			new Panel_Reader( $links, $contexts, $adapter->export_facts(), $validator, $mappings, $warehouses, $store, $accounts, $license, Logging::for_plugin( $plugin ), $pinned, $adapter->article_policy(), $facts, null, null !== $renames ),
+			new Panel_View( $names, $facts->supports_oversize(), null !== $adapter->price_pusher(), null !== $renames ),
+			new Link_Settings_Writer( $links, $intents, $mappings, $warehouses, $stock, $pinned, $renames ),
 			new Link_Form_Input( $pinned ),
 			new Export_Service( $links, $contexts, new Export_Scheduler( $job_names ), $adapter->export_facts(), $validator ),
 			new Link_Scheduler( $job_names ),

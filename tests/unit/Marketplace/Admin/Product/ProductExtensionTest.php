@@ -280,6 +280,9 @@ final class ProductExtensionTest extends TestCase {
 			'remote_error' => '',
 			'ids'          => [
 				'editable' => false,
+				'renamable'    => false,
+				'pending'      => '',
+				'rename_error' => '',
 				'offer_id' => 'ART-1',
 				'auto'     => 'ART-1',
 				'summary'  => '',

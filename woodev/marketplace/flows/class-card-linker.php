@@ -151,7 +151,7 @@ final class Card_Linker {
 			return self::NOT_A_CARD;
 		}
 
-		$owner = $this->links->find_by_offer_id( $account_id, $offer_id );
+		$owner = $this->links->owner_of_article( $account_id, $offer_id );
 
 		if ( null !== $owner ) {
 			return $owner->wc_product_id() === $wc_product_id ? self::PRODUCT_LINKED : self::CARD_LINKED;

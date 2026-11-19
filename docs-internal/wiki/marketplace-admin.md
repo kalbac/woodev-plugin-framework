@@ -1143,6 +1143,40 @@ recorded too, and an intent that cannot be stored throws instead of counting as 
 **Rig phase.** The 10 000-product scale test is generated and measured by `tests/integration/fixtures/bulk-run/` (see its README); the
 coordinator runs it, the PR carries the numbers.
 
+## Changing the article after the export (framework 2.1.13, #1860)
+
+Before 2.1.13 the article (`offer_id`) was frozen once a card was sent. Operator decision 19.11.2026: it stays changeable, and the change goes to the marketplace by its own
+offer-id update method, never as a side effect of a SKU edit (v1 renamed on every SKU change, synchronously, inside the product-save hook, with no uniqueness check and no
+visible failure; the explicit, queued, checked, visible change here is the fix of that).
+
+**Capability.** An optional contract, like `Product_Tab_Facts` / `Order_Canceller`: the adapter implements `Flows\Offer_Id_Renamer`
+(`max_renames_per_request()`, `rename_offer_ids( Account, current => new, context ): array<current, Offer_Id_Rename_Outcome>`) **and** reports `Capability::RENAME_SKU`. `Marketplace_Adapter`
+does not change. An adapter without either keeps the old frozen article, the old help text and no job (`Flow_Wiring::offer_id_renames()` hooks the job, `Embedded_Screens::product_tab()` switches the screen).
+The adapter answers for every pair; a pair it does not answer for is treated as refused. A request that fails as a whole throws, and the adapter's `Error_Classifier` decides.
+
+**State lives on the link row** (schema revision 3): `links.pending_offer_id` (the article the merchant asked for), `links.rename_error` (the marketplace's answer when it refused) and `links.rename_confirmed` (the marketplace already changed the card; only the shop's move is left),
+kept apart from `last_error_*` because export and poll writes wipe those. `offer_id` itself changes in exactly one statement (`Wpdb_Link_Store::finish_offer_id_rename()`), so the unique
+`(account_id, offer_id)` index is the arbiter of a clash and a row is never half-moved. The three columns are left out of `Link_Record::to_columns()`, so an insert works on a site whose tables
+are not yet at revision 2.
+
+| Step | Where | What happens |
+|---|---|---|
+| Edit | product tab / variation panel, «Артикул: … · изменить» | the input starts on the article the card has (or the one a change waits for) |
+| Save | `Link_Settings_Writer` → `Offer_Id_Renames::request()` | the card must be known to the marketplace (`Link_Record::RENAMEABLE_STATES`); the article must be free in the account (no row holds it, no other row waits for it — a refused change frees it); the link keeps its old article, `pending_offer_id` is set, the job is queued. A save never waits for the marketplace |
+| Job | `Rename_Offer_Ids_Runner` (`woodev_{plugin id}_rename_offer_ids`) | `Account_Job` skeleton (licence, pause, claim, the adapter's verdict), plus the plugin's write gate; reads the waiting rows, sends ≤ `max_renames_per_request()` pairs per request, up to 20 requests per run |
+| Success | `finish_offer_id_rename()` + `Offer_Id_Renames::for_plugin()` closure | link article, waiting request and error move together; the article chosen on the product (`Pinned_Offer_Id`) follows, only if the product had one; one log line |
+| Refusal | `fail_offer_id_rename()` | the old article stays linked; `rename_error` holds the marketplace's words; the badge gets the orange «!» and the problems dialog a «Смена артикула» section; the field's line says «не удалось сменить на …» |
+| Take back | typing the card's current article | clears a waiting or refused change; typing the refused article again asks again |
+
+Variations are rows like any other: each variation's panel posts its own `offer_id`, the parent's variations table notes «(меняется на …)» / «(не удалось сменить на …)». A detach or a reset of the
+state clears the waiting change. A cleared field leaves a sent card's article alone («follow the SKU» has no meaning once the card is on the marketplace).
+
+**One reservation rule.** A destination a change waits for belongs to that row until the marketplace refuses it (`Wpdb_Link_Store::offer_id_is_reserved()` / `owner_of_article()`). Every statement that assigns an article asks it: `insert_if_absent`, `insert_card`, `adopt_card`, `queue`; the export validator's «who holds this article» and `Card_Linker` use `owner_of_article()`. A check before the statement is not serialised against a concurrent request; the last guard is the unique index, whose clash after the marketplace confirmed is reported (`taken`), never half-applied.
+
+**Failure paths.** A database error after the marketplace confirmed is not «the link is gone»: `finish_offer_id_rename()` answers `error`, the row keeps the destination with `rename_confirmed = 1` and a readable error, the request is never sent again and the job retries the move (5 minutes). A change whose card is queued/submitted (an update is being exported) keeps its visible state and the job comes back every 2 minutes; a card the marketplace refused turns the change into a failed one. A job that gives up for good (refused key, lapsed licence, put-off ceiling, a request that cannot be repeated) marks **every** waiting change of the account failed with the reason (`fail_waiting_offer_id_renames()`); saving the article again asks again.
+
+**Known limits.** The framework checks uniqueness against the shop's own links only; a card of the same seller that is not linked to any product is the marketplace's answer to give (it arrives as the refusal text). The refusal text is the marketplace's, shown as it came. At most 25 stuck confirmed rows are looked at per batch.
+
 ## Bulk actions of the Variations tab (framework 2.1.13, #1859)
 
 The «Bulk actions» select of a variable product's Variations tab gets one optgroup per enabled account, named after the marketplace

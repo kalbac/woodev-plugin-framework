@@ -137,6 +137,13 @@ final class Panel_Reader {
 	private $clock;
 
 	/**
+	 * Whether the adapter can change the article of a card that was sent.
+	 *
+	 * @var bool
+	 */
+	private $renames_articles;
+
+	/**
 	 * Creates the reader.
 	 *
 	 * @since 2.1.2
@@ -155,8 +162,9 @@ final class Panel_Reader {
 	 * @param Article_Policy         $article_policy The marketplace's article rules.
 	 * @param Product_Tab_Facts      $tab_facts      The marketplace-specific answers of the tab.
 	 * @param callable|null          $clock          `function (): int`; the system clock when null.
+	 * @param bool                   $renames_articles Whether the adapter changes the article of a sent card ({@see \Woodev\Framework\Marketplace\Flows\Offer_Id_Renamer}).
 	 */
-	public function __construct( Wpdb_Link_Store $links, Export_Context_Builder $contexts, Export_Facts $facts, Export_Validator $validator, Wpdb_Mapping_Store $mappings, Warehouse_Options $warehouses, Sync_State_Store $sync_state, Wpdb_Account_Store $accounts, License_Gate $license, Logging $logging, Pinned_Offer_Id $pinned, Article_Policy $article_policy, Product_Tab_Facts $tab_facts, ?callable $clock = null ) {
+	public function __construct( Wpdb_Link_Store $links, Export_Context_Builder $contexts, Export_Facts $facts, Export_Validator $validator, Wpdb_Mapping_Store $mappings, Warehouse_Options $warehouses, Sync_State_Store $sync_state, Wpdb_Account_Store $accounts, License_Gate $license, Logging $logging, Pinned_Offer_Id $pinned, Article_Policy $article_policy, Product_Tab_Facts $tab_facts, ?callable $clock = null, bool $renames_articles = false ) {
 		$this->links          = $links;
 		$this->contexts       = $contexts;
 		$this->facts          = $facts;
@@ -171,6 +179,7 @@ final class Panel_Reader {
 		$this->article_policy = $article_policy;
 		$this->tab_facts      = $tab_facts;
 		$this->clock          = $clock ?? 'time';
+		$this->renames_articles = $renames_articles;
 	}
 
 	/**
@@ -321,9 +330,19 @@ final class Panel_Reader {
 		$pinned   = $editable ? $this->pinned->of( $product, $account->id() ) : null;
 		$auto     = $this->automatic_article( $product );
 
+		// A sent card keeps its article unless the adapter can change it there: then the article is a line with «изменить» again, showing the article the
+		// merchant asked for while the marketplace has not answered (or has refused), and the answer of a refusal.
+		$renamable = $this->renames_articles && null !== $record && $record->can_rename_offer_id();
+		// A change that waits stays visible while its card is being exported or refused (then the line is not editable, but it says what is coming).
+		$pending   = $this->renames_articles && null !== $record ? (string) $record->pending_offer_id() : '';
+
 		return [
-			'editable' => $editable,
-			'offer_id' => $editable ? (string) $pinned : (string) $shown->offer_id(),
+			'editable'     => $editable,
+			'renamable'    => $renamable,
+			'pending'      => $pending,
+			'rename_error' => '' !== $pending ? (string) $record->rename_error() : '',
+			'rename_confirmed' => '' !== $pending && $record->rename_confirmed(),
+			'offer_id'     => $editable ? (string) $pinned : (string) $shown->offer_id(),
 			'auto'     => $auto,
 			'summary'  => $this->tab_facts->identifier_summary( $shown ),
 			'card_url' => $this->tab_facts->card_url( $shown ),
@@ -642,6 +661,8 @@ final class Panel_Reader {
 				'badge'    => Card_State_Badge::of( $state ),
 				'offer_id' => null === $record || null === $record->offer_id() ? $this->contexts->offer_id( $account, $child, $record ?? Link_Record::offer( $account->id(), $child_id, (int) $child->get_parent_id(), '' ) ) : (string) $record->offer_id(),
 				'planned'  => null === $record || null === $record->frozen_offer_id(),
+				'pending'  => $this->renames_articles && null !== $record ? (string) $record->pending_offer_id() : '',
+				'rename_failed' => $this->renames_articles && null !== $record && null !== $record->pending_offer_id() && null !== $record->rename_error(),
 				'stock'    => null !== $stock && null !== $stock['present'] ? (string) ( (int) $stock['present'] - (int) ( $stock['reserved'] ?? 0 ) ) : '',
 				'price'    => is_array( $sent ) && isset( $sent['price'] ) ? (string) $sent['price'] : '',
 				'currency' => is_array( $sent ) && isset( $sent['currency_code'] ) ? (string) $sent['currency_code'] : '',

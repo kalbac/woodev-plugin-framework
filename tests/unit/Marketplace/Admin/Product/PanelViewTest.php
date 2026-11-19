@@ -298,6 +298,93 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( 'Артикул уже отправлен на маркетплейс и больше не меняется.', $html );
 	}
 
+	public function test_a_sent_article_is_a_line_with_a_change_link_when_the_adapter_can_change_it(): void {
+		$block                     = $this->block();
+		$block['ids']['renamable'] = true;
+		$html                      = $this->render_tab( [ $block ], [], false, [], true );
+
+		$this->assertStringContainsString( '<span class="woodev-mp-article"><span class="woodev-mp-article__value">ART-1</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="woodev_fake_a3_offer_id">изменить</button></span>', $html );
+		$this->assertStringContainsString( 'name="woodev_fake[3][offer_id]" value="ART-1" placeholder="ART-1" maxlength="50" hidden />', $html, 'the input starts on the article the card has' );
+		$this->assertStringNotContainsString( 'больше не меняется', $html );
+		$this->assertStringContainsString( 'После отправки артикул тоже можно изменить', $this->render_tab( [ $this->editable_block() ], [], false, [], true ) );
+		$this->assertStringContainsString( 'После отправки артикул уже не меняется', $this->render_tab( [ $this->editable_block() ], [] ), 'an adapter that cannot change it keeps saying so' );
+	}
+
+	public function test_a_waiting_change_shows_the_wanted_article_and_what_the_marketplace_still_knows(): void {
+		$block                     = $this->block();
+		$block['ids']['renamable'] = true;
+		$block['ids']['pending']   = 'ART-NEW';
+		$html                      = $this->render_tab( [ $block ], [], false, [], true );
+
+		$this->assertStringContainsString( '<span class="woodev-mp-article__value">ART-NEW</span>', $html );
+		$this->assertStringContainsString( '(меняется на «ART-NEW»: Fake пока знает товар по артикулу «ART-1»)', $html );
+		$this->assertStringContainsString( 'value="ART-NEW"', $html );
+		$this->assertStringNotContainsString( 'Смена артикула', $html, 'a change that is only waiting is not a problem' );
+	}
+
+	public function test_a_refused_change_keeps_the_old_article_and_puts_the_answer_in_the_problems_of_the_badge(): void {
+		$block                         = $this->block();
+		$block['ids']['renamable']     = true;
+		$block['ids']['pending']       = 'TAKEN';
+		$block['ids']['rename_error']  = 'OFFER_ID_ALREADY_EXISTS';
+		$html                          = $this->render_tab( [ $block ], [], false, [], true );
+
+		$this->assertStringContainsString( '<span class="woodev-mp-article__value">ART-1</span>', $html );
+		$this->assertStringContainsString( '(не удалось сменить на «TAKEN», подробности — в значке «!» у статуса)', $html );
+		$this->assertStringContainsString( 'woodev-mp-badge--problem', $html );
+		$this->assertStringContainsString( '<h3>Смена артикула</h3>', $html );
+		$this->assertStringContainsString( 'Не удалось сменить артикул на «TAKEN». Ответ: Fake<br />OFFER_ID_ALREADY_EXISTS', $html );
+		$this->assertStringContainsString( 'value="TAKEN"', $html, 'saving again asks for the same article again' );
+	}
+
+	public function test_a_waiting_change_is_noted_on_the_frozen_article_while_its_card_is_exported(): void {
+		$block                   = $this->block();
+		$block['ids']['pending'] = 'ART-NEW';
+		$html                    = $this->render_tab( [ $block ], [], false, [], true );
+
+		$this->assertStringContainsString( '<span>ART-1</span> <span class="woodev-mp-note">(меняется на «ART-NEW»)</span>', $html );
+		$this->assertStringNotContainsString( 'woodev-mp-article__edit', $html );
+	}
+
+	public function test_a_change_the_marketplace_made_but_the_shop_could_not_write_says_so_in_the_line_and_the_dialog(): void {
+		$block                             = $this->block();
+		$block['ids']['renamable']         = true;
+		$block['ids']['pending']           = 'DEST';
+		$block['ids']['rename_error']      = 'Маркетплейс уже сменил артикул на «DEST», но сайт не смог это записать.';
+		$block['ids']['rename_confirmed']  = true;
+		$html                              = $this->render_tab( [ $block ], [], false, [], true );
+
+		$this->assertStringContainsString( '(на маркетплейсе уже «DEST», сайт запишет это позже', $html );
+		$this->assertStringContainsString( '<h3>Смена артикула</h3><p class="woodev-mp-error">Маркетплейс уже сменил артикул', $html );
+		$this->assertStringNotContainsString( 'Не удалось сменить артикул на', $html );
+	}
+
+	public function test_the_variants_table_says_which_articles_are_changing(): void {
+		$block                = $this->block();
+		$block['kind']        = 'parent';
+		$block['counts']      = [];
+		$block['any_created'] = true;
+		$block['any_linked']  = true;
+		$row                  = [
+			'id'       => 5,
+			'name'     => 'S',
+			'badge'    => Card_State_Badge::of( Link_Record::STATE_CREATED ),
+			'offer_id' => 'ART-S',
+			'planned'  => false,
+			'stock'    => '',
+			'price'    => '',
+			'currency' => 'RUB',
+		];
+		$block['rows']        = [
+			array_merge( $row, [ 'pending' => 'ART-S2', 'rename_failed' => false ] ),
+			array_merge( $row, [ 'id' => 6, 'offer_id' => 'ART-M', 'pending' => 'ART-M2', 'rename_failed' => true ] ),
+		];
+		$html                 = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( 'ART-S <span class="woodev-mp-note">(меняется на «ART-S2»)</span>', $html );
+		$this->assertStringContainsString( 'ART-M <span class="woodev-mp-note woodev-mp-error">(не удалось сменить на «ART-M2»)</span>', $html );
+	}
+
 	public function test_a_variation_has_a_badge_and_no_check_row_and_the_article_line(): void {
 		$block                         = $this->block();
 		$block['validation']['errors'] = [
@@ -483,17 +570,31 @@ final class PanelViewTest extends TestCase {
 	}
 
 	/**
+	 * A block whose article is still editable (the card was not sent).
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function editable_block(): array {
+		$block                    = $this->block();
+		$block['ids']['editable'] = true;
+		$block['ids']['offer_id'] = '';
+
+		return $block;
+	}
+
+	/**
 	 * Renders the tab.
 	 *
 	 * @param array<int,array<string,mixed>> $blocks   Blocks.
 	 * @param array<string,string>           $ops      Nonces of the buttons.
 	 * @param bool                           $oversize Whether the marketplace has an oversize flag.
 	 * @param array<string,mixed>            $extra    Keys of the screen to add or replace.
+	 * @param bool                           $renames  Whether the adapter changes the article of a sent card.
 	 * @return string
 	 */
-	private function render_tab( array $blocks, array $ops, bool $oversize = false, array $extra = [] ): string {
+	private function render_tab( array $blocks, array $ops, bool $oversize = false, array $extra = [], bool $renames = false ): string {
 		ob_start();
-		( new Panel_View( new Screen_Names( 'fake', 'Fake' ), $oversize ) )->render_tab(
+		( new Panel_View( new Screen_Names( 'fake', 'Fake' ), $oversize, true, $renames ) )->render_tab(
 			array_merge(
 				[
 					'blocks'       => $blocks,
@@ -526,6 +627,9 @@ final class PanelViewTest extends TestCase {
 			'remote_error' => '',
 			'ids'          => [
 				'editable' => false,
+				'renamable'    => false,
+				'pending'      => '',
+				'rename_error' => '',
 				'offer_id' => 'ART-1',
 				'auto'     => 'ART-1',
 				'summary'  => '',

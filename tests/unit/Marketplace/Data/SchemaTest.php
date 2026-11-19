@@ -30,7 +30,7 @@ final class SchemaTest extends TestCase {
 	private function expected_columns(): array {
 		return [
 			'accounts'      => [ 'account_id', 'name', 'external_id', 'secret_enc', 'secret_fingerprint', 'is_enabled', 'health', 'health_message', 'health_checked_at', 'key_expires_at', 'seller_id', 'currency', 'warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', 'notification_token', 'notification_state', 'settings', 'claim_token', 'claim_until' ],
-			'links'         => [ 'link_id', 'account_id', 'wc_product_id', 'wc_parent_id', 'kind', 'offer_id', 'card_state', 'is_created', 'sync_stock', 'sync_price', 'warehouse_id', 'is_oversize', 'price_rule_override', 'attribute_overrides', 'mapping_id', 'last_task_id', 'last_error_code', 'last_error_text', 'last_pushed_stock', 'last_pushed_stock_at', 'last_pushed_price', 'last_pushed_price_at', 'updated_at' ],
+			'links'         => [ 'link_id', 'account_id', 'wc_product_id', 'wc_parent_id', 'kind', 'offer_id', 'card_state', 'is_created', 'sync_stock', 'sync_price', 'warehouse_id', 'is_oversize', 'price_rule_override', 'attribute_overrides', 'mapping_id', 'last_task_id', 'last_error_code', 'last_error_text', 'pending_offer_id', 'rename_error', 'rename_confirmed', 'last_pushed_stock', 'last_pushed_stock_at', 'last_pushed_price', 'last_pushed_price_at', 'updated_at' ],
 			'link_ids'      => [ 'link_id', 'account_id', 'id_name', 'id_value', 'id_type' ],
 			'tasks'         => [ 'task_id', 'account_id', 'kind', 'remote_task_id', 'status', 'submitted_at', 'last_polled_at', 'finished_at', 'poll_count', 'item_count', 'request_hash', 'result' ],
 			'task_items'    => [ 'task_id', 'link_id', 'offer_id', 'status', 'errors' ],
