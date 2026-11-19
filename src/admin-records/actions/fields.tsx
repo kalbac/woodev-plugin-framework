@@ -7,12 +7,13 @@
  */
 
 import type { ReactNode } from 'react';
-import { Button, CheckboxControl, SelectControl, Spinner, TextControl, TextareaControl } from '@wordpress/components';
-import { useEffect, useState } from '@wordpress/element';
+import { Button, CheckboxControl, SelectControl, Spinner, TextControl, TextareaControl, ToggleControl } from '@wordpress/components';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import type { TableHandle } from '../extensions';
 import type { ActionField, Messages, Option } from '../types';
 import { actionMessage, ACTION_MESSAGE_KEYS } from './messages';
 import { STYLES } from './styles';
+import { isHidden } from './use-action-flow';
 import type { FieldValue } from './types';
 import { useFieldOptions } from './use-field-options';
 
@@ -113,16 +114,21 @@ function useSettled( typed: string ): string {
 
 /**
  * A select whose options the server filters by what the merchant types (a product of the shop, say). It is ONE control: a
- * search box that carries the field's label and placeholder, and the list of what the server returned right under it. Picking
- * an entry writes its label into the box and closes the list; typing again opens it and drops the pick. The list is exactly
+ * search box that carries the field's label and placeholder, and the list of what the server returned right under it. It
+ * behaves like a select: focusing or clicking the box opens the list, Esc / a click outside / leaving by Tab closes it, picking
+ * an entry writes its label into the box and closes the list, and the box can be opened again to pick another entry directly
+ * (the list then shows every option, not only the one the box names). Typing drops the pick and searches. The list is exactly
  * what the server returned, never filtered again here (a client-side filter would hide a match the server found by another
  * word of the query or by a field the label does not show). The chosen option is kept next to the listed ones, so the field
  * still names it after another search replaced the list.
  */
 function SearchableField( props: FieldProps ) {
 	const { table, messages, action, rowId, field, value, error, disabled, onChange } = props;
+	// What the box shows, and what the server is asked for: a pick shows its label but searches for nothing.
+	const [ shown, setShown ] = useState( '' );
 	const [ typed, setTyped ] = useState( '' );
 	const [ open, setOpen ] = useState( false );
+	const root = useRef< HTMLFieldSetElement >( null );
 	const search = useSettled( typed );
 	const source = useFieldOptions( table, action, field.id, rowId, search );
 	const [ chosen, setChosen ] = useState< Option | null >( null );
@@ -134,6 +140,28 @@ function SearchableField( props: FieldProps ) {
 		}
 	}, [ current ] );
 
+	// Closing without a pick puts the box back to what is really chosen: a half-typed word is not a value.
+	const close = () => {
+		setOpen( false );
+		setTyped( '' );
+		setShown( current === '' ? '' : chosen?.label ?? '' );
+	};
+
+	useEffect( () => {
+		if ( ! open ) {
+			return undefined;
+		}
+		const outside = ( event: MouseEvent ) => {
+			if ( root.current && event.target instanceof Node && ! root.current.contains( event.target ) ) {
+				close();
+			}
+		};
+		document.addEventListener( 'mousedown', outside );
+
+		return () => document.removeEventListener( 'mousedown', outside );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ open, current, chosen ] );
+
 	const options = chosen && ! source.options.some( ( option ) => option.value === chosen.value ) ? [ chosen, ...source.options ] : source.options;
 	// A disabled fieldset disables its form controls, not the list items inside it. While the action is busy the flow refuses
 	// edits, so a pick made then would change the box but not the payload: the list is not drawn and a pick is ignored.
@@ -143,25 +171,46 @@ function SearchableField( props: FieldProps ) {
 		}
 
 		setChosen( option );
-		setTyped( option.label );
+		setShown( option.label );
+		setTyped( '' );
 		setOpen( false );
 		onChange( field.id, option.value );
 	};
 
 	return (
-		<fieldset disabled={ disabled } style={ STYLES.fieldset } className="woodev-records__searchable">
+		<fieldset
+			ref={ root }
+			disabled={ disabled }
+			style={ STYLES.fieldset }
+			className="woodev-records__searchable"
+			onKeyDown={ ( event ) => {
+				// The first Esc closes the list; only an Esc with the list shut reaches the dialog and closes that.
+				if ( event.key === 'Escape' && open ) {
+					event.stopPropagation();
+					close();
+				}
+			} }
+			onBlur={ ( event ) => {
+				if ( open && event.relatedTarget instanceof Node && ! event.currentTarget.contains( event.relatedTarget ) ) {
+					close();
+				}
+			} }
+		>
 			<TextControl
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 				type="search"
 				label={ field.label }
 				placeholder={ field.placeholder ?? '' }
-				value={ typed }
+				value={ shown }
 				help={ helpOf( field, error ) }
 				aria-invalid={ error !== '' }
 				aria-required={ field.required }
+				aria-expanded={ open }
 				onFocus={ () => setOpen( true ) }
+				onClick={ () => setOpen( true ) }
 				onChange={ ( next: string ) => {
+					setShown( next );
 					setTyped( next );
 					setOpen( true );
 					if ( current !== '' ) {
@@ -257,6 +306,19 @@ function Field( props: FieldProps ) {
 				/>
 			);
 		case 'boolean':
+			if ( field.toggle ) {
+				return (
+					<ToggleControl
+						__nextHasNoMarginBottom
+						label={ field.label }
+						checked={ value === true }
+						disabled={ disabled }
+						help={ helpOf( field, error ) }
+						onChange={ ( on: boolean ) => onChange( field.id, on ) }
+					/>
+				);
+			}
+
 			return (
 				<CheckboxControl
 					__nextHasNoMarginBottom
@@ -303,9 +365,14 @@ export function FieldsForm( { fields, values, errors, ...rest }: FieldsFormProps
 
 	return (
 		<div className="woodev-records__fields" style={ STYLES.form }>
-			{ drawn.map( ( field ) => (
-				<Field key={ field.id } { ...rest } field={ field } value={ values[ field.id ] } error={ errors[ field.id ] ?? '' } />
-			) ) }
+			{ drawn.map( ( field ) =>
+				isHidden( field, values ) ? (
+					// The place stays, so the dialog does not jump when the switch is flipped.
+					<div key={ field.id } className="woodev-records__field-reserved" aria-hidden="true" />
+				) : (
+					<Field key={ field.id } { ...rest } field={ field } value={ values[ field.id ] } error={ errors[ field.id ] ?? '' } />
+				)
+			) }
 		</div>
 	);
 }

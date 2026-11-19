@@ -90,10 +90,10 @@ const PLAN = {
 
 const COPY = { action_preview: 'Проверить', action_cancel: 'Отмена', action_choose: 'Выберите товар', action_options_more: 'Ещё товары' };
 
-function definitionEnvelope() {
+function definitionEnvelope( action: ActionDescriptor = LINK ) {
 	const base = fixtureDefinition();
 
-	return fixtureDefinitionEnvelope( { ...base, row_actions: [ LINK ], bulk_actions: [], messages: { ...base.messages, ...COPY } } );
+	return fixtureDefinitionEnvelope( { ...base, row_actions: [ action ], bulk_actions: [], messages: { ...base.messages, ...COPY } } );
 }
 
 function Page() {
@@ -358,11 +358,71 @@ describe( 'a searchable select field', () => {
 		fireEvent.focus( input );
 		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
 		fireEvent.change( input, { target: { value: 'Футб' } } );
-		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
 
-		await waitFor( () => expect( previews() ).toHaveLength( 1 ) );
-		expect( previews()[ 0 ].data.payload ).toEqual( {} ); // The pick is gone: the server is asked with no product and refuses it.
+		// The pick is gone: the required field is empty again, so the forward button waits and nothing is sent.
+		expect( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
+		expect( previews() ).toHaveLength( 0 );
 		expect( await within( dialog ).findByRole( 'listbox', { name: 'Товар сайта' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'Esc closes the open list without closing the dialog; a second Esc is the dialog\'s', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+
+		fireEvent.focus( input );
+		await within( dialog ).findByRole( 'listbox', { name: 'Товар сайта' } );
+		fireEvent.keyDown( input, { key: 'Escape' } );
+
+		expect( within( dialog ).queryByRole( 'listbox' ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'dialog' ) ).toBeInTheDocument();
+
+		fireEvent.click( input ); // Clicking the box again opens it again.
+		expect( await within( dialog ).findByRole( 'listbox', { name: 'Товар сайта' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'a click outside the control closes the list; a click inside it does not', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+
+		fireEvent.focus( input );
+		await within( dialog ).findByRole( 'listbox', { name: 'Товар сайта' } );
+		fireEvent.mouseDown( input );
+		expect( within( dialog ).getByRole( 'listbox' ) ).toBeInTheDocument();
+
+		fireEvent.mouseDown( document.body );
+		expect( within( dialog ).queryByRole( 'listbox' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'closing with a half-typed word and no pick puts the box back to empty', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+
+		fireEvent.change( input, { target: { value: 'Фут' } } );
+		fireEvent.mouseDown( document.body );
+
+		expect( input ).toHaveValue( '' );
+	} );
+
+	test( 'after a pick another entry can be chosen directly: the list shows every option again', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Товар сайта' } );
+
+		fireEvent.focus( input );
+		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
+		expect( input ).toHaveValue( 'Кружка синяя (#11)' );
+
+		fireEvent.click( input );
+		expect( await within( dialog ).findByRole( 'option', { name: 'Футболка (#21)' } ) ).toBeInTheDocument();
+		expect( within( dialog ).getAllByRole( 'option' ).length ).toBeGreaterThan( 1 );
+		fireEvent.click( within( dialog ).getByRole( 'option', { name: 'Футболка (#21)' } ) );
+		expect( input ).toHaveValue( 'Футболка (#21)' );
+
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
+		await waitFor( () => expect( previews() ).toHaveLength( 1 ) );
+		expect( previews()[ 0 ].data ).toMatchObject( { payload: { product: '21' } } );
+		// Nothing but the first read asked the server for a search: a pick never narrows the list to itself.
+		expect( searches().every( ( term ) => term === '' ) ).toBe( true );
 	} );
 
 	test( 'lists what the server found for a several-word search, even when no label holds the whole phrase', async () => {
@@ -375,5 +435,65 @@ describe( 'a searchable select field', () => {
 
 		// The server answered with the one product that has both words; its label has not "футболка красная" in it.
 		expect( await within( dialog ).findByRole( 'option', { name: 'Футболка хлопковая красная (TSH-01)' } ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'a switch that hides a required field', () => {
+	const WHOLE_SHOP: ActionField = { id: 'whole_shop', label: 'Весь магазин', type: 'boolean', required: false, options: [], options_source: false, toggle: true, help: '' };
+	const SCOPED: ActionDescriptor = {
+		...LINK,
+		fields: [ WHOLE_SHOP, { ...PRODUCT, id: 'category', label: 'Категория', hidden_when: 'whole_shop' } ],
+	};
+
+	beforeEach( () => {
+		const base = fetchMock.getMockImplementation() as ( request: { path: string } ) => Promise< unknown >;
+		fetchMock.mockImplementation( ( request: { path: string } ) =>
+			decodeURIComponent( request.path ).split( '?' )[ 0 ].endsWith( '/definition' ) ? Promise.resolve( definitionEnvelope( SCOPED ) ) : base( request )
+		);
+	} );
+
+	test( 'the switch is off at first: the category is asked and the forward button waits for it', async () => {
+		const dialog = await openDialog();
+
+		expect( within( dialog ).getByRole( 'checkbox', { name: 'Весь магазин' } ) ).not.toBeChecked();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Категория' } );
+		expect( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+
+		fireEvent.focus( input );
+		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
+
+		expect( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
+		await waitFor( () => expect( previews() ).toHaveLength( 1 ) );
+		expect( previews()[ 0 ].data ).toMatchObject( { payload: { whole_shop: false, category: '11' } } );
+	} );
+
+	test( 'switched on, the category is hidden, not sent even after a pick, and the button works at once', async () => {
+		const dialog = await openDialog();
+		const input = await within( dialog ).findByRole( 'searchbox', { name: 'Категория' } );
+		fireEvent.focus( input );
+		fireEvent.click( await within( dialog ).findByRole( 'option', { name: 'Кружка синяя (#11)' } ) );
+
+		fireEvent.click( within( dialog ).getByRole( 'checkbox', { name: 'Весь магазин' } ) );
+		expect( within( dialog ).queryByRole( 'searchbox', { name: 'Категория' } ) ).not.toBeInTheDocument();
+
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) );
+		await waitFor( () => expect( previews() ).toHaveLength( 1 ) );
+		expect( previews()[ 0 ].data.payload ).toEqual( { whole_shop: true } );
+	} );
+
+	test( 'switched on from the start the button is enabled without any category', async () => {
+		const dialog = await openDialog();
+		await within( dialog ).findByRole( 'searchbox', { name: 'Категория' } );
+		await waitFor( () => expect( optionReads() ).toHaveLength( 1 ) );
+		await waitFor( () => expect( within( dialog ).queryByRole( 'status' ) ).not.toBeInTheDocument() );
+
+		fireEvent.click( within( dialog ).getByRole( 'checkbox', { name: 'Весь магазин' } ) );
+
+		expect( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+		// Switched off again, the category is asked again.
+		fireEvent.click( within( dialog ).getByRole( 'checkbox', { name: 'Весь магазин' } ) );
+		expect( within( dialog ).getByRole( 'button', { name: 'Проверить' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		await waitFor( () => expect( within( dialog ).queryByRole( 'status' ) ).not.toBeInTheDocument() ); // The list it reads again.
 	} );
 } );
