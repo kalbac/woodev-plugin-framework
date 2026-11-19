@@ -34,8 +34,8 @@ export function useActionExtensions( activity?: ActivityExtensions ): RecordsExt
 				previewOnly: action.effect === 'read' && action.interaction !== 'download',
 			} ),
 		renderBulkActions: ( selection, table ) => <BulkToolbar flow={ flow } selection={ selection } table={ table } activity={ activity } />,
-		renderAccountActions: ( selection, table ) => (
-			<AccountActions flow={ flow } selection={ selection } table={ table } activity={ activity } />
+		renderAccountActions: ( selection, table, only ) => (
+			<AccountActions flow={ flow } selection={ selection } table={ table } activity={ activity } only={ only } />
 		),
 		renderActions: ( table ) => <ActionDialog flow={ flow } table={ table } />,
 	};

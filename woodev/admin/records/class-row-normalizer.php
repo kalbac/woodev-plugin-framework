@@ -33,6 +33,11 @@ final class Row_Normalizer {
 	/** Most items in one `stack` cell. */
 	const MAX_STACK_ITEMS = 5;
 
+	/**
+	 * Longest tooltip of a badge, in characters: a few short lines, not an essay.
+	 */
+	const MAX_TOOLTIP_LENGTH = 600;
+
 	/** Most response messages one page may carry. */
 	const MAX_MESSAGES = 20;
 
@@ -247,6 +252,8 @@ final class Row_Normalizer {
 		}
 
 		switch ( $type ) {
+			case 'image':
+				return self::image_cell( $value );
 			case 'text':
 				return self::text_cell( $value );
 			case 'number':
@@ -316,9 +323,41 @@ final class Row_Normalizer {
 			throw new \UnexpectedValueException( 'a badge cell is a label with a known tone.' );
 		}
 
-		return [
+		$badge = [
 			'label' => self::plain( $value['label'], 200 ),
 			'tone'  => $tone,
+		];
+
+		// What the badge explains on hover or focus: lines of one sentence each, separated by a line break.
+		if ( isset( $value['tooltip'] ) ) {
+			if ( ! is_string( $value['tooltip'] ) ) {
+				throw new \UnexpectedValueException( 'a badge tooltip is a string.' );
+			}
+
+			$tooltip = self::plain( $value['tooltip'], self::MAX_TOOLTIP_LENGTH );
+
+			if ( '' !== $tooltip ) {
+				$badge['tooltip'] = $tooltip;
+			}
+		}
+
+		return $badge;
+	}
+
+	/**
+	 * A small picture, only ever an item of a stack: the card's photo.
+	 *
+	 * @param mixed $value Provider value: `[ 'url' => string, 'alt' => string ]`.
+	 * @return array{url:string,alt:string}
+	 */
+	private static function image_cell( $value ): array {
+		if ( ! is_array( $value ) || ! is_string( $value['url'] ?? null ) || ! is_string( $value['alt'] ?? '' ) ) {
+			throw new \UnexpectedValueException( 'an image cell is an address and a description.' );
+		}
+
+		return [
+			'url' => self::safe_url( $value['url'] ),
+			'alt' => self::plain( (string) ( $value['alt'] ?? '' ), 200 ),
 		];
 	}
 
@@ -351,8 +390,8 @@ final class Row_Normalizer {
 		$out = [];
 		foreach ( $value as $item ) {
 			$type = is_array( $item ) ? ( $item['type'] ?? null ) : null;
-			if ( ! in_array( $type, [ 'text', 'badge', 'link' ], true ) ) {
-				throw new \UnexpectedValueException( 'a stack item is a text, badge or link.' );
+			if ( ! in_array( $type, [ 'text', 'badge', 'link', 'image' ], true ) ) {
+				throw new \UnexpectedValueException( 'a stack item is a text, badge, link or image.' );
 			}
 			$out[] = [
 				'type'  => $type,

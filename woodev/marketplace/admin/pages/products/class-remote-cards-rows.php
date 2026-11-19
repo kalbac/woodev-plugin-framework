@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Activity_Normalizer;
+use Woodev\Framework\Admin\Records\Row_Normalizer;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Admin\Product\Card_State_Badge;
 use Woodev\Framework\Marketplace\Catalog\Offer_Id_Likeness;
@@ -57,18 +58,27 @@ final class Remote_Cards_Rows {
 	private $importable;
 
 	/**
+	 * The cells that come straight from a card's fields: photo, name (a link to the cabinet), price, stock.
+	 *
+	 * @var Remote_Cards_Cells
+	 */
+	private $cells;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param callable     $describe   `function ( int $product_id ): array{title:string,url:string}`.
-	 * @param Logging|null $logging    The «Логирование» switch, read when a row is built, so the technical tail of an import note follows it as it is now.
-	 * @param bool         $importable Whether the table offers «Импортировать».
+	 * @param callable      $describe   `function ( int $product_id ): array{title:string,url:string}`.
+	 * @param Logging|null  $logging    The «Логирование» switch, read when a row is built, so the technical tail of an import note follows it as it is now.
+	 * @param bool          $importable Whether the table offers «Импортировать».
+	 * @param callable|null $card_url  {@see Remote_Card_Address::remote_card_url()}: the address of a card in the seller's cabinet; null when the adapter gives none.
 	 */
-	public function __construct( callable $describe, ?Logging $logging = null, bool $importable = false ) {
+	public function __construct( callable $describe, ?Logging $logging = null, bool $importable = false, ?callable $card_url = null ) {
 		$this->describe   = $describe;
 		$this->logging    = $logging;
 		$this->importable = $importable;
+		$this->cells      = new Remote_Cards_Cells( $card_url );
 	}
 
 	/**
@@ -89,10 +99,12 @@ final class Remote_Cards_Rows {
 			'id'           => Remote_Cards_Ids::row_id( $account_id, $offer_id ),
 			'revision'     => '',
 			'cells'        => [
+				'image'    => $this->cells->image( $card ),
+				'name'     => $this->cells->name( $card ),
 				'offer_id' => $offer_id,
-				'name'     => (string) ( $card['name'] ?? '' ),
-				'ids'      => $this->ids( (array) ( $card['remote_ids'] ?? [] ) ),
-				'state'    => array_merge( $this->state( $card ), $this->note( $note ) ),
+				'state'    => $this->state( $card, $this->note_lines( $note ) ),
+				'price'    => $this->cells->price( $card ),
+				'stock'    => $this->cells->stock( $card ),
 				'on_site'  => $this->on_site( (int) ( $card['wc_product_id'] ?? 0 ) ),
 			],
 			'actions'      => $this->actions( $card, $importing ),
@@ -142,10 +154,12 @@ final class Remote_Cards_Rows {
 			'id'           => Remote_Cards_Ids::near_row_id( $account_id, $offer_id, $product_id ),
 			'revision'     => '',
 			'cells'        => [
+				'image'    => $this->cells->image( $card ),
+				'name'     => $this->cells->name( $card ),
 				'offer_id' => $offer_id,
-				'name'     => (string) ( $card['name'] ?? '' ),
-				'ids'      => $this->ids( (array) ( $card['remote_ids'] ?? [] ) ),
 				'state'    => $this->state( array_merge( $card, [ 'details_ok' => true ] ) ),
+				'price'    => $this->cells->price( $card ),
+				'stock'    => $this->cells->stock( $card ),
 				'on_site'  => array_merge(
 					$this->on_site( $product_id ),
 					[
@@ -186,31 +200,22 @@ final class Remote_Cards_Rows {
 	}
 
 	/**
-	 * The card's last import note, under its state. The sentence is stored whole; the technical tail is stored apart and asked from the
-	 * «Логирование» switch only now, so turning the switch on or off changes this same note both ways.
+	 * The card's last import note, as lines of its state badge's tooltip. The sentence is stored whole; the technical tail is stored apart
+	 * and asked from the «Логирование» switch only now, so turning the switch on or off changes this same note both ways.
 	 *
 	 * @param array{offer_id:string,text:string,detail:string}|null $note The note, if the card has one.
-	 * @return array<int,array{type:string,value:string}>
+	 * @return string[]
 	 */
-	private function note( ?array $note ): array {
+	private function note_lines( ?array $note ): array {
 		if ( null === $note || '' === $note['text'] ) {
 			return [];
 		}
 
-		$lines = [
-			[
-				'type'  => 'text',
-				'value' => $note['text'],
-			],
-		];
-
+		$lines  = [ $note['text'] ];
 		$detail = null === $this->logging || '' === $note['detail'] ? '' : $this->logging->hint( $note['detail'] );
 
 		if ( '' !== $detail ) {
-			$lines[] = [
-				'type'  => 'text',
-				'value' => $detail,
-			];
+			$lines[] = $detail;
 		}
 
 		return $lines;
@@ -229,70 +234,46 @@ final class Remote_Cards_Rows {
 	}
 
 	/**
-	 * The marketplace's numbers of the card, as «name: value» lines.
+	 * The state of the card on the marketplace as ONE badge, like the delivery page's. Everything else about the card's state is its
+	 * tooltip: the marketplace's reason for a declined card, the card's last import note and the marketplace's numbers of the card. A
+	 * card whose details did not come with the list has no state to show.
 	 *
-	 * @param array<string,mixed> $remote_ids Identifier name => value.
-	 * @return array<int,array{type:string,value:string}>|null Null when the card has none.
-	 */
-	private function ids( array $remote_ids ): ?array {
-		$lines = [];
-
-		foreach ( $remote_ids as $name => $value ) {
-			if ( ! is_scalar( $value ) || '' === (string) $value || '0' === (string) $value ) {
-				continue;
-			}
-
-			$lines[] = [
-				'type'  => 'text',
-				'value' => $name . ': ' . $value,
-			];
-		}
-
-		return [] === $lines ? null : array_slice( $lines, 0, 5 );
-	}
-
-	/**
-	 * The state of the card on the marketplace and, for a declined card, the marketplace's reason. A card whose details did not come
-	 * with the list has no state to show.
-	 *
-	 * @param array<string,mixed> $card Card.
+	 * @param array<string,mixed> $card  Card.
+	 * @param string[]            $notes Lines of the card's import note.
 	 * @return array<int,array{type:string,value:mixed}>
 	 */
-	private function state( array $card ): array {
-		if ( empty( $card['details_ok'] ) ) {
-			return [
-				[
-					'type'  => 'badge',
-					'value' => [
-						'label' => __( 'Неизвестно', 'woodev-plugin-framework' ),
-						'tone'  => 'neutral',
-					],
-				],
-			];
-		}
-
-		$state = ! empty( $card['archived'] ) ? Link_Record::STATE_ARCHIVED : (string) ( $card['state'] ?? '' );
-		$badge = Card_State_Badge::of( $state );
-		$items = [
-			[
-				'type'  => 'badge',
-				'value' => [
-					'label' => $badge['label'],
-					'tone'  => self::TONES[ $badge['tone'] ] ?? 'neutral',
-				],
-			],
-		];
-
+	private function state( array $card, array $notes = [] ): array {
+		$lines  = [];
 		$reason = trim( (string) ( $card['status_text'] ?? '' ) );
 
-		if ( '' !== $reason ) {
-			$items[] = [
-				'type'  => 'text',
-				'value' => $reason,
+		if ( '' !== $reason && ! empty( $card['details_ok'] ) ) {
+			$lines[] = $reason;
+		}
+
+		$lines = array_merge( $lines, $notes, $this->cells->id_lines( (array) ( $card['remote_ids'] ?? [] ) ) );
+
+		if ( empty( $card['details_ok'] ) ) {
+			$badge = [
+				'label' => __( 'Неизвестно', 'woodev-plugin-framework' ),
+				'tone'  => 'neutral',
+			];
+		} else {
+			$state = ! empty( $card['archived'] ) ? Link_Record::STATE_ARCHIVED : (string) ( $card['state'] ?? '' );
+			$known = Card_State_Badge::of( $state );
+			$badge = [
+				'label' => $known['label'],
+				'tone'  => self::TONES[ $known['tone'] ] ?? 'neutral',
 			];
 		}
 
-		return $items;
+		$tooltip = mb_substr( implode( "\n", $lines ), 0, Row_Normalizer::MAX_TOOLTIP_LENGTH );
+
+		return [
+			[
+				'type'  => 'badge',
+				'value' => '' === $tooltip ? $badge : $badge + [ 'tooltip' => $tooltip ],
+			],
+		];
 	}
 
 	/**
@@ -330,13 +311,19 @@ final class Remote_Cards_Rows {
 	}
 
 	/**
-	 * The actions of a card's row: «Импортировать» (when the table offers it) and «Связать с…».
+	 * The actions of a card's row: «Открыть товар» when a product carries the card, else «Импортировать» (when the table offers it) and «Связать с…».
 	 *
 	 * @param array<string,mixed> $card      Card.
 	 * @param bool                $importing Whether the card is being imported.
 	 * @return array<int,array{id:string,enabled:bool,reason:string}>
 	 */
 	private function actions( array $card, bool $importing ): array {
+		// A card a product already carries needs nothing done to it: one button opens the product, no disabled «Импортировать» and
+		// «Связать с…» and no sentence about why they are off.
+		if ( (int) ( $card['wc_product_id'] ?? 0 ) > 0 ) {
+			return [ $this->open_action( (int) $card['wc_product_id'] ) ];
+		}
+
 		$locked = $importing ? self::locked_reason() : '';
 		$link   = $this->link_action( $card );
 
@@ -346,6 +333,23 @@ final class Remote_Cards_Rows {
 		}
 
 		return $this->importable ? [ $this->import_action( $card, $locked ), $link ] : [ $link ];
+	}
+
+	/**
+	 * «Открыть товар»: the edit screen of the product that carries the card; off, with its reason, when the user may not edit it.
+	 *
+	 * @param int $product_id Product or variation id.
+	 * @return array{id:string,enabled:bool,reason:string,url?:string}
+	 */
+	private function open_action( int $product_id ): array {
+		$product = call_user_func( $this->describe, $product_id );
+		$action  = [
+			'id'      => Remote_Cards_Definition::OPEN_PRODUCT,
+			'enabled' => '' !== $product['url'],
+			'reason'  => '' !== $product['url'] ? '' : __( 'Нет права изменять этот товар.', 'woodev-plugin-framework' ),
+		];
+
+		return '' === $product['url'] ? $action : $action + [ 'url' => $product['url'] ];
 	}
 
 	/**
@@ -366,9 +370,7 @@ final class Remote_Cards_Rows {
 			return $action;
 		}
 
-		if ( (int) ( $card['wc_product_id'] ?? 0 ) > 0 ) {
-			$action['reason'] = __( 'Карточка уже на сайте.', 'woodev-plugin-framework' );
-		} elseif ( empty( $card['details_ok'] ) ) {
+		if ( empty( $card['details_ok'] ) ) {
 			$action['reason'] = __( 'О карточке нет полных данных. Обновите список.', 'woodev-plugin-framework' );
 		} elseif ( ! empty( $card['archived'] ) || Link_Record::STATE_ARCHIVED === (string) ( $card['state'] ?? '' ) ) {
 			$action['reason'] = __( 'Карточка в архиве — не импортируем.', 'woodev-plugin-framework' );
@@ -392,9 +394,7 @@ final class Remote_Cards_Rows {
 			'reason'  => '',
 		];
 
-		if ( (int) ( $card['wc_product_id'] ?? 0 ) > 0 ) {
-			$action['reason'] = __( 'Карточка уже связана с товаром сайта.', 'woodev-plugin-framework' );
-		} elseif ( empty( $card['details_ok'] ) ) {
+		if ( empty( $card['details_ok'] ) ) {
 			$action['reason'] = __( 'О карточке нет полных данных. Обновите список.', 'woodev-plugin-framework' );
 		} else {
 			$action['enabled'] = true;

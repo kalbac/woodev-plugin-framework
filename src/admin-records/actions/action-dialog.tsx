@@ -19,7 +19,7 @@ import { FieldsForm } from './fields';
 import { actionMessage, ACTION_MESSAGE_KEYS, type ActionMessageKey } from './messages';
 import { Counts, Groups, Warnings } from './report';
 import { STYLES } from './styles';
-import { hasEmptyRequired, needsPreview, type ActionFlow, type FlowState } from './use-action-flow';
+import { hasEmptyRequired, isQuiet, needsPreview, type ActionFlow, type FlowState } from './use-action-flow';
 import type { ApplyResponse, ApplyStatus } from './types';
 
 const STATUS_KEYS: Record< ApplyStatus, ActionMessageKey > = {
@@ -203,6 +203,12 @@ export function ActionDialog( { flow, table }: ActionDialogProps ) {
 	}
 
 	const { action, stage, plan, result } = state;
+
+	// A quiet action (see `isQuiet`) shows nothing while it runs or when it went through; a refusal or an error still opens the dialog.
+	if ( isQuiet( action ) && stage !== 'failed' && ! ( stage === 'done' && result && ( result.status === 'failed' || result.status === 'partial' ) ) ) {
+		return null;
+	}
+
 	const messages: Messages = { ...table.messages, ...( plan?.messages ?? {} ), ...( result?.messages ?? {} ) };
 	const scope = plan?.scope.sentence || action.scope_sentence;
 	const showForm = stage === 'input' || stage === 'planning' || stage === 'previewed' || ( stage === 'applying' && action.fields.length > 0 );

@@ -100,7 +100,7 @@ final class Definition_Parser {
 		foreach ( $list as $i => $column ) {
 			$path   = "definition.columns[$i]";
 			$column = self::map( $column, $path );
-			self::allow_keys( $column, [ 'id', 'label', 'cell_type', 'sort_key', 'required', 'visible', 'align' ], $path );
+			self::allow_keys( $column, [ 'id', 'label', 'cell_type', 'sort_key', 'required', 'visible', 'align', 'help' ], $path );
 
 			$sort_key = isset( $column['sort_key'] ) ? self::slug( $column, 'sort_key', $path ) : null;
 			if ( null !== $sort_key && ! in_array( $sort_key, $sort_keys, true ) ) {
@@ -115,6 +115,7 @@ final class Definition_Parser {
 				'required'  => self::flag( $column, 'required', $path, false ),
 				'visible'   => self::flag( $column, 'visible', $path, true ),
 				'align'     => self::one_of( $column, 'align', $path, Records_Definition::ALIGNMENTS, 'left' ),
+				'help'      => self::text( $column, 'help', $path, true ), // The «?» beside the heading: what the column shows and in which format.
 			];
 		}
 
@@ -425,7 +426,7 @@ final class Definition_Parser {
 	private static function action( array $action, string $path, bool $bulk ): array {
 		self::allow_keys(
 			$action,
-			[ 'id', 'label', 'tone', 'capability', 'effect', 'interaction', 'scope', 'scope_sentence', 'fields', 'skip_preview', 'confirm_label', 'preview_label', 'short_label', 'all_matching', 'group' ],
+			[ 'id', 'label', 'tone', 'capability', 'effect', 'interaction', 'scope', 'scope_sentence', 'fields', 'skip_preview', 'confirm_label', 'preview_label', 'short_label', 'icon', 'all_matching', 'group' ],
 			$path
 		);
 
@@ -442,6 +443,7 @@ final class Definition_Parser {
 			'group'          => self::text( $action, 'group', $path, true, 64 ),
 			'preview_label'  => self::text( $action, 'preview_label', $path, true ),
 			'short_label'    => self::text( $action, 'short_label', $path, true, 32 ),
+			'icon'           => array_key_exists( 'icon', $action ) ? self::slug( $action, 'icon', $path ) : '',
 			'skip_preview'   => self::flag( $action, 'skip_preview', $path, false ),
 			'all_matching'   => self::flag( $action, 'all_matching', $path, false ),
 			'fields'         => self::action_fields( $action['fields'] ?? [], "$path.fields" ),
@@ -453,8 +455,11 @@ final class Definition_Parser {
 		if ( $entry['all_matching'] && ( ! $bulk || 'selection' !== $entry['scope'] ) ) {
 			throw new \InvalidArgumentException( "$path: only a bulk action scoped to the selection may declare all_matching." );
 		}
-		if ( $entry['skip_preview'] && ( $bulk || 'mutate' !== $entry['effect'] || 'danger' === $entry['tone'] ) ) {
-			throw new \InvalidArgumentException( "$path: only a non-destructive mutating row action may skip the preview." );
+		// A row action may start on a click; so may an account-wide bulk action: «Обновить список» has no selection to count, so a
+		// preview with «Выбрано 1» would say nothing. A selection action always previews, because its counts are the point.
+		$may_skip = ! $bulk || 'account' === $entry['scope'];
+		if ( $entry['skip_preview'] && ( ! $may_skip || 'mutate' !== $entry['effect'] || 'danger' === $entry['tone'] ) ) {
+			throw new \InvalidArgumentException( "$path: only a non-destructive mutating row or account-wide action may skip the preview." );
 		}
 
 		return $entry;

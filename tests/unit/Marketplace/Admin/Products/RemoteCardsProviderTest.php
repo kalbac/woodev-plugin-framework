@@ -62,12 +62,14 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$definition = $this->cards_definition()->to_array();
 
 		$this->assertSame( [ 'refresh_list', 'link_by_article' ], array_column( $definition['bulk_actions'], 'id' ) );
-		$this->assertSame( [ 'link_to', 'near_confirm', 'near_dismiss' ], array_column( $definition['row_actions'], 'id' ) );
+		$this->assertTrue( array_column( $definition['bulk_actions'], null, 'id' )['refresh_list']['skip_preview'], '«Обновить список» starts on the click: a preview of an account-wide read counts nothing.' );
+		$this->assertFalse( array_column( $definition['bulk_actions'], null, 'id' )['link_by_article']['skip_preview'] );
+		$this->assertSame( [ 'open_product', 'link_to', 'near_confirm', 'near_dismiss' ], array_column( $definition['row_actions'], 'id' ) );
 		$this->assertSame( [], $definition['sorts']['keys'], 'The list is the marketplace\'s own order.' );
 		$this->assertNull( $definition['analytics'] );
 		$this->assertNull( $definition['children'] );
 
-		$field = $definition['row_actions'][0]['fields'][0];
+		$field = array_column( $definition['row_actions'], null, 'id' )['link_to']['fields'][0];
 		$this->assertSame( 'product', $field['id'] );
 		$this->assertTrue( $field['required'] );
 		$this->assertTrue( $field['options_source'] );
@@ -87,11 +89,11 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertStringNotContainsString( 'отмеченным', $actions['link_by_article']['scope_sentence'], 'no card row can be marked on this table' );
 	}
 
-	public function test_the_table_opens_on_the_cards_that_are_not_on_the_site_yet(): void {
+	public function test_the_table_opens_on_all_cards_so_a_cabinet_whose_cards_are_all_on_the_site_is_not_called_empty(): void {
 		$filters = array_column( $this->cards_definition()->to_array()['filters'], null, 'id' );
 
 		$this->assertSame( 'search', $filters['q']['type'] );
-		$this->assertSame( Remote_Cards_Query::NOT_ON_SITE, $filters['on_site']['default'] );
+		$this->assertArrayNotHasKey( 'default', $filters['on_site'] );
 		$this->assertSame( [ 'no', 'yes' ], array_column( $filters['on_site']['options'], 'value' ) );
 		$this->assertTrue( $filters['on_site']['views'], '«На сайте» is the counted row above the table.' );
 		$this->assertArrayNotHasKey( 'views', $filters['show'] );
@@ -111,8 +113,12 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 
 		$this->assertSame( 1, $body['total'] );
 		$this->assertSame( 'A-1', $row['cells']['offer_id'] );
-		$this->assertSame( 'Кружка синяя', $row['cells']['name'] );
-		$this->assertSame( [ 'product_id: 5001', 'sku: 7001' ], array_column( $row['cells']['ids'], 'value' ) );
+		$this->assertSame( [ [ 'type' => 'text', 'value' => 'Кружка синяя' ] ], $row['cells']['name'], 'No cabinet address from the adapter: the name is plain text.' );
+		$this->assertArrayNotHasKey( 'ids', $row['cells'], 'The marketplace numbers are not a column.' );
+		$this->assertCount( 1, $row['cells']['state'], 'One badge; the numbers are its tooltip.' );
+		$this->assertSame( 'ID товара: 5001' . "\n" . 'SKU: 7001', $row['cells']['state'][0]['value']['tooltip'] );
+		$this->assertSame( [ '—', '—' ], [ $row['cells']['price'], $row['cells']['stock'] ], 'The store gives no price or stock yet: a dash, not an empty cell.' );
+		$this->assertNull( $row['cells']['image'] );
 		$this->assertSame( 'Создан', $row['cells']['state'][0]['value']['label'] );
 		$this->assertSame( '—', $row['cells']['on_site'][0]['value'] );
 		$this->assertSame( [ [ 'id' => 'link_to', 'enabled' => true, 'reason' => '' ] ], $row['actions'] );
@@ -130,8 +136,10 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertSame( 'link', $row['cells']['on_site'][0]['type'] );
 		$this->assertSame( 'Товар 41', $row['cells']['on_site'][0]['value']['label'] );
 		$this->assertSame( 'https://example.test/wp-admin/post.php?post=41&action=edit', $row['cells']['on_site'][0]['value']['url'] );
-		$this->assertFalse( $row['actions'][0]['enabled'] );
-		$this->assertSame( 'Карточка уже связана с товаром сайта.', $row['actions'][0]['reason'] );
+		// A card on the site needs nothing done to it: one button opens the product, no disabled «Связать с…» and no sentence.
+		$this->assertSame( [ 'open_product' ], array_column( $row['actions'], 'id' ) );
+		$this->assertTrue( $row['actions'][0]['enabled'] );
+		$this->assertSame( 'https://example.test/wp-admin/post.php?post=41&action=edit', $row['actions'][0]['url'] );
 	}
 
 	public function test_the_default_filter_hides_the_cards_already_on_the_site_and_no_filter_shows_all(): void {
@@ -186,7 +194,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$b    = $rows[ $this->card_row_id( 'B-2' ) ]['cells']['state'];
 
 		$this->assertSame( [ 'Ошибка', 'danger' ], [ $a[0]['value']['label'], $a[0]['value']['tone'] ] );
-		$this->assertSame( 'Нет категории', $a[1]['value'] );
+		$this->assertSame( 'Нет категории', explode( "\n", $a[0]['value']['tooltip'] )[0], 'The reason is the badge\'s tooltip.' );
 		$this->assertSame( 'В архиве', $b[0]['value']['label'] );
 	}
 

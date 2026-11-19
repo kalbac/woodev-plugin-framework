@@ -27,6 +27,11 @@ final class Remote_Cards_Definition {
 	public const LINK_TO = 'link_to';
 
 	/**
+	 * Row action: open the shop product that carries the card.
+	 */
+	public const OPEN_PRODUCT = 'open_product';
+
+	/**
 	 * Row action: import this one card as a shop product. The records engine keeps one id space for the row and the bulk actions, so
 	 * the bulk twin of this action has an id of its own ({@see self::IMPORT_SELECTED}); the server handles both alike.
 	 */
@@ -107,7 +112,7 @@ final class Remote_Cards_Definition {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private static function row_actions( bool $importable ): array {
-		$actions = [ self::link_to(), self::near_confirm(), self::near_dismiss() ];
+		$actions = [ self::open_product(), self::link_to(), self::near_confirm(), self::near_dismiss() ];
 
 		return $importable ? array_merge( [ self::import( self::IMPORT ) ], $actions ) : $actions;
 	}
@@ -124,10 +129,24 @@ final class Remote_Cards_Definition {
 	}
 
 	/**
+	 * Photo, name (a link to the card in the cabinet), article, state, price, stock, the product that carries the card, and the actions.
+	 * The marketplace's numbers of a card are not a column: they are in its state badge's tooltip.
+	 *
 	 * @return array<int,array<string,mixed>>
 	 */
 	private static function columns(): array {
 		return [
+			[
+				'id'        => 'image',
+				'label'     => __( 'Фото', 'woodev-plugin-framework' ),
+				'cell_type' => 'stack',
+			],
+			[
+				'id'        => 'name',
+				'label'     => __( 'Название', 'woodev-plugin-framework' ),
+				'cell_type' => 'stack',
+				'required'  => true,
+			],
 			[
 				'id'        => 'offer_id',
 				'label'     => __( 'Артикул', 'woodev-plugin-framework' ),
@@ -135,19 +154,21 @@ final class Remote_Cards_Definition {
 				'required'  => true,
 			],
 			[
-				'id'        => 'name',
-				'label'     => __( 'Название', 'woodev-plugin-framework' ),
-				'cell_type' => 'text',
-			],
-			[
-				'id'        => 'ids',
-				'label'     => __( 'Номера на маркетплейсе', 'woodev-plugin-framework' ),
-				'cell_type' => 'stack',
-			],
-			[
 				'id'        => 'state',
-				'label'     => __( 'Статус карточки', 'woodev-plugin-framework' ),
+				'label'     => __( 'Состояние', 'woodev-plugin-framework' ),
 				'cell_type' => 'stack',
+			],
+			[
+				'id'        => 'price',
+				'label'     => __( 'Цена', 'woodev-plugin-framework' ),
+				'cell_type' => 'text',
+				'help'      => __( 'Цена карточки на маркетплейсе. «—» значит, что значения нет.', 'woodev-plugin-framework' ),
+			],
+			[
+				'id'        => 'stock',
+				'label'     => __( 'Остаток', 'woodev-plugin-framework' ),
+				'cell_type' => 'text',
+				'help'      => __( 'Остаток карточки на маркетплейсе. «—» значит, что значения нет.', 'woodev-plugin-framework' ),
 			],
 			[
 				'id'        => 'on_site',
@@ -156,14 +177,14 @@ final class Remote_Cards_Definition {
 			],
 			[
 				'id'        => 'actions',
-				'label'     => '',
+				'label'     => __( 'Действия', 'woodev-plugin-framework' ),
 				'cell_type' => 'actions',
 			],
 		];
 	}
 
 	/**
-	 * The search box and «На сайте», which opens on «Нет на сайте»: the cards worth a look are the ones no product carries yet.
+	 * The search box and «На сайте», which opens on «Все»: a view that opens on «Нет на сайте» showed «В кабинете нет ни одной карточки.» for a cabinet whose cards were all on the site.
 	 *
 	 * @return array<int,array<string,mixed>>
 	 */
@@ -188,7 +209,6 @@ final class Remote_Cards_Definition {
 						'label' => __( 'Уже на сайте', 'woodev-plugin-framework' ),
 					],
 				],
-				'default' => Remote_Cards_Query::NOT_ON_SITE,
 				'views'   => true,
 			],
 			[
@@ -217,6 +237,7 @@ final class Remote_Cards_Definition {
 		$action = [
 			'id'             => $id,
 			'label'          => __( 'Импортировать', 'woodev-plugin-framework' ),
+			'icon'           => 'download',
 			'tone'           => 'primary',
 			'effect'         => 'mutate',
 			'interaction'    => 'dialog',
@@ -309,6 +330,21 @@ final class Remote_Cards_Definition {
 	}
 
 	/**
+	 * «Открыть товар»: the edit screen of the product that carries the card. A link, so it needs no dialog.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function open_product(): array {
+		return [
+			'id'          => self::OPEN_PRODUCT,
+			'label'       => __( 'Открыть товар', 'woodev-plugin-framework' ),
+			'icon'        => 'external',
+			'effect'      => 'read',
+			'interaction' => 'link',
+		];
+	}
+
+	/**
 	 * «Связать с…»: the merchant picks the product the card belongs to. The product field searches the shop's products.
 	 *
 	 * @return array<string,mixed>
@@ -317,6 +353,7 @@ final class Remote_Cards_Definition {
 		return [
 			'id'             => self::LINK_TO,
 			'label'          => __( 'Связать с…', 'woodev-plugin-framework' ),
+			'icon'           => 'admin-links',
 			'effect'         => 'mutate',
 			'interaction'    => 'dialog',
 			'scope'          => 'selection',
@@ -347,6 +384,9 @@ final class Remote_Cards_Definition {
 		return [
 			'id'             => self::REFRESH,
 			'label'          => __( 'Обновить список', 'woodev-plugin-framework' ),
+			'tone'           => 'primary',
+			// Account-wide and harmless: it starts on the click, and the account line above the table shows that it is running.
+			'skip_preview'   => true,
 			'effect'         => 'mutate',
 			'interaction'    => 'dialog',
 			'scope'          => 'account',
@@ -373,7 +413,8 @@ final class Remote_Cards_Definition {
 			Standard_Messages::matching( __( 'карточки', 'woodev-plugin-framework' ) ),
 			Standard_Messages::views(),
 			[
-				'empty'                  => __( 'Список карточек ещё не загружен. Нажмите «Обновить список».', 'woodev-plugin-framework' ),
+				'empty'                  => __( 'Список карточек ещё не загружен.', 'woodev-plugin-framework' ),
+				'empty_action'           => self::REFRESH,
 				'empty_filtered'         => __( 'По этим фильтрам карточек нет.', 'woodev-plugin-framework' ),
 				/* translators: %s: marketplace name. */
 				'error'                  => sprintf( __( 'Не удалось показать список карточек %s. Повторите чуть позже.', 'woodev-plugin-framework' ), $marketplace ),
