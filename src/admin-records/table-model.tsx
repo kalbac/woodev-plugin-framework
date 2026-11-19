@@ -77,21 +77,25 @@ function selectableIds( input: Pick< TableModelInput, 'rows' | 'children' > ): s
 
 interface ExpandButtonProps {
 	isOpen: boolean;
+	/** The accessible name: the verb and the row's name. */
 	label: string;
+	/** The tooltip: the verb alone («Показать варианты»). */
+	title: string;
 	onClick: () => void;
 }
 
-function ExpandButton( { isOpen, label, onClick }: ExpandButtonProps ) {
+/** A chevron icon button (right while the row is closed, down while it is open), not a text glyph. */
+function ExpandButton( { isOpen, label, title, onClick }: ExpandButtonProps ) {
 	return (
-		<button
-			type="button"
-			className="button-link woodev-records__expand"
+		<Button
+			className="woodev-records__expand"
+			icon={ <span className={ `dashicons dashicons-arrow-${ isOpen ? 'down' : 'right' }-alt2` } aria-hidden="true" /> }
+			label={ label }
+			showTooltip={ false }
+			title={ title === '' ? undefined : title }
 			aria-expanded={ isOpen }
-			aria-label={ label }
 			onClick={ onClick }
-		>
-			<span aria-hidden="true">{ isOpen ? '▾' : '▸' }</span>
-		</button>
+		/>
 	);
 }
 
@@ -134,6 +138,7 @@ function expandCell( input: TableModelInput, row: AdminRecord ): TableCell {
 		<ExpandButton
 			isOpen={ isOpen }
 			label={ joinLabel( verb, rowName( input.definition, row ) ) }
+			title={ verb }
 			onClick={ () => input.onToggle( row.id ) }
 		/>
 	);

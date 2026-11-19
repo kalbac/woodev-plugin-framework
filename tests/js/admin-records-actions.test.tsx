@@ -101,6 +101,13 @@ const BULK_ACTIONS = [
 		scope_sentence: 'Будут обработаны все товары аккаунта.',
 	} ),
 	action( 'labels', 'Скачать этикетки', { effect: 'read', interaction: 'download' } ),
+	// Account-wide, harmless, no field: starts on the click and shows nothing (see `isQuiet`).
+	action( 'refresh', 'Обновить список', {
+		interaction: 'dialog',
+		scope: 'account',
+		scope_sentence: 'Весь аккаунт.',
+		skip_preview: true,
+	} ),
 ];
 
 function definition( overrides: Partial< Definition > = {} ): Definition {
@@ -584,6 +591,38 @@ describe( 'apply', () => {
 		expect( previews() ).toHaveLength( 0 );
 		expect( applies() ).toHaveLength( 1 );
 		expect( applies()[ 0 ].data ).toMatchObject( { ids: [ 'p1' ], confirmed: true } );
+	} );
+
+	test( 'an account-wide action that skips the preview starts on the click: no dialog, no counters, the button is busy meanwhile', async () => {
+		const answer = defer< ApplyResponse >();
+		serve( { apply: () => answer.promise } );
+		await renderPage();
+
+		fireEvent.click( toolbarButton( 'Обновить список' ) );
+
+		await waitFor( () => expect( applies() ).toHaveLength( 1 ) );
+		expect( applies()[ 0 ].data ).toMatchObject( { ids: [], confirmed: true } );
+		expect( previews() ).toHaveLength( 0 );
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
+		expect( toolbarButton( 'Обновить список' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( toolbarButton( 'Обновить список' ) ).toHaveClass( 'is-busy' );
+
+		await act( async () => answer.resolve( outcome( { status: 'queued', requested: 1, accepted: 1 } ) ) );
+
+		// The table is read again (the account line above it shows the progress); nothing was opened and nothing counted.
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Принято' ) ).not.toBeInTheDocument();
+		await waitFor( () => expect( toolbarButton( 'Обновить список' ) ).not.toHaveAttribute( 'aria-disabled', 'true' ) );
+	} );
+
+	test( 'a quiet action that is refused opens the dialog with the reason', async () => {
+		serve( { apply: () => Promise.reject( { code: 'woodev_records_action_conflict', message: 'Список уже загружается.', data: { status: 409 } } ) } );
+		await renderPage();
+
+		fireEvent.click( toolbarButton( 'Обновить список' ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		expect( within( dialog ).getByText( 'Список уже загружается.' ) ).toBeInTheDocument();
 	} );
 
 	test( 'a link action is a link to the row’s destination: no dialog, no request', async () => {

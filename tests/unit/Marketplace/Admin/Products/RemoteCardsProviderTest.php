@@ -62,6 +62,8 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$definition = $this->cards_definition()->to_array();
 
 		$this->assertSame( [ 'refresh_list', 'link_by_article' ], array_column( $definition['bulk_actions'], 'id' ) );
+		$this->assertTrue( array_column( $definition['bulk_actions'], null, 'id' )['refresh_list']['skip_preview'], '«Обновить список» starts on the click: a preview of an account-wide read counts nothing.' );
+		$this->assertFalse( array_column( $definition['bulk_actions'], null, 'id' )['link_by_article']['skip_preview'] );
 		$this->assertSame( [ 'open_product', 'link_to', 'near_confirm', 'near_dismiss' ], array_column( $definition['row_actions'], 'id' ) );
 		$this->assertSame( [], $definition['sorts']['keys'], 'The list is the marketplace\'s own order.' );
 		$this->assertNull( $definition['analytics'] );
@@ -114,7 +116,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [ [ 'type' => 'text', 'value' => 'Кружка синяя' ] ], $row['cells']['name'], 'No cabinet address from the adapter: the name is plain text.' );
 		$this->assertArrayNotHasKey( 'ids', $row['cells'], 'The marketplace numbers are not a column.' );
 		$this->assertCount( 1, $row['cells']['state'], 'One badge; the numbers are its tooltip.' );
-		$this->assertSame( 'product_id: 5001' . "\n" . 'sku: 7001', $row['cells']['state'][0]['value']['tooltip'] );
+		$this->assertSame( 'ID товара: 5001' . "\n" . 'SKU: 7001', $row['cells']['state'][0]['value']['tooltip'] );
 		$this->assertSame( [ '—', '—' ], [ $row['cells']['price'], $row['cells']['stock'] ], 'The store gives no price or stock yet: a dash, not an empty cell.' );
 		$this->assertNull( $row['cells']['image'] );
 		$this->assertSame( 'Создан', $row['cells']['state'][0]['value']['label'] );

@@ -118,10 +118,11 @@
 	}
 
 	// WooCommerce pads a cell 24px each side; eight columns lose 380px to it, which is what pushed the actions off a 1024px screen.
+	// (Now 10px: both products tables must fit a 1024px screen with the sidebar collapsed without scrolling.)
 	.woocommerce-table__header,
 	.woocommerce-table__item {
-		padding-left: 12px;
-		padding-right: 12px;
+		padding-left: 10px;
+		padding-right: 10px;
 	}
 
 	// The row's buttons are one group on one line, the last column of the row.
@@ -147,6 +148,22 @@
 		}
 	}
 
+	// The expand toggle: a chevron icon button, centred in its cell like the checkbox beside it.
+	.woodev-records__expand.components-button.has-icon {
+		height: 24px;
+		min-width: 24px;
+		padding: 0;
+		vertical-align: middle;
+		width: 24px;
+
+		.dashicons {
+			font-size: 20px;
+			height: 20px;
+			line-height: 20px;
+			width: 20px;
+		}
+	}
+
 	.woodev-records__col-expand {
 		padding-left: 4px;
 		padding-right: 0;
@@ -160,9 +177,9 @@
 	// before it, whose width the `left` offsets add up (the expand column too, on a table whose rows expand).
 	.woodev-records__col-name {
 		box-sizing: border-box;
-		min-width: 210px;
-		max-width: 210px;
-		width: 210px;
+		min-width: 180px;
+		max-width: 180px;
+		width: 180px;
 	}
 
 	// A pinned cell is opaque, so what scrolls under it does not show through. WooCommerce paints the sorted column grey
@@ -239,9 +256,9 @@
 	.woodev-records__col-sku,
 	.woodev-records__col-offer_id {
 		box-sizing: border-box;
-		max-width: 160px;
-		min-width: 160px;
-		width: 160px;
+		max-width: 130px;
+		min-width: 130px;
+		width: 130px;
 
 		.woodev-records__stack,
 		.woodev-records__stack > span,
@@ -259,15 +276,15 @@
 
 	.woodev-records__col-on_site {
 		box-sizing: border-box;
-		max-width: 170px;
-		min-width: 170px;
-		width: 170px;
+		max-width: 120px;
+		min-width: 120px;
+		width: 120px;
 	}
 
 	// The photo of a card: a small square.
 	.woodev-records__col-image {
 		padding-right: 0;
-		width: 52px;
+		width: 44px;
 	}
 
 	.woodev-records__thumb {
@@ -447,7 +464,7 @@
 	.woodev-table-bulk__selected {
 		color: wd.$muted;
 		font-size: 13px;
-		min-width: 5.5em;
+		min-width: 5em;
 		white-space: nowrap;
 	}
 
@@ -455,9 +472,9 @@
 	// [title] [select | Apply] [search] [⋮] in one row on a 1024px screen with the sidebar open (a long option name
 	// — «Выключить синхронизацию остатков» — had stretched it to 330px and pushed the search under it).
 	.woodev-table-bulk .components-select-control {
-		max-width: 180px;
-		min-width: 180px;
-		width: 180px;
+		max-width: 198px;
+		min-width: 198px;
+		width: 198px;
 	}
 
 	.woodev-table-bulk .components-select-control__input {

@@ -149,6 +149,8 @@ export function AccountActions( { flow, selection, table, activity, only }: Acco
 			{ actions.map( ( action ) => {
 				const reason = blockedReason( action, selection.selectedIds, table, health );
 				const reasonId = `woodev-records-bulk-reason-${ action.id }`;
+				// The click has started it and the answer is not back yet: the button says so, and cannot be clicked twice.
+				const starting = flow.state?.action.id === action.id && flow.state.stage === 'applying';
 
 				return (
 					<Fragment key={ action.id }>
@@ -156,7 +158,8 @@ export function AccountActions( { flow, selection, table, activity, only }: Acco
 							__next40pxDefaultSize
 							variant={ action.tone === 'primary' ? 'primary' : 'secondary' }
 							isDestructive={ action.tone === 'danger' }
-							disabled={ reason !== '' }
+							disabled={ reason !== '' || starting }
+							isBusy={ starting }
 							accessibleWhenDisabled
 							aria-describedby={ reason === '' ? undefined : reasonId }
 							title={ reason === '' ? undefined : reason }

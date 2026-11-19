@@ -132,7 +132,21 @@ final class Remote_Cards_Cells {
 	}
 
 	/**
-	 * The marketplace's numbers of the card, as «name: value» lines (for the state badge's tooltip).
+	 * What a merchant calls the marketplace's identifiers (the product tab says «ID товара · SKU · модель»). An identifier that is
+	 * not listed keeps the adapter's own name.
+	 *
+	 * @return array<string,string>
+	 */
+	private function id_names(): array {
+		return [
+			'product_id' => __( 'ID товара', 'woodev-plugin-framework' ),
+			'sku'        => __( 'SKU', 'woodev-plugin-framework' ),
+			'model_id'   => __( 'Модель', 'woodev-plugin-framework' ),
+		];
+	}
+
+	/**
+	 * The marketplace's numbers of the card, as «ID товара: 1» lines (for the state badge's tooltip).
 	 *
 	 * @since 2.1.13
 	 *
@@ -141,13 +155,14 @@ final class Remote_Cards_Cells {
 	 */
 	public function id_lines( array $remote_ids ): array {
 		$lines = [];
+		$names = $this->id_names();
 
 		foreach ( $remote_ids as $name => $value ) {
 			if ( ! is_scalar( $value ) || '' === (string) $value || '0' === (string) $value ) {
 				continue;
 			}
 
-			$lines[] = $name . ': ' . $value;
+			$lines[] = ( $names[ $name ] ?? $name ) . ': ' . $value;
 		}
 
 		return array_slice( $lines, 0, 5 );

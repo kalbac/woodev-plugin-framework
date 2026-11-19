@@ -385,6 +385,8 @@ final class Remote_Cards_Definition {
 			'id'             => self::REFRESH,
 			'label'          => __( 'Обновить список', 'woodev-plugin-framework' ),
 			'tone'           => 'primary',
+			// Account-wide and harmless: it starts on the click, and the account line above the table shows that it is running.
+			'skip_preview'   => true,
 			'effect'         => 'mutate',
 			'interaction'    => 'dialog',
 			'scope'          => 'account',

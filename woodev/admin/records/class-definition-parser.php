@@ -455,8 +455,11 @@ final class Definition_Parser {
 		if ( $entry['all_matching'] && ( ! $bulk || 'selection' !== $entry['scope'] ) ) {
 			throw new \InvalidArgumentException( "$path: only a bulk action scoped to the selection may declare all_matching." );
 		}
-		if ( $entry['skip_preview'] && ( $bulk || 'mutate' !== $entry['effect'] || 'danger' === $entry['tone'] ) ) {
-			throw new \InvalidArgumentException( "$path: only a non-destructive mutating row action may skip the preview." );
+		// A row action may start on a click; so may an account-wide bulk action: «Обновить список» has no selection to count, so a
+		// preview with «Выбрано 1» would say nothing. A selection action always previews, because its counts are the point.
+		$may_skip = ! $bulk || 'account' === $entry['scope'];
+		if ( $entry['skip_preview'] && ( ! $may_skip || 'mutate' !== $entry['effect'] || 'danger' === $entry['tone'] ) ) {
+			throw new \InvalidArgumentException( "$path: only a non-destructive mutating row or account-wide action may skip the preview." );
 		}
 
 		return $entry;

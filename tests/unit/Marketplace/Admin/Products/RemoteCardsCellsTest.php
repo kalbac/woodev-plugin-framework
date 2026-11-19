@@ -56,9 +56,15 @@ class RemoteCardsCellsTest extends TestCase {
 		$this->assertSame( [ '1250.5', '0' ], [ $cells->price( [ 'price' => '1250.50' ] ), $cells->stock( [ 'stock' => 0 ] ) ], 'Zero stock is a number, not a missing value.' );
 	}
 
+	public function test_the_identifiers_have_the_merchants_names_and_an_unknown_one_keeps_its_own(): void {
+		$lines = ( new Remote_Cards_Cells() )->id_lines( [ 'product_id' => 5001, 'sku' => 7001, 'model_id' => 9, 'nmID' => 4 ] );
+
+		$this->assertSame( [ 'ID товара: 5001', 'SKU: 7001', 'Модель: 9', 'nmID: 4' ], $lines );
+	}
+
 	public function test_the_identifier_lines_skip_empty_numbers_and_keep_five(): void {
 		$lines = ( new Remote_Cards_Cells() )->id_lines( [ 'product_id' => 5001, 'sku' => 0, 'model_id' => '', 'a' => 1, 'b' => 2, 'c' => 3, 'd' => 4, 'e' => 5 ] );
 
-		$this->assertSame( [ 'product_id: 5001', 'a: 1', 'b: 2', 'c: 3', 'd: 4' ], $lines );
+		$this->assertSame( [ 'ID товара: 5001', 'a: 1', 'b: 2', 'c: 3', 'd: 4' ], $lines );
 	}
 }

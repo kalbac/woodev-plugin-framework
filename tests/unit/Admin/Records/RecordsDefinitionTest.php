@@ -149,6 +149,17 @@ class RecordsDefinitionTest extends TestCase {
 		$this->assertSame( [ 'edit', '' ], array_column( $parsed['row_actions'], 'icon' ) );
 	}
 
+	public function test_an_account_wide_bulk_action_may_skip_the_preview_a_selection_action_may_not(): void {
+		$account = [ 'id' => 'refresh', 'label' => 'Обновить', 'effect' => 'mutate', 'interaction' => 'dialog', 'scope' => 'account', 'scope_sentence' => 'Весь аккаунт.', 'skip_preview' => true ];
+
+		$parsed = Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ $account ] ] ) );
+
+		$this->assertTrue( $parsed->get_action( 'refresh' )['skip_preview'] );
+
+		$this->expectException( \InvalidArgumentException::class );
+		Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ array_merge( $account, [ 'scope' => 'selection', 'tone' => 'neutral' ] ) ] ] ) );
+	}
+
 	public function test_an_icon_is_a_slug_not_markup(): void {
 		$this->expectException( \InvalidArgumentException::class );
 
