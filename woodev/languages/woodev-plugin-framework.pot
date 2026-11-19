@@ -12194,3 +12194,62 @@ msgstr ""
 #: marketplace/admin/product/class-panel-view.php:621
 msgid "Перейти на страницу сопоставлений"
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-cells.php:142
+msgid "ID товара"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-cells.php:143
+msgid "SKU"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-cells.php:144
+msgid "Модель"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:141
+msgid "Фото"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:165
+msgid "Цена карточки на маркетплейсе. «—» значит, что значения нет."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:171
+msgid "Остаток карточки на маркетплейсе. «—» значит, что значения нет."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:340
+msgid "Открыть товар"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:416
+msgid "Список карточек ещё не загружен."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:217
+#, php-format
+msgid "Остаток на сайте / остаток на %s. «—» значит, что значения нет: например, товар ещё не выгружен."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:225
+#, php-format
+msgid "Цена на сайте / цена на %s. «—» значит, что значения нет: например, товар ещё не выгружен."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-rows.php:263
+msgid "остатки"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-rows.php:267
+msgid "цены"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-rows.php:271
+msgid "Синхронизация выключена"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-rows.php:273
+#, php-format
+msgid "Синхронизируются: %s"
+msgstr ""
