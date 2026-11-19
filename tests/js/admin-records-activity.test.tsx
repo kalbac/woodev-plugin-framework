@@ -7,7 +7,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import { RecordsTable, type RecordsExtensions, type RecordsTableProps } from '../../src/admin-records';
 import {
@@ -26,7 +26,7 @@ import {
 	fixtureList,
 	fixtureRow,
 } from '../../src/admin-records/testing/fixture';
-import type { AdminRecord, Definition, ListEnvelope } from '../../src/admin-records/types';
+import type { ActionDescriptor, AdminRecord, Definition, ListEnvelope } from '../../src/admin-records/types';
 import type { TableCardProps } from '../../src/admin-records/wc-runtime';
 
 jest.mock( '@wordpress/api-fetch' );
@@ -809,11 +809,25 @@ describe( 'old answers never overwrite newer rows', () => {
 	} );
 } );
 
+const BULK_EXPORT: ActionDescriptor = {
+	id: 'bulk_export',
+	label: 'Выгрузить выбранные',
+	tone: 'neutral',
+	capability: '',
+	effect: 'mutate',
+	interaction: 'dialog',
+	scope: 'selection',
+	scope_sentence: '',
+	confirm_label: '',
+	skip_preview: false,
+	fields: [],
+};
+
 describe( 'the account work finishes', () => {
 	const LOADING = 'Список карточек загружается с маркетплейса.';
 
 	/** The first list read says the load runs; the second, after it finished, brings the new rows. */
-	function serveLoad( second: () => ListEnvelope | Promise< ListEnvelope > ) {
+	function serveLoad( second: () => ListEnvelope | Promise< ListEnvelope >, definition: Partial< Definition > = {} ) {
 		let listReads = 0;
 
 		serve( {
@@ -825,6 +839,7 @@ describe( 'the account work finishes', () => {
 					: second();
 			},
 			activity: () => answer( [ row( 'p1', 'Кружка' ) ], { account_activity: account() } ),
+			definition,
 		} );
 
 		return () => listReads;
@@ -876,6 +891,36 @@ describe( 'the account work finishes', () => {
 		await wait( LIMITS.refresh_ms );
 
 		expect( reads.length ).toBeGreaterThan( before );
+	} );
+
+	test( 'what the merchant selected stays selected through the reload', async () => {
+		const slow = defer< ListEnvelope >();
+		serveLoad( () => slow.promise, {
+			bulk_actions: [ BULK_EXPORT ],
+			pagination: { default_per_page: 25, per_page_options: [ 25 ], max_per_page: 25, max_selection: 10 },
+		} );
+		const extensions: RecordsExtensions = {
+			...activity.extensions,
+			renderBulkActions: ( chosen ) => <output aria-label="selected">{ chosen.selectedIds.join( ',' ) }</output>,
+		};
+		render( <RecordsTable { ...tableProps( { extensions } ) } /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+		await flush();
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
+		expect( screen.getByLabelText( 'selected' ) ).toHaveTextContent( 'p1' );
+
+		await wait( LIMITS.refresh_ms );
+		expect( table() ).toHaveAttribute( 'data-loading', 'false' );
+		expect( screen.getByLabelText( 'selected' ) ).toHaveTextContent( 'p1' );
+
+		await act( async () => {
+			slow.resolve( fixtureList( [ row( 'p1', 'Кружка' ), row( 'p3', 'Чашка' ) ], { account_activity: account() } ) );
+		} );
+		await flush();
+
+		expect( tableRow( 'p3' ) ).toBeVisible();
+		expect( screen.getByLabelText( 'selected' ) ).toHaveTextContent( 'p1' );
 	} );
 
 	test( 'a list that finishes with nothing to say does not reload again and again', async () => {

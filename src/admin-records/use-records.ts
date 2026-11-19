@@ -99,6 +99,8 @@ export interface Records {
 	expanded: string[];
 	/** Changes with every list read, so an extension can tell that rows it asked about are gone. */
 	epoch: number;
+	/** Like `epoch`, but a silent read does not move it: what the merchant selected survives that read. */
+	selectionEpoch: number;
 	/** Reads the definition again after it failed. */
 	retryDefinition: () => void;
 	/**
@@ -133,6 +135,7 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 	const [ definitionAttempt, setDefinitionAttempt ] = useState( 0 );
 	const [ listAttempt, setListAttempt ] = useState( 0 );
 	const [ epoch, setEpoch ] = useState( 0 );
+	const [ selectionEpoch, setSelectionEpoch ] = useState( 0 );
 	const [ silentRead, setSilentRead ] = useState( false );
 	/** Set by a silent {@link Records.reload}, consumed by the list read it triggers. */
 	const silentRef = useRef( false );
@@ -291,6 +294,9 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 		silentRef.current = false;
 
 		setEpoch( ticket );
+		if ( ! silent ) {
+			setSelectionEpoch( ticket );
+		}
 		setSilentRead( silent );
 		if ( ! silent ) {
 			setList( ( known ) => ( { ...known, status: 'loading', message: '' } ) );
@@ -382,6 +388,7 @@ export function useRecords( api: RecordsApi, route: RouteQuery ): Records {
 		children: inScope ? children : NO_CHILDREN_BY_ID,
 		expanded: inScope ? expanded : NO_EXPANDED,
 		epoch,
+		selectionEpoch,
 		retryDefinition: useCallback( () => setDefinitionAttempt( ( attempt ) => attempt + 1 ), [] ),
 		silentRead,
 		reload: useCallback( ( options?: ReloadOptions ) => {

@@ -382,7 +382,7 @@ export function RecordsTable( {
 	const definition = envelope?.definition ?? null;
 	const hasBulk =
 		definition !== null && definition.bulk_actions.length > 0 && extensions.renderBulkActions !== undefined;
-	const selection = useSelection( definition?.pagination.max_selection ?? 0, records.epoch );
+	const selection = useSelection( definition?.pagination.max_selection ?? 0, records.selectionEpoch );
 	// The table and its empty card are two elements with a header each, so the search box is made again when a search
 	// finds nothing — and the merchant who is still typing must keep the keyboard. Read before the swap reaches the DOM.
 	const isEmpty = records.list.status === 'ready' && records.list.data?.total === 0;
