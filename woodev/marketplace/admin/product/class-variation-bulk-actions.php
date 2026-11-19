@@ -229,11 +229,13 @@ final class Variation_Bulk_Actions {
 			return;
 		}
 
+		wp_enqueue_style( self::SCRIPT, $this->urls['assets'] . 'css/admin/variation-bulk' . \Woodev_Plugin::get_assets_suffix() . '.css', [], $this->version );
 		wp_enqueue_script( self::SCRIPT, $this->urls['assets'] . 'js/admin/variation-bulk' . \Woodev_Plugin::get_assets_suffix() . '.js', [ 'jquery' ], $this->version, true );
 
 		$config = [
-			'prefix' => $this->prefix(),
-			'failed' => __( 'Не получилось: страница не ответила. Обновите её и повторите.', 'woodev-plugin-framework' ),
+			'prefix'  => $this->prefix(),
+			'failed'  => __( 'Не получилось: страница не ответила. Обновите её и повторите.', 'woodev-plugin-framework' ),
+			'dismiss' => __( 'Скрыть это уведомление.', 'woodev-plugin-framework' ),
 		];
 
 		// One entry per marketplace plugin: the script is loaded once, whatever the number of plugins.

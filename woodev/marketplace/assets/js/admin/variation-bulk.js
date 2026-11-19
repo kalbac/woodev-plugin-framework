@@ -9,7 +9,8 @@
 	'use strict';
 
 	var MARK = /<!--woodev-bulk:([\s\S]*?)-->/;
-	var TONES = { success: 1, warning: 1, error: 1 };
+	// The server's tones, drawn with WordPress' own notice classes: done is informational, nothing changed a warning.
+	var TONES = { success: 'info', warning: 'warning', error: 'error' };
 	var ROW = 'woodev-mp-variation-notice';
 
 	/**
@@ -46,7 +47,8 @@
 	 */
 	function show( tone, text, url, link ) {
 		var $host = $( '#variable_product_options_inner' );
-		var $notice = $( '<div class="notice inline"><p></p></div>' ).addClass( ROW + ' notice-' + ( TONES[ tone ] ? tone : 'warning' ) );
+		var $notice = $( '<div class="notice inline is-dismissible"><p></p></div>' ).addClass( ROW + ' notice-' + ( TONES[ tone ] || 'warning' ) );
+		var $dismiss = $( '<button type="button" class="notice-dismiss"><span class="screen-reader-text"></span></button>' );
 
 		$host = $host.length ? $host : $( '#variable_product_options' );
 		$( '.' + ROW ).remove();
@@ -56,8 +58,26 @@
 			$notice.find( 'p' ).append( ' ' ).append( $( '<a></a>' ).attr( 'href', url ).text( link ) );
 		}
 
+		$dismiss.find( 'span' ).text( dismissText() );
+		$notice.append( $dismiss );
 		$host.prepend( $notice );
 	}
+
+	/**
+	 * The screen-reader text of the dismiss button, from the first marketplace entry (WordPress' own sentence).
+	 *
+	 * @return {string}
+	 */
+	function dismissText() {
+		var all = window.woodevMarketplaceVariationBulk || [];
+
+		return ( all[ 0 ] && all[ 0 ].dismiss ) || '';
+	}
+
+	// WooCommerce removes a dismissed notice of its panel by itself; this keeps ours dismissible where its script is not there.
+	$( document ).on( 'click', '.' + ROW + ' .notice-dismiss', function () {
+		$( this ).closest( '.' + ROW ).remove();
+	} );
 
 	$( document ).on( 'ajaxSuccess', function ( event, xhr, settings ) {
 		var found;

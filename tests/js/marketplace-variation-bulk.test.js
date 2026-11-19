@@ -11,7 +11,7 @@ const PREFIX = 'woodev_fake_bulk_';
 global.jQuery = require( 'jquery' );
 global.$ = global.jQuery;
 window.jQuery = global.jQuery;
-window.woodevMarketplaceVariationBulk = [ { prefix: PREFIX, failed: 'The page did not answer.' } ];
+window.woodevMarketplaceVariationBulk = [ { prefix: PREFIX, failed: 'The page did not answer.', dismiss: 'Dismiss this notice.' } ];
 
 // The script attaches its handlers to `document` once, when it loads.
 require( SCRIPT );
@@ -50,9 +50,11 @@ describe( 'variation bulk notice', () => {
 		expect( notice ).not.toBeNull();
 		expect( notice.classList.contains( 'notice' ) ).toBe( true );
 		expect( notice.classList.contains( 'inline' ) ).toBe( true );
-		expect( notice.classList.contains( 'notice-success' ) ).toBe( true );
+		expect( notice.classList.contains( 'notice-info' ) ).toBe( true );
+		expect( notice.classList.contains( 'is-dismissible' ) ).toBe( true );
 		expect( notice.previousElementSibling ).toBeNull();
 		expect( notice.querySelector( 'p' ).textContent ).toBe( 'Принято в работу: 3 товара. Открыть «Товары»' );
+		expect( notice.querySelector( 'button.notice-dismiss .screen-reader-text' ).textContent ).toBe( 'Dismiss this notice.' );
 		expect( notice.querySelector( 'a' ).getAttribute( 'href' ) ).toBe( 'https://x.test/products' );
 	} );
 
@@ -63,7 +65,7 @@ describe( 'variation bulk notice', () => {
 		const notices = document.querySelectorAll( '.woodev-mp-variation-notice' );
 
 		expect( notices ).toHaveLength( 1 );
-		expect( notices[ 0 ].textContent ).toBe( 'Second' );
+		expect( notices[ 0 ].querySelector( 'p' ).textContent ).toBe( 'Second' );
 		expect( notices[ 0 ].classList.contains( 'notice-warning' ) ).toBe( true );
 		expect( notices[ 0 ].querySelector( 'a' ) ).toBeNull();
 	} );
@@ -74,7 +76,7 @@ describe( 'variation bulk notice', () => {
 		const notice = document.querySelector( '.woodev-mp-variation-notice' );
 
 		expect( notice.querySelector( 'img' ) ).toBeNull();
-		expect( notice.textContent ).toBe( '<img src=x onerror=alert(1)>' );
+		expect( notice.querySelector( 'p' ).textContent ).toBe( '<img src=x onerror=alert(1)>' );
 	} );
 
 	test( 'an unknown tone is drawn as a warning', () => {
@@ -109,6 +111,16 @@ describe( 'variation bulk notice', () => {
 		const notice = document.querySelector( '.woodev-mp-variation-notice' );
 
 		expect( notice.classList.contains( 'notice-error' ) ).toBe( true );
-		expect( notice.textContent ).toBe( 'The page did not answer.' );
+		expect( notice.querySelector( 'p' ).textContent ).toBe( 'The page did not answer.' );
+	} );
+
+	test( 'the dismiss button removes the notice', () => {
+		fire( 'ajaxSuccess', PREFIX + '1_export', comment( { tone: 'warning', text: 'Nothing changed', url: '', link: '' } ) );
+
+		expect( document.querySelector( '.notice-warning' ) ).not.toBeNull();
+
+		document.querySelector( '.woodev-mp-variation-notice .notice-dismiss' ).click();
+
+		expect( document.querySelector( '.woodev-mp-variation-notice' ) ).toBeNull();
 	} );
 } );
