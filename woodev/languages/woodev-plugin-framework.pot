@@ -12389,3 +12389,15 @@ msgstr ""
 #, php-format
 msgid "Маркетплейс уже сменил артикул на «%s», но сайт не смог это записать. Запись будет повторена; если ошибка остаётся, сохраните товар ещё раз."
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:833
+msgid "Список карточек загружается. Это займёт от нескольких секунд до пары минут. Таблица обновится сама, когда загрузка закончится."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:885
+msgid "Список уже загружается. Дождитесь окончания: таблица обновится сама."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:417
+msgid "Список карточек загружается с маркетплейса."
+msgstr ""
