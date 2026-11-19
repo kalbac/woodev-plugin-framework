@@ -12307,3 +12307,85 @@ msgstr ""
 #: marketplace/jobs/class-link-jobs.php:693
 msgid "Не удалось поставить продолжение загрузки списка в очередь."
 msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:296
+#, php-format
+msgid "(не удалось сменить на «%s»)"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:297
+#, php-format
+msgid "(меняется на «%s»)"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:359
+#, php-format
+msgid "меняется на «%1$s»: %2$s пока знает товар по артикулу «%3$s»"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:361
+#, php-format
+msgid "на маркетплейсе уже «%s», сайт запишет это позже, подробности — в значке «!» у статуса"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:363
+#, php-format
+msgid "не удалось сменить на «%s», подробности — в значке «!» у статуса"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:379
+#, php-format
+msgid "Артикул товара на маркетплейсе. Его можно изменить и после отправки: новый артикул уйдёт на %s отдельным запросом, а до подтверждения товар остаётся под прежним. Если артикул занят или не подходит, останется прежний, а ответ маркетплейса будет в значке «!» у статуса."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:412
+msgid "Артикул товара на маркетплейсе. По умолчанию берётся артикул (SKU) товара; нажмите «изменить», чтобы задать другой. После отправки артикул тоже можно изменить."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:491
+msgid "Смена артикула"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:492
+#, php-format
+msgid "Не удалось сменить артикул на «%1$s». Ответ: %2$s"
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:143
+msgid "Артикул можно изменить, когда карточка уже создана на маркетплейсе. Пока она создаётся, подождите."
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:161
+#, php-format
+msgid "Артикул «%s» уже используется у другого товара этого аккаунта. Выберите другой."
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:167
+msgid "Не удалось изменить артикул: карточка товара изменилась. Обновите страницу и повторите."
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:209
+msgid "Артикул уже занят другим изменением. Выберите другой."
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:260
+msgid "Карточка сейчас не принята маркетплейсом, поэтому сменить артикул нельзя. Исправьте карточку и сохраните артикул ещё раз."
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:278
+msgid "Артикул сохранён, но отправить его не удалось: не работает очередь задач. Сохраните товар ещё раз чуть позже."
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:312
+msgid "Маркетплейс не подтвердил смену артикула."
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:332
+#, php-format
+msgid "Маркетплейс сменил артикул на «%s», но на сайте он уже занят другим товаром. Освободите артикул и обновите связь с карточкой."
+msgstr ""
+
+#: marketplace/flows/class-offer-id-renames.php:348
+#, php-format
+msgid "Маркетплейс уже сменил артикул на «%s», но сайт не смог это записать. Запись будет повторена; если ошибка остаётся, сохраните товар ещё раз."
+msgstr ""
