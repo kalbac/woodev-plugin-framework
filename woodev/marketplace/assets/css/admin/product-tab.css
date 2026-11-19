@@ -5,14 +5,17 @@
 
 /*
  * One label column for every row of the tab (also the Ozon plugin's «Купить на…» fields, which are rows of the same
- * `form-field` markup): 190px instead of WooCommerce's 150px, so a label such as «Почему не синхронизируется» keeps to two
- * lines. WooCommerce writes the row's padding with !important, and gives every label a 40px line height (to centre it on a
- * 40px control), which spaces the lines of a two-line label 40px apart: here a label has a 20px line height under a 10px top
- * padding — its first line is centred on a control's first row and the second line follows tight — and the plain text of a
- * row (a value, a note) gets the same, so label and value read from one line.
+ * `form-field` markup): 190px instead of WooCommerce's 150px. WooCommerce writes the row's padding with !important, and gives
+ * every label a 40px line height (to centre it on a 40px control), which spaces the lines of a two-line label 40px apart: here a
+ * label has a 20px line height under a 10px top padding — its first line is centred on a control's first row and the second line
+ * follows tight — and the plain text of a row (a value, a note) gets the same, so label and value read from one line.
+ *
+ * The «?» of a row is out of the text: it sits in one column at the label column's right edge, centred on the label's lines
+ * (one line: level with the text; two lines: between them). The label keeps a gutter for it, so a long label never runs under it.
  */
 .woocommerce_options_panel.woodev-mp-tab p.form-field,
 .woocommerce_options_panel.woodev-mp-tab fieldset.form-field {
+	--woodev-mp-label-top: 10px;
 	padding-left: 212px !important;
 }
 
@@ -23,34 +26,40 @@
 
 .woocommerce_options_panel.woodev-mp-tab .form-field > label,
 .woocommerce_options_panel.woodev-mp-tab .form-field > legend {
+	box-sizing: border-box;
+	position: relative;
 	width: 190px;
 	margin-left: -200px;
-	padding-top: 10px !important;
+	padding-right: 26px;
+	padding-top: var(--woodev-mp-label-top) !important;
 	line-height: 20px !important;
 }
 
-.woocommerce_options_panel.woodev-mp-tab .form-field > span:not(.woodev-mp-buttons__row):not(.woodev-mp-result):not(.woocommerce-help-tip):not(.woodev-mp-row-link),
-.woocommerce_options_panel.woodev-mp-tab .form-field > details.woodev-mp-issues {
+.woocommerce_options_panel.woodev-mp-tab .form-field > span:not(.woodev-mp-buttons__row):not(.woodev-mp-result):not(.woocommerce-help-tip):not(.woodev-mp-with-action) {
 	display: inline-block;
 	padding-top: 10px;
 	line-height: 20px;
 }
 
 /* A row of checkboxes has no 40px control to centre on: its label starts at the top, like the boxes. */
+.woocommerce_options_panel.woodev-mp-tab .form-field:has(input[type="checkbox"]) {
+	--woodev-mp-label-top: 0px;
+}
+
 .woocommerce_options_panel.woodev-mp-tab .form-field:has(input[type="checkbox"]) > label,
 .woocommerce_options_panel.woodev-mp-tab .form-field:has(input[type="checkbox"]) > legend {
-	padding-top: 0 !important;
 	line-height: 24px !important;
 }
 
-/* The «?» is inside the label, right after its text. */
+/* The «?»: absolute, between the label's top padding and its bottom, centred in that space. */
 .woocommerce_options_panel.woodev-mp-tab .form-field > label .woocommerce-help-tip,
 .woocommerce_options_panel.woodev-mp-tab .form-field > legend .woocommerce-help-tip {
-	display: inline-block;
+	position: absolute !important;
+	top: var(--woodev-mp-label-top);
+	right: 0;
+	bottom: 0;
 	float: none !important;
-	position: relative !important;
-	margin: 0 0 0 4px !important;
-	vertical-align: middle;
+	margin: auto 0 !important;
 }
 
 /* Plain text in the control column (a note, a state): WooCommerce's own `.description` clears the floated label and drops below it. */
@@ -111,55 +120,83 @@
 	}
 }
 
-/* A link under a select (the mapping's «Открыть «Сопоставление»»). */
+/* A select with an icon link beside it (the mapping's «Перейти на страницу сопоставлений»): the icon is centred on the select. */
+.woocommerce_options_panel.woodev-mp-tab .form-field > .woodev-mp-with-action {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	max-width: 360px;
+}
+
+.woocommerce_options_panel.woodev-mp-tab .form-field .woodev-mp-with-action .woodev-mp-wide {
+	flex: 1 1 auto;
+	width: auto;
+	min-width: 0;
+	max-width: 320px;
+	margin-right: 0;
+}
+
 .woodev-mp-row-link {
-	display: block;
-	clear: both;
-	padding-top: 4px;
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 3px;
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.woodev-mp-row-link:hover,
+.woodev-mp-row-link:focus {
+	background: #f0f0f1;
+	color: #135e96;
+}
+
+/* The article: «Артикул» reads as a line with «изменить», and the input only appears when asked for. */
+.woodev-mp-article[hidden],
+.woodev-mp-article__input[hidden] {
+	display: none !important;
+}
+
+.woodev-mp-article__edit {
+	margin-left: 6px;
 }
 
 /*
- * The action buttons: ONE group of adjacent buttons with shared borders, one row, never two. Each is an icon and its words;
- * while the row is too narrow for the words (under 720px of control column) only the icon shows, and the name stays in the
- * `aria-label` and the tooltip. A browser without container queries keeps the icons, which always fit.
+ * The action buttons: ONE WordPress button group (`.button-group`: adjacent buttons with shared borders), one row, never two. Each is an
+ * icon and its words, centred on each other with a gap; while the row is too narrow for the words (under 720px of control column) only the
+ * icon shows, and the name stays in the `aria-label` and the tooltip, so four or more buttons still fit one row. A browser without
+ * container queries keeps the icons, which always fit.
  */
 .woodev-mp-tab .woodev-mp-buttons {
 	container-type: inline-size;
 	container-name: woodev-mp-buttons;
 }
 
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-buttons__row {
+.woodev-mp-tab .woodev-mp-buttons .woodev-mp-buttons__row.button-group {
 	display: inline-flex;
 	flex-wrap: nowrap;
 	max-width: 100%;
+	vertical-align: top;
 }
 
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn {
+.woodev-mp-tab .woodev-mp-buttons .woodev-mp-buttons__row.button-group > .woodev-mp-btn {
+	position: relative;
 	display: inline-flex;
+	flex: 0 1 auto;
 	align-items: center;
-	gap: 6px;
-	margin: 0 0 0 -1px;
-	border-radius: 0;
+	justify-content: center;
+	gap: 8px;
+	min-width: 0;
+	line-height: 1;
 	white-space: nowrap;
-}
-
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn:first-child {
-	margin-left: 0;
-	border-radius: 3px 0 0 3px;
-}
-
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn:last-child {
-	border-radius: 0 3px 3px 0;
-}
-
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn:only-child {
-	border-radius: 3px;
 }
 
 .woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn:hover,
 .woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn:focus,
 .woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn.is-armed {
-	position: relative;
 	z-index: 1;
 }
 
@@ -195,19 +232,48 @@
 	}
 }
 
-/* The «Подсказки» spoiler under the buttons. */
-.woodev-mp-hints summary {
-	cursor: pointer;
+/* The block: the «?» sits in its top-right corner. */
+.woodev-mp-tab .woodev-mp-block {
+	position: relative;
+}
+
+.woodev-mp-tab .woodev-mp-block[hidden] {
+	display: none !important;
+}
+
+.woodev-mp-tab .woodev-mp-block__title {
+	padding-right: 52px;
+}
+
+.woodev-mp-help {
+	position: absolute;
+	top: 12px;
+	right: 20px;
+	box-sizing: border-box;
+	width: 22px;
+	height: 22px;
+	margin: 0;
+	padding: 0;
+	border: 1px solid #2271b1;
+	border-radius: 50%;
+	background: #fff;
 	color: #2271b1;
+	font: 700 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	text-align: center;
+	cursor: pointer;
 }
 
-.woodev-mp-hints .woodev-mp-note {
-	display: block;
-	margin-top: 6px;
+.woodev-mp-help:hover,
+.woodev-mp-help:focus {
+	background: #2271b1;
+	color: #fff;
 }
 
+/* A state badge: a pill with the state's name; with a mark (a check, or «!») when the product was checked. */
 .woodev-mp-badge {
-	display: inline-block;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 	margin-left: 8px;
 	padding: 2px 8px;
 	border-radius: 10px;
@@ -215,7 +281,14 @@
 	color: #1d2327;
 	font-size: 12px;
 	font-weight: 500;
+	line-height: 1.5;
 	vertical-align: middle;
+}
+
+button.woodev-mp-badge {
+	border: 0;
+	font-family: inherit;
+	cursor: pointer;
 }
 
 .woodev-mp-badge--ok {
@@ -231,6 +304,146 @@
 .woodev-mp-badge--error {
 	background: #eba3a3;
 	color: #570000;
+}
+
+/* Something to look at (the check found a problem): orange, whatever the state is. */
+.woodev-mp-badge--problem {
+	background: #fbc77e;
+	color: #5c3300;
+}
+
+button.woodev-mp-badge--problem:hover,
+button.woodev-mp-badge--problem:focus {
+	background: #f5b25a;
+	color: #4a2900;
+}
+
+.woodev-mp-badge__icon {
+	flex: 0 0 auto;
+	width: 12px;
+	height: 12px;
+	background-color: currentColor;
+	-webkit-mask: var(--woodev-mp-mark) center / contain no-repeat;
+	mask: var(--woodev-mp-mark) center / contain no-repeat;
+}
+
+.woodev-mp-badge__icon--ok {
+	--woodev-mp-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+}
+
+.woodev-mp-badge__icon--problem {
+	--woodev-mp-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='12' y1='4' x2='12' y2='14'/%3E%3Cline x1='12' y1='20' x2='12' y2='20.5'/%3E%3C/svg%3E");
+}
+
+/* The state in a variation's collapsed header. */
+.woodev-mp-header-state {
+	display: inline-block;
+	margin-left: 12px;
+	font-size: 12px;
+	font-weight: 400;
+	vertical-align: middle;
+}
+
+.woodev-mp-header-state .woodev-mp-badge {
+	margin-left: 2px;
+}
+
+/* The account select, in the header of «Product data» (the script moves it there). */
+.woodev-mp-account-switch--header {
+	display: inline-block;
+	margin-left: 12px;
+	font-weight: 400;
+	vertical-align: baseline;
+}
+
+#woocommerce-product-data .hndle .woodev-mp-account-switch label {
+	margin: 0 6px 0 0;
+	padding: 0;
+	border: 0;
+	font-size: 12px;
+}
+
+#woocommerce-product-data .hndle .woodev-mp-account-switch select {
+	margin: 0;
+	vertical-align: middle;
+}
+
+.woodev-mp-account-switch[hidden] {
+	display: none !important;
+}
+
+/* The dialog of the badge's problems and of the help: one native `<dialog>`, built by the script. */
+.woodev-mp-dialog {
+	box-sizing: border-box;
+	width: min(560px, calc(100vw - 32px));
+	max-height: min(640px, calc(100vh - 64px));
+	padding: 0;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	background: #fff;
+	color: #1d2327;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.woodev-mp-dialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+
+.woodev-mp-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.5);
+}
+
+.woodev-mp-dialog__head {
+	flex: 0 0 auto;
+	padding: 16px 20px 0;
+}
+
+.woodev-mp-dialog__title {
+	margin: 0;
+	padding: 0;
+	font-size: 18px;
+	line-height: 1.4;
+}
+
+.woodev-mp-dialog__body {
+	flex: 1 1 auto;
+	padding: 8px 20px;
+	overflow-y: auto;
+}
+
+.woodev-mp-dialog__body h3 {
+	margin: 16px 0 6px;
+	font-size: 14px;
+}
+
+.woodev-mp-dialog__body p {
+	margin: 0 0 10px;
+}
+
+.woodev-mp-dialog__close {
+	align-self: flex-end;
+	margin: 8px 20px 16px;
+}
+
+.woodev-mp-problems__list {
+	margin: 0 0 12px;
+	padding: 0;
+	list-style: none;
+}
+
+.woodev-mp-problems__list .woodev-mp-issue,
+.woodev-mp-dialog__body > .woodev-mp-issue {
+	position: relative;
+	padding-left: 20px;
+}
+
+.woodev-mp-problems__list .woodev-mp-issue::before,
+.woodev-mp-dialog__body > .woodev-mp-issue::before {
+	position: absolute;
+	top: 4px;
+	left: 0;
+	margin: 0;
 }
 
 .woodev-mp-ok {
@@ -268,27 +481,6 @@
 	color: #b32d2e;
 }
 
-.woodev-mp-issues {
-	display: inline-block;
-	max-width: 100%;
-	vertical-align: top;
-}
-
-/* The check, collapsed: «Исправить перед выгрузкой (N)» opens the short lines. */
-.woodev-mp-issues__summary {
-	cursor: pointer;
-	color: #996800;
-	font-weight: 500;
-}
-
-.woodev-mp-issues__summary--error {
-	color: #b32d2e;
-}
-
-details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
-	margin-bottom: 4px;
-}
-
 .woodev-mp-issue {
 	display: block;
 	margin: 0 0 4px;
@@ -321,6 +513,9 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
  * the scroll position) show that there is more to scroll to, where a system scrollbar is hidden.
  */
 .woodev-mp-tab .woodev-mp-variations-wrap {
+	box-sizing: border-box;
+	width: auto;
+	max-width: none;
 	margin: 12px;
 	overflow-x: auto;
 	background:
@@ -332,6 +527,7 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 
 .woodev-mp-tab .woodev-mp-variations {
 	width: 100%;
+	min-width: 100%;
 	margin: 0;
 	/* Transparent, so the wrapper's edge shadows above stay visible: WordPress paints `.widefat` white. */
 	background: transparent;
@@ -428,18 +624,8 @@ details.woodev-mp-issues[open] > .woodev-mp-issues__summary {
 	margin: 0 12px 0 0;
 }
 
-.woodev-mp-variation .woodev-mp-issues {
-	max-width: 100%;
-}
-
 .woodev-mp-block--variation h4 {
 	margin: 0 0 4px;
 	font-size: 14px;
 	font-weight: 600;
-}
-
-@media screen and (max-width: 782px) {
-	.woodev-mp-issues {
-		max-width: 100%;
-	}
 }

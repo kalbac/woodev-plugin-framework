@@ -230,6 +230,7 @@ final class Product_Tab {
 		add_filter( 'woocommerce_product_data_tabs', [ $this, 'add_tab' ] );
 		add_action( 'woocommerce_product_data_panels', [ $this, 'render_panel' ] );
 		add_action( 'woocommerce_product_after_variable_attributes', [ $this, 'render_variation' ], 10, 3 );
+		add_action( 'woocommerce_variation_header', [ $this, 'render_variation_header' ] );
 		add_action( 'woocommerce_process_product_meta', [ $this, 'save_product' ] );
 		add_action( 'woocommerce_save_product_variation', [ $this, 'save_variation' ], 10, 2 );
 		add_action( 'wp_ajax_' . $this->names->product_action(), [ $this, 'handle_ajax' ] );
@@ -328,6 +329,36 @@ final class Product_Tab {
 		}
 
 		$this->view->render_variation( $screen );
+	}
+
+	/**
+	 * Prints the state of one variation in its collapsed header (WooCommerce's `woocommerce_variation_header`), so it can be told without opening
+	 * the variation whether the variation is on the marketplace.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param mixed $variation The variation's post.
+	 * @return void
+	 */
+	public function render_variation_header( $variation = null ): void {
+		$product = $variation instanceof \WP_Post ? wc_get_product( $variation->ID ) : null;
+
+		if ( ! $product instanceof \WC_Product || ! $this->may_edit( $product ) ) {
+			return;
+		}
+
+		$badges = [];
+
+		foreach ( $this->accounts->all( $this->names->id(), true ) as $account ) {
+			$badges[] = [
+				'account' => $account,
+				'badge'   => $this->reader->header_badge( $account, $product ),
+			];
+		}
+
+		if ( [] !== $badges ) {
+			$this->view->render_variation_header( [ 'badges' => $badges ] );
+		}
 	}
 
 	/**
@@ -443,6 +474,7 @@ final class Product_Tab {
 			'woodevMarketplaceProduct',
 			[
 				'texts' => [
+					'close'   => __( 'Закрыть', 'woodev-plugin-framework' ),
 					'working' => __( 'Выполняем…', 'woodev-plugin-framework' ),
 					'failed'  => __( 'Не получилось: страница не ответила. Обновите её и повторите.', 'woodev-plugin-framework' ),
 				],

@@ -280,6 +280,21 @@ final class Panel_Reader {
 	}
 
 	/**
+	 * Reads the state badge of a variation for its collapsed header: the link row only, no validator, so fifteen headers cost fifteen row reads.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param Account     $account   Account.
+	 * @param \WC_Product $variation Variation.
+	 * @return array{label:string,tone:string}
+	 */
+	public function header_badge( Account $account, \WC_Product $variation ): array {
+		$row = $this->links->find( $account->id(), (int) $variation->get_id() );
+
+		return Card_State_Badge::of( null !== $row && $row->is_offer() ? $row->card_state() : Link_Record::STATE_UNLINKED );
+	}
+
+	/**
 	 * Tells whether the diagnostic list may be shown: only while «Логирование» is on.
 	 *
 	 * @since 2.1.2

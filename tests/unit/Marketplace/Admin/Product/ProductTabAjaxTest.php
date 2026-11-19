@@ -7,6 +7,7 @@
 
 namespace Woodev\Tests\Unit\Marketplace\Admin\Product;
 
+use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Product\Link_Form_Input;
@@ -282,6 +283,28 @@ final class ProductTabAjaxTest extends Sync_Test_Case {
 		$this->assertSame( 'Fake', $tabs['woodev_fake']['label'] );
 		$this->assertSame( 'woodev_fake_product_data', $tabs['woodev_fake']['target'] );
 		$this->assertContains( 'show_if_variable', $tabs['woodev_fake']['class'] );
+	}
+
+	public function test_a_variations_collapsed_header_is_hooked_and_reads_the_state_of_its_link_only(): void {
+		Actions\expectAdded( 'woocommerce_variation_header' )->once();
+
+		$this->tab()->register();
+
+		$reader = $this->bare( Panel_Reader::class );
+		$links  = new \ReflectionProperty( Panel_Reader::class, 'links' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$links->setAccessible( true ); // Needed before PHP 8.1, deprecated after it.
+		}
+
+		$links->setValue( $reader, $this->links() );
+
+		$account = $this->accounts()->get( $this->account_id );
+		$linked  = $this->tab_product( 'ART-H', 910 );
+		$bare    = $this->tab_product( 'ART-N', 911, false );
+
+		$this->assertSame( 'Создан', $reader->header_badge( $account, $this->products[ $linked ] )['label'] );
+		$this->assertSame( 'Не связан', $reader->header_badge( $account, $this->products[ $bare ] )['label'] );
 	}
 
 	/**

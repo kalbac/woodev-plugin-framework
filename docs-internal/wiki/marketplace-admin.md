@@ -900,17 +900,33 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
 - **Product tab markup.** Every row is `form-field` markup printed by `Panel_View::row()` — **including the adapter's own groups**
   (`Extension_Group` / `Extension_Field`, e.g. Ozon's «Купить на Ozon»): a plugin never prints its own row, so it inherits the label column
   and the first-line alignment and needs no hook. The label column is 190px (`product-tab.css`); WooCommerce gives a label a 40px line
-  height, which spaces a two-line label 40px apart, so the stylesheet resets it. A «?» is **inside** the label. A row that holds a
-  `<details>` is a `fieldset.form-field` with a `legend` (a `<details>` cannot sit in a `<p>`). Notes use `.woodev-mp-note`, never WooCommerce's
-  `.description` (it clears the floated label and drops below it).
-- **Buttons.** One group of adjacent buttons in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
-  (`.woodev-mp-btn__text`). A container query shows the words only when the control column is at least 720px; below that only the icons show,
-  with the name alone in `aria-label` and the tooltip (the explanations are in «Подсказки»). «Архивировать» and «Снять связь» ask twice: the question
-  appears in the result line and the button turns red for five seconds. The category-wide «Связать по артикулу» is not one of the icons (it works on
-  many products): it is a text button (`.woodev-mp-link-op`, the same `data-woodev-mp-op` handler) inside «Подсказки». The help under the buttons
-  is one closed «Подсказки» block: the save-first note, one line per offered button, the link. «Почему не синхронизируется» is shown only while
-  «Логирование» is on (a diagnostics hint is never shown to a merchant who has not turned it on); no line invites the merchant to turn it on. The check is a closed
-  `details` under «Исправить перед выгрузкой (N)»; the marks (✓ ✗ !) are CSS masks, not characters.
+  height, which spaces a two-line label 40px apart, so the stylesheet resets it. The «?» of a row is inside the label in the markup but
+  **absolutely positioned** at the label column's right edge (one column for the whole tab), centred on the label's lines through
+  `--woodev-mp-label-top`. Notes use `.woodev-mp-note`, never WooCommerce's `.description` (it clears the floated label and drops below it).
+  No row is a spoiler any more (`details` is gone from the tab).
+- **State badge and its dialog (2.1.13).** `state_badge()` prints the card state with a drawn mark: a check when the validator found nothing,
+  an orange badge with «!» (a `<button data-woodev-mp-dialog>`) when something is wrong. «Something» = validator errors and warnings, the
+  marketplace's last answer, and (only while «Логирование» is on) the sync reasons; they were the separate «Проверка» / «Ответ» / «Почему не
+  синхронизируется» rows, now gone from the product and the variation. The list travels in a `<template>` that follows the badge; one native
+  `<dialog class="woodev-mp-dialog">` is built by `product-tab.js` on first use and filled from the template (DOM calls, no `innerHTML`), so a
+  variation WooCommerce loads later needs no request. A problem fixed on the product itself has no link (the sentence names the field); the
+  others open the mappings / account page in a new window (the product form keeps what was typed). The «?» in the block's corner uses the same
+  mechanism for the help.
+- **Account select (2.1.13).** One account: no account name on the tab. Two or more: `account_switch()` prints a select that the script moves
+  into the «Product data» header (right of Virtual / Downloadable) and shows only while the marketplace tab is open; every account's block
+  stays in the form (so «Обновить» saves each) and only the chosen one is shown. The default is the account used last in this browser
+  (`localStorage`), else the first enabled one: it is a view preference, so there is no server write.
+- **Article line.** While the article may still change (`Link_Settings_Writer::article_is_editable()`), the row reads «<article> изменить»
+  and the input appears on click; an already sent article is plain text with a hint. The tab only follows that rule — see #1860 for lifting it.
+- **Variation header.** `woocommerce_variation_header` → `Product_Tab::render_variation_header()` → `Panel_Reader::header_badge()`: a plain
+  state badge per account from the link row only (no validator: fifteen headers must stay cheap).
+- **Buttons.** One WordPress `.button-group` in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
+  (`.woodev-mp-btn__text`), centred on each other with a gap. A container query shows the words only when the control column is at least 720px;
+  below that only the icons show, with the name alone in `aria-label` and the tooltip, so four or more buttons still fit one row.
+  «Архивировать» and «Снять связь» ask twice: the question appears in the result line and the button turns red for five seconds. The
+  category-wide «Связать по артикулу» is not one of the icons (it works on many products): it is a text button (`.woodev-mp-link-op`, the same
+  `data-woodev-mp-op` handler, which in the dialog acts on the block the dialog was opened from) inside the help dialog.
+  The marks (check, «!», ✗) are CSS masks, not characters.
 
 ## Card importer (framework 2.1.6)
 
