@@ -1,8 +1,8 @@
 /*
  * The notice of the marketplace's bulk actions in the variation panel. WordPress' own `.notice` look, stated here so the notice
- * keeps its box, its coloured edge and its dismiss button inside the product data panel whatever else styles that panel.
+ * keeps its box, its coloured edge and its dismiss button inside the product data panel whatever else styles that panel (WooCommerce strips `#variable_product_options .notice` borders, hence the id).
  */
-.woodev-mp-variation-notice.notice {
+#variable_product_options .woodev-mp-variation-notice.notice {
 	position: relative;
 	box-sizing: border-box;
 	margin: 12px 12px 4px;
@@ -10,22 +10,23 @@
 	background: #fff;
 	border: 1px solid #c3c4c7;
 	border-left-width: 4px;
+	border-style: solid;
 	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
 }
 
-.woodev-mp-variation-notice.notice-info {
+#variable_product_options .woodev-mp-variation-notice.notice-info {
 	border-left-color: #72aee6;
 }
 
-.woodev-mp-variation-notice.notice-warning {
+#variable_product_options .woodev-mp-variation-notice.notice-warning {
 	border-left-color: #dba617;
 }
 
-.woodev-mp-variation-notice.notice-error {
+#variable_product_options .woodev-mp-variation-notice.notice-error {
 	border-left-color: #d63638;
 }
 
-.woodev-mp-variation-notice p {
+#variable_product_options .woodev-mp-variation-notice p {
 	margin: 0.5em 0;
 	padding: 2px;
 	font-size: 13px;
