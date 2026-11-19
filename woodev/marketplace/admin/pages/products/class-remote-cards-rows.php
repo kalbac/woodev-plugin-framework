@@ -16,8 +16,9 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Turns a snapshot card (with the product that carries its article, if any) into a row of the records engine. Plain values only: the
- * engine escapes and types every cell.
+ * Turns a card of the stored list (with the product that carries its article, if any) into a row of the records engine. Plain values
+ * only: the engine escapes and types every cell. {@see self::details()} gives the lean fields of the list (picture, price, stock, the
+ * marketplace's status text, identifiers and the link to the card in the seller's cabinet) for the columns that show them.
  *
  * @since 2.1.5
  */
@@ -57,18 +58,51 @@ final class Remote_Cards_Rows {
 	private $importable;
 
 	/**
+	 * Builds the address of a card in the seller's cabinet: `function ( array $remote_ids ): string`; null when the adapter cannot.
+	 *
+	 * @var callable|null
+	 */
+	private $card_url;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param callable     $describe   `function ( int $product_id ): array{title:string,url:string}`.
-	 * @param Logging|null $logging    The «Логирование» switch, read when a row is built, so the technical tail of an import note follows it as it is now.
-	 * @param bool         $importable Whether the table offers «Импортировать».
+	 * @param callable      $describe   `function ( int $product_id ): array{title:string,url:string}`.
+	 * @param Logging|null  $logging    The «Логирование» switch, read when a row is built, so the technical tail of an import note follows it as it is now.
+	 * @param bool          $importable Whether the table offers «Импортировать».
+	 * @param callable|null $card_url  `function ( array $remote_ids ): string`, the adapter's link to a card (2.1.13); null for none.
 	 */
-	public function __construct( callable $describe, ?Logging $logging = null, bool $importable = false ) {
+	public function __construct( callable $describe, ?Logging $logging = null, bool $importable = false, ?callable $card_url = null ) {
 		$this->describe   = $describe;
 		$this->logging    = $logging;
 		$this->importable = $importable;
+		$this->card_url   = $card_url;
+	}
+
+	/**
+	 * The lean fields of a card the list keeps beyond the current cells, for the columns that show them: the picture, the price and
+	 * the stock as the marketplace reported them (null when it did not), the marketplace's status text (the reason of a refused card),
+	 * the identifiers, the link to the card in the seller's cabinet and when the row was last written.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param array<string,mixed> $card Card of the stored list.
+	 * @return array{image:string,price:?string,stock:?int,status_text:string,remote_ids:array<string,mixed>,url:string,updated_at:string}
+	 */
+	public function details( array $card ): array {
+		$ids = (array) ( $card['remote_ids'] ?? [] );
+
+		return [
+			'image'       => (string) ( $card['image'] ?? '' ),
+			'price'       => isset( $card['price'] ) ? (string) $card['price'] : null,
+			'stock'       => isset( $card['stock'] ) ? (int) $card['stock'] : null,
+			'status_text' => (string) ( $card['status_text'] ?? '' ),
+			'remote_ids'  => $ids,
+			'url'         => null === $this->card_url || [] === $ids ? '' : (string) call_user_func( $this->card_url, $ids ),
+			'updated_at'  => (string) ( $card['updated_at'] ?? '' ),
+		];
 	}
 
 	/**
@@ -77,7 +111,7 @@ final class Remote_Cards_Rows {
 	 * @since 2.1.5
 	 *
 	 * @param int                                                   $account_id Account id.
-	 * @param array<string,mixed>                                   $card       Snapshot card with `wc_product_id` (0 when no product carries it).
+	 * @param array<string,mixed>                                   $card       Card of the stored list with `wc_product_id` (0 when no product carries it).
 	 * @param array{offer_id:string,text:string,detail:string}|null $note       The card's import note, if it has one.
 	 * @param bool                                                  $importing  Whether an import of the card is pending or running: the row is then locked.
 	 * @return array<string,mixed>

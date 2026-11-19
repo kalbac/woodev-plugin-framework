@@ -16,18 +16,19 @@ use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
 use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Flows\Card_List_Source;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
@@ -156,7 +157,7 @@ final class Site_Products_Module {
 			new Bulk_Run_Scheduler( $names ),
 			$accounts,
 			$adapter->id(),
-			self::run_workers( $plugin, $adapter, $db, $links, $runs, $worker ),
+			self::run_workers( $plugin, $adapter, $db, $runs, $worker ),
 			static function ( string $line ) use ( $plugin ): void {
 				$plugin->log_error( $line );
 			}
@@ -170,17 +171,16 @@ final class Site_Products_Module {
 	 * @param Marketplace_Plugin       $plugin  The marketplace plugin.
 	 * @param Marketplace_Adapter      $adapter Adapter.
 	 * @param \wpdb                    $db      Database.
-	 * @param Wpdb_Link_Store          $links   Links.
 	 * @param Bulk_Run_Store           $runs    Runs.
 	 * @param Site_Products_Run_Worker $products The worker of the «Товары сайта» actions.
 	 * @return \Woodev\Framework\Marketplace\Jobs\Bulk_Run_Worker
 	 */
-	private static function run_workers( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, \wpdb $db, Wpdb_Link_Store $links, Bulk_Run_Store $runs, Site_Products_Run_Worker $products ) {
+	private static function run_workers( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, \wpdb $db, Bulk_Run_Store $runs, Site_Products_Run_Worker $products ) {
 		if ( ! $adapter instanceof Card_Importer || ! $adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
 			return $products;
 		}
 
-		$matching = new Remote_Cards_Matching( new Cards_Snapshot_Store( Uninstaller::option_prefix( $plugin->get_id() ) ), $links );
+		$matching = new Remote_Cards_Matching( self::card_store( $plugin, $adapter, $db ) );
 		$feeder   = new Bulk_Import_Feeder(
 			$runs,
 			new Import_Scheduler( new Job_Names( $plugin->get_id() ) ),
@@ -314,13 +314,14 @@ final class Site_Products_Module {
 		$ledger   = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
 		$products = new Remote_Cards_Products( Remote_Cards_Products::woocommerce_search() );
 		$importer = $adapter instanceof Card_Importer && $adapter->supports( Capability::IMPORT_PRODUCTS ) ? new Import_Scheduler( new Job_Names( $plugin->get_id() ) ) : null;
-		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer );
+		$resolver = $adapter->link_resolver();
+		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer, $resolver instanceof Card_List_Source ? [ $resolver, 'card_url' ] : null );
 		$options  = Uninstaller::option_prefix( $plugin->get_id() );
-		$store    = new Cards_Snapshot_Store( $options );
+		$store    = self::card_store( $plugin, $adapter, $db );
 		$reports  = new Link_Report_Store( $options );
 		$plan     = null === $importer ? null : new Remote_Cards_Import_Plan( Remote_Cards_Import_Plan::woocommerce_lookup( Product_Writer::marker_key( $adapter->id() ) ), Group_Assembler::lookup( $adapter->id() ) );
 		$license  = License_Gate::for_plugin( $plugin );
-		$runs     = null === $importer ? null : new Remote_Cards_Run_Actions( self::bulk_runner( $plugin, $accounts, $db ), new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ), new Remote_Cards_Matching( $store, $links ), $license );
+		$runs     = null === $importer ? null : new Remote_Cards_Run_Actions( self::bulk_runner( $plugin, $accounts, $db ), new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ), new Remote_Cards_Matching( $store ), $license );
 		$actions  = new Remote_Cards_Actions(
 			$store,
 			$links,
@@ -339,7 +340,6 @@ final class Site_Products_Module {
 		return new Remote_Cards_Provider(
 			$accounts,
 			$store,
-			$links,
 			$reports,
 			$rows,
 			$products,
@@ -350,6 +350,20 @@ final class Site_Products_Module {
 			],
 			$importer
 		);
+	}
+
+	/**
+	 * The stored list of the marketplace's cards, as the jobs that fill it build it ({@see \Woodev\Framework\Marketplace\Flow_Wiring}).
+	 *
+	 * @param Marketplace_Plugin  $plugin  The marketplace plugin.
+	 * @param Marketplace_Adapter $adapter Adapter.
+	 * @param \wpdb               $db      Database.
+	 * @return Wpdb_Card_Store
+	 */
+	private static function card_store( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, \wpdb $db ): Wpdb_Card_Store {
+		$schema = new Schema( $adapter->id() );
+
+		return new Wpdb_Card_Store( $db, $schema->table_name( 'cards', $db->prefix ), $schema->table_name( 'links', $db->prefix ), Uninstaller::option_prefix( $plugin->get_id() ) );
 	}
 
 	/**

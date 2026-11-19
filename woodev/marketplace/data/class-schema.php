@@ -48,12 +48,13 @@ final class Schema {
 	 * the tables was itself updated. A site that never stored one is at revision 0.
 	 *
 	 * 1: `bulk_runs` and `sync_state.pending_source` (2.1.8–2.1.10).
+	 * 2: `cards`, the stored list of the marketplace's cards (#1863).
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var int
 	 */
-	public const REVISION = 1;
+	public const REVISION = 2;
 
 	/**
 	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
@@ -93,6 +94,7 @@ final class Schema {
 		'profiles',
 		'catalog_cache',
 		'bulk_runs',
+		'cards',
 	];
 
 	/**
@@ -613,6 +615,49 @@ final class Schema {
 			started_at datetime NOT NULL,
 			finished_at datetime NULL DEFAULT NULL,
 			PRIMARY KEY  (account_id)
+		) {$charset};";
+	}
+
+	/**
+	 * The marketplace's cards as the «Карточки» screen lists them, one lean row per card (#1863): only what the screen filters, searches,
+	 * sorts and shows. Kept for good, refreshed by the list job, a daily run and the card notifications ({@see Wpdb_Card_Store}).
+	 *
+	 * `card_key` is the hash of the article the screen's row ids carry, so a row is found by its id through the primary key. `seen_run` is
+	 * the generation of the full refresh that last saw the card: a refresh sweeps the rows it did not see only after its last page, so the
+	 * screen never empties mid-refresh. `position` keeps the marketplace's order of the last full refresh. `remote_ids` is the JSON of the
+	 * card's identifiers, `price` and `stock` are null when the marketplace did not say.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param string $table   Full table name.
+	 * @param string $charset Charset clause.
+	 * @return string
+	 */
+	private function cards( string $table, string $charset ): string {
+		return "CREATE TABLE {$table} (
+			account_id bigint(20) unsigned NOT NULL,
+			card_key char(32) NOT NULL,
+			offer_id varchar(191) NOT NULL,
+			name varchar(500) NOT NULL DEFAULT '',
+			image varchar(500) NOT NULL DEFAULT '',
+			state varchar(24) NOT NULL DEFAULT '',
+			is_created tinyint(1) NOT NULL DEFAULT 0,
+			failed tinyint(1) NOT NULL DEFAULT 0,
+			archived tinyint(1) NOT NULL DEFAULT 0,
+			details_ok tinyint(1) NOT NULL DEFAULT 0,
+			status_text text NULL,
+			price decimal(14,2) NULL DEFAULT NULL,
+			stock int(11) NULL DEFAULT NULL,
+			remote_ids varchar(255) NOT NULL DEFAULT '',
+			group_key varchar(64) NOT NULL DEFAULT '',
+			group_size int(10) unsigned NOT NULL DEFAULT 0,
+			position int(10) unsigned NOT NULL DEFAULT 0,
+			seen_run int(10) unsigned NOT NULL DEFAULT 0,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (account_id,card_key),
+			KEY account_position (account_id,position),
+			KEY account_state (account_id,state),
+			KEY account_seen (account_id,seen_run)
 		) {$charset};";
 	}
 }

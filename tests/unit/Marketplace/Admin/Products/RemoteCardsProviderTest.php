@@ -104,7 +104,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_card_no_product_carries_is_a_row_that_can_be_linked(): void {
-		$this->put_snapshot( [ $this->card( 'A-1', 'Кружка синяя', [ 'status_text' => '' ] ) ] );
+		$this->put_cards( [ $this->card( 'A-1', 'Кружка синяя', [ 'status_text' => '' ] ) ] );
 
 		$body = $this->list_body( [ 'on_site' => 'no' ] );
 		$row  = $this->rows_by_offer( $body )[ $this->card_row_id( 'A-1' ) ];
@@ -123,7 +123,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	public function test_a_card_a_product_carries_shows_the_product_and_cannot_be_linked_again(): void {
 		$product = $this->add_product( [ 'id' => 41, 'sku' => 'B-2' ] );
 		$this->add_link( $product, Link_Record::STATE_CREATED, [ 'offer_id' => 'B-2' ] );
-		$this->put_snapshot( [ $this->card( 'B-2', 'Футболка' ) ] );
+		$this->put_cards( [ $this->card( 'B-2', 'Футболка' ) ] );
 
 		$row = $this->rows_by_offer( $this->list_body( [ 'on_site' => 'yes' ] ) )[ $this->card_row_id( 'B-2' ) ];
 
@@ -137,7 +137,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	public function test_the_default_filter_hides_the_cards_already_on_the_site_and_no_filter_shows_all(): void {
 		$product = $this->add_product( [ 'id' => 41, 'sku' => 'B-2' ] );
 		$this->add_link( $product, Link_Record::STATE_CREATED, [ 'offer_id' => 'B-2' ] );
-		$this->put_snapshot( [ $this->card( 'A-1' ), $this->card( 'B-2' ), $this->card( 'C-3' ) ] );
+		$this->put_cards( [ $this->card( 'A-1' ), $this->card( 'B-2' ), $this->card( 'C-3' ) ] );
 
 		$this->assertSame( 2, $this->list_body( [ 'on_site' => 'no' ] )['total'] );
 		$this->assertSame( 1, $this->list_body( [ 'on_site' => 'yes' ] )['total'] );
@@ -148,7 +148,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	public function test_the_on_site_facets_count_the_cards_whatever_the_view_and_follow_the_search(): void {
 		$product = $this->add_product( [ 'id' => 41, 'sku' => 'B-2' ] );
 		$this->add_link( $product, Link_Record::STATE_CREATED, [ 'offer_id' => 'B-2' ] );
-		$this->put_snapshot( [ $this->card( 'A-1' ), $this->card( 'B-2' ), $this->card( 'C-3' ) ] );
+		$this->put_cards( [ $this->card( 'A-1' ), $this->card( 'B-2' ), $this->card( 'C-3' ) ] );
 
 		$counts = function ( array $filters, string $search = '' ): array {
 			return array_column( $this->list_body( $filters, $search )['facets']['on_site'], 'count', 'value' );
@@ -164,7 +164,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_card_whose_details_did_not_come_has_no_state_and_cannot_be_linked(): void {
-		$this->put_snapshot( [ $this->card( 'A-1', '', [ 'details_ok' => false, 'state' => 'unlinked', 'name' => '' ] ) ] );
+		$this->put_cards( [ $this->card( 'A-1', '', [ 'details_ok' => false, 'state' => 'unlinked', 'name' => '' ] ) ] );
 
 		$row = $this->list_body()['rows'][0];
 
@@ -174,7 +174,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_a_declined_card_shows_the_marketplaces_reason_and_an_archived_one_says_so(): void {
-		$this->put_snapshot(
+		$this->put_cards(
 			[
 				$this->card( 'A-1', '', [ 'state' => 'failed', 'failed' => true, 'status_text' => 'Нет категории' ] ),
 				$this->card( 'B-2', '', [ 'archived' => true ] ),
@@ -195,21 +195,24 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertStringNotContainsString( 'Обновить список', $body['messages']['summary'], 'No list yet: the empty table says so once, the line above it stays quiet.' );
 		$this->assertArrayNotHasKey( 'empty', $body['messages'], 'The definition\'s own empty sentence («Список карточек ещё не загружен…») stands.' );
 
-		$this->put_snapshot( [ $this->card( 'A-1' ), $this->card( 'B-2' ) ], 1700000000 );
-		$this->assertStringContainsString( '14.11.2023 22:13', $this->list_body()['messages']['summary'] );
+		$this->put_cards( [ $this->card( 'A-1' ), $this->card( 'B-2' ) ], 1700000000 );
+		$loaded = $this->list_body()['messages'];
+		$this->assertStringContainsString( 'Список обновлён 14.11.2023 в 22:13.', $loaded['summary'] );
+		$this->assertStringContainsString( 'В списке карточек: 2.', $loaded['summary'] );
+		$this->assertSame( 'Список обновлён 14.11.2023 в 22:13', $loaded['refreshed_at'], 'The time alone, for the screen\'s summary area.' );
 
-		$this->snapshots()->mark_refreshing( $this->account_id );
+		$this->card_store()->mark_refreshing( $this->account_id );
 		$body = $this->list_body();
 		$this->assertTrue( $body['account_activity']['active'], 'The account line says the list is being loaded.' );
 		$this->assertSame( [ 'refresh_list' ], $body['account_activity']['blocked_actions'] );
 
-		$this->snapshots()->fail( $this->account_id, 'Маркетплейс не ответил' );
+		$this->card_store()->fail( $this->account_id, 'Маркетплейс не ответил' );
 		$summary = $this->list_body()['messages']['summary'];
 		$this->assertStringContainsString( 'Маркетплейс не ответил', $summary );
 	}
 
 	public function test_reading_the_table_never_calls_the_marketplace_nor_queues_anything(): void {
-		$this->put_snapshot( [ $this->card( 'A-1' ) ] );
+		$this->put_cards( [ $this->card( 'A-1' ) ] );
 		$provider = $this->cards_provider();
 
 		$provider->get_definition( $this->context() );
@@ -220,7 +223,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 
 		$this->assertSame( [], $this->adapter->link_resolver()->reads, 'Not one read of the cabinet.' );
 		$this->assertSame( [], $this->scheduler->actions, 'Not one job queued by a read or a preview.' );
-		$this->assertFalse( $this->snapshots()->is_refreshing( $this->account_id ), 'A preview marks nothing.' );
+		$this->assertFalse( $this->card_store()->is_refreshing( $this->account_id ), 'A preview marks nothing.' );
 	}
 
 	public function test_a_table_for_an_account_that_is_gone_is_empty_not_an_error(): void {
@@ -242,7 +245,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	}
 
 	public function test_the_activity_is_the_account_line_only(): void {
-		$this->snapshots()->mark_refreshing( $this->account_id );
+		$this->card_store()->mark_refreshing( $this->account_id );
 
 		$activity = $this->cards_provider()->get_activity( $this->context(), [] );
 
@@ -264,7 +267,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$body   = Action_Response::apply( $this->cards_definition(), $this->cards_definition()->get_action( 'refresh_list' ), $result );
 
 		$this->assertSame( 'queued', $body['status'] );
-		$this->assertTrue( $this->snapshots()->is_refreshing( $this->account_id ) );
+		$this->assertTrue( $this->card_store()->is_refreshing( $this->account_id ) );
 		$this->assertCount( 1, $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->refresh_hook() ) );
 		$this->assertSame( [], $this->adapter->link_resolver()->reads, 'The job reads the cabinet later; this request does not.' );
 	}
@@ -292,8 +295,8 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 			$this->assertStringContainsString( 'Action Scheduler', $e->getMessage() );
 		}
 
-		$this->assertFalse( $this->snapshots()->is_refreshing( $this->account_id ) );
-		$this->assertStringContainsString( 'Action Scheduler', $this->snapshots()->last_error( $this->account_id ) );
+		$this->assertFalse( $this->card_store()->is_refreshing( $this->account_id ) );
+		$this->assertStringContainsString( 'Action Scheduler', $this->card_store()->last_error( $this->account_id ) );
 	}
 
 	public function test_refreshing_and_linking_by_article_need_a_licence_in_force(): void {
@@ -312,7 +315,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		}
 
 		$this->assertSame( [], $this->scheduler->actions );
-		$this->assertFalse( $this->snapshots()->is_refreshing( $this->account_id ) );
+		$this->assertFalse( $this->card_store()->is_refreshing( $this->account_id ) );
 	}
 
 	public function test_linking_by_article_is_the_same_account_wide_job_as_on_the_products_table(): void {

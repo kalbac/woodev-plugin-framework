@@ -355,14 +355,13 @@ event ledger's payload caps, `Images_Rule`, `Dimensions_Rule`, `Currency_Rule`,
 What the code settled in `woodev/marketplace/data/` (`Woodev\Framework\Marketplace\Data`), where the plan above left it open:
 
 - **One table set per marketplace.** `Schema( $marketplace_id )` names every table
-  `{$wpdb->prefix}woodev_{marketplace id}_{table}` (15 tables); the id is the adapter's `id()`, a lower-case word of at most 16
+  `{$wpdb->prefix}woodev_{marketplace id}_{table}` (17 tables); the id is the adapter's `id()`, a lower-case word of at most 16
   characters. No column, enum value or code names a marketplace (`NeutralityTest` reads the folder with the tokenizer).
-  The plugin's option family stays `woodev_{plugin id}_` (`Uninstaller::option_prefix()`); the option- and transient-backed stores
-  (`Link_Progress_Store`, `Link_Report_Store`, `Cards_Snapshot_Store`) take it as a constructor argument, and `Uninstaller::run()`
-  removes the tables, the pinned-article product meta, the option family and its transients — the ones in `wp_options` by a `LIKE`,
-  and each listed account's snapshot, refresh mark and error through `delete_transient()` (`Cards_Snapshot_Store::clear()`), because a
-  persistent object cache holds a transient nowhere else. It needs no loaded plugin; the plugin passes its own extra tables (Ozon:
-  the four v1 tables).
+  The plugin's option family stays `woodev_{plugin id}_` (`Uninstaller::option_prefix()`); the option-backed stores
+  (`Link_Progress_Store`, `Link_Report_Store`, and the per-account record of `Wpdb_Card_Store`) take it as a constructor argument,
+  and `Uninstaller::run()` removes the tables, the pinned-article product meta, the option family and its transients by a `LIKE`.
+  It needs no loaded plugin; the plugin passes its own extra tables (Ozon: the four v1 tables). The ten-minute cards snapshot in a
+  transient (`Cards_Snapshot_Store`) is gone since 2.1.13: the list is the `cards` table (see «Stored cards list» below).
 - **Neutral names.** Accounts: `external_id` (unique), `secret_enc`, `secret_fingerprint`; stock mode `site` / `marketplace`; price
   direction `to_marketplace` / `from_marketplace` / `off`. Links: the remote-id bag of `Product_Link` is kept
   whole in `link_ids` (link, account, name, value, type `i`/`s`), whatever the adapter names its identifiers (`product_id`, `nmID`, …)
@@ -575,7 +574,7 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   (unknown account 404, switched on 409, wrong confirmation 400). The job checks the switch again, and the card refuses to switch an account on while its deletion runs.
 - **Job.** `Account_Deletion_Job` (`woodev_{plugin id}_delete_account( account_id, attempt )`, Action Scheduler) takes the account claim through `Job_Gate::claim()` (not `check()`: that ends silently for a disabled account), renews it after every batch and runs ordered steps of
   `function ( int $account_id, int $limit ): int` until each removes nothing: `queue` (`Account_Queue_Cleaner`: pending actions of the plugin's group whose first argument is the account id), `sync_state`, `links` (+ `link_ids`), `tasks` (+ `task_items`), `postings`, `documents`, `throttle`, `api_errors`,
-  `options` (progress and report options, snapshot transients, `catalog_cache` keys ending `:{account id}`), `product_meta` (`_woodev_{marketplace}_offer_id_{account id}`), `events`, then the adapter's `plugin` step. **The account row goes last**, `Wpdb_Account_Store::delete()`, fenced by the claim and by the switch being off.
+  `cards` (the stored list's rows) before `options` (progress and report options, the cards list record, `catalog_cache` keys ending `:{account id}`), `product_meta` (`_woodev_{marketplace}_offer_id_{account id}`), `events`, then the adapter's `plugin` step. **The account row goes last**, `Wpdb_Account_Store::delete()`, fenced by the claim and by the switch being off.
   Nothing is remembered between runs: every step deletes what is left, so a resume is a re-run. A run stops after 20 s and queues itself; a thrown error retries three times, then the progress says `failed`.
 - **Stores.** Each owner of an account-keyed table has `delete_account( $account_id, $limit )` (bounded `DELETE … LIMIT` through `Ledger\Account_Rows`); links, tasks, postings and documents also have `count_for_account()` for the preview.
 - **Adapter capability.** An adapter that implements `Deletion\Account_Data_Cleaner` (like `Order_Canceller`) is asked for `erase_account_data( Account, $limit )` (its own data outside the framework's tables, in batches) and, once before the row goes, `unsubscribe_notifications( Account )`;
@@ -911,6 +910,27 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   is one closed «Подсказки» block: the save-first note, one line per offered button, the link. «Почему не синхронизируется» is shown only while
   «Логирование» is on (a diagnostics hint is never shown to a merchant who has not turned it on); no line invites the merchant to turn it on. The check is a closed
   `details` under «Исправить перед выгрузкой (N)»; the marks (✓ ✗ !) are CSS masks, not characters.
+
+## Stored cards list (framework 2.1.13, #1863)
+
+The «Карточки» tab reads the cabinet's cards from the `cards` table (`Data\Wpdb_Card_Store`, schema revision 2), kept for good, not
+a transient. One lean row per card: article and its hash `card_key` (the row id's key, the primary key with the account), name,
+picture URL, state flags, the marketplace's status text, price and stock (null = unknown), `remote_ids` JSON, group, `position` (the
+marketplace's order) and `seen_run`. Every screen read is SQL (page, «На сайте» by a `LEFT JOIN` on `links`, search by `LIKE` on
+article and name, counts); nothing loads the whole list. Measured on 10 000 / 50 000 cards before the choice: the card's comment.
+
+- **Refresh.** «Обновить список», a daily recurring run (`refresh_cards_daily`, only accounts whose list was loaded once) and the
+  continuation of a long refresh all run `refresh_cards`. A resolver that is a `Flows\Card_List_Source` is read one page per call;
+  each page is upserted (batches of `Wpdb_Card_Store::BATCH` = 1000) and the cursor kept in `Link_Progress_Store` after it; a run
+  stops after `Link_Jobs::PAGES_PER_RUN` pages and queues its continuation. A resolver without it is read whole by `snapshot()`.
+- **Deleted cards.** `begin_refresh()` takes a generation; rows are stamped with it; `finish_refresh()` sweeps `seen_run <> run`
+  only after the last page, so the screen never empties mid-refresh. A failed refresh keeps the last list and its time.
+- **Notifications.** For a `Card_List_Source`, `Jobs\Card_List_Event_Handler` wraps the handler of each `card_event_types()` type:
+  it queues `refresh_card_rows( account, [article] )` (only when the account has a list) and hands the event on. The job reads
+  `list_cards()` and upserts under `current_run()`, so a refresh running meanwhile does not sweep the row; a card the answer lacks
+  is left to the next full refresh.
+- **Screen data.** `messages.refreshed_at` («Список обновлён ДД.ММ.ГГГГ в ЧЧ:ММ») and the summary line; `Remote_Cards_Rows::details()`
+  gives picture, price, stock, status text, ids and the cabinet link (`Card_List_Source::card_url()`) for the columns that show them.
 
 ## Card importer (framework 2.1.6)
 

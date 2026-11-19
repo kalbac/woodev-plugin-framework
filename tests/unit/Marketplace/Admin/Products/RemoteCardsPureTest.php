@@ -1,6 +1,6 @@
 <?php
 /**
- * The pure parts of the «Карточки на маркетплейсе» table: row ids and the filter over the snapshot.
+ * The pure parts of the «Карточки на маркетплейсе» table: row ids and the filter values (the filtering itself is SQL: WpdbCardStoreTest).
  *
  * @package Woodev\Tests\Unit\Marketplace\Admin\Products
  */
@@ -18,17 +18,6 @@ use Woodev\Tests\Unit\TestCase;
  */
 final class RemoteCardsPureTest extends TestCase {
 
-	/**
-	 * @return array<int,array<string,mixed>>
-	 */
-	private function cards(): array {
-		return [
-			[ 'offer_id' => 'A-1', 'name' => 'Кружка синяя' ],
-			[ 'offer_id' => 'B-2', 'name' => 'Футболка' ],
-			[ 'offer_id' => 'C 3/x', 'name' => 'Кружка красная' ],
-			[ 'offer_id' => 'D-4', 'name' => '' ],
-		];
-	}
 
 	public function test_a_row_id_is_an_opaque_token_whatever_the_article_holds(): void {
 		foreach ( [ 'A-1', 'C 3/x', 'Кружка №5', str_repeat( 'я', 191 ), "tab\there" ] as $offer_id ) {
@@ -55,53 +44,10 @@ final class RemoteCardsPureTest extends TestCase {
 		$this->assertNull( Remote_Cards_Ids::key_of( '', 7 ) );
 	}
 
-	public function test_the_table_opens_on_the_cards_no_product_carries(): void {
-		$linked = [ 'B-2' => 41 ];
-
-		$page = Remote_Cards_Query::page( $this->cards(), $linked, Remote_Cards_Query::NOT_ON_SITE, '', 1, 20 );
-
-		$this->assertSame( 3, $page['total'] );
-		$this->assertSame( [ 'A-1', 'C 3/x', 'D-4' ], array_column( $page['cards'], 'offer_id' ) );
-		$this->assertSame( [ 0, 0, 0 ], array_column( $page['cards'], 'wc_product_id' ) );
-	}
-
-	public function test_the_cards_on_the_site_carry_their_product(): void {
-		$page = Remote_Cards_Query::page( $this->cards(), [ 'B-2' => 41 ], Remote_Cards_Query::ON_SITE, '', 1, 20 );
-
-		$this->assertSame( [ 'B-2' ], array_column( $page['cards'], 'offer_id' ) );
-		$this->assertSame( [ 41 ], array_column( $page['cards'], 'wc_product_id' ) );
-	}
-
-	public function test_no_filter_shows_every_card_in_the_marketplaces_order(): void {
-		$page = Remote_Cards_Query::page( $this->cards(), [ 'B-2' => 41 ], '', '', 1, 20 );
-
-		$this->assertSame( [ 'A-1', 'B-2', 'C 3/x', 'D-4' ], array_column( $page['cards'], 'offer_id' ) );
-		$this->assertSame( 4, $page['total'] );
-	}
-
-	public function test_a_search_looks_in_the_article_and_the_name_without_regard_to_case(): void {
-		$cards = $this->cards();
-
-		$this->assertSame( [ 'A-1', 'C 3/x' ], array_column( Remote_Cards_Query::page( $cards, [], '', 'кружка', 1, 20 )['cards'], 'offer_id' ) );
-		$this->assertSame( [ 'C 3/x' ], array_column( Remote_Cards_Query::page( $cards, [], '', ' c 3/X ', 1, 20 )['cards'], 'offer_id' ) );
-		$this->assertSame( [], Remote_Cards_Query::page( $cards, [], '', 'нет такой', 1, 20 )['cards'] );
-	}
-
-	public function test_a_page_is_a_slice_of_the_filtered_list_and_the_total_is_the_whole_of_it(): void {
-		$cards = $this->cards();
-
-		$second = Remote_Cards_Query::page( $cards, [], '', '', 2, 3 );
-
-		$this->assertSame( [ 'D-4' ], array_column( $second['cards'], 'offer_id' ) );
-		$this->assertSame( 4, $second['total'] );
-		$this->assertSame( [], Remote_Cards_Query::page( $cards, [], '', '', 3, 3 )['cards'], 'a page past the end is empty, not wrapped' );
-	}
-
-	public function test_a_card_is_found_by_the_key_of_its_article(): void {
-		$cards = $this->cards();
-
-		$this->assertSame( 'Футболка', Remote_Cards_Query::find( $cards, Remote_Cards_Ids::key( 'B-2' ) )['name'] );
-		$this->assertNull( Remote_Cards_Query::find( $cards, Remote_Cards_Ids::key( 'nope' ) ) );
-		$this->assertNull( Remote_Cards_Query::find( [], Remote_Cards_Ids::key( 'B-2' ) ) );
+	public function test_the_on_site_filter_reads_into_the_stores_flag(): void {
+		$this->assertTrue( Remote_Cards_Query::on_site_flag( Remote_Cards_Query::ON_SITE ) );
+		$this->assertFalse( Remote_Cards_Query::on_site_flag( Remote_Cards_Query::NOT_ON_SITE ) );
+		$this->assertNull( Remote_Cards_Query::on_site_flag( '' ) );
+		$this->assertNull( Remote_Cards_Query::on_site_flag( 'whatever' ) );
 	}
 }

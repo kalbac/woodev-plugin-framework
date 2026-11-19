@@ -21,7 +21,6 @@ namespace Woodev\Tests\Integration\Marketplace;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Marketplace\Data\Link_Record;
@@ -80,7 +79,7 @@ class PersistenceTest extends TestCase {
 		$this->lifecycle()->create_tables();
 
 		$tables = $this->schema->table_names( $wpdb->prefix );
-		$this->assertCount( 16, $tables );
+		$this->assertCount( 17, $tables );
 
 		foreach ( $tables as $table ) {
 			$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
@@ -90,7 +89,7 @@ class PersistenceTest extends TestCase {
 	}
 
 	/**
-	 * A second install is a no-op: `dbDelta` finds nothing to change in any of the 16 statements, and the rows survive.
+	 * A second install is a no-op: `dbDelta` finds nothing to change in any of the 17 statements, and the rows survive.
 	 */
 	public function test_a_second_install_changes_nothing_and_loses_no_rows(): void {
 		global $wpdb;
@@ -164,8 +163,8 @@ class PersistenceTest extends TestCase {
 		update_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING, 'yes' );
 		update_option( 'woodev_itest-plugin_version', '2.0.0' );
 		update_option( 'woodev_other-plugin_version', '1.0.0' );
-		( new Cards_Snapshot_Store( Uninstaller::option_prefix( 'itest-plugin' ) ) )->put( 3, [ [ 'offer_id' => 'A' ] ], 100 );
-		( new Cards_Snapshot_Store( Uninstaller::option_prefix( 'other-plugin' ) ) )->put( 3, [ [ 'offer_id' => 'B' ] ], 100 );
+		update_option( Uninstaller::option_prefix( 'itest-plugin' ) . 'cards_list_3', [ 'generation' => 1 ], false );
+		update_option( Uninstaller::option_prefix( 'other-plugin' ) . 'cards_list_3', [ 'generation' => 1 ], false );
 		$post = self::factory()->post->create();
 		update_post_meta( $post, Pinned_Offer_Id::meta_prefix( 'itest' ) . '7', 'MINE' );
 		update_post_meta( $post, Pinned_Offer_Id::meta_prefix( 'other' ) . '7', 'THEIRS' );
@@ -178,16 +177,16 @@ class PersistenceTest extends TestCase {
 				$this->assertNull( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ), $table );
 			}
 			$this->assertFalse( get_option( 'woodev_itest-plugin_version' ) );
-			$this->assertNull( ( new Cards_Snapshot_Store( Uninstaller::option_prefix( 'itest-plugin' ) ) )->get( 3 ) );
+			$this->assertFalse( get_option( Uninstaller::option_prefix( 'itest-plugin' ) . 'cards_list_3' ), 'the cards list record goes with the family' );
 			$this->assertSame( '1.0.0', get_option( 'woodev_other-plugin_version' ) );
-			$this->assertNotNull( ( new Cards_Snapshot_Store( Uninstaller::option_prefix( 'other-plugin' ) ) )->get( 3 ) );
+			$this->assertNotFalse( get_option( Uninstaller::option_prefix( 'other-plugin' ) . 'cards_list_3' ) );
 			$this->assertSame( '', get_post_meta( $post, Pinned_Offer_Id::meta_prefix( 'itest' ) . '7', true ) );
 			$this->assertSame( 'THEIRS', get_post_meta( $post, Pinned_Offer_Id::meta_prefix( 'other' ) . '7', true ) );
 			$this->assertSame( 'KEEP', get_post_meta( $post, '_unrelated', true ) );
 		} finally {
 			// The DROP TABLE above committed these rows; the rollback at the end of the test cannot take them back.
 			delete_option( 'woodev_other-plugin_version' );
-			delete_transient( 'woodev_other-plugin_cards_3' );
+			delete_option( Uninstaller::option_prefix( 'other-plugin' ) . 'cards_list_3' );
 			// The toggle must not leak into the next test: DDL commits the test transaction, so the rollback may not remove it.
 			delete_option( Uninstaller::option_prefix( 'itest-plugin' ) . Uninstaller::DELETE_DATA_SETTING );
 			wp_delete_post( $post, true );

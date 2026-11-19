@@ -12,7 +12,6 @@ use Brain\Monkey\Functions;
 use Mockery;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Uninstaller;
@@ -127,7 +126,7 @@ final class UninstallerTest extends TestCase {
 	}
 
 	/**
-	 * Deleting the plugin drops the 16 tables of its marketplace and the tables the plugin names itself, and no other table.
+	 * Deleting the plugin drops the 17 tables of its marketplace and the tables the plugin names itself, and no other table.
 	 *
 	 * @return void
 	 */
@@ -136,7 +135,7 @@ final class UninstallerTest extends TestCase {
 
 		$drops = array_values( array_filter( $this->db->queries, static fn( string $sql ): bool => 0 === strpos( $sql, 'DROP TABLE' ) ) );
 
-		$this->assertCount( 18, $drops );
+		$this->assertCount( 19, $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_woodev_fake_accounts', $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_woodev_fake_catalog_cache', $drops );
 		$this->assertContains( 'DROP TABLE IF EXISTS wp_legacy_stores', $drops );
@@ -235,55 +234,7 @@ final class UninstallerTest extends TestCase {
 		);
 	}
 
-	/**
-	 * With a persistent object cache the transients exist only there: no `LIKE` on `wp_options` finds them, so the uninstaller
-	 * removes each account's snapshot, refresh mark and error through the transient API — and only this plugin's.
-	 *
-	 * @return void
-	 */
-	public function test_uninstall_clears_transients_a_persistent_cache_holds_alone(): void {
-		$this->account_ids = [ 1, 2 ];
-		$mine              = new Cards_Snapshot_Store( Uninstaller::option_prefix( 'fake-seller' ) );
-		$other             = new Cards_Snapshot_Store( Uninstaller::option_prefix( 'other-seller' ) );
 
-		foreach ( [ 1, 2 ] as $account ) {
-			$mine->put( $account, [ [ 'offer_id' => 'A' ] ], 100 );
-			$mine->mark_refreshing( $account );
-			$mine->fail( $account, 'Маркетплейс не ответил' );
-		}
-		$mine->put( 3, [ [ 'offer_id' => 'C' ] ], 100 );
-		$other->put( 1, [ [ 'offer_id' => 'B' ] ], 100 );
-		$this->assertSame( [], $this->option_rows, 'the transients are not in the options table' );
-
-		Uninstaller::run( $this->db, new Schema( 'fake' ), 'fake-seller' );
-
-		foreach ( [ 1, 2 ] as $account ) {
-			$this->assertNull( $mine->get( $account ), "snapshot of account {$account}" );
-			$this->assertFalse( $mine->is_refreshing( $account ), "refresh mark of account {$account}" );
-			$this->assertSame( '', $mine->last_error( $account ), "last error of account {$account}" );
-		}
-		$this->assertNotNull( $other->get( 1 ), 'another plugin\'s cache entry is left alone' );
-		$this->assertNotNull( $mine->get( 3 ), 'an account the table did not list is not guessed at' );
-	}
-
-	/**
-	 * The accounts are read before their table is dropped, and a missing table is no error.
-	 *
-	 * @return void
-	 */
-	public function test_the_accounts_are_read_before_the_tables_are_dropped(): void {
-		$this->account_ids = [ 1 ];
-
-		Uninstaller::run( $this->db, new Schema( 'fake' ), 'fake-seller' );
-
-		$queries = $this->db->queries;
-		$read    = array_search( 'SELECT account_id FROM wp_woodev_fake_accounts', $this->db->reads, true );
-		$dropped = array_search( 'DROP TABLE IF EXISTS wp_woodev_fake_accounts', $queries, true );
-
-		$this->assertNotFalse( $read, 'the account ids are read' );
-		$this->assertNotFalse( $dropped );
-		$this->assertTrue( $this->db->suppressed, 'a missing table is not printed as an SQL error' );
-	}
 
 	/**
 	 * The family is built from the plugin id, exactly as `Woodev_Plugin` builds its option names.

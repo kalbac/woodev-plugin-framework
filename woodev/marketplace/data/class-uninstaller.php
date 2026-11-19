@@ -13,8 +13,7 @@ use Woodev\Framework\Marketplace\Settings\Extension_Field;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Drops the plugin's tables, its product meta, its option family and its transients — those in the options table and those a
- * persistent object cache holds alone.
+ * Drops the plugin's tables (the stored cards list with them), its product meta, its option family and its transients.
  *
  * Called only by the plugin's `uninstall.php`, which WordPress runs when the plugin is deleted from the Plugins screen.
  * Deactivation never reaches this class. It needs no loaded plugin: the caller gives the marketplace id and the plugin id.
@@ -78,8 +77,6 @@ final class Uninstaller {
 			return;
 		}
 
-		self::clear_transients( $wpdb, $schema, $plugin_id );
-
 		foreach ( array_merge( $schema->table_names( $wpdb->prefix ), $extra_tables ) as $table ) {
 			$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
@@ -98,27 +95,5 @@ final class Uninstaller {
 
 		// The «Общие» defaults are named by the adapter id (an account knows its adapter, not its plugin), so the family above misses them.
 		delete_option( Effective_Settings::option_name( $schema->marketplace_id() ) );
-	}
-
-	/**
-	 * Deletes the per-account transients through the transient API, while the accounts table that names the accounts still exists.
-	 *
-	 * With a persistent object cache WordPress keeps a transient only in the cache, so the `LIKE` on the options table below cannot
-	 * find it; a reinstall that reuses an account id would show the deleted cabinet's snapshot.
-	 *
-	 * @param \wpdb  $wpdb      Database handle.
-	 * @param Schema $schema    The marketplace's schema.
-	 * @param string $plugin_id Plugin id (the option family).
-	 * @return void
-	 */
-	private static function clear_transients( $wpdb, Schema $schema, string $plugin_id ): void {
-		$snapshots = new Cards_Snapshot_Store( self::option_prefix( $plugin_id ) );
-		$previous  = $wpdb->suppress_errors( true );
-		$ids       = $wpdb->get_col( $wpdb->prepare( 'SELECT account_id FROM %i', $schema->table_name( 'accounts', $wpdb->prefix ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->suppress_errors( $previous );
-
-		foreach ( (array) $ids as $account_id ) {
-			$snapshots->clear( (int) $account_id );
-		}
 	}
 }

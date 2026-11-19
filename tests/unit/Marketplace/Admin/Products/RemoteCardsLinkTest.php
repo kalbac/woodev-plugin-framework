@@ -25,7 +25,7 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->put_snapshot( [ $this->card( 'MUG-1', 'Кружка синяя' ), $this->card( 'TEE-2', 'Футболка' ) ] );
+		$this->put_cards( [ $this->card( 'MUG-1', 'Кружка синяя' ), $this->card( 'TEE-2', 'Футболка' ) ] );
 	}
 
 	/**
@@ -185,7 +185,7 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 
 	public function test_a_card_that_left_the_list_is_a_stale_list_with_its_reason(): void {
 		$this->add_product( [ 'id' => 41 ] );
-		$this->transients = [];
+		$this->forget_cards();
 
 		$plan = $this->preview( 'MUG-1', '41' );
 		$body = $this->apply( 'MUG-1', '41' );
@@ -198,7 +198,7 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 
 	public function test_a_card_whose_details_did_not_agree_is_not_linkable(): void {
 		$this->add_product( [ 'id' => 41 ] );
-		$this->put_snapshot( [ $this->card( 'MUG-1', '', [ 'details_ok' => false ] ) ] );
+		$this->put_cards( [ $this->card( 'MUG-1', '', [ 'details_ok' => false ] ) ] );
 
 		$body = $this->apply( 'MUG-1', '41' );
 
@@ -269,7 +269,7 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 
 	public function test_the_card_comes_from_the_snapshot_never_from_the_request(): void {
 		$this->add_product( [ 'id' => 41 ] );
-		$this->put_snapshot( [ $this->card( 'MUG-1', 'Кружка', [ 'remote_ids' => [ 'product_id' => 111, 'sku' => 222 ] ] ) ] );
+		$this->put_cards( [ $this->card( 'MUG-1', 'Кружка', [ 'remote_ids' => [ 'product_id' => 111, 'sku' => 222 ] ] ) ] );
 
 		$this->cards_provider()->apply( $this->context(), 'link_to', [ $this->card_row_id( 'MUG-1' ) ], [ 'product' => '41', 'remote_ids' => [ 'product_id' => 1 ], 'offer_id' => 'OTHER' ] );
 
@@ -280,7 +280,7 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 
 	public function test_a_declined_card_keeps_the_marketplaces_text_when_linked(): void {
 		$this->add_product( [ 'id' => 41 ] );
-		$this->put_snapshot( [ $this->card( 'MUG-1', '', [ 'state' => Link_Record::STATE_FAILED, 'failed' => true, 'status_text' => 'Нет категории' ] ) ] );
+		$this->put_cards( [ $this->card( 'MUG-1', '', [ 'state' => Link_Record::STATE_FAILED, 'failed' => true, 'status_text' => 'Нет категории' ] ) ] );
 
 		$this->apply( 'MUG-1', '41' );
 

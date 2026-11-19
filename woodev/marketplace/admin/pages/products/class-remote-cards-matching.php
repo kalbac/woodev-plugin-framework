@@ -7,43 +7,35 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
-use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
  * «Импортировать все по фильтру» (#1796) needs the cards the table's own filter reaches, without a page: how many (the apply-time
- * count) and which (the first tick's freeze). Both read the one transient snapshot of the cabinet and one identity-map read of the
- * links, and run the filter the page already runs ({@see Remote_Cards_Query}) — never a WooCommerce lookup per card.
+ * count) and which (the first tick's freeze). Both are one SQL read of the stored list joined with the links, with the filter the page
+ * itself runs ({@see Wpdb_Card_Store}) — never a WooCommerce lookup per card.
  *
  * The «Показать → Похожие артикулы» view is not part of it: that is a report the merchant decides on row by row, and its rows are
- * not cards of the snapshot.
+ * not cards of the list.
  *
  * @since 2.1.10
  */
 final class Remote_Cards_Matching {
 	/**
-	 * @var Cards_Snapshot_Store
+	 * @var Wpdb_Card_Store
 	 */
-	private $snapshots;
-
-	/**
-	 * @var Wpdb_Link_Store
-	 */
-	private $links;
+	private $cards;
 
 	/**
 	 * Creates the reader.
 	 *
 	 * @since 2.1.10
 	 *
-	 * @param Cards_Snapshot_Store $snapshots Snapshot of the cabinet's cards.
-	 * @param Wpdb_Link_Store      $links     Links.
+	 * @param Wpdb_Card_Store $cards The stored list of the cabinet's cards.
 	 */
-	public function __construct( Cards_Snapshot_Store $snapshots, Wpdb_Link_Store $links ) {
-		$this->snapshots = $snapshots;
-		$this->links     = $links;
+	public function __construct( Wpdb_Card_Store $cards ) {
+		$this->cards = $cards;
 	}
 
 	/**
@@ -65,23 +57,21 @@ final class Remote_Cards_Matching {
 	 *
 	 * @param int                                              $account_id Account.
 	 * @param array{search:string,filters:array<string,mixed>} $query      Validated filter and search.
-	 * @return int|null Null when the list is not loaded or has expired.
+	 * @return int|null Null when the account has no list yet.
 	 */
 	public function count( int $account_id, array $query ): ?int {
-		$snapshot = $this->snapshots->get( $account_id );
-
-		if ( null === $snapshot ) {
+		if ( ! $this->cards->has_list( $account_id ) ) {
 			return null;
 		}
 
-		$on_site = $this->on_site( $query );
-		$counts  = Remote_Cards_Query::on_site_counts( $snapshot['cards'], $this->linked( $account_id ), $this->search( $query ) );
+		$counts  = $this->cards->on_site_counts( $account_id, $this->search( $query ) );
+		$on_site = Remote_Cards_Query::on_site_flag( $this->on_site( $query ) );
 
-		if ( '' === $on_site ) {
-			return $counts[ Remote_Cards_Query::NOT_ON_SITE ] + $counts[ Remote_Cards_Query::ON_SITE ];
+		if ( null === $on_site ) {
+			return $counts['on_site'] + $counts['not_on_site'];
 		}
 
-		return $counts[ $on_site ];
+		return $on_site ? $counts['on_site'] : $counts['not_on_site'];
 	}
 
 	/**
@@ -92,16 +82,14 @@ final class Remote_Cards_Matching {
 	 *
 	 * @param int                                              $account_id Account.
 	 * @param array{search:string,filters:array<string,mixed>} $query      Validated filter and search.
-	 * @return array{cards:array<int,array{0:string,1:string}>,on_site:string[]}|null Null when the list is not loaded or has expired.
+	 * @return array{cards:array<int,array{0:string,1:string}>,on_site:string[]}|null Null when the account has no list yet.
 	 */
 	public function entries( int $account_id, array $query ): ?array {
-		$snapshot = $this->snapshots->get( $account_id );
-
-		if ( null === $snapshot ) {
+		if ( ! $this->cards->has_list( $account_id ) ) {
 			return null;
 		}
 
-		return Remote_Cards_Query::entries( $snapshot['cards'], $this->linked( $account_id ), $this->on_site( $query ), $this->search( $query ) );
+		return $this->cards->entries( $account_id, Remote_Cards_Query::on_site_flag( $this->on_site( $query ) ), $this->search( $query ) );
 	}
 
 	/**
@@ -118,13 +106,5 @@ final class Remote_Cards_Matching {
 	 */
 	private function search( array $query ): string {
 		return (string) ( $query['filters']['q'] ?? $query['search'] ?? '' );
-	}
-
-	/**
-	 * @param int $account_id Account.
-	 * @return array<string,int> Product id by article.
-	 */
-	private function linked( int $account_id ): array {
-		return Remote_Cards_Query::linked_offers( $this->links->identity_map( $account_id ) );
 	}
 }
