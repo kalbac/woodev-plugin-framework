@@ -79,14 +79,13 @@ final class Site_Products_Bulk {
 	public const RUN_FIELD  = 'run_id';
 
 	/**
-	 * The two fields of «Связать по артикулу» and the values of the first one.
+	 * The two fields of «Связать по артикулу»: the switch «Весь магазин» and, while it is off, the category to link.
 	 *
 	 * @since 2.1.8
+	 * @since 2.1.13 The switch replaced the select «Где связывать» (`where`).
 	 */
-	public const LINK_WHERE         = 'where';
-	public const LINK_WHERE_SHOP    = 'shop';
-	public const LINK_WHERE_CATEGORY = 'category';
-	public const LINK_CATEGORY      = 'category';
+	public const LINK_WHOLE_SHOP = 'whole_shop';
+	public const LINK_CATEGORY   = 'category';
 
 	/**
 	 * Names examples under each reason in a group.
@@ -271,17 +270,17 @@ final class Site_Products_Bulk {
 	}
 
 	/**
-	 * Reads the reach of «Связать по артикулу» out of the dialog's fields: no category for «весь магазин» (also when nothing was
-	 * chosen), the term id for «одна категория», which must be a product category. Both tables that offer the action read it here.
+	 * Reads the reach of «Связать по артикулу» out of the dialog's fields: no category when «Весь магазин» is on, otherwise the term
+	 * id of the chosen category, which must be a product category. Both tables that offer the action read it here.
 	 *
 	 * @since 2.1.8
 	 *
 	 * @param array<string,mixed> $payload Validated fields.
 	 * @return int|null Null for the whole shop.
-	 * @throws Action_Input_Exception When «одна категория» is chosen with no category, or with one that is not a product category.
+	 * @throws Action_Input_Exception When the switch is off and there is no category, or one that is not a product category.
 	 */
 	public function link_category( array $payload ): ?int {
-		if ( self::LINK_WHERE_CATEGORY !== (string) ( $payload[ self::LINK_WHERE ] ?? '' ) ) {
+		if ( true === ( $payload[ self::LINK_WHOLE_SHOP ] ?? false ) ) {
 			return null;
 		}
 

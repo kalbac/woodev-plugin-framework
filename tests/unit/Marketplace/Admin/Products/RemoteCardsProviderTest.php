@@ -318,11 +318,11 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 	public function test_linking_by_article_is_the_same_account_wide_job_as_on_the_products_table(): void {
 		$provider = $this->cards_provider();
 
-		$plan = Action_Response::preview( $this->cards_definition()->get_action( 'link_by_article' ), $provider->preview( $this->context(), 'link_by_article', [], [] ) );
+		$plan = Action_Response::preview( $this->cards_definition()->get_action( 'link_by_article' ), $provider->preview( $this->context(), 'link_by_article', [], [ 'whole_shop' => true ] ) );
 		$this->assertSame( 7, $plan['requested'] );
 		$this->assertStringContainsString( '7 товаров', $plan['scope']['sentence'] );
 
-		$done = $provider->apply( $this->context(), 'link_by_article', [], [] );
+		$done = $provider->apply( $this->context(), 'link_by_article', [], [ 'whole_shop' => true ] );
 
 		$this->assertTrue( $done['queued'] );
 		$this->assertCount( 1, $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() ) );
@@ -332,8 +332,9 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$actions = array_column( $this->cards_definition()->to_array()['bulk_actions'], null, 'id' );
 		$fields  = array_column( $actions['link_by_article']['fields'], null, 'id' );
 
-		$this->assertSame( [ 'where', 'category' ], array_keys( $fields ) );
-		$this->assertSame( [ 'shop', 'category' ], array_column( $fields['where']['options'], 'value' ) );
+		$this->assertSame( [ 'whole_shop', 'category' ], array_keys( $fields ) );
+		$this->assertTrue( $fields['whole_shop']['toggle'] );
+		$this->assertSame( 'whole_shop', $fields['category']['hidden_when'] );
 		$this->assertTrue( $fields['category']['options_source'] );
 		$this->assertTrue( $fields['category']['searchable'] );
 	}
@@ -354,13 +355,13 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		);
 		$provider = $this->cards_provider();
 
-		$plan = Action_Response::preview( $this->cards_definition()->get_action( 'link_by_article' ), $provider->preview( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '7' ] ) );
+		$plan = Action_Response::preview( $this->cards_definition()->get_action( 'link_by_article' ), $provider->preview( $this->context(), 'link_by_article', [], [ 'whole_shop' => false, 'category' => '7' ] ) );
 		$this->assertSame( 3, $plan['requested'] );
 		$this->assertStringContainsString( 'Категория «Обувь»', $plan['scope']['sentence'] );
 
-		$provider->apply( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '7' ] );
-		$provider->apply( $this->context(), 'link_by_article', [], [ 'where' => 'shop', 'category' => '7' ] );
-		$provider->apply( $this->context(), 'link_by_article', [], [] );
+		$provider->apply( $this->context(), 'link_by_article', [], [ 'whole_shop' => false, 'category' => '7' ] );
+		$provider->apply( $this->context(), 'link_by_article', [], [ 'whole_shop' => true, 'category' => '7' ] );
+		$provider->apply( $this->context(), 'link_by_article', [], [ 'whole_shop' => true ] );
 
 		$this->assertSame( [ 7, 7, null, null ], $this->candidates_asked );
 		$queued = $this->scheduler->of( ( new Link_Scheduler( $this->names() ) )->link_hook() );
@@ -373,7 +374,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 
 		foreach ( [ 'preview', 'apply' ] as $method ) {
 			try {
-				$this->cards_provider()->$method( $this->context(), 'link_by_article', [], [ 'where' => 'category', 'category' => '99' ] );
+				$this->cards_provider()->$method( $this->context(), 'link_by_article', [], [ 'whole_shop' => false, 'category' => '99' ] );
 				$this->fail( "$method accepted the category." );
 			} catch ( Action_Input_Exception $e ) {
 				$this->assertSame( [ 'category' ], array_keys( $e->get_errors() ) );

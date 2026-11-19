@@ -471,7 +471,7 @@ final class Definition_Parser {
 		foreach ( self::list( $raw, $path, 0, Records_Definition::MAX_ACTION_FIELDS ) as $i => $field ) {
 			$field_path = "{$path}[$i]";
 			$field      = self::map( $field, $field_path );
-			self::allow_keys( $field, [ 'id', 'label', 'type', 'required', 'options', 'options_source', 'searchable', 'placeholder', 'help' ], $field_path );
+			self::allow_keys( $field, [ 'id', 'label', 'type', 'required', 'options', 'options_source', 'searchable', 'placeholder', 'help', 'toggle', 'hidden_when' ], $field_path );
 
 			$entry = [
 				'id'             => self::slug( $field, 'id', $field_path ),
@@ -483,6 +483,8 @@ final class Definition_Parser {
 				'searchable'     => self::flag( $field, 'searchable', $field_path, false ),
 				'placeholder'    => self::text( $field, 'placeholder', $field_path, true ),
 				'help'           => self::text( $field, 'help', $field_path, true ),
+				'toggle'         => self::flag( $field, 'toggle', $field_path, false ),
+				'hidden_when'    => self::text( $field, 'hidden_when', $field_path, true, 64 ),
 			];
 
 			$entry = self::filter_options( $entry, $field, $field_path );
@@ -490,11 +492,21 @@ final class Definition_Parser {
 			if ( $entry['searchable'] && ( 'select' !== $entry['type'] || ! $entry['options_source'] ) ) {
 				throw new \InvalidArgumentException( "$field_path: only a select with options_source can be searchable." );
 			}
+			if ( $entry['toggle'] && 'boolean' !== $entry['type'] ) {
+				throw new \InvalidArgumentException( "$field_path: only a boolean field can be a toggle." );
+			}
 
 			$out[] = $entry;
 		}
 
 		self::unique_ids( $out, $path );
+
+		$booleans = array_column( array_filter( $out, static fn ( array $field ): bool => 'boolean' === $field['type'] ), 'id' );
+		foreach ( $out as $i => $field ) {
+			if ( '' !== $field['hidden_when'] && ! in_array( $field['hidden_when'], $booleans, true ) ) {
+				throw new \InvalidArgumentException( "{$path}[$i].hidden_when must name a boolean field of the same action." );
+			}
+		}
 
 		return $out;
 	}

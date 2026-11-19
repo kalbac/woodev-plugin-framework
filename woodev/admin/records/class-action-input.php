@@ -58,6 +58,12 @@ final class Action_Input {
 		$errors = [];
 
 		foreach ( $action['fields'] as $field ) {
+			// A field the dialog hides while its switch is on is not asked: not required, and what was sent for it is dropped.
+			$switch = (string) ( $field['hidden_when'] ?? '' );
+			if ( '' !== $switch && true === ( $payload[ $switch ] ?? false ) ) {
+				continue;
+			}
+
 			if ( ! array_key_exists( $field['id'], $payload ) ) {
 				self::missing( $field, $errors );
 				continue;

@@ -57,6 +57,49 @@ class ActionInputTest extends TestCase {
 	}
 
 	/**
+	 * An action with a switch and a required category the switch hides.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function scoped_action(): array {
+		$parsed = Records_Definition::from_array(
+			Records_Definitions::standard(
+				[
+					'bulk_actions' => [
+						[
+							'id'          => 'scoped',
+							'label'       => 'Связать',
+							'effect'      => 'mutate',
+							'interaction' => 'dialog',
+							'fields'      => [
+								[ 'id' => 'whole_shop', 'label' => 'Весь магазин', 'type' => 'boolean', 'toggle' => true ],
+								[ 'id' => 'category', 'label' => 'Категория', 'type' => 'select', 'required' => true, 'options_source' => true, 'hidden_when' => 'whole_shop' ],
+							],
+						],
+					],
+				]
+			)
+		);
+
+		return $parsed->get_action( 'scoped' );
+	}
+
+	public function test_a_field_the_switch_hides_is_not_required_and_not_kept(): void {
+		$action = $this->scoped_action();
+
+		$this->assertSame( [ 'whole_shop' => true ], Action_Input::validate( $action, [ 'whole_shop' => true ] ) );
+		$this->assertSame( [ 'whole_shop' => true ], Action_Input::validate( $action, [ 'whole_shop' => true, 'category' => '7' ] ), 'what was sent for a hidden field is dropped' );
+	}
+
+	public function test_a_field_the_switch_leaves_on_screen_is_required(): void {
+		$action = $this->scoped_action();
+
+		$this->assertFieldError( Action_Input::validate( $action, [ 'whole_shop' => false ] ), 'category' );
+		$this->assertFieldError( Action_Input::validate( $action, [] ), 'category' );
+		$this->assertSame( [ 'whole_shop' => false, 'category' => '7' ], Action_Input::validate( $action, [ 'whole_shop' => false, 'category' => '7' ] ) );
+	}
+
+	/**
 	 * @dataProvider bad_values
 	 * @param mixed $value Value that must be refused.
 	 */
