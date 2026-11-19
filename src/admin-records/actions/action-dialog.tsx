@@ -19,7 +19,7 @@ import { FieldsForm } from './fields';
 import { actionMessage, ACTION_MESSAGE_KEYS, type ActionMessageKey } from './messages';
 import { Counts, Groups, Warnings } from './report';
 import { STYLES } from './styles';
-import { needsPreview, type ActionFlow, type FlowState } from './use-action-flow';
+import { hasEmptyRequired, isQuiet, needsPreview, type ActionFlow, type FlowState } from './use-action-flow';
 import type { ApplyResponse, ApplyStatus } from './types';
 
 const STATUS_KEYS: Record< ApplyStatus, ActionMessageKey > = {
@@ -141,6 +141,8 @@ function Footer( { flow, table, messages }: ActionDialogProps & { messages: Mess
 	const confirmLabel = plan?.confirm_label || action.confirm_label || action.label;
 	const cancel = actionMessage( messages, ACTION_MESSAGE_KEYS.cancel ) || action.label;
 	const close = actionMessage( messages, ACTION_MESSAGE_KEYS.close ) || cancel;
+	// A field the merchant must fill (a category, say) keeps the forward button off until it is filled.
+	const incomplete = stage === 'input' && hasEmptyRequired( action, state.payload );
 
 	// A report has nothing to apply: its plan is the answer, and the dialog only closes.
 	if ( stage === 'done' || ( stage === 'previewed' && state.previewOnly ) || ( stage === 'failed' && state.failedAt === 'apply' ) ) {
@@ -162,7 +164,7 @@ function Footer( { flow, table, messages }: ActionDialogProps & { messages: Mess
 				</Button>
 			) }
 			{ forward === 'preview' && (
-				<Button variant="primary" disabled={ busy } accessibleWhenDisabled onClick={ () => void flow.preview( table ) }>
+				<Button variant="primary" disabled={ busy || incomplete } accessibleWhenDisabled onClick={ () => void flow.preview( table ) }>
 					{ action.preview_label || actionMessage( messages, ACTION_MESSAGE_KEYS.preview ) || confirmLabel }
 				</Button>
 			) }
@@ -170,7 +172,7 @@ function Footer( { flow, table, messages }: ActionDialogProps & { messages: Mess
 				<Button
 					variant="primary"
 					isDestructive={ action.tone === 'danger' }
-					disabled={ busy || ( stage === 'previewed' && plan?.can_apply !== true ) }
+					disabled={ busy || incomplete || ( stage === 'previewed' && plan?.can_apply !== true ) }
 					accessibleWhenDisabled
 					isBusy={ stage === 'applying' }
 					onClick={ () => void flow.confirm( table ) }
@@ -201,6 +203,12 @@ export function ActionDialog( { flow, table }: ActionDialogProps ) {
 	}
 
 	const { action, stage, plan, result } = state;
+
+	// A quiet action (see `isQuiet`) shows nothing while it runs or when it went through; a refusal or an error still opens the dialog.
+	if ( isQuiet( action ) && stage !== 'failed' && ! ( stage === 'done' && result && ( result.status === 'failed' || result.status === 'partial' ) ) ) {
+		return null;
+	}
+
 	const messages: Messages = { ...table.messages, ...( plan?.messages ?? {} ), ...( result?.messages ?? {} ) };
 	const scope = plan?.scope.sentence || action.scope_sentence;
 	const showForm = stage === 'input' || stage === 'planning' || stage === 'previewed' || ( stage === 'applying' && action.fields.length > 0 );

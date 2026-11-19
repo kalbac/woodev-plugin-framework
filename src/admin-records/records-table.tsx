@@ -188,6 +188,10 @@ function TableBody( {
 	const headers = buildHeaders( model );
 	const lines = buildLines( model );
 	const leadColumns = headers.length - definition.columns.length;
+	// The row header is the table's name column: the first column the definition marks `required`, else the first one. A photo
+	// column in front of the name must not take that place (WooCommerce draws the row-header cell in its own grey).
+	const firstRequired = definition.columns.findIndex( ( column ) => column.required );
+	const rowHeaderIndex = leadColumns + Math.max( 0, firstRequired );
 
 	const go = ( change: Partial< RecordsQuery > ) => {
 		const next = changeQuery( latest.current, change );
@@ -245,7 +249,7 @@ function TableBody( {
 				headers={ headers }
 				rows={ lines.map( ( line ) => line.cells ) }
 				rowKey={ ( _row, index ) => lines[ index ]?.key ?? String( index ) }
-				rowHeader={ leadColumns }
+				rowHeader={ rowHeaderIndex }
 				rowsPerPage={ query.perPage }
 				totalRows={ data?.total ?? 0 }
 				query={ {
@@ -282,6 +286,8 @@ function TableBody( {
 
 interface ResultProps extends TableBodyProps {
 	onRetry: () => void;
+	/** The account action the empty table offers in its own body («Обновить список»); `null` for none. */
+	emptyButton: ReactNode;
 }
 
 /** Below the toolbar: the failed read, the empty result, or the table. */
@@ -304,7 +310,14 @@ function Result( props: ResultProps ) {
 			? [ MESSAGE_KEYS.emptyFiltered, MESSAGE_KEYS.empty ]
 			: [ MESSAGE_KEYS.empty ];
 
-		return <EmptyCard title={ props.title } actions={ props.headerActions } text={ firstMessage( messages, keys ) } />;
+		return (
+			<EmptyCard
+				title={ props.title }
+				actions={ props.headerActions }
+				text={ firstMessage( messages, keys ) }
+				button={ props.emptyButton }
+			/>
+		);
 	}
 
 	return <TableBody { ...props } />;
@@ -323,8 +336,9 @@ interface HeaderActionsProps {
 
 /**
  * The card header's controls in one element: the card gives each entry of `actions` its own full-width slot, so two
- * entries would be two stacked controls. Bulk group first, then the account-wide buttons (they belong to the table
- * they sit on, not to a row of their own above its filters), search after them and filling the rest of the row.
+ * entries would be two stacked controls. The bulk group first, the search after it and filling the rest of the row —
+ * [title] [action | Apply] [search] [⋮], one row like «Заказы доставки». The account-wide buttons are not here: they sit at
+ * the top of the page ({@link RecordsTable}).
  */
 function HeaderActions( { definition, query, selection, handle, extensions, hasBulk, restoreFocus, onChange }: HeaderActionsProps ) {
 	const search = searchFilter( definition );
@@ -333,7 +347,6 @@ function HeaderActions( { definition, query, selection, handle, extensions, hasB
 	return (
 		<div className="woodev-table-toolbar">
 			{ hasBulk && extensions.renderBulkActions?.( chosen, handle ) }
-			{ hasBulk && extensions.renderAccountActions?.( chosen, handle ) }
 			{ search && (
 				<SearchBox
 					filter={ search }
@@ -426,6 +439,10 @@ export function RecordsTable( {
 			}
 		};
 	}
+	const chosen = { selectedIds: selection.selectedIds, matching: selection.matchingQuery, clear: selection.clear };
+	const emptyAction = message( messages, MESSAGE_KEYS.emptyAction );
+	const emptyButton =
+		hasBulk && emptyAction !== '' ? extensions.renderAccountActions?.( chosen, handle, [ emptyAction ] ) ?? null : null;
 	const summary = message( messages, MESSAGE_KEYS.summary );
 	const limitNote = selection.limitReached ? message( messages, MESSAGE_KEYS.selectionLimit ) : '';
 	const headerActions = (
@@ -443,7 +460,12 @@ export function RecordsTable( {
 	);
 
 	return (
-		<div className="woodev-records" data-owner={ owner } data-table={ table }>
+		<div
+			className={ `woodev-records${ definition.children ? ' has-expand' : '' }` }
+			data-owner={ owner }
+			data-table={ table }
+		>
+			{ hasBulk && extensions.renderAccountActions?.( chosen, handle ) }
 			<FiltersBar
 				definition={ definition }
 				account={ envelope.context.account_id }
@@ -488,6 +510,7 @@ export function RecordsTable( {
 				extensions={ extensions }
 				onChange={ change }
 				onRetry={ records.reload }
+				emptyButton={ emptyButton }
 			/>
 		</div>
 	);

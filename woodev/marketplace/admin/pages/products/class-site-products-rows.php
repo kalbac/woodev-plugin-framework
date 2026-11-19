@@ -135,28 +135,28 @@ final class Site_Products_Rows {
 	}
 
 	/**
-	 * Cells of a single offer: a simple product or a variation. The «Состояние» cell carries the state badge, what is synchronised
-	 * and, in red, the error — one column instead of three, so the table fits a 1024px screen without a hidden column.
+	 * Cells of a single offer: a simple product or a variation. The «Состояние» cell is one badge like the delivery page's; what is
+	 * synchronised and the error are its tooltip, not lines under it, so every row is the same height.
 	 *
 	 * @param string              $name  Name.
 	 * @param array<string,mixed> $offer Offer.
 	 * @return array<string,mixed>
 	 */
 	private function offer_cells( string $name, array $offer ): array {
-		$linked = null !== $offer['link_id'];
-		$state  = [
-			[
-				'type'  => 'badge',
-				'value' => State_Groups::badge( $offer['group'] ),
-			],
-		];
+		$badge = State_Groups::badge( $offer['group'] );
+		$tip   = $this->state_tooltip( $offer, null !== $offer['link_id'] );
 
 		return [
 			'name'      => $this->clip( $name ),
 			'sku'       => $this->sku_cell( $offer ),
-			'state'     => array_merge( $state, $linked ? $this->sync_cell( $offer ) : [], $this->error_items( $offer['error'] ) ),
-			'stock'     => $this->pair_cell( $this->count( $offer['site_stock'] ), null === $offer['remote_stock'] ? null : (string) $offer['remote_stock'] ),
-			'price'     => $this->pair_cell( $this->price( $offer['site_price'] ), $this->price( $offer['remote_price'] ) ),
+			'state'     => [
+				[
+					'type'  => 'badge',
+					'value' => '' === $tip ? $badge : $badge + [ 'tooltip' => $tip ],
+				],
+			],
+			'stock'     => $this->pair_text( $this->count( $offer['site_stock'] ), null === $offer['remote_stock'] ? null : (string) $offer['remote_stock'] ),
+			'price'     => $this->pair_text( $this->price( $offer['site_price'] ), $this->price( $offer['remote_price'] ) ),
 			'actions'   => null,
 		];
 	}
@@ -170,9 +170,12 @@ final class Site_Products_Rows {
 	 */
 	private function parent_cells( array $product, array $offers ): array {
 		$errors = array_filter( array_column( $offers, 'error' ) );
-		// The engine's stack holds `MAX_STACK_ITEMS` items: the badges of the state groups take them all, less the one line
-		// that summarises the errors, which is there only when a variation has one.
-		$room = Row_Normalizer::MAX_STACK_ITEMS - ( [] === $errors ? 0 : 1 );
+		$badges = $this->state_badges( $offers, Row_Normalizer::MAX_STACK_ITEMS );
+
+		// The errors of the variations are said once, in the tooltip of the first (biggest) group's badge.
+		if ( [] !== $errors && [] !== $badges ) {
+			$badges[0]['value']['tooltip'] = sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) );
+		}
 
 		return [
 			'name'      => $this->clip( $product['title'] ),
@@ -182,12 +185,9 @@ final class Site_Products_Rows {
 					'value' => $this->clip( $product['sku'] ),
 				],
 			],
-			'state'     => array_merge(
-				$this->state_badges( $offers, $room ),
-				[] === $errors ? [] : $this->error_items( sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) ) )
-			),
-			'stock'     => $this->pair_cell( $this->site_stock_sum( $offers ), $this->remote_stock_sum( $offers ) ),
-			'price'     => $this->pair_cell( $this->price_range( array_column( $offers, 'site_price' ) ), null ),
+			'state'     => $badges,
+			'stock'     => $this->pair_text( $this->site_stock_sum( $offers ), $this->remote_stock_sum( $offers ) ),
+			'price'     => $this->pair_text( $this->price_range( array_column( $offers, 'site_price' ) ), null ),
 			'actions'   => null,
 		];
 	}
@@ -234,88 +234,56 @@ final class Site_Products_Rows {
 	}
 
 	/**
-	 * «На сайте: 5» above «Маркетплейс: 4».
+	 * «5 / 4»: the site's value, a slash, the marketplace's. «—» stands for a side that has none, so «500 / —» reads as «not on the
+	 * marketplace yet». The column's «?» says which side is which.
 	 *
 	 * @param string|null $site   Site value, null for none.
 	 * @param string|null $remote Marketplace value, null for none.
-	 * @return array<int,array<string,mixed>>|null
+	 * @return string
 	 */
-	private function pair_cell( ?string $site, ?string $remote ): ?array {
-		$items = [];
-
-		if ( null !== $site ) {
-			$items[] = [
-				'type' => 'text',
-				'value' => sprintf( /* translators: %s: value. */ __( 'На сайте: %s', 'woodev-plugin-framework' ), $site ),
-			];
-		}
-
-		if ( null !== $remote ) {
-			$items[] = [
-				'type' => 'text',
-				'value' => $this->clip( $this->marketplace . ': ' . $remote ),
-			];
-		}
-
-		return [] === $items ? null : $items;
+	private function pair_text( ?string $site, ?string $remote ): string {
+		return $this->clip( ( $site ?? '—' ) . ' / ' . ( $remote ?? '—' ) );
 	}
 
 	/**
-	 * The error of an offer as a red badge under its state; nothing when there is none.
+	 * What the badge explains on hover: what is synchronised, the warehouse when the product has one of its own, and the error the
+	 * marketplace gave. One sentence a line; empty when there is nothing to add.
 	 *
-	 * @param string $error Error text of the offer, or the parent's summary of its variations' errors.
-	 * @return array<int,array<string,mixed>>
+	 * @param array<string,mixed> $offer  Offer.
+	 * @param bool                $linked Whether the offer has a card link (an unlinked product synchronises nothing).
+	 * @return string
 	 */
-	private function error_items( string $error ): array {
-		if ( '' === $error ) {
-			return [];
-		}
+	private function state_tooltip( array $offer, bool $linked ): string {
+		$lines = [];
 
-		return [
-			[
-				'type'  => 'badge',
-				'value' => [
-					'label' => $this->clip( $error ),
-					'tone'  => 'danger',
-				],
-			],
-		];
-	}
+		if ( $linked ) {
+			$on = [];
 
-	/**
-	 * What is synchronised and, when the product has a warehouse of its own, which: «Остатки · Цены» listing only what is on («—» when
-	 * nothing is), and under it «Склад: …». Lines of the «Состояние» cell, under the state badge.
-	 *
-	 * @param array<string,mixed> $offer Offer.
-	 * @return array<int,array<string,mixed>>
-	 */
-	private function sync_cell( array $offer ): array {
-		$on = [];
+			if ( $offer['sync_stock'] ) {
+				$on[] = __( 'остатки', 'woodev-plugin-framework' );
+			}
 
-		if ( $offer['sync_stock'] ) {
-			$on[] = __( 'Остатки', 'woodev-plugin-framework' );
-		}
+			if ( $offer['sync_price'] ) {
+				$on[] = __( 'цены', 'woodev-plugin-framework' );
+			}
 
-		if ( $offer['sync_price'] ) {
-			$on[] = __( 'Цены', 'woodev-plugin-framework' );
-		}
+			$lines[] = [] === $on
+				? __( 'Синхронизация выключена', 'woodev-plugin-framework' )
+				/* translators: %s: what is synchronised, for example «остатки, цены». */
+				: sprintf( __( 'Синхронизируются: %s', 'woodev-plugin-framework' ), implode( ', ', $on ) );
 
-		$items = [
-			[
-				'type'  => 'text',
-				'value' => [] === $on ? '—' : implode( ' · ', $on ),
-			],
-		];
-
-		if ( null !== $offer['warehouse_id'] && $offer['warehouse_id'] > 0 ) {
-			$items[] = [
-				'type'  => 'text',
+			if ( null !== $offer['warehouse_id'] && $offer['warehouse_id'] > 0 ) {
 				/* translators: %s: warehouse name. */
-				'value' => sprintf( __( 'Склад: %s', 'woodev-plugin-framework' ), $this->warehouse_name( $offer['warehouse_id'] ) ),
-			];
+				$lines[] = sprintf( __( 'Склад: %s', 'woodev-plugin-framework' ), $this->warehouse_name( $offer['warehouse_id'] ) );
+			}
 		}
 
-		return $items;
+		if ( '' !== $offer['error'] ) {
+			/* translators: %s: the marketplace's error text. */
+			$lines[] = sprintf( __( 'Ошибка: %s', 'woodev-plugin-framework' ), $offer['error'] );
+		}
+
+		return mb_substr( implode( "\n", $lines ), 0, Row_Normalizer::MAX_TOOLTIP_LENGTH );
 	}
 
 	/**

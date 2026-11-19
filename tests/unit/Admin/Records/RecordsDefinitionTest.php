@@ -85,6 +85,9 @@ class RecordsDefinitionTest extends TestCase {
 			'searchable text field'            => [ [ 'bulk_actions' => [ self::searchable_action( [ 'type' => 'text', 'options_source' => false ] ) ] ] ],
 			'searchable multi select'          => [ [ 'bulk_actions' => [ self::searchable_action( [ 'type' => 'multi_select' ] ) ] ] ],
 			'searchable that is not a boolean' => [ [ 'bulk_actions' => [ self::searchable_action( [ 'searchable' => 'yes' ] ) ] ] ],
+			'toggle that is not a boolean'     => [ [ 'bulk_actions' => [ self::searchable_action( [ 'toggle' => true ] ) ] ] ],
+			'hidden_when names no field'       => [ [ 'bulk_actions' => [ self::searchable_action( [ 'hidden_when' => 'nowhere' ] ) ] ] ],
+			'hidden_when names a non-boolean'  => [ [ 'bulk_actions' => [ self::searchable_action( [ 'hidden_when' => 'product' ] ) ] ] ],
 			'account default outside options'  => [ [ 'context' => [ 'label' => 'A', 'options' => [ [ 'value' => 'a1', 'label' => 'A' ] ], 'default' => 'zz' ] ] ],
 		];
 	}
@@ -121,6 +124,18 @@ class RecordsDefinitionTest extends TestCase {
 		$this->assertFalse( $definition->get_action( 'send' )['fields'][0]['searchable'], 'an existing field stays what it was' );
 	}
 
+	public function test_a_boolean_can_be_a_toggle_and_hide_another_field(): void {
+		$action = self::searchable_action( [ 'id' => 'category', 'hidden_when' => 'whole_shop', 'required' => true ] );
+		array_unshift( $action['fields'], [ 'id' => 'whole_shop', 'label' => 'Весь магазин', 'type' => 'boolean', 'toggle' => true ] );
+
+		$fields = Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ $action ] ] ) )->get_action( 'link' )['fields'];
+
+		$this->assertTrue( $fields[0]['toggle'] );
+		$this->assertSame( '', $fields[0]['hidden_when'] );
+		$this->assertFalse( $fields[1]['toggle'] );
+		$this->assertSame( 'whole_shop', $fields[1]['hidden_when'] );
+	}
+
 	public function test_an_action_may_name_its_group_and_preview_button_and_a_field_its_placeholder(): void {
 		$action = array_merge(
 			self::searchable_action( [ 'placeholder' => 'Начните вводить название' ] ),
@@ -134,6 +149,36 @@ class RecordsDefinitionTest extends TestCase {
 		$this->assertSame( 'Начните вводить название', $parsed->get_action( 'link' )['fields'][0]['placeholder'] );
 		$this->assertSame( '', $parsed->get_action( 'plain' )['group'], 'an action that names none is listed unheaded' );
 		$this->assertSame( '', $parsed->get_action( 'plain' )['fields'][0]['placeholder'] );
+	}
+
+	public function test_a_column_may_carry_a_help_sentence_and_an_action_an_icon(): void {
+		$standard = Records_Definitions::standard();
+		$columns  = $standard['columns'];
+		$columns[1]['help'] = 'Цена на сайте / цена на маркетплейсе.';
+		$actions  = [ [ 'id' => 'edit', 'label' => 'Изменить', 'effect' => 'read', 'interaction' => 'link', 'icon' => 'edit' ], [ 'id' => 'plain', 'label' => 'Другое', 'effect' => 'read', 'interaction' => 'link' ] ];
+
+		$parsed = Records_Definition::from_array( Records_Definitions::standard( [ 'columns' => $columns, 'row_actions' => $actions ] ) )->to_array();
+
+		$this->assertSame( 'Цена на сайте / цена на маркетплейсе.', $parsed['columns'][1]['help'] );
+		$this->assertSame( '', $parsed['columns'][0]['help'], 'a column that says nothing has an empty help' );
+		$this->assertSame( [ 'edit', '' ], array_column( $parsed['row_actions'], 'icon' ) );
+	}
+
+	public function test_an_account_wide_bulk_action_may_skip_the_preview_a_selection_action_may_not(): void {
+		$account = [ 'id' => 'refresh', 'label' => 'Обновить', 'effect' => 'mutate', 'interaction' => 'dialog', 'scope' => 'account', 'scope_sentence' => 'Весь аккаунт.', 'skip_preview' => true ];
+
+		$parsed = Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ $account ] ] ) );
+
+		$this->assertTrue( $parsed->get_action( 'refresh' )['skip_preview'] );
+
+		$this->expectException( \InvalidArgumentException::class );
+		Records_Definition::from_array( Records_Definitions::standard( [ 'bulk_actions' => [ array_merge( $account, [ 'scope' => 'selection', 'tone' => 'neutral' ] ) ] ] ) );
+	}
+
+	public function test_an_icon_is_a_slug_not_markup(): void {
+		$this->expectException( \InvalidArgumentException::class );
+
+		Records_Definition::from_array( Records_Definitions::standard( [ 'row_actions' => [ [ 'id' => 'edit', 'label' => 'Изменить', 'effect' => 'read', 'interaction' => 'link', 'icon' => '<b>x</b>' ] ] ] ) );
 	}
 
 	public function test_a_select_can_be_the_counted_view_row_and_the_flag_is_only_sent_when_it_is_set(): void {

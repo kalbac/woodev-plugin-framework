@@ -489,7 +489,7 @@ describe( 'the refresh loop', () => {
 		const view = await renderTable();
 
 		expect( screen.getByText( 'Аккаунт A занят.' ) ).toBeVisible();
-		await wait( LIMITS.stale_after_ms );
+		await wait( LIMITS.refresh_ms + LIMITS.stale_after_ms );
 		expect( screen.getByText( MESSAGES.activity_stale ) ).toBeVisible();
 
 		view.rerender( <RecordsTable { ...tableProps( { query: { account: 'a2' } } ) } /> );
@@ -573,7 +573,7 @@ describe( 'back-off and stale state', () => {
 		} );
 		await renderTable();
 
-		await wait( LIMITS.stale_after_ms );
+		await wait( LIMITS.refresh_ms + LIMITS.stale_after_ms );
 
 		expect( screen.getByText( MESSAGES.activity_stale ) ).toBeVisible();
 		expect( screen.queryByText( MESSAGES.activity_failed ) ).toBeNull();
@@ -586,7 +586,7 @@ describe( 'back-off and stale state', () => {
 		serve( { activity: () => ( ok ? answer( [] ) : Promise.reject( new Error( 'down' ) ) ) } );
 		await renderTable();
 
-		await wait( LIMITS.stale_after_ms );
+		await wait( LIMITS.refresh_ms + LIMITS.stale_after_ms );
 		expect( screen.getByText( MESSAGES.activity_stale ) ).toBeVisible();
 
 		ok = true;
@@ -596,6 +596,23 @@ describe( 'back-off and stale state', () => {
 		ok = false;
 		await wait( LIMITS.stale_after_ms + LIMITS.max_refresh_ms );
 		expect( screen.getByText( MESSAGES.activity_stale ) ).toBeVisible();
+	} );
+
+	test( 'a quiet table, read as slowly as the server asks, is never stale between two reads', async () => {
+		// Quiet: the server hints the slow ceiling (16 s), which is longer than the grace (7 s). The notice used to come on
+		// 7 s after every good read and go off at the next one, which made the page jump every cycle.
+		serve( { activity: () => answer( [], { refresh_after_ms: LIMITS.max_refresh_ms } ) } );
+		await renderTable();
+
+		for ( let cycle = 0; cycle < 4; cycle++ ) {
+			// Every second of two quiet cycles: the notice is never on.
+			for ( let second = 0; second < LIMITS.max_refresh_ms / 1000; second++ ) {
+				await wait( 1000 );
+				expect( screen.queryByText( MESSAGES.activity_stale ) ).toBeNull();
+			}
+		}
+
+		expect( reads.length ).toBeGreaterThanOrEqual( 4 );
 	} );
 
 	test( 'staleness never enables anything: an idle row stays enabled and a locked one stays locked', async () => {

@@ -62,8 +62,11 @@ export interface RecordsExtensions {
 	 * this is set and PHP declares bulk actions.
 	 */
 	renderBulkActions?: ( selection: SelectionHandle, table: TableHandle ) => ReactNode;
-	/** F6 — the account-wide actions: buttons above the filters. */
-	renderAccountActions?: ( selection: SelectionHandle, table: TableHandle ) => ReactNode;
+	/**
+	 * F6 — the account-wide actions: buttons at the top of the page, where «Заказы доставки» has «Создать заказ». With `only`,
+	 * just the actions of those ids (the empty table offers one of them in its own body).
+	 */
+	renderAccountActions?: ( selection: SelectionHandle, table: TableHandle, only?: string[] ) => ReactNode;
 	/** F6 — runs a declared account action for a button of the account line; the payload comes from the server unchanged. */
 	onAccountAction?: ( action: ActionDescriptor, payload: Record< string, string >, table: TableHandle ) => void;
 	/** F6 — always mounted, bulk actions or not: the host of the action dialog that a row action opens. */

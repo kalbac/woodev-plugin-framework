@@ -621,7 +621,7 @@ serves definition, list, children and options only — `preview`/`apply` (F6), `
 | `filters` | Ordered `id`, label, type (`search`, `select`, `multi_select`, `boolean`, `date_range`), options or a registered local options source, default. Omitted boolean differs from false. |
 | `sorts` | Whitelisted keys and directions plus default; PHP maps keys to prepared queries with a stable id tie-breaker. |
 | `pagination` | `default_per_page`, `per_page_options`, `max_per_page`, `max_selection`; overflow is rejected, never truncated. |
-| `row_actions` / `bulk_actions` | Registered ids with label, tone, capability, optional input-field schema, `effect` (`read`/`mutate`), interaction (`link`, `submit`, `dialog`, `download`), `scope` (`selection`/`account`) and the scope sentence. Mutating bulk actions always preview then confirm. |
+| `row_actions` / `bulk_actions` | Registered ids with label, tone, capability, optional input-field schema, `effect` (`read`/`mutate`), interaction (`link`, `submit`, `dialog`, `download`), `scope` (`selection`/`account`) and the scope sentence. Mutating selection actions always preview then confirm; an account-wide one may declare `skip_preview` (see «Tables in the style of «Заказы доставки»»). |
 | `children` | Optional: rows may expand into child rows (variations) read through `get_children()`, paged and bounded. |
 | `activity` | `refresh_ms`, `max_refresh_ms`, `stale_after_ms`, id limit. |
 | `messages` | Every application string: empty/error/loading, selection, buttons, modal titles, progress text. Count sentences arrive pluralised from PHP. |
@@ -867,17 +867,12 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   badges and the posting number never wrap, the name, article and state have a floor. Cells pad 12 px a side (WooCommerce's 24 px lost 380 px).
   The scrolling card always draws its scrollbar, and WooCommerce's edge fade over the last column is off (it made «Изменить товар» look disabled).
   Dates are `d.m.Y H:i` in the site's timezone.
-- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs (at most two lines: the stack text is clipped to two, its full value is the line's `title`). The table has
-  five data columns and fits 1040 px (measured: 985 px at the floors, with 60-character articles, long names and error badges; the
-  stock and price headings wrap): «Синхронизация» and «Ошибка» are lines of the «Состояние» cell — the state badge, «Остатки · Цены»
-  listing only what is on («—» when none), «Склад: …» only for a product with a warehouse of its own, and the error as a red badge
-  (a long one wraps inside 240 px). A variable product's cell shows one badge per state group, up to the stack's five lines (four when a variation has an error, which adds «Ошибка у N варианта»).
+- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs (one clipped line each, full value in the line's `title`). The table is laid out as «Tables in the style of «Заказы доставки» (#1861)» below.
 - **Bulk select.** An action descriptor may declare `group`; `BulkActionSelect` draws one `<optgroup>` per group («Выгрузка», «Синхронизация»,
   «Связи и архив») and «Выбрано: N» (`selected_count`) beside the button; its place is kept (the element is drawn empty) while nothing is
   ticked, so the buttons after it do not jump. The account-wide buttons («Связать по артикулу», «Обновить список»)
-  sit in the card header next to the select, on both tabs. The column-menu button is named from `columns_menu`.
-- **Card heading and summary.** The card title repeats the page title or the tab, so it is visually hidden (kept for assistive
-  technology); a long `summary` keeps its first sentence and folds the rest into a `<details>`. The footer word is pluralised per
+  sit at the top of the page since #1861, where «Заказы доставки» has «Создать заказ». The column-menu button is named from `columns_menu`.
+- **Card heading and summary.** The card title is drawn, like «Заказы доставки» (#1861; it had been visually hidden). A long `summary` keeps its first sentence and folds the rest into a `<details>`. The footer word is pluralised per
   list (`summary_label` in the list response) by `Russian_Plural::pick()` — the Russian rule whatever the site's locale (`_n()` follows the
   locale's rule, and a site not set to Russian printed «4 заказов»). The counted view row is not drawn while every count is zero.
 - **«Карточки {marketplace}».** The tab takes the name from the adapter's `settings_descriptor()->marketplace_name()`. Before the first
@@ -900,17 +895,51 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
 - **Product tab markup.** Every row is `form-field` markup printed by `Panel_View::row()` — **including the adapter's own groups**
   (`Extension_Group` / `Extension_Field`, e.g. Ozon's «Купить на Ozon»): a plugin never prints its own row, so it inherits the label column
   and the first-line alignment and needs no hook. The label column is 190px (`product-tab.css`); WooCommerce gives a label a 40px line
-  height, which spaces a two-line label 40px apart, so the stylesheet resets it. A «?» is **inside** the label. A row that holds a
-  `<details>` is a `fieldset.form-field` with a `legend` (a `<details>` cannot sit in a `<p>`). Notes use `.woodev-mp-note`, never WooCommerce's
-  `.description` (it clears the floated label and drops below it).
-- **Buttons.** One group of adjacent buttons in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
-  (`.woodev-mp-btn__text`). A container query shows the words only when the control column is at least 720px; below that only the icons show,
-  with the name alone in `aria-label` and the tooltip (the explanations are in «Подсказки»). «Архивировать» and «Снять связь» ask twice: the question
-  appears in the result line and the button turns red for five seconds. The category-wide «Связать по артикулу» is not one of the icons (it works on
-  many products): it is a text button (`.woodev-mp-link-op`, the same `data-woodev-mp-op` handler) inside «Подсказки». The help under the buttons
-  is one closed «Подсказки» block: the save-first note, one line per offered button, the link. «Почему не синхронизируется» is shown only while
-  «Логирование» is on (a diagnostics hint is never shown to a merchant who has not turned it on); no line invites the merchant to turn it on. The check is a closed
-  `details` under «Исправить перед выгрузкой (N)»; the marks (✓ ✗ !) are CSS masks, not characters.
+  height, which spaces a two-line label 40px apart, so the stylesheet resets it. The «?» of a row is inside the label in the markup but
+  **absolutely positioned** at the label column's right edge (one column for the whole tab), centred on the label's lines through
+  `--woodev-mp-label-top`. Notes use `.woodev-mp-note`, never WooCommerce's `.description` (it clears the floated label and drops below it).
+  No row is a spoiler any more (`details` is gone from the tab).
+- **State badge and its dialog (2.1.13).** `state_badge()` prints the card state with a drawn mark: a check when the validator found nothing,
+  an orange badge with «!» (a `<button data-woodev-mp-dialog>`) when something is wrong. «Something» = validator errors and warnings, the
+  marketplace's last answer, and (only while «Логирование» is on) the sync reasons; they were the separate «Проверка» / «Ответ» / «Почему не
+  синхронизируется» rows, now gone from the product and the variation. The list travels in a `<template>` that follows the badge; one native
+  `<dialog class="woodev-mp-dialog">` is built by `product-tab.js` on first use and filled from the template (DOM calls, no `innerHTML`), so a
+  variation WooCommerce loads later needs no request. A problem fixed on the product itself has no link (the sentence names the field); the
+  others open the mappings / account page in a new window (the product form keeps what was typed). The «?» in the block's corner uses the same
+  mechanism for the help.
+- **Account select (2.1.13).** One account: no account name on the tab. Two or more: `account_switch()` prints a select that the script moves
+  into the «Product data» header (right of Virtual / Downloadable) and shows only while the marketplace tab is open; every account's block
+  stays in the form (so «Обновить» saves each) and only the chosen one is shown. The default is the account used last in this browser
+  (`localStorage`), else the first enabled account whose saved connection check is fine (as Ozon Seller 1.1.7's «first connected store»), else the first
+  enabled one (`Product_Tab::default_account_id()`): it is a view preference, so there is no server write.
+- **Article line.** While the article may still change (`Link_Settings_Writer::article_is_editable()`), the row reads «<article> изменить»
+  and the input appears on click; an already sent article is plain text with a hint. The tab only follows that rule — see #1860 for lifting it.
+- **Variation header.** `woocommerce_variation_header` → `Product_Tab::render_variation_header()`: the same `state_badge()` (check, or orange «!»
+  with the problems dialog) as inside the opened variation. The header and the panel are printed in one request, so `Product_Tab::variation_blocks()`
+  reads each variation's blocks once. The dialog trigger listens in the capture phase: the header is an `<h3>` that WooCommerce toggles on click.
+- **Buttons.** One WordPress `.button-group` in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
+  (`.woodev-mp-btn__text`), centred on each other with a gap. A container query shows the words only when the control column is at least 720px;
+  below that only the icons show, with the name alone in `aria-label` and the tooltip, so four or more buttons still fit one row.
+  «Архивировать» and «Снять связь» ask twice: the question appears in the result line and the button turns red for five seconds. The
+  category-wide «Связать по артикулу» is not one of the icons (it works on many products): it is a text button (`.woodev-mp-link-op`, the same
+  `data-woodev-mp-op` handler, which in the dialog acts on the block the dialog was opened from) inside the help dialog.
+  The marks (check, «!», ✗) are CSS masks, not characters.
+
+### Tables in the style of «Заказы доставки» (#1861, framework 2.1.13)
+
+The two tables of «Товары» (and, through the shared shell, «Заказы») follow the delivery page's look; delivery code was not touched. What the shell and the definitions say now:
+
+- **Top of the page.** The account-wide buttons (`scope = account`: «Связать по артикулу», «Обновить список») are a row above the filters (`AccountActions`, `.woodev-records__account-actions.is-page-top`), where delivery has «Создать заказ»; each tab shows its own set. A blocked one says why in its `title` and a hidden sentence, never as text beside it: that text once sat inside the toolbar row and pushed the search aside. An action id in the `empty_action` message is drawn as a button inside the empty table (the cards table offers «Обновить список» there).
+- **Filters.** The selects and the period picker are the delivery pickers (WooCommerce's dropdown button: 50px, 1px `#757575` frame, 4px corners, 13px semibold). A `boolean` filter is a `ToggleControl` on its own row under them (`.woodev-records__switches`), like «Расширенные фильтры».
+- **Card header.** [title] [select | «Применить»] [search] [⋮], one row on a 1024px screen with the sidebar open: the bulk select is 198px wide (the whole «Выберите действие» shows) and the search shrinks to 160px.
+- **Columns.** The checkbox column is 40px with equal padding. The name column is 180px, wraps to two lines and ends in «…» (full text in `title`), and is **sticky on the left** together with the checkbox (and expand) column: their `left` offsets add up (`.has-expand` on the root says the expand column exists). WooCommerce paints the sorted column and the row-header cell grey, which would show through a pinned cell, so the pinned cells are opaque white and draw the row line themselves (the table collapses borders, and a pinned cell does not take its border along). The row header is the first `required` column, so a photo column in front of the name does not take its place. «Артикул» (130px) and «На сайте» (120px) are fixed width; cells pad 10px a side. Both products tables fit 1024px with the WP sidebar collapsed without a scrollbar (measured: 863–901px of content in a 908px card); the sticky name column matters below that and with the sidebar open. The expand toggle of a variable product is a chevron icon button (`dashicons-arrow-right-alt2` / `-down-alt2`, title «Показать варианты»), not a text glyph. A column may carry `help`: a «?» beside the heading with a tooltip.
+- **State.** `badge` cells have the delivery look (2.5em line, 13px side padding, 4px corners, the WooCommerce status colours per tone, a class per tone and no inline colours) and an optional `tooltip` (lines separated by a line break, ≤ 600 characters, a focusable badge). «Товары сайта»: one badge, its tooltip lists what is synchronised, the warehouse and the error; a variable product has one badge per state group and the error summary in the first one's tooltip. «Карточки»: one badge, its tooltip holds the marketplace's reason, the import note (with the logging-gated tail) and the marketplace numbers (`product_id: …`), which are no column any more.
+- **Stock and price** are one text, `{site} / {marketplace}`, «—» for a missing side; the headings are «Остатки» / «Цены» with `help`.
+- **Actions.** An action descriptor may carry `icon` (a Dashicons slug): the row button is then icon-only, named by its label (tooltip), and a row of icon buttons is one group (`.is-group`) with the delivery colours per tone (green main, red destructive, grey). A card a product already carries has the one action `open_product` («Открыть товар», a link) and nothing disabled; the repeated «Карточка уже на сайте» sentences are gone.
+- **Cards table.** Columns: photo, name (a link to the card in the seller's cabinet when the adapter implements `Remote_Card_Address::remote_card_url( $remote_ids )`, else text), article, state, price, stock, «На сайте», actions. `Remote_Cards_Cells` reads `image_url`, `price` and `stock` from the snapshot card and shows «—» / nothing when a card has none, so the columns fill in when the store provides them (#1863). The table opens on «Все»: a default of «Нет на сайте» answered «В кабинете нет ни одной карточки» for a cabinet whose cards were all on the site.
+- **Account actions that run on the click.** An account-wide bulk action may declare `skip_preview` (the parser allows it for `scope = account`, never for a selection action): `isQuiet()` in `use-action-flow.ts` = account scope, no preview, no visible field. «Обновить список» is one: no dialog, no «Выбрано / Принято» counters (they mean nothing without a selection); the button is busy while the request is out and the account line above the table shows the progress. A refusal or an error still opens the dialog with the reason. «Связать по артикулу» keeps its dialog (#1862).
+- **Marketplace numbers in the tooltip** read «ID товара», «SKU», «Модель» (`Remote_Cards_Cells::id_names()`), the product tab's words; an identifier with no name there keeps the adapter's own.
+- **Refresh notice.** «Данные о ходе работы устарели» came and went by itself: while nothing runs the server asks for the next read after `max_refresh_ms` (a minute), the grace `stale_after_ms` (30 s) was counted from the last read, so the table was «stale» for half of every quiet minute. The grace is now counted from the moment the next read is due (`staleAfter()`), and a hidden tab does not go stale.
 
 ## Card importer (framework 2.1.6)
 

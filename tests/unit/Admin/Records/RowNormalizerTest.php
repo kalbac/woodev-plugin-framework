@@ -209,6 +209,46 @@ class RowNormalizerTest extends TestCase {
 		}
 	}
 
+	public function test_a_badge_may_carry_a_tooltip_and_the_stack_may_hold_a_picture(): void {
+		$definition = Records_Definition::from_array(
+			Records_Definitions::standard(
+				[
+					'columns' => [
+						[ 'id' => 'badge', 'label' => 'B', 'cell_type' => 'badge' ],
+						[ 'id' => 'stack', 'label' => 'S', 'cell_type' => 'stack' ],
+					],
+					'sorts'   => [ 'keys' => [] ],
+				]
+			)
+		);
+		$row = [
+			'id'    => 'r1',
+			'cells' => [
+				'badge' => [ 'label' => 'Создан', 'tone' => 'success', 'tooltip' => "Синхронизируются: остатки\nОшибка: <b>нет фото</b>" ],
+				'stack' => [
+					[ 'type' => 'image', 'value' => [ 'url' => 'https://example.test/a.jpg', 'alt' => 'Кружка' ] ],
+					[ 'type' => 'badge', 'value' => [ 'label' => 'Создан', 'tone' => 'info' ] ],
+				],
+			],
+		];
+
+		$out = Row_Normalizer::page( $definition, [ 'rows' => [ $row ], 'total' => 1 ], 20 )['rows'][0]['cells'];
+
+		$this->assertSame( "Синхронизируются: остатки\nОшибка: нет фото", $out['badge']['tooltip'], 'markup is stripped, the line break stays' );
+		$this->assertSame( [ 'url' => 'https://example.test/a.jpg', 'alt' => 'Кружка' ], $out['stack'][0]['value'] );
+		$this->assertArrayNotHasKey( 'tooltip', $out['stack'][1]['value'], 'a badge without a tooltip carries no key' );
+
+		$empty = $row;
+		$empty['cells']['badge']['tooltip'] = '';
+		$this->assertArrayNotHasKey( 'tooltip', Row_Normalizer::page( $definition, [ 'rows' => [ $empty ], 'total' => 1 ], 20 )['rows'][0]['cells']['badge'] );
+
+		foreach ( [ [ 'badge', [ 'label' => 'x', 'tone' => 'info', 'tooltip' => [ 'a' ] ] ], [ 'badge', [ 'label' => 'x', 'tone' => 'info', 'tooltip' => str_repeat( 'я', Row_Normalizer::MAX_TOOLTIP_LENGTH + 1 ) ] ], [ 'stack', [ [ 'type' => 'image', 'value' => [ 'url' => 'javascript:alert(1)', 'alt' => '' ] ] ] ] ] as [ $column, $value ] ) {
+			$bad = $row;
+			$bad['cells'][ $column ] = $value;
+			$this->assertContractBroken( Row_Normalizer::page( $definition, [ 'rows' => [ $bad ], 'total' => 1 ], 20 ) );
+		}
+	}
+
 	public function test_options_page_is_bounded_and_typed(): void {
 		$ok = Row_Normalizer::options_page( [ 'options' => [ [ 'value' => 'w1', 'label' => 'Склад' ] ], 'next_cursor' => 'c2' ] );
 		$this->assertSame( [ 'options' => [ [ 'value' => 'w1', 'label' => 'Склад' ] ], 'next_cursor' => 'c2' ], $ok );

@@ -20,7 +20,7 @@ import { isAbort } from '../api';
 import type { TableHandle } from '../extensions';
 import { readActivity } from './api';
 import type { Ownership } from './ownership';
-import { chunk, delayAfterFailure, delayAfterSuccess, type ActivityLimits } from './schedule';
+import { chunk, delayAfterFailure, delayAfterSuccess, staleAfter, type ActivityLimits } from './schedule';
 import type { ActivityState } from './state';
 import type { AccountActivity, ActivityResponse } from './types';
 
@@ -100,9 +100,9 @@ export function useActivityLoop( table: TableHandle, state: ActivityState, owner
 			timer = undefined;
 		};
 
-		const armStaleTimer = () => {
+		const armStaleTimer = ( next: number ) => {
 			clearTimeout( staleTimer );
-			staleTimer = setTimeout( () => state.set( { stale: true } ), declared.stale_after_ms );
+			staleTimer = setTimeout( () => state.set( { stale: true } ), staleAfter( declared, next ) );
 		};
 
 		const stopReading = () => {
@@ -163,7 +163,7 @@ export function useActivityLoop( table: TableHandle, state: ActivityState, owner
 				apply( answer, ids, versions );
 				failures = 0;
 				state.set( { stale: false, failing: false } );
-				armStaleTimer();
+				armStaleTimer( delay );
 				schedule( delay );
 			} catch ( error ) {
 				if ( ! current() || isAbort( error ) ) {
@@ -180,18 +180,22 @@ export function useActivityLoop( table: TableHandle, state: ActivityState, owner
 		const onVisibility = () => {
 			if ( isHidden() ) {
 				clearTimers();
+				// Nobody reads while the tab is in the background, so nothing can go stale there: the notice would
+				// otherwise be waiting for the merchant when the tab comes back.
+				clearTimeout( staleTimer );
 				stopReading();
 				return;
 			}
 
 			// Back on screen: do not wait out the rest of the interval.
 			clearTimers();
+			armStaleTimer( 0 );
 			void tick();
 		};
 
 		// A new list read: the rows came with their activity, so the clock starts from now.
 		state.set( { stale: false, failing: false } );
-		armStaleTimer();
+		armStaleTimer( declared.refresh_ms );
 		schedule( declared.refresh_ms );
 		document.addEventListener( 'visibilitychange', onVisibility );
 
