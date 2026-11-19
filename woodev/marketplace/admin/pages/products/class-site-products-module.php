@@ -267,11 +267,7 @@ final class Site_Products_Module {
 		$ledger   = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
 		$license  = License_Gate::for_plugin( $plugin );
 		$bulk     = self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table );
-		$withheld = $adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE ];
-
-		// An adapter that reads no prices has nothing to pull; one that sends none keeps no own prices to reset.
-		$withheld = null === $adapter->price_reader() ? array_merge( $withheld, [ Site_Products_Bulk::PULL_PRICES ] ) : $withheld;
-		$withheld = null === $adapter->price_pusher() ? array_merge( $withheld, [ Site_Products_Bulk::RESET_PRICE ] ) : $withheld;
+		$withheld = self::withheld_actions( $adapter );
 		$runner   = self::bulk_runner( $plugin, $accounts, $db );
 		$runs     = new Bulk_Run_Store( $db, $table( 'bulk_runs' ) );
 
@@ -290,6 +286,54 @@ final class Site_Products_Module {
 			],
 			$runner,
 			$runs
+		);
+	}
+
+	/**
+	 * The bulk actions an adapter cannot serve: the table withholds them from its toolbar, and the variation panel's group of the
+	 * product edit screen leaves them out of its select.
+	 *
+	 * An adapter that cannot import cards has no export and no linking; one that reads no prices has nothing to pull; one that sends
+	 * none keeps no own prices to reset.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param Marketplace_Adapter $adapter Adapter.
+	 * @return string[] Action ids.
+	 */
+	public static function withheld_actions( Marketplace_Adapter $adapter ): array {
+		$withheld = $adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE ];
+		$withheld = null === $adapter->price_reader() ? array_merge( $withheld, [ Site_Products_Bulk::PULL_PRICES ] ) : $withheld;
+
+		return null === $adapter->price_pusher() ? array_merge( $withheld, [ Site_Products_Bulk::RESET_PRICE ] ) : $withheld;
+	}
+
+	/**
+	 * Builds the bulk actions of the table for a caller that has no table of its own (the variation panel of the product edit screen).
+	 * The same services, so an action there plans, queues and counts exactly as it does in the table.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
+	 * @param Wpdb_Account_Store $accounts Account store.
+	 * @param \wpdb              $db       Database.
+	 * @return Site_Products_Bulk
+	 */
+	public static function bulk_for( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): Site_Products_Bulk {
+		$adapter = $plugin->get_marketplace_adapter();
+		$schema  = new Schema( $adapter->id() );
+		$table   = static function ( string $name ) use ( $schema, $db ): string {
+			return $schema->table_name( $name, $db->prefix );
+		};
+
+		return self::bulk(
+			$plugin,
+			$adapter,
+			$accounts,
+			$db,
+			new Wpdb_Link_Store( $db, $table( 'links' ), $table( 'link_ids' ) ),
+			new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) ),
+			$table
 		);
 	}
 

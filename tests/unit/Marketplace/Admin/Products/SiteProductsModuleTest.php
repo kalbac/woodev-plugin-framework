@@ -12,8 +12,10 @@ use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Provider;
+use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
@@ -179,5 +181,26 @@ final class SiteProductsModuleTest extends TestCase {
 
 		$this->assertSame( 2, Site_Products_Module::count_candidates( $products, $identity ) );
 		$this->assertSame( 3, Site_Products_Module::count_candidates( $products, [] ) );
+	}
+
+	public function test_an_adapter_withholds_the_bulk_actions_it_cannot_serve(): void {
+		$adapter = Mockery::mock( Marketplace_Adapter::class );
+
+		$adapter->shouldReceive( 'supports' )->andReturn( false );
+		$adapter->shouldReceive( 'price_reader' )->andReturn( null );
+		$adapter->shouldReceive( 'price_pusher' )->andReturn( null );
+
+		$this->assertSame(
+			[ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE, Site_Products_Bulk::PULL_PRICES, Site_Products_Bulk::RESET_PRICE ],
+			Site_Products_Module::withheld_actions( $adapter )
+		);
+
+		$capable = Mockery::mock( Marketplace_Adapter::class );
+
+		$capable->shouldReceive( 'supports' )->andReturn( true );
+		$capable->shouldReceive( 'price_reader' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Sync\Price_Reader::class ) );
+		$capable->shouldReceive( 'price_pusher' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Price\Price_Pusher::class ) );
+
+		$this->assertSame( [], Site_Products_Module::withheld_actions( $capable ) );
 	}
 }
