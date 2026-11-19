@@ -20,9 +20,12 @@ defined( 'ABSPATH' ) || exit;
  * implement it is read with {@see Link_Resolver::snapshot()} in one piece, as before; its notifications then leave the list alone.
  *
  * A **list row** is the card of {@see Link_Resolver::snapshot()} (`offer_id`, `remote_ids`, `name`, `state`, `is_created`, `failed`,
- * `archived`, `details_ok`, `status_text`, `group`), plus what the screen shows when the marketplace says it: `image` (URL of the main
- * picture), `price` (the selling price as a number or numeric string) and `stock` (units the marketplace has, an integer). An absent
+ * `archived`, `details_ok`, `status_text`, `group`), plus what the screen shows when the marketplace says it: `image_url` (URL of the
+ * main picture), `price` (the selling price as a number or numeric string) and `stock` (units the marketplace has, an integer). An absent
  * key is stored empty (`price` and `stock` as unknown, never as 0).
+ *
+ * The link to a card in the seller's cabinet is not part of this contract: the screen asks the adapter's
+ * `Remote_Card_Address::remote_card_url()` for it (#1867).
  *
  * @since 2.1.13
  */
@@ -74,14 +77,4 @@ interface Card_List_Source {
 	 * @return string '' when the event names no card.
 	 */
 	public function event_article( Inbound_Event $event ): string;
-
-	/**
-	 * Builds the address of a card in the seller's cabinet on the marketplace, for the link on the screen.
-	 *
-	 * @since 2.1.13
-	 *
-	 * @param array<string,int|string> $remote_ids The card's identifiers, as its list row gave them.
-	 * @return string '' when the identifiers are not enough.
-	 */
-	public function card_url( array $remote_ids ): string;
 }

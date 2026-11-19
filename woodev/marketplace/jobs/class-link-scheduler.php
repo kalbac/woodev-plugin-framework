@@ -167,7 +167,10 @@ final class Link_Scheduler {
 	}
 
 	/**
-	 * Queues the refresh of the rows of named cards (a card notification). The same cards already waiting are not queued twice.
+	 * Queues the refresh of the rows of named cards (a card notification). The same cards already **waiting** are not queued twice;
+	 * a read of them that is **running** is not enough, because it may have read the card before the change this notification
+	 * announces — so one follow-up waits behind it (#1868). `as_has_scheduled_action()` counts a running action too, hence the
+	 * pending-only lookup.
 	 *
 	 * @since 2.1.13
 	 *
@@ -176,7 +179,27 @@ final class Link_Scheduler {
 	 * @return bool False when Action Scheduler is not available or refused the action.
 	 */
 	public function refresh_rows( int $account_id, array $offer_ids ): bool {
-		return $this->enqueue( $this->rows_hook(), [ $account_id, array_values( array_map( 'strval', $offer_ids ) ), 0 ], 0 );
+		if ( ! function_exists( 'as_schedule_single_action' ) || ! function_exists( 'as_get_scheduled_actions' ) ) {
+			return false;
+		}
+
+		$args    = [ $account_id, array_values( array_map( 'strval', $offer_ids ) ), 0 ];
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'     => $this->rows_hook(),
+				'args'     => $args,
+				'group'    => $this->names->group(),
+				'status'   => 'pending',
+				'per_page' => 1,
+			],
+			'ids'
+		);
+
+		if ( is_array( $pending ) && [] !== $pending ) {
+			return true;
+		}
+
+		return 0 !== as_schedule_single_action( time(), $this->rows_hook(), $args, $this->names->group() );
 	}
 
 	/**

@@ -226,17 +226,23 @@ final class Wpdb_Card_Store {
 	/**
 	 * Starts a full refresh, or goes on with the one an interruption left: the generation its rows are stamped with.
 	 *
+	 * A generation belongs to one traversal of the cabinet. It is reused only when the caller resumes that traversal from its saved
+	 * cursor (`$resume` is the generation the cursor was saved with, and it is still the one in progress); a traversal that starts
+	 * over — after a give-up, an expired cursor, or a newer refresh that finished meanwhile — gets a new one above every earlier
+	 * one. Reusing an abandoned generation would let the rows of the abandoned pages survive the new traversal's sweep (#1868).
+	 *
 	 * @since 2.1.13
 	 *
 	 * @param int $account_id Account id.
 	 * @param int $now        Unix time.
-	 * @return int The generation, above every earlier one.
+	 * @param int $resume     The generation of the saved cursor the caller goes on from; 0 for a traversal from the first page.
+	 * @return int The generation: `$resume` when it may go on, else a new one above every earlier one.
 	 */
-	public function begin_refresh( int $account_id, int $now ): int {
+	public function begin_refresh( int $account_id, int $now, int $resume = 0 ): int {
 		$meta = $this->meta( $account_id );
 
-		if ( $meta['running'] <= $meta['generation'] ) {
-			$meta['running'] = $meta['generation'] + 1;
+		if ( $resume <= 0 || $resume !== $meta['running'] || $meta['running'] <= $meta['generation'] ) {
+			$meta['running'] = max( $meta['generation'], $meta['running'] ) + 1;
 		}
 
 		$meta['refreshing_at'] = $now;
@@ -324,21 +330,43 @@ final class Wpdb_Card_Store {
 	/**
 	 * Ends a full refresh: sweeps the rows it did not see (the cards deleted on the marketplace), then records it as the last one.
 	 *
+	 * Nothing is swept or recorded for a generation that is not above the last finished one: a run that lost its account claim and
+	 * came back after a newer refresh finished must not delete that refresh's rows or move the generation back. With a fence the
+	 * sweep itself is conditional on the account claim, as the fenced writes of {@see Wpdb_Link_Store} are, and a run whose claim
+	 * was taken over records nothing.
+	 *
 	 * @since 2.1.13
 	 *
-	 * @param int $account_id Account id.
-	 * @param int $run        The refresh's generation.
-	 * @param int $now        Unix time.
-	 * @return int Rows swept.
+	 * @param int              $account_id Account id.
+	 * @param int              $run        The refresh's generation.
+	 * @param int              $now        Unix time.
+	 * @param Claim_Fence|null $fence      The account claim the run holds, or null.
+	 * @return int|null Rows swept; null when the run is obsolete or its claim was taken over, and nothing was recorded.
 	 * @throws \RuntimeException When the database refuses the sweep; the refresh then stays unfinished and its next run sweeps.
 	 */
-	public function finish_refresh( int $account_id, int $run, int $now ): int {
+	public function finish_refresh( int $account_id, int $run, int $now, ?Claim_Fence $fence = null ): ?int {
+		if ( $run <= $this->meta( $account_id )['generation'] ) {
+			return null;
+		}
+
+		$condition = 'account_id = %d AND seen_run <> %d';
+		$values    = [ $account_id, $run ];
+
+		if ( null !== $fence ) {
+			$condition .= ' AND EXISTS (SELECT 1 FROM %i AS claim_owner WHERE claim_owner.account_id = %d AND claim_owner.claim_token = %s AND claim_owner.claim_until > %s)';
+			$values     = array_merge( $values, [ $fence->table(), $account_id, $fence->token(), gmdate( 'Y-m-d H:i:s', $this->now() ) ] );
+		}
+
 		$swept = 0;
 
 		do {
-			$deleted = Account_Rows::delete_where( $this->db, $this->table, 'account_id = %d AND seen_run <> %d', [ $account_id, $run ], self::SWEEP );
+			$deleted = Account_Rows::delete_where( $this->db, $this->table, $condition, $values, self::SWEEP );
 			$swept  += $deleted;
 		} while ( $deleted >= self::SWEEP );
+
+		if ( null !== $fence && ! $this->claim_held( $account_id, $fence ) ) {
+			return null;
+		}
 
 		$meta                  = $this->meta( $account_id );
 		$meta['generation']    = $run;
@@ -350,6 +378,19 @@ final class Wpdb_Card_Store {
 		$this->save_meta( $account_id, $meta );
 
 		return $swept;
+	}
+
+	/**
+	 * Whether the run still holds the account claim.
+	 *
+	 * @param int         $account_id Account id.
+	 * @param Claim_Fence $fence      The run's claim.
+	 * @return bool
+	 */
+	private function claim_held( int $account_id, Claim_Fence $fence ): bool {
+		$sql = $this->db->prepare( 'SELECT COUNT(*) FROM %i WHERE account_id = %d AND claim_token = %s AND claim_until > %s', $fence->table(), $account_id, $fence->token(), gmdate( 'Y-m-d H:i:s', $this->now() ) );
+
+		return 1 === (int) $this->db->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
 	}
 
 	/**
@@ -582,7 +623,7 @@ final class Wpdb_Card_Store {
 					self::key( $offer_id ),
 					$offer_id,
 					mb_substr( (string) ( $card['name'] ?? '' ), 0, self::NAME_LENGTH ),
-					self::url( (string) ( $card['image'] ?? '' ) ),
+					self::url( (string) ( $card['image_url'] ?? '' ) ),
 					substr( (string) ( $card['state'] ?? '' ), 0, 24 ),
 					empty( $card['is_created'] ) ? 0 : 1,
 					empty( $card['failed'] ) ? 0 : 1,
@@ -647,7 +688,7 @@ final class Wpdb_Card_Store {
 			'offer_id'      => (string) $row['offer_id'],
 			'remote_ids'    => is_array( $ids ) ? $ids : [],
 			'name'          => (string) $row['name'],
-			'image'         => (string) $row['image'],
+			'image_url'     => (string) $row['image'],
 			'state'         => (string) $row['state'],
 			'is_created'    => 1 === (int) $row['is_created'],
 			'failed'        => 1 === (int) $row['failed'],

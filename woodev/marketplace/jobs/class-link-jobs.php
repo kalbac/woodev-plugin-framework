@@ -307,9 +307,10 @@ final class Link_Jobs {
 				// The account job has logged it; the row stays as the last refresh left it.
 			},
 			(int) $attempt,
-			function ( Account $account ) use ( $source, $offer_ids ): void {
+			function ( Account $account, Claim_Fence $fence ) use ( $source, $offer_ids ): void {
 				$cards = $source->list_cards( $account, $this->scheduler->rows_hook(), $offer_ids );
 
+				$this->job->hold( $account->id(), $fence ); // The read may have outlasted the claim.
 				$this->cards->upsert( $account->id(), $cards, $this->cards->current_run( $account->id() ), 0, (int) call_user_func( $this->clock ) );
 			},
 			max( 0, (int) $put_offs )
@@ -563,6 +564,9 @@ final class Link_Jobs {
 	 * Refreshes the stored list of the cabinet's cards: a part of at most {@see self::PAGES_PER_RUN} pages for a resolver that pages,
 	 * the whole cabinet for one that does not; the sweep of the cards it did not see after the last page.
 	 *
+	 * The saved cursor carries the generation of its traversal. A run goes on from the cursor only under that same generation; when
+	 * the store gives a new one (no cursor, an expired one, an abandoned traversal) the read starts again from the first page.
+	 *
 	 * @param Account     $account Account.
 	 * @param Claim_Fence $fence   The run's claim.
 	 * @return void
@@ -572,13 +576,19 @@ final class Link_Jobs {
 		$account_id = $account->id();
 		$now        = (int) call_user_func( $this->clock );
 		$record     = $this->progress->load( $account_id, Link_Progress_Store::KIND_REFRESH, 0, $now );
-		// Only the two keys of this job: a record an older framework left holds the adapter's whole read, which must not be saved again.
-		$state      = [
+		$saved      = (int) ( $record['state']['run'] ?? 0 );
+		$run        = $this->cards->begin_refresh( $account_id, $now, $saved );
+		// Only the keys of this job: a record an older framework left holds the adapter's whole read, which must not be saved again.
+		$state      = $run === $saved ? [
+			'run'      => $run,
 			'page'     => (array) ( $record['state']['page'] ?? [] ),
 			'position' => max( 1, (int) ( $record['state']['position'] ?? 1 ) ),
+		] : [
+			'run'      => $run,
+			'page'     => [],
+			'position' => 1,
 		];
 		$before     = $state;
-		$run        = $this->cards->begin_refresh( $account_id, $now );
 		$renew      = function () use ( $account_id, $fence ): void {
 			$this->job->hold( $account_id, $fence );
 		};
@@ -592,6 +602,8 @@ final class Link_Jobs {
 			} else {
 				$this->refresh_whole( $account, $run, $renew, $state );
 			}
+		} catch ( Claim_Lost $e ) {
+			throw $e; // The cursor is the new claim owner's now: a run that lost the claim must not write over it.
 		} catch ( \Throwable $e ) {
 			$this->note_progress( $before, $state );
 			$record['state'] = $state;
@@ -600,8 +612,12 @@ final class Link_Jobs {
 			throw $e;
 		}
 
-		$this->cards->finish_refresh( $account_id, $run, (int) call_user_func( $this->clock ) );
-		$this->progress->clear( $account_id, Link_Progress_Store::KIND_REFRESH );
+		$renew();
+
+		// Null: a newer refresh finished meanwhile, or the claim was taken over; that run's list and cursor stand.
+		if ( null !== $this->cards->finish_refresh( $account_id, $run, (int) call_user_func( $this->clock ), $fence ) ) {
+			$this->progress->clear( $account_id, Link_Progress_Store::KIND_REFRESH );
+		}
 	}
 
 	/**
@@ -612,7 +628,7 @@ final class Link_Jobs {
 	 * @param Card_List_Source                                          $source  The resolver, read by page.
 	 * @param int                                                       $run     The refresh's generation.
 	 * @param callable                                                  $renew   Extends the claim or throws.
-	 * @param array<string,mixed>                                       $state   `page` (the adapter's cursor) and `position`; updated.
+	 * @param array<string,mixed>                                       $state   `run`, `page` (the adapter's cursor) and `position`; updated.
 	 * @param array{started_at:int,scope:int,state:array<string,mixed>} $record  The progress record, saved after every page.
 	 * @return bool True when the last page was read.
 	 * @throws \Throwable Whatever interrupted the read.
@@ -629,6 +645,7 @@ final class Link_Jobs {
 			$cards = (array) ( $page['cards'] ?? [] );
 			$now   = (int) call_user_func( $this->clock );
 
+			$renew(); // The read may have outlasted the claim: a run that lost it writes nothing.
 			$this->cards->upsert( $account_id, $cards, $run, (int) $state['position'], $now );
 			$this->cards->touch( $account_id, $now );
 
@@ -658,9 +675,7 @@ final class Link_Jobs {
 		$cards = $this->resolver->snapshot( $account, $this->scheduler->refresh_hook(), $renew, $state['page'] );
 
 		foreach ( array_chunk( $cards, Wpdb_Card_Store::BATCH ) as $index => $chunk ) {
-			if ( $index > 0 ) {
-				$renew();
-			}
+			$renew(); // After the read and between batches: a run that lost the claim writes nothing.
 
 			$this->cards->upsert( $account->id(), $chunk, $run, 1 + $index * Wpdb_Card_Store::BATCH, (int) call_user_func( $this->clock ) );
 		}

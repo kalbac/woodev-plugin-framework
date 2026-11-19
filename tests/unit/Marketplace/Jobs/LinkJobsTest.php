@@ -1126,4 +1126,83 @@ final class LinkJobsTest extends Export_Test_Case {
 		$this->assertCount( 1, $daily );
 		$this->assertSame( 'recurring', $daily[0]['kind'] );
 	}
+
+	/**
+	 * A refresh that gave up half way and is started again reads under a new generation: a card it saw before giving up and that
+	 * was deleted meanwhile leaves the list with the successful refresh (#1868 Must 1).
+	 *
+	 * @return void
+	 */
+	public function test_a_refresh_started_over_after_a_give_up_sweeps_the_cards_of_the_abandoned_pages(): void {
+		$paged           = new Paged_Link_Resolver();
+		$paged->pages    = [ [ $this->detail( 1, 'A' ) ], [ $this->detail( 2, 'X' ) ] ];
+		$paged->failures = [ 1 => Fake_Remote_Exception::of( Remote_Error::FAIL, 'denied' ) ];
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ 'A' ], $this->listed(), 'the first page was written before the refusal' );
+		$this->assertStringContainsString( 'denied', $this->card_store()->last_error( $this->account_id ) );
+
+		// A is deleted on the marketplace; the merchant refreshes again and the cabinet holds B only.
+		$paged->pages = [ [ $this->detail( 3, 'B' ) ] ];
+		$paged->reads = [];
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ [] ], array_column( $paged->reads, 1 ), 'the new refresh starts from the first page' );
+		$this->assertSame( [ 'B' ], $this->listed(), 'the card of the abandoned page is swept' );
+		$this->assertSame( '', $this->card_store()->last_error( $this->account_id ) );
+	}
+
+	/**
+	 * A cursor older than the progress store trusts is a traversal started over: new generation, first page.
+	 *
+	 * @return void
+	 */
+	public function test_an_expired_cursor_starts_the_traversal_over_under_a_new_generation(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ [ $this->detail( 1, 'OLD' ) ] ];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$abandoned = $this->card_store()->begin_refresh( $this->account_id, self::NOW );
+		( new Link_Progress_Store( self::PREFIX ) )->save(
+			$this->account_id,
+			Link_Progress_Store::KIND_REFRESH,
+			[
+				'started_at' => self::NOW - Link_Progress_Store::MAX_AGE - 1,
+				'scope'      => 0,
+				'state'      => [ 'run' => $abandoned, 'page' => [ 'next' => 1 ], 'position' => 2 ],
+			]
+		);
+		$this->card_store()->upsert( $this->account_id, [ $this->detail( 2, 'GONE' ) ], $abandoned, 2, self::NOW );
+
+		$paged->pages = [ [ $this->detail( 3, 'NEW' ) ] ];
+		$paged->reads = [];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ [] ], array_column( $paged->reads, 1 ) );
+		$this->assertSame( [ 'NEW' ], $this->listed() );
+	}
+
+	/**
+	 * A run whose account claim is taken over after its last page writes nothing and sweeps nothing: the new owner's list stands
+	 * (#1868 Should 3).
+	 *
+	 * @return void
+	 */
+	public function test_a_refresh_that_lost_its_claim_after_the_last_page_neither_writes_nor_sweeps(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ [ $this->detail( 1, 'KEEP-1' ), $this->detail( 2, 'KEEP-2' ) ] ];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$paged->pages   = [ [ $this->detail( 9, 'STALE' ) ] ];
+		$paged->on_page = function (): void {
+			$this->db->query( $this->db->prepare( 'UPDATE %i SET claim_token = %s, claim_until = %s WHERE account_id = %d', Sqlite_Tables::table( 'accounts' ), str_repeat( 'b', 32 ), '2099-01-01 00:00:00', $this->account_id ) );
+		};
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ 'KEEP-1', 'KEEP-2' ], $this->listed() );
+		$this->assertSame( self::NOW, $this->card_store()->refreshed_at( $this->account_id ) );
+	}
 }

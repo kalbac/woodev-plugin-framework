@@ -924,13 +924,19 @@ article and name, counts); nothing loads the whole list. Measured on 10 000 / 50
   each page is upserted (batches of `Wpdb_Card_Store::BATCH` = 1000) and the cursor kept in `Link_Progress_Store` after it; a run
   stops after `Link_Jobs::PAGES_PER_RUN` pages and queues its continuation. A resolver without it is read whole by `snapshot()`.
 - **Deleted cards.** `begin_refresh()` takes a generation; rows are stamped with it; `finish_refresh()` sweeps `seen_run <> run`
-  only after the last page, so the screen never empties mid-refresh. A failed refresh keeps the last list and its time.
+  only after the last page, so the screen never empties mid-refresh. A failed refresh keeps the last list and its time. The
+  generation is saved in the cursor and reused only when a run goes on from that cursor; a traversal started over (give-up, expired
+  cursor) gets a new one above both counters, or the abandoned pages' cards would survive its sweep. `finish_refresh()` refuses a
+  generation not above the last finished one, fences its sweep on the account claim (`Claim_Fence`), and the job renews the claim
+  after every read before it writes; the batch upsert itself is check-then-write, not SQL-fenced.
 - **Notifications.** For a `Card_List_Source`, `Jobs\Card_List_Event_Handler` wraps the handler of each `card_event_types()` type:
-  it queues `refresh_card_rows( account, [article] )` (only when the account has a list) and hands the event on. The job reads
+  it queues `refresh_card_rows( account, [article] )` (only when the account has a list; deduplicated against **pending** actions
+  only, so a read already running gets one follow-up behind it) and hands the event on. The job reads
   `list_cards()` and upserts under `current_run()`, so a refresh running meanwhile does not sweep the row; a card the answer lacks
   is left to the next full refresh.
-- **Screen data.** `messages.refreshed_at` («Список обновлён ДД.ММ.ГГГГ в ЧЧ:ММ») and the summary line; `Remote_Cards_Rows::details()`
-  gives picture, price, stock, status text, ids and the cabinet link (`Card_List_Source::card_url()`) for the columns that show them.
+- **Screen data.** `messages.refreshed_at` («Список обновлён ДД.ММ.ГГГГ в ЧЧ:ММ») and the summary line.
+  The cells (picture `image_url`, price, stock, the cabinet link through the adapter's `Remote_Card_Address`) are #1867's
+  `Remote_Cards_Cells`; the store's card carries those keys.
 
 ## Card importer (framework 2.1.6)
 

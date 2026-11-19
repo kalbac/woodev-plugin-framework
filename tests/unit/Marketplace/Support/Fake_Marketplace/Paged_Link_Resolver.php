@@ -40,6 +40,13 @@ final class Paged_Link_Resolver implements Link_Resolver, Card_List_Source {
 	public $failures = [];
 
 	/**
+	 * Runs after a page was read, before it is answered: `function ( int $index ): void` (a test can take the account claim away there).
+	 *
+	 * @var callable|null
+	 */
+	public $on_page;
+
+	/**
 	 * Reads: `[ kind, cursor as handed in, offer ids asked for ]`.
 	 *
 	 * @var array<int,array{0:string,1:array<string,mixed>,2:string[]}>
@@ -122,6 +129,10 @@ final class Paged_Link_Resolver implements Link_Resolver, Card_List_Source {
 
 		$state['next'] = $index + 1;
 
+		if ( null !== $this->on_page ) {
+			call_user_func( $this->on_page, $index );
+		}
+
 		return [
 			'cards' => $this->pages[ $index ] ?? [],
 			'done'  => $index + 1 >= count( $this->pages ),
@@ -153,13 +164,5 @@ final class Paged_Link_Resolver implements Link_Resolver, Card_List_Source {
 	 */
 	public function event_article( Inbound_Event $event ): string {
 		return (string) ( $event->payload()['offer_id'] ?? '' );
-	}
-
-	/**
-	 * @param array<string,int|string> $remote_ids Identifiers.
-	 * @return string
-	 */
-	public function card_url( array $remote_ids ): string {
-		return isset( $remote_ids['card_ref'] ) ? 'https://fake.test/cards/' . $remote_ids['card_ref'] : '';
 	}
 }

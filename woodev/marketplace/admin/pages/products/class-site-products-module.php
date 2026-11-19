@@ -28,7 +28,6 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
-use Woodev\Framework\Marketplace\Flows\Card_List_Source;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
@@ -314,8 +313,7 @@ final class Site_Products_Module {
 		$ledger   = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
 		$products = new Remote_Cards_Products( Remote_Cards_Products::woocommerce_search() );
 		$importer = $adapter instanceof Card_Importer && $adapter->supports( Capability::IMPORT_PRODUCTS ) ? new Import_Scheduler( new Job_Names( $plugin->get_id() ) ) : null;
-		$resolver = $adapter->link_resolver();
-		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer, $resolver instanceof Card_List_Source ? [ $resolver, 'card_url' ] : null );
+		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer );
 		$options  = Uninstaller::option_prefix( $plugin->get_id() );
 		$store    = self::card_store( $plugin, $adapter, $db );
 		$reports  = new Link_Report_Store( $options );

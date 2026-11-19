@@ -150,6 +150,32 @@ class CardStoreTest extends TestCase {
 		$this->assertSame( [ 'S-00001', 'S-00002', 'S-00003' ], $this->found( '' ) );
 	}
 
+	public function test_the_fenced_sweep_deletes_nothing_for_a_run_that_lost_the_claim(): void {
+		global $wpdb;
+
+		$accounts = $this->schema->table_name( 'accounts', $wpdb->prefix );
+		$wpdb->insert(
+			$accounts,
+			[
+				'account_id'         => self::ACCOUNT,
+				'external_id'        => 'cab-3',
+				'secret_enc'         => '',
+				'notification_token' => str_repeat( 'n', 32 ),
+				'claim_token'        => str_repeat( 'b', 32 ),
+				'claim_until'        => gmdate( 'Y-m-d H:i:s', time() + 120 ),
+			]
+		);
+		$this->refresh( [ $this->row( 'KEPT', 'Карточка' ) ] );
+
+		$store = $this->store();
+		$run   = $store->begin_refresh( self::ACCOUNT, 1700000100 );
+
+		$this->assertNull( $store->finish_refresh( self::ACCOUNT, $run, 1700000100, new \Woodev\Framework\Marketplace\Data\Claim_Fence( $accounts, str_repeat( 'a', 32 ) ) ) );
+		$this->assertSame( [ 'KEPT' ], $this->found( '' ) );
+		$this->assertSame( 1, $store->finish_refresh( self::ACCOUNT, $run, 1700000100, new \Woodev\Framework\Marketplace\Data\Claim_Fence( $accounts, str_repeat( 'b', 32 ) ) ) );
+		$this->assertSame( [], $this->found( '' ) );
+	}
+
 	private function drop_tables(): void {
 		global $wpdb;
 

@@ -144,4 +144,22 @@ final class CardListEventHandlerTest extends Export_Test_Case {
 		$this->assertSame( [], $this->scheduler->of( self::ROWS ) );
 		$this->assertCount( 2, $this->inner_seen );
 	}
+
+	/**
+	 * A notification that arrives while the read of the same card runs gets one follow-up behind it: the running read may have
+	 * seen the card before this change (#1868 Must 2). More notifications meanwhile add no second follow-up.
+	 *
+	 * @return void
+	 */
+	public function test_a_notification_while_the_cards_read_runs_queues_one_follow_up(): void {
+		$this->load_list();
+
+		$this->handler()->handle( $this->event( 'ART-1' ) );
+		$this->scheduler->start_running( self::ROWS );
+
+		$this->handler()->handle( $this->event( 'ART-1' ) );
+		$this->handler()->handle( $this->event( 'ART-1' ) );
+
+		$this->assertSame( [ 'in-progress', 'pending' ], array_column( $this->scheduler->of( self::ROWS ), 'status' ) );
+	}
 }

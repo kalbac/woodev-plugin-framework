@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Data;
 use Brain\Monkey;
 use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
+use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
@@ -293,7 +294,7 @@ final class WpdbCardStoreTest extends TestCase {
 					'F-1',
 					'Платье',
 					[
-						'image'       => 'https://cdn.test/f1.jpg',
+						'image_url'   => 'https://cdn.test/f1.jpg',
 						'price'       => '1499.5',
 						'stock'       => 3,
 						'failed'      => true,
@@ -314,7 +315,7 @@ final class WpdbCardStoreTest extends TestCase {
 
 		$card = $this->store()->find( self::ACCOUNT, Wpdb_Card_Store::key( 'F-1' ) );
 
-		$this->assertSame( 'https://cdn.test/f1.jpg', $card['image'] );
+		$this->assertSame( 'https://cdn.test/f1.jpg', $card['image_url'] );
 		$this->assertSame( '1499.50', $card['price'] );
 		$this->assertSame( 3, $card['stock'] );
 		$this->assertTrue( $card['failed'] );
@@ -330,7 +331,7 @@ final class WpdbCardStoreTest extends TestCase {
 	public function test_an_unknown_price_or_stock_stays_unknown_and_a_bad_picture_is_dropped(): void {
 		$this->refresh(
 			[
-				$this->row( 'U-1', '', [ 'price' => null, 'stock' => 'много', 'image' => 'javascript:alert(1)' ] ),
+				$this->row( 'U-1', '', [ 'price' => null, 'stock' => 'много', 'image_url' => 'javascript:alert(1)' ] ),
 				$this->row( 'U-2', '', [ 'price' => 0, 'stock' => 0 ] ),
 			]
 		);
@@ -340,7 +341,7 @@ final class WpdbCardStoreTest extends TestCase {
 
 		$this->assertNull( $unknown['price'] );
 		$this->assertNull( $unknown['stock'] );
-		$this->assertSame( '', $unknown['image'] );
+		$this->assertSame( '', $unknown['image_url'] );
 		$this->assertSame( '0.00', $zero['price'], 'zero is a price, not «unknown»' );
 		$this->assertSame( 0, $zero['stock'] );
 	}
@@ -398,9 +399,9 @@ final class WpdbCardStoreTest extends TestCase {
 
 		$store = $this->store();
 		$first = $store->begin_refresh( self::ACCOUNT, self::NOW );
-		$again = $store->begin_refresh( self::ACCOUNT, self::NOW + 30 );
+		$again = $store->begin_refresh( self::ACCOUNT, self::NOW + 30, $first );
 
-		$this->assertSame( $first, $again );
+		$this->assertSame( $first, $again, 'a run that goes on from the saved cursor keeps the generation' );
 		$this->assertSame( $first, $store->current_run( self::ACCOUNT ), 'a notification meanwhile writes under the running generation' );
 
 		$store->finish_refresh( self::ACCOUNT, $first, self::NOW + 60 );
@@ -463,5 +464,57 @@ final class WpdbCardStoreTest extends TestCase {
 		$this->expectException( \Woodev\Framework\Marketplace\Data\Persistence_Exception::class );
 
 		$this->store()->upsert( self::ACCOUNT, [ $this->row( 'W-1' ) ], 1, 1, self::NOW );
+	}
+
+	public function test_a_traversal_started_over_gets_a_generation_above_both_counters_and_only_a_resumed_one_keeps_its_own(): void {
+		$store = $this->store();
+
+		$first = $store->begin_refresh( self::ACCOUNT, self::NOW );
+		$store->fail( self::ACCOUNT, 'denied' );
+
+		$this->assertSame( $first, $store->begin_refresh( self::ACCOUNT, self::NOW, $first ), 'the saved cursor of the running traversal goes on' );
+
+		$again = $store->begin_refresh( self::ACCOUNT, self::NOW );
+		$this->assertGreaterThan( $first, $again, 'from the first page: never the abandoned generation' );
+		$this->assertGreaterThan( $again, $store->begin_refresh( self::ACCOUNT, self::NOW, $first ), 'a cursor of an older traversal is not resumed' );
+	}
+
+	public function test_finishing_an_obsolete_generation_sweeps_and_records_nothing(): void {
+		$store = $this->store();
+		$old   = $store->begin_refresh( self::ACCOUNT, self::NOW );
+		$store->upsert( self::ACCOUNT, [ $this->row( 'OLD' ) ], $old, 1, self::NOW );
+
+		$new = $store->begin_refresh( self::ACCOUNT, self::NOW + 10 );
+		$store->upsert( self::ACCOUNT, [ $this->row( 'NEW' ) ], $new, 1, self::NOW + 10 );
+		$store->finish_refresh( self::ACCOUNT, $new, self::NOW + 10 );
+
+		$this->assertNull( $store->finish_refresh( self::ACCOUNT, $old, self::NOW + 20 ) );
+		$this->assertSame( [ 'NEW' ], self::articles( $store->page( self::ACCOUNT, null, '', 1, 20 ) ) );
+		$this->assertSame( self::NOW + 10, $store->refreshed_at( self::ACCOUNT ), 'the generation does not move back' );
+	}
+
+	public function test_a_fenced_sweep_of_a_run_whose_claim_was_taken_over_deletes_nothing(): void {
+		$accounts = Sqlite_Tables::table( 'accounts' );
+		$this->db->insert(
+			$accounts,
+			[
+				'account_id'         => self::ACCOUNT,
+				'external_id'        => 'cab-7',
+				'secret_enc'         => '',
+				'notification_token' => str_repeat( 'n', 32 ),
+				'claim_token'        => str_repeat( 'b', 32 ),
+				'claim_until'        => gmdate( 'Y-m-d H:i:s', self::NOW + 120 ),
+			]
+		);
+		$this->refresh( [ $this->row( 'KEPT' ) ] );
+
+		$store = $this->store();
+		$run   = $store->begin_refresh( self::ACCOUNT, self::NOW );
+		$lost  = new Claim_Fence( $accounts, str_repeat( 'a', 32 ) );
+
+		$this->assertNull( $store->finish_refresh( self::ACCOUNT, $run, self::NOW, $lost ) );
+		$this->assertSame( [ 'KEPT' ], self::articles( $store->page( self::ACCOUNT, null, '', 1, 20 ) ) );
+
+		$this->assertSame( 1, $store->finish_refresh( self::ACCOUNT, $run, self::NOW, new Claim_Fence( $accounts, str_repeat( 'b', 32 ) ) ), 'the owner sweeps' );
 	}
 }
