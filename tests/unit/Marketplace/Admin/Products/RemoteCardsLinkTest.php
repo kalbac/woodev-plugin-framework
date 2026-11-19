@@ -98,7 +98,8 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 		$row = $body['rows'][0];
 		$this->assertSame( $this->card_row_id( 'MUG-1' ), $row['id'] );
 		$this->assertSame( 'link', $row['cells']['on_site'][0]['type'] );
-		$this->assertFalse( $row['actions'][0]['enabled'], 'The card is on the site now.' );
+		$this->assertSame( [ 'open_product' ], array_column( $row['actions'], 'id' ), 'The card is on the site now: its one action opens the product.' );
+		$this->assertTrue( $row['actions'][0]['enabled'] );
 		$this->assertSame( [], $this->adapter->link_resolver()->reads, 'Linking writes our table; the marketplace is not asked.' );
 		$this->assertSame( [], $this->scheduler->actions );
 	}

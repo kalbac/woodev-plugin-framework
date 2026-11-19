@@ -9,9 +9,10 @@
  */
 
 import type { ReactNode } from 'react';
+import { Tooltip } from '@wordpress/components';
 import { dateI18n } from '@wordpress/date';
-import { STYLES, badgeStyle } from './styles';
-import type { BadgeCell, CellType, LinkCell, ProgressCell, StackItem } from './types';
+import { STYLES } from './styles';
+import type { BadgeCell, CellType, ImageCell, LinkCell, ProgressCell, StackItem } from './types';
 
 type CellRenderer = ( value: unknown ) => ReactNode;
 
@@ -20,30 +21,66 @@ const DATE_FORMAT = 'd.m.Y';
 const DATETIME_FORMAT = 'd.m.Y H:i';
 
 function TextValue( { value, title }: { value: string | number; title?: string } ) {
-	return <span title={ title }>{ String( value ) }</span>;
+	return (
+		<span className="woodev-records__text" title={ title ?? String( value ) }>
+			{ String( value ) }
+		</span>
+	);
 }
 
 /** A badge longer than this is a sentence (an error text), not a state: it wraps instead of widening the column. */
 const LONG_BADGE_LENGTH = 32;
 
+/**
+ * The status badge of «Заказы доставки» (the size, the corners and the colours are the stylesheet's). A badge with a
+ * `tooltip` explains itself on hover and on keyboard focus: the sub-lines and the errors a cell used to stack under it.
+ */
 function Badge( { value }: { value: BadgeCell } ) {
-	const style = badgeStyle( value.tone );
-
-	if ( value.label.length > LONG_BADGE_LENGTH ) {
-		style.whiteSpace = 'normal';
-		style.maxWidth = '240px';
-		style.overflowWrap = 'anywhere';
-	}
-
-	return (
-		<span className={ `woodev-records__badge is-${ value.tone }` } style={ style }>
+	const long = value.label.length > LONG_BADGE_LENGTH;
+	const tooltip = value.tooltip ?? '';
+	const badge = (
+		<span
+			className={ `woodev-records__badge is-${ value.tone }${ long ? ' is-long' : '' }${ tooltip === '' ? '' : ' has-tooltip' }` }
+			tabIndex={ tooltip === '' ? undefined : 0 }
+		>
 			{ value.label }
 		</span>
 	);
+
+	if ( tooltip === '' ) {
+		return badge;
+	}
+
+	return (
+		<Tooltip text={ tooltip } className="woodev-records__tooltip" delay={ 150 }>
+			{ badge }
+		</Tooltip>
+	);
+}
+
+/** Whether an address leaves this site: such a link opens in a new tab, so the table stays where it was. */
+function isExternal( url: string ): boolean {
+	try {
+		return new URL( url, window.location.href ).origin !== window.location.origin;
+	} catch ( error ) {
+		return false;
+	}
 }
 
 function LinkValue( { value }: { value: LinkCell } ) {
-	return <a href={ value.url }>{ value.label }</a>;
+	const external = isExternal( value.url );
+
+	return (
+		<a
+			className="woodev-records__link"
+			href={ value.url }
+			title={ value.label }
+			target={ external ? '_blank' : undefined }
+			rel={ external ? 'noopener noreferrer' : undefined }
+		>
+			{ value.label }
+		</a>
+	);
 }
 
 /**
@@ -77,6 +114,10 @@ const STACK_RENDERERS: Record< StackItem[ 'type' ], CellRenderer > = {
 	text: ( value ) => <TextValue value={ value as string } title={ value as string } />,
 	badge: ( value ) => <Badge value={ value as BadgeCell } />,
 	link: ( value ) => <LinkValue value={ value as LinkCell } />,
+	// The card's photo: a small square; the browser reads it only when it scrolls into view.
+	image: ( value ) => (
+		<img className="woodev-records__thumb" src={ ( value as ImageCell ).url } alt={ ( value as ImageCell ).alt } loading="lazy" />
+	),
 };
 
 function Stack( { items }: { items: StackItem[] } ) {

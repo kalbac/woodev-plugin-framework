@@ -101,6 +101,7 @@ final class Site_Products_Definition {
 				[
 					'id'          => 'edit',
 					'label'       => __( 'Изменить товар', 'woodev-plugin-framework' ),
+					'icon'        => 'edit',
 					'effect'      => 'read',
 					'interaction' => 'link',
 				],
@@ -155,39 +156,30 @@ final class Site_Products_Definition {
 	}
 
 	/**
-	 * The two fields of «Связать по артикулу»: where to link and, for one category, which. An empty «where» means the whole shop, so
-	 * the one-click path of the old dialog stays.
+	 * The two fields of «Связать по артикулу»: the switch «Весь магазин» (off by default) and, while it is off, the required category.
 	 *
 	 * @since 2.1.8
+	 * @since 2.1.13 A switch and a required category replaced the select «Где связывать».
 	 *
 	 * @return array<int,array<string,mixed>>
 	 */
 	private static function link_scope_fields(): array {
 		return [
 			[
-				'id'      => Site_Products_Bulk::LINK_WHERE,
-				'label'   => __( 'Где связывать', 'woodev-plugin-framework' ),
-				'type'    => 'select',
-				'options' => [
-					[
-						'value' => Site_Products_Bulk::LINK_WHERE_SHOP,
-						'label' => __( 'Весь магазин', 'woodev-plugin-framework' ),
-					],
-					[
-						'value' => Site_Products_Bulk::LINK_WHERE_CATEGORY,
-						'label' => __( 'Одна категория (вместе с подкатегориями)', 'woodev-plugin-framework' ),
-					],
-				],
-				'help'    => __( 'Если ничего не выбрано, связываются товары всего магазина.', 'woodev-plugin-framework' ),
+				'id'     => Site_Products_Bulk::LINK_WHOLE_SHOP,
+				'label'  => __( 'Весь магазин', 'woodev-plugin-framework' ),
+				'type'   => 'boolean',
+				'toggle' => true,
 			],
 			[
 				'id'             => Site_Products_Bulk::LINK_CATEGORY,
 				'label'          => __( 'Категория', 'woodev-plugin-framework' ),
 				'type'           => 'select',
+				'required'       => true,
 				'options_source' => true,
 				'searchable'     => true,
+				'hidden_when'    => Site_Products_Bulk::LINK_WHOLE_SHOP,
 				'placeholder'    => __( 'Начните вводить название категории', 'woodev-plugin-framework' ),
-				'help'           => __( 'Нужна, когда выбрана одна категория.', 'woodev-plugin-framework' ),
 			],
 		];
 	}
@@ -218,21 +210,23 @@ final class Site_Products_Definition {
 			],
 			[
 				'id'        => 'stock',
-				/* translators: %s: marketplace name. */
-				'label'     => sprintf( __( 'Остаток: сайт / %s', 'woodev-plugin-framework' ), $marketplace ),
-				'cell_type' => 'stack',
+				'label'     => __( 'Остатки', 'woodev-plugin-framework' ),
+				'cell_type' => 'text',
 				'sort_key'  => 'stock',
+				/* translators: %s: marketplace name. */
+				'help'      => sprintf( __( 'Остаток на сайте / остаток на %s. «—» значит, что значения нет: например, товар ещё не выгружен.', 'woodev-plugin-framework' ), $marketplace ),
 			],
 			[
 				'id'        => 'price',
-				/* translators: %s: marketplace name. */
-				'label'     => sprintf( __( 'Цена: сайт / %s', 'woodev-plugin-framework' ), $marketplace ),
-				'cell_type' => 'stack',
+				'label'     => __( 'Цены', 'woodev-plugin-framework' ),
+				'cell_type' => 'text',
 				'sort_key'  => 'price',
+				/* translators: %s: marketplace name. */
+				'help'      => sprintf( __( 'Цена на сайте / цена на %s. «—» значит, что значения нет: например, товар ещё не выгружен.', 'woodev-plugin-framework' ), $marketplace ),
 			],
 			[
 				'id'        => 'actions',
-				'label'     => '',
+				'label'     => __( 'Действия', 'woodev-plugin-framework' ),
 				'cell_type' => 'actions',
 			],
 		];

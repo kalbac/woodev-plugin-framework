@@ -461,7 +461,7 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$this->assertFalse( $after['activity']['locked'] );
 		$this->assertSame( 'link', $after['cells']['on_site'][0]['type'] );
 		$this->assertSame( 'Товар 77', $after['cells']['on_site'][0]['value']['label'] );
-		$this->assertFalse( $after['actions'][0]['enabled'], 'A card on the site is not imported again.' );
+		$this->assertSame( [ 'open_product' ], array_column( $after['actions'], 'id' ), 'A card on the site is not imported again: it is opened instead, with no disabled button.' );
 	}
 
 	public function test_the_note_detail_follows_the_logging_switch_in_both_directions_for_the_same_stored_note(): void {
@@ -469,8 +469,9 @@ final class RemoteCardsImportTest extends Remote_Cards_Test_Case {
 		$this->reports()->set_import_note( $this->account_id, 'NEW-1', 'Не удалось сохранить товар.', 'WC_Data_Exception: duplicate sku' );
 		$id = $this->card_row_id( 'NEW-1' );
 
+		// The note is the state badge's tooltip, one sentence a line.
 		$text = static function ( array $row ): array {
-			return array_column( $row['cells']['state'], 'value' );
+			return explode( "\n", (string) ( $row['cells']['state'][0]['value']['tooltip'] ?? '' ) );
 		};
 
 		$off = $text( $this->rows()[ $id ] );

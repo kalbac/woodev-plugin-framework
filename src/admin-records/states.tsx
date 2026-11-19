@@ -41,22 +41,25 @@ export interface EmptyCardProps {
 	actions: ReactNode;
 	/** PHP's sentence for an empty (or empty filtered) table. */
 	text: string;
+	/** An action offered right in the empty table («Обновить список»), if PHP named one. */
+	button?: ReactNode;
 }
 
 /**
  * The empty result in the frame of the table it stands for: `TableCard` has no `emptyMessage` in the oldest WooCommerce
  * we support, so the card is built from what `TableCard` itself is made of. Never a bare box instead of the card.
  */
-export function EmptyCard( { title, actions, text }: EmptyCardProps ) {
+export function EmptyCard( { title, actions, text, button }: EmptyCardProps ) {
 	return (
 		<Card className="woodev-records__empty-card">
 			<CardHeader className="woodev-records__empty-header">
-				<h2 className="woodev-records__empty-title screen-reader-text">{ title }</h2>
+				<h2 className="woodev-records__empty-title">{ title }</h2>
 				{ actions }
 			</CardHeader>
 			<CardBody>
 				<div className="woodev-records__state is-empty" role="status">
 					<p>{ text }</p>
+					{ button }
 				</div>
 			</CardBody>
 		</Card>

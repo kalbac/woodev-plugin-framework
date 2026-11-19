@@ -37,6 +37,8 @@ export interface Column {
 	required: boolean;
 	visible: boolean;
 	align: Alignment;
+	/** The sentence behind the «?» beside the heading: what the column shows and in which format; empty for none. */
+	help?: string;
 }
 
 export interface DateRange {
@@ -88,6 +90,10 @@ export interface ActionField {
 	searchable?: boolean;
 	/** What an empty text field or search box says it wants («Начните вводить название категории»). */
 	placeholder?: string;
+	/** A boolean drawn as a switch instead of a checkbox. */
+	toggle?: boolean;
+	/** The id of a boolean field of the same action; while that one is on, this field is not asked (it is not required and is not sent). */
+	hidden_when?: string;
 	help: string;
 }
 
@@ -100,6 +106,8 @@ export interface ActionDescriptor {
 	preview_label?: string;
 	/** What a row button shows when the full label does not fit in a table row; the full label stays its name and tooltip. */
 	short_label?: string;
+	/** A Dashicons slug (`edit`, `external`, …): the row button is then the icon alone, its label the title. Empty for a text button. */
+	icon?: string;
 	tone: Tone;
 	capability: string;
 	effect: 'read' | 'mutate';
@@ -155,6 +163,8 @@ export interface DefinitionEnvelope {
 export interface BadgeCell {
 	label: string;
 	tone: Tone;
+	/** What the badge explains on hover or focus: one sentence per line. */
+	tooltip?: string;
 }
 
 export interface LinkCell {
@@ -162,8 +172,13 @@ export interface LinkCell {
 	url: string;
 }
 
+export interface ImageCell {
+	url: string;
+	alt: string;
+}
+
 export interface StackItem {
-	type: 'text' | 'badge' | 'link';
+	type: 'text' | 'badge' | 'link' | 'image';
 	value: unknown;
 }
 
