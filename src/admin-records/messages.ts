@@ -19,6 +19,8 @@ export const MESSAGE_KEYS = {
 	empty: 'empty',
 	/** Empty table while a search or filter is on. Falls back to `empty`. */
 	emptyFiltered: 'empty_filtered',
+	/** The id of an account action offered as a button right in the empty table («Обновить список»). */
+	emptyAction: 'empty_action',
 	/** A read failed and the server sent no sentence of its own. */
 	error: 'error',
 	/** Button that repeats a failed read. */

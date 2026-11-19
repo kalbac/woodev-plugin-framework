@@ -11,7 +11,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Button, Spinner } from '@wordpress/components';
+import { Button, Spinner, Tooltip } from '@wordpress/components';
 import { cellText, renderCell } from './cells';
 import { MESSAGE_KEYS, fillMessage, firstMessage, joinLabel, message } from './messages';
 import { searchFilter } from './query';
@@ -259,10 +259,31 @@ export function buildLines( input: TableModelInput ): TableLine[] {
 	return input.rows.flatMap( ( row ) => [ parentLine( input, row ), ...childLines( input, row ) ] );
 }
 
+/**
+ * A heading with its «?»: the sentence PHP wrote for the column — what it shows and in which format — on hover and on
+ * keyboard focus. The «?» is not a button, so a click on it only moves the focus (it never sorts the column).
+ *
+ * @param label The column's label.
+ * @param help  PHP's sentence.
+ */
+function HeadingWithHelp( { label, help }: { label: string; help: string } ) {
+	return (
+		<span className="woodev-records__heading">
+			{ label }
+			<Tooltip text={ help } className="woodev-records__tooltip" delay={ 150 }>
+				<span className="woodev-records__help" tabIndex={ 0 } role="img" aria-label={ help }>
+					?
+				</span>
+			</Tooltip>
+		</span>
+	);
+}
+
 function columnHeader( column: Column, messages: Messages ): TableHeader {
+	const help = column.help ?? '';
 	const header: TableHeader = {
 		key: column.id,
-		label: column.label,
+		label: help === '' ? column.label : <HeadingWithHelp label={ column.label } help={ help } />,
 		isSortable: column.sort_key !== null,
 		isLeftAligned: column.align !== 'right',
 		isNumeric: column.align === 'right',
@@ -282,7 +303,12 @@ function columnHeader( column: Column, messages: Messages ): TableHeader {
 
 function expandHeader( messages: Messages ): TableHeader {
 	const name = firstMessage( messages, [ MESSAGE_KEYS.expandColumn, MESSAGE_KEYS.expand ] );
-	const header: TableHeader = { key: EXPAND_COLUMN, label: '', required: true };
+	const header: TableHeader = {
+		key: EXPAND_COLUMN,
+		label: '',
+		required: true,
+		cellClassName: 'woodev-records__col woodev-records__col-expand',
+	};
 
 	if ( name !== '' ) {
 		header.screenReaderLabel = name;
@@ -300,6 +326,7 @@ function selectHeader( input: TableModelInput ): TableHeader {
 	return {
 		key: SELECT_COLUMN,
 		required: true,
+		cellClassName: 'woodev-records__col woodev-records__col-select',
 		label: (
 			<Checkbox
 				label={ message( input.messages, MESSAGE_KEYS.selectAll ) }

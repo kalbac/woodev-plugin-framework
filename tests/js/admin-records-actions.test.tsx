@@ -929,6 +929,8 @@ describe( 'with the activity part', () => {
 
 		expect( toolbarButton( 'Связать по артикулу' ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		expect( toolbarButton( 'Связать по артикулу' ) ).toHaveAccessibleDescription( 'По аккаунту идёт фоновая работа' );
-		expect( document.querySelectorAll( '.woodev-records__reason' ) ).toHaveLength( 1 ); // Beside the action it blocks only.
+		// The sentence is the button's tooltip and a hidden description: nothing is written beside the button, where it once pushed the toolbar apart.
+		expect( toolbarButton( 'Связать по артикулу' ) ).toHaveAttribute( 'title', 'По аккаунту идёт фоновая работа' );
+		expect( document.querySelectorAll( '.woodev-records__account-actions .screen-reader-text' ) ).toHaveLength( 1 );
 	} );
 } );

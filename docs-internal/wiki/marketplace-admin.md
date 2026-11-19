@@ -867,17 +867,12 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   badges and the posting number never wrap, the name, article and state have a floor. Cells pad 12 px a side (WooCommerce's 24 px lost 380 px).
   The scrolling card always draws its scrollbar, and WooCommerce's edge fade over the last column is off (it made «Изменить товар» look disabled).
   Dates are `d.m.Y H:i` in the site's timezone.
-- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs (at most two lines: the stack text is clipped to two, its full value is the line's `title`). The table has
-  five data columns and fits 1040 px (measured: 985 px at the floors, with 60-character articles, long names and error badges; the
-  stock and price headings wrap): «Синхронизация» and «Ошибка» are lines of the «Состояние» cell — the state badge, «Остатки · Цены»
-  listing only what is on («—» when none), «Склад: …» only for a product with a warehouse of its own, and the error as a red badge
-  (a long one wraps inside 240 px). A variable product's cell shows one badge per state group, up to the stack's five lines (four when a variation has an error, which adds «Ошибка у N варианта»).
+- **«Товары сайта».** Article: the site SKU, plus the marketplace offer id only when it differs (one clipped line each, full value in the line's `title`). The table is laid out as «Tables in the style of «Заказы доставки» (#1861)» below.
 - **Bulk select.** An action descriptor may declare `group`; `BulkActionSelect` draws one `<optgroup>` per group («Выгрузка», «Синхронизация»,
   «Связи и архив») and «Выбрано: N» (`selected_count`) beside the button; its place is kept (the element is drawn empty) while nothing is
   ticked, so the buttons after it do not jump. The account-wide buttons («Связать по артикулу», «Обновить список»)
-  sit in the card header next to the select, on both tabs. The column-menu button is named from `columns_menu`.
-- **Card heading and summary.** The card title repeats the page title or the tab, so it is visually hidden (kept for assistive
-  technology); a long `summary` keeps its first sentence and folds the rest into a `<details>`. The footer word is pluralised per
+  sit at the top of the page since #1861, where «Заказы доставки» has «Создать заказ». The column-menu button is named from `columns_menu`.
+- **Card heading and summary.** The card title is drawn, like «Заказы доставки» (#1861; it had been visually hidden). A long `summary` keeps its first sentence and folds the rest into a `<details>`. The footer word is pluralised per
   list (`summary_label` in the list response) by `Russian_Plural::pick()` — the Russian rule whatever the site's locale (`_n()` follows the
   locale's rule, and a site not set to Russian printed «4 заказов»). The counted view row is not drawn while every count is zero.
 - **«Карточки {marketplace}».** The tab takes the name from the adapter's `settings_descriptor()->marketplace_name()`. Before the first
@@ -911,6 +906,20 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   is one closed «Подсказки» block: the save-first note, one line per offered button, the link. «Почему не синхронизируется» is shown only while
   «Логирование» is on (a diagnostics hint is never shown to a merchant who has not turned it on); no line invites the merchant to turn it on. The check is a closed
   `details` under «Исправить перед выгрузкой (N)»; the marks (✓ ✗ !) are CSS masks, not characters.
+
+### Tables in the style of «Заказы доставки» (#1861, framework 2.1.13)
+
+The two tables of «Товары» (and, through the shared shell, «Заказы») follow the delivery page's look; delivery code was not touched. What the shell and the definitions say now:
+
+- **Top of the page.** The account-wide buttons (`scope = account`: «Связать по артикулу», «Обновить список») are a row above the filters (`AccountActions`, `.woodev-records__account-actions.is-page-top`), where delivery has «Создать заказ»; each tab shows its own set. A blocked one says why in its `title` and a hidden sentence, never as text beside it: that text once sat inside the toolbar row and pushed the search aside. An action id in the `empty_action` message is drawn as a button inside the empty table (the cards table offers «Обновить список» there).
+- **Filters.** The selects and the period picker are the delivery pickers (WooCommerce's dropdown button: 50px, 1px `#757575` frame, 4px corners, 13px semibold). A `boolean` filter is a `ToggleControl` on its own row under them (`.woodev-records__switches`), like «Расширенные фильтры».
+- **Card header.** [title] [select | «Применить»] [search] [⋮], one row on a 1024px screen with the sidebar open: the bulk select is 180px wide and the search shrinks to 160px.
+- **Columns.** The checkbox column is 40px with equal padding. The name column is 210px, wraps to two lines and ends in «…» (full text in `title`), and is **sticky on the left** together with the checkbox (and expand) column: their `left` offsets add up (`.has-expand` on the root says the expand column exists). WooCommerce paints the sorted column and the row-header cell grey, which would show through a pinned cell, so the pinned cells are opaque white and draw the row line themselves (the table collapses borders, and a pinned cell does not take its border along). The row header is the first `required` column, so a photo column in front of the name does not take its place. «Артикул» and «На сайте» are fixed width. A column may carry `help`: a «?» beside the heading with a tooltip.
+- **State.** `badge` cells have the delivery look (2.5em line, 13px side padding, 4px corners, the WooCommerce status colours per tone, a class per tone and no inline colours) and an optional `tooltip` (lines separated by a line break, ≤ 600 characters, a focusable badge). «Товары сайта»: one badge, its tooltip lists what is synchronised, the warehouse and the error; a variable product has one badge per state group and the error summary in the first one's tooltip. «Карточки»: one badge, its tooltip holds the marketplace's reason, the import note (with the logging-gated tail) and the marketplace numbers (`product_id: …`), which are no column any more.
+- **Stock and price** are one text, `{site} / {marketplace}`, «—» for a missing side; the headings are «Остатки» / «Цены» with `help`.
+- **Actions.** An action descriptor may carry `icon` (a Dashicons slug): the row button is then icon-only, named by its label (tooltip), and a row of icon buttons is one group (`.is-group`) with the delivery colours per tone (green main, red destructive, grey). A card a product already carries has the one action `open_product` («Открыть товар», a link) and nothing disabled; the repeated «Карточка уже на сайте» sentences are gone.
+- **Cards table.** Columns: photo, name (a link to the card in the seller's cabinet when the adapter implements `Remote_Card_Address::remote_card_url( $remote_ids )`, else text), article, state, price, stock, «На сайте», actions. `Remote_Cards_Cells` reads `image_url`, `price` and `stock` from the snapshot card and shows «—» / nothing when a card has none, so the columns fill in when the store provides them (#1863). The table opens on «Все»: a default of «Нет на сайте» answered «В кабинете нет ни одной карточки» for a cabinet whose cards were all on the site.
+- **Refresh notice.** «Данные о ходе работы устарели» came and went by itself: while nothing runs the server asks for the next read after `max_refresh_ms` (a minute), the grace `stale_after_ms` (30 s) was counted from the last read, so the table was «stale» for half of every quiet minute. The grace is now counted from the moment the next read is due (`staleAfter()`), and a hidden tab does not go stale.
 
 ## Card importer (framework 2.1.6)
 

@@ -329,9 +329,10 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 
 		$this->assertTrue( $parent['has_children'] );
 		$this->assertSame( 'Кроссовки', $parent['cells']['name'] );
-		$this->assertSame( 'На сайте: 7', $parent['cells']['stock'][0]['value'], 'Three plus four.' );
-		$this->assertSame( 'На сайте: 200 – 250', $parent['cells']['price'][0]['value'] );
-		$this->assertSame( [ 'Ошибка', 'Не связан', 'Ошибка у 1 варианта' ], array_column( array_column( $parent['cells']['state'], 'value' ), 'label' ), 'The error of a variation is the last line of the state cell.' );
+		$this->assertSame( '7 / —', $parent['cells']['stock'], 'Three plus four.' );
+		$this->assertSame( '200 – 250 / —', $parent['cells']['price'] );
+		$this->assertSame( [ 'Ошибка', 'Не связан' ], array_column( array_column( $parent['cells']['state'], 'value' ), 'label' ) );
+		$this->assertSame( 'Ошибка у 1 варианта', $parent['cells']['state'][0]['value']['tooltip'], 'The error of a variation is the tooltip of the first badge.' );
 		$this->assertSame( 'https://example.test/wp-admin/post.php?post=20&action=edit', $parent['actions'][0]['url'] );
 	}
 
@@ -344,8 +345,9 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( 'Создан', $row['cells']['state'][0]['value']['label'] );
 		$this->assertSame( 'success', $row['cells']['state'][0]['value']['tone'] );
 		$this->assertSame( [ 'P-10', 'OZ-10' ], array_column( $row['cells']['sku'], 'value' ), 'The offer id differs from the article: both are shown.' );
-		$this->assertSame( [ 'На сайте: 5', 'Тестмаркет: 7' ], array_column( $row['cells']['stock'], 'value' ) );
-		$this->assertSame( [ 'Остатки · Цены' ], array_column( array_slice( $row['cells']['state'], 1 ), 'value' ), 'Only what is on is listed under the badge; the default warehouse is not written out.' );
+		$this->assertSame( '5 / 7', $row['cells']['stock'] );
+		$this->assertCount( 1, $row['cells']['state'], 'One badge; what is synchronised is its tooltip.' );
+		$this->assertSame( 'Синхронизируются: остатки, цены', $row['cells']['state'][0]['value']['tooltip'], 'Only what is on is listed; the default warehouse is not written out.' );
 		$this->assertArrayNotHasKey( 'warehouse', $row['cells'] );
 	}
 
@@ -371,8 +373,8 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( 2, $body['total'] );
 		$this->assertSame( [ $this->row_id( 21 ), $this->row_id( 22 ) ], array_column( $body['rows'], 'id' ) );
 		$this->assertSame( [ 'красный', 'синий' ], array_column( array_column( $body['rows'], 'cells' ), 'name' ) );
-		$this->assertSame( 'Не заполнен бренд', end( $body['rows'][0]['cells']['state'] )['value']['label'] );
 		$this->assertSame( 'Ошибка', $body['rows'][0]['cells']['state'][0]['value']['label'] );
+		$this->assertStringContainsString( 'Ошибка: Не заполнен бренд', $body['rows'][0]['cells']['state'][0]['value']['tooltip'] );
 		$this->assertSame( 'https://example.test/wp-admin/post.php?post=20&action=edit', $body['rows'][0]['actions'][0]['url'], 'A variation is edited on its parent.' );
 		$this->assertFalse( $body['rows'][0]['has_children'] );
 	}

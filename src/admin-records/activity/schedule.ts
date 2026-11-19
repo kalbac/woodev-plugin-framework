@@ -53,3 +53,17 @@ export function chunk( ids: string[], limit: number ): string[][] {
 
 	return parts;
 }
+
+/**
+ * How long after a good read the table may be called stale: the wait until the NEXT read plus the table's own grace.
+ *
+ * The server asks for the slow ceiling (`max_refresh_ms`, a minute) while everything is quiet, and the grace
+ * (`stale_after_ms`, 30 seconds on the products table) is shorter than that. Counting the grace from the read alone made
+ * the table «stale» for half of every quiet minute: the yellow notice came and went by itself and the page jumped.
+ *
+ * @param limits The table's declared numbers.
+ * @param next   The wait until the next read.
+ */
+export function staleAfter( limits: ActivityLimits, next: number ): number {
+	return next + limits.stale_after_ms;
+}

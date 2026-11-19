@@ -19,7 +19,6 @@ import type { ActivityHealth } from '../activity';
 import type { SelectionHandle, TableHandle } from '../extensions';
 import { MESSAGE_KEYS, fillMessage, message } from '../messages';
 import type { ActionDescriptor } from '../types';
-import { STYLES } from './styles';
 import type { ActionFlow } from './use-action-flow';
 
 export interface BulkToolbarProps {
@@ -28,6 +27,11 @@ export interface BulkToolbarProps {
 	table: TableHandle;
 	/** The page's activity part; without it nothing is ever blocked here. */
 	activity?: ActivityExtensions;
+}
+
+export interface AccountActionsProps extends BulkToolbarProps {
+	/** Only the actions of these ids (the empty table offers one of them in its own body); every account action when absent. */
+	only?: string[];
 }
 
 /** Stands in for the account line when the page has no activity part. */
@@ -126,17 +130,22 @@ export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarPr
 	);
 }
 
-/** The account-wide actions, as secondary buttons above the filters; a blocked one says why under the row. */
-export function AccountActions( { flow, selection, table, activity }: BulkToolbarProps ) {
+/**
+ * The account-wide actions as a row of buttons at the top of the page, where «Заказы доставки» has «Создать заказ».
+ *
+ * A blocked one says why in its tooltip and, for assistive technology, in a hidden sentence: the account line above the table
+ * already says the same in words, and a sentence written beside a button here once pushed the toolbar apart.
+ */
+export function AccountActions( { flow, selection, table, activity, only }: AccountActionsProps ) {
 	const health = useActivityState( activity?.state ?? NO_ACTIVITY );
-	const actions = formActions( table, 'account' );
+	const actions = formActions( table, 'account' ).filter( ( action ) => only === undefined || only.includes( action.id ) );
 
 	if ( actions.length === 0 ) {
 		return null;
 	}
 
 	return (
-		<div className="woodev-records__account-actions" style={ { ...STYLES.bulk, margin: 0 } }>
+		<div className={ `woodev-records__account-actions${ only === undefined ? ' is-page-top' : '' }` }>
 			{ actions.map( ( action ) => {
 				const reason = blockedReason( action, selection.selectedIds, table, health );
 				const reasonId = `woodev-records-bulk-reason-${ action.id }`;
@@ -144,18 +153,20 @@ export function AccountActions( { flow, selection, table, activity }: BulkToolba
 				return (
 					<Fragment key={ action.id }>
 						<Button
-							variant="secondary"
+							__next40pxDefaultSize
+							variant={ action.tone === 'primary' ? 'primary' : 'secondary' }
 							isDestructive={ action.tone === 'danger' }
 							disabled={ reason !== '' }
 							accessibleWhenDisabled
 							aria-describedby={ reason === '' ? undefined : reasonId }
+							title={ reason === '' ? undefined : reason }
 							data-action={ action.id }
 							onClick={ () => flow.begin( action, [], '', table, { onApplied: selection.clear } ) }
 						>
 							{ action.label }
 						</Button>
 						{ reason !== '' && (
-							<span id={ reasonId } className="woodev-records__reason" style={ STYLES.reason }>
+							<span id={ reasonId } className="screen-reader-text">
 								{ reason }
 							</span>
 						) }
