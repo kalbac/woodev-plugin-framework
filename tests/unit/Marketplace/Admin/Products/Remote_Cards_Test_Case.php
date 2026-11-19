@@ -1,6 +1,6 @@
 <?php
 /**
- * Harness of the «Карточки на маркетплейсе» tests: the products harness plus the snapshot in an in-memory transient store, the shop's
+ * Harness of the «Карточки на маркетплейсе» tests: the products harness plus the stored cards list on the SQLite database, the shop's
  * product search, and the provider wired as the module wires it.
  *
  * @package Woodev\Tests\Unit\Marketplace\Admin\Products
@@ -17,8 +17,8 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Products;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Rows;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Run_Actions;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
@@ -27,7 +27,7 @@ use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 
 /**
- * Cards of the snapshot are plain arrays shaped like the adapter's `snapshot()`; see {@see self::card()}.
+ * Cards of the list are plain arrays shaped like the adapter's `snapshot()`; see {@see self::card()}.
  */
 abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	/**
@@ -197,7 +197,7 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	}
 
 	/**
-	 * A snapshot card, shaped like the adapter's `snapshot()` answer.
+	 * A list card, shaped like the adapter's `snapshot()` answer.
 	 *
 	 * @param string              $offer_id Article.
 	 * @param string              $name     Name.
@@ -225,21 +225,37 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	}
 
 	/**
-	 * Stores a snapshot for the harness' account.
+	 * Stores the harness account's list as a finished full refresh does: the cards the refresh saw, the others swept.
 	 *
 	 * @param array<int,array<string,mixed>> $cards Cards.
-	 * @param int                            $at    Unix time of the load.
+	 * @param int                            $at    Unix time of the refresh.
 	 * @return void
 	 */
-	protected function put_snapshot( array $cards, int $at = 1700000000 ): void {
-		$this->assertTrue( $this->snapshots()->put( $this->account_id, $cards, $at ) );
+	protected function put_cards( array $cards, int $at = 1700000000 ): void {
+		$store = $this->card_store();
+		$run   = $store->begin_refresh( $this->account_id, $at );
+
+		$store->upsert( $this->account_id, $cards, $run, 1, $at );
+		$store->finish_refresh( $this->account_id, $run, $at );
 	}
 
 	/**
-	 * @return Cards_Snapshot_Store
+	 * Takes the harness account's list away: no rows, no record of a refresh (what an expired ten-minute snapshot used to be).
+	 *
+	 * @return void
 	 */
-	protected function snapshots(): Cards_Snapshot_Store {
-		return new Cards_Snapshot_Store( 'woodev_test_' );
+	protected function forget_cards(): void {
+		$store = $this->card_store();
+
+		$store->delete_account( $this->account_id, 100000 );
+		$store->forget( $this->account_id );
+	}
+
+	/**
+	 * @return Wpdb_Card_Store
+	 */
+	protected function card_store(): Wpdb_Card_Store {
+		return new Wpdb_Card_Store( $this->db, Sqlite_Tables::table( 'cards' ), Sqlite_Tables::table( 'links' ), 'woodev_test_' );
 	}
 
 	/**
@@ -317,13 +333,12 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 
 		return new Remote_Cards_Provider(
 			$this->accounts(),
-			$this->snapshots(),
-			$this->links(),
+			$this->card_store(),
 			$this->reports(),
 			$rows,
 			$products,
 			new Remote_Cards_Actions(
-				$this->snapshots(),
+				$this->card_store(),
 				$this->links(),
 				$this->reports(),
 				$this->linker ?? new Card_Linker( $this->links() ),

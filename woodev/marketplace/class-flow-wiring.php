@@ -11,7 +11,6 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Progress_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
@@ -19,6 +18,7 @@ use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
@@ -28,6 +28,7 @@ use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Flows\Card_List_Source;
 use Woodev\Framework\Marketplace\Flows\Deleted_Product_Releaser;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
@@ -50,6 +51,7 @@ use Woodev\Framework\Marketplace\Intake\Tokenless_Seen;
 use Woodev\Framework\Marketplace\Intake\Webhook_Switches;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
 use Woodev\Framework\Marketplace\Jobs\Card_Event_Handler;
+use Woodev\Framework\Marketplace\Jobs\Card_List_Event_Handler;
 use Woodev\Framework\Marketplace\Jobs\Drain_Events_Runner;
 use Woodev\Framework\Marketplace\Jobs\Drain_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Event_Handler_Registry;
@@ -505,7 +507,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		}
 
 		/**
-		 * Linking existing cards, and the weekly refresh of the catalogue cache.
+		 * Linking existing cards, the stored cards list (its refresh, the daily run), and the weekly refresh of the catalogue cache.
 		 *
 		 * @return void
 		 */
@@ -519,6 +521,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$options    = Uninstaller::option_prefix( $this->plugin_id );
 			$shop       = new Shop_Sku_Source( $this->db );
 			$refresh    = new Refresh_Catalog_Scheduler( $this->names );
+			$scheduler  = new Link_Scheduler( $this->names );
+			$accounts   = $this->accounts;
+			$adapter_id = $adapter->id();
 
 			( new Link_Jobs(
 				$this->gate,
@@ -526,19 +531,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 				$this->linker,
 				[ $shop, 'products' ],
 				new Link_Report_Store( $options ),
-				new Cards_Snapshot_Store( $options ),
-				new Link_Scheduler( $this->names ),
+				$this->card_store(),
+				$scheduler,
 				$adapter->link_resolver(),
 				$adapter->article_policy(),
 				$classifier,
 				$this->ring,
 				$this->log_error,
-				new Link_Progress_Store( $options )
+				new Link_Progress_Store( $options ),
+				null,
+				static function () use ( $accounts, $adapter_id ): array {
+					return array_map(
+						static function ( Account $account ): int {
+							return $account->id();
+						},
+						$accounts->all( $adapter_id, true )
+					);
+				}
 			) )->register();
 
 			( new Refresh_Catalog_Runner( $this->accounts, $adapter->id(), $this->gate, $adapter->catalog_refresher(), $refresh, $classifier, $this->ring, $this->log_error ) )->register();
 
 			add_action( 'action_scheduler_init', [ $refresh, 'ensure_weekly' ] );
+			add_action( 'action_scheduler_init', [ $scheduler, 'ensure_daily' ] );
+		}
+
+		/**
+		 * The stored list of the cards the «Карточки» screen shows.
+		 *
+		 * @return Wpdb_Card_Store
+		 */
+		private function card_store(): Wpdb_Card_Store {
+			return new Wpdb_Card_Store( $this->db, $this->table( 'cards' ), $this->table( 'links' ), Uninstaller::option_prefix( $this->plugin_id ) );
+		}
+
+		/**
+		 * Wraps the handler of every card event type the adapter's list part names, so a created or changed card also refreshes its
+		 * row of the stored list. Only for an adapter whose resolver reads single cards ({@see Card_List_Source}).
+		 *
+		 * @param Event_Handler_Registry $handlers The registry the drain reads.
+		 * @return void
+		 */
+		private function register_card_list_handler( Event_Handler_Registry $handlers ): void {
+			if ( ! $this->adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+				return;
+			}
+
+			$source = $this->adapter->link_resolver();
+
+			if ( ! $source instanceof Card_List_Source ) {
+				return;
+			}
+
+			$cards     = $this->card_store();
+			$scheduler = new Link_Scheduler( $this->names );
+
+			foreach ( $source->card_event_types() as $type ) {
+				$handlers->register( (string) $type, new Card_List_Event_Handler( $source, $cards, $scheduler, $handlers->for_type( (string) $type ) ) );
+			}
 		}
 
 		/**
@@ -681,6 +731,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$handlers  = new Event_Handler_Registry();
 
 			$this->register_card_handler( $handlers );
+			$this->register_card_list_handler( $handlers );
 
 			do_action( $this->names->hook( 'event_handlers' ), $handlers ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores,WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Job_Names builds `woodev_{plugin id}_…` in snake case.
 

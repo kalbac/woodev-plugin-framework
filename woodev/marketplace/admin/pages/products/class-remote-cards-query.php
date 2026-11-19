@@ -1,19 +1,18 @@
 <?php
 /**
- * Filters and pages the snapshot of the marketplace's cards.
+ * The filter values of the «Карточки на маркетплейсе» table, and the near-match report's paging.
  *
  * @package Woodev\Framework\Marketplace
  */
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
-use Woodev\Framework\Marketplace\Flows\Group_Assembler;
-
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Pure: the snapshot, the articles our link table knows, a filter and a page in; the page's cards out. A card is *on the site* when a
- * link row carries its article (the answer comes from the links table, never from guessing a product from a name).
+ * Pure. The cards themselves are filtered and paged in SQL by {@see \Woodev\Framework\Marketplace\Data\Wpdb_Card_Store} (#1863);
+ * here are the values of the filters and the paging of the near-match report, which is a short list kept in an option. A card is
+ * *on the site* when a link row carries its article (the answer comes from the links table, never from guessing a product from a name).
  *
  * @since 2.1.5
  */
@@ -34,118 +33,19 @@ final class Remote_Cards_Query {
 	public const SHOW_NEAR = 'near';
 
 	/**
-	 * Selects a page of cards.
+	 * Reads the «На сайте» filter.
 	 *
-	 * @since 2.1.5
+	 * @since 2.1.13
 	 *
-	 * @param array<int,array<string,mixed>> $cards    Snapshot cards, in the marketplace's order.
-	 * @param array<string,int>              $linked   Product id by article, for every article a link row carries.
-	 * @param string                         $on_site  {@see self::NOT_ON_SITE}, {@see self::ON_SITE}, or '' for both.
-	 * @param string                         $search   Text looked for in the article and the name; empty for none.
-	 * @param int                            $page     Page number, from 1.
-	 * @param int                            $per_page Cards per page.
-	 * @return array{cards:array<int,array<string,mixed>>,total:int} The cards of the page, each with `wc_product_id` (0 when not on the site).
+	 * @param string $on_site {@see self::NOT_ON_SITE}, {@see self::ON_SITE}, or '' for both.
+	 * @return bool|null True: only the cards on the site; false: only the others; null: both.
 	 */
-	public static function page( array $cards, array $linked, string $on_site, string $search, int $page, int $per_page ): array {
-		$matching = [];
-
-		foreach ( $cards as $card ) {
-			$product_id = (int) ( $linked[ (string) ( $card['offer_id'] ?? '' ) ] ?? 0 );
-
-			if ( ! self::wanted( $card, $product_id, $on_site, $search ) ) {
-				continue;
-			}
-
-			$matching[] = array_merge( $card, [ 'wc_product_id' => $product_id ] );
+	public static function on_site_flag( string $on_site ): ?bool {
+		if ( self::ON_SITE === $on_site ) {
+			return true;
 		}
 
-		return [
-			'cards' => array_slice( $matching, ( max( 1, $page ) - 1 ) * max( 1, $per_page ), max( 1, $per_page ) ),
-			'total' => count( $matching ),
-		];
-	}
-
-	/**
-	 * How many cards are not on the site and how many are, under the search text: the numbers of the «На сайте» view row.
-	 *
-	 * @since 2.1.6
-	 *
-	 * @param array<int,array<string,mixed>> $cards  Snapshot cards.
-	 * @param array<string,int>              $linked Product id by article, for every article a link row carries.
-	 * @param string                         $search Text looked for in the article and the name; empty for none.
-	 * @return array{no:int,yes:int} Keyed by the values of the filter.
-	 */
-	public static function on_site_counts( array $cards, array $linked, string $search ): array {
-		$counts = [
-			self::NOT_ON_SITE => 0,
-			self::ON_SITE     => 0,
-		];
-
-		foreach ( $cards as $card ) {
-			$product_id = (int) ( $linked[ (string) ( $card['offer_id'] ?? '' ) ] ?? 0 );
-
-			if ( self::wanted( $card, $product_id, '', $search ) ) {
-				++$counts[ $product_id > 0 ? self::ON_SITE : self::NOT_ON_SITE ];
-			}
-		}
-
-		return $counts;
-	}
-
-	/**
-	 * Every card the filter reaches, as what the bulk import needs — not the cards themselves, so the pass over a 50 000-card cabinet
-	 * allocates one small pair per card to import instead of a copy of each card ({@see self::page()} merges one in). The pairs are
-	 * the very ones the run stores: nothing downstream builds them again.
-	 *
-	 * @since 2.1.10
-	 *
-	 * @param array<int,array<string,mixed>> $cards   Snapshot cards, in the marketplace's order.
-	 * @param array<string,int>              $linked  Product id by article, for every article a link row carries.
-	 * @param string                         $on_site {@see self::NOT_ON_SITE}, {@see self::ON_SITE}, or '' for both.
-	 * @param string                         $search  Text looked for in the article and the name; empty for none.
-	 * @return array{cards:array<int,array{0:string,1:string}>,on_site:string[]} `cards`: article and group key ('' for a card that stands alone) of each card no product carries, in the snapshot's order; `on_site`: the articles a product carries already.
-	 */
-	public static function entries( array $cards, array $linked, string $on_site, string $search ): array {
-		$found = [
-			'cards'   => [],
-			'on_site' => [],
-		];
-
-		foreach ( $cards as $card ) {
-			$offer_id   = (string) ( $card['offer_id'] ?? '' );
-			$product_id = (int) ( $linked[ $offer_id ] ?? 0 );
-
-			if ( '' === $offer_id || ! self::wanted( $card, $product_id, $on_site, $search ) ) {
-				continue;
-			}
-
-			if ( $product_id > 0 ) {
-				$found['on_site'][] = $offer_id;
-			} else {
-				$found['cards'][] = [ $offer_id, Group_Assembler::key_of( (array) ( $card['group'] ?? [] ) ) ];
-			}
-		}
-
-		return $found;
-	}
-
-	/**
-	 * Finds a card by the key of its article.
-	 *
-	 * @since 2.1.5
-	 *
-	 * @param array<int,array<string,mixed>> $cards Snapshot cards.
-	 * @param string                         $key   {@see Remote_Cards_Ids::key()}.
-	 * @return array<string,mixed>|null Null when the snapshot has no such card.
-	 */
-	public static function find( array $cards, string $key ): ?array {
-		foreach ( $cards as $card ) {
-			if ( Remote_Cards_Ids::key( (string) ( $card['offer_id'] ?? '' ) ) === $key ) {
-				return $card;
-			}
-		}
-
-		return null;
+		return self::NOT_ON_SITE === $on_site ? false : null;
 	}
 
 	/**
@@ -217,30 +117,5 @@ final class Remote_Cards_Query {
 		}
 
 		return null;
-	}
-
-	/**
-	 * Whether a card passes the filter.
-	 *
-	 * @param array<string,mixed> $card       Card.
-	 * @param int                 $product_id The product that carries its article, 0 for none.
-	 * @param string              $on_site    The «На сайте» filter.
-	 * @param string              $search     Search text.
-	 * @return bool
-	 */
-	private static function wanted( array $card, int $product_id, string $on_site, string $search ): bool {
-		if ( self::NOT_ON_SITE === $on_site && $product_id > 0 ) {
-			return false;
-		}
-
-		if ( self::ON_SITE === $on_site && 0 === $product_id ) {
-			return false;
-		}
-
-		$needle = trim( $search );
-
-		return '' === $needle
-			|| false !== mb_stripos( (string) ( $card['offer_id'] ?? '' ), $needle )
-			|| false !== mb_stripos( (string) ( $card['name'] ?? '' ), $needle );
 	}
 }

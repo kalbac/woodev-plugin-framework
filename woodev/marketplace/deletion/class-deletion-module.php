@@ -9,12 +9,12 @@ namespace Woodev\Framework\Marketplace\Deletion;
 
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Progress_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
@@ -117,13 +117,13 @@ final class Deletion_Module {
 		$gate      = new Job_Gate( $accounts, License_Gate::for_plugin( $plugin ), Account_Pause::over( $accounts, $adapter->error_classifier() ) );
 		$progress  = new Account_Deletion_Progress( $options );
 		$scheduler = new Account_Deletion_Scheduler( $names );
-		$stores    = self::stores( $db, $schema );
+		$stores    = self::stores( $db, $schema, $options );
 
 		$queue = new Account_Queue_Cleaner( $names->group(), $names->hook( '' ), [ $scheduler->hook(), $names->hook( Label_Jobs::JOB_POLL ) ] );
 		$steps = self::steps(
 			$queue,
 			$stores,
-			self::forget_options( $options, new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ) ),
+			self::forget_options( $options, new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ), $stores['cards'] ),
 			new Pinned_Offer_Eraser( $db, $adapter->id() ),
 			new Wpdb_Event_Ledger( $db, $schema->table_name( 'events', $db->prefix ) )
 		);
@@ -168,11 +168,12 @@ final class Deletion_Module {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param \wpdb  $db     Database.
-	 * @param Schema $schema Schema of the marketplace.
+	 * @param \wpdb  $db      Database.
+	 * @param Schema $schema  Schema of the marketplace.
+	 * @param string $options Option family of the plugin ({@see Uninstaller::option_prefix()}); the cards list keeps its record there.
 	 * @return array<string,object> Stores with `delete_account()`, by step name.
 	 */
-	public static function stores( \wpdb $db, Schema $schema ): array {
+	public static function stores( \wpdb $db, Schema $schema, string $options ): array {
 		$table = static function ( string $name ) use ( $schema, $db ): string {
 			return $schema->table_name( $name, $db->prefix );
 		};
@@ -186,6 +187,7 @@ final class Deletion_Module {
 			'throttle'   => new Wpdb_Throttle_Store( $db, $table( 'throttle' ) ),
 			'api_errors' => new Api_Error_Ring( $db, $table( 'api_errors' ) ),
 			'bulk_runs'  => new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ),
+			'cards'      => new Wpdb_Card_Store( $db, $table( 'cards' ), $table( 'links' ), $options ),
 		];
 	}
 
@@ -224,17 +226,17 @@ final class Deletion_Module {
 	 *
 	 * @param string             $options Option family of the plugin.
 	 * @param Wpdb_Catalog_Cache $cache   Catalogue cache.
+	 * @param Wpdb_Card_Store    $cards   The cards list, whose record of refreshes goes; its rows went with the stores.
 	 * @return callable `function ( int $account_id ): int`
 	 */
-	private static function forget_options( string $options, Wpdb_Catalog_Cache $cache ): callable {
-		$progress  = new Link_Progress_Store( $options );
-		$reports   = new Link_Report_Store( $options );
-		$snapshots = new Cards_Snapshot_Store( $options );
+	private static function forget_options( string $options, Wpdb_Catalog_Cache $cache, Wpdb_Card_Store $cards ): callable {
+		$progress = new Link_Progress_Store( $options );
+		$reports  = new Link_Report_Store( $options );
 
-		return static function ( int $account_id ) use ( $progress, $reports, $snapshots, $cache ): int {
+		return static function ( int $account_id ) use ( $progress, $reports, $cards, $cache ): int {
 			$progress->forget_account( $account_id );
 			$reports->forget_account( $account_id );
-			$snapshots->clear( $account_id );
+			$cards->forget( $account_id );
 			$cache->delete_keys( [ Warehouse_Options::key_for( $account_id ) ] );
 
 			return 0;

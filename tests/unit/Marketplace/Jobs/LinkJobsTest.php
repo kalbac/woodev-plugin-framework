@@ -1,6 +1,7 @@
 <?php
 /**
- * The `link_cards` and `refresh_cards` jobs: gate, claim, matching, linking, the near-match report and the failure ladder.
+ * The `link_cards`, `refresh_cards`, `refresh_card_rows` and daily jobs: gate, claim, matching, linking, the near-match report, the
+ * stored cards list (paging, the sweep of deleted cards, notifications) and the failure ladder.
  *
  * @package Woodev\Tests\Unit\Marketplace
  */
@@ -9,12 +10,13 @@ namespace Woodev\Tests\Unit\Marketplace\Jobs;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Catalog\Offer_Id_Likeness;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
 use Woodev\Framework\Marketplace\Data\Link_Progress_Store;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Link_Resolve_Exception;
+use Woodev\Framework\Marketplace\Flows\Link_Resolver;
 use Woodev\Framework\Marketplace\Jobs\Account_Job;
 use Woodev\Framework\Marketplace\Jobs\Backoff;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
@@ -24,6 +26,7 @@ use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Export_Test_Case;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Paged_Link_Resolver;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Link_Resolver;
 
 /**
@@ -33,6 +36,8 @@ use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Link_Resolve
 final class LinkJobsTest extends Export_Test_Case {
 	private const LINK    = 'woodev_fake_seller_link_cards';
 	private const REFRESH = 'woodev_fake_seller_refresh_cards';
+	private const ROWS    = 'woodev_fake_seller_refresh_card_rows';
+	private const DAILY   = 'woodev_fake_seller_refresh_cards_daily';
 	private const PREFIX  = 'fake_seller_';
 
 	/**
@@ -162,10 +167,12 @@ final class LinkJobsTest extends Export_Test_Case {
 	/**
 	 * Builds the jobs over the test doubles.
 	 *
-	 * @param Card_Linker|null $linker The linker the job writes through; the plain one (switches off) by default.
+	 * @param Card_Linker|null   $linker   The linker the job writes through; the plain one (switches off) by default.
+	 * @param Link_Resolver|null $resolver The cabinet reader; the scripted one by default.
+	 * @param int[]              $accounts The enabled accounts the daily run sees.
 	 * @return Link_Jobs
 	 */
-	private function jobs( ?Card_Linker $linker = null ): Link_Jobs {
+	private function jobs( ?Card_Linker $linker = null, ?Link_Resolver $resolver = null, array $accounts = [] ): Link_Jobs {
 		return new Link_Jobs(
 			$this->job_gate(),
 			$this->links(),
@@ -176,15 +183,18 @@ final class LinkJobsTest extends Export_Test_Case {
 				return $this->shop;
 			},
 			$this->reports(),
-			$this->snapshots(),
+			$this->card_store(),
 			new Link_Scheduler( $this->names() ),
-			$this->resolver,
+			$resolver ?? $this->resolver,
 			$this->adapter->article_policy(),
 			$this->classifier,
 			$this->ring(),
 			[ $this, 'log_line' ],
 			new Link_Progress_Store( self::PREFIX ),
-			$this->clock()
+			$this->clock(),
+			static function () use ( $accounts ): array {
+				return $accounts;
+			}
 		);
 	}
 
@@ -198,12 +208,38 @@ final class LinkJobsTest extends Export_Test_Case {
 	}
 
 	/**
-	 * Snapshot.
+	 * The stored cards list.
 	 *
-	 * @return Cards_Snapshot_Store
+	 * @return Wpdb_Card_Store
 	 */
-	private function snapshots(): Cards_Snapshot_Store {
-		return new Cards_Snapshot_Store( self::PREFIX );
+	private function card_store(): Wpdb_Card_Store {
+		return new Wpdb_Card_Store( $this->db, Sqlite_Tables::table( 'cards' ), Sqlite_Tables::table( 'links' ), self::PREFIX, $this->clock() );
+	}
+
+	/**
+	 * The articles of the account's list, in the marketplace's order.
+	 *
+	 * @return string[]
+	 */
+	private function listed(): array {
+		return array_column( $this->card_store()->page( $this->account_id, null, '', 1, 1000 )['cards'], 'offer_id' );
+	}
+
+	/**
+	 * A page of list rows, `{prefix}-1` … `{prefix}-{count}`.
+	 *
+	 * @param string $prefix Article prefix.
+	 * @param int    $count  Rows.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function list_rows( string $prefix, int $count ): array {
+		$rows = [];
+
+		for ( $i = 1; $i <= $count; $i++ ) {
+			$rows[] = $this->detail( $i, $prefix . '-' . $i );
+		}
+
+		return $rows;
 	}
 
 	/**
@@ -582,25 +618,22 @@ final class LinkJobsTest extends Export_Test_Case {
 	}
 
 	/**
-	 * The refresh job fills the snapshot of the tab and clears the «refreshing» mark.
+	 * A resolver that cannot page fills the list in one piece and clears the «refreshing» mark.
 	 *
 	 * @return void
 	 */
-	public function test_the_refresh_job_fills_the_snapshot(): void {
+	public function test_the_refresh_job_fills_the_list_from_a_resolver_that_cannot_page(): void {
 		$this->resolver->snapshot = [ $this->detail( 11, 'OW-TEST-1' ), $this->detail( 12, 'OW-TEST-2' ) ];
-		$this->snapshots()->mark_refreshing( $this->account_id );
+		$this->card_store()->mark_refreshing( $this->account_id );
 
-		$this->assertTrue( $this->snapshots()->is_refreshing( $this->account_id ) );
+		$this->assertTrue( $this->card_store()->is_refreshing( $this->account_id ) );
 
 		$this->jobs()->refresh_cards( $this->account_id, 0 );
 
-		$snapshot = $this->snapshots()->get( $this->account_id );
-
-		$this->assertNotNull( $snapshot );
-		$this->assertSame( self::NOW, $snapshot['fetched_at'] );
-		$this->assertCount( 2, $snapshot['cards'] );
-		$this->assertSame( 'Карточка OW-TEST-1', $snapshot['cards'][0]['name'] );
-		$this->assertFalse( $this->snapshots()->is_refreshing( $this->account_id ) );
+		$this->assertSame( self::NOW, $this->card_store()->refreshed_at( $this->account_id ) );
+		$this->assertSame( [ 'OW-TEST-1', 'OW-TEST-2' ], $this->listed() );
+		$this->assertSame( 'Карточка OW-TEST-1', $this->card_store()->find( $this->account_id, Wpdb_Card_Store::key( 'OW-TEST-1' ) )['name'] );
+		$this->assertFalse( $this->card_store()->is_refreshing( $this->account_id ) );
 		$this->assertSame( [ 'snapshot' ], $this->read_kinds() );
 	}
 
@@ -610,14 +643,14 @@ final class LinkJobsTest extends Export_Test_Case {
 	 * @return void
 	 */
 	public function test_a_failed_refresh_records_a_text(): void {
-		$this->snapshots()->mark_refreshing( $this->account_id );
+		$this->card_store()->mark_refreshing( $this->account_id );
 		$this->resolver->failure = Fake_Remote_Exception::of( Remote_Error::FAIL, 'not allowed' );
 
 		$this->jobs()->refresh_cards( $this->account_id, 0 );
 
-		$this->assertFalse( $this->snapshots()->is_refreshing( $this->account_id ) );
-		$this->assertStringContainsString( 'not allowed', $this->snapshots()->last_error( $this->account_id ) );
-		$this->assertNull( $this->snapshots()->get( $this->account_id ) );
+		$this->assertFalse( $this->card_store()->is_refreshing( $this->account_id ) );
+		$this->assertStringContainsString( 'not allowed', $this->card_store()->last_error( $this->account_id ) );
+		$this->assertFalse( $this->card_store()->has_list( $this->account_id ) );
 	}
 
 	/**
@@ -628,6 +661,8 @@ final class LinkJobsTest extends Export_Test_Case {
 	public function test_register_hooks_both_jobs_under_the_plugins_names(): void {
 		\Brain\Monkey\Actions\expectAdded( self::LINK )->once();
 		\Brain\Monkey\Actions\expectAdded( self::REFRESH )->once();
+		\Brain\Monkey\Actions\expectAdded( self::ROWS )->once();
+		\Brain\Monkey\Actions\expectAdded( self::DAILY )->once();
 
 		$this->jobs()->register();
 		$this->addToAssertionCount( 1 );
@@ -764,15 +799,15 @@ final class LinkJobsTest extends Export_Test_Case {
 	 *
 	 * @return void
 	 */
-	public function test_a_wait_during_a_refresh_resumes_and_publishes_the_snapshot(): void {
+	public function test_a_wait_during_a_refresh_resumes_and_publishes_the_list(): void {
 		$this->resolver->snapshot = [ $this->detail( 11, 'OW-TEST-1' ) ];
 		$this->resolver->failure  = Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'governor', 30, false );
-		$this->snapshots()->mark_refreshing( $this->account_id );
+		$this->card_store()->mark_refreshing( $this->account_id );
 
 		$this->jobs()->refresh_cards( $this->account_id, 0 );
 
-		$this->assertNull( $this->snapshots()->get( $this->account_id ), 'nothing is published half way' );
-		$this->assertTrue( $this->snapshots()->is_refreshing( $this->account_id ) );
+		$this->assertFalse( $this->card_store()->has_list( $this->account_id ), 'nothing is published half way' );
+		$this->assertTrue( $this->card_store()->is_refreshing( $this->account_id ) );
 
 		$retry = $this->scheduler->of( self::REFRESH );
 
@@ -784,8 +819,8 @@ final class LinkJobsTest extends Export_Test_Case {
 		$this->jobs()->refresh_cards( ...$retry[0]['args'] );
 
 		$this->assertSame( 1, $this->resolver->reads[0][2]['reads'] );
-		$this->assertCount( 1, $this->snapshots()->get( $this->account_id )['cards'] );
-		$this->assertFalse( $this->snapshots()->is_refreshing( $this->account_id ) );
+		$this->assertSame( [ 'OW-TEST-1' ], $this->listed() );
+		$this->assertFalse( $this->card_store()->is_refreshing( $this->account_id ) );
 		$this->assertArrayNotHasKey( self::PREFIX . Link_Progress_Store::OPTION . 'refresh_' . $this->account_id, $this->wp_storage );
 	}
 
@@ -885,5 +920,289 @@ final class LinkJobsTest extends Export_Test_Case {
 
 		$this->assertSame( 0, $this->links()->count( $this->account_id ) );
 		$this->assertSame( 1, $this->reports()->last_run( $this->account_id )['ambiguous'] );
+	}
+
+	/**
+	 * A resolver that pages: each page is written before the next is read, in the marketplace's order, and the refresh is recorded
+	 * after the last.
+	 *
+	 * @return void
+	 */
+	public function test_a_paged_refresh_writes_every_page_in_order_and_records_the_time(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ $this->list_rows( 'A', 3 ), $this->list_rows( 'B', 2 ) ];
+		$this->card_store()->mark_refreshing( $this->account_id );
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ 'A-1', 'A-2', 'A-3', 'B-1', 'B-2' ], $this->listed() );
+		$this->assertSame( [ [], [ 'next' => 1 ] ], array_column( $paged->reads, 1 ), 'the second page gets the cursor the first left' );
+		$this->assertSame( self::NOW, $this->card_store()->refreshed_at( $this->account_id ) );
+		$this->assertFalse( $this->card_store()->is_refreshing( $this->account_id ) );
+		$this->assertArrayNotHasKey( self::PREFIX . Link_Progress_Store::OPTION . 'refresh_' . $this->account_id, $this->wp_storage, 'a finished refresh leaves no progress' );
+		$this->assertSame( [], $this->scheduler->of( self::REFRESH ), 'nothing left to continue' );
+	}
+
+	/**
+	 * A run reads at most its page budget, then queues its continuation; the screen shows what was written so far, and the
+	 * continuation goes on from the next page.
+	 *
+	 * @return void
+	 */
+	public function test_a_long_refresh_stops_at_its_page_budget_and_continues_from_the_next_page(): void {
+		$paged = new Paged_Link_Resolver();
+
+		for ( $page = 1; $page <= Link_Jobs::PAGES_PER_RUN + 2; $page++ ) {
+			$paged->pages[] = $this->list_rows( 'P' . $page, 2 );
+		}
+
+		$this->card_store()->mark_refreshing( $this->account_id );
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertCount( 2 * Link_Jobs::PAGES_PER_RUN, $this->listed(), 'the first part is on the screen already' );
+		$this->assertSame( 0, $this->card_store()->refreshed_at( $this->account_id ), 'the refresh is not finished' );
+		$this->assertTrue( $this->card_store()->is_refreshing( $this->account_id ) );
+
+		$next = $this->scheduler->of( self::REFRESH );
+
+		$this->assertCount( 1, $next );
+		$this->assertSame( [ $this->account_id, 0 ], $next[0]['args'], 'a continuation starts with fresh counters' );
+
+		$this->jobs( null, $paged )->refresh_cards( ...$next[0]['args'] );
+
+		$this->assertCount( 2 * ( Link_Jobs::PAGES_PER_RUN + 2 ), $this->listed() );
+		$this->assertSame( 'P' . ( Link_Jobs::PAGES_PER_RUN + 1 ) . '-1', $this->listed()[ 2 * Link_Jobs::PAGES_PER_RUN ], 'the order goes on where it stopped' );
+		$this->assertSame( [ 'next' => Link_Jobs::PAGES_PER_RUN ], $paged->reads[ Link_Jobs::PAGES_PER_RUN ][1] );
+		$this->assertSame( self::NOW, $this->card_store()->refreshed_at( $this->account_id ) );
+	}
+
+	/**
+	 * A card deleted on the marketplace leaves the list — but only after the refresh's last page: until then the screen keeps it.
+	 *
+	 * @return void
+	 */
+	public function test_a_refresh_sweeps_the_cards_it_did_not_see_only_after_its_last_page(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ $this->list_rows( 'K', 3 ) ];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+		$this->assertSame( [ 'K-1', 'K-2', 'K-3' ], $this->listed() );
+
+		// K-2 is deleted on the marketplace; the new refresh is interrupted after its first page.
+		$paged->pages    = [ [ $this->detail( 1, 'K-1' ) ], [ $this->detail( 3, 'K-3' ) ] ];
+		$paged->failures = [ 1 => Fake_Remote_Exception::of( Remote_Error::THROTTLE, 'governor', 30, false ) ];
+		$paged->reads    = [];
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ 'K-1', 'K-2', 'K-3' ], $this->listed(), 'nothing is swept half way' );
+
+		$retry = $this->scheduler->of( self::REFRESH );
+		$this->jobs( null, $paged )->refresh_cards( ...end( $retry )['args'] );
+
+		$this->assertSame( [ 'next' => 1 ], end( $paged->reads )[1], 'the refresh went on from the page it reached' );
+		$this->assertSame( [ 'K-1', 'K-3' ], $this->listed(), 'the deleted card left with the last page' );
+	}
+
+	/**
+	 * A failed refresh keeps the last list on the screen and says why.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_refresh_keeps_the_last_list(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ $this->list_rows( 'L', 2 ) ];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$paged->failures = [ 0 => Fake_Remote_Exception::of( Remote_Error::FAIL, 'not allowed' ) ];
+		$this->card_store()->mark_refreshing( $this->account_id );
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ 'L-1', 'L-2' ], $this->listed() );
+		$this->assertStringContainsString( 'not allowed', $this->card_store()->last_error( $this->account_id ) );
+		$this->assertFalse( $this->card_store()->is_refreshing( $this->account_id ) );
+		$this->assertSame( self::NOW, $this->card_store()->refreshed_at( $this->account_id ), 'the time of the last good refresh stays' );
+	}
+
+	/**
+	 * A notification's card is rewritten from a single read: a new card is added, a known one updated in its place.
+	 *
+	 * @return void
+	 */
+	public function test_the_rows_of_named_cards_are_rewritten_from_a_single_read(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ $this->list_rows( 'N', 3 ) ];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$paged->single = [
+			'N-2' => array_merge( $this->detail( 2, 'N-2' ), [ 'name' => 'Новое имя', 'failed' => true, 'status_text' => 'Нет фото', 'price' => '990', 'stock' => 4 ] ),
+			'NEW' => $this->detail( 9, 'NEW' ),
+		];
+
+		$this->jobs( null, $paged )->refresh_card_rows( $this->account_id, [ 'N-2', 'NEW', 'GONE' ], 0 );
+
+		$card = $this->card_store()->find( $this->account_id, Wpdb_Card_Store::key( 'N-2' ) );
+
+		$this->assertSame( [ 'cards', [], [ 'N-2', 'NEW', 'GONE' ] ], end( $paged->reads ) );
+		$this->assertSame( 'Новое имя', $card['name'] );
+		$this->assertTrue( $card['failed'] );
+		$this->assertSame( 'Нет фото', $card['status_text'] );
+		$this->assertSame( '990.00', $card['price'] );
+		$this->assertSame( 4, $card['stock'] );
+		$this->assertSame( [ 'NEW', 'N-1', 'N-2', 'N-3' ], $this->listed(), 'a known card keeps its place; a new one goes first' );
+	}
+
+	/**
+	 * A card a notification wrote during a refresh is not swept by it, though the refresh did not see it.
+	 *
+	 * @return void
+	 */
+	public function test_a_card_written_by_a_notification_during_a_refresh_survives_its_sweep(): void {
+		$paged = new Paged_Link_Resolver();
+
+		for ( $page = 1; $page <= Link_Jobs::PAGES_PER_RUN + 1; $page++ ) {
+			$paged->pages[] = $this->list_rows( 'R' . $page, 1 );
+		}
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 ); // Stops at its budget.
+
+		$paged->single = [ 'FRESH' => $this->detail( 7, 'FRESH' ) ];
+		$this->jobs( null, $paged )->refresh_card_rows( $this->account_id, [ 'FRESH' ], 0 );
+
+		$next = $this->scheduler->of( self::REFRESH );
+		$this->jobs( null, $paged )->refresh_cards( ...end( $next )['args'] );
+
+		$this->assertContains( 'FRESH', $this->listed() );
+		$this->assertCount( Link_Jobs::PAGES_PER_RUN + 2, $this->listed() );
+	}
+
+	/**
+	 * A resolver that cannot read single cards leaves the list to the refreshes.
+	 *
+	 * @return void
+	 */
+	public function test_a_resolver_that_cannot_read_single_cards_leaves_the_rows_alone(): void {
+		$this->jobs()->refresh_card_rows( $this->account_id, [ 'OW-TEST-1' ], 0 );
+
+		$this->assertSame( [], $this->resolver->reads );
+		$this->assertSame( [], $this->listed() );
+	}
+
+	/**
+	 * The daily run refreshes every account whose list was loaded once and is not being refreshed — and nothing else.
+	 *
+	 * @return void
+	 */
+	public function test_the_daily_run_refreshes_only_the_lists_that_were_loaded(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ $this->list_rows( 'D', 1 ) ];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->jobs( null, $paged, [ $this->account_id, 999 ] )->refresh_daily();
+
+		$queued = $this->scheduler->of( self::REFRESH );
+
+		$this->assertCount( 1, $queued );
+		$this->assertSame( [ $this->account_id, 0 ], $queued[0]['args'] );
+		$this->assertTrue( $this->card_store()->is_refreshing( $this->account_id ), 'the screen says the list is being refreshed' );
+
+		$this->jobs( null, $paged, [ $this->account_id ] )->refresh_daily();
+
+		$this->assertCount( 1, $this->scheduler->of( self::REFRESH ), 'a refresh already marked is not queued again' );
+	}
+
+	/**
+	 * The daily run is created once, as a recurring action of the plugin's group.
+	 *
+	 * @return void
+	 */
+	public function test_the_daily_run_is_scheduled_once(): void {
+		$scheduler = new Link_Scheduler( $this->names() );
+
+		$scheduler->ensure_daily();
+		$scheduler->ensure_daily();
+
+		$daily = $this->scheduler->of( self::DAILY );
+
+		$this->assertCount( 1, $daily );
+		$this->assertSame( 'recurring', $daily[0]['kind'] );
+	}
+
+	/**
+	 * A refresh that gave up half way and is started again reads under a new generation: a card it saw before giving up and that
+	 * was deleted meanwhile leaves the list with the successful refresh (#1868 Must 1).
+	 *
+	 * @return void
+	 */
+	public function test_a_refresh_started_over_after_a_give_up_sweeps_the_cards_of_the_abandoned_pages(): void {
+		$paged           = new Paged_Link_Resolver();
+		$paged->pages    = [ [ $this->detail( 1, 'A' ) ], [ $this->detail( 2, 'X' ) ] ];
+		$paged->failures = [ 1 => Fake_Remote_Exception::of( Remote_Error::FAIL, 'denied' ) ];
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ 'A' ], $this->listed(), 'the first page was written before the refusal' );
+		$this->assertStringContainsString( 'denied', $this->card_store()->last_error( $this->account_id ) );
+
+		// A is deleted on the marketplace; the merchant refreshes again and the cabinet holds B only.
+		$paged->pages = [ [ $this->detail( 3, 'B' ) ] ];
+		$paged->reads = [];
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ [] ], array_column( $paged->reads, 1 ), 'the new refresh starts from the first page' );
+		$this->assertSame( [ 'B' ], $this->listed(), 'the card of the abandoned page is swept' );
+		$this->assertSame( '', $this->card_store()->last_error( $this->account_id ) );
+	}
+
+	/**
+	 * A cursor older than the progress store trusts is a traversal started over: new generation, first page.
+	 *
+	 * @return void
+	 */
+	public function test_an_expired_cursor_starts_the_traversal_over_under_a_new_generation(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ [ $this->detail( 1, 'OLD' ) ] ];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$abandoned = $this->card_store()->begin_refresh( $this->account_id, self::NOW );
+		( new Link_Progress_Store( self::PREFIX ) )->save(
+			$this->account_id,
+			Link_Progress_Store::KIND_REFRESH,
+			[
+				'started_at' => self::NOW - Link_Progress_Store::MAX_AGE - 1,
+				'scope'      => 0,
+				'state'      => [ 'run' => $abandoned, 'page' => [ 'next' => 1 ], 'position' => 2 ],
+			]
+		);
+		$this->card_store()->upsert( $this->account_id, [ $this->detail( 2, 'GONE' ) ], $abandoned, 2, self::NOW );
+
+		$paged->pages = [ [ $this->detail( 3, 'NEW' ) ] ];
+		$paged->reads = [];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ [] ], array_column( $paged->reads, 1 ) );
+		$this->assertSame( [ 'NEW' ], $this->listed() );
+	}
+
+	/**
+	 * A run whose account claim is taken over after its last page writes nothing and sweeps nothing: the new owner's list stands
+	 * (#1868 Should 3).
+	 *
+	 * @return void
+	 */
+	public function test_a_refresh_that_lost_its_claim_after_the_last_page_neither_writes_nor_sweeps(): void {
+		$paged        = new Paged_Link_Resolver();
+		$paged->pages = [ [ $this->detail( 1, 'KEEP-1' ), $this->detail( 2, 'KEEP-2' ) ] ];
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$paged->pages   = [ [ $this->detail( 9, 'STALE' ) ] ];
+		$paged->on_page = function (): void {
+			$this->db->query( $this->db->prepare( 'UPDATE %i SET claim_token = %s, claim_until = %s WHERE account_id = %d', Sqlite_Tables::table( 'accounts' ), str_repeat( 'b', 32 ), '2099-01-01 00:00:00', $this->account_id ) );
+		};
+
+		$this->jobs( null, $paged )->refresh_cards( $this->account_id, 0 );
+
+		$this->assertSame( [ 'KEEP-1', 'KEEP-2' ], $this->listed() );
+		$this->assertSame( self::NOW, $this->card_store()->refreshed_at( $this->account_id ) );
 	}
 }

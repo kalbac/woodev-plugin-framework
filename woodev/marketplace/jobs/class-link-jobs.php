@@ -9,7 +9,7 @@ namespace Woodev\Framework\Marketplace\Jobs;
 
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Catalog\Article_Policy;
-use Woodev\Framework\Marketplace\Data\Cards_Snapshot_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Progress_Store;
 use Woodev\Framework\Marketplace\Data\Link_Record;
@@ -18,6 +18,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Card_Identity;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
+use Woodev\Framework\Marketplace\Flows\Card_List_Source;
 use Woodev\Framework\Marketplace\Flows\Card_Matcher;
 use Woodev\Framework\Marketplace\Flows\Link_Resolve_Exception;
 use Woodev\Framework\Marketplace\Flows\Link_Resolver;
@@ -36,8 +37,16 @@ defined( 'ABSPATH' ) || exit;
  *    the merchant confirms one by one ({@see Link_Report_Store}).
  * 4. A summary of the run is stored.
  *
- * **`refresh_cards( account_id, attempt )`** fills the snapshot of the tab that lists the marketplace's cards
- * ({@see Cards_Snapshot_Store}).
+ * **`refresh_cards( account_id, attempt )`** refreshes the stored list of the tab that lists the marketplace's cards
+ * ({@see Wpdb_Card_Store}). A resolver that is a {@see Card_List_Source} is read page by page: each page is written before the next is
+ * asked for and the cursor is kept after it, and a run stops after {@see self::PAGES_PER_RUN} pages and queues its continuation, so
+ * neither memory nor one request's time grows with the cabinet. Any other resolver is read in one piece ({@see Link_Resolver::snapshot()})
+ * and written in batches. Only after the last page are the cards the refresh did not see swept.
+ *
+ * **`refresh_card_rows( account_id, offer_ids, attempt )`** rewrites the rows of the cards a notification named, from
+ * {@see Card_List_Source::list_cards()}; a card the marketplace no longer knows is left to the next full refresh.
+ *
+ * **`refresh_cards_daily()`** queues `refresh_cards` for every enabled account whose list was loaded once.
  *
  * Failures follow the adapter's {@see Error_Classifier}: a refused credential pauses the account, a wait is not an attempt, a
  * server error retries on the {@see Backoff} ladder up to {@see self::MAX_ATTEMPTS}; any other refusal ends the run with its text
@@ -47,6 +56,14 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Link_Jobs {
 	public const MAX_ATTEMPTS = Account_Job::MAX_ATTEMPTS;
+
+	/**
+	 * Pages one `refresh_cards` run reads before it queues its continuation: with Ozon's 1000 cards a page, two requests each, a run
+	 * stays well inside a request's time limit.
+	 *
+	 * @since 2.1.13
+	 */
+	public const PAGES_PER_RUN = 5;
 
 	private const FAILURE_CODE = 'link_cards_failed';
 	private const RENEW_EVERY  = 100;
@@ -87,11 +104,18 @@ final class Link_Jobs {
 	private $reports;
 
 	/**
-	 * Snapshot.
+	 * The stored list of the cards.
 	 *
-	 * @var Cards_Snapshot_Store
+	 * @var Wpdb_Card_Store
 	 */
-	private $snapshots;
+	private $cards;
+
+	/**
+	 * Ids of the enabled accounts: `function (): int[]`; the daily run refreshes their lists.
+	 *
+	 * @var callable
+	 */
+	private $account_ids;
 
 	/**
 	 * Scheduler.
@@ -133,27 +157,31 @@ final class Link_Jobs {
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Job_Gate             $gate       Job gate.
-	 * @param Wpdb_Link_Store      $links      Links.
-	 * @param Card_Linker          $linker     Linker.
-	 * @param callable             $shop       `function ( ?int $category_id ): array`, the shop's products with an article (`Shop_Sku_Source::products()`).
-	 * @param Link_Report_Store    $reports    Reports.
-	 * @param Cards_Snapshot_Store $snapshots  Snapshot.
-	 * @param Link_Scheduler       $scheduler  Scheduler.
-	 * @param Link_Resolver        $resolver   The adapter's cabinet reader.
-	 * @param Article_Policy       $articles   The adapter's article rules.
-	 * @param Error_Classifier     $classifier The adapter's error classifier.
-	 * @param Api_Error_Ring       $ring       Error ring.
-	 * @param callable             $log_error  `function ( string $line ): void`.
-	 * @param Link_Progress_Store  $progress   Progress of interrupted runs.
-	 * @param callable|null        $clock      `function (): int`; the system clock when null.
+	 * @param Job_Gate            $gate       Job gate.
+	 * @param Wpdb_Link_Store     $links      Links.
+	 * @param Card_Linker         $linker     Linker.
+	 * @param callable            $shop       `function ( ?int $category_id ): array`, the shop's products with an article (`Shop_Sku_Source::products()`).
+	 * @param Link_Report_Store   $reports    Reports.
+	 * @param Wpdb_Card_Store     $cards      The stored list of the cards.
+	 * @param Link_Scheduler      $scheduler  Scheduler.
+	 * @param Link_Resolver       $resolver   The adapter's cabinet reader.
+	 * @param Article_Policy      $articles   The adapter's article rules.
+	 * @param Error_Classifier    $classifier The adapter's error classifier.
+	 * @param Api_Error_Ring      $ring       Error ring.
+	 * @param callable            $log_error  `function ( string $line ): void`.
+	 * @param Link_Progress_Store $progress   Progress of interrupted runs.
+	 * @param callable|null       $clock      `function (): int`; the system clock when null.
+	 * @param callable|null       $account_ids `function (): int[]`, the enabled accounts the daily run refreshes; none when null.
 	 */
-	public function __construct( Job_Gate $gate, Wpdb_Link_Store $links, Card_Linker $linker, callable $shop, Link_Report_Store $reports, Cards_Snapshot_Store $snapshots, Link_Scheduler $scheduler, Link_Resolver $resolver, Article_Policy $articles, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error, Link_Progress_Store $progress, ?callable $clock = null ) {
+	public function __construct( Job_Gate $gate, Wpdb_Link_Store $links, Card_Linker $linker, callable $shop, Link_Report_Store $reports, Wpdb_Card_Store $cards, Link_Scheduler $scheduler, Link_Resolver $resolver, Article_Policy $articles, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error, Link_Progress_Store $progress, ?callable $clock = null, ?callable $account_ids = null ) {
 		$this->links         = $links;
 		$this->linker        = $linker;
 		$this->shop_products = $shop;
 		$this->reports       = $reports;
-		$this->snapshots     = $snapshots;
+		$this->cards         = $cards;
+		$this->account_ids   = $account_ids ?? static function (): array {
+			return [];
+		};
 		$this->scheduler     = $scheduler;
 		$this->resolver      = $resolver;
 		$this->articles      = $articles;
@@ -172,6 +200,8 @@ final class Link_Jobs {
 	public function register(): void {
 		add_action( $this->scheduler->link_hook(), [ $this, 'link_cards' ], 10, 4 );
 		add_action( $this->scheduler->refresh_hook(), [ $this, 'refresh_cards' ], 10, 3 );
+		add_action( $this->scheduler->rows_hook(), [ $this, 'refresh_card_rows' ], 10, 4 );
+		add_action( $this->scheduler->daily_hook(), [ $this, 'refresh_daily' ] );
 	}
 
 	/**
@@ -236,7 +266,7 @@ final class Link_Jobs {
 			},
 			function ( string $text ) use ( $account_id ): void {
 				$this->progress->clear( $account_id, Link_Progress_Store::KIND_REFRESH );
-				$this->snapshots->fail( $account_id, $text );
+				$this->cards->fail( $account_id, $text );
 			},
 			$attempt,
 			function ( Account $account, Claim_Fence $fence ): void {
@@ -244,6 +274,71 @@ final class Link_Jobs {
 			},
 			max( 0, (int) $put_offs )
 		);
+	}
+
+	/**
+	 * Runs `refresh_card_rows`: rewrites the rows of the cards a notification named. Does nothing for a resolver that cannot read single
+	 * cards. A failure is only logged: the merchant's screen keeps the row as it was, and the daily refresh brings it up to date.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param mixed $account_id Account id.
+	 * @param mixed $offer_ids  Articles.
+	 * @param mixed $attempt    Failed attempts so far.
+	 * @param mixed $put_offs   Waits so far.
+	 * @return void
+	 */
+	public function refresh_card_rows( $account_id = 0, $offer_ids = [], $attempt = 0, $put_offs = 0 ): void {
+		$account_id = (int) $account_id;
+		$offer_ids  = array_values( array_filter( array_map( 'strval', (array) $offer_ids ), 'strlen' ) );
+		$source     = $this->resolver;
+
+		if ( ! $source instanceof Card_List_Source || [] === $offer_ids ) {
+			return;
+		}
+
+		$this->job->run(
+			$account_id,
+			$this->scheduler->rows_hook(),
+			function ( int $delay, int $failures, int $waits ) use ( $account_id, $offer_ids ): bool {
+				return $this->scheduler->retry_rows( $account_id, $offer_ids, $failures, $delay, $waits );
+			},
+			static function (): void {
+				// The account job has logged it; the row stays as the last refresh left it.
+			},
+			(int) $attempt,
+			function ( Account $account, Claim_Fence $fence ) use ( $source, $offer_ids ): void {
+				$cards = $source->list_cards( $account, $this->scheduler->rows_hook(), $offer_ids );
+
+				$this->job->hold( $account->id(), $fence ); // The read may have outlasted the claim.
+				$this->cards->upsert( $account->id(), $cards, $this->cards->current_run( $account->id() ), 0, (int) call_user_func( $this->clock ) );
+			},
+			max( 0, (int) $put_offs )
+		);
+	}
+
+	/**
+	 * Runs `refresh_cards_daily`: queues the refresh of every enabled account whose list was loaded once and is not being refreshed.
+	 * An account whose merchant never opened the list costs the marketplace nothing.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return void
+	 */
+	public function refresh_daily(): void {
+		foreach ( (array) call_user_func( $this->account_ids ) as $account_id ) {
+			$account_id = (int) $account_id;
+
+			if ( $account_id <= 0 || ! $this->cards->has_list( $account_id ) || $this->cards->is_refreshing( $account_id ) ) {
+				continue;
+			}
+
+			$this->cards->mark_refreshing( $account_id );
+
+			if ( ! $this->scheduler->refresh_cards( $account_id ) ) {
+				$this->cards->fail( $account_id, __( 'Не удалось поставить ежедневное обновление списка в очередь. Проверьте, что в WooCommerce работает планировщик задач (Action Scheduler).', 'woodev-plugin-framework' ) );
+			}
+		}
 	}
 
 	/**
@@ -466,7 +561,11 @@ final class Link_Jobs {
 	}
 
 	/**
-	 * Reads the cabinet with names and states and stores it for the tab.
+	 * Refreshes the stored list of the cabinet's cards: a part of at most {@see self::PAGES_PER_RUN} pages for a resolver that pages,
+	 * the whole cabinet for one that does not; the sweep of the cards it did not see after the last page.
+	 *
+	 * The saved cursor carries the generation of its traversal. A run goes on from the cursor only under that same generation; when
+	 * the store gives a new one (no cursor, an expired one, an abandoned traversal) the read starts again from the first page.
 	 *
 	 * @param Account     $account Account.
 	 * @param Claim_Fence $fence   The run's claim.
@@ -475,19 +574,36 @@ final class Link_Jobs {
 	 */
 	private function refresh_run( Account $account, Claim_Fence $fence ): void {
 		$account_id = $account->id();
-		$record     = $this->progress->load( $account_id, Link_Progress_Store::KIND_REFRESH, 0, (int) call_user_func( $this->clock ) );
-		$state      = $record['state'];
+		$now        = (int) call_user_func( $this->clock );
+		$record     = $this->progress->load( $account_id, Link_Progress_Store::KIND_REFRESH, 0, $now );
+		$saved      = (int) ( $record['state']['run'] ?? 0 );
+		$run        = $this->cards->begin_refresh( $account_id, $now, $saved );
+		// Only the keys of this job: a record an older framework left holds the adapter's whole read, which must not be saved again.
+		$state      = $run === $saved ? [
+			'run'      => $run,
+			'page'     => (array) ( $record['state']['page'] ?? [] ),
+			'position' => max( 1, (int) ( $record['state']['position'] ?? 1 ) ),
+		] : [
+			'run'      => $run,
+			'page'     => [],
+			'position' => 1,
+		];
 		$before     = $state;
+		$renew      = function () use ( $account_id, $fence ): void {
+			$this->job->hold( $account_id, $fence );
+		};
 
 		try {
-			$cards = $this->resolver->snapshot(
-				$account,
-				$this->scheduler->refresh_hook(),
-				function () use ( $account_id, $fence ): void {
-					$this->job->hold( $account_id, $fence );
-				},
-				$state
-			);
+			if ( $this->resolver instanceof Card_List_Source ) {
+				if ( ! $this->refresh_pages( $account, $this->resolver, $run, $renew, $state, $record ) ) {
+					$this->continue_refresh( $account_id );
+					return;
+				}
+			} else {
+				$this->refresh_whole( $account, $run, $renew, $state );
+			}
+		} catch ( Claim_Lost $e ) {
+			throw $e; // The cursor is the new claim owner's now: a run that lost the claim must not write over it.
 		} catch ( \Throwable $e ) {
 			$this->note_progress( $before, $state );
 			$record['state'] = $state;
@@ -496,10 +612,85 @@ final class Link_Jobs {
 			throw $e;
 		}
 
-		$this->progress->clear( $account_id, Link_Progress_Store::KIND_REFRESH );
+		$renew();
 
-		if ( ! $this->snapshots->put( $account_id, $cards, (int) call_user_func( $this->clock ) ) ) {
-			$this->snapshots->fail( $account_id, __( 'Список карточек получен, но сохранить его не удалось: в нём слишком много товаров для просмотра на этой странице.', 'woodev-plugin-framework' ) );
+		// Null: a newer refresh finished meanwhile, or the claim was taken over; that run's list and cursor stand.
+		if ( null !== $this->cards->finish_refresh( $account_id, $run, (int) call_user_func( $this->clock ), $fence ) ) {
+			$this->progress->clear( $account_id, Link_Progress_Store::KIND_REFRESH );
+		}
+	}
+
+	/**
+	 * Reads up to {@see self::PAGES_PER_RUN} pages, writing each and keeping the cursor after it: a run cut off by the request's time
+	 * limit goes on from the last page it wrote.
+	 *
+	 * @param Account                                                   $account Account.
+	 * @param Card_List_Source                                          $source  The resolver, read by page.
+	 * @param int                                                       $run     The refresh's generation.
+	 * @param callable                                                  $renew   Extends the claim or throws.
+	 * @param array<string,mixed>                                       $state   `run`, `page` (the adapter's cursor) and `position`; updated.
+	 * @param array{started_at:int,scope:int,state:array<string,mixed>} $record  The progress record, saved after every page.
+	 * @return bool True when the last page was read.
+	 * @throws \Throwable Whatever interrupted the read.
+	 */
+	private function refresh_pages( Account $account, Card_List_Source $source, int $run, callable $renew, array &$state, array $record ): bool {
+		$account_id = $account->id();
+
+		for ( $read = 0; $read < self::PAGES_PER_RUN; $read++ ) {
+			if ( $read > 0 ) {
+				$renew();
+			}
+
+			$page  = $source->list_page( $account, $this->scheduler->refresh_hook(), $renew, $state['page'] );
+			$cards = (array) ( $page['cards'] ?? [] );
+			$now   = (int) call_user_func( $this->clock );
+
+			$renew(); // The read may have outlasted the claim: a run that lost it writes nothing.
+			$this->cards->upsert( $account_id, $cards, $run, (int) $state['position'], $now );
+			$this->cards->touch( $account_id, $now );
+
+			$state['position'] += count( $cards );
+			$record['state']    = $state;
+			$this->progress->save( $account_id, Link_Progress_Store::KIND_REFRESH, $record );
+
+			if ( ! empty( $page['done'] ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Reads the cabinet in one piece from a resolver that cannot page it, and writes it in batches.
+	 *
+	 * @param Account             $account Account.
+	 * @param int                 $run     The refresh's generation.
+	 * @param callable            $renew   Extends the claim or throws.
+	 * @param array<string,mixed> $state   `page` is the resolver's cursor; updated.
+	 * @return void
+	 * @throws \Throwable Whatever interrupted the read.
+	 */
+	private function refresh_whole( Account $account, int $run, callable $renew, array &$state ): void {
+		$cards = $this->resolver->snapshot( $account, $this->scheduler->refresh_hook(), $renew, $state['page'] );
+
+		foreach ( array_chunk( $cards, Wpdb_Card_Store::BATCH ) as $index => $chunk ) {
+			$renew(); // After the read and between batches: a run that lost the claim writes nothing.
+
+			$this->cards->upsert( $account->id(), $chunk, $run, 1 + $index * Wpdb_Card_Store::BATCH, (int) call_user_func( $this->clock ) );
+		}
+	}
+
+	/**
+	 * Queues the next part of a refresh that spent its page budget. The part that ran made progress, so it starts with fresh counters.
+	 *
+	 * @param int $account_id Account id.
+	 * @return void
+	 * @throws \RuntimeException When Action Scheduler refuses it: the job then records the failure, and the button starts it again.
+	 */
+	private function continue_refresh( int $account_id ): void {
+		if ( ! $this->scheduler->retry_refresh( $account_id, 0, 1 ) ) {
+			throw new \RuntimeException( __( 'Не удалось поставить продолжение загрузки списка в очередь.', 'woodev-plugin-framework' ) );
 		}
 	}
 }
