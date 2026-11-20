@@ -269,6 +269,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `get_sanitized_response_body()` in the plugin's API client and mask personal data. →
   `docs-internal/gotchas/a-4xx-body-thrown-in-the-pre-parse-validation-is-logged-empty.md`
 
+- **A notice inside the product's Variations panel loses its box.** WooCommerce styles `#variable_product_options .notice`
+  with an id selector and strips the border, so a class-only rule of yours never wins. Scope the rule with
+  `#variable_product_options …` (gotcha `woocommerce-variable-product-options-notice-reset-strips-a-notice-box`, s238).
+
 ## Related
 
 - [SKILL.md](SKILL.md)

@@ -51,6 +51,7 @@
 - [woocommerce/blocks] **The cart store STARTS from `localStorage` when the cart hash matches, and `load` marks it resolved without the page's preload — a rate and point from before the last order render.** → [woocommerce-starts-the-cart-store-from-localstorage-and-skips-the-page-s-own-cart](../gotchas/woocommerce-starts-the-cart-store-from-localstorage-and-skips-the-page-s-own-cart.md) (s154)
 - [woocommerce/blocks] **A refused Place Order scrolls to the TOP for an inner block's error (core focuses only its own fields) — say the error in `core/notices`, context `wc/checkout`.** → [the-checkout-block-scrolls-to-the-top-for-a-validation-error-that-is-not-its-own-field](../gotchas/the-checkout-block-scrolls-to-the-top-for-a-validation-error-that-is-not-its-own-field.md) (s153)
 - [woocommerce/blocks] **`force: true` renders an inner block only inside a parent that is IN the saved page — a parent core itself forced in comes without its forced children.** → [a-forced-inner-block-does-not-render-inside-a-parent-woocommerce-forced-in](../gotchas/a-forced-inner-block-does-not-render-inside-a-parent-woocommerce-forced-in.md) (s153)
+- [woocommerce/admin-css] **WooCommerce's `#variable_product_options .notice` (an id selector) strips the border of any notice in the Variations panel — scope our notice rules with the same id.** → [woocommerce-variable-product-options-notice-reset-strips-a-notice-box](../gotchas/woocommerce-variable-product-options-notice-reset-strips-a-notice-box.md) (s238)
 
 ## Related
 
