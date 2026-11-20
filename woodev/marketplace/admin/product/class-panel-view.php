@@ -365,11 +365,12 @@ final class Panel_View {
 		}
 
 		$cells .= '<td class="woodev-mp-variations__image">' . ( '' === $image ? '' : sprintf( '<img src="%s" alt="" width="36" height="36" loading="lazy" />', esc_url( $image ) ) ) . '</td>';
+		// The words in `data-label` are the headings of a row that is stacked on a narrow panel (the heading row is hidden then).
 		$cells .= '<td class="woodev-mp-variations__name">' . esc_html( $name ) . '</td>';
-		$cells .= '<td>' . $this->badge( $row['badge'] ) . '</td>';
-		$cells .= '<td>' . esc_html( $row['offer_id'] ) . ( $row['planned'] ? $this->help_tip( __( 'Артикул будет отправлен на маркетплейс вместе с карточкой.', 'woodev-plugin-framework' ) ) : '' ) . $this->article_note( $row ) . '</td>';
-		$cells .= '<td>' . esc_html( $this->site_and_remote( (string) ( $row['site_stock'] ?? '' ), (string) $row['stock'] ) ) . '</td>';
-		$cells .= '<td>' . esc_html( $this->site_and_remote( (string) ( $row['site_price'] ?? '' ), (string) $row['price'] ) ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__state">' . $this->badge( $row['badge'] ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__article" data-label="' . esc_attr__( 'Артикул', 'woodev-plugin-framework' ) . '">' . esc_html( $row['offer_id'] ) . ( $row['planned'] ? $this->help_tip( __( 'Артикул будет отправлен на маркетплейс вместе с карточкой.', 'woodev-plugin-framework' ) ) : '' ) . $this->article_note( $row ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__stock" data-label="' . esc_attr__( 'Остаток', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_stock'] ?? '' ), (string) $row['stock'] ) ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__price" data-label="' . esc_attr__( 'Цена', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_price'] ?? '' ), (string) $row['price'] ) ) . '</td>';
 
 		if ( null !== $facts ) {
 			$group  = $this->button_group(
@@ -463,7 +464,7 @@ final class Panel_View {
 	 */
 	private function article_control( string $target, string $name, string $shown, string $value, string $placeholder, string $note = '' ): string {
 		return sprintf(
-			'<span class="woodev-mp-article"><span class="woodev-mp-article__value">%1$s</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="%2$s">%3$s</button>%4$s</span><span class="woodev-mp-article__editor" hidden><input type="text" class="short woodev-mp-article__input" id="%2$s" name="%5$s" value="%6$s" placeholder="%7$s" maxlength="50" /> <button type="button" class="button-link woodev-mp-article__cancel" aria-controls="%2$s">%8$s</button></span>',
+			'<span class="woodev-mp-article"><span class="woodev-mp-article__value">%1$s</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="%2$s">%3$s</button>%4$s</span><span class="woodev-mp-article__editor" hidden><input type="text" class="woodev-mp-article__input" id="%2$s" name="%5$s" value="%6$s" placeholder="%7$s" maxlength="50" /> <button type="button" class="button-link woodev-mp-article__cancel" aria-controls="%2$s">%8$s</button></span>',
 			esc_html( $shown ),
 			esc_attr( $target ),
 			esc_html__( 'изменить', 'woodev-plugin-framework' ),
@@ -896,7 +897,7 @@ final class Panel_View {
 
 	/**
 	 * Builds a group of buttons: ONE WordPress button group, one row, never two. A button is an icon and its words. Up to {@see self::LABELLED_MAX}
-	 * buttons keep their words (the stylesheet drops them when even that few do not fit the panel); more are icons only. The name is in the
+	 * buttons keep their words (the script drops them, with `.is-compact`, when even that few do not fit the width they have); more are icons only. The name is in the
 	 * tooltip (WooCommerce's own, drawn from `data-tip`: a browser's `title` does not show in every host of the product screen) and in `aria-label`.
 	 *
 	 * @param array<string,string> $labels     `op` => label.
@@ -932,8 +933,8 @@ final class Panel_View {
 		$count = count( $buttons );
 
 		return sprintf(
-			'<span class="woodev-mp-buttons__row button-group %1$s" role="group" aria-label="%2$s">%3$s</span>',
-			esc_attr( trim( ( $count > self::LABELLED_MAX ? 'woodev-mp-buttons__row--many' : 'woodev-mp-buttons__row--n' . $count ) . ' ' . $modifier ) ),
+			'<span class="%1$s" role="group" aria-label="%2$s">%3$s</span>',
+			esc_attr( trim( 'woodev-mp-buttons__row button-group ' . ( $count > self::LABELLED_MAX ? 'woodev-mp-buttons__row--many ' : '' ) . $modifier ) ),
 			esc_attr__( 'Действия с карточкой', 'woodev-plugin-framework' ),
 			implode( '', $buttons )
 		);

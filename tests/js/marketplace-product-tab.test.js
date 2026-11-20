@@ -492,6 +492,65 @@ describe( 'the actions on the variations of a variable product', () => {
 	} );
 } );
 
+describe( 'fitting to the width the panel has', () => {
+	/**
+	 * Renders the Variations area with a line of buttons and a table of the variants, with the sizes a browser would report.
+	 *
+	 * @param {Object} sizes `{ box, group, wrap, scroll }`: the width of the line, the width the group needs with its words, the width of the
+	 *                       table's wrapper and the width its content needs.
+	 */
+	function renderFit( sizes ) {
+		document.body.innerHTML = `
+			<div id="variable_product_options">
+				<p class="woodev-mp-buttons" style="padding-left: 100px"><span class="woodev-mp-buttons__row button-group"><button type="button">A</button></span></p>
+				<p class="woodev-mp-buttons"><span class="woodev-mp-buttons__row button-group woodev-mp-buttons__row--many"><button type="button">A</button></span></p>
+				<div class="woodev-mp-variants"><div class="woodev-mp-variations-wrap"><table></table></div></div>
+			</div>`;
+
+		const boxes = document.querySelectorAll( '.woodev-mp-buttons' );
+		const wrap = document.querySelector( '.woodev-mp-variations-wrap' );
+
+		boxes.forEach( ( box ) => Object.defineProperty( box, 'clientWidth', { configurable: true, value: sizes.box } ) );
+		boxes[ 0 ].querySelector( '.woodev-mp-buttons__row' ).getBoundingClientRect = () => ( { width: sizes.group } );
+		Object.defineProperty( wrap, 'clientWidth', { configurable: true, value: sizes.wrap } );
+		Object.defineProperty( wrap, 'scrollWidth', { configurable: true, value: sizes.scroll } );
+
+		global.jQuery( document.body ).trigger( 'woocommerce_variations_loaded' );
+
+		return {
+			row: boxes[ 0 ].querySelector( '.woodev-mp-buttons__row' ),
+			many: boxes[ 1 ].querySelector( '.woodev-mp-buttons__row' ),
+			variants: document.querySelector( '.woodev-mp-variants' ),
+		};
+	}
+
+	test( 'a group whose words fit the width its line has keeps them (the line\'s own padding is not width)', () => {
+		const { row } = renderFit( { box: 560, group: 460, wrap: 600, scroll: 600 } );
+
+		expect( row.classList.contains( 'is-compact' ) ).toBe( false );
+		expect( row.classList.contains( 'is-measuring' ) ).toBe( false );
+	} );
+
+	test( 'a group whose words do not fit drops them', () => {
+		const { row } = renderFit( { box: 540, group: 460, wrap: 600, scroll: 600 } );
+
+		expect( row.classList.contains( 'is-compact' ) ).toBe( true );
+		expect( row.classList.contains( 'is-measuring' ) ).toBe( false );
+	} );
+
+	test( 'a group of more than three, and a line that is not on screen, are left alone', () => {
+		const { many } = renderFit( { box: 10, group: 460, wrap: 600, scroll: 600 } );
+
+		expect( many.classList.contains( 'is-compact' ) ).toBe( false );
+		expect( renderFit( { box: 0, group: 460, wrap: 600, scroll: 600 } ).row.classList.contains( 'is-compact' ) ).toBe( false );
+	} );
+
+	test( 'a table that is wider than its panel is stacked, one that fits stays a table', () => {
+		expect( renderFit( { box: 560, group: 460, wrap: 500, scroll: 700 } ).variants.classList.contains( 'is-stacked' ) ).toBe( true );
+		expect( renderFit( { box: 560, group: 460, wrap: 500, scroll: 500 } ).variants.classList.contains( 'is-stacked' ) ).toBe( false );
+	} );
+} );
+
 describe( 'the account select', () => {
 	beforeEach( () => {
 		jest.useRealTimers();

@@ -536,4 +536,104 @@
 			$( this ).closest( '.woodev-mp-variants' ).find( '.woodev-mp-variants__all' ).prop( 'checked', $checks.length === $checks.filter( ':checked' ).length );
 		}
 	);
+
+	/**
+	 * Decides whether the words of a line of buttons fit: the group is measured with its words (`.is-measuring` lets it take its natural width)
+	 * against the width its line has, and `.is-compact` (icons only) is set when it is wider. A line that is not on screen has no width and is
+	 * left as it is; the observer below measures it when it appears.
+	 *
+	 * @param {Element} box The line that holds the group (`.woodev-mp-buttons`).
+	 */
+	function fitButtonLabels( box ) {
+		var row = box.querySelector( '.woodev-mp-buttons__row' );
+		var style;
+		var available;
+		var needed;
+
+		if ( ! row || ! box.clientWidth || row.classList.contains( 'woodev-mp-buttons__row--many' ) || row.classList.contains( 'woodev-mp-buttons__row--icons' ) ) {
+			return;
+		}
+
+		style     = window.getComputedStyle( box );
+		available = box.clientWidth - ( parseFloat( style.paddingLeft ) || 0 ) - ( parseFloat( style.paddingRight ) || 0 );
+
+		row.classList.remove( 'is-compact' );
+		row.classList.add( 'is-measuring' );
+		needed = row.getBoundingClientRect().width;
+		row.classList.remove( 'is-measuring' );
+		row.classList.toggle( 'is-compact', needed > available );
+	}
+
+	/**
+	 * Stacks the variants of a table that is wider than its panel: the table is measured as a table (`.is-stacked` taken off) and the class
+	 * is set when it overflows. A table that fits stays a table.
+	 *
+	 * @param {Element} box The table's wrapper (`.woodev-mp-variants`).
+	 */
+	function fitVariants( box ) {
+		var wrap = box.querySelector( '.woodev-mp-variations-wrap' );
+
+		if ( ! wrap || ! wrap.clientWidth ) {
+			return;
+		}
+
+		box.classList.remove( 'is-stacked' );
+		box.classList.toggle( 'is-stacked', wrap.scrollWidth > wrap.clientWidth );
+	}
+
+	/**
+	 * Fits what depends on the width of a box: the words of a line of buttons, the table of the variants.
+	 *
+	 * @param {Element} box A `.woodev-mp-buttons` line or a `.woodev-mp-variants` table.
+	 */
+	function fitToWidth( box ) {
+		if ( box.classList.contains( 'woodev-mp-variants' ) ) {
+			fitVariants( box );
+		} else {
+			fitButtonLabels( box );
+		}
+	}
+
+	var labelObserver = window.ResizeObserver ? new window.ResizeObserver(
+		function ( entries ) {
+			entries.forEach(
+				function ( entry ) {
+					fitToWidth( entry.target );
+				}
+			);
+		}
+	) : null;
+
+	/**
+	 * Fits the words of every line of buttons and the table of the variants in a scope now and whenever the box changes its size (a resized
+	 * window, a tab that was hidden being opened).
+	 *
+	 * @param {jQuery} $scope Where to look.
+	 */
+	function watchButtonLabels( $scope ) {
+		$scope.find( '.woodev-mp-buttons, .woodev-mp-variants' ).each(
+			function () {
+				fitToWidth( this );
+
+				if ( labelObserver ) {
+					labelObserver.observe( this );
+				}
+			}
+		);
+	}
+
+	$(
+		function () {
+			watchButtonLabels( $( document ) );
+		}
+	);
+
+	// The variations (and the buttons inside them) arrive after the tab is opened, and again after a save or a page.
+	$( document ).on(
+		'woocommerce_variations_loaded',
+		function () {
+			watchButtonLabels( $( '#variable_product_options' ) );
+		}
+	);
+
 }( window.jQuery ) );

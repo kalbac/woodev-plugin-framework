@@ -925,9 +925,11 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   reads each variation's blocks once. The dialog trigger listens in the capture phase: the header is an `<h3>` that WooCommerce toggles on click.
 - **Buttons.** One WordPress `.button-group` in one row (`.woodev-mp-buttons__row`, built by `Panel_View::button_group()` for the block, a
   variation's panel and a row of the variants table); each is an inline SVG icon plus its words (`.woodev-mp-btn__text`), centred on each other
-  with a gap. Up to three buttons keep their words (`--n1`..`--n3`); more than three (`Panel_View::LABELLED_MAX`) get `--many` and show only
-  the icons, and so does a group in a table row (`--icons`). Even three drop their words when the panel is too narrow: the line that holds the
-  group is a size container and a container query per count hides the words (500 / 360 / 200px). The name is in `aria-label` and in the tooltip.
+  with a gap. Up to three buttons keep their words; more than three (`Panel_View::LABELLED_MAX`) get `--many` and show only
+  the icons, and so does a group in a table row (`--icons`). Even three drop their words when they do not fit: `product-tab.js` measures the
+  group with its words (`.is-measuring`) against the width its line has (a `ResizeObserver` on `.woodev-mp-buttons`) and sets `.is-compact`
+  (measured, not a fixed breakpoint: the fit depends on the font and the screen; at 1280 three buttons need ~463px of the ~490px a product
+  panel gives, at 1024 they do not fit). The name is in `aria-label` and in the tooltip.
   **The tooltip is WooCommerce's (`class="tips"` + `data-tip`, tipTip), never `title`:** a native `title` shows after a delay or not at all in some
   hosts of the product screen (the operator saw nothing on hover), and WooCommerce draws `.tips` on load and again after the variations load.
   «Архивировать» and «Снять связь» ask twice: the question appears in the result line and the button turns red for five seconds. The
@@ -940,7 +942,9 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   unlink, as on a simple product). Above it «Выберите действие» + «Применить» offers the same nine actions as the Variations tab's «Bulk actions»
   (`Variation_Bulk_Actions::ACTIONS`). The buttons of a row, the buttons inside an opened variation and «Применить» all post to ONE endpoint,
   `Variation_Bulk_Actions::handle_ajax()` (`woodev_{id}_variations`), which runs `Site_Products_Bulk::apply()` through the same `run()` as the
-  Variations tab: same rights, licence, limit and notice. The posted variation ids are cut to the product's own children.
+  Variations tab: same rights, licence, limit and notice. The posted variation ids are cut to the product's own children. The table is a table while it fits: the same observer measures it and sets
+  `.is-stacked` when it would scroll sideways (1024px), and every variant becomes a card of two lines (tick, picture, name, state, actions; then
+  article, stock, price with their `data-label`s) — WordPress's own list-table pattern on a narrow screen.
 
 ### Tables in the style of «Заказы доставки» (#1861, framework 2.1.13)
 

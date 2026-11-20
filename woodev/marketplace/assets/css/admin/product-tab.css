@@ -188,23 +188,20 @@
 
 .woocommerce_options_panel .woodev-mp-article__editor .woodev-mp-article__input {
 	float: none;
-	width: 320px;
+	box-sizing: border-box;
+	width: 22em;
 	max-width: 100%;
 	margin: 0;
 }
 
 /*
  * The action buttons: ONE WordPress button group (`.button-group`: adjacent buttons with shared borders), one row, never two. Each is an
- * icon and its words, centred on each other with a gap. The PHP says how many buttons a group has: up to three keep their words
- * (`--n1`..`--n3`), more are icons only (`--many`), and so is a group in a table row (`--icons`). Even three do not always fit: the line that
- * holds the group is a size container, and a panel narrower than the group needs (a narrow screen) drops the words too. The name is never lost:
- * it is in the tooltip (`data-tip`, drawn by WooCommerce's tipTip) and in the `aria-label`.
+ * icon and its words, centred on each other with a gap. Up to three buttons keep their words; more are icons only (`--many`, put there by the
+ * PHP that counts them), and so is a group in a table row (`--icons`). Even three do not always fit: the script measures the group with its
+ * words (`.is-measuring` lets it take its natural width) against the width its line has, and sets `.is-compact` when it does not fit, so the
+ * words follow the real fit, whatever the font and the screen. The name is never lost: it is in the tooltip (`data-tip`, drawn by
+ * WooCommerce's tipTip) and in the `aria-label`.
  */
-.woodev-mp-buttons {
-	container-type: inline-size;
-	container-name: woodev-mp-buttons;
-}
-
 .woodev-mp-buttons__row.button-group {
 	display: inline-flex;
 	flex-wrap: nowrap;
@@ -218,10 +215,20 @@
 	flex: 0 1 auto;
 	align-items: center;
 	justify-content: center;
-	gap: 8px;
+	gap: 6px;
 	min-width: 0;
+	padding-right: 8px;
+	padding-left: 8px;
 	line-height: 1;
 	white-space: nowrap;
+}
+
+.woodev-mp-buttons__row.button-group.is-measuring {
+	max-width: none;
+}
+
+.woodev-mp-buttons__row.button-group.is-measuring > .woodev-mp-btn {
+	flex: none;
 }
 
 .woodev-mp-buttons__row .woodev-mp-btn:hover,
@@ -240,26 +247,9 @@
 }
 
 .woodev-mp-buttons__row--many .woodev-mp-btn__text,
-.woodev-mp-buttons__row--icons .woodev-mp-btn__text {
+.woodev-mp-buttons__row--icons .woodev-mp-btn__text,
+.woodev-mp-buttons__row.is-compact:not(.is-measuring) .woodev-mp-btn__text {
 	display: none;
-}
-
-@container woodev-mp-buttons (max-width: 500px) {
-	.woodev-mp-buttons__row--n3 .woodev-mp-btn__text {
-		display: none;
-	}
-}
-
-@container woodev-mp-buttons (max-width: 360px) {
-	.woodev-mp-buttons__row--n2 .woodev-mp-btn__text {
-		display: none;
-	}
-}
-
-@container woodev-mp-buttons (max-width: 200px) {
-	.woodev-mp-buttons__row--n1 .woodev-mp-btn__text {
-		display: none;
-	}
 }
 
 /* The block: the «?» sits in its top-right corner. */
@@ -520,8 +510,9 @@ button.woodev-mp-badge--problem:focus {
 
 /*
  * The variants: a table in the style of the marketplace pages' tables (a quiet heading, thin rules, no stripes, a tick column first, a picture,
- * «Действия» last). A cell keeps to one line and the table scrolls sideways when it still does not fit; the shadows at the edges (they follow
- * the scroll position) show that there is more to scroll to, where a system scrollbar is hidden.
+ * «Действия» last). A cell keeps to one line, except the name and the article, which wrap. When even so the table is wider than the panel (the
+ * script measures it) the panel gets `.is-stacked`: every variant becomes a card of two lines, like WordPress's own list tables on a narrow
+ * screen, so there is never a sideways scroll. The scroll and its edge shadows stay only for the moment before the script has measured.
  */
 .woodev-mp-tab .woodev-mp-variants {
 	margin: 12px;
@@ -570,7 +561,7 @@ button.woodev-mp-badge--problem:focus {
 
 .woodev-mp-tab .woodev-mp-variations th,
 .woodev-mp-tab .woodev-mp-variations td {
-	padding: 10px 12px;
+	padding: 10px 8px;
 	border-bottom: 1px solid #f0f0f1;
 	text-align: left;
 	vertical-align: middle;
@@ -590,6 +581,7 @@ button.woodev-mp-badge--problem:focus {
 .woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__check {
 	width: 20px;
 	padding-right: 0;
+	padding-left: 12px;
 }
 
 .woodev-mp-tab .woodev-mp-variations input[type="checkbox"] {
@@ -598,27 +590,37 @@ button.woodev-mp-badge--problem:focus {
 }
 
 .woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__image {
-	width: 36px;
+	width: 32px;
 	padding-right: 0;
 }
 
 .woodev-mp-variations__image img {
 	display: block;
-	width: 36px;
-	height: 36px;
+	width: 32px;
+	height: 32px;
 	border: 1px solid #dcdcde;
 	border-radius: 3px;
 	object-fit: cover;
 }
 
-/* The variant's own name may be long («Цвет: красный, размер: XL»): it wraps, the other cells keep one line. */
+/* The variant's own name («Цвет: красный, размер: XL») and its article may be long: they wrap, the other cells keep one line. */
 .woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__name {
-	min-width: 90px;
+	min-width: 70px;
+	max-width: 140px;
 	white-space: normal;
 }
 
+.woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__article {
+	min-width: 110px;
+	max-width: 190px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+/* «Действия» keeps a margin to the card's edge, like the right-most column of the records tables. */
 .woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__actions {
 	width: 1%;
+	padding-right: 16px;
 }
 
 /* A «?» sits right after its text, in the heading and in a cell. */
@@ -637,6 +639,102 @@ button.woodev-mp-badge--problem:focus {
 
 .woodev-mp-tab .woodev-mp-variations .woodev-mp-badge {
 	margin-left: 0;
+}
+
+/* Stacked: the table does not fit the panel, so every variant is a card of two lines (tick, picture, name, state, actions; then the figures). */
+.woodev-mp-tab .woodev-mp-variants.is-stacked .woodev-mp-variations-wrap {
+	overflow-x: hidden;
+	background: transparent;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations,
+.woodev-mp-variants.is-stacked .woodev-mp-variations tbody {
+	display: block;
+	min-width: 0;
+}
+
+/* The heading row stays for the tick that ticks all of them; its words are for the table. */
+.woodev-mp-variants.is-stacked .woodev-mp-variations thead tr {
+	display: flex;
+	align-items: center;
+	padding: 8px 12px;
+	border-bottom: 1px solid #dcdcde;
+}
+
+.woodev-mp-tab .woodev-mp-variants.is-stacked .woodev-mp-variations thead td {
+	padding: 0;
+	border: 0;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations thead th {
+	display: none;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations tbody tr {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 12px;
+	padding: 10px 12px;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.woodev-mp-tab .woodev-mp-variants.is-stacked .woodev-mp-variations tbody td {
+	display: block;
+	min-width: 0;
+	max-width: none;
+	padding: 0;
+	border: 0;
+	white-space: normal;
+}
+
+.woodev-mp-tab .woodev-mp-variants.is-stacked .woodev-mp-variations .woodev-mp-variations__check {
+	padding-left: 0;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations__check {
+	order: 1;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations__image {
+	order: 2;
+}
+
+.woodev-mp-tab .woodev-mp-variants.is-stacked .woodev-mp-variations tbody .woodev-mp-variations__name {
+	order: 3;
+	flex: 1 1 80px;
+	font-weight: 600;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations__state {
+	order: 4;
+}
+
+.woodev-mp-tab .woodev-mp-variants.is-stacked .woodev-mp-variations tbody .woodev-mp-variations__actions {
+	order: 5;
+	width: auto;
+	padding-right: 0;
+}
+
+/* The second line starts under the name: the tick, the picture and their gaps are 68px. */
+.woodev-mp-tab .woodev-mp-variants.is-stacked .woodev-mp-variations tbody .woodev-mp-variations__article {
+	order: 6;
+	flex: 1 1 100%;
+	padding-left: 68px;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations__stock {
+	order: 7;
+	margin-left: 68px;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations__price {
+	order: 8;
+}
+
+.woodev-mp-variants.is-stacked .woodev-mp-variations td[data-label]::before {
+	content: attr(data-label) ": ";
+	color: #646970;
 }
 
 /* The marketplace's block inside a variation: a rule above it and a heading like the tab's, so it does not read as WooCommerce's own fields. */
