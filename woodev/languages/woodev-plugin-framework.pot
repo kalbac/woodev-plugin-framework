@@ -12402,6 +12402,39 @@ msgstr ""
 msgid "Список карточек загружается с маркетплейса."
 msgstr ""
 
+#: marketplace/admin/order/class-order-source-filter.php:267
+msgid "Магазин"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:268
+msgid "Маркетплейсы"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:270
+msgid "Источник:"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:329
+#, php-format
+msgid "Заказы маркетплейсов скрыты · %s"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:330
+msgid "показать"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:515
+msgid "Все источники"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:516
+msgid "Только магазин"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:517
+msgid "Все маркетплейсы"
+msgstr ""
+
 #: marketplace/admin/pages/orders/class-marketplace-orders-page.php:259
 msgid "Маркетплейс"
 msgstr ""
