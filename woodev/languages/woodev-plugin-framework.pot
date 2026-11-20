@@ -12433,3 +12433,39 @@ msgstr ""
 #: marketplace/admin/pages/orders/class-site-orders-definition.php:177
 msgid "Статус на маркетплейсе"
 msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:94
+msgid "Заказ %s — сведения"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:122
+msgid "Основное"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:123
+msgid "Суммы"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:137
+msgid "Номер отправления"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:138
+msgid "Номер заказа на сайте"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:140
+msgid "Статус на сайте"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:142
+msgid "Обновлён"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:146
+msgid "Примечание покупателя"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:211
+msgid "Этикетки и документы"
+msgstr ""
