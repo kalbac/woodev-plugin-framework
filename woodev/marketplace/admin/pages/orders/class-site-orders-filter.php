@@ -10,7 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Account, the posting state, the WooCommerce status, the order date range, the search text and the sort. Built from the engine's
+ * Account, the posting state, the WooCommerce status, the marketplace's posting status, the order date range, the search text and the sort. Built from the engine's
  * validated query, so a value is already typed; the sort is still checked against the whitelist and the status against its
  * shape, because the reader puts them in SQL.
  *
@@ -28,6 +28,11 @@ final class Site_Orders_Filter {
 	public const STATE_FINISHED = 'finished';
 
 	/**
+	 * Shape of a stored posting status (`status_raw` is a `varchar(32)`), checked before it reaches SQL.
+	 */
+	public const POSTING_STATUS_SHAPE = '/^[A-Za-z0-9_.:-]{1,32}$/D';
+
+	/**
 	 * @var int
 	 */
 	private $account_id;
@@ -41,6 +46,11 @@ final class Site_Orders_Filter {
 	 * @var string
 	 */
 	private $wc_status;
+
+	/**
+	 * @var string
+	 */
+	private $posting_status;
 
 	/**
 	 * @var string
@@ -80,8 +90,10 @@ final class Site_Orders_Filter {
 	 * @param string $search     Search text.
 	 * @param string $sort       Key of {@see Site_Orders_Storage::SORT_KEYS}; the date for anything else.
 	 * @param string $direction  `asc` or `desc`.
+	 * @param string $posting_status The marketplace's own posting status, as stored (since 2.1.13); anything of another shape is any.
 	 */
-	public function __construct( int $account_id, string $state = '', string $wc_status = '', string $from = '', string $to = '', string $search = '', string $sort = 'date', string $direction = 'desc' ) {
+	public function __construct( int $account_id, string $state = '', string $wc_status = '', string $from = '', string $to = '', string $search = '', string $sort = 'date', string $direction = 'desc', string $posting_status = '' ) {
+		$this->posting_status = 1 === preg_match( self::POSTING_STATUS_SHAPE, $posting_status ) ? $posting_status : '';
 		$this->account_id = $account_id;
 		$this->state      = in_array( $state, [ self::STATE_OPEN, self::STATE_FINISHED ], true ) ? $state : '';
 		$this->wc_status  = 1 === preg_match( '/^[a-z0-9-]{1,40}$/D', $wc_status ) ? $wc_status : '';
@@ -113,7 +125,8 @@ final class Site_Orders_Filter {
 			isset( $dates['to'] ) ? self::utc( (string) $dates['to'], '23:59:59' ) : '',
 			(string) ( $filters['q'] ?? $query['search'] ?? '' ),
 			(string) ( $query['sort'] ?? 'date' ),
-			(string) ( $query['direction'] ?? 'desc' )
+			(string) ( $query['direction'] ?? 'desc' ),
+			(string) ( $filters['posting_status'] ?? '' )
 		);
 	}
 
@@ -169,6 +182,29 @@ final class Site_Orders_Filter {
 	 */
 	public function wc_status(): string {
 		return $this->wc_status;
+	}
+
+	/**
+	 * The same filter with no posting status: the base of the counts the posting status filter shows next to each status.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return self
+	 */
+	public function without_posting_status(): self {
+		$copy                 = clone $this;
+		$copy->posting_status = '';
+
+		return $copy;
+	}
+
+	/**
+	 * @since 2.1.13
+	 *
+	 * @return string The marketplace's posting status, empty for any.
+	 */
+	public function posting_status(): string {
+		return $this->posting_status;
 	}
 
 	/**

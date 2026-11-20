@@ -98,19 +98,28 @@ final class Posting_Jobs {
 	private $poll_option;
 
 	/**
+	 * Where a poll attempt that ended without an error is recorded (a partial catch-up included); null records nothing.
+	 *
+	 * @var Posting_Poll_Times|null
+	 */
+	private $poll_times;
+
+	/**
 	 * Creates the jobs.
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Job_Gate           $gate       Gate of licence, account and pause.
-	 * @param Wpdb_Account_Store $accounts   Accounts.
-	 * @param Posting_Handler    $handler    The marketplace's order flow.
-	 * @param Error_Classifier   $classifier Error classifier of the marketplace.
-	 * @param Job_Names          $names      Hook names of the plugin.
-	 * @param string             $adapter_id The marketplace's id (the adapter's `id()`).
-	 * @param string             $poll_option Key of the settings option that holds the poll interval, as {@see self::option_key()} builds it.
+	 * @param Job_Gate                $gate       Gate of licence, account and pause.
+	 * @param Wpdb_Account_Store      $accounts   Accounts.
+	 * @param Posting_Handler         $handler    The marketplace's order flow.
+	 * @param Error_Classifier        $classifier Error classifier of the marketplace.
+	 * @param Job_Names               $names      Hook names of the plugin.
+	 * @param string                  $adapter_id The marketplace's id (the adapter's `id()`).
+	 * @param string                  $poll_option Key of the settings option that holds the poll interval, as {@see self::option_key()} builds it.
+	 * @param Posting_Poll_Times|null $poll_times Where a poll attempt that ended without an error is recorded (since 2.1.13); null records nothing.
 	 */
-	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id, string $poll_option ) {
+	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id, string $poll_option, ?Posting_Poll_Times $poll_times = null ) {
+		$this->poll_times  = $poll_times;
 		$this->gate       = $gate;
 		$this->accounts   = $accounts;
 		$this->handler    = $handler;
@@ -266,6 +275,10 @@ final class Posting_Jobs {
 			$this->settle( $account, $e );
 
 			throw $e;
+		}
+
+		if ( null !== $this->poll_times ) {
+			$this->poll_times->record( $account->id(), time() );
 		}
 	}
 

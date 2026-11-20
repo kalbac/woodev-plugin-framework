@@ -62,6 +62,9 @@ class RecordsDefinitionTest extends TestCase {
 			'views on a boolean'               => [ [ 'filters' => [ array_merge( $filters[3], [ 'views' => true ] ) ] ] ],
 			'views on a search'                => [ [ 'filters' => [ array_merge( $filters[0], [ 'views' => true ] ) ] ] ],
 			'views that is not a flag'         => [ [ 'filters' => [ array_merge( $filters[1], [ 'views' => 'yes' ] ) ] ] ],
+			'advanced on a search'             => [ [ 'filters' => [ array_merge( $filters[0], [ 'advanced' => true ] ) ] ] ],
+			'advanced on the views row'        => [ [ 'filters' => [ array_merge( $filters[1], [ 'views' => true, 'advanced' => true ] ) ] ] ],
+			'advanced that is not a flag'      => [ [ 'filters' => [ array_merge( $filters[1], [ 'advanced' => 1 ] ) ] ] ],
 			'two views filters'                => [ [ 'filters' => [ array_merge( $filters[1], [ 'views' => true ] ), array_merge( $filters[1], [ 'id' => 'other', 'views' => true ] ) ] ] ],
 			'today on a select'                => [ [ 'filters' => [ array_merge( $filters[1], [ 'today' => '2026-11-15' ] ) ] ] ],
 			'today that is not a day'          => [ [ 'filters' => [ array_merge( $filters[4], [ 'today' => '2026-02-30' ] ) ] ] ],
@@ -193,6 +196,26 @@ class RecordsDefinitionTest extends TestCase {
 		$this->assertArrayNotHasKey( 'views', $definition[0] );
 		$this->assertArrayNotHasKey( 'views', $definition[2] );
 		$this->assertArrayNotHasKey( 'views', $plain[1], 'a filter that does not ask for it keeps its old shape' );
+	}
+
+	public function test_any_value_filter_can_wait_under_the_advanced_toggle_and_the_flag_is_only_sent_when_it_is_set(): void {
+		$filters    = Records_Definitions::standard()['filters'];
+		$definition = Records_Definition::from_array(
+			Records_Definitions::standard(
+				[
+					'filters' => [
+						$filters[0],
+						array_merge( $filters[1], [ 'advanced' => true ] ),
+						array_merge( $filters[2], [ 'advanced' => true ] ),
+						array_merge( $filters[3], [ 'advanced' => true ] ),
+						array_merge( $filters[4], [ 'advanced' => false ] ),
+					],
+				]
+			)
+		)->to_array()['filters'];
+
+		$this->assertSame( [ false, true, true, true, false ], array_map( static fn( array $filter ): bool => $filter['advanced'] ?? false, $definition ) );
+		$this->assertArrayNotHasKey( 'advanced', $definition[4], 'a filter that does not ask for it keeps its old shape' );
 	}
 
 	public function test_a_date_range_can_carry_the_sites_current_day(): void {

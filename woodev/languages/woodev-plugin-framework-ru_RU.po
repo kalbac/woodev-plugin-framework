@@ -12425,3 +12425,35 @@ msgstr ""
 #: marketplace/admin/pages/products/class-remote-cards-provider.php:417
 msgid "Список карточек загружается с маркетплейса."
 msgstr ""
+
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:259
+msgid "Маркетплейс"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:263
+msgid "Здесь появятся отчёты по заказам маркетплейсов."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:272
+msgid "Заказы маркетплейсов"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:89
+msgid "Последний опрос"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:93
+msgid "Следующий опрос"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:97
+msgid "Когда сайт в последний раз опрашивал маркетплейс о заказах аккаунта и когда опросит снова. За один опрос сайт может прочитать не все изменения — остальное он дочитает в следующих."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:107
+msgid "Сейчас"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:177
+msgid "Статус на маркетплейсе"
+msgstr ""

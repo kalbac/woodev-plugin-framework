@@ -57,6 +57,10 @@ export const MESSAGE_KEYS = {
 	clearSelection: 'clear_selection',
 	/** "Any" entry of a select filter. */
 	filterAny: 'filter_any',
+	/** The switch that shows the filters declared `advanced`. */
+	advancedFilters: 'advanced_filters',
+	/** Label above the «Статус данных» block. */
+	dataStatus: 'data_status',
 	/** Label of the page-size control. */
 	perPage: 'per_page',
 	/** Start of a date range. */

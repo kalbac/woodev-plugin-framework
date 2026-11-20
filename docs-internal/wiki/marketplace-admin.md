@@ -940,6 +940,46 @@ The two tables of «Товары» (and, through the shared shell, «Заказ�
 - **Marketplace numbers in the tooltip** read «ID товара», «SKU», «Модель» (`Remote_Cards_Cells::id_names()`), the product tab's words; an identifier with no name there keeps the adapter's own.
 - **Refresh notice.** «Данные о ходе работы устарели» came and went by itself: while nothing runs the server asks for the next read after `max_refresh_ms` (a minute), the grace `stale_after_ms` (30 s) was counted from the last read, so the table was «stale» for half of every quiet minute. The grace is now counted from the moment the next read is due (`staleAfter()`), and a hidden tab does not go stale.
 
+## «Заказы маркетплейсов» — the shared orders page (framework 2.1.13, #1878)
+
+One framework page under the WooCommerce menu, `admin.php?page=wc-admin&path=/woodev-marketplace-orders`, for the orders of every
+active marketplace plugin (operator review s238, LIST.md §4.1). It **hosts** each plugin's own `orders` records table
+(`woodev/v1/admin/records/{plugin id}/orders`, `Site_Orders_Module`), one marketplace at a time; it owns no table, provider or route.
+
+- **Server.** `Admin\Pages\Orders\Marketplace_Orders_Page` builds the arguments; `Admin_Collector` calls WooCommerce. It is
+  registered when the user may open at least one plugin's «Заказы» page (capability = the first such page's), and placed after
+  «Заказы доставки», else after WooCommerce's «Заказы», by the neighbour's slug (`place_orders_page`, `admin_menu` priority 100 —
+  after the delivery page's own move at 99). The page it takes over is the framework's default `orders` page (`serves()`: slug
+  `orders`, kind `records`, table `orders`); a plugin that redefined it keeps its own.
+- **The plugin's «Заказы» stays** (Ozon's `get_marketplace_pages()`, its `legacy_page` and its tests are unchanged): its submenu
+  entry becomes the link `admin.php?page=wc-admin&path=%2Fwoodev-marketplace-orders&marketplace={plugin id}`,
+  `get_marketplace_page_url( 'orders', $query )` and the v1 redirect lead there (`Admin_Collector::get_page_url()`), and its
+  route forwards in the browser (`movedTo` on its manifest entry → `MovedPage`, history `replace`, the old route's arguments kept).
+- **Client** (`src/marketplace-admin/orders-page/`, the marketplace bundle; manifest key `ordersPage`). URL arguments: `marketplace`
+  (a plugin id; one the page does not have — a deactivated plugin, lost access — shows the first marketplace and is rewritten to
+  it with the switch's clearing BEFORE its table mounts, so a stale link's account and filters never reach another plugin's table:
+  `stalePresetPatch()`) and `tab=analytics` (absent = «Заказы»); a switch of either drops every
+  argument of the table that was left. The marketplace select leads the filter row (`RecordsTable` prop `leadingFilter`) and is
+  not drawn with one marketplace — the account select's rule. The help links are the plugin's «Заказы» page's. No merged «all
+  marketplaces» list: accounts, actions and statuses are per marketplace, the same reason the table shows one account at a time.
+- **«Аналитика»** is a shell (`EmptyCard` with PHP's sentence); its reports are a separate card.
+- **Engine additions (generic, optional).** A filter may declare `advanced` (not the search, not the counted view row): it is
+  drawn only under the «Расширенные фильтры» switch (message `advanced_filters`), which is the URL argument `advanced_filters=1`
+  and never part of the list request; a link that sets such a filter opens the row; switching off puts every advanced filter back
+  to its default. A list read may carry `data_status` = `{ items: [ { label, value } ] (1–3), title }` (`Row_Normalizer::data_status()`),
+  drawn at the end of the filter row under the message `data_status` — the delivery block's shape.
+- **Orders table.** Icons: open `visibility`, labels `media-document`, cancel `remove`. Advanced filters: «Статус на маркетплейсе»
+  (`posting_status`, `options_source`: its options are list facets — the stored `status_raw` codes under the account's other
+  filters, with counts, named by `Posting_Status_Text`; two codes named alike keep the code in brackets) and «Статус заказа».
+  «Статус данных»: «Последний опрос» = the last `poll_postings` ATTEMPT that ended without an error
+  (`Jobs\Posting_Poll_Times`, option `woodev_{plugin id}_postings_polled`, written by `Posting_Jobs::poll()` since 2.1.13, so
+  «Ни разу» until the first poll after the update; a skipped or failed poll writes nothing), «Следующий опрос» = the account's
+  next poll in Action Scheduler («Сейчас» while it runs). None for an adapter without a posting handler. ⚠ It is NOT a «read
+  to the end» certificate: `Posting_Handler::catch_up()` is void, and Ozon's catch-up stops inside its 20 s budget with a window
+  or cursor left (first 30-day catch-up, recovery after an outage) and returns normally — so a partial run is recorded too, and
+  the label and tooltip say «опрос», never «обновлено» (critic of PR #1890). Certifying completion needs an optional completion
+  signal from the handler — a contract this card did not add.
+
 ## Stored cards list (framework 2.1.13, #1863)
 
 The «Карточки» tab reads the cabinet's cards from the `cards` table (`Data\Wpdb_Card_Store`, schema revision 2), kept for good, not

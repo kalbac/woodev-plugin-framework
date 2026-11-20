@@ -422,6 +422,9 @@ final class Records_Rest_Controller {
 		if ( ! $children ) {
 			$body['account_activity'] = $page['account_activity'];
 		}
+		if ( ! $children && null !== ( $page['data_status'] ?? null ) ) {
+			$body['data_status'] = $page['data_status'];
+		}
 		$body['messages'] = $this->json_map( $page['messages'] );
 
 		return $this->respond( $body );
