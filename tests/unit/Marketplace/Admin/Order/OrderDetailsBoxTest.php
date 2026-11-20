@@ -11,6 +11,7 @@ use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Modal;
+use Woodev\Framework\Marketplace\Admin\Order\Label_Button;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Details_Box;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
@@ -19,7 +20,8 @@ use Woodev\Tests\Unit\TestCase;
 
 /**
  * The box shows the posting, both statuses, the dates, payment, delivery, the address and the amounts of the order, and the
- * marketplace's own actions as buttons: the cancellation of an adapter that can cancel and the link to labels of one that has them.
+ * marketplace's own actions as buttons: the cancellation of an adapter that can cancel and the label button of one that has labels. The
+ * marketplace's status is a badge beside the posting number in the heading.
  *
  * Each test runs in its own process: the box formats dates with `wc_date_format()`, and a Brain Monkey stub of it would stay defined
  * for every later test — `LicensePureOperationsTest` asserts the path where that function is ABSENT, so a leaked stub fails it
@@ -131,16 +133,24 @@ final class OrderDetailsBoxTest extends TestCase {
 	public function test_the_marketplace_status_is_named_for_the_merchant_never_by_its_code(): void {
 		$html = $this->render( $this->box( $this->adapter() ), $this->order( 700 ) );
 
-		$this->assertStringContainsString( 'Статус на маркетплейсе:', $html );
+		$this->assertStringContainsString( 'woodev-mp-badge', $html );
 		$this->assertStringNotContainsString( 'awaiting_deliver', $html );
 	}
 
-	public function test_a_row_without_a_value_is_left_out(): void {
+	public function test_the_status_is_a_badge_beside_the_posting_number_in_the_heading_and_not_a_row(): void {
+		$html = $this->render( $this->box( $this->adapter() ), $this->order( 700 ) );
+
+		$this->assertMatchesRegularExpression( '#<h2 class="[^"]*">P-1 <span class="woodev-mp-badge is-(success|info|warning|danger|neutral)">[^<]+</span></h2>#', $html );
+		$this->assertStringNotContainsString( 'Статус на маркетплейсе', $html );
+	}
+
+	public function test_an_order_without_a_status_has_no_badge(): void {
 		$this->remote_status = '';
 
 		$html = $this->render( $this->box( $this->adapter() ), $this->order( 700 ) );
 
-		$this->assertStringNotContainsString( 'Статус на маркетплейсе', $html );
+		$this->assertStringNotContainsString( 'woodev-mp-badge', $html );
+		$this->assertStringContainsString( '>P-1</h2>', $html );
 	}
 
 	public function test_an_adapter_that_cannot_cancel_has_no_posting_and_no_actions(): void {
@@ -168,12 +178,14 @@ final class OrderDetailsBoxTest extends TestCase {
 		$this->assertStringNotContainsString( '<button', $html );
 	}
 
-	public function test_the_labels_link_is_a_button_only_when_the_adapter_has_labels(): void {
-		$with    = $this->render( $this->box( $this->adapter(), null, 'https://example.test/wp-admin/admin.php?page=fake-orders' ), $this->order( 700 ) );
+	public function test_the_label_button_is_in_the_box_only_when_the_adapter_has_labels(): void {
+		$with    = $this->render( $this->box( $this->adapter(), null, $this->label_button( 5 ) ), $this->order( 700 ) );
 		$without = $this->render( $this->box( $this->adapter() ), $this->order( 700 ) );
 
-		$this->assertStringContainsString( '<a class="button" href="https://example.test/wp-admin/admin.php?page=fake-orders">Этикетки и документы</a>', $with );
-		$this->assertStringNotContainsString( 'Этикетки и документы', $without );
+		$this->assertStringContainsString( '>Этикетка</button>', $with );
+		$this->assertStringContainsString( 'data-row="5:700"', $with );
+		$this->assertStringNotContainsString( 'Этикетка', $without );
+		$this->assertStringNotContainsString( 'Этикетки и документы', $with );
 	}
 
 	public function test_the_plugin_adds_its_own_rows_through_the_filter(): void {
@@ -209,10 +221,10 @@ final class OrderDetailsBoxTest extends TestCase {
 	 *
 	 * @param Marketplace_Adapter $adapter    Adapter.
 	 * @param Cancel_Modal|null   $modal      The cancel button.
-	 * @param string              $labels_url Labels page.
+	 * @param Label_Button|null   $label_button The label button.
 	 * @return Order_Details_Box
 	 */
-	private function box( Marketplace_Adapter $adapter, ?Cancel_Modal $modal = null, string $labels_url = '' ): Order_Details_Box {
+	private function box( Marketplace_Adapter $adapter, ?Cancel_Modal $modal = null, ?Label_Button $label_button = null ): Order_Details_Box {
 		return new Order_Details_Box(
 			new Screen_Names( 'fake', 'Fake' ),
 			$adapter,
@@ -220,7 +232,24 @@ final class OrderDetailsBoxTest extends TestCase {
 				return $this->remote_status;
 			},
 			$modal,
-			$labels_url,
+			$label_button,
+			'https://example.test/assets/',
+			'1.0'
+		);
+	}
+
+	/**
+	 * Builds the label button over a registry that keeps every posting under one account.
+	 *
+	 * @param int $account_id The account.
+	 * @return Label_Button
+	 */
+	private function label_button( int $account_id ): Label_Button {
+		return new Label_Button(
+			'https://example.test/wp-json/woodev/v1/admin/records/fake/orders',
+			static function () use ( $account_id ): int {
+				return $account_id;
+			},
 			'https://example.test/assets/',
 			'1.0'
 		);

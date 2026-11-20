@@ -80,6 +80,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Cancel_Ajax' => 'woodev/marketplace/admin/order/class-cancel-ajax.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Cancel_Modal' => 'woodev/marketplace/admin/order/class-cancel-modal.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Cancel_Refused' => 'woodev/marketplace/admin/order/class-cancel-refused.php',
+	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Label_Button' => 'woodev/marketplace/admin/order/class-label-button.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Canceller' => 'woodev/marketplace/admin/order/interface-order-canceller.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Details_Box' => 'woodev/marketplace/admin/order/class-order-details-box.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Screen' => 'woodev/marketplace/admin/order/class-order-screen.php',

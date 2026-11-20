@@ -204,6 +204,22 @@ final class Order_Registry {
 	}
 
 	/**
+	 * Reads the account the posting of a WooCommerce order belongs to.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int $order_id WooCommerce order id.
+	 * @return int The account id; 0 when no posting is registered for the order.
+	 */
+	public function account_of_order( int $order_id ): int {
+		$account_id = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The order screen needs the current account.
+			$this->db->prepare( 'SELECT account_id FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id )
+		);
+
+		return null === $account_id ? 0 : (int) $account_id;
+	}
+
+	/**
 	 * Registers the WooCommerce order of a group: succeeds only for the claim holder and only while no order is registered.
 	 *
 	 * @since 2.0.29

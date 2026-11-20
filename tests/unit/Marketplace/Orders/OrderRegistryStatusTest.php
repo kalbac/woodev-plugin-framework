@@ -1,6 +1,6 @@
 <?php
 /**
- * Unit tests for the marketplace's status of the posting an order was made from.
+ * Unit tests for the marketplace's status and the account of the posting an order was made from.
  *
  * @package Woodev\Tests\Unit\Marketplace
  */
@@ -13,7 +13,7 @@ use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 use Woodev\Tests\Unit\TestCase;
 
 /**
- * `Order_Registry::status_of_order()` runs its real SQL on SQLite over the schema's own columns.
+ * `Order_Registry::status_of_order()` and `account_of_order()` run their real SQL on SQLite over the schema's own columns.
  */
 final class OrderRegistryStatusTest extends TestCase {
 	/**
@@ -51,6 +51,14 @@ final class OrderRegistryStatusTest extends TestCase {
 
 	public function test_an_order_without_a_posting_has_no_status(): void {
 		$this->assertSame( '', $this->registry()->status_of_order( 701 ) );
+	}
+
+	public function test_the_account_of_a_registered_order_is_read(): void {
+		$this->assertSame( 1, $this->registry()->account_of_order( 700 ) );
+	}
+
+	public function test_an_order_without_a_posting_has_no_account(): void {
+		$this->assertSame( 0, $this->registry()->account_of_order( 701 ) );
 	}
 
 	/**

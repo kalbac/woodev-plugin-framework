@@ -7,7 +7,9 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
+use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Module;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -18,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Gives every marketplace plugin the read-only order screen ({@see Order_Screen}) with its details box ({@see Order_Details_Box}),
- * whatever else its adapter offers: the cancel button comes with an {@see Order_Canceller}, the link to labels with label calls.
+ * whatever else its adapter offers: the cancel button comes with an {@see Order_Canceller}, the label button with label calls.
  *
  * @since 2.1.13
  */
@@ -63,7 +65,7 @@ final class Order_Screen_Module {
 		$names    = new Screen_Names( $adapter->id(), $adapter->settings_descriptor()->marketplace_name() );
 		$registry = new Order_Registry( $db, ( new Schema( $adapter->id() ) )->table_name( 'postings', $db->prefix ) );
 		$assets   = self::assets_url( $plugin );
-		$box      = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets ), self::labels_url( $plugin, $adapter ), $assets, $plugin->get_version() );
+		$box      = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets ), self::label_button( $plugin, $adapter, $registry, $assets ), $assets, $plugin->get_version() );
 
 		( new Order_Screen( $adapter->order_meta(), $box ) )->register();
 	}
@@ -96,17 +98,25 @@ final class Order_Screen_Module {
 	}
 
 	/**
-	 * Returns the URL of the page that makes labels and documents.
+	 * Builds the label button over the plugin's «Заказы» records table, the table that makes the labels.
 	 *
-	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin  Plugin.
-	 * @param Marketplace_Adapter                              $adapter Adapter.
-	 * @return string Empty when the adapter has no label calls.
+	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin   Plugin.
+	 * @param Marketplace_Adapter                              $adapter  Adapter.
+	 * @param Order_Registry                                   $registry The postings registry.
+	 * @param string                                           $assets   Assets folder URL.
+	 * @return Label_Button|null Null when the adapter has no label calls or the plugin has no table to ask them of.
 	 */
-	private static function labels_url( $plugin, Marketplace_Adapter $adapter ): string {
+	private static function label_button( $plugin, Marketplace_Adapter $adapter, Order_Registry $registry, string $assets ): ?Label_Button {
 		if ( null === $adapter->label_provider() || ! $adapter->supports( Capability::GET_LABEL ) ) {
-			return '';
+			return null;
 		}
 
-		return $plugin->get_marketplace_page_url( Site_Orders_Module::PAGE );
+		if ( '' === $plugin->get_marketplace_page_url( Site_Orders_Module::PAGE ) || 1 !== preg_match( Records_Definition::SLUG_PATTERN, $plugin->get_id() ) ) {
+			return null;
+		}
+
+		$table_url = rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/admin/records/' . $plugin->get_id() . '/' . Site_Orders_Provider::TABLE );
+
+		return new Label_Button( $table_url, [ $registry, 'account_of_order' ], $assets, $plugin->get_version() );
 	}
 }

@@ -67,3 +67,16 @@ test( 'the notifications tab is the switches and then a row per account, with no
 	expect( screen.getByTestId( 'block-notifications_webhooks' ) ).toBeInTheDocument();
 	expect( screen.getByTestId( 'block-notifications_account_1' ) ).toBeInTheDocument();
 } );
+
+test( 'the description sits above the stacked cards, outside the column that spaces them', () => {
+	const { container } = render( createElement( StackedView, {
+		tab: { id: 'tab', description: 'Что делает вкладка', sections: [ section( 'a', 'A', { stacked: true } ) ] },
+		renderSection: () => createElement( 'div' ),
+	} ) );
+
+	const description = container.querySelector( '.woodev-settings__tab-desc' );
+
+	expect( description ).toHaveTextContent( 'Что делает вкладка' );
+	expect( container.querySelector( '.woodev-stacked' ) ).not.toContainElement( description );
+	expect( description.parentElement ).toHaveClass( 'woodev-stacked-tab' );
+} );
