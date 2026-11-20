@@ -11,8 +11,6 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
-use Woodev\Framework\Marketplace\Admin\Order\Cancel_Metabox;
-use Woodev\Framework\Marketplace\Admin\Order\Cancel_Modal;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -47,8 +45,9 @@ use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Registers the product tab and the order cancel metabox of a plugin, each **only when its adapter offers the capability**:
- * the adapter implements {@see Product_Tab_Facts} to get the tab, {@see Order_Canceller} to get the cancel metabox. The
+ * Registers the product tab and the order cancel AJAX of a plugin, each **only when its adapter offers the capability**:
+ * the adapter implements {@see Product_Tab_Facts} to get the tab, {@see Order_Canceller} to get the cancel call (its button sits in the
+ * {@see \Woodev\Framework\Marketplace\Admin\Order\Order_Details_Box}, which every marketplace order screen has). The
  * `Marketplace_Adapter` interface itself does not change, so an adapter without either keeps working and gets neither screen.
  *
  * @since 2.1.2
@@ -125,24 +124,21 @@ final class Embedded_Screens {
 		}
 
 		if ( $capabilities['order_cancel'] ) {
-			self::order_cancel( $plugin, $adapter, $accounts, $guard, $names, $assets_url );
+			self::order_cancel( $plugin, $adapter, $accounts, $guard, $names );
 		}
 	}
 
 	/**
-	 * Hooks the cancel AJAX and the metabox.
+	 * Hooks the cancel AJAX.
 	 *
 	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin     Plugin.
 	 * @param Marketplace_Adapter                              $adapter    Adapter, an {@see Order_Canceller}.
 	 * @param Account_Store                                    $accounts   Account store.
 	 * @param Admin_Guard                                      $guard      Guard.
 	 * @param Screen_Names                                     $names      Names.
-	 * @param string                                           $assets_url Assets folder URL.
 	 * @return void
 	 */
-	private static function order_cancel( $plugin, Marketplace_Adapter $adapter, Account_Store $accounts, Admin_Guard $guard, Screen_Names $names, string $assets_url ): void {
-		$modal = new Cancel_Modal( $names, $adapter, $assets_url, $plugin->get_version() );
-
+	private static function order_cancel( $plugin, Marketplace_Adapter $adapter, Account_Store $accounts, Admin_Guard $guard, Screen_Names $names ): void {
 		( new Cancel_Ajax(
 			$guard,
 			$accounts,
@@ -154,7 +150,6 @@ final class Embedded_Screens {
 				$plugin->log_error( $line );
 			}
 		) )->register();
-		( new Cancel_Metabox( $names, $adapter, $modal ) )->register();
 	}
 
 	/**

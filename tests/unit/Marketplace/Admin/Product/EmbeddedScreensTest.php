@@ -73,7 +73,7 @@ final class EmbeddedScreensTest extends TestCase {
 		);
 	}
 
-	public function test_an_adapter_that_can_cancel_gets_the_cancel_screens_and_not_the_tab(): void {
+	public function test_an_adapter_that_can_cancel_gets_the_cancel_call_and_not_the_tab(): void {
 		$adapter = Mockery::mock( Marketplace_Adapter::class, Order_Canceller::class );
 		$adapter->shouldReceive( 'id' )->andReturn( 'fake' );
 		$adapter->shouldReceive( 'settings_descriptor' )->andReturn( new Fake_Settings_Descriptor( new Credential_Fields( 'cabinet_ref', [ 'api_token' ] ) ) );
@@ -82,7 +82,7 @@ final class EmbeddedScreensTest extends TestCase {
 		Functions\when( 'wp_create_nonce' )->justReturn( 'n' );
 		Actions\expectAdded( 'wp_ajax_woodev_fake_cancel_reasons' )->once();
 		Actions\expectAdded( 'wp_ajax_woodev_fake_cancel_posting' )->once();
-		Actions\expectAdded( 'add_meta_boxes' )->once();
+		Actions\expectAdded( 'add_meta_boxes' )->never(); // The box lives in the order screen module now.
 		Actions\expectAdded( 'wp_ajax_woodev_fake_product' )->never();
 		Actions\expectAdded( 'woocommerce_bulk_edit_variations' )->never();
 		Filters\expectAdded( 'woocommerce_product_data_tabs' )->never();
@@ -132,7 +132,7 @@ final class EmbeddedScreensTest extends TestCase {
 		$adapter->shouldReceive( 'settings_descriptor' )->andReturn( new Fake_Settings_Descriptor( new Credential_Fields( 'cabinet_ref', [ 'api_token' ] ) ) );
 		$adapter->shouldReceive( 'order_meta' )->andReturn( new Fake_Order_Meta() );
 
-		Actions\expectAdded( 'add_meta_boxes' )->once();
+		Actions\expectAdded( 'wp_ajax_woodev_fake_cancel_posting' )->once();
 
 		$plugin = $this->plugin( $adapter );
 

@@ -1,0 +1,44 @@
+/*
+ * The details box of a marketplace order on the order screens. One label column for every group, labels left-aligned at the first line
+ * of their value, and room before the row of actions. WooCommerce's own order-data classes are kept for its fonts and colours; the
+ * columns are stacked, so a long value (an address) has the whole width.
+ */
+.woodev-mp-details .order_data_column {
+	float: none;
+	width: auto;
+	padding: 0 0 16px;
+}
+
+.woodev-mp-details .order_data_column h3 {
+	margin-bottom: 8px;
+}
+
+.woodev-mp-details table {
+	width: 100%;
+	table-layout: fixed;
+	border-collapse: collapse;
+}
+
+.woodev-mp-details th,
+.woodev-mp-details td {
+	padding: 3px 0;
+	vertical-align: top;
+	text-align: left;
+}
+
+.woodev-mp-details th {
+	width: 15em;
+	max-width: 45%;
+	padding-right: 16px;
+	font-weight: 600;
+}
+
+.woodev-mp-details .actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	margin-top: 8px;
+	padding-top: 16px;
+	border-top: 1px solid #dcdcde;
+}

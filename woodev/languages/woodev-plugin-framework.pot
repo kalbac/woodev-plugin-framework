@@ -1217,6 +1217,43 @@ msgstr ""
 msgid "Срок действия ключа истёк %s."
 msgstr ""
 
+#. translators: %s: marketplace name.
+#: marketplace/admin/order/class-order-details-box.php:112
+msgid "Заказ %s — сведения"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:142
+msgid "Основное"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:143
+msgid "Суммы"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:166
+msgid "Номер отправления"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:167
+msgid "Номер заказа на сайте"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:169
+msgid "Статус на сайте"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:171
+msgid "Обновлён"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:175
+msgid "Примечание покупателя"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:240
+msgid "Этикетки и документы"
+msgstr ""
+
 #. translators: %s: saved warehouse ids, for example «#123».
 #: marketplace/settings/class-account-status.php:177
 #, php-format
