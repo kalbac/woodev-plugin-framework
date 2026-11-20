@@ -251,7 +251,7 @@ export default function AccountsView( { tab, renderSection, onAccountsChanged, o
 
 	return (
 		<Card className="woodev-settings__card woodev-accounts" onKeyDown={ closeOnEscape }>
-			<CardBody>
+			<CardBody className="woodev-accounts__body">
 				<div className="woodev-accounts__header">
 					<TabDescription tab={ tab } />
 					{ adder && ! adding && (
@@ -264,7 +264,7 @@ export default function AccountsView( { tab, renderSection, onAccountsChanged, o
 								setAdding( true );
 							} }
 						>
-							<span aria-hidden="true">+ </span>
+							<span className="woodev-accounts__plus" aria-hidden="true">+</span>
 							{ __( 'Добавить аккаунт', 'woodev-plugin-framework' ) }
 						</Button>
 					) }

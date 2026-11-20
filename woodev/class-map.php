@@ -160,6 +160,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Notification_State_Text' => 'woodev/marketplace/admin/shared/class-notification-state-text.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Posting_Status_Names' => 'woodev/marketplace/admin/shared/interface-posting-status-names.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Posting_Status_Text' => 'woodev/marketplace/admin/shared/class-posting-status-text.php',
+	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Russian_Age' => 'woodev/marketplace/admin/shared/class-russian-age.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Russian_Plural' => 'woodev/marketplace/admin/shared/class-russian-plural.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Sync_Reason_Text' => 'woodev/marketplace/admin/shared/class-sync-reason-text.php',
 	'Woodev\\Framework\\Marketplace\\Capabilities\\Capability' => 'woodev/marketplace/capabilities/class-capability.php',

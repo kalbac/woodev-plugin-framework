@@ -541,7 +541,7 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
 ### «Инструменты» and «Диагностика» as built (#1883)
 
 - **One wrapper, cards inside.** Both pages are ONE white `Card.woodev-settings__card` with an intro sentence on top (`.woodev-settings__section-desc`; «Инструменты» gets `messages.intro` from `Tools_Controller::messages()`, «Диагностика» from `Diagnostics_Controller::messages()`) and each tool or section a `.woodev-group` card inside it — the look of Woodev → Настройки → Доставка → «Инструменты» (the same wrapper rule as the tables). The column spacing is the wrapper body's `gap` (`src/settings-page/style.scss`).
-- **«Диагностика» exists only while «Логирование» is on.** `Marketplace_Plugin::build_menu()` leaves the page with slug `Page::DIAGNOSTICS_SLUG` out of the menu while `logging()->is_enabled()` is false — no menu item and no page to open by URL, whoever lists it in `get_marketplace_pages()`. The page has no «Включить логирование» button and the `POST …/diagnostics/logging` route, `Logging::set_enabled()` and the switch messages are gone; the switch is the settings' «Дополнительно». The menu is built once per request, so the item appears after the next page load. A page left open after logging was switched off says so and shows only the operational sections; `Logging::REFUSAL` (the report's 403) points at the settings only.
+- **«Диагностика» exists only while «Логирование» is on.** `Marketplace_Plugin::build_menu()` leaves the page with slug `Page::DIAGNOSTICS_SLUG` out of the menu while `logging()->is_enabled()` is false — no menu item and no page to open by URL, whoever lists it in `get_marketplace_pages()`. The page has no «Включить логирование» button and the `POST …/diagnostics/logging` route, `Logging::set_enabled()` and the switch messages are gone; the switch is the settings' «Дополнительно». The menu is built once per request, so the item appears after the next page load. Ages on the page («4 дня назад», «обновлено 1 день назад») come from `Admin\Shared\Russian_Age::ago()` (the words and the Russian plural rule are ours): `human_time_diff()` follows the site locale and printed «4 days назад» on an en_US site. A page left open after logging was switched off says so and shows only the operational sections; `Logging::REFUSAL` (the report's 403) points at the settings only.
 
 ### Settings and diagnostics polish as built (s237, 2.1.13)
 
@@ -1270,6 +1270,8 @@ Why not the framework's `WoodevModal` (`woodev/assets/js/frontend/woodev-modal.j
 hand-made focus trap, scroll-lock class, CSS reset for a map's content), enqueued as a standalone script; the admin dialogs get
 the same behaviour from the native element with no JS of their own. The pickup map keeps `WoodevModal`; it is a delivery
 screen and is not touched.
+
+Height: the React frame is capped at `calc(100vh - 64px)` (`100dvh` where known) and its content inherits the cap, so a tall dialog (the account deletion preview at 1024×768) scrolls its BODY while the header and footer stay in view; the Modal's own cap is a percentage of the overlay and let such a dialog run past the screen (`tests/js/woodev-dialog-css.test.ts` reads the rules, jsdom has no layout).
 
 Rules: the «✕» is an EMPTY button (the stylesheet draws it as a mask); a footer button and the «✕» may both be named «Закрыть»,
 so a test that means the footer button asks for it inside `.woodev-dialog__footer` (`tests/js/dialog-parts.ts`); a request in

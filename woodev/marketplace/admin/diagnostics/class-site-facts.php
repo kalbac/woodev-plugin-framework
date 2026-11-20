@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Diagnostics;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Age;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
@@ -186,8 +187,8 @@ final class Site_Facts {
 			return __( 'обновлено сегодня', 'woodev-plugin-framework' );
 		}
 
-		/* translators: %d: age of the cached category tree in whole days. */
-		return sprintf( __( 'обновлено %d дн. назад', 'woodev-plugin-framework' ), $days );
+		/* translators: %s: age of the cached category tree, «1 день назад». */
+		return sprintf( __( 'обновлено %s', 'woodev-plugin-framework' ), Russian_Age::ago( $days * DAY_IN_SECONDS ) );
 	}
 
 	/**

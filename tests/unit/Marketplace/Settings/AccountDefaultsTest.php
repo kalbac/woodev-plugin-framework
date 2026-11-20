@@ -821,6 +821,21 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertStringContainsString( '<a href="https://cabinet.test/keys" target="_blank" rel="noopener noreferrer">личном кабинете Acme</a>', $linked );
 	}
 
+	public function test_the_credentials_form_links_the_cabinet_only_when_the_descriptor_supplies_it(): void {
+		Functions\when( 'esc_url' )->returnArg();
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$plain               = $this->accounts_sections( $adapter, $store )->connection_sections()[0]->get_description();
+
+		$this->assertStringContainsString( 'Учётные данные создаются', $plain );
+		$this->assertStringNotContainsString( '<a ', $plain );
+
+		[ $linked_adapter, $linked_store ] = $this->adapter_and_store( [], 'https://cabinet.test/keys' );
+		$linked                            = $this->accounts_sections( $linked_adapter, $linked_store )->connection_sections()[0]->get_description();
+
+		$this->assertStringContainsString( 'Учётные данные создаются', $linked, 'the descriptor\'s own help stays' );
+		$this->assertStringContainsString( '<a href="https://cabinet.test/keys" target="_blank" rel="noopener noreferrer">Открыть личный кабинет</a>', $linked );
+	}
+
 	public function test_the_tabs_carry_their_descriptions(): void {
 		[ $adapter, $store ] = $this->adapter_and_store();
 		$sections            = $this->accounts_sections( $adapter, $store );

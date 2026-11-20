@@ -329,8 +329,9 @@ $marketplace-label-col: 280px;
 
 // «Подключение» tab of a marketplace plugin: a white wrapper (the settings card) holding a card per account (accounts-view.tsx).
 .woodev-accounts {
-	// The wrapper's own body is the column; the forms nested in an account's card keep their own bodies.
-	> .components-card__body {
+	// The wrapper's own body is the column (a class on it, not `> .components-card__body`: the Card puts its own element between
+	// them); the forms nested in an account's card keep their own bodies.
+	&__body {
 		display: flex;
 		flex-direction: column;
 		gap: wd.$gap-lg;
@@ -342,7 +343,7 @@ $marketplace-label-col: 280px;
 		flex-wrap: wrap;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: wd.$gap;
+		gap: wd.$gap-lg;
 
 		.woodev-settings__section-desc {
 			flex: 1 1 320px;
@@ -351,7 +352,13 @@ $marketplace-label-col: 280px;
 	}
 
 	&__add-button {
+		flex: none;
 		white-space: nowrap;
+	}
+
+	// The «+» keeps a gap of its own: whitespace inside a button's flex row collapses.
+	&__plus {
+		margin-right: wd.$gap-xs;
 	}
 
 	&__empty {

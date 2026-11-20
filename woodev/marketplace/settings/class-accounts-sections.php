@@ -292,7 +292,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			},
 			array_merge( [ $fields->identifier() ], $fields->secrets() )
 		);
-		$url        = $descriptor instanceof Credentials_Cabinet_Link ? trim( $descriptor->credentials_url() ) : '';
+		$url        = $this->cabinet_url();
 		/* translators: %s: marketplace name, for example «Ozon». */
 		$cabinet = esc_html( sprintf( __( 'личном кабинете %s', 'woodev-plugin-framework' ), $descriptor->marketplace_name() ) );
 
@@ -307,6 +307,17 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			esc_html( implode( ', ', $labels ) ),
 			$cabinet
 		);
+	}
+
+	/**
+	 * The cabinet page where credentials are issued, '' when the adapter's descriptor does not say ({@see Credentials_Cabinet_Link}).
+	 *
+	 * @return string
+	 */
+	private function cabinet_url(): string {
+		$descriptor = $this->adapter->settings_descriptor();
+
+		return $descriptor instanceof Credentials_Cabinet_Link ? trim( $descriptor->credentials_url() ) : '';
 	}
 
 	/**
@@ -844,7 +855,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$field_ids[] = self::setting_id( $key, 'enabled' );
 
 		$help        = trim( $descriptor->credentials_help() );
-		$description = '' !== $help ? '<p>' . esc_html( $help ) . '</p>' : '';
+		$link        = $this->cabinet_url();
+		$open        = '' !== $link
+			? '<a href="' . esc_url( $link ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Открыть личный кабинет', 'woodev-plugin-framework' ) . '</a>'
+			: '';
+		$description = '' !== $help || '' !== $open ? '<p>' . trim( esc_html( $help ) . ' ' . $open ) . '</p>' : '';
 
 		return Settings_Section::create_connection(
 			self::connection_section_id( $key ),
