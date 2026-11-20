@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Unit\Marketplace;
 
 use Brain\Monkey\Actions;
+use Brain\Monkey\Functions;
 use Brain\Monkey\Filters;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
@@ -133,6 +134,9 @@ final class FlowWiringTest extends TestCase {
 		parent::setUp();
 
 		Flow_Wiring::forget();
+
+		// The wiring also hooks the orders-list filter, which is wp-admin only.
+		Functions\when( 'is_admin' )->justReturn( false );
 
 		$this->licensed  = true;
 		$this->log       = [];
