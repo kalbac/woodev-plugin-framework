@@ -26,6 +26,16 @@ final class Order_Source_Query {
 	private const META_KEY = '_created_via';
 
 	/**
+	 * First WooCommerce version whose HPOS orders query understands `field_query`.
+	 */
+	private const ORDERS_TABLE_MIN_WC = '8.2';
+
+	/**
+	 * First WooCommerce version that lets the HPOS list skip its blank-state count.
+	 */
+	private const ORDERS_TABLE_COUNTS_MIN_WC = '8.6';
+
+	/**
 	 * Operational data column of HPOS's `created_via`.
 	 */
 	private const FIELD = 'created_via';
@@ -110,27 +120,55 @@ final class Order_Source_Query {
 			return $meta_query;
 		}
 
-		return empty( $meta_query ) ? $clause : $this->combine( 'AND', [ $meta_query, $clause ] );
+		// A list of clauses, never a bare one: WP_Meta_Query skips the `key`/`value` of a clause given at the top level.
+		return empty( $meta_query ) ? [ $clause ] : $this->combine( 'AND', [ $meta_query, $clause ] );
 	}
 
 	/**
-	 * Returns the `wc_get_orders()` arguments that count the orders of every registered marketplace.
+	 * Returns the `wc_get_orders()` arguments that select the orders a choice keeps: the list's own constraint, to count them.
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param bool $hpos Whether orders live in the HPOS tables.
+	 * @param bool   $hpos   Whether orders live in the HPOS tables.
+	 * @param string $choice An {@see Order_Source_Choice} value.
 	 * @return array<string,mixed> Only the source constraint: the caller adds `limit`, `paginate` and the rest.
 	 */
-	public function marketplace_orders( bool $hpos ): array {
+	public function matching( bool $hpos, string $choice ): array {
 		if ( $hpos ) {
-			return [ 'created_via' => $this->created_vias ];
+			return $this->for_orders_table( [], $choice );
 		}
 
-		return [
-			'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- one indexed key, a count for a screen.
-				$this->meta_clause( 'IN', $this->created_vias ),
-			],
-		];
+		$meta_query = $this->for_posts( [], $choice );
+
+		return [] === $meta_query ? [] : [ 'meta_query' => $meta_query ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- one key, a count for a screen.
+	}
+
+	/**
+	 * Tells whether the HPOS orders list can be filtered by source: the `field_query` that excludes the marketplaces' orders (the
+	 * shop's own) exists since WooCommerce 8.2. The posts-table list needs no such version.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param bool        $hpos       Whether orders live in the HPOS tables.
+	 * @param string|null $wc_version The installed WooCommerce version; null when unknown.
+	 * @return bool
+	 */
+	public static function supports_storage( bool $hpos, ?string $wc_version ): bool {
+		return ! $hpos || ( null !== $wc_version && version_compare( $wc_version, self::ORDERS_TABLE_MIN_WC, '>=' ) );
+	}
+
+	/**
+	 * Tells whether the status counts of the HPOS orders list can follow the source: it asks for them through
+	 * `woocommerce_shop_order_list_table_order_count` and may skip its blank-state count through
+	 * `woocommerce_shop_order_list_table_should_render_blank_state`, a hook of WooCommerce 8.6.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param string|null $wc_version The installed WooCommerce version; null when unknown.
+	 * @return bool
+	 */
+	public static function supports_orders_table_status_counts( ?string $wc_version ): bool {
+		return null !== $wc_version && version_compare( $wc_version, self::ORDERS_TABLE_COUNTS_MIN_WC, '>=' );
 	}
 
 	/**

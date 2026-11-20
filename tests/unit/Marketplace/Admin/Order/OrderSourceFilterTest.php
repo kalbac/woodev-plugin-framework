@@ -44,6 +44,13 @@ final class OrderSourceFilterTest extends TestCase {
 		'marketplace' => 3,
 	];
 
+	/**
+	 * What a count of one status answers while a choice is active, by status.
+	 *
+	 * @var array<string,int>
+	 */
+	private $status_totals = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -53,6 +60,7 @@ final class OrderSourceFilterTest extends TestCase {
 			'all'         => 10,
 			'marketplace' => 3,
 		];
+		$this->status_totals = [];
 		$_GET                = [];
 
 		Order_Source_Filter::instance()->reset_for_tests();
@@ -88,6 +96,10 @@ final class OrderSourceFilterTest extends TestCase {
 		Functions\when( 'wc_get_orders' )->alias(
 			function ( array $args ) {
 				$this->order_queries[] = $args;
+
+				if ( isset( $args['status'] ) ) {
+					return (object) [ 'total' => $this->status_totals[ implode( ',', (array) $args['status'] ) ] ?? 0 ];
+				}
 
 				return (object) [ 'total' => isset( $args['meta_query'] ) || isset( $args['created_via'] ) ? $this->totals['marketplace'] : $this->totals['all'] ];
 			}
@@ -176,7 +188,7 @@ final class OrderSourceFilterTest extends TestCase {
 			'meta_query',
 			Mockery::on(
 				static function ( $meta_query ): bool {
-					return 'OR' === $meta_query['relation'] && 'NOT IN' === $meta_query[0]['compare'] && '_created_via' === $meta_query[0]['key'];
+					return 'OR' === $meta_query[0]['relation'] && 'NOT IN' === $meta_query[0][0]['compare'] && '_created_via' === $meta_query[0][0]['key'];
 				}
 			)
 		);
@@ -281,5 +293,125 @@ final class OrderSourceFilterTest extends TestCase {
 
 		$this->assertSame( '', (string) ob_get_clean() );
 		$this->assertSame( [], $this->order_queries, 'Not even a count is paid for on another screen.' );
+	}
+
+	public function test_an_hpos_shop_on_a_woocommerce_older_than_8_2_gets_no_filter_at_all(): void {
+		Order_Source_Filter::instance()->reset_for_tests( true, '8.1.0' );
+		$this->filter();
+
+		$this->assertFalse( has_filter( 'woocommerce_shop_order_list_table_prepare_items_query_args' ) );
+		$this->assertFalse( has_filter( 'views_woocommerce_page_wc-orders' ) );
+		$this->assertFalse( has_action( 'woocommerce_order_list_table_restrict_manage_orders' ) );
+		$this->assertFalse( has_action( 'admin_notices' ) );
+	}
+
+	public function test_an_hpos_shop_from_woocommerce_8_2_is_filtered_and_from_8_6_its_status_counts_follow(): void {
+		Order_Source_Filter::instance()->reset_for_tests( true, '8.2.0' );
+		$filter = $this->filter();
+
+		$this->assertSame( 10, has_filter( 'woocommerce_shop_order_list_table_prepare_items_query_args', [ $filter, 'filter_orders_table_args' ] ) );
+		$this->assertFalse( has_filter( 'woocommerce_shop_order_list_table_order_count' ), 'The hook the counts need does not exist before 8.6.' );
+
+		Order_Source_Filter::instance()->reset_for_tests( true, '8.6.0' );
+		$filter = $this->filter();
+
+		$this->assertSame( 10, has_filter( 'woocommerce_shop_order_list_table_order_count', [ $filter, 'filter_orders_table_count' ] ) );
+		$this->assertSame( 10, has_filter( 'woocommerce_shop_order_list_table_should_render_blank_state', [ $filter, 'filter_blank_state' ] ) );
+	}
+
+	public function test_a_posts_table_shop_is_filtered_whatever_the_woocommerce_version(): void {
+		Order_Source_Filter::instance()->reset_for_tests( false, '7.0.0' );
+		$filter = $this->filter();
+
+		$this->assertSame( 10, has_action( 'pre_get_posts', [ $filter, 'filter_posts_query' ] ) );
+		$this->assertSame( 10, has_filter( 'wp_count_posts', [ $filter, 'filter_posts_counts' ] ) );
+	}
+
+	public function test_an_hpos_status_view_counts_the_orders_the_shop_only_list_shows(): void {
+		$this->status_totals = [ 'wc-processing' => 2 ];
+
+		$filter = $this->filter();
+
+		$this->assertSame( 2, $filter->filter_orders_table_count( 5, [ 'wc-processing' ] ), 'Processing (5) is Processing (2) while marketplace orders are hidden.' );
+		$this->assertSame( 0, $filter->filter_orders_table_count( 0, [ 'wc-on-hold' ] ), 'A status without orders is not counted.' );
+
+		$status_counts = array_filter(
+			$this->order_queries,
+			static function ( array $query ): bool {
+				return isset( $query['status'] );
+			}
+		);
+		$query         = reset( $status_counts );
+
+		$this->assertSame( 1, $query['limit'] );
+		$this->assertSame( 'ids', $query['return'], 'Counted, never loaded.' );
+		$this->assertSame( [ 'wc-processing' ], $query['status'] );
+		$this->assertArrayHasKey( 'meta_query', $query, 'The same constraint the list uses.' );
+	}
+
+	public function test_an_hpos_status_count_is_left_alone_when_every_order_is_shown(): void {
+		$_GET['woodev_order_source'] = 'all';
+
+		$this->assertSame( 5, $this->filter()->filter_orders_table_count( 5, [ 'wc-processing' ] ) );
+		$this->assertSame( [], $this->order_queries );
+	}
+
+	public function test_the_hpos_list_is_not_blank_while_the_shop_has_orders_only_the_marketplaces_hide(): void {
+		$this->assertFalse( $this->filter()->filter_blank_state( null ) );
+	}
+
+	public function test_the_hpos_list_is_blank_when_there_is_no_order_at_all(): void {
+		$this->totals = [
+			'all'         => 0,
+			'marketplace' => 0,
+		];
+
+		$this->assertNull( $this->filter()->filter_blank_state( null ) );
+		$this->assertTrue( $this->filter()->filter_blank_state( true ) );
+	}
+
+	public function test_the_posts_list_status_views_follow_the_choice_on_their_own_screen_only(): void {
+		Functions\when( 'get_current_screen' )->justReturn( (object) [ 'id' => 'edit-shop_order' ] );
+		$this->status_totals = [
+			'wc-processing' => 2,
+			'trash'         => 1,
+		];
+		$counts              = (object) [
+			'wc-processing' => '5',
+			'wc-on-hold'    => '0',
+			'trash'         => '3',
+			'auto-draft'    => '4',
+		];
+
+		$result = $this->filter()->filter_posts_counts( $counts, 'shop_order', 'readable' );
+
+		$this->assertSame( 2, $result->{'wc-processing'} );
+		$this->assertSame( '0', $result->{'wc-on-hold'} );
+		$this->assertSame( 1, $result->trash );
+		$this->assertSame( '4', $result->{'auto-draft'}, 'A status the list does not show is not touched.' );
+		$this->assertSame( '5', $counts->{'wc-processing'}, 'The cached counts are not changed.' );
+	}
+
+	public function test_wp_count_posts_keeps_the_real_counts_for_every_other_caller(): void {
+		Functions\when( 'get_current_screen' )->justReturn( (object) [ 'id' => 'edit-shop_order' ] );
+		$this->status_totals = [ 'wc-processing' => 2 ];
+		$counts              = (object) [ 'wc-processing' => '5' ];
+		$filter              = $this->filter();
+
+		// WooCommerce's blank-state check asks without a permission; another post type is not ours.
+		$this->assertSame( $counts, $filter->filter_posts_counts( $counts, 'shop_order', '' ) );
+		$this->assertSame( $counts, $filter->filter_posts_counts( $counts, 'product', 'readable' ) );
+
+		Functions\when( 'get_current_screen' )->justReturn( (object) [ 'id' => 'dashboard' ] );
+		$this->assertSame( $counts, $filter->filter_posts_counts( $counts, 'shop_order', 'readable' ) );
+		$this->assertSame( [], $this->order_queries );
+	}
+
+	public function test_the_posts_list_status_views_are_left_alone_when_every_order_is_shown(): void {
+		Functions\when( 'get_current_screen' )->justReturn( (object) [ 'id' => 'edit-shop_order' ] );
+		$_GET['woodev_order_source'] = 'all';
+		$counts                      = (object) [ 'wc-processing' => '5' ];
+
+		$this->assertSame( $counts, $this->filter()->filter_posts_counts( $counts, 'shop_order', 'readable' ) );
 	}
 }

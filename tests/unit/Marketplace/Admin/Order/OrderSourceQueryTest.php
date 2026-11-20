@@ -86,29 +86,34 @@ final class OrderSourceQueryTest extends TestCase {
 	}
 
 	public function test_marketplace_orders_in_the_posts_table_are_a_meta_query_in(): void {
+		// A list of clauses: WP_Meta_Query skips a clause given bare at the top level.
 		$this->assertSame(
 			[
-				'key'     => '_created_via',
-				'value'   => [ 'ozon_api', 'wb_api' ],
-				'compare' => 'IN',
+				[
+					'key'     => '_created_via',
+					'value'   => [ 'ozon_api', 'wb_api' ],
+					'compare' => 'IN',
+				],
 			],
 			$this->query()->for_posts( [], Order_Source_Choice::MARKETPLACES )
 		);
-		$this->assertSame( [ 'wb_api' ], $this->query()->for_posts( [], 'wb_api' )['value'] );
+		$this->assertSame( [ 'wb_api' ], $this->query()->for_posts( [], 'wb_api' )[0]['value'] );
 	}
 
 	public function test_the_shop_in_the_posts_table_excludes_every_marketplace_and_keeps_orders_without_the_meta(): void {
 		$this->assertSame(
 			[
-				'relation' => 'OR',
 				[
-					'key'     => '_created_via',
-					'value'   => [ 'ozon_api', 'wb_api' ],
-					'compare' => 'NOT IN',
-				],
-				[
-					'key'     => '_created_via',
-					'compare' => 'NOT EXISTS',
+					'relation' => 'OR',
+					[
+						'key'     => '_created_via',
+						'value'   => [ 'ozon_api', 'wb_api' ],
+						'compare' => 'NOT IN',
+					],
+					[
+						'key'     => '_created_via',
+						'compare' => 'NOT EXISTS',
+					],
 				],
 			],
 			$this->query()->for_posts( [], Order_Source_Choice::SHOP )
@@ -130,19 +135,54 @@ final class OrderSourceQueryTest extends TestCase {
 		$this->assertSame( 'IN', $meta_query[1]['compare'] );
 	}
 
-	public function test_the_marketplace_count_is_the_same_constraint_on_each_storage(): void {
-		$this->assertSame( [ 'created_via' => [ 'ozon_api', 'wb_api' ] ], $this->query()->marketplace_orders( true ) );
+	public function test_what_a_choice_keeps_is_counted_with_the_lists_own_constraint_on_each_storage(): void {
+		$this->assertSame( [ 'created_via' => [ 'ozon_api', 'wb_api' ] ], $this->query()->matching( true, Order_Source_Choice::MARKETPLACES ) );
+		$this->assertSame( $this->query()->for_orders_table( [], Order_Source_Choice::SHOP ), $this->query()->matching( true, Order_Source_Choice::SHOP ) );
 		$this->assertSame(
 			[
 				'meta_query' => [
 					[
 						'key'     => '_created_via',
-						'value'   => [ 'ozon_api', 'wb_api' ],
+						'value'   => [ 'wb_api' ],
 						'compare' => 'IN',
 					],
 				],
 			],
-			$this->query()->marketplace_orders( false )
+			$this->query()->matching( false, 'wb_api' )
 		);
+		$this->assertSame( [], $this->query()->matching( true, Order_Source_Choice::ALL ) );
+		$this->assertSame( [], $this->query()->matching( false, Order_Source_Choice::ALL ) );
+	}
+
+	/**
+	 * @dataProvider storage_support
+	 *
+	 * @param bool        $hpos       Orders in the HPOS tables.
+	 * @param string|null $wc_version WooCommerce version.
+	 * @param bool        $expected   Whether the filter can run.
+	 */
+	public function test_an_hpos_list_needs_woocommerce_8_2_for_the_field_query( bool $hpos, ?string $wc_version, bool $expected ): void {
+		$this->assertSame( $expected, Order_Source_Query::supports_storage( $hpos, $wc_version ) );
+	}
+
+	/**
+	 * @return array<string,array{bool,string|null,bool}>
+	 */
+	public function storage_support(): array {
+		return [
+			'posts table, any version'  => [ false, '7.0.0', true ],
+			'posts table, unknown'      => [ false, null, true ],
+			'hpos on 7.9'               => [ true, '7.9.0', false ],
+			'hpos on 8.1.9'             => [ true, '8.1.9', false ],
+			'hpos on 8.2'               => [ true, '8.2.0', true ],
+			'hpos on 11.3'              => [ true, '11.3.0', true ],
+			'hpos, version unknown'     => [ true, null, false ],
+		];
+	}
+
+	public function test_the_hpos_status_counts_need_woocommerce_8_6(): void {
+		$this->assertFalse( Order_Source_Query::supports_orders_table_status_counts( '8.5.9' ) );
+		$this->assertFalse( Order_Source_Query::supports_orders_table_status_counts( null ) );
+		$this->assertTrue( Order_Source_Query::supports_orders_table_status_counts( '8.6.0' ) );
 	}
 }

@@ -22,7 +22,11 @@ defined( 'ABSPATH' ) || exit;
  *
  * The two lists are different WooCommerce screens, so the query is filtered twice: the HPOS list through
  * `woocommerce_shop_order_list_table_prepare_items_query_args`, the posts list through `pre_get_posts`. The views, the dropdown and
- * the notice are shared.
+ * the notice are shared. The status views' own counts follow the choice too, so «Processing (5)» is the number the table shows:
+ * the HPOS list asks for them through `woocommerce_shop_order_list_table_order_count`, the posts list through `wp_count_posts`.
+ *
+ * An HPOS shop on a WooCommerce too old for the filter ({@see Order_Source_Query::supports_storage()}) gets none of it: the list
+ * stays the way WooCommerce draws it.
  *
  * @internal
  *
@@ -76,6 +80,20 @@ final class Order_Source_Filter {
 	private $counts;
 
 	/**
+	 * Test override of the storage and the WooCommerce version, in place of the real ones.
+	 *
+	 * @var array{hpos:bool,wc_version:string|null}|null
+	 */
+	private $environment;
+
+	/**
+	 * Status counts under the choice, by the statuses asked for.
+	 *
+	 * @var array<string,int>
+	 */
+	private $status_counts = [];
+
+	/**
 	 * @return self
 	 */
 	public static function instance(): self {
@@ -119,6 +137,7 @@ final class Order_Source_Filter {
 		$this->sources[ $created_via ] = $name;
 		$this->choice                  = null;
 		$this->counts                  = null;
+		$this->status_counts           = [];
 
 		$this->add_hooks();
 	}
@@ -157,6 +176,77 @@ final class Order_Source_Filter {
 		$meta_query = $query->get( 'meta_query' );
 
 		$query->set( 'meta_query', $this->query()->for_posts( is_array( $meta_query ) ? $meta_query : [], $this->choice() ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- one key; the same filter the list's other meta queries use.
+	}
+
+	/**
+	 * Makes a status view's count of the HPOS list the number of orders of that status the choice keeps.
+	 *
+	 * @internal
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int|mixed $count    WooCommerce's count of all orders in the statuses.
+	 * @param string[]  $statuses The statuses counted.
+	 * @return int
+	 */
+	public function filter_orders_table_count( $count, $statuses ): int {
+		$count = (int) $count;
+
+		if ( $count < 1 || Order_Source_Choice::ALL === $this->choice() ) {
+			return $count;
+		}
+
+		return $this->count_status( (array) $statuses );
+	}
+
+	/**
+	 * Keeps the HPOS list from taking itself for an empty shop: its blank-state check counts the orders through the filtered
+	 * counts, and a shop whose orders are all the marketplaces' would otherwise lose its list, views included.
+	 *
+	 * @internal
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param bool|null $render WooCommerce's answer; null leaves it to WooCommerce.
+	 * @return bool|null
+	 */
+	public function filter_blank_state( $render ) {
+		return $this->counts()['all'] > 0 ? false : $render;
+	}
+
+	/**
+	 * Makes the status views' counts of the posts-table list the numbers of orders the choice keeps.
+	 *
+	 * Only the list's own call is answered (`readable`, on its screen): WooCommerce's blank-state check, the dashboard and every other
+	 * caller of `wp_count_posts()` keep the real counts.
+	 *
+	 * @internal
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param \stdClass|mixed $counts Counts by post status.
+	 * @param string          $type   Post type.
+	 * @param string          $perm   The permission the counts were read for.
+	 * @return \stdClass|mixed
+	 */
+	public function filter_posts_counts( $counts, $type = '', $perm = '' ) {
+		if ( self::ORDER_TYPE !== $type || 'readable' !== $perm || ! $counts instanceof \stdClass || ! $this->is_screen( self::LEGACY_SCREEN ) ) {
+			return $counts;
+		}
+
+		if ( Order_Source_Choice::ALL === $this->choice() ) {
+			return $counts;
+		}
+
+		$counts = clone $counts;
+
+		foreach ( array_merge( array_keys( wc_get_order_statuses() ), [ 'trash' ] ) as $status ) {
+			if ( ! empty( $counts->$status ) ) {
+				$counts->$status = $this->count_status( [ $status ] );
+			}
+		}
+
+		return $counts;
 	}
 
 	/**
@@ -224,9 +314,7 @@ final class Order_Source_Filter {
 	 * @return void
 	 */
 	public function render_hidden_notice(): void {
-		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-
-		if ( ! $screen || ! in_array( $screen->id, [ self::LEGACY_SCREEN, self::HPOS_SCREEN ], true ) ) {
+		if ( ! $this->is_screen( self::LEGACY_SCREEN ) && ! $this->is_screen( self::HPOS_SCREEN ) ) {
 			return;
 		}
 
@@ -251,13 +339,20 @@ final class Order_Source_Filter {
 	 *
 	 * @since 2.1.13
 	 *
+	 * @param bool|null   $hpos       Pretend orders live in the HPOS tables (true) or the posts table (false); the real storage when null.
+	 * @param string|null $wc_version The WooCommerce version to pretend; only read with `$hpos`.
 	 * @return void
 	 */
-	public function reset_for_tests(): void {
-		$this->sources = [];
-		$this->hooked  = false;
-		$this->choice  = null;
-		$this->counts  = null;
+	public function reset_for_tests( ?bool $hpos = null, ?string $wc_version = null ): void {
+		$this->sources       = [];
+		$this->hooked        = false;
+		$this->choice        = null;
+		$this->counts        = null;
+		$this->status_counts = [];
+		$this->environment   = null === $hpos ? null : [
+			'hpos'       => $hpos,
+			'wc_version' => $wc_version,
+		];
 	}
 
 	/**
@@ -266,7 +361,9 @@ final class Order_Source_Filter {
 	 * @return void
 	 */
 	private function add_hooks(): void {
-		if ( $this->hooked ) {
+		[ $hpos, $wc_version ] = $this->environment();
+
+		if ( $this->hooked || ! Order_Source_Query::supports_storage( $hpos, $wc_version ) ) {
 			return;
 		}
 
@@ -277,12 +374,31 @@ final class Order_Source_Filter {
 		add_filter( 'views_' . self::HPOS_SCREEN, [ $this, 'add_views' ] );
 		add_action( 'woocommerce_order_list_table_restrict_manage_orders', [ $this, 'render_dropdown' ], 10, 2 );
 
+		if ( Order_Source_Query::supports_orders_table_status_counts( $wc_version ) ) {
+			add_filter( 'woocommerce_shop_order_list_table_order_count', [ $this, 'filter_orders_table_count' ], 10, 2 );
+			add_filter( 'woocommerce_shop_order_list_table_should_render_blank_state', [ $this, 'filter_blank_state' ] );
+		}
+
 		// The posts-table list.
 		add_action( 'pre_get_posts', [ $this, 'filter_posts_query' ] );
 		add_filter( 'views_' . self::LEGACY_SCREEN, [ $this, 'add_views' ] );
+		add_filter( 'wp_count_posts', [ $this, 'filter_posts_counts' ], 10, 3 );
 		add_action( 'restrict_manage_posts', [ $this, 'render_dropdown' ], 10, 2 );
 
 		add_action( 'admin_notices', [ $this, 'render_hidden_notice' ] );
+	}
+
+	/**
+	 * Whether orders live in the HPOS tables and the installed WooCommerce version.
+	 *
+	 * @return array{0:bool,1:string|null}
+	 */
+	private function environment(): array {
+		if ( null !== $this->environment ) {
+			return [ $this->environment['hpos'], $this->environment['wc_version'] ];
+		}
+
+		return [ \Woodev_Plugin_Compatibility::is_hpos_enabled(), \Woodev_Plugin_Compatibility::get_wc_version() ];
 	}
 
 	/**
@@ -316,7 +432,7 @@ final class Order_Source_Filter {
 	private function counts(): array {
 		if ( null === $this->counts ) {
 			$all         = $this->count_orders( [] );
-			$marketplace = $this->count_orders( $this->query()->marketplace_orders( \Woodev_Plugin_Compatibility::is_hpos_enabled() ) );
+			$marketplace = $this->count_orders( $this->constraint( Order_Source_Choice::MARKETPLACES ) );
 
 			$this->counts = [
 				'all'         => $all,
@@ -326,6 +442,44 @@ final class Order_Source_Filter {
 		}
 
 		return $this->counts;
+	}
+
+	/**
+	 * The `wc_get_orders()` arguments that select the orders a choice keeps.
+	 *
+	 * @param string $choice An {@see Order_Source_Choice} value.
+	 * @return array<string,mixed>
+	 */
+	private function constraint( string $choice ): array {
+		return $this->query()->matching( $this->environment()[0], $choice );
+	}
+
+	/**
+	 * Counts the orders in some statuses that the current choice keeps, once per request.
+	 *
+	 * @param string[] $statuses Statuses, as WooCommerce names them (`wc-processing`, `trash`).
+	 * @return int
+	 */
+	private function count_status( array $statuses ): int {
+		$key = implode( ',', $statuses );
+
+		if ( ! isset( $this->status_counts[ $key ] ) ) {
+			$this->status_counts[ $key ] = $this->count_orders( array_merge( $this->constraint( $this->choice() ), [ 'status' => $statuses ] ) );
+		}
+
+		return $this->status_counts[ $key ];
+	}
+
+	/**
+	 * Tells whether the current admin screen is a given one.
+	 *
+	 * @param string $id Screen id.
+	 * @return bool
+	 */
+	private function is_screen( string $id ): bool {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+
+		return $screen && $id === $screen->id;
 	}
 
 	/**
