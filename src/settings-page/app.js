@@ -22,6 +22,7 @@ import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
 import AccountsView, { isAccountsTab } from './accounts-view';
 import StackedView, { isStackedTab } from './stacked-view';
+import TabDescription from './tab-description';
 
 /**
  * Whether a staged value is still the one that was submitted (scalars by identity,
@@ -391,6 +392,37 @@ export default function App( { bootstrap = null } ) {
 			.catch( () => {} );
 	};
 
+	// An account card's on/off switch saves at once, on its own: the staged edits of the open forms are neither sent nor lost.
+	// A staged value of this very field is dropped, because the click is the newer word. Rejects after saying why.
+	const onToggleAccount = ( tab, section, enabled ) => {
+		const field = section.card.enabled_field;
+
+		onFieldRevert( tab.id, field );
+
+		return saveTab( tab.id, { [ field ]: enabled } )
+			.then( () => {
+				dispatch( noticesStore ).createSuccessNotice(
+					enabled
+						? __( 'Аккаунт включён.', 'woodev-plugin-framework' )
+						: __( 'Аккаунт выключен.', 'woodev-plugin-framework' ),
+					{ type: 'snackbar' }
+				);
+				return fetchSchema();
+			} )
+			.then( ( res ) => {
+				if ( res && res.tabs ) {
+					setTabs( res.tabs );
+				}
+			} )
+			.catch( ( err ) => {
+				dispatch( noticesStore ).createErrorNotice(
+					( err && err.message ) || __( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' ),
+					{ type: 'snackbar' }
+				);
+				throw err;
+			} );
+	};
+
 	// `heading` ({ title, subtitle }) comes only from a stacked tab: the title opens the card, as its first child.
 	const renderSection = ( tab, sectionId, heading ) => {
 		const section = tab.sections.find( ( s ) => s.id === sectionId ) || tab.sections[ 0 ];
@@ -493,11 +525,15 @@ export default function App( { bootstrap = null } ) {
 							tab={ tab }
 							renderSection={ renderSection }
 							onAccountsChanged={ refreshTabs }
+							onToggleEnabled={ ( section, enabled ) => onToggleAccount( tab, section, enabled ) }
 						/>
 					) : isStackedTab( tab ) ? (
 						<StackedView tab={ tab } renderSection={ renderSection } />
 					) : (
-						renderSection( tab, sectionId )
+						<>
+							<TabDescription tab={ tab } />
+							{ renderSection( tab, sectionId ) }
+						</>
 					)
 				}
 				onTabChange={ () => {

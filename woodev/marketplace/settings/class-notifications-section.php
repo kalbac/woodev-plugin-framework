@@ -284,7 +284,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 	}
 
 	/**
-	 * Turns an address written into an already escaped sentence («seller.ozon.ru/app/settings/integrations») into a link whose text
+	 * Turns an address written into an already escaped sentence («seller.ozon.ru/app/settings/notifications-api») into a link whose text
 	 * is the site's name: a merchant never reads a raw address in running text, and a link opens the page.
 	 *
 	 * @param string $escaped The sentence, escaped for HTML.

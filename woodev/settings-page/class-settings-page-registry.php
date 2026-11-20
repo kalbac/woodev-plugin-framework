@@ -232,12 +232,19 @@ final class Settings_Page_Registry {
 				continue;
 			}
 
-			$tabs[] = [
+			$tab = [
 				'id'         => $id,
 				'label'      => $provider->get_label(),
 				'capability' => $capability,
 				'sections'   => $this->build_sections( $provider, Help_Links::topics_of( $entry['plugin'] ?? null ) ),
 			];
+
+			// Only a tab that says what it is for carries the key, so the schema of every other tab is unchanged.
+			if ( '' !== $provider->get_description() ) {
+				$tab['description'] = $provider->get_description();
+			}
+
+			$tabs[] = $tab;
 		}
 
 		return $tabs;

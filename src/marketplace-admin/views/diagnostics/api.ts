@@ -21,11 +21,5 @@ export function createDiagnosticsApi( pluginId: string ) {
 	return {
 		state: () => apiFetch< DiagnosticsState >( { path: base } ),
 		report: () => apiFetch< DiagnosticsReport >( { path: `${ base }/report` } ),
-		setLogging: ( enabled: boolean ) =>
-			apiFetch< { logging: { enabled: boolean } } >( {
-				path: `${ base }/logging`,
-				method: 'POST',
-				data: { enabled },
-			} ),
 	};
 }

@@ -19,7 +19,6 @@ final class NotificationStateTextTest extends TestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
-		Functions\when( 'human_time_diff' )->justReturn( '3 дня' );
 	}
 
 	private function text(): Notification_State_Text {

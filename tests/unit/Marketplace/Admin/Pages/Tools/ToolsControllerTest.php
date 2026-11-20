@@ -194,6 +194,13 @@ final class ToolsControllerTest extends TestCase {
 		$this->assertSame( [ [ 'id' => 3, 'name' => 'Главный' ] ], $state['accounts'] );
 	}
 
+	public function test_the_state_carries_the_intro_sentence_of_the_page_wrapper(): void {
+		$messages = $this->controller()->get_state( $this->request( '', [] ) )->get_data()['messages'];
+
+		$this->assertNotSame( '', $messages['intro'] );
+		$this->assertStringContainsString( 'не настройки', $messages['intro'] );
+	}
+
 	private function assertError( $answer, string $code, int $status ): void {
 		$this->assertInstanceOf( \WP_Error::class, $answer );
 		$this->assertSame( $code, $answer->code );
