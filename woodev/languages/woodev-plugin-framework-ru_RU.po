@@ -12426,62 +12426,34 @@ msgstr ""
 msgid "Список карточек загружается с маркетплейса."
 msgstr ""
 
-#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:75
-msgid "Что происходит с подключением, уведомлениями, очередью и ошибками. Если нужна помощь поддержки, скопируйте отчёт в конце страницы и отправьте его в обращении. Страница показывается, пока включено «Логирование» (настройки плагина, раздел «Дополнительно»)."
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:259
+msgid "Маркетплейс"
 msgstr ""
 
-#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:76
-msgid "Логирование выключено, поэтому подробной диагностики нет. Включите его в настройках плагина, раздел «Дополнительно», и обновите страницу."
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:263
+msgid "Здесь появятся отчёты по заказам маркетплейсов."
 msgstr ""
 
-#: marketplace/admin/pages/tools/class-tools-controller.php:205
-msgid "Действия над данными плагина — не настройки, а то, что можно выполнить прямо сейчас. Перед запуском инструмент покажет, что именно будет сделано."
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:272
+msgid "Заказы маркетплейсов"
 msgstr ""
 
-#: marketplace/deletion/class-account-deletion-preview.php:80
-msgid "Товары и заказы WooCommerce остаются в магазине: заказы удаляются отдельно."
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:89
+msgid "Последний опрос"
 msgstr ""
 
-#: marketplace/deletion/class-account-deletion-preview.php:92
-msgid "Аккаунт включён. Выключить и удалить? Перед удалением плагин выключит аккаунт: остатки, цены и заказы по нему перестанут синхронизироваться. Связи товаров с карточками и записи об отправлениях будут удалены."
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:93
+msgid "Следующий опрос"
 msgstr ""
 
-#. translators: %s: marketplace name, for example «Ozon».
-#: marketplace/settings/class-accounts-sections.php:297
-#, php-format
-msgid "личном кабинете %s"
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:97
+msgid "Когда сайт в последний раз опрашивал маркетплейс о заказах аккаунта и когда опросит снова. За один опрос сайт может прочитать не все изменения — остальное он дочитает в следующих."
 msgstr ""
 
-#. translators: 1: marketplace name, 2: comma-separated credential field names, 3: «личном кабинете …» (a link when the address is known).
-#: marketplace/settings/class-accounts-sections.php:305
-#, php-format
-msgid "Здесь подключаются аккаунты %1$s. Для каждого нужны: %2$s — они выдаются в %3$s. Добавьте аккаунт, нажмите «Проверить подключение», и плагин начнёт с ним работать. Несколько аккаунтов работают независимо друг от друга."
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:107
+msgid "Сейчас"
 msgstr ""
 
-#: marketplace/settings/class-accounts-sections.php:320
-msgid "Здесь задаётся, как плагин работает с каждым аккаунтом по отдельности: склад и учёт остатков, цены, заказы и карточки товаров. Параметры появляются после того, как аккаунт добавлен на вкладке «Подключение»."
-msgstr ""
-
-#: marketplace/settings/class-accounts-sections.php:677
-msgid "Необязательно. Короткая заметка, которая видна на карточке аккаунта и помогает отличить его от других."
-msgstr ""
-
-#: marketplace/settings/class-accounts-sections.php:678
-msgid "Например, одежда и обувь"
-msgstr ""
-
-#: assets/build/settings-page/index.js:7
-msgid "Выключить и удалить"
-msgstr ""
-
-#: assets/build/settings-page/index.js:7
-msgid "Пока нет ни одного аккаунта. Добавьте первый, чтобы плагин начал работать."
-msgstr ""
-
-#: assets/build/settings-page/index.js:7
-msgid "Аккаунт включён."
-msgstr ""
-
-#: assets/build/settings-page/index.js:7
-msgid "Аккаунт выключен."
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:177
+msgid "Статус на маркетплейсе"
 msgstr ""

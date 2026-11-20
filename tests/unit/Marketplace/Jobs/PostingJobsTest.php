@@ -11,6 +11,7 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
+use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Framework\Marketplace\Orders\Order_Claim_Exception;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
@@ -290,6 +291,44 @@ final class PostingJobsTest extends Sync_Test_Case {
 		$this->handler->fails = null;
 		$this->jobs()->poll( $this->account_id );
 		$this->assertCount( 1, $this->handler->caught_up, 'a paused account is not polled' );
+	}
+
+	/**
+	 * A poll attempt that ended without an error is recorded as «Последний опрос» (a handler that stopped within its budget
+	 * included — `catch_up()` cannot say so); a skipped or failed one is not.
+	 *
+	 * @return void
+	 */
+	public function test_only_a_finished_poll_is_recorded_as_the_accounts_last_read(): void {
+		Functions\when( 'update_option' )->alias(
+			function ( string $name, $value ): bool {
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
+		$times = new Posting_Poll_Times( self::PLUGIN_ID );
+		$jobs  = new Posting_Jobs( $this->job_gate(), $this->accounts(), $this->handler, $this->classifier, $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ), $times );
+
+		$this->licensed = false;
+		$jobs->poll( $this->account_id );
+		$this->assertNull( $times->last( $this->account_id ), 'Skipped without a licence: nothing was read.' );
+
+		$this->licensed       = true;
+		$this->handler->fails = Fake_Remote_Exception::of( Remote_Error::RETRY, 'busy' );
+
+		try {
+			$jobs->poll( $this->account_id );
+		} catch ( Fake_Remote_Exception $e ) {
+			$this->assertNull( $times->last( $this->account_id ), 'A failed read is not a read.' );
+		}
+
+		$this->handler->fails = null;
+		$before               = time();
+		$jobs->poll( $this->account_id );
+
+		$this->assertGreaterThanOrEqual( $before, $times->last( $this->account_id ) );
+		$this->assertArrayHasKey( 'woodev_' . self::PLUGIN_ID . '_postings_polled', $this->options, 'In the plugin\'s option family, which the uninstaller takes.' );
 	}
 
 	/**

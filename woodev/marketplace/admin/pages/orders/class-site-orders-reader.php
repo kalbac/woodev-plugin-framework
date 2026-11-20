@@ -27,6 +27,11 @@ final class Site_Orders_Reader {
 	private const COLUMNS = 'pg.wc_order_id, pg.external_key, pg.status_raw, pg.is_terminal, pg.claim_until';
 
 	/**
+	 * Most posting statuses the status filter offers.
+	 */
+	public const MAX_POSTING_STATUSES = 50;
+
+	/**
 	 * @var \wpdb
 	 */
 	private $db;
@@ -151,6 +156,31 @@ final class Site_Orders_Reader {
 	}
 
 	/**
+	 * How many orders each of the marketplace's posting statuses holds under every other filter of the read (the posting status
+	 * itself is not applied): the options of the «Статус на маркетплейсе» filter, with their counts. Only stored codes, so the
+	 * filter never offers a status no order is in. One query.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param Site_Orders_Filter $filter Filters; the posting status is ignored.
+	 * @return array<string,int> Count by code, at most {@see self::MAX_POSTING_STATUSES} codes, sorted by code.
+	 */
+	public function posting_status_counts( Site_Orders_Filter $filter ): array {
+		$rows = $this->db->get_results(
+			'SELECT pg.status_raw AS code, COUNT(*) AS total FROM ' . $this->from_sql() . ' WHERE ' . $this->where( $filter->without_posting_status() ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Every fragment is prepared or fixed.
+			. " AND pg.status_raw <> '' GROUP BY pg.status_raw ORDER BY pg.status_raw" . $this->db->prepare( ' LIMIT %d', self::MAX_POSTING_STATUSES ),
+			'ARRAY_A'
+		);
+		$out  = [];
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$out[ (string) $row['code'] ] = (int) $row['total'];
+		}
+
+		return $out;
+	}
+
+	/**
 	 * `postings AS pg` joined to the order.
 	 *
 	 * @return string A prepared fragment.
@@ -178,6 +208,10 @@ final class Site_Orders_Reader {
 
 		if ( '' !== $filter->wc_status() ) {
 			$clauses[] = $this->db->prepare( $this->storage->status_column() . ' = %s', $filter->wc_status() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The column is one of two fixed names.
+		}
+
+		if ( '' !== $filter->posting_status() ) {
+			$clauses[] = $this->db->prepare( 'pg.status_raw = %s', $filter->posting_status() );
 		}
 
 		if ( '' !== $filter->from() ) {

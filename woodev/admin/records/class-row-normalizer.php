@@ -41,6 +41,9 @@ final class Row_Normalizer {
 	/** Most response messages one page may carry. */
 	const MAX_MESSAGES = 20;
 
+	/** Pairs the «Статус данных» block may carry. */
+	const MAX_DATA_STATUS_ITEMS = 3;
+
 	/** Most options one page of an action field may carry. */
 	const MAX_OPTIONS_PER_PAGE = 100;
 
@@ -48,11 +51,12 @@ final class Row_Normalizer {
 	 * Builds the list envelope body from a provider result.
 	 *
 	 * @since 2.0.29
+	 * @since 2.1.13 Carries the optional `data_status` block.
 	 *
 	 * @param Records_Definition  $definition Definition the request was validated against.
-	 * @param array<string,mixed> $result     Provider result (`rows`, `total`, optional `facets`, `messages`).
+	 * @param array<string,mixed> $result     Provider result (`rows`, `total`, optional `facets`, `messages`, `data_status`).
 	 * @param int                 $per_page   Validated page size: the provider may not return more.
-	 * @return array{rows:array<int,array<string,mixed>>,total:int,facets:array<string,mixed>,account_activity:array<string,mixed>,messages:array<string,string>}|\WP_Error
+	 * @return array{rows:array<int,array<string,mixed>>,total:int,facets:array<string,mixed>,account_activity:array<string,mixed>,messages:array<string,string>,data_status:array<string,mixed>|null}|\WP_Error
 	 */
 	public static function page( Records_Definition $definition, array $result, int $per_page ) {
 		try {
@@ -67,10 +71,51 @@ final class Row_Normalizer {
 				'facets'           => self::facets( $definition, $result['facets'] ?? [] ),
 				'account_activity' => Activity_Normalizer::account( $definition, $result['account_activity'] ?? null ),
 				'messages'         => self::messages( $result['messages'] ?? [] ),
+				'data_status'      => self::data_status( $result['data_status'] ?? null ),
 			];
 		} catch ( \UnexpectedValueException $e ) {
 			return Records_Error::internal( 'woodev_records_invalid_provider_response' );
 		}
+	}
+
+	/**
+	 * The «Статус данных» block a provider may put above its table: up to three `label` / `value` pairs (e.g. «Обновлено» and
+	 * «Обновится») and a `title`, the tooltip that says what the values are about. Plain text only; null when the provider sent none.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param mixed $status Raw `data_status`.
+	 * @return array{items:array<int,array{label:string,value:string}>,title:string}|null
+	 */
+	public static function data_status( $status ): ?array {
+		if ( null === $status ) {
+			return null;
+		}
+
+		$items = is_array( $status ) ? ( $status['items'] ?? null ) : null;
+
+		if ( ! is_array( $items ) || [] === $items || count( $items ) > self::MAX_DATA_STATUS_ITEMS ) {
+			throw new \UnexpectedValueException( 'data_status needs one to three items.' );
+		}
+
+		$out = [];
+		foreach ( array_values( $items ) as $item ) {
+			if ( ! is_array( $item ) || ! is_string( $item['label'] ?? null ) || ! is_string( $item['value'] ?? null ) ) {
+				throw new \UnexpectedValueException( 'a data_status item is a label and a value.' );
+			}
+
+			$out[] = [
+				'label' => self::plain( $item['label'], Records_Definition::MAX_STRING_LENGTH ),
+				'value' => self::plain( $item['value'], Records_Definition::MAX_STRING_LENGTH ),
+			];
+		}
+
+		$title = $status['title'] ?? '';
+
+		return [
+			'items' => $out,
+			'title' => is_string( $title ) ? self::plain( $title, Records_Definition::MAX_STRING_LENGTH ) : '',
+		];
 	}
 
 	/**

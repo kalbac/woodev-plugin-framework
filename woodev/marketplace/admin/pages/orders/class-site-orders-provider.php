@@ -107,22 +107,31 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	private $log_error;
 
 	/**
+	 * The «Статус данных» block; null when the marketplace has no order polls.
+	 *
+	 * @var Site_Orders_Data_Status|null
+	 */
+	private $data_status;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param Wpdb_Account_Store      $accounts   Accounts.
-	 * @param Site_Orders_Reader      $reader     Reader.
-	 * @param Site_Orders_Rows        $rows       Row builder.
-	 * @param Site_Orders_Activity    $activity   Activity reader.
-	 * @param Site_Orders_Labels|null $labels     Labels, when the adapter has label calls.
-	 * @param Site_Orders_Cancel|null $cancel     Cancellation, when the adapter can cancel.
-	 * @param Order_Meta_Contract     $meta       The marketplace's order meta (owner stamps).
-	 * @param callable                $can_edit   `function ( int $order_id ): bool`, the object right to edit an order.
-	 * @param string                  $adapter_id The marketplace's id.
-	 * @param callable|null           $log_error  `function ( string $line ): void`, for failures that are not a refusal.
+	 * @param Wpdb_Account_Store           $accounts   Accounts.
+	 * @param Site_Orders_Reader           $reader     Reader.
+	 * @param Site_Orders_Rows             $rows       Row builder.
+	 * @param Site_Orders_Activity         $activity   Activity reader.
+	 * @param Site_Orders_Labels|null      $labels     Labels, when the adapter has label calls.
+	 * @param Site_Orders_Cancel|null      $cancel     Cancellation, when the adapter can cancel.
+	 * @param Order_Meta_Contract          $meta       The marketplace's order meta (owner stamps).
+	 * @param callable                     $can_edit   `function ( int $order_id ): bool`, the object right to edit an order.
+	 * @param string                       $adapter_id The marketplace's id.
+	 * @param callable|null                $log_error  `function ( string $line ): void`, for failures that are not a refusal.
+	 * @param Site_Orders_Data_Status|null $data_status The «Статус данных» block (since 2.1.13); null shows none.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null ) {
+		$this->data_status = $data_status;
 		$this->accounts   = $accounts;
 		$this->reader     = $reader;
 		$this->rows       = $rows;
@@ -228,13 +237,21 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 
 		$filter = Site_Orders_Filter::from_query( $account->id(), $query );
 		$page   = $this->reader->page( $filter, (int) $query['page'], (int) $query['per_page'] );
-
-		return [
+		$result = [
 			'rows'     => $this->build_rows( $account, $page['items'] ),
 			'total'    => $page['total'],
-			'facets'   => [ 'state' => $this->state_facets( $filter ) ],
+			'facets'   => [
+				'state'          => $this->state_facets( $filter ),
+				'posting_status' => $this->rows->posting_status_options( $this->reader->posting_status_counts( $filter ) ),
+			],
 			'messages' => [ 'summary_label' => Russian_Plural::pick( $page['total'], __( 'заказ', 'woodev-plugin-framework' ), __( 'заказа', 'woodev-plugin-framework' ), __( 'заказов', 'woodev-plugin-framework' ) ) ],
 		];
+
+		if ( null !== $this->data_status ) {
+			$result['data_status'] = $this->data_status->for_account( $account->id() );
+		}
+
+		return $result;
 	}
 
 	/**

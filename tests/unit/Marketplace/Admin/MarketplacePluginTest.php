@@ -212,8 +212,13 @@ final class MarketplacePluginTest extends TestCase {
 		$plugin = new Test_Marketplace_Plugin( 'ozon', self::MENU, null, [ new \stdClass() ] );
 
 		$this->assertSame(
-			'https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Forders&paged=2',
-			$plugin->get_marketplace_page_url( 'orders', [ 'paged' => 2 ] )
+			'https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fproducts&paged=2',
+			$plugin->get_marketplace_page_url( 'products', [ 'paged' => 2 ] )
+		);
+		$this->assertSame(
+			'https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-marketplace-orders&marketplace=ozon&paged=2',
+			$plugin->get_marketplace_page_url( 'orders', [ 'paged' => 2 ] ),
+			'«Заказы» is shown on «Заказы маркетплейсов», with the plugin\'s marketplace preset.'
 		);
 		$this->assertSame( '', $plugin->get_marketplace_page_url( 'no-such-page' ) );
 	}
