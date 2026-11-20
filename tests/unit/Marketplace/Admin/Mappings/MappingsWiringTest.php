@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Mappings;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Module;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
@@ -103,8 +104,7 @@ final class MappingsWiringTest extends TestCase {
 		Mappings_Module::controller( $plugin )->register_routes();
 
 		$base = 'woodev/v1/admin/marketplace/ozon/mappings';
-		$this->assertCount( 11, $routes, 'eleven patterns carry the handlers' );
-		$this->assertArrayHasKey( $base . '/attribute-counts', $routes );
+		$this->assertCount( 10, $routes, 'ten patterns carry the handlers' );
 		$this->assertArrayHasKey( $base, $routes );
 		$this->assertArrayHasKey( $base . '/categories', $routes );
 		$this->assertArrayHasKey( $base . '/mappings/(?P<id>[1-9][0-9]{0,18})/check', $routes );
@@ -117,7 +117,7 @@ final class MappingsWiringTest extends TestCase {
 				$this->assertIsCallable( $endpoint['permission_callback'] );
 			}
 		}
-		$this->assertSame( 15, $handlers );
+		$this->assertSame( 14, $handlers );
 	}
 
 	/**
@@ -137,5 +137,47 @@ final class MappingsWiringTest extends TestCase {
 		$plugin = new Test_Marketplace_Plugin( 'ozon', self::MENU, $pages );
 
 		$this->assertNull( Mappings_Module::controller( $plugin ) );
+	}
+
+	/**
+	 * The two lists are registered with the records engine under the plugin's own id, for the capability of the page.
+	 *
+	 * @return void
+	 */
+	public function test_the_two_lists_are_registered_with_the_records_engine(): void {
+		Records_Registry::reset_for_tests();
+		$plugin = new Test_Marketplace_Plugin( 'ozon', self::MENU );
+
+		$this->assertTrue( Mappings_Module::register_lists( $plugin ) );
+
+		$registry = Records_Registry::instance();
+		$this->assertSame( 'mappings', $registry->get( 'ozon', 'mappings' )->get_provider()->get_id() );
+		$this->assertSame( 'profiles', $registry->get( 'ozon', 'profiles' )->get_provider()->get_id() );
+		$this->assertNull( $registry->get( 'ozon', 'products' ) );
+
+		Records_Registry::reset_for_tests();
+	}
+
+	/**
+	 * A plugin that dropped the page gets no lists.
+	 *
+	 * @return void
+	 */
+	public function test_a_plugin_without_the_mappings_page_gets_no_lists(): void {
+		Records_Registry::reset_for_tests();
+		$pages  = [
+			[
+				'slug'   => 'products',
+				'title'  => 'Товары',
+				'kind'   => 'records',
+				'tables' => [ 'products' ],
+			],
+		];
+		$plugin = new Test_Marketplace_Plugin( 'ozon', self::MENU, $pages );
+
+		$this->assertFalse( Mappings_Module::register_lists( $plugin ) );
+		$this->assertNull( Records_Registry::instance()->get( 'ozon', 'mappings' ) );
+
+		Records_Registry::reset_for_tests();
 	}
 }

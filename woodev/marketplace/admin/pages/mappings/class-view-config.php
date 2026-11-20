@@ -144,28 +144,10 @@ final class View_Config {
 			'requestFailed'  => __( 'Не удалось выполнить запрос. Обновите страницу и повторите.', 'woodev-plugin-framework' ),
 			'addMapping'     => __( 'Добавить сопоставление', 'woodev-plugin-framework' ),
 			'addProfile'     => __( 'Добавить профиль', 'woodev-plugin-framework' ),
-			'descriptionMappings' => __( 'Сопоставление связывает категории вашего магазина с категориями маркетплейса и подсказывает, откуда брать значения характеристик. Так товар попадает в нужный раздел сразу с заполненными данными.', 'woodev-plugin-framework' ),
-			'descriptionProfiles' => __( 'Профиль хранит общие правила выгрузки: габариты, вес, НДС, цену. Настройте его один раз и выбирайте в нескольких сопоставлениях.', 'woodev-plugin-framework' ),
-			'emptyMappings'  => __( 'Сопоставлений пока нет. Сопоставление связывает категории вашего магазина с категориями маркетплейса: так товары попадают в нужный раздел и получают нужные характеристики.', 'woodev-plugin-framework' ),
 			'createFirstMapping' => __( 'Создать первое сопоставление', 'woodev-plugin-framework' ),
-			'emptyNoShopCategories' => __( 'В магазине пока нет категорий товаров, а сопоставление работает по категориям. Создайте категорию товаров и вернитесь сюда.', 'woodev-plugin-framework' ),
 			'createShopCategory' => __( 'Создать категорию товаров', 'woodev-plugin-framework' ),
 			'shopCategoriesUrl' => 'edit-tags.php?taxonomy=product_cat&post_type=product',
-			'emptyProfiles'  => __( 'Профилей пока нет. Профиль — это набор общих настроек для группы товаров, например габариты и вес по умолчанию, ставка НДС, правило цены. Создайте его один раз и выбирайте в сопоставлениях.', 'woodev-plugin-framework' ),
 			'createFirstProfile' => __( 'Создать первый профиль', 'woodev-plugin-framework' ),
-			'columnShopCategories' => __( 'Категории магазина', 'woodev-plugin-framework' ),
-			'columnAttributes' => __( 'Атрибуты', 'woodev-plugin-framework' ),
-			'attributesHelp' => __( 'Товары, у которых не заполнены обязательные атрибуты категории, выгрузить на маркетплейс нельзя.', 'woodev-plugin-framework' ),
-			/* translators: {filled} and {total} are replaced by the view: the attributes the mapping fills and the attributes its category has. */
-			'attributesOf'   => __( '{filled} из {total}', 'woodev-plugin-framework' ),
-			'attributesUncached' => __( 'Откройте сопоставление, чтобы загрузить характеристики.', 'woodev-plugin-framework' ),
-			/* translators: {count} is replaced by the view: the number of required attributes left empty. */
-			'attributesMissing' => __( 'Не заполнены обязательные атрибуты: {count}', 'woodev-plugin-framework' ),
-			'columnProperties' => __( 'Свойства профиля', 'woodev-plugin-framework' ),
-			'columnUsedIn'   => __( 'Используется в', 'woodev-plugin-framework' ),
-			'notConfigured'  => __( 'Не настроен', 'woodev-plugin-framework' ),
-			'columnActions'  => __( 'Действия', 'woodev-plugin-framework' ),
-			'edit'           => __( 'Редактировать', 'woodev-plugin-framework' ),
 			'close'          => __( 'Закрыть', 'woodev-plugin-framework' ),
 			'deleteMappingTitle' => __( 'Удалить сопоставление?', 'woodev-plugin-framework' ),
 			/* translators: {name} is replaced by the view: the mapping's name. */
@@ -180,13 +162,6 @@ final class View_Config {
 			'backToProfiles' => __( '← Все профили', 'woodev-plugin-framework' ),
 			'newMapping'     => __( 'Новое сопоставление', 'woodev-plugin-framework' ),
 			'newProfile'     => __( 'Новый профиль', 'woodev-plugin-framework' ),
-			'columnName'     => __( 'Название', 'woodev-plugin-framework' ),
-			'columnCategory' => __( 'Категория маркетплейса', 'woodev-plugin-framework' ),
-			'columnShop'     => __( 'Категорий магазина', 'woodev-plugin-framework' ),
-			'columnProfile'  => __( 'Профиль', 'woodev-plugin-framework' ),
-			'columnProducts' => __( 'Товаров', 'woodev-plugin-framework' ),
-			'columnMappings' => __( 'Сопоставлений', 'woodev-plugin-framework' ),
-			'noCategory'     => __( 'Не выбрана', 'woodev-plugin-framework' ),
 			'save'           => __( 'Сохранить', 'woodev-plugin-framework' ),
 			'saving'         => __( 'Сохраняем…', 'woodev-plugin-framework' ),
 			'delete'         => __( 'Удалить', 'woodev-plugin-framework' ),
@@ -292,16 +267,9 @@ final class View_Config {
 	 * @return string E.g. «как в магазине (см)».
 	 */
 	private static function shop_unit_label( string $option, string $fallback ): string {
-		$names = [
-			'mm' => __( 'мм', 'woodev-plugin-framework' ),
-			'cm' => __( 'см', 'woodev-plugin-framework' ),
-			'm'  => __( 'м', 'woodev-plugin-framework' ),
-			'kg' => __( 'кг', 'woodev-plugin-framework' ),
-			'g'  => __( 'г', 'woodev-plugin-framework' ),
-		];
 		$unit  = (string) get_option( $option, $fallback );
 
 		/* translators: %s: unit of measure the shop uses, e.g. «см» or «кг». */
-		return sprintf( __( 'как в магазине (%s)', 'woodev-plugin-framework' ), $names[ $unit ] ?? $unit );
+		return sprintf( __( 'как в магазине (%s)', 'woodev-plugin-framework' ), Profile_Properties::unit_name( $unit ) );
 	}
 }
