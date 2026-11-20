@@ -172,14 +172,12 @@ final class Remote_Cards_Definition {
 				'id'        => 'price',
 				'label'     => __( 'Цена', 'woodev-plugin-framework' ),
 				'cell_type' => 'text',
-				'align'     => 'right',
 				'help'      => __( 'Цена карточки на маркетплейсе. «—» значит, что значения нет.', 'woodev-plugin-framework' ),
 			],
 			[
 				'id'        => 'stock',
 				'label'     => __( 'Остаток', 'woodev-plugin-framework' ),
 				'cell_type' => 'text',
-				'align'     => 'right',
 				'help'      => __( 'Остаток карточки на маркетплейсе. «—» значит, что значения нет.', 'woodev-plugin-framework' ),
 			],
 			[

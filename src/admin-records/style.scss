@@ -196,16 +196,24 @@
 	}
 
 	.woodev-records__col-status,
-	.woodev-records__col-state,
-	.woodev-records__col-on_site {
+	.woodev-records__col-state {
 		width: 14ch;
 	}
 
-	// A sum, a price, a stock: the numbers of a row end at the same edge (the column's `align: right`).
-	.woodev-records__col-total,
+	// The «На сайте» link of a card is a product name: two lines of it (see the clamp below) need a column wider than a status.
+	.woodev-records__col-on_site {
+		width: 26ch;
+	}
+
+	// A sum, a price, a stock: one width. A column whose definition says `align: right` ends its numbers at the same edge.
+	.woodev-records__col-total {
+		width: 12ch;
+	}
+
+	// A price and a stock of the products tables: «500 / 500» under a heading with its «?» mark, left-aligned.
 	.woodev-records__col-price,
 	.woodev-records__col-stock {
-		width: 12ch;
+		width: 14ch;
 	}
 
 	.woodev-records__col-products,
@@ -222,6 +230,17 @@
 	}
 
 	@include table-look.header-height;
+
+	// A sortable heading of a left-aligned column is WooCommerce's button inside a cell that pads 16px on the left, and the button pads
+	// 12px more: the label stood 19px to the right of the values under it. The cell pads like every other cell, and the button adds none,
+	// so the label starts exactly above the first letter of its column.
+	.woocommerce-table__header.is-left-aligned.is-sortable {
+		padding-left: 10px;
+
+		.components-button {
+			padding-left: 0;
+		}
+	}
 
 	// The first column is inset like the card's title above it (24px, WooCommerce's own inset), as the first column of «Заказы доставки» is
 	// inset from the card's edge. The checkbox and expand columns keep their own narrow cells.
@@ -385,7 +404,8 @@
 		white-space: normal;
 	}
 
-	// The article: 14ch, one line, «…» at the end of a longer one (the full value is the line's `title`).
+	// The article: 14ch (19ch in the products table, whose SKUs are longer), one line, «…» at the end of a longer one (the full value
+	// is the line's `title`).
 	.woodev-records__col-sku,
 	.woodev-records__col-offer_id {
 		max-width: 14ch;
@@ -403,6 +423,11 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 		}
+	}
+
+	.woodev-records__col-sku {
+		max-width: 19ch;
+		width: 19ch;
 	}
 
 	// The photo: a small square in a 52px column, pinned beside the checkbox.
