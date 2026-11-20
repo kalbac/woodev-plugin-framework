@@ -64,6 +64,53 @@
 		margin-top: 12px;
 	}
 
+	// The filters «Расширенные фильтры» reveals: a row of selects of their own under the switches.
+	&__advanced {
+		margin-top: 12px;
+	}
+
+	// «Статус данных» at the end of the selects' row, the delivery page's block: a label above a bordered bar of «label above
+	// value» columns. It hugs the row's bottom, so its bar lines up with the 50px selects whatever their labels' height.
+	&__data-status {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+		justify-content: flex-end;
+		margin-left: auto;
+	}
+
+	&__data-status-label {
+		color: #3c434a;
+		font-size: 13px;
+		line-height: 1.4;
+	}
+
+	&__data-status-bar {
+		align-items: center;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		display: flex;
+		gap: 32px;
+		min-height: 50px;
+		padding: 0 12px;
+		font-size: 13px;
+		line-height: 20px;
+	}
+
+	&__data-status-item {
+		display: flex;
+		flex-direction: column;
+		white-space: nowrap;
+	}
+
+	&__data-status-item-label {
+		color: #757575;
+	}
+
+	&__data-status-item-value {
+		color: wd.$ink;
+	}
+
 	// The switch of a boolean filter: its label is the plain 13px text of the delivery page's «Расширенные фильтры».
 	&__boolean {
 		align-items: center;
