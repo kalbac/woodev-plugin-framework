@@ -117,8 +117,10 @@ final class Embedded_Screens {
 		$guard      = Admin_Guard::for_store( $accounts, $adapter->id() );
 
 		if ( $capabilities['product_tab'] ) {
-			self::product_tab( $plugin, $adapter, $accounts, $db, $guard, $names, $assets_url )->register();
-			self::variation_bulk( $plugin, $adapter, $accounts, $db, $names, $assets_url )->register();
+			$variation_actions = self::variation_bulk( $plugin, $adapter, $accounts, $db, $names, $assets_url );
+
+			self::product_tab( $plugin, $adapter, $accounts, $db, $guard, $names, $assets_url, $variation_actions )->register();
+			$variation_actions->register();
 		}
 
 		if ( $capabilities['order_cancel'] ) {
@@ -192,9 +194,10 @@ final class Embedded_Screens {
 	 * @param Admin_Guard                                      $guard      Guard.
 	 * @param Screen_Names                                     $names      Names.
 	 * @param string                                           $assets_url Assets folder URL.
+	 * @param Variation_Bulk_Actions                           $variation_actions The actions of the variations the tab offers.
 	 * @return Product_Tab
 	 */
-	private static function product_tab( $plugin, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, Admin_Guard $guard, Screen_Names $names, string $assets_url ): Product_Tab {
+	private static function product_tab( $plugin, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, Admin_Guard $guard, Screen_Names $names, string $assets_url, Variation_Bulk_Actions $variation_actions ): Product_Tab {
 		$schema     = new Schema( $adapter->id() );
 		$table      = static function ( string $name ) use ( $schema, $db ): string {
 			return $schema->table_name( $name, $db->prefix );
@@ -272,7 +275,8 @@ final class Embedded_Screens {
 			],
 			$plugin->get_version(),
 			$adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ 'export', 'link' ],
-			$adapter instanceof Settings_Extension ? new Product_Extension( $adapter, $names ) : null
+			$adapter instanceof Settings_Extension ? new Product_Extension( $adapter, $names ) : null,
+			$variation_actions
 		);
 	}
 }

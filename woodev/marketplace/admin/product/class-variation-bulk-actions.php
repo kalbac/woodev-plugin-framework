@@ -49,6 +49,15 @@ final class Variation_Bulk_Actions {
 	];
 
 	/**
+	 * The actions a single variation's buttons run (the same as a simple product's buttons), in their order.
+	 */
+	public const BUTTONS = [
+		Site_Products_Bulk::EXPORT,
+		Site_Products_Bulk::ARCHIVE,
+		Site_Products_Bulk::DETACH,
+	];
+
+	/**
 	 * Handle of the script that draws the notice (one for every marketplace plugin on the screen).
 	 */
 	private const SCRIPT = 'woodev-marketplace-variation-bulk';
@@ -144,6 +153,67 @@ final class Variation_Bulk_Actions {
 		add_action( 'woocommerce_variable_product_bulk_edit_actions', [ $this, 'render_options' ] );
 		add_action( 'woocommerce_bulk_edit_variations', [ $this, 'handle' ], 10, 4 );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
+		add_action( 'wp_ajax_' . $this->names->variations_action(), [ $this, 'handle_ajax' ] );
+	}
+
+	/**
+	 * Tells the product tab what it may offer on a variable product: the select above the table of the variants (the same actions as the
+	 * Variations tab's «Bulk actions»), the buttons of one variation, and the AJAX action and nonce both post with. An action the user may not
+	 * run (a write to the marketplace needs the shop-wide capability) is left out, so the screen does not offer what the request would refuse.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return array{action:string,nonce:string,select:array<string,string>,buttons:string[]}
+	 */
+	public function panel_facts(): array {
+		$select = [];
+
+		foreach ( $this->offered() as $action ) {
+			if ( $this->shop_may( $action ) ) {
+				$select[ $action ] = Site_Products_Definition::label_of( $action );
+			}
+		}
+
+		return [
+			'action'  => $this->names->variations_action(),
+			'nonce'   => wp_create_nonce( $this->names->variations_action() ),
+			'select'  => $select,
+			'buttons' => array_values( array_filter( self::BUTTONS, [ $this, 'is_allowed_button' ] ) ),
+		];
+	}
+
+	/**
+	 * Runs an action on the variations the merchant ticked in the table of the Ozon tab, or on the one variation whose button was pressed, and
+	 * answers with the same notice the Variations tab draws. The work is {@see Site_Products_Bulk::apply()}, as for the select of that tab.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return void
+	 */
+	public function handle_ajax(): void {
+		$nonce = isset( $_POST['_wpnonce'] ) && is_string( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, $this->names->variations_action() ) ) {
+			wp_send_json_error( [ 'message' => __( 'Страница устарела. Обновите её и повторите.', 'woodev-plugin-framework' ) ], 403 );
+		}
+
+		$action     = isset( $_POST['bulk_action'] ) && is_string( $_POST['bulk_action'] ) ? sanitize_key( wp_unslash( $_POST['bulk_action'] ) ) : '';
+		$account_id = isset( $_POST['account_id'] ) ? absint( wp_unslash( $_POST['account_id'] ) ) : 0; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- absint().
+		$product    = isset( $_POST['product_id'] ) ? wc_get_product( absint( wp_unslash( $_POST['product_id'] ) ) ) : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- absint().
+		$posted     = isset( $_POST['variations'] ) && is_array( $_POST['variations'] ) ? array_map( 'absint', wp_unslash( $_POST['variations'] ) ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- absint() on every element.
+
+		if ( ! in_array( $action, $this->ajax_actions(), true ) || ! $product instanceof \WC_Product || ! $product->is_type( 'variable' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Запрос не удалось разобрать. Обновите страницу и повторите.', 'woodev-plugin-framework' ) ], 400 );
+		}
+
+		// Only the product's own variations: the ids come from the browser.
+		$variations = array_values( array_intersect( $posted, array_map( 'intval', (array) $product->get_children() ) ) );
+
+		if ( [] === $variations ) {
+			wp_send_json_error( [ 'message' => __( 'Отметьте варианты, с которыми нужно что-то сделать.', 'woodev-plugin-framework' ) ], 400 );
+		}
+
+		wp_send_json_success( $this->run( $account_id, $action, (int) $product->get_id(), $variations ) );
 	}
 
 	/**
@@ -342,20 +412,40 @@ final class Variation_Bulk_Actions {
 		];
 	}
 
-	/**
-	 * Tells whether the user may run the action: edit the product, and for a write to the marketplace manage the shop as well (the
-	 * product tab's rule).
-	 *
-	 * @param string $action     Action id.
-	 * @param int    $product_id The variable product.
-	 * @return bool
-	 */
 	private function may( string $action, int $product_id ): bool {
 		if ( ! current_user_can( 'edit_product', $product_id ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- The meta capability of the product post type.
 			return false;
 		}
 
+		return $this->shop_may( $action );
+	}
+
+	/**
+	 * Tells whether the user has the shop-wide right the action needs: a write to the marketplace needs `manage_woocommerce`, a local change
+	 * only the right to edit the product.
+	 *
+	 * @param string $action Action id.
+	 * @return bool
+	 */
+	private function shop_may( string $action ): bool {
 		return null === Site_Products_Bulk::license_phrase( $action ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- WooCommerce's own capability.
+	}
+
+	/**
+	 * Tells whether a variation's button may be offered: the marketplace serves the action and the user may run it.
+	 *
+	 * @param string $action Action id.
+	 * @return bool
+	 */
+	private function is_allowed_button( string $action ): bool {
+		return ! in_array( $action, $this->withheld, true ) && $this->shop_may( $action );
+	}
+
+	/**
+	 * @return string[] The actions the tab's own AJAX serves: the select's and the buttons'.
+	 */
+	private function ajax_actions(): array {
+		return array_values( array_unique( array_merge( $this->offered(), array_diff( self::BUTTONS, $this->withheld ) ) ) );
 	}
 
 	/**

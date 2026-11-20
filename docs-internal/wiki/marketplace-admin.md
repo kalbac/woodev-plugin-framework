@@ -83,7 +83,7 @@ infrastructure folders are new and sit outside the dependency scanner's scope.
 | `flows/` | `Flows` | export service, link writing/detaching/matching, labels, order query/store | F9b |
 | `settings/` | `Settings` | settings handler and sections | F10 |
 | `admin/guard/`, `admin/notices/`, `admin/diagnostics/`, `admin/shared/` | `Admin\…` | admin guard, key-expiry notices, diagnostics report, code-to-sentence mappers shared by several screens | F10 |
-| `admin/product/`, `admin/order/` | `Admin\Product`, `Admin\Order` | embedded classic product tab; read-only marketplace order screen (`Order_Screen`, `Order_Details_Box`, #1879) | F11 |
+| `admin/product/`, `admin/order/` | `Admin\Product`, `Admin\Order` | embedded classic product tab; read-only marketplace order screen (`Order_Screen`, `Order_Details_Box`, #1879); the «Источник» filter of the WooCommerce orders list (`Order_Source_Filter`, #1880: views, dropdown, per-user choice in user meta, default shop-only; one singleton for every marketplace plugin, HPOS and posts list) | F11 |
 | `admin/pages/{products,orders,mappings,tools,diagnostics}/` | `Admin\Pages\…` | records providers and custom-view endpoints | F12a–F15 |
 
 Client code: `src/marketplace-admin/` (routing bundle, built to
@@ -899,7 +899,11 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   `--woodev-mp-label-top`. Notes use `.woodev-mp-note`, never WooCommerce's `.description` (it clears the floated label and drops below it).
   No row is a spoiler any more (`details` is gone from the tab).
 - **State badge and its dialog (2.1.13).** `state_badge()` prints the card state with a drawn mark: a check when the validator found nothing,
-  an orange badge with «!» (a `<button data-woodev-mp-dialog>`) when something is wrong. «Something» = validator errors and warnings, the
+  an orange badge (a `<button data-woodev-mp-dialog>`) when something is wrong. The mark stands to the RIGHT of the words (#1876): the check, or the
+  `warning` triangle with an exclamation mark (a CSS mask). Hover says «Есть проблемы (N) — нажмите, чтобы посмотреть». The badge pulses three
+  times and stops when the «Ozon» TAB is opened (not on page load; `product-tab.js` adds `.is-pulsing`, the keyframes live in `product-tab.css`
+  under `prefers-reduced-motion: no-preference`, so a visitor who asked for less motion gets none); the badges of the variations pulse when the
+  Variations tab loads and when a variation is opened. «Something» = validator errors and warnings, the
   marketplace's last answer, and (only while «Логирование» is on) the sync reasons; they were the separate «Проверка» / «Ответ» / «Почему не
   синхронизируется» rows, now gone from the product and the variation. The list travels in a `<template>` that follows the badge; one native
   `<dialog class="woodev-mp-dialog">` is built by `product-tab.js` on first use and filled from the template (DOM calls, no `innerHTML`), so a
@@ -912,17 +916,35 @@ What the UI audit of 18.11.2026 changed in the records shell and the two pages (
   (`localStorage`), else the first enabled account whose saved connection check is fine (as Ozon Seller 1.1.7's «first connected store»), else the first
   enabled one (`Product_Tab::default_account_id()`): it is a view preference, so there is no server write.
 - **Article line.** While the article may still change (`Link_Settings_Writer::article_is_editable()`), the row reads «<article> изменить»
-  and the input appears on click; an already sent article is plain text with a hint. The tab only follows that rule — see #1860 for lifting it.
-- **Variation header.** `woocommerce_variation_header` → `Product_Tab::render_variation_header()`: the same `state_badge()` (check, or orange «!»
-  with the problems dialog) as inside the opened variation. The header and the panel are printed in one request, so `Product_Tab::variation_blocks()`
+  and the input appears on click, with a clickable «отменить» beside it that puts the saved article back and shows the line again
+  (`Panel_View::article_control()`: `.woodev-mp-article` line, `.woodev-mp-article__editor` holding the input and «отменить»; the input keeps
+  posting while the editor is hidden). An already sent article is plain text with a hint. The tab only follows that rule — see #1860 for lifting it.
+- **Variation header.** `woocommerce_variation_header` → `Product_Tab::render_variation_header()`: the same `state_badge()` (check, or orange
+  warning with the problems dialog) as inside the opened variation. One `.woodev-mp-header-state` slot per marketplace (an inline flex box: the
+  name and the badge centred on one line, a gap between, 16px to the right): another marketplace's plugin prints its own slot after it. The header and the panel are printed in one request, so `Product_Tab::variation_blocks()`
   reads each variation's blocks once. The dialog trigger listens in the capture phase: the header is an `<h3>` that WooCommerce toggles on click.
-- **Buttons.** One WordPress `.button-group` in one row (`.woodev-mp-buttons__row`); each is an inline SVG icon plus its words
-  (`.woodev-mp-btn__text`), centred on each other with a gap. A container query shows the words only when the control column is at least 720px;
-  below that only the icons show, with the name alone in `aria-label` and the tooltip, so four or more buttons still fit one row.
+- **Buttons.** One WordPress `.button-group` in one row (`.woodev-mp-buttons__row`, built by `Panel_View::button_group()` for the block, a
+  variation's panel and a row of the variants table); each is an inline SVG icon plus its words (`.woodev-mp-btn__text`), centred on each other
+  with a gap. Up to three buttons keep their words; more than three (`Panel_View::LABELLED_MAX`) get `--many` and show only
+  the icons, and so does a group in a table row (`--icons`). Even three drop their words when they do not fit: `product-tab.js` measures the
+  group with its words (`.is-measuring`) against the width its line has (a `ResizeObserver` on `.woodev-mp-buttons`) and sets `.is-compact`
+  (measured, not a fixed breakpoint: the fit depends on the font and the screen; at 1280 three buttons need ~463px of the ~490px a product
+  panel gives, at 1024 they do not fit). The name is in `aria-label` and in the tooltip.
+  **The tooltip is WooCommerce's (`class="tips"` + `data-tip`, tipTip), never `title`:** a native `title` shows after a delay or not at all in some
+  hosts of the product screen (the operator saw nothing on hover), and WooCommerce draws `.tips` on load and again after the variations load.
   «Архивировать» and «Снять связь» ask twice: the question appears in the result line and the button turns red for five seconds. The
   category-wide «Связать по артикулу» is not one of the icons (it works on many products): it is a text button (`.woodev-mp-link-op`, the same
   `data-woodev-mp-op` handler, which in the dialog acts on the block the dialog was opened from) inside the help dialog.
-  The marks (check, «!», ✗) are CSS masks, not characters.
+  The marks (check, warning, ✗) are CSS masks, not characters.
+- **Variants table (#1877).** On a variable product the Ozon tab shows its variants as a records-style table (`Panel_View::variation_table()`):
+  tick column, picture (the WooCommerce placeholder when none), name, state, article, stock and price as «сайт / маркетплейс» (the «?» in the
+  heading explains it; «(будет отправлен)» is the tooltip of the article's «?»), and «Действия» (an icon group per row: update/export, archive,
+  unlink, as on a simple product). Above it «Выберите действие» + «Применить» offers the same nine actions as the Variations tab's «Bulk actions»
+  (`Variation_Bulk_Actions::ACTIONS`). The buttons of a row, the buttons inside an opened variation and «Применить» all post to ONE endpoint,
+  `Variation_Bulk_Actions::handle_ajax()` (`woodev_{id}_variations`), which runs `Site_Products_Bulk::apply()` through the same `run()` as the
+  Variations tab: same rights, licence, limit and notice. The posted variation ids are cut to the product's own children. The table is a table while it fits: the same observer measures it and sets
+  `.is-stacked` when it would scroll sideways (1024px), and every variant becomes a card of two lines (tick, picture, name, state, actions; then
+  article, stock, price with their `data-label`s) — WordPress's own list-table pattern on a narrow screen.
 
 ### Tables in the style of «Заказы доставки» (#1861, framework 2.1.13)
 

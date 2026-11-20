@@ -12402,6 +12402,39 @@ msgstr ""
 msgid "Список карточек загружается с маркетплейса."
 msgstr ""
 
+#: marketplace/admin/order/class-order-source-filter.php:267
+msgid "Магазин"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:268
+msgid "Маркетплейсы"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:270
+msgid "Источник:"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:329
+#, php-format
+msgid "Заказы маркетплейсов скрыты · %s"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:330
+msgid "показать"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:515
+msgid "Все источники"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:516
+msgid "Только магазин"
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:517
+msgid "Все маркетплейсы"
+msgstr ""
+
 #: marketplace/admin/pages/orders/class-marketplace-orders-page.php:259
 msgid "Маркетплейс"
 msgstr ""
@@ -12434,38 +12467,59 @@ msgstr ""
 msgid "Статус на маркетплейсе"
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:94
-msgid "Заказ %s — сведения"
+#: marketplace/admin/product/class-panel-view.php:319
+msgid "Действие над отмеченными вариантами"
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:122
-msgid "Основное"
+#: marketplace/admin/product/class-panel-view.php:336
+msgid "Отметить все варианты"
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:123
-msgid "Суммы"
+#: marketplace/admin/product/class-panel-view.php:337
+msgid "Изображение"
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:137
-msgid "Номер отправления"
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:343
+#, php-format
+msgid "Слева — остаток на сайте, справа — на %s. Прочерк — данных пока нет."
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:138
-msgid "Номер заказа на сайте"
+#. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:344
+#, php-format
+msgid "Слева — цена на сайте, справа — цена, которую %s получил в последний раз. Прочерк — данных пока нет."
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:140
-msgid "Статус на сайте"
+#. translators: %s: name of a variation.
+#: marketplace/admin/product/class-panel-view.php:364
+#, php-format
+msgid "Отметить вариант «%s»"
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:142
-msgid "Обновлён"
+#: marketplace/admin/product/class-panel-view.php:371
+msgid "Артикул будет отправлен на маркетплейс вместе с карточкой."
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:146
-msgid "Примечание покупателя"
+#: marketplace/admin/product/class-panel-view.php:475
+msgid "отменить"
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:211
-msgid "Этикетки и документы"
+#. translators: %d: number of problems.
+#: marketplace/admin/product/class-panel-view.php:622
+#, php-format
+msgid "Есть проблемы (%d) — нажмите, чтобы посмотреть"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:543
+msgid "Выберите действие."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:544
+#: marketplace/admin/product/class-variation-bulk-actions.php:213
+msgid "Отметьте варианты, с которыми нужно что-то сделать."
+msgstr ""
+
+#: marketplace/admin/product/class-variation-bulk-actions.php:197
+msgid "Страница устарела. Обновите её и повторите."
 msgstr ""

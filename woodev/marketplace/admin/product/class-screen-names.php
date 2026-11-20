@@ -78,6 +78,17 @@ final class Screen_Names {
 	}
 
 	/**
+	 * Returns the `wp_ajax_` action (and the nonce action) of the variations' actions on the tab: the table's bulk select and every variation's buttons.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string
+	 */
+	public function variations_action(): string {
+		return 'woodev_' . $this->marketplace_id . '_variations';
+	}
+
+	/**
 	 * Returns the nonce action of the product tab saves (a button appends `_{op}`).
 	 *
 	 * @since 2.1.2
