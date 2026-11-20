@@ -138,7 +138,7 @@ final class LinkSettingsWriterTest extends Sync_Test_Case {
 			( new \ReflectionClass( Warehouse_Options::class ) )->newInstanceWithoutConstructor(),
 			$this->hook_stock(),
 			new Pinned_Offer_Id( 'fake', new Fake_Article_Policy() ),
-			$renames ? new Offer_Id_Renames( $this->links(), new Rename_Scheduler( $this->names() ), static function (): void {}, [ $this, 'log_line' ] ) : null
+			$renames ? new Offer_Id_Renames( $this->links(), new Rename_Scheduler( $this->names() ), static function (): void {}, [ $this, 'log_line' ], [ $this, 'debug_line' ] ) : null
 		);
 	}
 }
