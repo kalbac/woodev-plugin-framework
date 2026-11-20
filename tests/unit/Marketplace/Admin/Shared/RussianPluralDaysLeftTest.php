@@ -5,17 +5,17 @@
  * @package Woodev\Tests\Unit\Marketplace
  */
 
-namespace Woodev\Tests\Unit\Marketplace\Account;
+namespace Woodev\Tests\Unit\Marketplace\Admin\Shared;
 
-use Woodev\Framework\Marketplace\Account\Key_Expiry;
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Tests\Unit\TestCase;
 
 /**
  * «ещё 1 день», «ещё 3 дня», «ещё 77 дней»: the Russian plural, whatever the site's locale.
  *
- * @covers \Woodev\Framework\Marketplace\Account\Key_Expiry::days_left_phrase
+ * @covers \Woodev\Framework\Marketplace\Account\Russian_Plural::days_left
  */
-final class KeyExpiryPhraseTest extends TestCase {
+final class RussianPluralDaysLeftTest extends TestCase {
 
 	/**
 	 * @return array<string,array{0:int,1:string}>
@@ -41,6 +41,6 @@ final class KeyExpiryPhraseTest extends TestCase {
 	 * @return void
 	 */
 	public function test_the_phrase_takes_the_russian_plural( int $days, string $expected ): void {
-		$this->assertSame( $expected, Key_Expiry::days_left_phrase( $days ) );
+		$this->assertSame( $expected, Russian_Plural::days_left( $days ) );
 	}
 }

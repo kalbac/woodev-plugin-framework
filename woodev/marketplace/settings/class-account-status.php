@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Account\Key_Expiry;
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
@@ -208,7 +209,7 @@ final class Account_Status {
 		}
 
 		/* translators: 1: key expiry date in d.m.Y format, 2: the days left, like «ещё 77 дней». */
-		return sprintf( __( 'Ключ истекает %1$s (%2$s).', 'woodev-plugin-framework' ), $date, Key_Expiry::days_left_phrase( $days ) ) . $tail;
+		return sprintf( __( 'Ключ истекает %1$s (%2$s).', 'woodev-plugin-framework' ), $date, Russian_Plural::days_left( $days ) ) . $tail;
 	}
 
 	/**
@@ -280,7 +281,7 @@ final class Account_Status {
 				/* translators: 1: expiry date in d.m.Y format, 2: the days left, like «ещё 77 дней». */
 				__( 'ключ до %1$s (%2$s)', 'woodev-plugin-framework' ),
 				$date,
-				Key_Expiry::days_left_phrase( $days )
+				Russian_Plural::days_left( $days )
 			);
 		}
 

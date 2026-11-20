@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Notices;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Account\Key_Expiry;
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 
 defined( 'ABSPATH' ) || exit;
@@ -211,7 +212,7 @@ final class Key_Expiry_Notices {
 			$when = sprintf( __( 'Ключ истекает сегодня (%s).', 'woodev-plugin-framework' ), esc_html( (string) $date ) );
 		} else {
 			/* translators: 1: expiry date in d.m.Y format, 2: the days left, like «ещё 77 дней». */
-			$when = sprintf( __( 'Ключ истекает %1$s (%2$s).', 'woodev-plugin-framework' ), esc_html( (string) $date ), esc_html( Key_Expiry::days_left_phrase( (int) $days ) ) );
+			$when = sprintf( __( 'Ключ истекает %1$s (%2$s).', 'woodev-plugin-framework' ), esc_html( (string) $date ), esc_html( Russian_Plural::days_left( (int) $days ) ) );
 		}
 
 		$advice = trim( $descriptor->key_renewal_advice() );
