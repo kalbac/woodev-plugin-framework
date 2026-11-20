@@ -73,6 +73,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Report_Builder' => 'woodev/marketplace/admin/diagnostics/class-report-builder.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Report_Redactor' => 'woodev/marketplace/admin/diagnostics/class-report-redactor.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Diagnostics\\Site_Facts' => 'woodev/marketplace/admin/diagnostics/class-site-facts.php',
+	'Woodev\\Framework\\Marketplace\\Admin\\Dialog_Assets' => 'woodev/marketplace/admin/class-dialog-assets.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Guard\\Admin_Guard' => 'woodev/marketplace/admin/guard/class-admin-guard.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Menu' => 'woodev/marketplace/admin/class-menu.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Notices\\Key_Expiry_Notices' => 'woodev/marketplace/admin/notices/class-key-expiry-notices.php',

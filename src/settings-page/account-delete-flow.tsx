@@ -9,7 +9,8 @@
 
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { Button, Modal, Notice, Spinner, TextControl } from '@wordpress/components';
+import { Button, Notice, Spinner, TextControl } from '@wordpress/components';
+import { WoodevDialog } from '../components/woodev-dialog';
 import type { AccountCardSchema } from './accounts-view';
 import { fetchDeletion, startDeletion, type DeletionProgress, type DeletionState } from './deletion-rest';
 
@@ -145,13 +146,33 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 	};
 
 	const busy = 'starting' === phase;
+	const confirmed = confirms( typed, card.identifier );
+
+	// The buttons of each screen, in the dialog's footer.
+	let footer: JSX.Element | null = null;
+
+	if ( 'preview' === phase || 'starting' === phase ) {
+		footer = (
+			<>
+				<Button variant="secondary" disabled={ busy } onClick={ onClose }>{ __( 'Отмена', 'woodev-plugin-framework' ) }</Button>
+				<Button variant="primary" isDestructive isBusy={ busy } disabled={ busy || ! confirmed } onClick={ start }>
+					{ __( 'Удалить аккаунт', 'woodev-plugin-framework' ) }
+				</Button>
+			</>
+		);
+	} else if ( 'done' === phase ) {
+		footer = <Button variant="primary" onClick={ onClose }>{ __( 'Готово', 'woodev-plugin-framework' ) }</Button>;
+	} else if ( 'loading' !== phase ) {
+		footer = <Button variant="secondary" onClick={ onClose }>{ __( 'Закрыть', 'woodev-plugin-framework' ) }</Button>;
+	}
 
 	return (
-		<Modal
+		<WoodevDialog
 			title={ __( 'Удаление аккаунта', 'woodev-plugin-framework' ) }
-			onRequestClose={ busy ? () => undefined : onClose }
-			shouldCloseOnClickOutside={ false }
+			onRequestClose={ onClose }
+			dismissible={ ! busy }
 			className="woodev-account-delete"
+			footer={ footer }
 		>
 			{ 'loading' === phase && (
 				<p role="status" aria-busy="true">
@@ -160,14 +181,9 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 			) }
 
 			{ 'error' === phase && (
-				<>
-					<Notice status="warning" isDismissible={ false }>
-						{ error || ( state && state.refusal ) || __( 'Аккаунт сейчас нельзя удалить.', 'woodev-plugin-framework' ) }
-					</Notice>
-					<div className="woodev-account-delete__actions">
-						<Button variant="secondary" onClick={ onClose }>{ __( 'Закрыть', 'woodev-plugin-framework' ) }</Button>
-					</div>
-				</>
+				<Notice status="warning" isDismissible={ false }>
+					{ error || ( state && state.refusal ) || __( 'Аккаунт сейчас нельзя удалить.', 'woodev-plugin-framework' ) }
+				</Notice>
 			) }
 
 			{ ( 'preview' === phase || 'starting' === phase ) && state && state.preview && (
@@ -199,12 +215,6 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					/>
-					<div className="woodev-account-delete__actions">
-						<Button variant="secondary" disabled={ busy } onClick={ onClose }>{ __( 'Отмена', 'woodev-plugin-framework' ) }</Button>
-						<Button variant="primary" isDestructive isBusy={ busy } disabled={ busy || ! confirms( typed, card.identifier ) } onClick={ start }>
-							{ __( 'Удалить аккаунт', 'woodev-plugin-framework' ) }
-						</Button>
-					</div>
 				</>
 			) }
 
@@ -215,9 +225,6 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 					</p>
 					<Removed progress={ state.deletion } />
 					{ error && <Notice status="warning" isDismissible={ false }>{ error }</Notice> }
-					<div className="woodev-account-delete__actions">
-						<Button variant="secondary" onClick={ onClose }>{ __( 'Закрыть', 'woodev-plugin-framework' ) }</Button>
-					</div>
 				</>
 			) }
 
@@ -227,11 +234,8 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 					{ ( ( state && state.deletion && state.deletion.notes ) || [] ).map( ( note ) => (
 						<Notice key={ note } status="warning" isDismissible={ false }>{ note }</Notice>
 					) ) }
-					<div className="woodev-account-delete__actions">
-						<Button variant="primary" onClick={ onClose }>{ __( 'Готово', 'woodev-plugin-framework' ) }</Button>
-					</div>
 				</>
 			) }
-		</Modal>
+		</WoodevDialog>
 	);
 }

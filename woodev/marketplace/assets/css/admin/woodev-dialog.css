@@ -1,0 +1,181 @@
+/**
+ * The look of every dialog of the marketplace admin: one header, one body, one footer, told apart by lines and a tint.
+ *
+ * Two mechanisms draw their dialogs with this file and nothing else:
+ *   - the React screens, through `src/components/woodev-dialog.tsx` (a `@wordpress/components` Modal, which brings the overlay,
+ *     the focus trap and Esc); the SCSS of each bundle pulls this file in with `@use`;
+ *   - the plain-PHP screens (the product tab, the order metabox), through `js/admin/woodev-dialog.js` (a native `<dialog>`,
+ *     which brings the backdrop, the focus trap and Esc).
+ * Both build the same parts, so the same class names:
+ *
+ *   .woodev-dialog              the frame (a `<dialog>`, or the Modal's frame)
+ *     .woodev-dialog__header    title and «✕»
+ *       .woodev-dialog__title
+ *       .woodev-dialog__close
+ *     .woodev-dialog__body      the content; it scrolls, the header and footer stay
+ *     .woodev-dialog__footer    the buttons, on the right (optional)
+ *
+ * Only plain CSS here: no SCSS variables, so a plain-PHP page loads it as it is.
+ */
+
+.woodev-dialog {
+	--woodev-dialog-line: #dcdcde;
+	--woodev-dialog-tint: #f6f7f7;
+	--woodev-dialog-ink: #1d2327;
+
+	box-sizing: border-box;
+	color: var(--woodev-dialog-ink);
+	background: #fff;
+	font-size: 15px;
+	line-height: 1.6;
+}
+
+.woodev-dialog *,
+.woodev-dialog *::before,
+.woodev-dialog *::after {
+	box-sizing: inherit;
+}
+
+/* The native `<dialog>`: the frame itself. */
+dialog.woodev-dialog {
+	width: min(560px, calc(100vw - 32px));
+	max-height: min(680px, calc(100vh - 64px));
+	margin: auto;
+	padding: 0;
+	border: 0;
+	border-radius: 8px;
+	box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08), 0 15px 27px rgba(0, 0, 0, 0.07), 0 30px 36px rgba(0, 0, 0, 0.04);
+	overflow: hidden;
+}
+
+dialog.woodev-dialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+
+dialog.woodev-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.5);
+}
+
+/* The Modal of `@wordpress/components`: its own header is hidden, ours is drawn, so the frame only lays the parts out. */
+.woodev-dialog.components-modal__frame {
+	min-width: min(420px, calc(100vw - 32px));
+}
+
+.woodev-dialog.components-modal__frame.has-size-medium {
+	max-width: 560px;
+}
+
+.woodev-dialog .components-modal__content {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+.woodev-dialog__header {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 18px 20px 18px 28px;
+	border-bottom: 1px solid var(--woodev-dialog-line);
+}
+
+.woodev-dialog__title {
+	margin: 0;
+	padding: 4px 0;
+	font-size: 20px;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--woodev-dialog-ink);
+}
+
+.woodev-dialog__close {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--woodev-dialog-ink);
+	cursor: pointer;
+}
+
+.woodev-dialog__close:hover {
+	background: #f0f0f1;
+}
+
+.woodev-dialog__close:focus-visible {
+	outline: 2px solid var(--wp-admin-theme-color, #2271b1);
+	outline-offset: 0;
+}
+
+/* The «✕» is drawn, not typed: a character is a glyph some systems have no font for. One definition for every mechanism, so the button is empty. */
+.woodev-dialog__close::before {
+	content: "";
+	display: block;
+	width: 24px;
+	height: 24px;
+	background-color: currentColor;
+	-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M13 11.8l6.1-6.3-1-1-6.1 6.2-6.1-6.2-1 1 6.1 6.3-6.5 6.7 1 1 6.5-6.6 6.5 6.6 1-1z'/%3E%3C/svg%3E") center / contain no-repeat;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M13 11.8l6.1-6.3-1-1-6.1 6.2-6.1-6.2-1 1 6.1 6.3-6.5 6.7 1 1 6.5-6.6 6.5 6.6 1-1z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.woodev-dialog__body {
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: 24px 28px;
+	overflow-y: auto;
+}
+
+.woodev-dialog__body > :first-child {
+	margin-top: 0;
+}
+
+.woodev-dialog__body > :last-child {
+	margin-bottom: 0;
+}
+
+.woodev-dialog__body h3 {
+	margin: 20px 0 8px;
+	font-size: 16px;
+}
+
+.woodev-dialog__body p {
+	margin: 0 0 12px;
+	font-size: inherit;
+}
+
+.woodev-dialog__footer {
+	display: flex;
+	flex: 0 0 auto;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	padding: 16px 28px;
+	border-top: 1px solid var(--woodev-dialog-line);
+	background: var(--woodev-dialog-tint);
+}
+
+/* A narrow screen: less side padding; the footer buttons wrap by themselves. */
+@media (max-width: 480px) {
+	.woodev-dialog__header {
+		padding-left: 20px;
+	}
+
+	.woodev-dialog__body,
+	.woodev-dialog__footer {
+		padding-right: 20px;
+		padding-left: 20px;
+	}
+}

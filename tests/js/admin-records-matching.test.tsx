@@ -13,6 +13,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import { RecordsTable, useActionExtensions } from '../../src/admin-records';
+import { footerButton } from './dialog-parts';
 import { createActivityExtensions, type ActivityExtensions } from '../../src/admin-records/activity';
 import { filterUrlKey } from '../../src/admin-records/query';
 import {
@@ -579,7 +580,7 @@ describe( 'the account line with buttons', () => {
 		expect( within( dialog ).getAllByRole( 'button' ).map( ( button ) => button.textContent ) ).toContain( 'Закрыть' );
 		expect( within( dialog ).queryByRole( 'button', { name: 'Подробнее' } ) ).toBeNull();
 
-		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Закрыть' } ) );
+		fireEvent.click( footerButton( dialog, 'Закрыть' ) );
 
 		expect( screen.queryByRole( 'dialog' ) ).toBeNull();
 		expect( posts( 'apply' ) ).toHaveLength( 0 );

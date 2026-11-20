@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
+use Woodev\Framework\Marketplace\Admin\Dialog_Assets;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 
 defined( 'ABSPATH' ) || exit;
@@ -120,22 +121,27 @@ final class Cancel_Modal {
 
 		$printed = true;
 		?>
-		<dialog id="<?php echo esc_attr( self::DIALOG_ID ); ?>" class="woodev-mp-cancel-dialog" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-button="<?php echo esc_attr( '.' . self::BUTTON_CLASS ); ?>" data-loading="<?php echo esc_attr__( 'Загружаем причины…', 'woodev-plugin-framework' ); ?>" data-sending="<?php echo esc_attr__( 'Отменяем…', 'woodev-plugin-framework' ); ?>" data-failed="<?php echo esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ); ?>">
-			<h2><?php esc_html_e( 'Отменить отправление', 'woodev-plugin-framework' ); ?></h2>
-			<p><?php esc_html_e( 'Отправление будет отменено на маркетплейсе. Это нельзя отменить: покупатель получит уведомление, а товар вернётся на склад сайта.', 'woodev-plugin-framework' ); ?></p>
-			<p>
-				<label for="woodev-mp-cancel-reason"><?php esc_html_e( 'Причина отмены', 'woodev-plugin-framework' ); ?></label><br>
-				<select id="woodev-mp-cancel-reason" disabled></select>
-			</p>
-			<p id="woodev-mp-cancel-message-row" hidden>
-				<label for="woodev-mp-cancel-message"><?php esc_html_e( 'Напишите, что случилось', 'woodev-plugin-framework' ); ?></label><br>
-				<textarea id="woodev-mp-cancel-message" class="large-text" rows="3"></textarea>
-			</p>
-			<p id="woodev-mp-cancel-status" role="status"></p>
-			<p>
+		<dialog id="<?php echo esc_attr( self::DIALOG_ID ); ?>" class="woodev-dialog woodev-mp-cancel-dialog" aria-labelledby="woodev-mp-cancel-title" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-button="<?php echo esc_attr( '.' . self::BUTTON_CLASS ); ?>" data-loading="<?php echo esc_attr__( 'Загружаем причины…', 'woodev-plugin-framework' ); ?>" data-sending="<?php echo esc_attr__( 'Отменяем…', 'woodev-plugin-framework' ); ?>" data-failed="<?php echo esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ); ?>">
+			<div class="woodev-dialog__header">
+				<h2 class="woodev-dialog__title" id="woodev-mp-cancel-title"><?php esc_html_e( 'Отменить отправление', 'woodev-plugin-framework' ); ?></h2>
+				<button type="button" class="woodev-dialog__close" data-woodev-dialog-close aria-label="<?php esc_attr_e( 'Закрыть', 'woodev-plugin-framework' ); ?>"></button>
+			</div>
+			<div class="woodev-dialog__body">
+				<p><?php esc_html_e( 'Отправление будет отменено на маркетплейсе. Это нельзя отменить: покупатель получит уведомление, а товар вернётся на склад сайта.', 'woodev-plugin-framework' ); ?></p>
+				<p>
+					<label for="woodev-mp-cancel-reason"><?php esc_html_e( 'Причина отмены', 'woodev-plugin-framework' ); ?></label><br>
+					<select id="woodev-mp-cancel-reason" disabled></select>
+				</p>
+				<p id="woodev-mp-cancel-message-row" hidden>
+					<label for="woodev-mp-cancel-message"><?php esc_html_e( 'Напишите, что случилось', 'woodev-plugin-framework' ); ?></label><br>
+					<textarea id="woodev-mp-cancel-message" class="large-text" rows="3"></textarea>
+				</p>
+				<p id="woodev-mp-cancel-status" role="status"></p>
+			</div>
+			<div class="woodev-dialog__footer">
+				<button type="button" class="button" id="woodev-mp-cancel-close" data-woodev-dialog-close><?php esc_html_e( 'Не отменять', 'woodev-plugin-framework' ); ?></button>
 				<button type="button" class="button button-primary" id="woodev-mp-cancel-confirm" disabled><?php esc_html_e( 'Отменить отправление', 'woodev-plugin-framework' ); ?></button>
-				<button type="button" class="button" id="woodev-mp-cancel-close"><?php esc_html_e( 'Не отменять', 'woodev-plugin-framework' ); ?></button>
-			</p>
+			</div>
 		</dialog>
 		<?php
 	}
@@ -148,7 +154,9 @@ final class Cancel_Modal {
 	private function enqueue_assets(): void {
 		$suffix = \Woodev_Plugin::get_assets_suffix();
 
-		wp_enqueue_style( self::ASSET_HANDLE, $this->assets_url . 'css/admin/order-cancel' . $suffix . '.css', [], $this->version );
-		wp_enqueue_script( self::ASSET_HANDLE, $this->assets_url . 'js/admin/order-cancel' . $suffix . '.js', [], $this->version, true );
+		$dialog = Dialog_Assets::enqueue( $this->assets_url, $this->version );
+
+		wp_enqueue_style( self::ASSET_HANDLE, $this->assets_url . 'css/admin/order-cancel' . $suffix . '.css', [ $dialog ], $this->version );
+		wp_enqueue_script( self::ASSET_HANDLE, $this->assets_url . 'js/admin/order-cancel' . $suffix . '.js', [ $dialog ], $this->version, true );
 	}
 }

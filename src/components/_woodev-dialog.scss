@@ -1,0 +1,10 @@
+// The look of `WoodevDialog` (`woodev-dialog.tsx`): the plain CSS file that the plain-PHP screens' dialog loads too, pulled into the
+// bundle so a React screen and a PHP screen draw every dialog from ONE source.
+//
+// @use '../components/woodev-dialog';
+//
+// Each bundle that shows a dialog says it once, in the stylesheet that belongs to the screen with the dialog.
+//
+// @package woodev-plugin-framework
+
+@use '../../woodev/marketplace/assets/css/admin/woodev-dialog';

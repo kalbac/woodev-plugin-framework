@@ -5,6 +5,7 @@
 
 const path = require( 'node:path' );
 
+const DIALOG_SCRIPT = path.join( __dirname, '../../woodev/marketplace/assets/js/admin/woodev-dialog.js' );
 const TAB_SCRIPT = path.join( __dirname, '../../woodev/marketplace/assets/js/admin/product-tab.js' );
 const CONFIRM_MS = 5000;
 
@@ -18,6 +19,7 @@ window.ajaxurl = '/wp-admin/admin-ajax.php';
 
 // The script attaches one delegated click handler to `document` when it loads: load it once, and
 // reset only the markup and the mocked request between tests.
+require( DIALOG_SCRIPT );
 require( TAB_SCRIPT );
 
 let request;
@@ -152,12 +154,13 @@ describe( 'the dialogs of a block', () => {
 
 		badge.click();
 
-		const dialog = document.querySelector( 'dialog.woodev-mp-dialog' );
+		const dialog = document.querySelector( 'dialog.woodev-dialog' );
 		expect( dialog ).not.toBeNull();
 		expect( dialog.hasAttribute( 'open' ) ).toBe( true );
-		expect( dialog.querySelector( '.woodev-mp-dialog__title' ).textContent ).toBe( 'Check' );
-		expect( dialog.querySelector( '.woodev-mp-dialog__body' ).textContent ).toBe( 'No weight' );
-		expect( dialog.querySelector( '.woodev-mp-dialog__close' ).textContent ).toBe( 'Close' );
+		expect( dialog.querySelector( '.woodev-dialog__title' ).textContent ).toBe( 'Check' );
+		expect( dialog.querySelector( '.woodev-dialog__body' ).textContent ).toBe( 'No weight' );
+		expect( dialog.querySelector( '.woodev-dialog__header .woodev-dialog__close' ).getAttribute( 'aria-label' ) ).toBe( 'Close' );
+		expect( dialog.querySelector( '.woodev-dialog__footer button' ).textContent ).toBe( 'Close' );
 	} );
 
 	test( 'the «?» reuses the same dialog and replaces its content', () => {
@@ -167,9 +170,9 @@ describe( 'the dialogs of a block', () => {
 		help.click();
 
 		expect( document.querySelectorAll( 'dialog' ).length ).toBe( 1 );
-		expect( document.querySelector( '.woodev-mp-dialog__title' ).textContent ).toBe( 'Hints' );
-		expect( document.querySelector( '.woodev-mp-dialog__body' ).textContent ).toContain( 'Hint' );
-		expect( document.querySelector( '.woodev-mp-dialog__body' ).textContent ).not.toContain( 'No weight' );
+		expect( document.querySelector( '.woodev-dialog__title' ).textContent ).toBe( 'Hints' );
+		expect( document.querySelector( '.woodev-dialog__body' ).textContent ).toContain( 'Hint' );
+		expect( document.querySelector( '.woodev-dialog__body' ).textContent ).not.toContain( 'No weight' );
 	} );
 
 	test( 'a badge in a variation header opens the dialog without the header\'s own click handler running', () => {
@@ -183,15 +186,18 @@ describe( 'the dialogs of a block', () => {
 		document.querySelector( '.woodev-mp-badge' ).click();
 
 		expect( toggled ).not.toHaveBeenCalled();
-		expect( document.querySelector( 'dialog .woodev-mp-dialog__body' ).textContent ).toBe( 'No weight' );
+		expect( document.querySelector( 'dialog .woodev-dialog__body' ).textContent ).toBe( 'No weight' );
 	} );
 
-	test( 'the close button closes the dialog', () => {
+	test( 'the «✕» of the header and the button of the footer both close the dialog', () => {
 		const { badge } = renderDialogs();
 
 		badge.click();
-		document.querySelector( '.woodev-mp-dialog__close' ).click();
+		document.querySelector( '.woodev-dialog__header .woodev-dialog__close' ).click();
+		expect( document.querySelector( 'dialog' ).hasAttribute( 'open' ) ).toBe( false );
 
+		badge.click();
+		document.querySelector( '.woodev-dialog__footer button' ).click();
 		expect( document.querySelector( 'dialog' ).hasAttribute( 'open' ) ).toBe( false );
 	} );
 

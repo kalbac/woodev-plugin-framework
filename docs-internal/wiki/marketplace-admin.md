@@ -1208,6 +1208,27 @@ the chosen one. It is registered by `Embedded_Screens` for an adapter that has t
 - **Limit.** The table's `MAX_OFFERS` (500). A product with more variations is refused with a pointer to «Товары», whose bulk runs have
   no limit.
 
+## Dialogs: one mechanism and one look (framework 2.1.13, #1875)
+
+Every dialog of the marketplace admin is drawn by ONE stylesheet, `woodev/marketplace/assets/css/admin/woodev-dialog.css`:
+a frame, a header (title and «✕» at the top right), a body (generous padding, 15 px) and an optional footer (a tinted bar with the
+buttons on the right), told apart by lines. The class set is `.woodev-dialog`, `__header`, `__title`, `__close`, `__body`,
+`__footer`. Two thin mechanisms build the same parts; a new dialog never gets its own CSS or its own `<dialog>`:
+
+| Screen kind | Mechanism | Where |
+|---|---|---|
+| React (records actions, account deletion, every later screen) | `<WoodevDialog title onRequestClose footer>` — a `@wordpress/components` Modal with its own header hidden; the Modal gives the overlay, focus trap, focus return and Esc | `src/components/woodev-dialog.tsx`; the bundle's SCSS says `@use '../components/woodev-dialog';` once |
+| Plain PHP (product tab, order metabox) | `window.WoodevDialog.build( { title, closeLabel, footer } )` for a dialog the script fills, `WoodevDialog.attach( el )` for a `<dialog class="woodev-dialog">` that PHP printed; the native `<dialog>` gives the backdrop, focus trap and Esc | `woodev/marketplace/assets/js/admin/woodev-dialog.js`; PHP enqueues both files with `Dialog_Assets::enqueue()` and lists the returned handle as a dependency |
+
+Why not the framework's `WoodevModal` (`woodev/assets/js/frontend/woodev-modal.js`): it is the storefront shell (own backdrop,
+hand-made focus trap, scroll-lock class, CSS reset for a map's content), enqueued as a standalone script; the admin dialogs get
+the same behaviour from the native element with no JS of their own. The pickup map keeps `WoodevModal`; it is a delivery
+screen and is not touched.
+
+Rules: the «✕» is an EMPTY button (the stylesheet draws it as a mask); a footer button and the «✕» may both be named «Закрыть»,
+so a test that means the footer button asks for it inside `.woodev-dialog__footer` (`tests/js/dialog-parts.ts`); a request in
+flight passes `dismissible={ false }` (no «✕», no Esc).
+
 ## Verification
 
 Implementation evidence: PHP 7.4 syntax/static analysis, unit and contract tests, Jest
