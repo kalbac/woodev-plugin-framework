@@ -31,6 +31,41 @@ export interface ManifestPage {
 	problems?: HelpLinkData;
 	/** The reserved analytics slot: always null, never requested. */
 	analytics: null;
+	/** Set when another page shows this one now (the plugin's «Заказы» → «Заказы маркетплейсов»): the route forwards there. */
+	movedTo?: MovedTo;
+}
+
+/** Where a page that moved is shown now: a wc-admin path and the arguments it opens with. */
+export interface MovedTo {
+	path: string;
+	query: Record< string, string >;
+}
+
+/** One marketplace on «Заказы маркетплейсов»: its plugin, whose `orders` table is shown, and the help links of its old page. */
+export interface OrdersPageMarketplace {
+	/** The plugin id: the records owner and the value of the `marketplace` URL argument. */
+	id: string;
+	label: string;
+	table: string;
+	help?: HelpLinkData;
+	problems?: HelpLinkData;
+}
+
+/** The shared «Заказы маркетплейсов» page (`Marketplace_Orders_Page::build_manifest()`). */
+export interface OrdersPageManifest {
+	path: string;
+	title: string;
+	breadcrumbs: Breadcrumb[];
+	/** DOM id of the WooCommerce menu root, kept open while the page is on screen. */
+	domId: string;
+	marketplaces: OrdersPageMarketplace[];
+	labels: {
+		marketplace: string;
+		tabs: string;
+		orders: string;
+		analytics: string;
+		analyticsEmpty: string;
+	};
 }
 
 export interface ManifestMenu {
@@ -44,6 +79,8 @@ export interface ManifestMenu {
 
 export interface Manifest {
 	menus: ManifestMenu[];
+	/** Present when the user may open the orders of at least one marketplace. */
+	ordersPage?: OrdersPageManifest;
 }
 
 /** What wc-admin hands a page container. */

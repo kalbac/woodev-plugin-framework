@@ -7,7 +7,7 @@
  * @package woodev-plugin-framework
  */
 
-import type { ComponentType, FormEvent, MutableRefObject } from 'react';
+import type { ComponentType, FormEvent, MutableRefObject, ReactNode } from 'react';
 import { Button, SearchControl, SelectControl, ToggleControl } from '@wordpress/components';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { CountLinks, withAllEntry } from '../components/count-links';
@@ -18,8 +18,10 @@ import {
 	MAX_MULTI_VALUES,
 	changeFilter,
 	changeQuery,
+	isAdvancedOpen,
 	isSearchText,
 	sameFilterValue,
+	toggleAdvanced,
 	valueFilters,
 } from './query';
 import { STYLES } from './styles';
@@ -297,6 +299,10 @@ export interface FiltersBarProps {
 	facets: Record< string, Facet[] >;
 	messages: Messages;
 	onChange: ( query: RecordsQuery ) => void;
+	/** A control the page puts first in the row, before the account select (the marketplace of «Заказы маркетплейсов»). */
+	leading?: ReactNode;
+	/** What the page puts at the end of the row, apart from the selects (the «Статус данных» block). */
+	aside?: ReactNode;
 }
 
 /** The select that is drawn as the counted row above the table, if the definition declares one. */
@@ -304,14 +310,22 @@ export function viewsFilter( definition: Definition ): Filter | undefined {
 	return definition.filters.find( ( filter ) => filter.type === 'select' && filter.views === true );
 }
 
-export function FiltersBar( { definition, account, query, facets, messages, onChange }: FiltersBarProps ) {
+/**
+ * The row above the table. Selects in one row, switches on their own row under it; a definition with `advanced` filters gets
+ * the «Расширенные фильтры» switch there too, and those filters in a row of their own while it is on — the layout of
+ * «Заказы доставки».
+ */
+export function FiltersBar( { definition, account, query, facets, messages, onChange, leading, aside }: FiltersBarProps ) {
 	const resetLabel = message( messages, MESSAGE_KEYS.resetFilters );
 	const canReset = resetLabel !== '' && isNarrowed( definition, query );
 	const reset = () => onChange( changeQuery( query, { search: '', filters: defaultFilters( definition ) } ) );
 	const counted = viewsFilter( definition );
 	const controls = valueFilters( definition ).filter( ( filter ) => filter !== counted );
-	const pickers = controls.filter( ( filter ) => filter.type !== 'boolean' );
-	const switches = controls.filter( ( filter ) => filter.type === 'boolean' );
+	const advanced = controls.filter( ( filter ) => filter.advanced === true );
+	const basic = controls.filter( ( filter ) => filter.advanced !== true );
+	const pickers = basic.filter( ( filter ) => filter.type !== 'boolean' );
+	const switches = basic.filter( ( filter ) => filter.type === 'boolean' );
+	const advancedOpen = advanced.length > 0 && isAdvancedOpen( definition, query );
 	const draw = ( filter: Filter ) => {
 		const Control = FILTER_CONTROLS[ filter.type ];
 
@@ -330,6 +344,7 @@ export function FiltersBar( { definition, account, query, facets, messages, onCh
 	return (
 		<div className="woodev-records__filters">
 			<div className="woodev-records__toolbar" style={ STYLES.toolbar }>
+				{ leading }
 				<AccountSelect
 					definition={ definition }
 					account={ account }
@@ -341,8 +356,28 @@ export function FiltersBar( { definition, account, query, facets, messages, onCh
 						{ resetLabel }
 					</Button>
 				) }
+				{ aside }
 			</div>
-			{ switches.length > 0 && <div className="woodev-records__switches">{ switches.map( draw ) }</div> }
+			{ ( switches.length > 0 || advanced.length > 0 ) && (
+				<div className="woodev-records__switches">
+					{ switches.map( draw ) }
+					{ advanced.length > 0 && (
+						<div className="woodev-records__boolean">
+							<ToggleControl
+								__nextHasNoMarginBottom
+								label={ message( messages, MESSAGE_KEYS.advancedFilters ) }
+								checked={ advancedOpen }
+								onChange={ ( open: boolean ) => onChange( toggleAdvanced( definition, query, open ) ) }
+							/>
+						</div>
+					) }
+				</div>
+			) }
+			{ advancedOpen && (
+				<div className="woodev-records__toolbar woodev-records__advanced" style={ STYLES.toolbar }>
+					{ advanced.map( draw ) }
+				</div>
+			) }
 		</div>
 	);
 }

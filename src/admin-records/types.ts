@@ -64,6 +64,8 @@ export interface Filter {
 	views?: boolean;
 	/** On a `date_range`: the site's current day (`YYYY-MM-DD`), which the named periods are counted from. */
 	today?: string;
+	/** Drawn only while «Расширенные фильтры» is switched on, as on «Заказы доставки». */
+	advanced?: boolean;
 }
 
 export interface Sorts {
@@ -226,7 +228,21 @@ export interface ListEnvelope {
 	facets: Record< string, Facet[] >;
 	/** Work that belongs to the whole account; absent from a children page. */
 	account_activity?: AccountActivity;
+	/** The «Статус данных» block next to the filters; absent when the table has none. */
+	data_status?: DataStatusBlock;
 	messages: Messages;
+}
+
+/** One «label above value» column of the «Статус данных» block («Обновлено», «Обновится»). */
+export interface DataStatusItem {
+	label: string;
+	value: string;
+}
+
+/** The «Статус данных» block a list read may carry: its columns and the tooltip that says what they are about. */
+export interface DataStatusBlock {
+	items: DataStatusItem[];
+	title: string;
 }
 
 /** The table's query: what the URL holds and what a list request sends. */
@@ -240,6 +256,8 @@ export interface RecordsQuery {
 	sort: string;
 	direction: Direction;
 	filters: Record< string, FilterValue >;
+	/** «Расширенные фильтры» is switched on. Kept in the URL only; it changes what is drawn, never the list request. */
+	advanced?: boolean;
 }
 
 /** The route query as wc-admin hands it to a page. */
