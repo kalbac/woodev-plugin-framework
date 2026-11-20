@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
 import AccountDeleteFlow, { phaseOf, confirms } from '../../src/settings-page/account-delete-flow';
+import { footerButton } from './dialog-parts';
 import { fetchDeletion, startDeletion } from '../../src/settings-page/deletion-rest';
 
 jest.mock( '../../src/settings-page/deletion-rest' );
@@ -113,6 +114,6 @@ test( 'an account that cannot be deleted shows the reason and only closes', asyn
 	flow( onClose );
 
 	expect( ( await screen.findAllByText( 'Сначала выключите аккаунт.' ) ).length ).toBeGreaterThan( 0 );
-	fireEvent.click( screen.getByRole( 'button', { name: 'Закрыть' } ) );
+	fireEvent.click( footerButton( screen.getByRole( 'dialog' ), 'Закрыть' ) );
 	expect( onClose ).toHaveBeenCalledTimes( 1 );
 } );
