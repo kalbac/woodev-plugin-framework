@@ -703,6 +703,43 @@ msgstr ""
 msgid "Плагин %1$s не запущен: на сайте активен другой плагин Woodev, который работает на старой версии Woodev и несовместим с ним. Если для него вышло обновление, обновите его в разделе %2$s. Если нет, на время выберите одно из двух: отключите его или верните прежнюю версию этого плагина."
 msgstr ""
 
+#. translators: %s: marketplace name.
+#: marketplace/admin/order/class-order-details-box.php:112
+msgid "Заказ %s — сведения"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:142
+msgid "Основное"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:143
+msgid "Суммы"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:166
+msgid "Номер отправления"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:167
+msgid "Номер заказа на сайте"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:169
+msgid "Статус на сайте"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:171
+msgid "Обновлён"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:175
+msgid "Примечание покупателя"
+msgstr ""
+
+#: marketplace/admin/order/class-order-details-box.php:240
+msgid "Этикетки и документы"
+msgstr ""
+
 #: payment-gateway/admin/class-payment-gateway-admin-order.php:95
 msgid "Are you sure you wish to process this capture? The action cannot be undone."
 msgstr "Вы уверены, что хотите выполнить эту операцию? Данное действие нельзя отменить."

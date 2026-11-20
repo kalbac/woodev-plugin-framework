@@ -188,6 +188,22 @@ final class Order_Registry {
 	}
 
 	/**
+	 * Reads the marketplace's own status of the posting a WooCommerce order was made from.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int $order_id WooCommerce order id.
+	 * @return string The status as stored; empty when no posting is registered for the order.
+	 */
+	public function status_of_order( int $order_id ): string {
+		$status = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The order screen shows the current status.
+			$this->db->prepare( 'SELECT status_raw FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id )
+		);
+
+		return null === $status ? '' : (string) $status;
+	}
+
+	/**
 	 * Registers the WooCommerce order of a group: succeeds only for the claim holder and only while no order is registered.
 	 *
 	 * @since 2.0.29
