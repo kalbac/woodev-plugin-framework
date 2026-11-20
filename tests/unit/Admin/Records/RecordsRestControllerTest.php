@@ -83,6 +83,15 @@ class RecordsRestControllerTest extends TestCase {
 		$this->assertSame( 10, $this->ozon->last['query'][1]['per_page'] );
 	}
 
+	public function test_the_list_envelope_carries_the_data_status_only_when_the_provider_sends_one(): void {
+		$this->ozon->data_status = [ 'items' => [ [ 'label' => 'Обновлено', 'value' => 'Ни разу' ] ] ];
+
+		$data = $this->controller->get_rows( $this->request() )->get_data();
+
+		$this->assertSame( [ 'items' => [ [ 'label' => 'Обновлено', 'value' => 'Ни разу' ] ], 'title' => '' ], $data['data_status'] );
+		$this->assertArrayNotHasKey( 'data_status', $this->controller->get_rows( $this->request( [], 'wildberries' ) )->get_data() );
+	}
+
 	public function test_the_definition_route_filters_actions_by_capability_and_reports_the_context(): void {
 		$this->caps = [ 'manage_woocommerce' ];
 

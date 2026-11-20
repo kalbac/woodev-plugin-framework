@@ -141,6 +141,35 @@ final class SiteOrdersReaderTest extends TestCase {
 	/**
 	 * @dataProvider storages
 	 */
+	public function test_the_marketplace_status_narrows_the_table_and_a_malformed_one_is_any( bool $hpos ): void {
+		$reader = $this->reader( $hpos );
+
+		$this->assertSame( [ 104 ], $this->ids( $reader, [ '', '', '', '', '', 'date', 'desc', 'delivering' ] ) );
+		$this->assertSame( [ 101 ], $this->ids( $reader, [ Site_Orders_Filter::STATE_OPEN, 'wc-processing', '', '', '', 'date', 'desc', 'awaiting_packaging' ] ), 'Filters combine.' );
+		$this->assertSame( [], $this->ids( $reader, [ '', '', '', '', '', 'date', 'desc', 'new' ] ), 'The trashed order and the row with no order stay out.' );
+		$this->assertSame( [ 104, 103, 102, 101 ], $this->ids( $reader, [ '', '', '', '', '', 'date', 'desc', "x' OR 1=1 --" ] ), 'Not a status: no filter.' );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
+	public function test_the_status_counts_ignore_the_status_itself_and_follow_every_other_filter( bool $hpos ): void {
+		$reader = $this->reader( $hpos );
+
+		$this->assertSame(
+			[ 'awaiting_packaging' => 1, 'cancelled' => 1, 'delivered' => 1, 'delivering' => 1 ],
+			$reader->posting_status_counts( new Site_Orders_Filter( Orders_Shop::ACCOUNT, '', '', '', '', '', 'date', 'desc', 'delivering' ) ),
+			'Only the account\'s real orders, by code; the chosen status does not hide the others.'
+		);
+		$this->assertSame(
+			[ 'awaiting_packaging' => 1, 'delivering' => 1 ],
+			$reader->posting_status_counts( new Site_Orders_Filter( Orders_Shop::ACCOUNT, '', 'wc-processing' ) )
+		);
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
 	public function test_the_date_range_is_compared_with_the_creation_time_in_utc( bool $hpos ): void {
 		$reader = $this->reader( $hpos );
 

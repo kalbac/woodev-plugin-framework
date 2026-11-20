@@ -68,6 +68,7 @@ use Woodev\Framework\Marketplace\Jobs\Link_Jobs;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Poll_Task_Runner;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
+use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Jobs\Price_Flush_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Recompute_Runner;
 use Woodev\Framework\Marketplace\Jobs\Rename_Offer_Ids_Runner;
@@ -676,7 +677,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 				return;
 			}
 
-			( new Posting_Jobs( $this->gate, $this->accounts, $handler, $this->adapter->error_classifier(), $this->names, $this->adapter->id(), Posting_Jobs::option_key( $this->plugin_id ) ) )->register();
+			( new Posting_Jobs( $this->gate, $this->accounts, $handler, $this->adapter->error_classifier(), $this->names, $this->adapter->id(), Posting_Jobs::option_key( $this->plugin_id ), new Posting_Poll_Times( $this->plugin_id ) ) )->register();
 		}
 
 		/**
