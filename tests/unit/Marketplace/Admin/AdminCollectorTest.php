@@ -328,29 +328,27 @@ final class AdminCollectorTest extends TestCase {
 		$this->assertNull( $this->collector->resolve_legacy_redirect() );
 	}
 
-	private function diagnostics_plugin(): Test_Marketplace_Plugin {
+	private function diagnostics_plugin( bool $with_settings = false ): Test_Marketplace_Plugin {
 		return new Test_Marketplace_Plugin(
 			'ozon-seller',
 			[ 'id' => 'ozon-seller', 'title' => 'OZON-SELLER' ],
 			[
 				[ 'slug' => 'products', 'title' => 'T', 'kind' => 'records', 'tables' => [ 'products' ] ],
 				[ 'slug' => Page::DIAGNOSTICS_SLUG, 'title' => 'D', 'kind' => 'custom', 'view' => 'diagnostics' ],
-			]
+			],
+			$with_settings ? [ new \stdClass() ] : []
 		);
 	}
 
 	/**
-	 * Sets the request to a bookmark of «Диагностика» and registers a plugin that declares it.
+	 * Registers a plugin that declares «Диагностика» and answers the URL helpers the manifest needs.
 	 *
-	 * @param bool $logging_on Whether «Логирование» is on.
+	 * @param bool $logging_on    Whether «Логирование» is on.
+	 * @param bool $with_settings Whether the plugin has a settings page.
 	 */
-	private function diagnostics_collector( bool $logging_on ): void {
+	private function diagnostics_collector( bool $logging_on, bool $with_settings = false ): void {
 		Functions\stubs(
 			[
-				'wp_unslash'    => null,
-				'wp_parse_url'  => 'parse_url',
-				'wp_doing_ajax' => false,
-				'esc_url'       => null,
 				'admin_url'     => static function ( string $path = '' ): string {
 					return 'https://shop.test/wp-admin/' . $path;
 				},
@@ -360,78 +358,60 @@ final class AdminCollectorTest extends TestCase {
 			]
 		);
 
-		$plugin = $this->diagnostics_plugin();
+		$plugin = $this->diagnostics_plugin( $with_settings );
 		$plugin->set_logging_on( $logging_on );
 		$this->collector->register_plugin( $plugin );
-
-		$_SERVER['REQUEST_URI'] = '/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fdiagnostics';
 	}
 
-	public function test_a_bookmark_to_a_hidden_diagnostics_page_is_explained_in_russian(): void {
+	public function test_a_hidden_diagnostics_page_gets_an_explanation_route_in_the_manifest_but_no_menu_page(): void {
 		$this->diagnostics_collector( false );
 
-		$text = $this->collector->resolve_hidden_diagnostics_explanation();
+		$manifest = $this->collector->build_manifest();
 
-		$this->assertNotNull( $text );
-		$this->assertStringContainsString( 'Включите «Логирование» в', $text );
-		$this->assertStringContainsString( 'чтобы увидеть диагностику.', $text );
+		$this->assertSame( [ 'products' ], array_column( $manifest['menus'][0]['pages'], 'id' ), 'the menu keeps no entry for it' );
+		$this->assertCount( 1, $manifest['explanations'] );
+		$this->assertSame( '/ozon-seller/diagnostics', $manifest['explanations'][0]['path'] );
+		$this->assertSame( 'Включите «Логирование» в настройках, чтобы увидеть диагностику.', $manifest['explanations'][0]['message'] );
+		$this->assertSame( $manifest['menus'][0]['domId'], $manifest['explanations'][0]['domId'] );
+		$this->assertArrayNotHasKey( 'settings', $manifest['explanations'][0], 'no settings page, no link' );
 	}
 
 	public function test_the_explanation_links_to_the_settings_page_when_the_plugin_has_one(): void {
-		$this->diagnostics_collector( false );
-		$this->collector->reset_for_tests();
-		$plugin = new Test_Marketplace_Plugin(
-			'ozon-seller',
-			[ 'id' => 'ozon-seller', 'title' => 'OZON-SELLER' ],
-			[
-				[ 'slug' => 'products', 'title' => 'T', 'kind' => 'records', 'tables' => [ 'products' ] ],
-				[ 'slug' => Page::DIAGNOSTICS_SLUG, 'title' => 'D', 'kind' => 'custom', 'view' => 'diagnostics' ],
-			],
-			[ new \stdClass() ]
-		);
-		$plugin->set_logging_on( false );
-		$this->collector->register_plugin( $plugin );
+		$this->diagnostics_collector( false, true );
 
-		$text = (string) $this->collector->resolve_hidden_diagnostics_explanation();
+		$explanation = $this->collector->build_manifest()['explanations'][0];
 
-		$this->assertStringContainsString( '<a href="https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fsettings">настройках</a>', $text );
+		$this->assertSame( 'https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fsettings', $explanation['settings']['url'] );
+		$this->assertSame( 'Перейти к настройкам', $explanation['settings']['label'] );
 	}
 
 	public function test_nothing_is_explained_while_logging_is_on_because_the_page_is_there(): void {
 		$this->diagnostics_collector( true );
 
-		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
+		$manifest = $this->collector->build_manifest();
+
+		$this->assertArrayNotHasKey( 'explanations', $manifest );
+		$this->assertContains( 'diagnostics', array_column( $manifest['menus'][0]['pages'], 'id' ) );
 	}
 
-	public function test_a_user_without_the_capability_keeps_the_wordpress_refusal(): void {
+	public function test_a_user_without_the_diagnostics_capability_gets_no_explanation(): void {
 		$this->diagnostics_collector( false );
-		Functions\when( 'current_user_can' )->justReturn( false );
+		Functions\when( 'current_user_can' )->alias(
+			static function ( string $capability ): bool {
+				return 'manage_woocommerce' !== $capability;
+			}
+		);
 
-		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
+		$this->assertArrayNotHasKey( 'explanations', $this->collector->build_manifest() );
 	}
 
-	public function test_another_page_of_the_menu_is_not_explained(): void {
-		$this->diagnostics_collector( false );
-		$_SERVER['REQUEST_URI'] = '/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Forders';
-
-		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
-	}
-
-	public function test_a_plugin_that_does_not_declare_diagnostics_is_not_explained(): void {
-		$this->diagnostics_collector( false );
-		$this->collector->reset_for_tests();
+	public function test_a_plugin_that_does_not_declare_diagnostics_gets_no_explanation(): void {
+		Functions\stubs( [ 'admin_url' => 'https://shop.test/wp-admin/' ] );
 		$plugin = $this->plugin( 'ozon-seller', [ 'products' ] );
 		$plugin->set_logging_on( false );
 		$this->collector->register_plugin( $plugin );
 
-		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
-	}
-
-	public function test_an_ajax_request_is_never_explained(): void {
-		$this->diagnostics_collector( false );
-		Functions\when( 'wp_doing_ajax' )->justReturn( true );
-
-		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
+		$this->assertArrayNotHasKey( 'explanations', $this->collector->build_manifest() );
 	}
 
 	public function test_an_ajax_request_is_never_redirected(): void {

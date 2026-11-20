@@ -322,77 +322,48 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		}
 
 		/**
-		 * Tells a merchant who opens «Диагностика» from a bookmark, while «Логирование» is off, what to switch on.
+		 * The pages the menu leaves out but a bookmark can still reach, as the bundle reads them: for now «Диагностика» while
+		 * «Логирование» is off, which gets a route that says what to switch on instead of wc-admin's English «not allowed» screen
+		 * (that screen is drawn by the client, so WordPress never denies the request and no PHP hook sees it).
 		 *
-		 * The menu leaves the page out, so core denies the request with its English refusal; this runs just before that, on the same
-		 * hook as the v1 redirect. A user who could not open the page anyway keeps core's refusal.
-		 *
-		 * @internal
-		 *
-		 * @since 2.1.13
-		 *
-		 * @return void
-		 */
-		public function maybe_explain_hidden_diagnostics(): void {
-			$explanation = $this->resolve_hidden_diagnostics_explanation();
-
-			if ( null === $explanation ) {
-				return;
-			}
-
-			wp_die(
-				wp_kses( $explanation, [ 'a' => [ 'href' => [] ] ] ),
-				esc_html__( 'Диагностика недоступна', 'woodev-plugin-framework' ),
-				[
-					'response'  => 403,
-					'back_link' => true,
-				]
-			);
-		}
-
-		/**
-		 * The explanation (HTML) for the current request when it is a bookmark to a hidden «Диагностика», else null. Split from
-		 * the `wp_die()` so a test can reach it.
+		 * Only for a user who holds the page's capability; anyone else keeps the refusal. The menu keeps no entry for it.
 		 *
 		 * @since 2.1.13
 		 *
-		 * @return string|null
+		 * @return array<int,array<string,mixed>>
 		 */
-		public function resolve_hidden_diagnostics_explanation(): ?string {
-			if ( wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
-				return null;
-			}
-
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput -- read-only URL routing, no state change.
-			$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
-			$request     = Page::parse_query( (string) wp_parse_url( $request_uri, PHP_URL_QUERY ) );
-
-			if ( 'wc-admin' !== ( $request['page'] ?? '' ) || ! isset( $request['path'] ) ) {
-				return null;
-			}
+		private function build_explanations(): array {
+			$can          = self::capability_check();
+			$explanations = [];
 
 			foreach ( $this->get_menus() as $menu ) {
 				$plugin = $this->plugins[ $menu->get_plugin_id() ] ?? null;
 				$page   = null === $plugin ? null : $plugin->get_hidden_diagnostics_page();
 
-				if ( null === $page || $menu->get_page_path( $page ) !== $request['path'] || ! current_user_can( $page->get_capability( $menu->get_capability() ) ) ) {
+				if ( null === $page || ! $can( $page->get_capability( $menu->get_capability() ) ) ) {
 					continue;
 				}
 
 				$settings = $menu->get_page( Page::SETTINGS_SLUG );
+				$entry    = [
+					'path'        => $menu->get_page_path( $page ),
+					'title'       => $page->get_heading(),
+					'breadcrumbs' => [ [ $menu->get_page_path( $menu->get_landing_page() ), $menu->get_title() ], $page->get_heading() ],
+					'domId'       => $menu->get_root_dom_id(),
+					'message'     => __( 'Включите «Логирование» в настройках, чтобы увидеть диагностику.', 'woodev-plugin-framework' ),
+				];
 
-				if ( null === $settings ) {
-					return esc_html__( 'Включите «Логирование» в настройках, чтобы увидеть диагностику.', 'woodev-plugin-framework' );
+				if ( null !== $settings && $can( $settings->get_capability( $menu->get_capability() ) ) ) {
+					$entry['settings'] = [
+						'url'   => $this->get_page_url( $menu, $settings ),
+						'label' => __( 'Перейти к настройкам', 'woodev-plugin-framework' ),
+					];
 				}
 
-				return sprintf(
-					/* translators: %s: the link «настройках» to the plugin's settings page. */
-					esc_html__( 'Включите «Логирование» в %s, чтобы увидеть диагностику.', 'woodev-plugin-framework' ),
-					sprintf( '<a href="%1$s">%2$s</a>', esc_url( $this->get_page_url( $menu, $settings ) ), esc_html__( 'настройках', 'woodev-plugin-framework' ) )
-				);
+				$explanations[] = $entry;
 			}
 
-			return null;
+			return $explanations;
 		}
 
 		/**
@@ -458,9 +429,9 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		 * (`ordersPage`) when the user may open the orders of a marketplace.
 		 *
 		 * @since 2.0.29
-		 * @since 2.1.13 Carries `ordersPage`, and `movedTo` on each «Заказы» page.
+		 * @since 2.1.13 Carries `ordersPage`, `movedTo` on each «Заказы» page, and `explanations` for a page the menu leaves out.
 		 *
-		 * @return array{menus: array<int,array<string,mixed>>, ordersPage?: array<string,mixed>}
+		 * @return array{menus: array<int,array<string,mixed>>, ordersPage?: array<string,mixed>, explanations?: array<int,array<string,mixed>>}
 		 */
 		public function build_manifest(): array {
 			$menus = [];
@@ -479,8 +450,13 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 				}
 			}
 
-			$manifest = [ 'menus' => $menus ];
-			$orders   = Marketplace_Orders_Page::build_manifest( $menus, $names );
+			$manifest     = [ 'menus' => $menus ];
+			$explanations = $this->build_explanations();
+			$orders       = Marketplace_Orders_Page::build_manifest( $menus, $names );
+
+			if ( [] !== $explanations ) {
+				$manifest['explanations'] = $explanations;
+			}
 
 			if ( null !== $orders ) {
 				$manifest['ordersPage'] = $orders;
@@ -565,7 +541,6 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 			add_action( 'admin_head', [ $this, 'print_menu_styles' ] );
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy' ] );
-			add_action( 'admin_page_access_denied', [ $this, 'maybe_explain_hidden_diagnostics' ], 20 );
 		}
 
 		/**
