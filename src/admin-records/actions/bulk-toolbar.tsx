@@ -131,7 +131,7 @@ export function BulkToolbar( { flow, selection, table, activity }: BulkToolbarPr
 }
 
 /**
- * The account-wide actions as a row of buttons at the top of the page, where «Заказы доставки» has «Создать заказ».
+ * The account-wide actions as a row of buttons: at the right end of the filter row, where the orders page puts its «Статус данных».
  *
  * A blocked one says why in its tooltip and, for assistive technology, in a hidden sentence: the account line above the table
  * already says the same in words, and a sentence written beside a button here once pushed the toolbar apart.
@@ -145,7 +145,7 @@ export function AccountActions( { flow, selection, table, activity, only }: Acco
 	}
 
 	return (
-		<div className={ `woodev-records__account-actions${ only === undefined ? ' is-page-top' : '' }` }>
+		<div className="woodev-records__account-actions">
 			{ actions.map( ( action ) => {
 				const reason = blockedReason( action, selection.selectedIds, table, health );
 				const reasonId = `woodev-records-bulk-reason-${ action.id }`;

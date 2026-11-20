@@ -271,7 +271,7 @@ export function buildLines( input: TableModelInput ): TableLine[] {
  * @param label The column's label.
  * @param help  PHP's sentence.
  */
-function HeadingWithHelp( { label, help }: { label: string; help: string } ) {
+export function HeadingWithHelp( { label, help }: { label: string; help: string } ) {
 	return (
 		<span className="woodev-records__heading">
 			{ label }

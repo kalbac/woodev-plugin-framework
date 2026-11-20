@@ -858,6 +858,12 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			$this->warehouses->for_account( $account->id() ),
 			static function ( int $product_id ): string {
 				return current_user_can( 'edit_post', $product_id ) ? (string) get_edit_post_link( $product_id, 'raw' ) : '';
+			},
+			static function ( int $product_id ): string {
+				$product = wc_get_product( $product_id );
+				$photo   = $product instanceof \WC_Product && $product->get_image_id() ? wp_get_attachment_image_url( (int) $product->get_image_id(), 'thumbnail' ) : '';
+
+				return is_string( $photo ) && '' !== $photo ? $photo : wc_placeholder_img_src( 'thumbnail' );
 			}
 		);
 	}

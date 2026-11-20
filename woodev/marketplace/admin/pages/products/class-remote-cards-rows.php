@@ -311,17 +311,22 @@ final class Remote_Cards_Rows {
 	}
 
 	/**
-	 * The actions of a card's row: «Открыть товар» when a product carries the card, else «Импортировать» (when the table offers it) and «Связать с…».
+	 * The actions of a card's row, by state. A card a product carries: «Открыть на {marketplace}», «Открыть товар», «Отвязать». A card no
+	 * product carries: «Открыть на {marketplace}», «Импортировать» (when the table offers it) and «Связать с товаром…».
 	 *
 	 * @param array<string,mixed> $card      Card.
 	 * @param bool                $importing Whether the card is being imported.
-	 * @return array<int,array{id:string,enabled:bool,reason:string}>
+	 * @return array<int,array{id:string,enabled:bool,reason:string,url?:string}>
 	 */
 	private function actions( array $card, bool $importing ): array {
-		// A card a product already carries needs nothing done to it: one button opens the product, no disabled «Импортировать» and
-		// «Связать с…» and no sentence about why they are off.
+		$remote = $this->open_remote_actions( $card );
+
+		// A card a product already carries needs nothing done to it: no disabled «Импортировать» and «Связать с…» and no sentence
+		// about why they are off.
 		if ( (int) ( $card['wc_product_id'] ?? 0 ) > 0 ) {
-			return [ $this->open_action( (int) $card['wc_product_id'] ) ];
+			$open = $this->open_action( (int) $card['wc_product_id'] );
+
+			return array_merge( $remote, [ $open, $this->unlink_action( $open ) ] );
 		}
 
 		$locked = $importing ? self::locked_reason() : '';
@@ -332,7 +337,42 @@ final class Remote_Cards_Rows {
 			$link['reason']  = $locked;
 		}
 
-		return $this->importable ? [ $this->import_action( $card, $locked ), $link ] : [ $link ];
+		return array_merge( $remote, $this->importable ? [ $this->import_action( $card, $locked ), $link ] : [ $link ] );
+	}
+
+	/**
+	 * «Открыть на {marketplace}»: the card in the seller's cabinet. Not offered when the adapter gives no address.
+	 *
+	 * @param array<string,mixed> $card Card.
+	 * @return array<int,array{id:string,enabled:bool,reason:string,url:string}>
+	 */
+	private function open_remote_actions( array $card ): array {
+		$url = $this->cells->card_address( $card );
+
+		return '' === $url
+			? []
+			: [
+				[
+					'id'      => Remote_Cards_Definition::OPEN_REMOTE,
+					'enabled' => true,
+					'reason'  => '',
+					'url'     => $url,
+				],
+			];
+	}
+
+	/**
+	 * «Отвязать»: the site forgets the card. It is open for whoever may edit the product that carries the card.
+	 *
+	 * @param array{enabled:bool,reason:string} $open «Открыть товар» of the same row: the product's edit right decides both.
+	 * @return array{id:string,enabled:bool,reason:string}
+	 */
+	private function unlink_action( array $open ): array {
+		return [
+			'id'      => Remote_Cards_Definition::UNLINK,
+			'enabled' => $open['enabled'],
+			'reason'  => $open['reason'],
+		];
 	}
 
 	/**

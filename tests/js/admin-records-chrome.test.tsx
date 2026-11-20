@@ -124,7 +124,7 @@ describe( 'the card header', () => {
 		expect( cardProps.at( -1 )?.hasSearch ).toBe( true );
 	} );
 
-	test( 'only the selection actions are in the select; an account action is a button at the top of the page, above the filters, not in the card', async () => {
+	test( 'only the selection actions are in the select; an account action is a button at the right end of the filter row, not in the card', async () => {
 		serve( () => fixtureList( [ mug ] ) );
 		render( <Page /> );
 		await screen.findByRole( 'table', { name: 'Товары' } );
@@ -137,11 +137,34 @@ describe( 'the card header', () => {
 		expect( options ).toEqual( [ 'Выберите действие', 'Отправить' ] );
 		expect( within( accountRow ).getByRole( 'button', { name: 'Связать по артикулу' } ) ).toBeInTheDocument();
 		expect( header ).not.toContainElement( accountRow );
-		expect( accountRow ).toHaveClass( 'is-page-top' );
-		// Above the filters and above the card: the place of «Создать заказ» on the delivery page.
-		const filters = document.querySelector( '.woodev-records__filters' ) as HTMLElement;
-		expect( accountRow.compareDocumentPosition( filters ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+		// In the row of the filter selects, after them, and above the card.
+		const toolbar = document.querySelector( '.woodev-records__toolbar' ) as HTMLElement;
+		expect( toolbar ).toContainElement( accountRow );
+		expect( toolbar.lastElementChild ).toBe( accountRow );
 		expect( accountRow.compareDocumentPosition( select ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+	} );
+
+	test( "PHP's description is the full-width row above the filters", async () => {
+		const base = definition();
+		serve( () => fixtureList( [ mug ] ), { ...base, messages: { ...base.messages, description: 'Здесь видно, что уже выгружено.' } } );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		const description = screen.getByText( 'Здесь видно, что уже выгружено.' );
+		const filters = document.querySelector( '.woodev-records__filters' ) as HTMLElement;
+
+		expect( description ).toHaveClass( 'woodev-records__description' );
+		expect( description.compareDocumentPosition( filters ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+	} );
+
+	test( 'a table with a photo column tells the stylesheet to pin it before the name', async () => {
+		const base = definition();
+		const photo = { ...base.columns[ 0 ], id: 'image', label: 'Фото', required: false };
+		serve( () => fixtureList( [ mug ] ), { ...base, columns: [ photo, ...base.columns ] } );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		expect( document.querySelector( '.woodev-records' ) ).toHaveClass( 'has-image' );
 	} );
 
 	test( 'the select runs a selection action only for a selected row', async () => {

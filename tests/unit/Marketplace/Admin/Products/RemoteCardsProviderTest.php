@@ -64,7 +64,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertSame( [ 'refresh_list', 'link_by_article' ], array_column( $definition['bulk_actions'], 'id' ) );
 		$this->assertTrue( array_column( $definition['bulk_actions'], null, 'id' )['refresh_list']['skip_preview'], '«Обновить список» starts on the click: a preview of an account-wide read counts nothing.' );
 		$this->assertFalse( array_column( $definition['bulk_actions'], null, 'id' )['link_by_article']['skip_preview'] );
-		$this->assertSame( [ 'open_product', 'link_to', 'near_confirm', 'near_dismiss' ], array_column( $definition['row_actions'], 'id' ) );
+		$this->assertSame( [ 'open_remote', 'open_product', 'unlink', 'link_to', 'near_confirm', 'near_dismiss' ], array_column( $definition['row_actions'], 'id' ) );
 		$this->assertSame( [], $definition['sorts']['keys'], 'The list is the marketplace\'s own order.' );
 		$this->assertNull( $definition['analytics'] );
 		$this->assertNull( $definition['children'] );
@@ -118,7 +118,7 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertCount( 1, $row['cells']['state'], 'One badge; the numbers are its tooltip.' );
 		$this->assertSame( 'ID товара: 5001' . "\n" . 'SKU: 7001', $row['cells']['state'][0]['value']['tooltip'] );
 		$this->assertSame( [ '—', '—' ], [ $row['cells']['price'], $row['cells']['stock'] ], 'The store gives no price or stock yet: a dash, not an empty cell.' );
-		$this->assertNull( $row['cells']['image'] );
+		$this->assertSame( 'https://example.test/placeholder.png', $row['cells']['image'][0]['value']['url'], 'A card without a photo shows the WooCommerce placeholder.' );
 		$this->assertSame( 'Создан', $row['cells']['state'][0]['value']['label'] );
 		$this->assertSame( '—', $row['cells']['on_site'][0]['value'] );
 		$this->assertSame( [ [ 'id' => 'link_to', 'enabled' => true, 'reason' => '' ] ], $row['actions'] );
@@ -136,8 +136,8 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$this->assertSame( 'link', $row['cells']['on_site'][0]['type'] );
 		$this->assertSame( 'Товар 41', $row['cells']['on_site'][0]['value']['label'] );
 		$this->assertSame( 'https://example.test/wp-admin/post.php?post=41&action=edit', $row['cells']['on_site'][0]['value']['url'] );
-		// A card on the site needs nothing done to it: one button opens the product, no disabled «Связать с…» and no sentence.
-		$this->assertSame( [ 'open_product' ], array_column( $row['actions'], 'id' ) );
+		// A card on the site needs nothing done to it: it is opened or unlinked, no disabled «Связать с…» and no sentence.
+		$this->assertSame( [ 'open_product', 'unlink' ], array_column( $row['actions'], 'id' ) );
 		$this->assertTrue( $row['actions'][0]['enabled'] );
 		$this->assertSame( 'https://example.test/wp-admin/post.php?post=41&action=edit', $row['actions'][0]['url'] );
 	}

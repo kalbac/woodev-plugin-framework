@@ -45,15 +45,16 @@ final class Remote_Cards_Cells {
 	}
 
 	/**
-	 * The card's photo, a small square; nothing when the card has none.
+	 * The card's photo, a small square; the WooCommerce placeholder when the card has none, so the column is never an empty cell.
 	 *
 	 * @since 2.1.13
 	 *
 	 * @param array<string,mixed> $card Card.
-	 * @return array<int,array{type:string,value:mixed}>|null
+	 * @return array<int,array{type:string,value:mixed}>|null Null outside WooCommerce, where there is no placeholder either.
 	 */
 	public function image( array $card ): ?array {
-		$url = $this->address( (string) ( $card['image_url'] ?? '' ) );
+		$own = $this->address( (string) ( $card['image_url'] ?? '' ) );
+		$url = '' === $own ? $this->placeholder() : $own;
 
 		if ( '' === $url ) {
 			return null;
@@ -71,6 +72,17 @@ final class Remote_Cards_Cells {
 	}
 
 	/**
+	 * The WooCommerce placeholder picture, shown for a card that has no photo of its own so the column is never an empty cell.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string Empty outside WooCommerce, where there is no placeholder to show.
+	 */
+	private function placeholder(): string {
+		return function_exists( 'wc_placeholder_img_src' ) ? $this->address( (string) wc_placeholder_img_src( 'thumbnail' ) ) : '';
+	}
+
+	/**
 	 * The card's name, a link to the card in the seller's cabinet when the adapter knows the address.
 	 *
 	 * @since 2.1.13
@@ -85,7 +97,7 @@ final class Remote_Cards_Cells {
 			return null;
 		}
 
-		$url = null === $this->card_url ? '' : $this->address( (string) call_user_func( $this->card_url, (array) ( $card['remote_ids'] ?? [] ) ) );
+		$url = $this->card_address( $card );
 
 		return [
 			'' === $url
@@ -101,6 +113,18 @@ final class Remote_Cards_Cells {
 					],
 				],
 		];
+	}
+
+	/**
+	 * Where the card is in the seller's cabinet.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param array<string,mixed> $card Card.
+	 * @return string Empty when the adapter gives no address.
+	 */
+	public function card_address( array $card ): string {
+		return null === $this->card_url ? '' : $this->address( (string) call_user_func( $this->card_url, (array) ( $card['remote_ids'] ?? [] ) ) );
 	}
 
 	/**

@@ -98,6 +98,7 @@ abstract class Products_Test_Case extends Export_Test_Case {
 		$this->hook_stock();
 
 		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'wc_placeholder_img_src' )->justReturn( 'https://example.test/placeholder.png' );
 	}
 
 	/**

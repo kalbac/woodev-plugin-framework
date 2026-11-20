@@ -98,10 +98,38 @@ final class RemoteCardsLinkTest extends Remote_Cards_Test_Case {
 		$row = $body['rows'][0];
 		$this->assertSame( $this->card_row_id( 'MUG-1' ), $row['id'] );
 		$this->assertSame( 'link', $row['cells']['on_site'][0]['type'] );
-		$this->assertSame( [ 'open_product' ], array_column( $row['actions'], 'id' ), 'The card is on the site now: its one action opens the product.' );
+		$this->assertSame( [ 'open_product', 'unlink' ], array_column( $row['actions'], 'id' ), 'The card is on the site now: its actions open the product or unlink the card.' );
 		$this->assertTrue( $row['actions'][0]['enabled'] );
 		$this->assertSame( [], $this->adapter->link_resolver()->reads, 'Linking writes our table; the marketplace is not asked.' );
 		$this->assertSame( [], $this->scheduler->actions );
+	}
+
+	public function test_unlink_forgets_the_card_and_returns_it_as_a_card_no_product_carries(): void {
+		$this->add_product( [ 'id' => 41, 'sku' => '' ] );
+		$this->apply( 'MUG-1', '41' );
+		$action = $this->cards_definition()->get_action( 'unlink' );
+		$ids    = [ $this->card_row_id( 'MUG-1' ) ];
+
+		$plan = Action_Response::preview( $action, $this->cards_provider()->preview( $this->context(), 'unlink', $ids, [] ) );
+
+		$this->assertSame( [ 1, 1, 0 ], [ $plan['requested'], $plan['eligible'], $plan['skipped'] ] );
+		$this->assertNotNull( $this->link_row( 41 ), 'A preview detaches nothing.' );
+
+		$body = Action_Response::apply( $this->cards_definition(), $action, $this->cards_provider()->apply( $this->context(), 'unlink', $ids, [] ) );
+
+		$this->assertSame( 'done', $body['status'] );
+		$this->assertSame( [ 1, 0, 0 ], [ $body['accepted'], $body['skipped'], $body['failed'] ] );
+		$this->assertNull( $this->link_row( 41 )->offer_id(), 'The site forgot the card.' );
+		$this->assertSame( '—', $body['rows'][0]['cells']['on_site'][0]['value'], 'The row comes back as a card no product carries.' );
+		$this->assertNotContains( 'unlink', array_column( $body['rows'][0]['actions'], 'id' ) );
+		$this->assertSame( [], $this->adapter->link_resolver()->reads, 'Nothing is sent to the marketplace.' );
+	}
+
+	public function test_unlink_of_a_card_no_product_carries_is_refused_not_run(): void {
+		$result = $this->cards_provider()->apply( $this->context(), 'unlink', [ $this->card_row_id( 'TEE-2' ) ], [] );
+		$body   = Action_Response::apply( $this->cards_definition(), $this->cards_definition()->get_action( 'unlink' ), $result );
+
+		$this->assertSame( [ 0, 1 ], [ $body['accepted'], $body['skipped'] ] );
 	}
 
 	public function test_the_manual_link_follows_the_sync_on_link_setting(): void {

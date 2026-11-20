@@ -117,7 +117,7 @@ final class Site_Products_Definition {
 				'stale_after_ms' => 30000,
 				'id_limit'       => 100,
 			],
-			'messages'     => self::messages(),
+			'messages'     => self::messages( $marketplace ),
 			'analytics'    => null,
 		];
 	}
@@ -190,6 +190,11 @@ final class Site_Products_Definition {
 	 */
 	private static function columns( string $marketplace ): array {
 		return [
+			[
+				'id'        => 'image',
+				'label'     => __( 'Фото', 'woodev-plugin-framework' ),
+				'cell_type' => 'stack',
+			],
 			[
 				'id'        => 'name',
 				'label'     => __( 'Товар', 'woodev-plugin-framework' ),
@@ -404,11 +409,12 @@ final class Site_Products_Definition {
 	/**
 	 * Every sentence the page shows. The shell, the action dialog and the activity part read their strings from here.
 	 *
+	 * @param string $marketplace Marketplace name.
 	 * @return array<string,string>
 	 */
-	private static function messages(): array {
+	private static function messages( string $marketplace ): array {
 		return array_merge(
-			self::shell_messages(),
+			self::shell_messages( $marketplace ),
 			Standard_Messages::bulk(),
 			Standard_Messages::matching( __( 'товары', 'woodev-plugin-framework' ) ),
 			Standard_Messages::views(),
@@ -419,10 +425,13 @@ final class Site_Products_Definition {
 	/**
 	 * The sentences of the table itself.
 	 *
+	 * @param string $marketplace Marketplace name.
 	 * @return array<string,string>
 	 */
-	private static function shell_messages(): array {
+	private static function shell_messages( string $marketplace ): array {
 		return [
+			/* translators: %s: marketplace name. */
+			'description'           => sprintf( __( 'Здесь видно, какие товары вашего магазина уже выгружены на %s, а какие ещё нет. Отметьте товары, чтобы отправить их на маркетплейс, обновить остатки и цены или связать с готовой карточкой.', 'woodev-plugin-framework' ), $marketplace ),
 			'empty'                 => __( 'Товаров не найдено. Добавьте аккаунт в настройках или измените фильтры.', 'woodev-plugin-framework' ),
 			'empty_filtered'        => __( 'По этим фильтрам товаров нет.', 'woodev-plugin-framework' ),
 			'error'                 => __( 'Не удалось загрузить товары. Повторите чуть позже.', 'woodev-plugin-framework' ),

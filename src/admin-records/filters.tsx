@@ -303,6 +303,8 @@ export interface FiltersBarProps {
 	leading?: ReactNode;
 	/** What the page puts at the end of the row, apart from the selects (the «Статус данных» block). */
 	aside?: ReactNode;
+	/** The account-wide buttons: the right edge of the row, after everything else. */
+	trailing?: ReactNode;
 }
 
 /** The select that is drawn as the counted row above the table, if the definition declares one. */
@@ -315,7 +317,7 @@ export function viewsFilter( definition: Definition ): Filter | undefined {
  * the «Расширенные фильтры» switch there too, and those filters in a row of their own while it is on — the layout of
  * «Заказы доставки».
  */
-export function FiltersBar( { definition, account, query, facets, messages, onChange, leading, aside }: FiltersBarProps ) {
+export function FiltersBar( { definition, account, query, facets, messages, onChange, leading, aside, trailing }: FiltersBarProps ) {
 	const resetLabel = message( messages, MESSAGE_KEYS.resetFilters );
 	const canReset = resetLabel !== '' && isNarrowed( definition, query );
 	const reset = () => onChange( changeQuery( query, { search: '', filters: defaultFilters( definition ) } ) );
@@ -357,6 +359,7 @@ export function FiltersBar( { definition, account, query, facets, messages, onCh
 					</Button>
 				) }
 				{ aside }
+				{ trailing }
 			</div>
 			{ ( switches.length > 0 || advanced.length > 0 ) && (
 				<div className="woodev-records__switches">

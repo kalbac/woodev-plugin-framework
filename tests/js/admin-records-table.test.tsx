@@ -135,6 +135,12 @@ function FakeTableCard( props: TableCardProps ) {
 			>
 				next page
 			</button>
+			{ /* WooCommerce's footer: its page-size picker is a container with the vendor control in it. */ }
+			<div className="woocommerce-pagination">
+				<div className="woocommerce-pagination__per-page-picker">
+					<div className="components-base-control vendor-picker" />
+				</div>
+			</div>
 			<button type="button" onClick={ () => props.onQueryChange( 'per_page' )( '50' ) }>
 				50 per page
 			</button>
@@ -540,7 +546,11 @@ describe( 'URL round trip', () => {
 			).toEqual( [ '10', '20', '50' ] );
 			expect( select ).toHaveValue( '20' );
 			const css = Array.from( document.querySelectorAll( 'style' ) ).map( ( style ) => style.textContent );
-			expect( css.join( '' ) ).toContain( '.woocommerce-pagination__per-page-picker{display:none}' );
+			expect( css.join( '' ) ).toContain(
+				'.woocommerce-pagination__per-page-picker>:not(.woodev-records__page-size){display:none}'
+			);
+			// In the card's footer, in the vendor picker's slot — not below the card.
+			expect( select.closest( '.woocommerce-pagination__per-page-picker' ) ).not.toBeNull();
 
 			fireEvent.change( select, { target: { value: '10' } } );
 			expect( navigate ).toHaveBeenLastCalledWith(
