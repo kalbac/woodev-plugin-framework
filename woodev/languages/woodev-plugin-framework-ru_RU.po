@@ -12953,3 +12953,31 @@ msgstr ""
 #: marketplace/admin/pages/mappings/class-profile-properties.php:191
 msgid "своё правило"
 msgstr ""
+
+#: admin/records/class-standard-messages.php:84
+msgid "Страница {page} из {pages}"
+msgstr ""
+
+#: admin/records/class-standard-messages.php:85
+msgid "Предыдущая страница"
+msgstr ""
+
+#: admin/records/class-standard-messages.php:86
+msgid "Следующая страница"
+msgstr ""
+
+#: admin/records/class-standard-messages.php:87
+msgid "Перейти на страницу"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/pages/products/class-remote-cards-definition.php:465
+#, php-format
+msgid "На этой странице отображаются карточки товаров из вашего кабинета %s. Карточки можно загрузить в магазин или связать с товарами сайта, чтобы остатки и цены обновлялись автоматически."
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/pages/products/class-site-products-definition.php:435
+#, php-format
+msgid "На этой странице отображаются товары вашего магазина и их состояние на %s. Отсюда товары можно выгрузить на маркетплейс, обновить остатки и цены или связать с уже существующими карточками."
+msgstr ""
