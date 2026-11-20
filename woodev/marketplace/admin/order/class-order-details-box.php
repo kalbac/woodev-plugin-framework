@@ -143,6 +143,7 @@ final class Order_Details_Box {
 			__( 'Способ оплаты', 'woodev-plugin-framework' ) => esc_html( (string) $order->get_payment_method_title() ),
 			__( 'Доставка', 'woodev-plugin-framework' ) => esc_html( (string) $order->get_shipping_method() ),
 			__( 'Адрес', 'woodev-plugin-framework' ) => wp_kses_post( (string) $order->get_formatted_billing_address( '' ) ),
+			__( 'Примечание покупателя', 'woodev-plugin-framework' ) => nl2br( esc_html( (string) $order->get_customer_note() ) ),
 		];
 
 		/**

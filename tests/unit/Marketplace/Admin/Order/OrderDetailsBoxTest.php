@@ -98,6 +98,15 @@ final class OrderDetailsBoxTest extends TestCase {
 		$this->assertStringContainsString( 'Товары:</th><td><bdi>1300.00 RUB</bdi>', $html );
 	}
 
+	public function test_the_buyers_note_is_shown_escaped_and_only_when_there_is_one(): void {
+		$box  = $this->box( $this->adapter() );
+		$with = $this->render( $box, $this->order( 700, "Позвоните <b>заранее</b>\nдомофон 12" ) );
+
+		$this->assertStringContainsString( 'Примечание покупателя:</th><td>Позвоните &lt;b&gt;заранее&lt;/b&gt;<br />', $with );
+		$this->assertStringContainsString( 'домофон 12', $with );
+		$this->assertStringNotContainsString( 'Примечание покупателя', $this->render( $box, $this->order( 701 ) ) );
+	}
+
 	public function test_the_marketplace_status_is_named_for_the_merchant_never_by_its_code(): void {
 		$html = $this->render( $this->box( $this->adapter() ), $this->order( 700 ) );
 
@@ -222,10 +231,11 @@ final class OrderDetailsBoxTest extends TestCase {
 	/**
 	 * Builds an order double.
 	 *
-	 * @param int $id Order id.
+	 * @param int    $id            Order id.
+	 * @param string $customer_note The buyer's note.
 	 * @return \WC_Order
 	 */
-	private function order( int $id ): \WC_Order {
+	private function order( int $id, string $customer_note = '' ): \WC_Order {
 		$created = Mockery::mock( '\WC_DateTime' );
 		$created->shouldReceive( 'date_i18n' )->andReturn( '20.11.2026 10:30' );
 
@@ -238,6 +248,7 @@ final class OrderDetailsBoxTest extends TestCase {
 		$order->shouldReceive( 'get_payment_method_title' )->andReturn( 'Картой на сайте' );
 		$order->shouldReceive( 'get_shipping_method' )->andReturn( 'Курьер' );
 		$order->shouldReceive( 'get_formatted_billing_address' )->andReturn( 'Москва, Тверская 1' );
+		$order->shouldReceive( 'get_customer_note' )->andReturn( $customer_note );
 		$order->shouldReceive( 'get_currency' )->andReturn( 'RUB' );
 		$order->shouldReceive( 'get_subtotal' )->andReturn( 1300 );
 		$order->shouldReceive( 'get_shipping_total' )->andReturn( '200' );
