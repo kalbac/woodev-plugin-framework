@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin;
 
 use Woodev\Framework\Marketplace\Account\Account_Store;
+use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Account_Store;
@@ -40,6 +41,9 @@ class Test_Marketplace_Plugin extends Marketplace_Plugin {
 
 	/** @var Fake_Account_Store|null */
 	private $account_store;
+
+	/** @var bool|null Whether the merchant has «Логирование» on (the menu lists «Диагностика» only then); null reads the real option. */
+	private $logging_on = true;
 
 	/**
 	 * @param string                              $plugin_id       Plugin id.
@@ -77,6 +81,25 @@ class Test_Marketplace_Plugin extends Marketplace_Plugin {
 		}
 
 		return $this->account_store;
+	}
+
+	/**
+	 * Switches the double's «Логирование» on or off; null hands the question back to the real option reader.
+	 *
+	 * @param bool|null $on Whether it is on.
+	 * @return void
+	 */
+	public function set_logging_on( ?bool $on ): void {
+		$this->logging_on = $on;
+	}
+
+	/** @return Logging */
+	public function logging(): Logging {
+		if ( null === $this->logging_on ) {
+			return parent::logging();
+		}
+
+		return new Logging( 'woodev_test_advanced_logging', fn(): string => $this->logging_on ? 'yes' : 'no' );
 	}
 
 	/** @return Account_Store */

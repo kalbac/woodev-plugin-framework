@@ -42,6 +42,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	public const NEW_KEY = 'new';
 
 	/**
+	 * The optional note that tells accounts apart. It lives in the account's `settings` JSON (additive: an account saved
+	 * before it existed simply has none), capped at {@see self::DESCRIPTION_LIMIT} characters.
+	 */
+	public const DESCRIPTION       = 'description';
+	public const DESCRIPTION_LIMIT = 200;
+
+	/**
 	 * Fields that choose, per group, between the «Общие» defaults and the account's own values.
 	 */
 	public const OVERRIDE_PRICES   = 'override_prices';
@@ -266,6 +273,51 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$sections[] = $this->connection_section( self::NEW_KEY, $new_title )->with_card( [ 'new' => true ] );
 
 		return $sections;
+	}
+
+	/**
+	 * What the «Подключение» tab is for, as escaped HTML: where the account's credentials come from and what to do with them.
+	 * The cabinet name is a link when the adapter's descriptor supplies the address ({@see Credentials_Cabinet_Link}).
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string
+	 */
+	public function connection_description(): string {
+		$descriptor = $this->adapter->settings_descriptor();
+		$fields     = $this->adapter->credential_fields();
+		$labels     = array_map(
+			static function ( string $field ) use ( $descriptor ): string {
+				return $descriptor->field_spec( $field )->label();
+			},
+			array_merge( [ $fields->identifier() ], $fields->secrets() )
+		);
+		$url        = $descriptor instanceof Credentials_Cabinet_Link ? trim( $descriptor->credentials_url() ) : '';
+		/* translators: %s: marketplace name, for example «Ozon». */
+		$cabinet = esc_html( sprintf( __( 'личном кабинете %s', 'woodev-plugin-framework' ), $descriptor->marketplace_name() ) );
+
+		if ( '' !== $url ) {
+			$cabinet = '<a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">' . $cabinet . '</a>';
+		}
+
+		return sprintf(
+			/* translators: 1: marketplace name, 2: comma-separated credential field names, 3: «личном кабинете …» (a link when the address is known). */
+			esc_html__( 'Здесь подключаются аккаунты %1$s. Для каждого нужны: %2$s — они выдаются в %3$s. Добавьте аккаунт, нажмите «Проверить подключение», и плагин начнёт с ним работать. Несколько аккаунтов работают независимо друг от друга.', 'woodev-plugin-framework' ),
+			esc_html( $descriptor->marketplace_name() ),
+			esc_html( implode( ', ', $labels ) ),
+			$cabinet
+		);
+	}
+
+	/**
+	 * What the «Параметры аккаунта» tab is for, as escaped HTML.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string
+	 */
+	public function parameters_description(): string {
+		return esc_html__( 'Здесь задаётся, как плагин работает с каждым аккаунтом по отдельности: склад и учёт остатков, цены, заказы и карточки товаров. Параметры появляются после того, как аккаунт добавлен на вкладке «Подключение».', 'woodev-plugin-framework' );
 	}
 
 	public function parameter_sections(): array {
@@ -614,6 +666,21 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		Field_Kit::add(
 			$handler,
+			self::setting_id( $key, self::DESCRIPTION ),
+			\Woodev_Setting::TYPE_STRING,
+			[
+				'name'    => __( 'Описание', 'woodev-plugin-framework' ),
+				'default' => '',
+			],
+			\Woodev_Control::TYPE_TEXT,
+			[
+				'tooltip'     => __( 'Необязательно. Короткая заметка, которая видна на карточке аккаунта и помогает отличить его от других.', 'woodev-plugin-framework' ),
+				'placeholder' => __( 'Например, одежда и обувь', 'woodev-plugin-framework' ),
+			]
+		);
+
+		Field_Kit::add(
+			$handler,
 			self::setting_id( $key, $id_field ),
 			\Woodev_Setting::TYPE_STRING,
 			[
@@ -768,7 +835,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 */
 	private function connection_section( string $key, string $title ): Settings_Section {
 		$descriptor = $this->adapter->settings_descriptor();
-		$field_ids  = [ self::setting_id( $key, 'name' ) ];
+		$field_ids  = [ self::setting_id( $key, 'name' ), self::setting_id( $key, self::DESCRIPTION ) ];
 
 		foreach ( $this->credential_field_names() as $cred_field ) {
 			$field_ids[] = self::setting_id( $key, $cred_field );
@@ -866,9 +933,9 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	/**
 	 * What the «Подключение» tab draws for a saved account: its title, identifier, switch and «Удалить».
 	 *
-	 * «Удалить» is offered only for a switched-off account: for an enabled one the card carries the reason instead. `delete_url` is
-	 * the deletion route the screen asks for the preview and posts the confirmation to; `deletion` is the state of a deletion
-	 * already under way (`running` / `failed`), so a reloaded screen goes on showing it.
+	 * «Удалить» is offered for every account, switched on or off: the deletion dialog says that an enabled account is switched off
+	 * first. `delete_url` is the deletion route the screen asks for the preview and posts the confirmation to; `deletion` is the
+	 * state of a deletion already under way (`running` / `failed`), so a reloaded screen goes on showing it.
 	 *
 	 * @param Account $account Account.
 	 * @return array<string,mixed>
@@ -879,11 +946,12 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$card     = [
 			'new'              => false,
 			'title'            => $this->account_title( $account ),
+			'description'      => self::description_of( $account ),
 			'identifier_label' => $spec->label(),
 			'identifier'       => (string) ( $account->credentials()[ $id_field ] ?? '' ),
 			'enabled'          => $account->is_enabled(),
 			'enabled_field'    => self::setting_id( (string) $account->id(), 'enabled' ),
-			'delete_hint'      => $this->delete_hint( $account ),
+			'delete_hint'      => null === $this->deletion ? __( 'Удаление аккаунта недоступно.', 'woodev-plugin-framework' ) : '',
 		];
 
 		if ( null === $this->deletion ) {
@@ -896,20 +964,6 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			'delete_url' => rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . Account_Deletion_Controller::path( $this->plugin_id, $account->id() ) ),
 			'deletion'   => null === $state ? '' : (string) $state['state'],
 		];
-	}
-
-	/**
-	 * Why «Удалить» is unavailable on an account's card; empty when it is available.
-	 *
-	 * @param Account $account Account.
-	 * @return string
-	 */
-	private function delete_hint( Account $account ): string {
-		if ( $account->is_enabled() ) {
-			return __( 'Чтобы удалить аккаунт, сначала выключите его.', 'woodev-plugin-framework' );
-		}
-
-		return null === $this->deletion ? __( 'Удаление аккаунта недоступно.', 'woodev-plugin-framework' ) : '';
 	}
 
 	/**
@@ -1017,6 +1071,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		switch ( $field ) {
 			case 'name':
 				return $account->name();
+			case self::DESCRIPTION:
+				return self::description_of( $account );
 			case 'enabled':
 				return $account->is_enabled();
 			case 'warehouse_id':
@@ -1090,9 +1146,14 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$name    = trim( (string) ( $this->pending['name'] ?? '' ) );
 		$enabled = array_key_exists( 'enabled', $this->pending ) ? self::to_bool( $this->pending['enabled'] ) : true;
 
-		$this->created_id = $this->store->save(
-			new Account( 0, $this->adapter->id(), $name, $enabled, $credentials, null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] )
-		);
+		$settings = [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ];
+		$note     = self::clean_description( $this->pending[ self::DESCRIPTION ] ?? '' );
+
+		if ( '' !== $note ) {
+			$settings[ self::DESCRIPTION ] = $note;
+		}
+
+		$this->created_id = $this->store->save( new Account( 0, $this->adapter->id(), $name, $enabled, $credentials, null, $settings ) );
 		$this->refresh( $this->created_id );
 	}
 
@@ -1187,6 +1248,9 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		switch ( $field ) {
 			case 'name':
 				$this->store->update_fields( $id, [ 'name' => $text ] );
+				return;
+			case self::DESCRIPTION:
+				$this->save_description( $id, $text );
 				return;
 			case 'enabled':
 				// An account whose data is being deleted stays off: switching it on would put work back on a half-deleted account.
@@ -1312,6 +1376,53 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				return $current;
 			}
 		);
+	}
+
+	/**
+	 * Saves the account's description into the `settings` JSON; an empty one removes the entry.
+	 *
+	 * @param int    $id   Account id.
+	 * @param string $text Submitted text.
+	 * @return void
+	 */
+	private function save_description( int $id, string $text ): void {
+		$note = self::clean_description( $text );
+
+		$this->store->update_settings(
+			$id,
+			static function ( array $current ) use ( $note ): array {
+				if ( '' !== $note ) {
+					$current[ self::DESCRIPTION ] = $note;
+				} else {
+					unset( $current[ self::DESCRIPTION ] );
+				}
+
+				return $current;
+			}
+		);
+	}
+
+	/**
+	 * The description of an account, '' when it has none.
+	 *
+	 * @param Account $account Account.
+	 * @return string
+	 */
+	private static function description_of( Account $account ): string {
+		return self::clean_description( $account->setting( self::DESCRIPTION, '' ) );
+	}
+
+	/**
+	 * A description as it is stored: plain text, trimmed, at most {@see self::DESCRIPTION_LIMIT} characters.
+	 *
+	 * @param mixed $value Submitted or stored value.
+	 * @return string
+	 */
+	private static function clean_description( $value ): string {
+		// Plain text the screen shows escaped, so the tags only have to go; there is no markup to keep or script to unwrap.
+		$text = trim( preg_replace( '/\s+/u', ' ', strip_tags( (string) $value ) ) ?? '' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags
+
+		return mb_substr( $text, 0, self::DESCRIPTION_LIMIT );
 	}
 
 	/**
@@ -1634,7 +1745,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return array_values(
 			array_unique(
 				array_merge(
-					[ 'name', 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', Effective_Settings::KEY_SYNC_ON_LINK, self::OVERRIDE_PRICES, self::OVERRIDE_EXCHANGE ],
+					[ 'name', self::DESCRIPTION, 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', Effective_Settings::KEY_SYNC_ON_LINK, self::OVERRIDE_PRICES, self::OVERRIDE_EXCHANGE ],
 					$this->credential_field_names(),
 					array_keys( Shared_Fields::PRICE_RULE_FIELDS )
 				)

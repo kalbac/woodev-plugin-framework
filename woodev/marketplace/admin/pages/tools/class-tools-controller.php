@@ -202,6 +202,7 @@ final class Tools_Controller {
 	 */
 	public static function messages(): array {
 		return [
+			'intro'         => __( 'Действия над данными плагина — не настройки, а то, что можно выполнить прямо сейчас. Перед запуском инструмент покажет, что именно будет сделано.', 'woodev-plugin-framework' ),
 			'accountLabel'  => __( 'Аккаунт', 'woodev-plugin-framework' ),
 			'chooseAccount' => __( 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.', 'woodev-plugin-framework' ),
 			'noTools'       => __( 'Для этого маркетплейса пока нет инструментов.', 'woodev-plugin-framework' ),

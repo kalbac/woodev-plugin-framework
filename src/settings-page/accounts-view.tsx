@@ -1,10 +1,12 @@
 /**
- * The «Подключение» tab of a marketplace plugin: one card per connected account, and the way to add another.
+ * The «Подключение» tab of a marketplace plugin: ONE white wrapper card holding a card per connected account, with the way to add
+ * another in the wrapper's header.
  *
- * Sections that carry a `card` (`Settings_Section::with_card()`) are drawn here instead of as sub-tabs. A card shows the
- * account's title, identifier and stored status with «Редактировать» / «Удалить»; opening it renders the
- * section's own connection block (fields and «Проверить подключение») through `renderSection`, so saving and testing are the
- * settings page's, unchanged. With no account the tab is one big «Добавить аккаунт» button that opens the form.
+ * Sections that carry a `card` (`Settings_Section::with_card()`) are drawn here instead of as sub-tabs. A card shows the on/off
+ * switch, the account's title, «Client-Id · description», the stored connection status and «Редактировать» / «Удалить»; the
+ * switch saves at once (`onToggleEnabled`). Opening a card renders the section's own connection block (fields and «Проверить
+ * подключение») through `renderSection`, so saving and testing are the settings page's, unchanged. With no account the wrapper
+ * says to add the first one.
  *
  * @package woodev-plugin-framework
  */
@@ -12,8 +14,9 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { Button } from '@wordpress/components';
+import { Button, Card, CardBody, FormToggle } from '@wordpress/components';
 import AccountDeleteFlow from './account-delete-flow';
+import TabDescription from './tab-description';
 
 /** The stored connection status of an account section (`Settings_Section` status). */
 export interface SectionStatus {
@@ -29,7 +32,9 @@ export interface AccountCardSchema {
 	enabled: boolean;
 	/** The setting that switches the account (the form's «Аккаунт включён»); the page saves it with the form. */
 	enabled_field: string;
-	/** Why «Удалить» is unavailable (an enabled account must be switched off first); empty when it is available. */
+	/** The account's own note that tells it apart from the others (optional, may be empty). */
+	description?: string;
+	/** Why «Удалить» is unavailable (the screen does not offer deleting); empty when it is available. */
 	delete_hint?: string;
 	/** The account's deletion route; absent when the screen does not offer deleting. */
 	delete_url?: string;
@@ -52,6 +57,8 @@ export interface AccountSection {
 /** The slice of a tab schema the accounts and stacked views read. */
 export interface AccountsTab {
 	id: string;
+	/** What the tab is for, as escaped HTML from PHP; absent for a tab that says nothing. */
+	description?: string;
 	sections?: AccountSection[];
 }
 
@@ -111,37 +118,58 @@ export function cardStatus( section: CardSection ): CardStatus {
 interface AccountCardProps {
 	section: CardSection;
 	open: boolean;
+	/** True while the switch is being saved. */
+	switching: boolean;
 	onToggleOpen: () => void;
+	onToggleEnabled?: ( enabled: boolean ) => void;
 	onDelete: () => void;
 	children?: ReactNode;
 }
 
 /**
- * Whether «Удалить» can be pressed: the account is switched off and the screen offers deleting.
+ * Whether «Удалить» can be pressed: the screen offers deleting. An enabled account can be deleted too: the dialog says that it is
+ * switched off first.
  *
  * @param {AccountCardSchema} card the account's card.
  * @return {boolean} true when it can.
  */
 export function canDelete( card: AccountCardSchema ): boolean {
-	return ! card.enabled && !! card.delete_url;
+	return !! card.delete_url;
 }
 
-function AccountCard( { section, open, onToggleOpen, onDelete, children }: AccountCardProps ) {
+/**
+ * The muted line under an account's name: «Client-Id: 4180680 · Одежда и обувь».
+ *
+ * @param {AccountCardSchema} card the account's card.
+ * @return {string} the line.
+ */
+export function identifierLine( card: AccountCardSchema ): string {
+	const identifier = `${ card.identifier_label }: ${ card.identifier }`;
+
+	return card.description ? `${ identifier } · ${ card.description }` : identifier;
+}
+
+function AccountCard( { section, open, switching, onToggleOpen, onToggleEnabled, onDelete, children }: AccountCardProps ) {
 	const card = section.card;
 	const status = cardStatus( section );
 	// An open form shows the stored connection message under «Проверить подключение»: the header does not say it a second time.
 	const statusShownBelow = open && card.enabled && !! section.status?.message;
-	// The reason «Удалить» waits, as visible text: a disabled button shows no tooltip of its own.
+	// The reason «Удалить» is not offered, as visible text: a disabled button shows no tooltip of its own.
 	const deleteHint = ! canDelete( card ) && card.delete_hint ? card.delete_hint : '';
 
 	return (
 		<div className={ 'woodev-account-card' + ( open ? ' is-open' : '' ) + ( card.enabled ? '' : ' is-disabled' ) }>
 			<div className="woodev-account-card__head">
+				<FormToggle
+					className="woodev-account-card__toggle"
+					checked={ card.enabled }
+					disabled={ ! onToggleEnabled || switching }
+					onChange={ () => onToggleEnabled && onToggleEnabled( ! card.enabled ) }
+					aria-label={ __( 'Аккаунт включён', 'woodev-plugin-framework' ) }
+				/>
 				<div className="woodev-account-card__main">
 					<strong className="woodev-account-card__title">{ card.title }</strong>
-					<span className="woodev-account-card__identifier">
-						{ card.identifier_label }: { card.identifier }
-					</span>
+					<span className="woodev-account-card__identifier">{ identifierLine( card ) }</span>
 					{ ! statusShownBelow && (
 						<span className={ `woodev-account-card__status is-${ status.ok ? 'ok' : 'error' }` }>
 							{ status.text }
@@ -172,18 +200,22 @@ interface AccountsViewProps {
 	renderSection: ( tab: AccountsTab, sectionId: string ) => ReactNode;
 	/** Reloads the cards after the deletion dialog closes (the account may be gone, or a deletion may be running). */
 	onAccountsChanged?: () => void;
+	/** Saves an account's on/off switch at once and resolves when the cards are up to date; absent: the switch is read-only. */
+	onToggleEnabled?: ( section: AccountSection, enabled: boolean ) => Promise< unknown >;
 }
 
 /**
- * The accounts tab: a card per saved account and the way to add another.
+ * The accounts tab: a white wrapper with the tab's description and «+ Добавить аккаунт» in its header, a card per saved account
+ * and the form of a new one.
  *
  * @param {AccountsViewProps} props the view props.
  */
-export default function AccountsView( { tab, renderSection, onAccountsChanged }: AccountsViewProps ) {
+export default function AccountsView( { tab, renderSection, onAccountsChanged, onToggleEnabled }: AccountsViewProps ) {
 	const { accounts, adder } = splitAccountSections( tab );
 	const [ openId, setOpenId ] = useState( '' );
 	const [ adding, setAdding ] = useState( false );
 	const [ deletingId, setDeletingId ] = useState( '' );
+	const [ switchingId, setSwitchingId ] = useState( '' );
 	const deleting = accounts.find( ( section ) => section.id === deletingId );
 
 	// A saved new account turns into a card: the add form has done its job.
@@ -205,55 +237,78 @@ export default function AccountsView( { tab, renderSection, onAccountsChanged }:
 		setAdding( false );
 	};
 
+	// The switch waits for the save; a failed save leaves it where it was (the page already said why).
+	const toggleEnabled = ( section: CardSection, enabled: boolean ) => {
+		if ( ! onToggleEnabled ) {
+			return;
+		}
+
+		setSwitchingId( section.id );
+		onToggleEnabled( section, enabled )
+			.catch( () => {} )
+			.then( () => setSwitchingId( '' ) );
+	};
+
 	return (
-		<div className="woodev-accounts" onKeyDown={ closeOnEscape }>
-			{ accounts.map( ( section ) => (
-				<AccountCard
-					key={ section.id }
-					section={ section }
-					open={ openId === section.id }
-					onToggleOpen={ () => {
-						// Two forms never stack: opening an edit puts the new-account form away.
-						setAdding( false );
-						setOpenId( openId === section.id ? '' : section.id );
-					} }
-					onDelete={ () => setDeletingId( section.id ) }
-				>
-					{ renderSection( tab, section.id ) }
-				</AccountCard>
-			) ) }
-			{ deleting && (
-				<AccountDeleteFlow
-					card={ deleting.card }
-					onClose={ () => {
-						setDeletingId( '' );
-						if ( onAccountsChanged ) {
-							onAccountsChanged();
-						}
-					} }
-				/>
-			) }
-			{ adder && ! adding && (
-				<div className={ 'woodev-accounts__add' + ( 0 === accounts.length ? ' is-first' : '' ) }>
-					<Button
-						variant={ 0 === accounts.length ? 'primary' : 'secondary' }
-						className="woodev-accounts__add-button"
-						onClick={ () => {
-							// Two forms never stack: adding an account collapses the open edit form.
-							setOpenId( '' );
-							setAdding( true );
+		<Card className="woodev-settings__card woodev-accounts" onKeyDown={ closeOnEscape }>
+			<CardBody>
+				<div className="woodev-accounts__header">
+					<TabDescription tab={ tab } />
+					{ adder && ! adding && (
+						<Button
+							variant={ 0 === accounts.length ? 'primary' : 'secondary' }
+							className="woodev-accounts__add-button"
+							onClick={ () => {
+								// Two forms never stack: adding an account collapses the open edit form.
+								setOpenId( '' );
+								setAdding( true );
+							} }
+						>
+							<span aria-hidden="true">+ </span>
+							{ __( 'Добавить аккаунт', 'woodev-plugin-framework' ) }
+						</Button>
+					) }
+				</div>
+				{ 0 === accounts.length && ! adding && (
+					<p className="woodev-accounts__empty">
+						{ __( 'Пока нет ни одного аккаунта. Добавьте первый, чтобы плагин начал работать.', 'woodev-plugin-framework' ) }
+					</p>
+				) }
+				{ accounts.map( ( section ) => (
+					<AccountCard
+						key={ section.id }
+						section={ section }
+						open={ openId === section.id }
+						switching={ switchingId === section.id }
+						onToggleOpen={ () => {
+							// Two forms never stack: opening an edit puts the new-account form away.
+							setAdding( false );
+							setOpenId( openId === section.id ? '' : section.id );
 						} }
+						onToggleEnabled={ onToggleEnabled ? ( enabled ) => toggleEnabled( section, enabled ) : undefined }
+						onDelete={ () => setDeletingId( section.id ) }
 					>
-						{ __( 'Добавить аккаунт', 'woodev-plugin-framework' ) }
-					</Button>
-				</div>
-			) }
-			{ adder && adding && (
-				<div className="woodev-accounts__form">
-					<h3 className="woodev-accounts__form-title">{ __( 'Новый аккаунт', 'woodev-plugin-framework' ) }</h3>
-					{ renderSection( tab, adder.id ) }
-				</div>
-			) }
-		</div>
+						{ renderSection( tab, section.id ) }
+					</AccountCard>
+				) ) }
+				{ deleting && (
+					<AccountDeleteFlow
+						card={ deleting.card }
+						onClose={ () => {
+							setDeletingId( '' );
+							if ( onAccountsChanged ) {
+								onAccountsChanged();
+							}
+						} }
+					/>
+				) }
+				{ adder && adding && (
+					<div className="woodev-accounts__form">
+						<h3 className="woodev-accounts__form-title">{ __( 'Новый аккаунт', 'woodev-plugin-framework' ) }</h3>
+						{ renderSection( tab, adder.id ) }
+					</div>
+				) }
+			</CardBody>
+		</Card>
 	);
 }

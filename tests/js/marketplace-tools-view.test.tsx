@@ -23,6 +23,7 @@ const mocked = apiFetch as unknown as jest.Mock;
 
 const state = ( accounts: ToolsState[ 'accounts' ] ): ToolsState => ( {
 	messages: {
+		intro: 'Действия над данными плагина — не настройки, а то, что можно выполнить прямо сейчас.',
 		accountLabel: 'Аккаунт',
 		chooseAccount: 'Добавьте аккаунт в настройках плагина, чтобы запускать инструменты.',
 		noTools: 'Инструментов нет.',
@@ -87,8 +88,11 @@ describe( 'the account selector', () => {
 		await screen.findByText( 'Перенос данных' );
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Пробный запуск' } ) ).toBeEnabled() );
 
-		// Each tool is a settings-page card with its title inside.
-		expect( container.querySelector( '.woodev-settings__card .woodev-group__title' ) ).toHaveTextContent( 'Перенос данных' );
+		// ONE white wrapper card: the intro sentence on top, each tool a card inside it (not floating on the grey page).
+		const wrappers = container.querySelectorAll( '.woodev-settings__card' );
+		expect( wrappers ).toHaveLength( 1 );
+		expect( wrappers[ 0 ].firstElementChild?.firstElementChild ).toHaveTextContent( 'Действия над данными плагина — не настройки, а то, что можно выполнить прямо сейчас.' );
+		expect( wrappers[ 0 ].querySelector( '.woodev-group.woodev-tools-view__tool .woodev-group__title' ) ).toHaveTextContent( 'Перенос данных' );
 
 		await act( async () => {
 			fireEvent.click( screen.getByRole( 'button', { name: 'Пробный запуск' } ) );

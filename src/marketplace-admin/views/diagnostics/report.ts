@@ -5,16 +5,6 @@
  */
 
 /**
- * The label of the logging switch: what pressing it does.
- *
- * @param enabled   Whether «Логирование» is on now.
- * @param messages  The server's copy.
- */
-export function loggingSwitchLabel( enabled: boolean, messages: Record< string, string > ): string {
-	return enabled ? messages.disableLogging : messages.enableLogging;
-}
-
-/**
  * The sentence after the copy button was pressed.
  *
  * @param copied   Whether the clipboard accepted the text.

@@ -18,6 +18,7 @@ use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
+use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Progress;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Export_Price_Policy;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
@@ -730,11 +731,24 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertSame( '777', $card['identifier'] );
 		$this->assertSame( "account_{$id}_enabled", $card['enabled_field'] );
 		$this->assertTrue( $card['enabled'] );
-		$this->assertSame( 'Чтобы удалить аккаунт, сначала выключите его.', $card['delete_hint'], 'an enabled account says what to do first' );
+		$this->assertSame( '', $card['description'], 'an account saved before the field existed has none' );
 		$this->assertSame( [ 'new' => true ], $sections[1]->get_card() );
 	}
 
-	public function test_a_disabled_account_on_a_screen_without_deletion_says_so(): void {
+	public function test_an_enabled_account_offers_delete_and_no_switch_off_first_hint(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Main', true, [ 'merchant_uid' => '777', 'access_token' => 't1' ] ) );
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'rest_url' )->alias( static fn ( string $path ): string => 'https://shop.test/wp-json/' . $path );
+
+		$card = $this->accounts_sections( $adapter, $store, new Account_Deletion_Progress( 'woodev_fake_' ) )->connection_sections()[0]->get_card();
+
+		$this->assertTrue( $card['enabled'] );
+		$this->assertNotEmpty( $card['delete_url'] );
+		$this->assertSame( '', $card['delete_hint'] );
+	}
+
+	public function test_an_account_on_a_screen_without_deletion_says_so(): void {
 		[ $adapter, $store ] = $this->adapter_and_store();
 		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Off', false, [ 'merchant_uid' => '778', 'access_token' => 't2' ] ) );
 
@@ -744,13 +758,90 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'delete_url', $card );
 	}
 
+	public function test_the_description_is_saved_with_the_account_and_shown_on_its_card(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$handler             = $this->handler( $adapter, $store );
+
+		$handler->get_setting( 'account_new_name' )->set_value( 'Fresh' );
+		$handler->get_setting( 'account_new_description' )->set_value( '  Одежда  и обувь <b>2</b> ' );
+		$handler->get_setting( 'account_new_merchant_uid' )->set_value( '555' );
+		$handler->get_setting( 'account_new_access_token' )->set_value( 'tok' );
+		$handler->save();
+
+		$created = $store->all( Sqlite_Tables::MARKETPLACE_ID, false )[0];
+
+		$this->assertSame( 'Одежда и обувь 2', $created->setting( 'description' ), 'plain text, spaces collapsed, no markup' );
+		$this->assertSame( 'Одежда и обувь 2', $this->accounts_sections( $adapter, $store )->connection_sections()[0]->get_card()['description'] );
+	}
+
+	public function test_the_description_can_be_edited_and_cleared_without_touching_other_settings(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'description' => 'Старое', 'oversize_warehouse_id' => 9 ] ) );
+		$handler             = $this->handler( $adapter, $store );
+
+		$handler->update_value( "account_{$id}_description", 'Новое' );
+		$this->assertSame( 'Новое', $store->get( $id )->setting( 'description' ) );
+		$this->assertSame( 9, $store->get( $id )->setting( 'oversize_warehouse_id' ), 'a sibling setting is kept' );
+
+		$handler->update_value( "account_{$id}_description", '   ' );
+		$this->assertNull( $store->get( $id )->setting( 'description' ), 'an empty description removes the entry' );
+	}
+
+	public function test_the_description_is_capped(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ] ) );
+
+		$this->handler( $adapter, $store )->update_value( "account_{$id}_description", str_repeat( 'я', 500 ) );
+
+		$this->assertSame( Accounts_Sections::DESCRIPTION_LIMIT, mb_strlen( $store->get( $id )->setting( 'description' ) ) );
+	}
+
+	public function test_the_connection_form_lists_the_description_after_the_name(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ] ) );
+
+		$fields = array_slice( $this->accounts_sections( $adapter, $store )->connection_sections()[0]->get_setting_ids(), 0, 2 );
+
+		$this->assertSame( [ "account_{$id}_name", "account_{$id}_description" ], $fields );
+	}
+
+	public function test_the_connection_tab_description_names_the_credentials_and_links_the_cabinet_when_it_is_known(): void {
+		Functions\when( 'esc_url' )->returnArg();
+		[ $adapter, $store ] = $this->adapter_and_store();
+
+		$plain = $this->accounts_sections( $adapter, $store )->connection_description();
+
+		$this->assertStringContainsString( 'UID продавца, Токен доступа', $plain );
+		$this->assertStringContainsString( 'Acme', $plain );
+		$this->assertStringNotContainsString( '<a ', $plain, 'no address, no link' );
+
+		[ $linked_adapter, $linked_store ] = $this->adapter_and_store( [], 'https://cabinet.test/keys' );
+		$linked                            = $this->accounts_sections( $linked_adapter, $linked_store )->connection_description();
+
+		$this->assertStringContainsString( '<a href="https://cabinet.test/keys" target="_blank" rel="noopener noreferrer">личном кабинете Acme</a>', $linked );
+	}
+
+	public function test_the_tabs_carry_their_descriptions(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$sections            = $this->accounts_sections( $adapter, $store );
+		$tab                 = new Settings_Tab( 'connection', 'Подключение', [ $sections, 'connection_sections' ], false, $sections->connection_description() );
+		$handler             = new Settings_Handler( self::PLUGIN, [ $sections, $tab ], 'Fake Market' );
+
+		$provider = $handler->get_settings_providers()[0];
+
+		$this->assertSame( $sections->connection_description(), $provider->get_description() );
+		$this->assertSame( '', ( new Settings_Tab( 'x', 'X', [ $sections, 'parameter_sections' ] ) )->description() );
+		$this->assertStringContainsString( 'Подключение', $sections->parameters_description() );
+	}
+
 	// Support -------------------------------------------------------------------------------------------------------------
 
 	/**
 	 * @param string[] $capabilities Adapter capabilities.
+	 * @param string   $cabinet_url  Address the descriptor gives for the credentials link ('' for none).
 	 * @return array{0:Fake_Marketplace_Adapter,1:Wpdb_Account_Store}
 	 */
-	private function adapter_and_store( array $capabilities = [] ): array {
+	private function adapter_and_store( array $capabilities = [], string $cabinet_url = '' ): array {
 		$fields     = new Credential_Fields( 'merchant_uid', [ 'access_token' ] );
 		$descriptor = new Fake_Settings_Descriptor(
 			$fields,
@@ -758,7 +849,8 @@ final class AccountDefaultsTest extends TestCase {
 			[
 				'merchant_uid' => new Credential_Field_Spec( 'UID продавца', 'Код продавца' ),
 				'access_token' => new Credential_Field_Spec( 'Токен доступа', 'Основной токен' ),
-			]
+			],
+			$cabinet_url
 		);
 		$adapter    = new Fake_Marketplace_Adapter(
 			null,
@@ -782,7 +874,7 @@ final class AccountDefaultsTest extends TestCase {
 		return [ $adapter, $store ];
 	}
 
-	private function accounts_sections( Fake_Marketplace_Adapter $adapter, Wpdb_Account_Store $store ): Accounts_Sections {
+	private function accounts_sections( Fake_Marketplace_Adapter $adapter, Wpdb_Account_Store $store, ?Account_Deletion_Progress $deletion = null ): Accounts_Sections {
 		$status = new Account_Status(
 			$store,
 			$adapter,
@@ -791,7 +883,7 @@ final class AccountDefaultsTest extends TestCase {
 			}
 		);
 
-		return new Accounts_Sections( $store, $adapter, $status, new Warehouse_Options( $this->cache ), self::PLUGIN );
+		return new Accounts_Sections( $store, $adapter, $status, new Warehouse_Options( $this->cache ), self::PLUGIN, null, $deletion );
 	}
 
 	private function handler( Fake_Marketplace_Adapter $adapter, Wpdb_Account_Store $store ): Settings_Handler {

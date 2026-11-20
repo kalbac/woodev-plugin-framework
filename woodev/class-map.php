@@ -390,6 +390,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Settings\\Advanced_Section' => 'woodev/marketplace/settings/class-advanced-section.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Connection_Section_Provider' => 'woodev/marketplace/settings/interface-connection-section-provider.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Credential_Field_Spec' => 'woodev/marketplace/settings/class-credential-field-spec.php',
+	'Woodev\\Framework\\Marketplace\\Settings\\Credentials_Cabinet_Link' => 'woodev/marketplace/settings/interface-credentials-cabinet-link.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Defaults_Migration' => 'woodev/marketplace/settings/class-defaults-migration.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Defaults_Section' => 'woodev/marketplace/settings/class-defaults-section.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Effective_Settings' => 'woodev/marketplace/settings/class-effective-settings.php',

@@ -1,5 +1,6 @@
 /**
- * Deleting an account: preview → confirm by typing the identifier → progress → done.
+ * Deleting an account: preview → confirm by typing the identifier → progress → done. An account that is still switched on gets the
+ * server's «Аккаунт включён. Выключить и удалить? …» note and a «Выключить и удалить» button: the server switches it off first.
  *
  * The server owns the rules and the copy (`Account_Deletion`): this dialog reads the preview, sends the confirmation and polls the
  * progress of the background job. Closing the dialog never stops the job; a reopened one picks the progress up again.
@@ -147,6 +148,8 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 
 	const busy = 'starting' === phase;
 	const confirmed = confirms( typed, card.identifier );
+	// An account that is still on is switched off first: the dialog asks «Выключить и удалить?» and the button says so.
+	const enabledNote = state?.preview?.enabled_note ?? '';
 
 	// The buttons of each screen, in the dialog's footer.
 	let footer: JSX.Element | null = null;
@@ -156,7 +159,7 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 			<>
 				<Button variant="secondary" disabled={ busy } onClick={ onClose }>{ __( 'Отмена', 'woodev-plugin-framework' ) }</Button>
 				<Button variant="primary" isDestructive isBusy={ busy } disabled={ busy || ! confirmed } onClick={ start }>
-					{ __( 'Удалить аккаунт', 'woodev-plugin-framework' ) }
+					{ enabledNote ? __( 'Выключить и удалить', 'woodev-plugin-framework' ) : __( 'Удалить аккаунт', 'woodev-plugin-framework' ) }
 				</Button>
 			</>
 		);
@@ -182,12 +185,13 @@ export default function AccountDeleteFlow( { card, onClose }: AccountDeleteFlowP
 
 			{ 'error' === phase && (
 				<Notice status="warning" isDismissible={ false }>
-					{ error || ( state && state.refusal ) || __( 'Аккаунт сейчас нельзя удалить.', 'woodev-plugin-framework' ) }
+					{ error || __( 'Аккаунт сейчас нельзя удалить.', 'woodev-plugin-framework' ) }
 				</Notice>
 			) }
 
 			{ ( 'preview' === phase || 'starting' === phase ) && state && state.preview && (
 				<>
+					{ enabledNote && <Notice status="warning" isDismissible={ false }>{ enabledNote }</Notice> }
 					<p>
 						{ __( 'Аккаунт', 'woodev-plugin-framework' ) } <strong>{ card.title }</strong> ({ card.identifier_label }: { card.identifier }) { __( 'будет удалён вместе со своими данными в плагине. Это нельзя отменить.', 'woodev-plugin-framework' ) }
 					</p>

@@ -93,22 +93,39 @@ final class AccountDeletionServiceTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * An enabled account cannot be deleted: the state says why, the start is refused with 409, and nothing is queued.
+	 * An enabled account can be deleted: the preview says it is switched off first, the wrong identifier still stops the request
+	 * with the account untouched, and the right one switches it off and queues the job.
 	 *
 	 * @return void
 	 */
-	public function test_an_enabled_account_is_refused(): void {
+	public function test_an_enabled_account_is_switched_off_by_the_confirmed_start(): void {
 		$state = $this->service()->state( $this->account_id );
 
-		$this->assertFalse( $state['can_delete'] );
-		$this->assertSame( 'Сначала выключите аккаунт.', $state['refusal'] );
-		$this->assertNull( $state['preview'] );
+		$this->assertTrue( $state['can_delete'] );
+		$this->assertStringContainsString( 'Аккаунт включён. Выключить и удалить?', $state['preview']['enabled_note'] );
 
-		$this->assertRefused( 409, function (): void {
-			$this->service()->start( $this->account_id, self::IDENTIFIER );
+		$this->assertRefused( 400, function (): void {
+			$this->service()->start( $this->account_id, 'nope' );
 		} );
+		$this->assertTrue( $this->accounts()->get( $this->account_id )->is_enabled(), 'a refused confirmation switches nothing off' );
 		$this->assertSame( [], $this->scheduler->summary() );
-		$this->assertNull( $this->progress->get( $this->account_id ) );
+
+		$started = $this->service()->start( $this->account_id, self::IDENTIFIER );
+
+		$this->assertSame( 'running', $started['deletion']['state'] );
+		$this->assertFalse( $this->accounts()->get( $this->account_id )->is_enabled() );
+		$this->assertCount( 1, $this->scheduler->of( self::HOOK ) );
+	}
+
+	/**
+	 * A switched-off account has no note about being switched off.
+	 *
+	 * @return void
+	 */
+	public function test_a_switched_off_account_has_no_enabled_note(): void {
+		$this->accounts()->set_enabled( $this->account_id, false );
+
+		$this->assertSame( '', $this->service()->state( $this->account_id )['preview']['enabled_note'] );
 	}
 
 	/**
@@ -211,7 +228,7 @@ final class AccountDeletionServiceTest extends Sync_Test_Case {
 			array_column( $preview['counts'], 'count', 'key' ),
 			'only this account\'s rows are counted'
 		);
-		$this->assertStringContainsString( 'Заказы WooCommerce остаются', $preview['kept'] );
+		$this->assertStringContainsString( 'заказы удаляются отдельно', $preview['kept'] );
 	}
 
 	/**
@@ -286,12 +303,11 @@ final class AccountDeletionServiceTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * The route answers with the service's statuses: 202 for a start, 409 and 400 for the refusals, 404 for no account.
+	 * The route answers with the service's statuses: 202 for a start, 400 for a wrong confirmation, 404 for no account.
 	 *
 	 * @return void
 	 */
 	public function test_the_route_answers_with_the_services_statuses(): void {
-		$this->assertSame( 409, $this->controller()->start( $this->request( [ 'confirm' => self::IDENTIFIER ] ) )->data['status'] );
 		$this->assertSame( 404, $this->controller()->get_state( $this->request( [], 999 ) )->data['status'] );
 
 		$this->accounts()->set_enabled( $this->account_id, false );

@@ -9,12 +9,13 @@ namespace Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace;
 
 use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Settings\Credential_Field_Spec;
+use Woodev\Framework\Marketplace\Settings\Credentials_Cabinet_Link;
 use Woodev\Framework\Marketplace\Settings\Settings_Descriptor;
 
 /**
  * In-memory {@see Settings_Descriptor} used by {@see \Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter}.
  */
-final class Fake_Settings_Descriptor implements Settings_Descriptor {
+final class Fake_Settings_Descriptor implements Settings_Descriptor, Credentials_Cabinet_Link {
 	/**
 	 * Credential fields of the owning adapter.
 	 *
@@ -37,20 +38,35 @@ final class Fake_Settings_Descriptor implements Settings_Descriptor {
 	private $specs;
 
 	/**
+	 * Address of the cabinet page where credentials are issued ('' for none).
+	 *
+	 * @var string
+	 */
+	private $cabinet_url;
+
+	/**
 	 * Creates the fake descriptor.
 	 *
 	 * @param Credential_Fields                   $fields       Credential fields.
 	 * @param string                              $name         Marketplace display name.
 	 * @param array<string,Credential_Field_Spec> $specs        Optional explicit field specs.
+	 * @param string                              $cabinet_url  Optional cabinet address for the credentials link.
 	 */
 	public function __construct(
 		Credential_Fields $fields,
 		string $name = 'Fake Seller',
-		array $specs = []
+		array $specs = [],
+		string $cabinet_url = ''
 	) {
-		$this->fields = $fields;
-		$this->name   = $name;
-		$this->specs  = $specs;
+		$this->fields      = $fields;
+		$this->name        = $name;
+		$this->specs       = $specs;
+		$this->cabinet_url = $cabinet_url;
+	}
+
+	/** @inheritDoc */
+	public function credentials_url(): string {
+		return $this->cabinet_url;
 	}
 
 	/** @inheritDoc */

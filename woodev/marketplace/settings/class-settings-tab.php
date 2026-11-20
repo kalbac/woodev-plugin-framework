@@ -50,6 +50,13 @@ final class Settings_Tab implements Settings_Section_Provider {
 	private $stacked;
 
 	/**
+	 * What the tab is for, as escaped HTML ('' for none).
+	 *
+	 * @var string
+	 */
+	private $description;
+
+	/**
 	 * Creates the tab.
 	 *
 	 * @since 2.1.5
@@ -59,12 +66,26 @@ final class Settings_Tab implements Settings_Section_Provider {
 	 * @param callable $sections `function (): Settings_Section[]`, called when the page or a route needs the sections.
 	 * @param bool     $stacked  True to draw every section of the tab under its own heading, one after another, with no sub-tabs
 	 *                           ({@see Settings_Section::stacked()}).
+	 * @param string   $description What the tab is for: a sentence or two, HTML the caller has already escaped, drawn above the
+	 *                           tab's content. '' for none.
 	 */
-	public function __construct( string $slug, string $label, callable $sections, bool $stacked = false ) {
-		$this->slug     = $slug;
-		$this->label    = $label;
-		$this->sections = $sections;
-		$this->stacked  = $stacked;
+	public function __construct( string $slug, string $label, callable $sections, bool $stacked = false, string $description = '' ) {
+		$this->slug        = $slug;
+		$this->label       = $label;
+		$this->sections    = $sections;
+		$this->stacked     = $stacked;
+		$this->description = $description;
+	}
+
+	/**
+	 * What the tab is for, as escaped HTML; '' when it says nothing.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string
+	 */
+	public function description(): string {
+		return $this->description;
 	}
 
 	/**

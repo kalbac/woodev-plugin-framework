@@ -27,7 +27,7 @@ final class Logging {
 	 *
 	 * @since 2.1.5
 	 */
-	public const REFUSAL = 'Эта информация показывается только при включённом «Логировании». Включите его на странице «Диагностика» или в настройках плагина, раздел «Дополнительно».';
+	public const REFUSAL = 'Эта информация показывается только при включённом «Логировании». Включите его в настройках плагина, раздел «Дополнительно».';
 
 	/**
 	 * Option name in `wp_options`.
@@ -115,17 +115,5 @@ final class Logging {
 	 */
 	public function hint( string $text ): string {
 		return $this->is_enabled() ? 'подсказка: ' . $text : '';
-	}
-
-	/**
-	 * Stores the switch the way the settings API stores a checkbox (`yes` / `no`).
-	 *
-	 * @since 2.1.5
-	 *
-	 * @param bool $enabled New state.
-	 * @return void
-	 */
-	public function set_enabled( bool $enabled ): void {
-		update_option( $this->option_name, $enabled ? 'yes' : 'no' );
 	}
 }

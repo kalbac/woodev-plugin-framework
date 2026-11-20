@@ -21,7 +21,7 @@ final class Account_Deletion_Refused extends \RuntimeException {
 	 * @since 2.1.5
 	 *
 	 * @param string $message Sentence for the merchant.
-	 * @param int    $status  HTTP status: 404 no such account, 409 the account is switched on, 400 the confirmation does not match.
+	 * @param int    $status  HTTP status: 404 no such account, 400 the confirmation does not match, 500 the job could not be queued.
 	 */
 	public function __construct( string $message, int $status ) {
 		parent::__construct( $message, $status );

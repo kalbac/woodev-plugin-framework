@@ -327,24 +327,36 @@ $marketplace-label-col: 280px;
 	@media ( max-width: 782px ) { grid-template-columns: 1fr; }
 }
 
-// «Подключение» tab of a marketplace plugin: one card per account (accounts-view.tsx).
+// «Подключение» tab of a marketplace plugin: a white wrapper (the settings card) holding a card per account (accounts-view.tsx).
 .woodev-accounts {
-	display: flex;
-	flex-direction: column;
-	gap: wd.$gap-lg;
-
-	&__add.is-first {
+	// The wrapper's own body is the column; the forms nested in an account's card keep their own bodies.
+	> .components-card__body {
 		display: flex;
-		justify-content: center;
-		padding: wd.$gap-lg * 2 0;
+		flex-direction: column;
+		gap: wd.$gap-lg;
 	}
 
-	// The one big button of a shop with no account yet.
-	&__add.is-first &__add-button {
-		justify-content: center;
-		min-width: 280px;
-		height: 56px;
-		font-size: 16px;
+	// The tab's description on the left, «+ Добавить аккаунт» on the right; the button drops under the text on a narrow screen.
+	&__header {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: wd.$gap;
+
+		.woodev-settings__section-desc {
+			flex: 1 1 320px;
+			margin: 0;
+		}
+	}
+
+	&__add-button {
+		white-space: nowrap;
+	}
+
+	&__empty {
+		margin: 0;
+		color: wd.$muted;
 	}
 
 	&__form-title {
@@ -366,15 +378,21 @@ $marketplace-label-col: 280px;
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		justify-content: space-between;
 		gap: wd.$gap;
 	}
 
+	// The on/off switch keeps its size beside the text.
+	&__toggle {
+		flex: none;
+	}
+
+	// Name, «Client-Id · description», connection status: one under another.
 	&__main {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: wd.$gap-sm wd.$gap-lg;
+		flex: 1 1 240px;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
 	}
 
 	&__title {
@@ -544,26 +562,34 @@ $marketplace-label-col: 280px;
 	}
 }
 
-// The marketplace «Инструменты» and «Диагностика» pages: cards one under another, like the settings tabs.
+// The marketplace «Инструменты» and «Диагностика» pages: one white wrapper card, an intro sentence on top, and a card per tool or
+// section inside it — the look of Woodev → Настройки → Доставка → «Инструменты».
 .woodev-tools-view,
 .woodev-diagnostics-view {
-	display: flex;
-	flex-direction: column;
-	gap: wd.$gap-lg;
-
-	// A card never grows past its content's width inside the flex column.
 	.woodev-settings__card {
 		min-width: 0;
 	}
 
-	// The column's gap spaces the notices; the settings page's own auto margin would shrink them to their text here.
+	// The wrapper's content is one column; the gap spaces the intro, the notices and the cards.
+	.components-card__body {
+		display: flex;
+		flex-direction: column;
+		gap: wd.$gap-lg;
+	}
+
+	.woodev-settings__section-desc,
+	.woodev-group {
+		margin: 0;
+	}
+
+	// The settings page's own auto margin would shrink a notice to its text here.
 	.components-notice {
 		margin: 0;
 	}
 }
 
 // The preview of a tool sits inside its card, under the first button.
-.woodev-tools-view__preview {
+.woodev-tools-view .woodev-tools-view__preview {
 	margin: wd.$gap 0 0;
 }
 
