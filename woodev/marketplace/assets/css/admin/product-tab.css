@@ -35,7 +35,7 @@
 	line-height: 20px !important;
 }
 
-.woocommerce_options_panel.woodev-mp-tab .form-field > span:not(.woodev-mp-buttons__row):not(.woodev-mp-result):not(.woocommerce-help-tip):not(.woodev-mp-with-action) {
+.woocommerce_options_panel.woodev-mp-tab .form-field > span:not(.woodev-mp-buttons__row):not(.woodev-mp-result):not(.woocommerce-help-tip):not(.woodev-mp-with-action):not(.woodev-mp-article__editor) {
 	display: inline-block;
 	padding-top: 10px;
 	line-height: 20px;
@@ -169,9 +169,9 @@
 	color: #135e96;
 }
 
-/* The article: «Артикул» reads as a line with «изменить», and the input only appears when asked for. */
+/* The article: «Артикул» reads as a line with «изменить»; asked for, the input takes its place with «отменить» beside it. */
 .woodev-mp-article[hidden],
-.woodev-mp-article__input[hidden] {
+.woodev-mp-article__editor[hidden] {
 	display: none !important;
 }
 
@@ -179,25 +179,40 @@
 	margin-left: 6px;
 }
 
+.woodev-mp-article__editor {
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+	max-width: 100%;
+}
+
+.woocommerce_options_panel .woodev-mp-article__editor .woodev-mp-article__input {
+	float: none;
+	width: 320px;
+	max-width: 100%;
+	margin: 0;
+}
+
 /*
  * The action buttons: ONE WordPress button group (`.button-group`: adjacent buttons with shared borders), one row, never two. Each is an
- * icon and its words, centred on each other with a gap; while the row is too narrow for the words (under 720px of control column) only the
- * icon shows, and the name stays in the `aria-label` and the tooltip, so four or more buttons still fit one row. A browser without
- * container queries keeps the icons, which always fit.
+ * icon and its words, centred on each other with a gap. The PHP says how many buttons a group has: up to three keep their words
+ * (`--n1`..`--n3`), more are icons only (`--many`), and so is a group in a table row (`--icons`). Even three do not always fit: the line that
+ * holds the group is a size container, and a panel narrower than the group needs (a narrow screen) drops the words too. The name is never lost:
+ * it is in the tooltip (`data-tip`, drawn by WooCommerce's tipTip) and in the `aria-label`.
  */
-.woodev-mp-tab .woodev-mp-buttons {
+.woodev-mp-buttons {
 	container-type: inline-size;
 	container-name: woodev-mp-buttons;
 }
 
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-buttons__row.button-group {
+.woodev-mp-buttons__row.button-group {
 	display: inline-flex;
 	flex-wrap: nowrap;
 	max-width: 100%;
 	vertical-align: top;
 }
 
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-buttons__row.button-group > .woodev-mp-btn {
+.woodev-mp-buttons__row.button-group > .woodev-mp-btn {
 	position: relative;
 	display: inline-flex;
 	flex: 0 1 auto;
@@ -209,13 +224,13 @@
 	white-space: nowrap;
 }
 
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn:hover,
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn:focus,
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn.is-armed {
+.woodev-mp-buttons__row .woodev-mp-btn:hover,
+.woodev-mp-buttons__row .woodev-mp-btn:focus,
+.woodev-mp-buttons__row .woodev-mp-btn.is-armed {
 	z-index: 1;
 }
 
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-btn.is-armed {
+.woodev-mp-buttons__row .woodev-mp-btn.is-armed {
 	border-color: #b32d2e;
 	color: #b32d2e;
 }
@@ -224,26 +239,26 @@
 	flex: 0 0 auto;
 }
 
-/* The words, hidden from sight (not from a screen reader) while only the icons fit. */
-.woodev-mp-btn__text {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: -1px;
-	padding: 0;
-	overflow: hidden;
-	clip: rect(0, 0, 0, 0);
-	white-space: nowrap;
+.woodev-mp-buttons__row--many .woodev-mp-btn__text,
+.woodev-mp-buttons__row--icons .woodev-mp-btn__text {
+	display: none;
 }
 
-@container woodev-mp-buttons (min-width: 720px) {
-	.woodev-mp-btn__text {
-		position: static;
-		width: auto;
-		height: auto;
-		margin: 0;
-		overflow: visible;
-		clip: auto;
+@container woodev-mp-buttons (max-width: 500px) {
+	.woodev-mp-buttons__row--n3 .woodev-mp-btn__text {
+		display: none;
+	}
+}
+
+@container woodev-mp-buttons (max-width: 360px) {
+	.woodev-mp-buttons__row--n2 .woodev-mp-btn__text {
+		display: none;
+	}
+}
+
+@container woodev-mp-buttons (max-width: 200px) {
+	.woodev-mp-buttons__row--n1 .woodev-mp-btn__text {
+		display: none;
 	}
 }
 
@@ -288,7 +303,7 @@
 .woodev-mp-badge {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: 6px;
 	margin-left: 8px;
 	padding: 2px 8px;
 	border-radius: 10px;
@@ -347,20 +362,53 @@ button.woodev-mp-badge--problem:focus {
 }
 
 .woodev-mp-badge__icon--problem {
-	--woodev-mp-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='12' y1='4' x2='12' y2='14'/%3E%3Cline x1='12' y1='20' x2='12' y2='20.5'/%3E%3C/svg%3E");
+	width: 14px;
+	height: 14px;
+	/* The «warning» icon: an exclamation mark in a triangle. */
+	--woodev-mp-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/%3E%3Cline x1='12' y1='9' x2='12' y2='13'/%3E%3Cline x1='12' y1='17' x2='12.01' y2='17'/%3E%3C/svg%3E");
 }
 
-/* The state in a variation's collapsed header. */
+/*
+ * A badge with problems asks to be looked at: a ring spreads from it three times and it stops. The script sets `.is-pulsing` when the tab (or an
+ * opened variation) is shown, not when the page loads. A visitor who asked the system for less motion gets no animation at all.
+ */
+@keyframes woodev-mp-attention {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(219, 142, 31, 0.6);
+		transform: scale(1);
+	}
+
+	50% {
+		box-shadow: 0 0 0 6px rgba(219, 142, 31, 0);
+		transform: scale(1.08);
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.woodev-mp-badge--problem.is-pulsing {
+		animation: woodev-mp-attention 0.9s ease-in-out 3;
+	}
+}
+
+/*
+ * The state in a variation's collapsed header: one slot per marketplace, the name and its badge on one line (centred on each other, so one
+ * baseline) with a gap between them and room to the right: the slot of another marketplace (Wildberries, say) comes after it and the slots
+ * wrap, never collide.
+ */
 .woodev-mp-header-state {
-	display: inline-block;
-	margin-left: 12px;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 16px 0 12px;
 	font-size: 12px;
 	font-weight: 400;
+	line-height: 1.5;
 	vertical-align: middle;
 }
 
 .woodev-mp-header-state .woodev-mp-badge {
-	margin-left: 2px;
+	margin-left: 0;
 }
 
 /* The account select, in the header of «Product data» (the script moves it there). */
@@ -456,7 +504,7 @@ button.woodev-mp-badge--problem:focus {
 	color: #996800;
 }
 
-.woodev-mp-tab .woodev-mp-buttons .woodev-mp-result {
+.woodev-mp-buttons .woodev-mp-result {
 	display: block;
 	margin: 6px 0 0;
 }
@@ -471,15 +519,41 @@ button.woodev-mp-badge--problem:focus {
 }
 
 /*
- * The variants: one line per cell, tight cells, and the table scrolls sideways when it still does not fit. The shadows at the edges (they follow
+ * The variants: a table in the style of the marketplace pages' tables (a quiet heading, thin rules, no stripes, a tick column first, a picture,
+ * «Действия» last). A cell keeps to one line and the table scrolls sideways when it still does not fit; the shadows at the edges (they follow
  * the scroll position) show that there is more to scroll to, where a system scrollbar is hidden.
  */
+.woodev-mp-tab .woodev-mp-variants {
+	margin: 12px;
+}
+
+.woodev-mp-variants__toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 10px;
+}
+
+.woodev-mp-variants__toolbar .woodev-mp-result {
+	margin: 0 0 0 4px;
+}
+
+.woodev-mp-tab .woodev-mp-variants__select {
+	float: none;
+	width: auto;
+	min-width: 220px;
+	margin: 0;
+}
+
 .woodev-mp-tab .woodev-mp-variations-wrap {
 	box-sizing: border-box;
 	width: auto;
 	max-width: none;
-	margin: 12px;
+	margin: 0;
 	overflow-x: auto;
+	border: 1px solid #dcdcde;
+	border-radius: 2px;
 	background:
 		linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)) left center / 24px 100% no-repeat local,
 		linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)) right center / 24px 100% no-repeat local,
@@ -491,29 +565,71 @@ button.woodev-mp-badge--problem:focus {
 	width: 100%;
 	min-width: 100%;
 	margin: 0;
-	/* Transparent, so the wrapper's edge shadows above stay visible: WordPress paints `.widefat` white. */
-	background: transparent;
+	border-collapse: collapse;
 }
 
-/* WordPress's `.striped` rows are opaque too; the stripes would hide the edge shadows on every other row. */
-.woodev-mp-tab .woodev-mp-variations > thead > tr,
-.woodev-mp-tab .woodev-mp-variations > tbody > tr,
-.woodev-mp-tab .woodev-mp-variations > tbody > tr:nth-child(odd) {
-	background: transparent;
-}
-
-.woodev-mp-tab .woodev-mp-variations td,
-.woodev-mp-tab .woodev-mp-variations th {
-	padding: 6px 8px;
+.woodev-mp-tab .woodev-mp-variations th,
+.woodev-mp-tab .woodev-mp-variations td {
+	padding: 10px 12px;
+	border-bottom: 1px solid #f0f0f1;
+	text-align: left;
+	vertical-align: middle;
 	white-space: nowrap;
 }
 
+.woodev-mp-tab .woodev-mp-variations thead th,
+.woodev-mp-tab .woodev-mp-variations thead td {
+	border-bottom-color: #dcdcde;
+	font-weight: 600;
+}
+
+.woodev-mp-tab .woodev-mp-variations tbody tr:last-child td {
+	border-bottom: 0;
+}
+
+.woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__check {
+	width: 20px;
+	padding-right: 0;
+}
+
+.woodev-mp-tab .woodev-mp-variations input[type="checkbox"] {
+	margin: 0;
+	vertical-align: middle;
+}
+
+.woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__image {
+	width: 36px;
+	padding-right: 0;
+}
+
+.woodev-mp-variations__image img {
+	display: block;
+	width: 36px;
+	height: 36px;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+	object-fit: cover;
+}
+
 /* The variant's own name may be long («Цвет: красный, размер: XL»): it wraps, the other cells keep one line. */
-.woodev-mp-tab .woodev-mp-variations td:first-child {
+.woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__name {
+	min-width: 90px;
 	white-space: normal;
 }
 
-/* «(будет отправлен)» goes under the article: the widest column gets narrower and the pair stays together. */
+.woodev-mp-tab .woodev-mp-variations .woodev-mp-variations__actions {
+	width: 1%;
+}
+
+/* A «?» sits right after its text, in the heading and in a cell. */
+.woodev-mp-tab .woodev-mp-variations .woocommerce-help-tip {
+	display: inline-block;
+	float: none !important;
+	margin: 0 0 0 4px !important;
+	vertical-align: middle;
+}
+
+/* A note under the article (a change that is waiting) goes under it: the widest column gets narrower and the pair stays together. */
 .woodev-mp-tab .woodev-mp-variations .woodev-mp-note {
 	display: block;
 	margin: 0;

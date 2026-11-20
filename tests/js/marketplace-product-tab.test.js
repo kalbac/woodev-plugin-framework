@@ -231,17 +231,264 @@ describe( 'the dialogs of a block', () => {
 } );
 
 describe( 'the article line', () => {
-	test( '«изменить» gives way to the input and focuses it', () => {
+	/**
+	 * Renders the article the way PHP prints it: the line with «изменить», and the hidden editor (the input and «отменить»).
+	 */
+	function renderArticle() {
 		document.body.innerHTML = `
-			<span class="woodev-mp-article"><span>SKU-1</span>
+			<span class="woodev-mp-article"><span class="woodev-mp-article__value">SKU-1</span>
 				<button type="button" class="button-link woodev-mp-article__edit" aria-controls="art-1">edit</button></span>
-			<input type="text" id="art-1" hidden />`;
+			<span class="woodev-mp-article__editor" hidden><input type="text" id="art-1" value="SKU-1" />
+				<button type="button" class="button-link woodev-mp-article__cancel" aria-controls="art-1">cancel</button></span>`;
+
+		return {
+			line: document.querySelector( '.woodev-mp-article' ),
+			editor: document.querySelector( '.woodev-mp-article__editor' ),
+			input: document.getElementById( 'art-1' ),
+		};
+	}
+
+	test( '«изменить» gives way to the input and focuses it', () => {
+		const { line, editor, input } = renderArticle();
 
 		document.querySelector( '.woodev-mp-article__edit' ).click();
 
-		expect( document.querySelector( '.woodev-mp-article' ).hidden ).toBe( true );
-		expect( document.getElementById( 'art-1' ).hidden ).toBe( false );
-		expect( document.activeElement ).toBe( document.getElementById( 'art-1' ) );
+		expect( line.hidden ).toBe( true );
+		expect( editor.hidden ).toBe( false );
+		expect( document.activeElement ).toBe( input );
+	} );
+
+	test( '«отменить» drops what was typed and brings the line back', () => {
+		const { line, editor, input } = renderArticle();
+
+		document.querySelector( '.woodev-mp-article__edit' ).click();
+		input.value = 'NEW-ARTICLE';
+		document.querySelector( '.woodev-mp-article__cancel' ).click();
+
+		expect( input.value ).toBe( 'SKU-1' );
+		expect( editor.hidden ).toBe( true );
+		expect( line.hidden ).toBe( false );
+	} );
+} );
+
+describe( 'the attention pulse of a badge with problems', () => {
+	const rects = Element.prototype.getClientRects;
+
+	beforeAll( () => {
+		// jsdom has no layout: every element is «not visible» to jQuery unless it reports a box.
+		Element.prototype.getClientRects = function () {
+			return this.closest( '[hidden]' ) ? [] : [ {} ];
+		};
+	} );
+
+	afterAll( () => {
+		Element.prototype.getClientRects = rects;
+	} );
+
+	/**
+	 * Renders the product data box with the marketplace tab and the Variations tab, and one badge with problems in each place.
+	 */
+	function renderTabs() {
+		document.body.innerHTML = `
+			<div id="woocommerce-product-data">
+				<ul class="wc-tabs">
+					<li class="general active"><a href="#g">General</a></li>
+					<li class="woodev-mp-tab-link"><a href="#o">Ozon</a></li>
+					<li class="variations_tab"><a href="#v">Variations</a></li>
+				</ul>
+				<div class="woodev-mp-tab"><button type="button" class="woodev-mp-badge woodev-mp-badge--problem" id="tab-badge">Created</button></div>
+				<div id="variable_product_options"><div class="woocommerce_variation wc-metabox closed"><h3><button type="button" class="woodev-mp-badge woodev-mp-badge--problem" id="var-badge">Created</button></h3></div></div>
+			</div>`;
+	}
+
+	test( 'opening the marketplace tab pulses its badge; clicking the tab that is already open does not', () => {
+		renderTabs();
+		const tab = document.querySelector( '.woodev-mp-tab-link' );
+
+		tab.querySelector( 'a' ).click();
+		jest.runOnlyPendingTimers();
+		expect( document.getElementById( 'tab-badge' ).classList.contains( 'is-pulsing' ) ).toBe( true );
+
+		document.getElementById( 'tab-badge' ).dispatchEvent( new Event( 'animationend', { bubbles: true } ) );
+		expect( document.getElementById( 'tab-badge' ).classList.contains( 'is-pulsing' ) ).toBe( false );
+
+		tab.classList.add( 'active' );
+		tab.querySelector( 'a' ).click();
+		jest.runOnlyPendingTimers();
+		expect( document.getElementById( 'tab-badge' ).classList.contains( 'is-pulsing' ) ).toBe( false );
+	} );
+
+	test( 'the page loading pulses nothing', () => {
+		renderTabs();
+		jest.runOnlyPendingTimers();
+
+		expect( document.querySelectorAll( '.is-pulsing' ).length ).toBe( 0 );
+	} );
+
+	test( 'a badge that is not on screen (another account\'s block) does not pulse', () => {
+		renderTabs();
+		document.querySelector( '.woodev-mp-tab' ).hidden = true;
+
+		document.querySelector( '.woodev-mp-tab-link a' ).click();
+		jest.runOnlyPendingTimers();
+
+		expect( document.getElementById( 'tab-badge' ).classList.contains( 'is-pulsing' ) ).toBe( false );
+	} );
+
+	test( 'the variations loading, and a variation being opened, pulse the badges of the variations', () => {
+		renderTabs();
+
+		global.jQuery( document.body ).trigger( 'woocommerce_variations_loaded' );
+		expect( document.getElementById( 'var-badge' ).classList.contains( 'is-pulsing' ) ).toBe( true );
+
+		document.getElementById( 'var-badge' ).dispatchEvent( new Event( 'animationend', { bubbles: true } ) );
+		const variation = document.querySelector( '.woocommerce_variation' );
+
+		variation.classList.remove( 'closed' );
+		variation.querySelector( 'h3' ).click();
+		jest.runOnlyPendingTimers();
+
+		expect( document.getElementById( 'var-badge' ).classList.contains( 'is-pulsing' ) ).toBe( true );
+	} );
+} );
+
+describe( 'the actions on the variations of a variable product', () => {
+	/**
+	 * Renders the table of the variants (select, apply, ticks, the buttons of a row) and the buttons of an opened variation.
+	 */
+	function renderVariants() {
+		document.body.innerHTML = `
+			<div class="woodev-mp-variants" data-account="2" data-product="90" data-action="woodev_mp_variations" data-nonce="vn">
+				<div class="woodev-mp-variants__toolbar">
+					<select class="woodev-mp-variants__select"><option value="">Pick</option><option value="export">Export</option></select>
+					<button type="button" class="woodev-mp-variants__apply">Apply</button>
+					<span class="woodev-mp-result" role="status"></span></div>
+				<table><thead><tr><td><input type="checkbox" class="woodev-mp-variants__all" /></td></tr></thead><tbody>
+					<tr><td><input type="checkbox" class="woodev-mp-variants__check" value="5" /></td>
+						<td><button type="button" data-woodev-mp-vop="detach" data-action="woodev_mp_variations" data-nonce="vn"
+							data-product="90" data-variation="5" data-account="2" data-confirm="Sure?">Detach</button></td></tr>
+					<tr><td><input type="checkbox" class="woodev-mp-variants__check" value="6" /></td></tr>
+				</tbody></table></div>
+			<p class="woodev-mp-buttons"><span class="woodev-mp-buttons__row">
+				<button type="button" id="panel-export" data-woodev-mp-vop="export" data-action="woodev_mp_variations" data-nonce="vn"
+					data-product="90" data-variation="7" data-account="2" data-confirm="">Export</button></span>
+				<span class="woodev-mp-result" id="panel-result" role="status"></span></p>`;
+
+		return {
+			select: document.querySelector( '.woodev-mp-variants__select' ),
+			apply: document.querySelector( '.woodev-mp-variants__apply' ),
+			result: document.querySelector( '.woodev-mp-variants__toolbar .woodev-mp-result' ),
+			checks: document.querySelectorAll( '.woodev-mp-variants__check' ),
+			all: document.querySelector( '.woodev-mp-variants__all' ),
+		};
+	}
+
+	test( 'the heading tick ticks every variant, and ticking them all by hand ticks the heading', () => {
+		const { checks, all } = renderVariants();
+
+		all.checked = true;
+		all.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		expect( [ ...checks ].every( ( box ) => box.checked ) ).toBe( true );
+
+		checks[ 0 ].checked = false;
+		checks[ 0 ].dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		expect( all.checked ).toBe( false );
+
+		checks[ 0 ].checked = true;
+		checks[ 0 ].dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		expect( all.checked ).toBe( true );
+	} );
+
+	test( '«Применить» posts the chosen action with the ticked variants and shows the notice with its link', () => {
+		window.woodevMarketplaceProduct.texts.pickAction = 'Pick an action';
+		const { select, apply, result, checks } = renderVariants();
+
+		select.value = 'export';
+		checks[ 1 ].checked = true;
+		apply.click();
+
+		expect( global.jQuery.post ).toHaveBeenCalledTimes( 1 );
+		expect( global.jQuery.post.mock.calls[ 0 ][ 0 ] ).toBe( '/wp-admin/admin-ajax.php' );
+		expect( global.jQuery.post.mock.calls[ 0 ][ 1 ] ).toEqual( {
+			action: 'woodev_mp_variations',
+			_wpnonce: 'vn',
+			bulk_action: 'export',
+			account_id: 2,
+			product_id: 90,
+			variations: [ 6 ],
+		} );
+		expect( apply.disabled ).toBe( true );
+
+		request.resolve( { data: { tone: 'success', text: 'Queued 1.', url: 'https://example.test/products', link: 'Open' } } );
+
+		expect( apply.disabled ).toBe( false );
+		expect( result.textContent ).toBe( 'Queued 1. Open' );
+		expect( result.querySelector( 'a' ).getAttribute( 'href' ) ).toBe( 'https://example.test/products' );
+		expect( result.classList.contains( 'woodev-mp-result--error' ) ).toBe( false );
+	} );
+
+	test( '«Применить» asks for an action and for variants before it sends anything', () => {
+		window.woodevMarketplaceProduct.texts.pickAction = 'Pick an action';
+		window.woodevMarketplaceProduct.texts.pickVariants = 'Tick variants';
+		const { select, apply, result } = renderVariants();
+
+		apply.click();
+		expect( result.textContent ).toBe( 'Pick an action' );
+
+		select.value = 'export';
+		apply.click();
+		expect( result.textContent ).toBe( 'Tick variants' );
+		expect( result.classList.contains( 'woodev-mp-result--error' ) ).toBe( true );
+		expect( global.jQuery.post ).not.toHaveBeenCalled();
+	} );
+
+	test( 'a refusal is shown in red', () => {
+		const { select, apply, result, checks } = renderVariants();
+
+		select.value = 'export';
+		checks[ 0 ].checked = true;
+		apply.click();
+		request.resolve( { data: { tone: 'error', text: 'No rights.', url: '', link: '' } } );
+
+		expect( result.textContent ).toBe( 'No rights.' );
+		expect( result.classList.contains( 'woodev-mp-result--error' ) ).toBe( true );
+	} );
+
+	test( 'a failed request says so, with the server\'s words when it gave any', () => {
+		const { select, apply, result, checks } = renderVariants();
+
+		select.value = 'export';
+		checks[ 0 ].checked = true;
+		apply.click();
+		request.reject( { responseJSON: { data: { message: 'Page is stale.' } } } );
+
+		expect( result.textContent ).toBe( 'Page is stale.' );
+		expect( apply.disabled ).toBe( false );
+	} );
+
+	test( 'a destructive button of a row asks twice, then posts its action for its own variation', () => {
+		renderVariants();
+		const detach = document.querySelector( 'tbody [data-woodev-mp-vop="detach"]' );
+		const result = document.querySelector( '.woodev-mp-variants__toolbar .woodev-mp-result' );
+
+		detach.click();
+		expect( result.textContent ).toBe( 'Sure?' );
+		expect( global.jQuery.post ).not.toHaveBeenCalled();
+
+		detach.click();
+		expect( global.jQuery.post.mock.calls[ 0 ][ 1 ] ).toMatchObject( { bulk_action: 'detach', variations: [ 5 ], product_id: 90, account_id: 2 } );
+	} );
+
+	test( 'a button of an opened variation answers on its own line', () => {
+		renderVariants();
+
+		document.getElementById( 'panel-export' ).click();
+		expect( global.jQuery.post.mock.calls[ 0 ][ 1 ] ).toMatchObject( { bulk_action: 'export', variations: [ 7 ] } );
+
+		request.resolve( { data: { tone: 'success', text: 'Queued 1.', url: '', link: '' } } );
+
+		expect( document.getElementById( 'panel-result' ).textContent ).toBe( 'Queued 1.' );
+		expect( document.querySelector( '.woodev-mp-variants__toolbar .woodev-mp-result' ).textContent ).toBe( '' );
 	} );
 } );
 

@@ -1,6 +1,7 @@
 /**
  * The marketplace tab of the product edit screen: the buttons of a block, the dialogs (the state badge's problems, the help), the article's
- * «изменить» and the account select.
+ * «изменить» / «отменить», the attention pulse of a badge with problems and the account select. For a variable product also the actions on its
+ * variations: the select above the table of the variants, and the buttons of a row or of an opened variation.
  *
  * Each button posts to `admin-ajax.php` with its own nonce and shows the answer in the line beside it. «Архивировать» and «Снять связь» ask twice:
  * the first click shows the question and arms the button, a second click within five seconds does it.
@@ -141,17 +142,107 @@
 		true
 	);
 
+	/**
+	 * Finds the parts of an article control from any of its buttons.
+	 *
+	 * @param {Element} button «изменить» or «отменить».
+	 * @return {{line: jQuery, editor: jQuery, input: jQuery}} The line with the article, the editor that replaces it, the input inside.
+	 */
+	function articleParts( button ) {
+		var $input  = $( '#' + $.escapeSelector( $( button ).attr( 'aria-controls' ) ) );
+		var $editor = $input.closest( '.woodev-mp-article__editor' );
+
+		return { line: $editor.prevAll( '.woodev-mp-article' ).first(), editor: $editor, input: $input };
+	}
+
 	// «Артикул»: the line with «изменить» gives way to the input.
 	$( document ).on(
 		'click',
 		'.woodev-mp-article__edit',
 		function ( event ) {
-			var $line  = $( this ).closest( '.woodev-mp-article' );
-			var $input = $( '#' + $.escapeSelector( $( this ).attr( 'aria-controls' ) ) );
+			var parts = articleParts( this );
 
 			event.preventDefault();
-			$line.prop( 'hidden', true );
-			$input.prop( 'hidden', false ).trigger( 'focus' );
+			parts.line.prop( 'hidden', true );
+			parts.editor.prop( 'hidden', false );
+			parts.input.trigger( 'focus' );
+		}
+	);
+
+	// «отменить»: the input gives way to the line again, and what was typed is dropped (the input goes back to the article it started with).
+	$( document ).on(
+		'click',
+		'.woodev-mp-article__cancel',
+		function ( event ) {
+			var parts = articleParts( this );
+
+			event.preventDefault();
+			parts.input.val( parts.input.prop( 'defaultValue' ) );
+			parts.editor.prop( 'hidden', true );
+			parts.line.prop( 'hidden', false );
+		}
+	);
+
+	/**
+	 * Makes the badges with problems inside a scope pulse a few times (the stylesheet does the pulsing and stops it by itself; it does nothing
+	 * for a visitor who asked the system for less motion). Only badges that can be seen are pulsed.
+	 *
+	 * @param {jQuery} $scope Where to look for badges.
+	 */
+	function pulse( $scope ) {
+		$scope.find( '.woodev-mp-badge--problem' ).filter( ':visible' ).addClass( 'is-pulsing' );
+	}
+
+	$( document ).on(
+		'animationend',
+		'.woodev-mp-badge--problem',
+		function () {
+			$( this ).removeClass( 'is-pulsing' );
+		}
+	);
+
+	// In the capture phase, before WooCommerce marks the clicked tab active: only a tab that was not open pulses, not every click on it.
+	document.addEventListener(
+		'click',
+		function ( event ) {
+			var $tab = $( event.target.closest ? event.target.closest( '#woocommerce-product-data ul.wc-tabs li' ) : [] );
+
+			if ( ! $tab.length || $tab.hasClass( 'active' ) ) {
+				return;
+			}
+
+			if ( $tab.hasClass( 'woodev-mp-tab-link' ) ) {
+				window.setTimeout( function () { pulse( $( '.woodev-mp-tab' ) ); }, 0 );
+			} else if ( $tab.hasClass( 'variations_tab' ) ) {
+				window.setTimeout( function () { pulse( $( '#variable_product_options' ) ); }, 0 );
+			}
+		},
+		true
+	);
+
+	// The variations arrive after the tab is opened (and again after a save or a page): their badges pulse when they are on screen.
+	$( document ).on(
+		'woocommerce_variations_loaded',
+		function () {
+			pulse( $( '#variable_product_options' ) );
+		}
+	);
+
+	// An opened variation shows its own badge: it pulses once the variation is open.
+	$( document ).on(
+		'click',
+		'.woocommerce_variation > h3',
+		function () {
+			var $variation = $( this ).closest( '.woocommerce_variation' );
+
+			window.setTimeout(
+				function () {
+					if ( ! $variation.hasClass( 'closed' ) ) {
+						pulse( $variation );
+					}
+				},
+				0
+			);
 		}
 	);
 
@@ -305,6 +396,144 @@
 					$button.prop( 'disabled', false );
 				}
 			);
+		}
+	);
+
+	/**
+	 * Draws the answer of an action on variations in the line beside the buttons: the sentence, in red when it is a refusal, and the link to the page
+	 * that shows the progress when the work went to the queue.
+	 *
+	 * @param {jQuery} $result Result line.
+	 * @param {Object} notice  `{ tone, text, url, link }`.
+	 */
+	function showNotice( $result, notice ) {
+		$result.toggleClass( 'woodev-mp-result--error', 'error' === notice.tone ).text( notice.text );
+
+		if ( notice.url ) {
+			$result.append( ' ', $( '<a>' ).attr( 'href', notice.url ).text( notice.link ) );
+		}
+	}
+
+	/**
+	 * Runs one action on some variations of a variable product and shows the answer. The server runs the table's own bulk action (the same
+	 * code as the Variations tab's «Bulk actions»).
+	 *
+	 * @param {Object} request `{ source, action, variations, $result, $controls }`: the element that carries `data-action`, `data-nonce`,
+	 *                         `data-account` and `data-product`; the action id; the variation ids; the result line; the controls to lock meanwhile.
+	 */
+	function runOnVariations( request ) {
+		request.$controls.prop( 'disabled', true );
+		request.$result.removeClass( 'woodev-mp-result--error' ).text( settings.texts.working );
+
+		$.post(
+			window.ajaxurl,
+			{
+				action: request.source.data( 'action' ),
+				_wpnonce: request.source.data( 'nonce' ),
+				bulk_action: request.action,
+				account_id: request.source.data( 'account' ),
+				product_id: request.source.data( 'product' ),
+				variations: request.variations
+			}
+		)
+		.done(
+			function ( response ) {
+				showNotice( request.$result, response.data );
+			}
+		)
+		.fail(
+			function ( xhr ) {
+				var data = xhr.responseJSON && xhr.responseJSON.data;
+
+				request.$result.addClass( 'woodev-mp-result--error' ).text( data && data.message ? data.message : settings.texts.failed );
+			}
+		)
+		.always(
+			function () {
+				request.$controls.prop( 'disabled', false );
+			}
+		);
+	}
+
+	// A button of a variation (in a row of the table or in the opened variation): the same buttons as a simple product's, acting on this variation.
+	$( document ).on(
+		'click',
+		'[data-woodev-mp-vop]',
+		function ( event ) {
+			var $button = $( this );
+			var $scope  = $button.closest( '.woodev-mp-variants, .woodev-mp-buttons' );
+			var $result = $scope.find( '.woodev-mp-result' ).first();
+
+			event.preventDefault();
+
+			// The result line is shared by the buttons around it: whatever is armed elsewhere loses its prompt now.
+			$scope.find( '[data-woodev-mp-vop]' ).not( $button ).each(
+				function () {
+					disarm( $( this ) );
+				}
+			);
+
+			if ( ! confirmed( $button, $result ) ) {
+				return;
+			}
+
+			disarm( $button );
+			runOnVariations(
+				{
+					source: $button,
+					action: $button.data( 'woodev-mp-vop' ),
+					variations: [ $button.data( 'variation' ) ],
+					$result: $result,
+					$controls: $button
+				}
+			);
+		}
+	);
+
+	// «Выберите действие» + «Применить» above the table: the chosen action on every ticked variant.
+	$( document ).on(
+		'click',
+		'.woodev-mp-variants__apply',
+		function () {
+			var $table   = $( this ).closest( '.woodev-mp-variants' );
+			var $select  = $table.find( '.woodev-mp-variants__select' );
+			var $result  = $table.find( '.woodev-mp-result' ).first();
+			var ticked   = $table.find( '.woodev-mp-variants__check:checked' ).map(
+				function () {
+					return Number( this.value );
+				}
+			).get();
+
+			if ( ! $select.val() ) {
+				$result.addClass( 'woodev-mp-result--error' ).text( settings.texts.pickAction );
+				return;
+			}
+
+			if ( ! ticked.length ) {
+				$result.addClass( 'woodev-mp-result--error' ).text( settings.texts.pickVariants );
+				return;
+			}
+
+			runOnVariations( { source: $table, action: $select.val(), variations: ticked, $result: $result, $controls: $( this ) } );
+		}
+	);
+
+	// The tick in the heading ticks every variant; a variant ticked or unticked keeps the heading's tick true.
+	$( document ).on(
+		'change',
+		'.woodev-mp-variants__all',
+		function () {
+			$( this ).closest( '.woodev-mp-variants' ).find( '.woodev-mp-variants__check' ).prop( 'checked', this.checked );
+		}
+	);
+
+	$( document ).on(
+		'change',
+		'.woodev-mp-variants__check',
+		function () {
+			var $checks = $( this ).closest( '.woodev-mp-variants' ).find( '.woodev-mp-variants__check' );
+
+			$( this ).closest( '.woodev-mp-variants' ).find( '.woodev-mp-variants__all' ).prop( 'checked', $checks.length === $checks.filter( ':checked' ).length );
 		}
 	);
 }( window.jQuery ) );

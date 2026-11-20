@@ -112,7 +112,7 @@ final class PanelViewTest extends TestCase {
 		$html                        = $this->render_tab( [ $block ], [] );
 
 		$this->assertStringContainsString( '>По категории: Платья</option>', $html );
-		$this->assertMatchesRegularExpression( '#<span class="woodev-mp-with-action"><select [^>]*>.*</select><a class="woodev-mp-row-link" href="https://example.test/mappings" target="_blank" rel="noopener noreferrer" title="Перейти на страницу сопоставлений" aria-label="Перейти на страницу сопоставлений"><svg#us', $html );
+		$this->assertMatchesRegularExpression( '#<span class="woodev-mp-with-action"><select [^>]*>.*</select><a class="woodev-mp-row-link tips" href="https://example.test/mappings" target="_blank" rel="noopener noreferrer" data-tip="Перейти на страницу сопоставлений" aria-label="Перейти на страницу сопоставлений"><svg#us', $html );
 		$this->assertStringNotContainsString( 'Открыть «Сопоставление»', $html, 'the link is an icon with a tooltip, not a sentence' );
 	}
 
@@ -125,13 +125,15 @@ final class PanelViewTest extends TestCase {
 		];
 		$html = $this->render_tab( [ $this->block() ], $ops );
 
-		$this->assertSame( 1, substr_count( $html, 'class="woodev-mp-buttons__row button-group" role="group"' ), 'one real WordPress button group' );
-		preg_match( '#<span class="woodev-mp-buttons__row button-group".*?</span><span class="woodev-mp-result#us', $html, $row );
+		$this->assertSame( 1, substr_count( $html, 'class="woodev-mp-buttons__row button-group woodev-mp-buttons__row--n3" role="group"' ), 'one real WordPress button group; three buttons keep their words' );
+		preg_match( '#<span class="woodev-mp-buttons__row button-group[^"]*".*?</span><span class="woodev-mp-result#us', $html, $row );
 		$this->assertSame( 3, substr_count( $row[0], '<button' ), 'export, archive, detach: the category-wide link is not an icon of this product' );
 		$this->assertSame( 3, substr_count( $row[0], '<svg class="woodev-mp-btn__icon"' ) );
-		$this->assertStringContainsString( 'aria-label="Архивировать на Fake"', $row[0] );
-		$this->assertStringContainsString( 'title="Архивировать на Fake"', $row[0] );
-		$this->assertStringContainsString( 'title="Снять связь" aria-label="Снять связь"', $row[0], 'the tooltip is the verb only, not the explanation' );
+		$this->assertStringContainsString( 'aria-label="Архивировать на Fake" data-tip="Архивировать на Fake"', $row[0] );
+		$this->assertStringContainsString( 'aria-label="Снять связь" data-tip="Снять связь"', $row[0], 'the tooltip is the verb only, not the explanation' );
+		$this->assertStringNotContainsString( ' title=', $row[0], 'the tooltip is WooCommerce\'s (tips + data-tip): a native title shows nowhere in some hosts and would double it where it does' );
+		$this->assertStringContainsString( 'class="button woodev-mp-btn tips"', $row[0] );
+		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Снять связь</span>', $row[0], 'every button carries its words; the stylesheet hides them when they do not fit' );
 		$this->assertStringNotContainsString( 'Связать', $row[0] );
 		$this->assertStringNotContainsString( 'Сайт забудет связь', $row[0] );
 		$this->assertStringNotContainsString( 'Архивировать:', $html );
@@ -178,7 +180,7 @@ final class PanelViewTest extends TestCase {
 	public function test_a_product_without_problems_has_its_badge_with_a_check_and_no_check_row(): void {
 		$html = $this->render_tab( [ $this->block() ], [] );
 
-		$this->assertMatchesRegularExpression( '#<h3 class="woodev-mp-block__title">Fake <span class="woodev-mp-badge woodev-mp-badge--ok" title="Проблем не найдено"><span class="woodev-mp-badge__icon woodev-mp-badge__icon--ok" aria-hidden="true"></span><span class="woodev-mp-badge__label">Создан</span></span></h3>#u', $html );
+		$this->assertMatchesRegularExpression( '#<h3 class="woodev-mp-block__title">Fake <span class="woodev-mp-badge woodev-mp-badge--ok tips" data-tip="Проблем не найдено"><span class="woodev-mp-badge__label">Создан</span><span class="woodev-mp-badge__icon woodev-mp-badge__icon--ok" aria-hidden="true"></span></span></h3>#u', $html );
 		$this->assertStringNotContainsString( 'woodev-mp-badge--button', $html, 'nothing to open: the badge is not a button' );
 		$this->assertStringNotContainsString( '>Проверка<', $html, 'the separate «Проверка» row is gone' );
 		$this->assertStringNotContainsString( 'Товар готов к выгрузке', $html );
@@ -208,7 +210,7 @@ final class PanelViewTest extends TestCase {
 		];
 		$html                          = $this->render_tab( [ $block ], [] );
 
-		$this->assertMatchesRegularExpression( '#<button type="button" class="woodev-mp-badge woodev-mp-badge--problem woodev-mp-badge--button" data-woodev-mp-dialog title="Замечаний: 4\. Нажмите, чтобы посмотреть\." aria-haspopup="dialog"><span class="woodev-mp-badge__icon woodev-mp-badge__icon--problem" aria-hidden="true"></span><span class="woodev-mp-badge__label">Создан</span></button><template data-title="Проверка товара">#u', $html );
+		$this->assertMatchesRegularExpression( '#<button type="button" class="woodev-mp-badge woodev-mp-badge--problem woodev-mp-badge--button tips" data-woodev-mp-dialog data-tip="Есть проблемы \(4\) — нажмите, чтобы посмотреть" aria-haspopup="dialog"><span class="woodev-mp-badge__label">Создан</span><span class="screen-reader-text">Есть проблемы \(4\) — нажмите, чтобы посмотреть</span><span class="woodev-mp-badge__icon woodev-mp-badge__icon--problem" aria-hidden="true"></span></button><template data-title="Проверка товара">#u', $html );
 		$this->assertStringContainsString( '<h3>Исправить перед выгрузкой</h3><ul class="woodev-mp-problems__list">', $html );
 		$this->assertStringContainsString( '<li class="woodev-mp-issue woodev-mp-issue--error">Не указан вес <a href="https://example.test/mappings" target="_blank" rel="noopener noreferrer">Исправить</a></li>', $html );
 		$this->assertStringContainsString( '<li class="woodev-mp-issue woodev-mp-issue--error">Нет главного фото</li>', $html, 'a problem fixed on the product itself has no link: the sentence names the field' );
@@ -226,7 +228,7 @@ final class PanelViewTest extends TestCase {
 
 		$this->assertStringContainsString( 'woodev-mp-badge--problem', $html );
 		$this->assertStringContainsString( 'Проверить товар сейчас не удалось.', $html );
-		$this->assertStringContainsString( 'title="Замечаний: 1.', $html );
+		$this->assertStringContainsString( 'data-tip="Есть проблемы (1) — нажмите, чтобы посмотреть"', $html );
 	}
 
 	public function test_the_sync_reasons_are_in_the_dialog_only_while_logging_shows_them(): void {
@@ -240,7 +242,7 @@ final class PanelViewTest extends TestCase {
 
 		$this->assertStringContainsString( '<h3>Почему не синхронизируется</h3>', $html );
 		$this->assertStringContainsString( 'Лицензия не действует', $html );
-		$this->assertStringContainsString( 'title="Замечаний: 1.', $html );
+		$this->assertStringContainsString( 'data-tip="Есть проблемы (1) — нажмите, чтобы посмотреть"', $html );
 
 		$block['reasons']['visible'] = false;
 		$html                        = $this->render_tab( [ $block ], [] );
@@ -280,7 +282,7 @@ final class PanelViewTest extends TestCase {
 		$html                    = $this->render_tab( [ $block ], [] );
 
 		$this->assertStringContainsString( '<span class="woodev-mp-article"><span class="woodev-mp-article__value">SKU-77</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="woodev_fake_a3_offer_id">изменить</button></span>', $html );
-		$this->assertStringContainsString( 'id="woodev_fake_a3_offer_id" name="woodev_fake[3][offer_id]" value="" placeholder="SKU-77" maxlength="50" hidden />', $html );
+		$this->assertStringContainsString( '<span class="woodev-mp-article__editor" hidden><input type="text" class="short woodev-mp-article__input" id="woodev_fake_a3_offer_id" name="woodev_fake[3][offer_id]" value="" placeholder="SKU-77" maxlength="50" /> <button type="button" class="button-link woodev-mp-article__cancel" aria-controls="woodev_fake_a3_offer_id">отменить</button></span>', $html, 'the input comes with a clickable «отменить»' );
 
 		$block['ids']['offer_id'] = 'CHOSEN-1';
 		$html                     = $this->render_tab( [ $block ], [] );
@@ -304,7 +306,8 @@ final class PanelViewTest extends TestCase {
 		$html                      = $this->render_tab( [ $block ], [], false, [], true );
 
 		$this->assertStringContainsString( '<span class="woodev-mp-article"><span class="woodev-mp-article__value">ART-1</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="woodev_fake_a3_offer_id">изменить</button></span>', $html );
-		$this->assertStringContainsString( 'name="woodev_fake[3][offer_id]" value="ART-1" placeholder="ART-1" maxlength="50" hidden />', $html, 'the input starts on the article the card has' );
+		$this->assertStringContainsString( 'name="woodev_fake[3][offer_id]" value="ART-1" placeholder="ART-1" maxlength="50" />', $html, 'the input starts on the article the card has, which «отменить» goes back to' );
+		$this->assertStringContainsString( 'woodev-mp-article__cancel', $html );
 		$this->assertStringNotContainsString( 'больше не меняется', $html );
 		$this->assertStringContainsString( 'После отправки артикул тоже можно изменить', $this->render_tab( [ $this->editable_block() ], [], false, [], true ) );
 		$this->assertStringContainsString( 'После отправки артикул уже не меняется', $this->render_tab( [ $this->editable_block() ], [] ), 'an adapter that cannot change it keeps saying so' );
@@ -429,7 +432,7 @@ final class PanelViewTest extends TestCase {
 		);
 		$one = (string) ob_get_clean();
 
-		$this->assertStringStartsWith( '<span class="woodev-mp-header-state"><span class="woodev-mp-header-state__name">Fake</span> <span class="woodev-mp-badge woodev-mp-badge--ok" title="Проблем не найдено">', $one );
+		$this->assertStringStartsWith( '<span class="woodev-mp-header-state"><span class="woodev-mp-header-state__name">Fake</span><span class="woodev-mp-badge woodev-mp-badge--ok tips" data-tip="Проблем не найдено">', $one );
 
 		$sick                         = $this->block();
 		$sick['state']                = Link_Record::STATE_UNLINKED;
@@ -456,9 +459,9 @@ final class PanelViewTest extends TestCase {
 
 		$this->assertStringContainsString( 'Fake · Основной', $two );
 		$this->assertStringContainsString( 'Fake · Два', $two );
-		$this->assertMatchesRegularExpression( '#Fake · Два</span> <button type="button" class="woodev-mp-badge woodev-mp-badge--problem woodev-mp-badge--button" data-woodev-mp-dialog#u', $two, 'a problem shows in the header, orange, with the dialog' );
+		$this->assertMatchesRegularExpression( '#Fake · Два</span><button type="button" class="woodev-mp-badge woodev-mp-badge--problem woodev-mp-badge--button tips" data-woodev-mp-dialog#u', $two, 'a problem shows in the header, orange, with the dialog' );
 		$this->assertStringContainsString( 'Не указан вес <a href="https://example.test/mappings"', $two );
-		$this->assertStringContainsString( '<span class="woodev-mp-badge__label">Не связан</span></button><template', $two );
+		$this->assertStringContainsString( '<span class="woodev-mp-badge__icon woodev-mp-badge__icon--problem" aria-hidden="true"></span></button><template', $two, 'the warning mark is to the right of the words' );
 	}
 
 	public function test_the_default_account_is_the_one_the_screen_names_and_the_variants_headings_are_short(): void {
@@ -491,7 +494,8 @@ final class PanelViewTest extends TestCase {
 		];
 		$html                 = $this->render_tab( [ $block ], [] );
 
-		$this->assertStringContainsString( '<th scope="col">Остаток</th><th scope="col">Цена</th>', $html );
+		$this->assertMatchesRegularExpression( '#<th scope="col">Остаток<span class="woocommerce-help-tip"[^>]*></span></th><th scope="col">Цена<span class="woocommerce-help-tip"[^>]*></span></th>#u', $html );
+		$this->assertStringContainsString( 'data-tip="Слева — остаток на сайте, справа — на Fake. Прочерк — данных пока нет."', $html, 'the «?» explains «сайт / Fake»' );
 		$this->assertStringNotContainsString( 'Цена: Fake', $html );
 	}
 
@@ -518,8 +522,9 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">Остатки, цены и проверка — у каждого варианта, во вкладке «Вариации».</span></p>', $html );
 		$this->assertStringContainsString( 'Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой.', $html );
 		$this->assertMatchesRegularExpression( '#<template data-title="Подсказки"><p class="woodev-mp-note">Это вариативный товар#u', $html, 'the rest of the explanation is in the help dialog' );
-		$this->assertStringContainsString( '<div class="woodev-mp-variations-wrap"><table class="widefat striped woodev-mp-variations">', $html );
-		$this->assertStringContainsString( 'ART-S <span class="woodev-mp-note">(будет отправлен)</span>', $html );
+		$this->assertStringContainsString( '<div class="woodev-mp-variations-wrap"><table class="woodev-mp-variations">', $html );
+		$this->assertMatchesRegularExpression( '#<td>ART-S<span class="woocommerce-help-tip"[^>]*data-tip="Артикул будет отправлен на маркетплейс вместе с карточкой\."></span></td>#u', $html, '«(будет отправлен)» is in the tooltip, not in the cell' );
+		$this->assertStringNotContainsString( '(будет отправлен)', $html );
 		$this->assertStringContainsString( '</table></div>', $html );
 		$this->assertStringContainsString( 'class="woodev-mp-help"', $html );
 	}
@@ -530,7 +535,7 @@ final class PanelViewTest extends TestCase {
 		$block['ids']['card_url']  = 'https://example.test/card/1';
 		$html                      = $this->render_tab( [ $block ], [] );
 
-		$this->assertStringContainsString( '<span>ID 1 · SKU 2 · <a href="https://example.test/card/1" target="_blank" rel="noopener noreferrer" title="Открыть на Fake">модель 3</a></span>', $html );
+		$this->assertStringContainsString( '<span>ID 1 · SKU 2 · <a class="tips" href="https://example.test/card/1" target="_blank" rel="noopener noreferrer" data-tip="Открыть на Fake">модель 3</a></span>', $html );
 		$this->assertStringNotContainsString( '· </span>', $html );
 		$this->assertStringNotContainsString( '>Открыть на Fake</a>', $html, 'there is no separate «Открыть на…» link' );
 
@@ -567,6 +572,99 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( 'placeholder="99,00 ₽"', $html );
 		$this->assertStringContainsString( 'placeholder="120,50 ₽"', $html );
 		$this->assertStringContainsString( 'placeholder="Не задана"', $html );
+	}
+
+	public function test_more_than_three_buttons_are_icons_only_and_up_to_three_keep_their_words(): void {
+		$view   = new Panel_View( new Screen_Names( 'fake', 'Fake' ) );
+		$group  = new \ReflectionMethod( $view, 'button_group' );
+		$all    = static function ( string $op ): string {
+			return 'data-x="' . $op . '"';
+		};
+		$labels = [
+			'a' => 'А',
+			'b' => 'Б',
+			'c' => 'В',
+			'd' => 'Г',
+		];
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$group->setAccessible( true ); // Needed before PHP 8.1, deprecated from 8.5.
+		}
+
+		$four  = (string) $group->invoke( $view, $labels, false, $all );
+		$three = (string) $group->invoke( $view, array_slice( $labels, 0, 3 ), false, $all );
+		$none  = (string) $group->invoke( $view, $labels, false, static function (): ?string {
+			return null;
+		} );
+
+		$this->assertStringContainsString( 'button-group woodev-mp-buttons__row--many"', $four, 'four buttons: the PHP adds the class that hides the words' );
+		$this->assertStringContainsString( 'button-group woodev-mp-buttons__row--n3"', $three );
+		$this->assertSame( '', $none, 'nothing offered: no empty group' );
+	}
+
+	public function test_the_variants_table_is_a_records_table_with_ticks_pictures_site_and_marketplace_figures_and_the_buttons_of_each_row(): void {
+		$html = $this->render_tab( [ $this->parent_block() ], [ 'export' => 't1' ], false, [ 'variations' => $this->variation_facts() ] );
+
+		$this->assertStringContainsString( '<div class="woodev-mp-variants" data-account="3" data-product="41" data-action="woodev_fake_variations" data-nonce="var-nonce">', $html );
+		$this->assertStringContainsString( '<select id="woodev_fake_a3_bulk" class="woodev-mp-variants__select"><option value="">Выберите действие</option><option value="export">Экспортировать / Обновить карточку</option><option value="sync_stock_on">Включить синхронизацию остатков</option></select> <button type="button" class="button woodev-mp-variants__apply">Применить</button>', $html );
+		$this->assertStringContainsString( '<td class="woodev-mp-variations__check"><input type="checkbox" class="woodev-mp-variants__all"', $html, 'the first column is the ticks, the heading ticks all' );
+		$this->assertMatchesRegularExpression( '#<td class="woodev-mp-variations__check"><input type="checkbox" class="woodev-mp-variants__check" value="5" aria-label="Отметить вариант «S»" /></td><td class="woodev-mp-variations__image"><img src="https://example.test/s\.png"#u', $html );
+		$this->assertStringContainsString( '<td>500 / 480</td><td>1990 / —</td>', $html, 'stock and price are «сайт / Fake»' );
+		$this->assertStringContainsString( '<td>— / 0</td><td>99.5 / 99.5</td>', $html );
+		$this->assertStringContainsString( '<th scope="col" class="woodev-mp-variations__actions">Действия</th>', $html );
+		$this->assertStringContainsString( 'data-woodev-mp-vop="export" data-action="woodev_fake_variations" data-nonce="var-nonce" data-product="41" data-variation="5" data-account="3" data-confirm=""', $html );
+		$this->assertMatchesRegularExpression( '#<td class="woodev-mp-variations__actions"><span class="woodev-mp-buttons__row button-group woodev-mp-buttons__row--n3 woodev-mp-buttons__row--icons"#u', $html, 'a row of the table keeps to icons' );
+		$this->assertSame( 3, substr_count( $html, 'data-woodev-mp-vop="detach"' ) + substr_count( $html, 'data-woodev-mp-vop="archive"' ) + 1, 'the row of a created card: update, archive, detach; the row of an unsent one: export only' );
+		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Экспортировать</span>', $html, 'a card that was not sent is «Экспортировать»' );
+		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Обновить карточку</span>', $html );
+	}
+
+	public function test_without_the_variations_actions_the_table_has_no_ticks_no_select_and_no_buttons(): void {
+		$html = $this->render_tab( [ $this->parent_block() ], [ 'export' => 't1' ] );
+
+		$this->assertStringNotContainsString( 'woodev-mp-variants__check', $html );
+		$this->assertStringNotContainsString( 'woodev-mp-variants__select', $html );
+		$this->assertStringNotContainsString( 'data-woodev-mp-vop', $html );
+		$this->assertStringNotContainsString( 'Действия</th>', $html );
+	}
+
+	public function test_a_variation_has_the_buttons_of_a_simple_product_acting_on_itself(): void {
+		ob_start();
+		( new Panel_View( new Screen_Names( 'fake', 'Fake' ) ) )->render_variation(
+			[
+				'blocks'       => [ $this->block() ],
+				'nonce'        => 'save-nonce',
+				'loop'         => 0,
+				'parent_id'    => 90,
+				'variations'   => $this->variation_facts(),
+				'settings_url' => 'https://example.test/settings',
+				'mappings_url' => 'https://example.test/mappings',
+			]
+		);
+		$html = (string) ob_get_clean();
+
+		$this->assertSame( 3, substr_count( $html, 'data-woodev-mp-vop=' ), 'update card, archive, unlink' );
+		$this->assertStringContainsString( 'data-woodev-mp-vop="archive" data-action="woodev_fake_variations" data-nonce="var-nonce" data-product="90" data-variation="41" data-account="3" data-confirm="Точно архивировать на Fake? Нажмите ещё раз."', $html, 'the request names the variable product and this variation' );
+		$this->assertStringContainsString( 'class="woodev-mp-buttons__row button-group woodev-mp-buttons__row--n3"', $html );
+		$this->assertStringContainsString( '<span class="woodev-mp-result woodev-mp-note" role="status" aria-live="polite"></span>', $html );
+
+		$facts            = $this->variation_facts();
+		$facts['buttons'] = [ 'detach' ];
+
+		ob_start();
+		( new Panel_View( new Screen_Names( 'fake', 'Fake' ) ) )->render_variation(
+			[
+				'blocks'       => [ $this->block() ],
+				'nonce'        => 'save-nonce',
+				'loop'         => 0,
+				'parent_id'    => 90,
+				'variations'   => $facts,
+				'settings_url' => 'https://example.test/settings',
+				'mappings_url' => 'https://example.test/mappings',
+			]
+		);
+
+		$this->assertSame( 1, substr_count( (string) ob_get_clean(), 'data-woodev-mp-vop=' ), 'a button the user may not press is not offered' );
 	}
 
 	/**
@@ -609,6 +707,73 @@ final class PanelViewTest extends TestCase {
 		);
 
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * What the product tab hands the view for a variable product's variations.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function variation_facts(): array {
+		return [
+			'action'  => 'woodev_fake_variations',
+			'nonce'   => 'var-nonce',
+			'select'  => [
+				'export'        => 'Экспортировать / Обновить карточку',
+				'sync_stock_on' => 'Включить синхронизацию остатков',
+			],
+			'buttons' => [ 'export', 'archive', 'detach' ],
+		];
+	}
+
+	/**
+	 * Builds the block of a variable product with two variants: S (card created) and M (not sent).
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function parent_block(): array {
+		$block                = $this->block();
+		$block['kind']        = 'parent';
+		$block['counts']      = [];
+		$block['any_created'] = true;
+		$block['any_linked']  = true;
+		$row                  = [
+			'id'          => 5,
+			'name'        => 'S',
+			'image'       => 'https://example.test/s.png',
+			'badge'       => Card_State_Badge::of( Link_Record::STATE_CREATED ),
+			'offer_id'    => 'ART-S',
+			'planned'     => false,
+			'is_new'      => false,
+			'can_archive' => true,
+			'can_detach'  => true,
+			'site_stock'  => '500',
+			'stock'       => '480',
+			'site_price'  => '1990',
+			'price'       => '',
+			'currency'    => 'RUB',
+		];
+		$block['rows']        = [
+			$row,
+			array_merge(
+				$row,
+				[
+					'id'          => 6,
+					'name'        => 'M',
+					'badge'       => Card_State_Badge::of( Link_Record::STATE_UNLINKED ),
+					'offer_id'    => 'ART-M',
+					'is_new'      => true,
+					'can_archive' => false,
+					'can_detach'  => false,
+					'site_stock'  => '',
+					'stock'       => '0',
+					'site_price'  => '99.50',
+					'price'       => '99.5000',
+				]
+			),
+		];
+
+		return $block;
 	}
 
 	/**
