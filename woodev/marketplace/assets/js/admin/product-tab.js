@@ -79,72 +79,26 @@
 	}
 
 	/**
-	 * Builds the one dialog of the page, the first time it is needed (native `<dialog>`: Esc and the backdrop come with it).
+	 * Builds the one dialog of the page, the first time it is needed: the shared `WoodevDialog` (header with «✕», body, footer with «Закрыть»).
 	 *
-	 * @return {HTMLDialogElement} The dialog; its parts are `.woodev-mp-dialog__title` and `.woodev-mp-dialog__body`.
+	 * @return {Object} The `WoodevDialog` handle.
 	 */
 	function ensureDialog() {
-		if ( dialog && dialog.isConnected ) {
+		if ( dialog && dialog.element.isConnected ) {
 			return dialog;
 		}
 
-		dialog = document.createElement( 'dialog' );
-		dialog.className = 'woodev-mp-dialog';
-		dialog.setAttribute( 'aria-labelledby', 'woodev-mp-dialog-title' );
+		var closer = document.createElement( 'button' );
 
-		var head  = document.createElement( 'div' );
-		var title = document.createElement( 'h2' );
-		var close = document.createElement( 'button' );
-		var body  = document.createElement( 'div' );
+		dialog = window.WoodevDialog.build( { closeLabel: settings.texts.close || 'OK', footer: true } );
 
-		head.className  = 'woodev-mp-dialog__head';
-		title.className = 'woodev-mp-dialog__title';
-		title.id        = 'woodev-mp-dialog-title';
-		body.className  = 'woodev-mp-dialog__body';
-		close.type      = 'button';
-		close.autofocus = true; // The dialog opens on its close button, not on the first link in the text.
-		close.className = 'button woodev-mp-dialog__close';
-		close.textContent = settings.texts.close || 'OK';
-
-		head.appendChild( title );
-		dialog.appendChild( head );
-		dialog.appendChild( body );
-		dialog.appendChild( close );
-		document.body.appendChild( dialog );
-
-		close.addEventListener(
-			'click',
-			function () {
-				closeDialog();
-			}
-		);
-
-		// A click on the backdrop lands on the dialog element itself, not on its content.
-		dialog.addEventListener(
-			'click',
-			function ( event ) {
-				if ( event.target === dialog ) {
-					closeDialog();
-				}
-			}
-		);
+		closer.type        = 'button';
+		closer.className   = 'button';
+		closer.textContent = settings.texts.close || 'OK';
+		closer.setAttribute( 'data-woodev-dialog-close', '' );
+		dialog.footer.appendChild( closer );
 
 		return dialog;
-	}
-
-	/**
-	 * Closes the dialog.
-	 */
-	function closeDialog() {
-		if ( ! dialog ) {
-			return;
-		}
-
-		if ( typeof dialog.close === 'function' ) {
-			dialog.close();
-		} else {
-			dialog.removeAttribute( 'open' );
-		}
 	}
 
 	/**
@@ -159,21 +113,14 @@
 			return;
 		}
 
-		var element = ensureDialog();
+		var handle = ensureDialog();
 
-		element.querySelector( '.woodev-mp-dialog__title' ).textContent = template.getAttribute( 'data-title' ) || '';
-		element.querySelector( '.woodev-mp-dialog__body' ).replaceChildren( template.content.cloneNode( true ) );
+		handle.title.textContent = template.getAttribute( 'data-title' ) || '';
+		handle.body.replaceChildren( template.content.cloneNode( true ) );
 
 		// The buttons inside the dialog act on the block the dialog was opened from.
-		$( element ).data( 'origin', $trigger.closest( '.woodev-mp-block' ) );
-
-		if ( typeof element.showModal === 'function' ) {
-			if ( ! element.open ) {
-				element.showModal();
-			}
-		} else {
-			element.setAttribute( 'open', '' );
-		}
+		$( handle.element ).data( 'origin', $trigger.closest( '.woodev-mp-block' ) );
+		handle.open();
 	}
 
 	// In the capture phase: a badge in a variation's collapsed header sits in the `<h3>` that WooCommerce opens and closes on a click, and the click
@@ -305,14 +252,14 @@
 		function ( event ) {
 			var $button = $( this );
 			var $dialog = $button.closest( 'dialog' );
-			var $block  = $dialog.length ? $( dialog ).data( 'origin' ) : $button.closest( '.woodev-mp-block' );
+			var $block  = $dialog.length ? $( dialog.element ).data( 'origin' ) : $button.closest( '.woodev-mp-block' );
 			var $result = $block.find( '.woodev-mp-result' );
 
 			event.preventDefault();
 
 			// A button of the help dialog works on the block it was opened from, and shows its answer there.
 			if ( $dialog.length ) {
-				closeDialog();
+				dialog.close();
 			}
 
 			// The result line is shared by the block's buttons: whatever is armed elsewhere in the block loses its prompt now.

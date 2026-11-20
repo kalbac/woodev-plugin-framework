@@ -13,6 +13,7 @@
 @use '../components/location-picker';
 @use '../components/group';
 @use '../components/fields-table';
+@use '../components/woodev-dialog';
 
 // The settings surface's own label-column width. Wider than the shared
 // `$label-col` token (182px) because the operator set it by eye on the rig,
@@ -408,32 +409,23 @@ $marketplace-label-col: 280px;
 	}
 }
 
-// The deletion dialog of one account (account-delete-flow.tsx): a WordPress Modal, so the plain selectors apply.
+// The deletion dialog of one account (account-delete-flow.tsx): a `WoodevDialog`, so its frame, header and footer are the shared ones.
 .woodev-account-delete {
 	// The gap between the warnings above and the confirm field below.
 	&__confirm {
 		margin-top: wd.$gap-lg;
 	}
 
-	// «Отмена» and the confirm button side by side, on the right, with the gap WordPress gives its own buttons.
-	&__actions {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-		gap: wd.$gap-sm;
-		margin-top: wd.$gap-lg;
+	// A disabled primary button keeps its accent colour, so a destructive one reads as faded red. Until the identifier
+	// matches it must look like the other disabled controls.
+	.woodev-dialog__footer .components-button.is-destructive:disabled {
+		background: wd.$disabled-bg;
+		border-color: wd.$disabled-line;
+		color: wd.$disabled-ink;
+	}
 
-		.components-button {
-			white-space: nowrap;
-		}
-
-		// A disabled primary button keeps its accent colour, so a destructive one reads as faded red. Until the identifier
-		// matches it must look like the other disabled controls.
-		.components-button.is-destructive:disabled {
-			background: wd.$disabled-bg;
-			border-color: wd.$disabled-line;
-			color: wd.$disabled-ink;
-		}
+	.woodev-dialog__footer .components-button {
+		white-space: nowrap;
 	}
 }
 

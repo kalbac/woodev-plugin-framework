@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Product;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Dialog_Assets;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
@@ -509,9 +510,10 @@ final class Product_Tab {
 		}
 
 		$suffix = \Woodev_Plugin::get_assets_suffix();
+		$dialog = Dialog_Assets::enqueue( $this->urls['assets'], $this->version );
 
-		wp_enqueue_style( self::ASSET_HANDLE, $this->urls['assets'] . 'css/admin/product-tab' . $suffix . '.css', [], $this->version );
-		wp_enqueue_script( self::ASSET_HANDLE, $this->urls['assets'] . 'js/admin/product-tab' . $suffix . '.js', [ 'jquery' ], $this->version, true );
+		wp_enqueue_style( self::ASSET_HANDLE, $this->urls['assets'] . 'css/admin/product-tab' . $suffix . '.css', [ $dialog ], $this->version );
+		wp_enqueue_script( self::ASSET_HANDLE, $this->urls['assets'] . 'js/admin/product-tab' . $suffix . '.js', [ 'jquery', $dialog ], $this->version, true );
 		wp_localize_script(
 			self::ASSET_HANDLE,
 			'woodevMarketplaceProduct',
