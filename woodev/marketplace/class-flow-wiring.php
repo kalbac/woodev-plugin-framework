@@ -193,6 +193,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		private $log_error;
 
 		/**
+		 * Writes a success line to the plugin's debug log, recorded only while logging is on: `function ( string $line ): void`.
+		 *
+		 * @var callable
+		 */
+		private $log_debug;
+
+		/**
 		 * Job and hook names of the plugin.
 		 *
 		 * @var Job_Names
@@ -260,9 +267,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 * @param string              $prefix    The site's table prefix (`$wpdb->prefix`).
 		 * @param License_Gate        $license   Licence gate of the plugin.
 		 * @param callable            $log_error `function ( string $line ): void`.
+		 * @param callable            $log_debug `function ( string $line ): void`, for a success; recorded only while logging is on.
 		 * @param callable|null       $write_gate `function ( Account $account ): bool`, the plugin's write gate; null lets every account write.
 		 */
-		public function __construct( string $plugin_id, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, string $prefix, License_Gate $license, callable $log_error, ?callable $write_gate = null ) {
+		public function __construct( string $plugin_id, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, string $prefix, License_Gate $license, callable $log_error, callable $log_debug, ?callable $write_gate = null ) {
 			$this->plugin_id = $plugin_id;
 			$this->adapter   = $adapter;
 			$this->accounts  = $accounts;
@@ -270,6 +278,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->prefix    = $prefix;
 			$this->license   = $license;
 			$this->log_error = $log_error;
+			$this->log_debug = $log_debug;
 			$this->write_gate = $write_gate;
 		}
 
@@ -633,7 +642,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 				return;
 			}
 
-			$renames = Offer_Id_Renames::for_plugin( $this->links, $this->names, new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() ), $this->log_error );
+			$renames = Offer_Id_Renames::for_plugin( $this->links, $this->names, new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() ), $this->log_error, $this->log_debug );
 
 			( new Rename_Offer_Ids_Runner( $this->gate, $renames, $adapter, new Rename_Scheduler( $this->names ), $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
 		}

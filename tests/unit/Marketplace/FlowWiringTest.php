@@ -187,6 +187,7 @@ final class FlowWiringTest extends TestCase {
 			function ( string $line ): void {
 				$this->log[] = $line;
 			},
+			static function (): void {},
 			$write_gate
 		);
 	}

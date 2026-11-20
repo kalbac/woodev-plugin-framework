@@ -58,11 +58,18 @@ final class Offer_Id_Renames {
 	private $move_choice;
 
 	/**
-	 * Writes a line to the plugin's log: `function ( string $line ): void`.
+	 * Writes a failure to the plugin's error log: `function ( string $line ): void`.
 	 *
 	 * @var callable
 	 */
-	private $log;
+	private $log_error;
+
+	/**
+	 * Writes a success to the plugin's debug log, which records it only while logging is on: `function ( string $line ): void`.
+	 *
+	 * @var callable
+	 */
+	private $log_debug;
 
 	/**
 	 * Rows this run already looked at (link id => true), so a row whose local move keeps failing is not retried again within one run.
@@ -86,13 +93,15 @@ final class Offer_Id_Renames {
 	 * @param Rename_Scheduler $scheduler   Scheduler of the job.
 	 * @param callable         $move_choice `function ( Link_Record $link, string $offer_id ): void`, keeps the article the merchant chose for the product in step
 	 *                                      with the link ({@see \Woodev\Framework\Marketplace\Data\Pinned_Offer_Id}).
-	 * @param callable         $log         `function ( string $line ): void`.
+	 * @param callable         $log_error   `function ( string $line ): void`, for a failure.
+	 * @param callable         $log_debug   `function ( string $line ): void`, for a success; recorded only while logging is on.
 	 */
-	public function __construct( Wpdb_Link_Store $links, Rename_Scheduler $scheduler, callable $move_choice, callable $log ) {
+	public function __construct( Wpdb_Link_Store $links, Rename_Scheduler $scheduler, callable $move_choice, callable $log_error, callable $log_debug ) {
 		$this->links       = $links;
 		$this->scheduler   = $scheduler;
 		$this->move_choice = $move_choice;
-		$this->log         = $log;
+		$this->log_error   = $log_error;
+		$this->log_debug   = $log_debug;
 	}
 
 	/**
@@ -104,10 +113,11 @@ final class Offer_Id_Renames {
 	 * @param Wpdb_Link_Store $links  Links.
 	 * @param Job_Names       $names  Job names of the plugin.
 	 * @param Pinned_Offer_Id $pinned The chosen articles.
-	 * @param callable        $log    `function ( string $line ): void`.
+	 * @param callable        $log_error `function ( string $line ): void`, for a failure.
+	 * @param callable        $log_debug `function ( string $line ): void`, for a success; recorded only while logging is on.
 	 * @return self
 	 */
-	public static function for_plugin( Wpdb_Link_Store $links, Job_Names $names, Pinned_Offer_Id $pinned, callable $log ): self {
+	public static function for_plugin( Wpdb_Link_Store $links, Job_Names $names, Pinned_Offer_Id $pinned, callable $log_error, callable $log_debug ): self {
 		return new self(
 			$links,
 			new Rename_Scheduler( $names ),
@@ -118,7 +128,8 @@ final class Offer_Id_Renames {
 					$pinned->store( $product, $link->account_id(), $offer_id );
 				}
 			},
-			$log
+			$log_error,
+			$log_debug
 		);
 	}
 
@@ -273,7 +284,7 @@ final class Offer_Id_Renames {
 		try {
 			$this->scheduler->queue( $account->id() );
 		} catch ( \RuntimeException $e ) {
-			call_user_func( $this->log, 'rename_offer_ids: account ' . $account->id() . ': ' . $e->getMessage() );
+			call_user_func( $this->log_error, 'rename_offer_ids: account ' . $account->id() . ': ' . $e->getMessage() );
 
 			return __( 'Артикул сохранён, но отправить его не удалось: не работает очередь задач. Сохраните товар ещё раз чуть позже.', 'woodev-plugin-framework' );
 		}
@@ -291,7 +302,7 @@ final class Offer_Id_Renames {
 		try {
 			$this->scheduler->again( $account->id(), self::RETRY_AFTER, 0, 0 );
 		} catch ( \RuntimeException $e ) {
-			call_user_func( $this->log, 'rename_offer_ids: account ' . $account->id() . ': the retry was not scheduled: ' . $e->getMessage() );
+			call_user_func( $this->log_error, 'rename_offer_ids: account ' . $account->id() . ': the retry was not scheduled: ' . $e->getMessage() );
 		}
 	}
 
@@ -311,7 +322,7 @@ final class Offer_Id_Renames {
 		if ( null === $answer || ! $answer->is_renamed() ) {
 			$text = null === $answer || '' === $answer->message() ? __( 'Маркетплейс не подтвердил смену артикула.', 'woodev-plugin-framework' ) : $answer->message();
 			$this->links->fail_offer_id_rename( $link_id, $wanted, $text );
-			call_user_func( $this->log, sprintf( 'rename_offer_ids: account %d: article %s was not changed to %s: %s', $account->id(), $old, $wanted, $text ) );
+			call_user_func( $this->log_error, sprintf( 'rename_offer_ids: account %d: article %s was not changed to %s: %s', $account->id(), $old, $wanted, $text ) );
 
 			return;
 		}
@@ -320,7 +331,7 @@ final class Offer_Id_Renames {
 
 		if ( 'done' === $moved ) {
 			call_user_func( $this->move_choice, $row, $wanted );
-			call_user_func( $this->log, sprintf( 'rename_offer_ids: account %d: article %s changed to %s (product %d)', $account->id(), $old, $wanted, $row->wc_product_id() ) );
+			call_user_func( $this->log_debug, sprintf( 'rename_offer_ids: account %d: article %s changed to %s (product %d)', $account->id(), $old, $wanted, $row->wc_product_id() ) );
 
 			return;
 		}
@@ -333,7 +344,7 @@ final class Offer_Id_Renames {
 				$wanted
 			);
 			$this->links->fail_offer_id_rename( $link_id, $wanted, $text );
-			call_user_func( $this->log, sprintf( 'rename_offer_ids: account %d: article %s was changed to %s on the marketplace but the shop already holds %s', $account->id(), $old, $wanted, $wanted ) );
+			call_user_func( $this->log_error, sprintf( 'rename_offer_ids: account %d: article %s was changed to %s on the marketplace but the shop already holds %s', $account->id(), $old, $wanted, $wanted ) );
 
 			return;
 		}
@@ -349,7 +360,7 @@ final class Offer_Id_Renames {
 					$wanted
 				)
 			);
-			call_user_func( $this->log, sprintf( 'rename_offer_ids: account %d: article %s was changed to %s on the marketplace but the shop could not write it; the move will be retried', $account->id(), $old, $wanted ) );
+			call_user_func( $this->log_error, sprintf( 'rename_offer_ids: account %d: article %s was changed to %s on the marketplace but the shop could not write it; the move will be retried', $account->id(), $old, $wanted ) );
 			$this->retry_move( $account );
 
 			return;
@@ -357,6 +368,6 @@ final class Offer_Id_Renames {
 
 		// `gone`: the link was detached or deleted while the request was on its way; there is nothing left to move. The marketplace did change the card.
 		$this->links->clear_offer_id_rename( $link_id );
-		call_user_func( $this->log, sprintf( 'rename_offer_ids: account %d: article %s was changed to %s on the marketplace, the link had gone', $account->id(), $old, $wanted ) );
+		call_user_func( $this->log_error, sprintf( 'rename_offer_ids: account %d: article %s was changed to %s on the marketplace, the link had gone', $account->id(), $old, $wanted ) );
 	}
 }

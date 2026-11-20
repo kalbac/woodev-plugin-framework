@@ -89,7 +89,9 @@ final class RenameOfferIdsTest extends Sync_Test_Case {
 		$this->assertSame( [ [ $id, 'ART-NEW' ] ], $this->moved );
 		$this->assertNull( $this->links()->find_by_offer_id( $this->account_id, 'ART-1' ), 'the old article no longer finds the link' );
 		$this->assertSame( $id, $this->links()->find_by_offer_id( $this->account_id, 'ART-NEW' )->wc_product_id() );
-		$this->assertContains( 'rename_offer_ids: account ' . $this->account_id . ': article ART-1 changed to ART-NEW (product ' . $id . ')', $this->log, 'the change is in the log' );
+		$success = 'rename_offer_ids: account ' . $this->account_id . ': article ART-1 changed to ART-NEW (product ' . $id . ')';
+		$this->assertContains( $success, $this->debug, 'a success is written at debug level' );
+		$this->assertNotContains( $success, $this->log, 'a success is not written to the error log' );
 		$this->assertCount( 1, $this->scheduler->of( $this->hook() ), 'the run queued nothing more' );
 	}
 
@@ -105,7 +107,9 @@ final class RenameOfferIdsTest extends Sync_Test_Case {
 		$this->assertSame( 'TAKEN', $row->pending_offer_id() );
 		$this->assertSame( 'OFFER_ID_ALREADY_EXISTS: артикул занят', $row->rename_error() );
 		$this->assertSame( [], $this->moved );
-		$this->assertContains( 'rename_offer_ids: account ' . $this->account_id . ': article ART-1 was not changed to TAKEN: OFFER_ID_ALREADY_EXISTS: артикул занят', $this->log );
+		$refusal = 'rename_offer_ids: account ' . $this->account_id . ': article ART-1 was not changed to TAKEN: OFFER_ID_ALREADY_EXISTS: артикул занят';
+		$this->assertContains( $refusal, $this->log, 'a failure is written to the error log' );
+		$this->assertNotContains( $refusal, $this->debug, 'a failure is not written at debug level' );
 	}
 
 	public function test_a_refused_change_does_not_stop_the_others_of_the_same_request(): void {
@@ -467,7 +471,8 @@ final class RenameOfferIdsTest extends Sync_Test_Case {
 			function ( Link_Record $link, string $offer_id ): void {
 				$this->moved[] = [ $link->wc_product_id(), $offer_id ];
 			},
-			[ $this, 'log_line' ]
+			[ $this, 'log_line' ],
+			[ $this, 'debug_line' ]
 		);
 	}
 

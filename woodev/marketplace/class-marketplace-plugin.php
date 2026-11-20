@@ -121,6 +121,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				function ( string $line ): void {
 					$this->log_error( $line );
 				},
+				function ( string $line ): void {
+					$this->log_debug( $line );
+				},
 				$this->account_write_gate()
 			) )->register();
 

@@ -249,6 +249,9 @@ final class Embedded_Screens {
 				$pinned,
 				function ( string $line ) use ( $plugin ): void {
 					$plugin->log_error( $line );
+				},
+				function ( string $line ) use ( $plugin ): void {
+					$plugin->log_debug( $line );
 				}
 			)
 			: null;
