@@ -93,6 +93,7 @@
 - [tooling/worktrees] **A fresh CDEK-plugin worktree has no `vendor/` and no `woodev/` — copy vendor, run `scripts/sync-framework.sh`.** → [a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev](../gotchas/a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev.md) (s160)
 - [tooling/claude] **Auto mode refuses to launch an EDD publish worker (`[Production Deploy]`) even when the operator's overnight rule allows it — finish to the GitHub release and park the EDD step as an operator button.** → [auto-mode-refuses-an-edd-publish-worker-launch-even-under-the-overnight-rule](../gotchas/auto-mode-refuses-an-edd-publish-worker-launch-even-under-the-overnight-rule.md) (s207)
 - [tooling/gh] **A `gh pr view --jq .body > f` that failed under the GraphQL rate limit leaves `f` empty, and `gh pr edit --body-file f` then wipes the PR description — check `[ -s f ]`.** → [a-pr-body-edit-from-a-failed-fetch-writes-an-empty-body](../gotchas/a-pr-body-edit-from-a-failed-fetch-writes-an-empty-body.md) (s222)
+- [tooling/local-ci] **A plugin CI pinned to a framework tag cannot pass a PR that adopts unreleased framework contracts — prove it with an uncommitted pin to framework `main`, park the PR until the release.** → [a-plugin-ci-pinned-to-a-framework-tag-cannot-pass-on-unreleased-contracts](../gotchas/a-plugin-ci-pinned-to-a-framework-tag-cannot-pass-on-unreleased-contracts.md) (s238)
 
 ## Related
 
