@@ -12401,3 +12401,63 @@ msgstr ""
 #: marketplace/admin/pages/products/class-remote-cards-provider.php:417
 msgid "Список карточек загружается с маркетплейса."
 msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:75
+msgid "Что происходит с подключением, уведомлениями, очередью и ошибками. Если нужна помощь поддержки, скопируйте отчёт в конце страницы и отправьте его в обращении. Страница показывается, пока включено «Логирование» (настройки плагина, раздел «Дополнительно»)."
+msgstr ""
+
+#: marketplace/admin/pages/diagnostics/class-diagnostics-controller.php:76
+msgid "Логирование выключено, поэтому подробной диагностики нет. Включите его в настройках плагина, раздел «Дополнительно», и обновите страницу."
+msgstr ""
+
+#: marketplace/admin/pages/tools/class-tools-controller.php:205
+msgid "Действия над данными плагина — не настройки, а то, что можно выполнить прямо сейчас. Перед запуском инструмент покажет, что именно будет сделано."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:80
+msgid "Товары и заказы WooCommerce остаются в магазине: заказы удаляются отдельно."
+msgstr ""
+
+#: marketplace/deletion/class-account-deletion-preview.php:92
+msgid "Аккаунт включён. Выключить и удалить? Перед удалением плагин выключит аккаунт: остатки, цены и заказы по нему перестанут синхронизироваться. Связи товаров с карточками и записи об отправлениях будут удалены."
+msgstr ""
+
+#. translators: %s: marketplace name, for example «Ozon».
+#: marketplace/settings/class-accounts-sections.php:297
+#, php-format
+msgid "личном кабинете %s"
+msgstr ""
+
+#. translators: 1: marketplace name, 2: comma-separated credential field names, 3: «личном кабинете …» (a link when the address is known).
+#: marketplace/settings/class-accounts-sections.php:305
+#, php-format
+msgid "Здесь подключаются аккаунты %1$s. Для каждого нужны: %2$s — они выдаются в %3$s. Добавьте аккаунт, нажмите «Проверить подключение», и плагин начнёт с ним работать. Несколько аккаунтов работают независимо друг от друга."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:320
+msgid "Здесь задаётся, как плагин работает с каждым аккаунтом по отдельности: склад и учёт остатков, цены, заказы и карточки товаров. Параметры появляются после того, как аккаунт добавлен на вкладке «Подключение»."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:677
+msgid "Необязательно. Короткая заметка, которая видна на карточке аккаунта и помогает отличить его от других."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:678
+msgid "Например, одежда и обувь"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Выключить и удалить"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Пока нет ни одного аккаунта. Добавьте первый, чтобы плагин начал работать."
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Аккаунт включён."
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
+msgid "Аккаунт выключен."
+msgstr ""
