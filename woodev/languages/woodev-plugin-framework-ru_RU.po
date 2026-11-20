@@ -12981,3 +12981,15 @@ msgstr ""
 #, php-format
 msgid "На этой странице отображаются товары вашего магазина и их состояние на %s. Отсюда товары можно выгрузить на маркетплейс, обновить остатки и цены или связать с уже существующими карточками."
 msgstr ""
+
+#: marketplace/admin/order/class-label-button.php:116
+msgid "Маркетплейс готовит этикетку…"
+msgstr ""
+
+#: marketplace/admin/order/class-label-button.php:117
+msgid "Этикетка ещё готовится. Обновите страницу чуть позже и нажмите кнопку снова."
+msgstr ""
+
+#: marketplace/admin/shared/class-label-availability.php:49
+msgid "Отправление завершено — этикетка не нужна."
+msgstr ""
