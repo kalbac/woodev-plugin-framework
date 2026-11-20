@@ -116,16 +116,28 @@ interface RowButtonsProps {
 	onDelete: () => void;
 }
 
-/** «Редактировать» and «Удалить» of one row: two text buttons on one line. */
+/**
+ * «Редактировать» and «Удалить» of one row: two icon buttons on one line, named by their label (the tooltip on hover, the accessible
+ * name for a screen reader), so the actions column stays as narrow as the buttons.
+ */
 function RowButtons( { editLabel, deleteLabel, onEdit, onDelete }: RowButtonsProps ) {
 	return (
 		<span className="woodev-mappings-list__buttons">
-			<Button variant="secondary" size="small" onClick={ onEdit }>
-				{ editLabel }
-			</Button>
-			<Button variant="secondary" size="small" isDestructive onClick={ onDelete }>
-				{ deleteLabel }
-			</Button>
+			<Button
+				className="woodev-mappings-list__icon"
+				icon={ <span className="dashicons dashicons-edit" aria-hidden="true" /> }
+				label={ editLabel }
+				showTooltip
+				onClick={ onEdit }
+			/>
+			<Button
+				className="woodev-mappings-list__icon is-delete"
+				icon={ <span className="dashicons dashicons-trash" aria-hidden="true" /> }
+				label={ deleteLabel }
+				showTooltip
+				isDestructive
+				onClick={ onDelete }
+			/>
 		</span>
 	);
 }
@@ -282,18 +294,19 @@ export function MappingsList( { state, counts, onOpen, onOpenProfile, onDelete }
 				title={ messages.tabMappings }
 				addLabel={ messages.addMapping }
 				headers={ [
-					{ key: 'name', label: messages.columnName, isSortable: true, isLeftAligned: true, required: true },
-					{ key: 'category', label: messages.columnCategory, isSortable: true, isLeftAligned: true },
-					{ key: 'shop', label: messages.columnShopCategories, isSortable: true, isLeftAligned: true },
-					{ key: 'profile', label: messages.columnProfile, isSortable: true, isLeftAligned: true },
+					{ key: 'name', label: messages.columnName, isSortable: true, isLeftAligned: true, required: true, cellClassName: 'woodev-mappings-col-name' },
+					{ key: 'category', label: messages.columnCategory, isSortable: true, isLeftAligned: true, cellClassName: 'woodev-mappings-col-category' },
+					{ key: 'shop', label: messages.columnShopCategories, isSortable: true, isLeftAligned: true, cellClassName: 'woodev-mappings-col-shop' },
+					{ key: 'profile', label: messages.columnProfile, isSortable: true, isLeftAligned: true, cellClassName: 'woodev-mappings-col-profile' },
 					{
 						key: 'attributes',
 						label: <HeadingWithHelp label={ messages.columnAttributes } help={ messages.attributesHelp } />,
 						isSortable: true,
 						isLeftAligned: true,
+						cellClassName: 'woodev-mappings-col-attributes',
 					},
-					{ key: 'products', label: messages.columnProducts, isSortable: true, isNumeric: true },
-					{ key: 'actions', label: '', screenReaderLabel: messages.columnActions, isLeftAligned: true },
+					{ key: 'products', label: messages.columnProducts, isSortable: true, isNumeric: true, cellClassName: 'woodev-mappings-col-products' },
+					{ key: 'actions', label: '', screenReaderLabel: messages.columnActions, isLeftAligned: true, cellClassName: 'woodev-mappings-col-actions' },
 				] }
 				items={ items }
 				empty={ <EmptyMappings state={ state } onOpen={ onOpen } /> }
@@ -343,10 +356,10 @@ export function ProfilesList( { state, onOpen, onDelete }: TabProps ) {
 				title={ messages.tabProfiles }
 				addLabel={ messages.addProfile }
 				headers={ [
-					{ key: 'name', label: messages.columnName, isSortable: true, isLeftAligned: true, required: true },
-					{ key: 'properties', label: messages.columnProperties, isSortable: true, isLeftAligned: true },
-					{ key: 'usedIn', label: messages.columnUsedIn, isSortable: true, isLeftAligned: true },
-					{ key: 'actions', label: '', screenReaderLabel: messages.columnActions, isLeftAligned: true },
+					{ key: 'name', label: messages.columnName, isSortable: true, isLeftAligned: true, required: true, cellClassName: 'woodev-mappings-col-name' },
+					{ key: 'properties', label: messages.columnProperties, isSortable: true, isLeftAligned: true, cellClassName: 'woodev-mappings-col-properties' },
+					{ key: 'usedIn', label: messages.columnUsedIn, isSortable: true, isLeftAligned: true, cellClassName: 'woodev-mappings-col-used' },
+					{ key: 'actions', label: '', screenReaderLabel: messages.columnActions, isLeftAligned: true, cellClassName: 'woodev-mappings-col-actions' },
 				] }
 				items={ items }
 				empty={

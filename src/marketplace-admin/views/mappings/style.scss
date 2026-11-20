@@ -40,33 +40,98 @@
 		display: none;
 	}
 
-	// The tab above the list names it: the card draws no heading of its own («Профили» under the tab «Профили»). `TableCard` needs a
-	// `title` (it is the table's caption, which is what names the table to a screen reader), so the visible heading leaves the
-	// screen, not the DOM, and the add button stays at the right end of the header. The heading is an `h2` inside the card's header
-	// (WooCommerce's own class on it is not stable), which is the selector the records table hides its heading by.
-	.woocommerce-card__title,
+	// The card's header row: the list's name at the left, the add button at the right end — the shape of the records tables'.
 	.components-card__header > h2 {
-		border: 0;
-		clip-path: inset( 50% );
-		height: 1px;
-		margin: -1px;
-		overflow: hidden;
-		padding: 0;
-		position: absolute;
-		white-space: nowrap;
-		width: 1px;
+		flex: 0 0 auto;
+		font-size: 16px;
+		font-weight: 600;
+		line-height: 1.4;
+		margin: 0;
 	}
 
-	.woocommerce-card__header {
-		justify-content: flex-end;
+	.woocommerce-table__actions {
+		flex: 0 0 auto;
+		margin: 0 0 0 auto;
+	}
+
+	// Tight cells, like the records tables': the five data columns and the actions fit a 1024px screen without a sideways scroll.
+	.woocommerce-table__header,
+	.woocommerce-table__item {
+		padding-left: 10px;
+		padding-right: 10px;
+	}
+
+	// A name or a profile is a link-button: it wraps inside its column instead of stretching it.
+	.components-button.is-link {
+		height: auto;
+		max-width: 100%;
+		overflow-wrap: anywhere;
+		text-align: left;
+		white-space: normal;
+	}
+
+	// A heading wraps too: a long one («Категории магазина») must not set the width of its column.
+	.woocommerce-table__header .components-button {
+		height: auto;
+		padding: 4px 0;
+		text-align: left;
+		white-space: normal;
+	}
+
+	// The widths of the columns. They add up to less than a 1024px screen's table, so the table never scrolls sideways; the text
+	// of a cell wraps (a long category list ends in «…» after two lines) instead of widening it.
+	.woodev-mappings-col-name,
+	.woodev-mappings-col-category,
+	.woodev-mappings-col-shop,
+	.woodev-mappings-col-properties,
+	.woodev-mappings-col-used {
+		box-sizing: border-box;
+		width: 22%;
+	}
+
+	.woodev-mappings-col-profile {
+		box-sizing: border-box;
+		width: 16%;
+	}
+
+	.woodev-mappings-col-attributes {
+		box-sizing: border-box;
+		width: 12%;
+	}
+
+	// The count column is a number, and the actions column holds its two icons: as wide as their content.
+	.woodev-mappings-col-products,
+	.woodev-mappings-col-actions {
+		width: 1%;
+		white-space: nowrap;
+	}
+
+	.woocommerce-table__header.is-numeric,
+	.woocommerce-table__item.is-numeric {
+		text-align: right;
 	}
 
 	// The buttons of a row: one group on one line.
 	&__buttons {
 		display: inline-flex;
 		flex-wrap: nowrap;
-		gap: 4px;
+		gap: 2px;
 		white-space: nowrap;
+	}
+
+	// An icon button of a row: 32px square, no frame until the pointer is on it.
+	&__icon.components-button.has-icon {
+		height: 32px;
+		min-width: 32px;
+		padding: 0;
+		width: 32px;
+
+		.dashicons {
+			font-size: 18px;
+			height: 18px;
+			line-height: 18px;
+			width: 18px;
+		}
 	}
 
 	// A long list of categories or properties is clipped to two lines; its full text is the cell's `title`.
@@ -75,7 +140,7 @@
 		-webkit-line-clamp: 2;
 		display: -webkit-box;
 		line-clamp: 2;
-		max-width: 260px;
+		max-width: 100%;
 		overflow: hidden;
 		overflow-wrap: anywhere;
 	}

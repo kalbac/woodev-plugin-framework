@@ -235,7 +235,9 @@ function FakeTableCard( props: TableCardProps & { actions?: React.ReactNode[] } 
 				<thead>
 					<tr>
 						{ props.headers.map( ( header ) => (
-							<th key={ header.key }>{ header.label }</th>
+							<th key={ header.key } className={ header.cellClassName }>
+								{ header.label }
+							</th>
 						) ) }
 					</tr>
 				</thead>
@@ -352,6 +354,29 @@ describe( 'lists', () => {
 		expect( screen.getByText( STATE.messages.descriptionProfiles ) ).toBeInTheDocument();
 		// Both lists stand in the wrapper that keeps a table off the page's edge.
 		expect( profiles.closest( '.woodev-marketplace-table' ) ).not.toBeNull();
+	} );
+
+	test( 'the card has a header row — the list\'s name at the left, the add button in the card — and every column carries its width class, the row buttons being icons named by their label', async () => {
+		serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: [] } } );
+		openView();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		const card = mappings.closest( '[data-testid="table-card"]' ) as HTMLElement;
+
+		expect( within( card ).getByRole( 'heading', { name: 'Сопоставления' } ) ).toBeInTheDocument();
+		expect( within( card ).getByRole( 'button', { name: 'Добавить сопоставление' } ) ).toBeInTheDocument();
+		expect( Array.from( mappings.querySelectorAll( 'th' ) ).map( ( th ) => th.className ) ).toEqual( [
+			'woodev-mappings-col-name',
+			'woodev-mappings-col-category',
+			'woodev-mappings-col-shop',
+			'woodev-mappings-col-profile',
+			'woodev-mappings-col-attributes',
+			'woodev-mappings-col-products',
+			'woodev-mappings-col-actions',
+		] );
+		const edit = within( mappings ).getByRole( 'button', { name: 'Редактировать' } );
+		expect( edit ).toHaveTextContent( '' );
+		expect( edit.querySelector( '.dashicons-edit' ) ).not.toBeNull();
 	} );
 
 	test( 'the «Атрибуты» column is read after the list: «N из M» and an orange «!» while a required attribute is empty', async () => {
