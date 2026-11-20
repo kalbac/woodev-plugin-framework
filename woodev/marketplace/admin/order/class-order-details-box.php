@@ -15,9 +15,9 @@ use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * The one box a marketplace order shows on top of its screen ({@see Order_Screen}): the posting, its status on the marketplace, the
+ * The one box a marketplace order shows on top of its screen ({@see Order_Screen}): the posting with its status on the marketplace as a badge, the
  * dates, how it is paid and delivered and what it adds up to — and the marketplace's own actions as buttons, the cancellation when the
- * adapter can cancel ({@see Order_Canceller}) and the link to the page that makes labels and documents when it can.
+ * adapter can cancel ({@see Order_Canceller}) and the «Этикетка» button ({@see Label_Button}) when it has label calls.
  *
  * It shows what the WooCommerce order and the postings registry hold, so a field only the marketplace's own plugin knows (a
  * warehouse, a ship-by date) comes through the `woodev_marketplace_{id}_order_details` filter as one more `label => HTML` row.
@@ -54,11 +54,11 @@ final class Order_Details_Box {
 	private $modal;
 
 	/**
-	 * The page that makes labels and documents; empty when the adapter has none.
+	 * The label button, when the adapter has label calls and the plugin has the orders page.
 	 *
-	 * @var string
+	 * @var Label_Button|null
 	 */
-	private $labels_url;
+	private $label_button;
 
 	/**
 	 * Folder URL of the module's assets, with a trailing slash.
@@ -83,16 +83,16 @@ final class Order_Details_Box {
 	 * @param Marketplace_Adapter $adapter       The adapter.
 	 * @param callable            $remote_status `function ( int $order_id ): string`, the marketplace's status of an order, '' for none.
 	 * @param Cancel_Modal|null   $modal         The cancel button, when the adapter can cancel.
-	 * @param string              $labels_url    URL of the page that makes labels and documents; '' for an adapter without them.
+	 * @param Label_Button|null   $label_button  The label button, when the adapter has label calls.
 	 * @param string              $assets_url    Folder URL of the module's assets, with a trailing slash.
 	 * @param string              $version       Plugin version.
 	 */
-	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, string $labels_url, string $assets_url, string $version ) {
+	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version ) {
 		$this->names         = $names;
 		$this->adapter       = $adapter;
 		$this->remote_status = $remote_status;
 		$this->modal         = $modal;
-		$this->labels_url    = $labels_url;
+		$this->label_button  = $label_button;
 		$this->assets_url    = $assets_url;
 		$this->version       = $version;
 	}
@@ -128,16 +128,10 @@ final class Order_Details_Box {
 	 * @return void
 	 */
 	public function render( \WC_Order $order ): void {
-		$heading = trim( $this->posting_number( $order ) . ' ' . $this->status_label( $order ) );
-
 		$this->enqueue_style();
 
 		echo '<div class="panel-wrap woocommerce woodev-mp-details"><div id="order_data" class="panel woocommerce-order-data">';
-
-		if ( '' !== $heading ) {
-			echo '<h2 class="woocommerce-order-data__heading">' . esc_html( $heading ) . '</h2>';
-		}
-
+		echo $this->heading( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo '<div class="order_data_column_container">';
 		$this->column( __( 'Основное', 'woodev-plugin-framework' ), $this->general_rows( $order ) );
 		$this->column( __( 'Суммы', 'woodev-plugin-framework' ), $this->amount_rows( $order ) );
@@ -165,7 +159,6 @@ final class Order_Details_Box {
 		$rows = [
 			__( 'Номер отправления', 'woodev-plugin-framework' ) => esc_html( $this->posting_number( $order ) ),
 			__( 'Номер заказа на сайте', 'woodev-plugin-framework' ) => esc_html( (string) $order->get_order_number() ),
-			__( 'Статус на маркетплейсе', 'woodev-plugin-framework' ) => esc_html( $this->status_label( $order ) ),
 			__( 'Статус на сайте', 'woodev-plugin-framework' ) => esc_html( html_entity_decode( (string) wc_get_order_status_name( $order->get_status() ), ENT_QUOTES, 'UTF-8' ) ),
 			__( 'Создан', 'woodev-plugin-framework' ) => esc_html( $this->date( $order->get_date_created() ) ),
 			__( 'Обновлён', 'woodev-plugin-framework' ) => esc_html( $this->date( $order->get_date_modified() ) ),
@@ -224,7 +217,7 @@ final class Order_Details_Box {
 	}
 
 	/**
-	 * Builds the marketplace's actions: the cancel button (or the reason there is none) and the link to labels and documents.
+	 * Builds the marketplace's actions: the cancel button (or the reason there is none) and the label button.
 	 *
 	 * @param \WC_Order $order The order.
 	 * @return string HTML, escaped; empty when the marketplace offers no action.
@@ -236,8 +229,8 @@ final class Order_Details_Box {
 			$html = '<span class="description">' . esc_html__( 'Отправление завершено или отменено — отменить его нельзя.', 'woodev-plugin-framework' ) . '</span>';
 		}
 
-		if ( '' !== $this->labels_url ) {
-			$html .= ' <a class="button" href="' . esc_url( $this->labels_url ) . '">' . esc_html__( 'Этикетки и документы', 'woodev-plugin-framework' ) . '</a>';
+		if ( null !== $this->label_button ) {
+			$html .= ' ' . $this->label_button->button( $order );
 		}
 
 		return '' === trim( $html ) ? '' : '<div class="actions">' . $html . '</div>';
@@ -254,15 +247,36 @@ final class Order_Details_Box {
 	}
 
 	/**
-	 * Returns the merchant-facing name of the marketplace's status of an order.
+	 * Builds the heading of the box: the posting number and the marketplace's status of it as a badge — the badge of the status column
+	 * of «Заказы маркетплейсов» (the same name and tone, {@see Posting_Status_Text}).
 	 *
 	 * @param \WC_Order $order The order.
-	 * @return string Empty when the marketplace has recorded none.
+	 * @return string HTML, escaped; empty when the order has neither.
 	 */
-	private function status_label( \WC_Order $order ): string {
+	private function heading( \WC_Order $order ): string {
+		$content = trim( esc_html( $this->posting_number( $order ) ) . ' ' . $this->status_badge( $order ) );
+
+		return '' === $content ? '' : '<h2 class="woocommerce-order-data__heading woodev-mp-details__heading">' . $content . '</h2>';
+	}
+
+	/**
+	 * Builds the badge of the marketplace's status of an order.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return string HTML, escaped; empty when the marketplace has recorded no status.
+	 */
+	private function status_badge( \WC_Order $order ): string {
 		$status = (string) call_user_func( $this->remote_status, $order->get_id() );
 
-		return '' === $status ? '' : Posting_Status_Text::label( $status, $this->adapter instanceof Posting_Status_Names ? $this->adapter : null );
+		if ( '' === $status ) {
+			return '';
+		}
+
+		return sprintf(
+			'<span class="woodev-mp-badge is-%1$s">%2$s</span>',
+			esc_attr( Posting_Status_Text::tone( $status ) ),
+			esc_html( Posting_Status_Text::label( $status, $this->adapter instanceof Posting_Status_Names ? $this->adapter : null ) )
+		);
 	}
 
 	/**

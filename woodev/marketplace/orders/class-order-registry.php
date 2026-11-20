@@ -204,6 +204,31 @@ final class Order_Registry {
 	}
 
 	/**
+	 * Reads what the order screen needs of the posting of a WooCommerce order: its account, its status and whether it is finished.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int $order_id WooCommerce order id.
+	 * @return array{account_id:int,status_raw:string,is_terminal:bool}|null Null when no posting is registered for the order.
+	 */
+	public function posting_of_order( int $order_id ): ?array {
+		$row = $this->db->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The order screen shows the current posting.
+			$this->db->prepare( 'SELECT account_id, status_raw, is_terminal FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id ),
+			'ARRAY_A'
+		);
+
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+
+		return [
+			'account_id'  => (int) $row['account_id'],
+			'status_raw'  => (string) $row['status_raw'],
+			'is_terminal' => 1 === (int) $row['is_terminal'],
+		];
+	}
+
+	/**
 	 * Registers the WooCommerce order of a group: succeeds only for the claim holder and only while no order is registered.
 	 *
 	 * @since 2.0.29

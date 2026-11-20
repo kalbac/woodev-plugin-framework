@@ -10,6 +10,8 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -134,7 +136,8 @@ final class Site_Orders_Module {
 			static function ( string $line ) use ( $plugin ): void {
 				$plugin->log_error( $line );
 			},
-			self::data_status( $plugin, $adapter )
+			self::data_status( $plugin, $adapter ),
+			new Label_Availability( $adapter instanceof Label_Readiness ? $adapter : null )
 		);
 	}
 

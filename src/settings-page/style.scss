@@ -436,6 +436,12 @@ $marketplace-label-col: 280px;
 
 // The deletion dialog of one account (account-delete-flow.tsx): a `WoodevDialog`, so its frame, header and footer are the shared ones.
 .woodev-account-delete {
+	// A warning notice keeps the same gap below it as a paragraph of the dialog has (`.woodev-dialog__body p`), so a notice never
+	// touches the text that follows it. The last child of the body keeps none.
+	.woodev-dialog__body > .components-notice:not(:last-child) {
+		margin-bottom: wd.$gap;
+	}
+
 	// The gap between the warnings above and the confirm field below.
 	&__confirm {
 		margin-top: wd.$gap-lg;
@@ -454,7 +460,12 @@ $marketplace-label-col: 280px;
 	}
 }
 
-// A tab of sections drawn one after another, each in its own card (stacked-view.tsx); the heading is the card's first child.
+// A tab of sections drawn one after another (stacked-view.tsx): its description, then a card per section; the heading is the card's
+// first child. The description has the room above it and the card below that «Подключение» has (24px each), not the 48px between cards.
+.woodev-stacked-tab > .woodev-settings__tab-desc {
+	margin-top: wd.$gap-lg;
+}
+
 .woodev-stacked {
 	display: flex;
 	flex-direction: column;

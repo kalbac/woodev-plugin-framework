@@ -23,6 +23,8 @@ use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Reader;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Rows;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -103,6 +105,13 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	 * @var Site_Orders_Data_Status|null
 	 */
 	private $data_status;
+
+	/**
+	 * The adapter's label readiness the provider is built with; none by default.
+	 *
+	 * @var Label_Readiness|null
+	 */
+	private $readiness;
 
 	/**
 	 * The options, by name.
@@ -277,7 +286,8 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			function ( string $line ): void {
 				$this->logged[] = $line;
 			},
-			$this->data_status
+			$this->data_status,
+			new Label_Availability( $this->readiness )
 		);
 	}
 
@@ -748,6 +758,39 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( 'done', $body['status'] );
 		$this->assertSame( $this->label_url( $document ), $body['download']['url'] );
 		$this->assertSame( [], $this->provider_calls() );
+	}
+
+	public function test_a_finished_posting_is_refused_a_label_request_without_asking_the_marketplace(): void {
+		$this->stock( false );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 102 ) ], [] ) );
+
+		$this->assertSame( 'failed', $body['status'] );
+		$this->assertSame( 'Отправление завершено — этикетка не нужна.', $body['groups'][0]['reason'] );
+		$this->assertSame( [], $this->provider_calls(), 'No remote call for a finished posting.' );
+	}
+
+	public function test_a_posting_the_adapter_says_is_not_ready_is_refused_with_its_reason_and_no_remote_call(): void {
+		$this->stock( false );
+		$this->readiness = Mockery::mock( Label_Readiness::class );
+		$this->readiness->shouldReceive( 'label_readiness' )->andReturn( 'Этикетка появится, когда заказ будет собран.' );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertSame( 'failed', $body['status'] );
+		$this->assertSame( 'Этикетка появится, когда заказ будет собран.', $body['groups'][0]['reason'] );
+		$this->assertSame( [], $this->provider_calls() );
+	}
+
+	public function test_a_posting_the_adapter_says_is_ready_is_asked_for_as_before(): void {
+		$this->stock( false );
+		$this->readiness = Mockery::mock( Label_Readiness::class );
+		$this->readiness->shouldReceive( 'label_readiness' )->andReturn( null );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertSame( 'queued', $body['status'] );
+		$this->assertSame( [ 'request', [ 'P-104' ] ], $this->provider_calls()[0] );
 	}
 
 	public function test_a_label_request_the_licence_or_the_marketplace_refuses_is_a_sentence_for_the_merchant(): void {

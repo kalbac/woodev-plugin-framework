@@ -1,12 +1,29 @@
 /*
- * The details box of a marketplace order on the order screens. One label column for every group, labels left-aligned at the first line
- * of their value, and room before the row of actions. WooCommerce's own order-data classes are kept for its fonts and colours; the
- * columns are stacked, so a long value (an address) has the whole width.
+ * The details box of a marketplace order on the order screens. WooCommerce's own order-data classes are kept for its fonts and colours,
+ * but its column rule (`#order_data .order_data_column`: a third of the box, floated) is overridden here through the same `#order_data`
+ * id, or the values would be squeezed into that third.
+ *
+ * The groups sit side by side while there is room (the main one takes what the amounts do not) and stack when there is not. In a group
+ * the label column is as wide as its longest label and the values take the rest, so a posting number, a date or an address is not
+ * wrapped while the box has room for it.
  */
-.woodev-mp-details .order_data_column {
+.woodev-mp-details #order_data .order_data_column_container {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 40px;
+}
+
+.woodev-mp-details #order_data .order_data_column {
 	float: none;
+	flex: 1 1 32em;
+	min-width: 0;
 	width: auto;
+	margin: 0;
 	padding: 0 0 16px;
+}
+
+.woodev-mp-details #order_data .order_data_column + .order_data_column {
+	flex: 0 1 20em;
 }
 
 .woodev-mp-details .order_data_column h3 {
@@ -15,7 +32,6 @@
 
 .woodev-mp-details table {
 	width: 100%;
-	table-layout: fixed;
 	border-collapse: collapse;
 }
 
@@ -27,10 +43,62 @@
 }
 
 .woodev-mp-details th {
-	width: 15em;
-	max-width: 45%;
+	width: 1%;
 	padding-right: 16px;
 	font-weight: 600;
+	white-space: nowrap;
+}
+
+.woodev-mp-details td {
+	overflow-wrap: anywhere;
+}
+
+/* The heading: the posting number and, beside it, the marketplace's status as a badge. */
+.woodev-mp-details__heading {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+}
+
+/* The status badge of «Заказы маркетплейсов» (`.woodev-records__badge`): the same height, corners and colour pairs per tone. */
+.woodev-mp-badge {
+	box-sizing: border-box;
+	display: inline-flex;
+	align-items: center;
+	max-width: 100%;
+	padding: 0 13px;
+	border-bottom: 1px solid rgba( 0, 0, 0, 0.05 );
+	border-radius: 4px;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 2.5em;
+	white-space: nowrap;
+}
+
+.woodev-mp-badge.is-neutral {
+	background: #e5e5e5;
+	color: #454545;
+}
+
+.woodev-mp-badge.is-success {
+	background: #c6e1c6;
+	color: #2c4700;
+}
+
+.woodev-mp-badge.is-info {
+	background: #c8d7e1;
+	color: #003d66;
+}
+
+.woodev-mp-badge.is-warning {
+	background: #f8dda7;
+	color: #573b00;
+}
+
+.woodev-mp-badge.is-danger {
+	background: #eba3a3;
+	color: #570000;
 }
 
 .woodev-mp-details .actions {
@@ -41,4 +109,12 @@
 	margin-top: 8px;
 	padding-top: 16px;
 	border-top: 1px solid #dcdcde;
+}
+
+/* The label button and the line beside it that says what it is doing. */
+.woodev-mp-label-wrap {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 12px;
 }

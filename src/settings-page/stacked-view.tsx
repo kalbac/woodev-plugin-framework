@@ -42,13 +42,15 @@ export interface StackedHeading {
  */
 export default function StackedView( { tab, renderSection }: StackedViewProps ) {
 	return (
-		<div className="woodev-stacked">
+		<div className="woodev-stacked-tab">
 			<TabDescription tab={ tab } />
-			{ ( tab.sections || [] ).map( ( section ) => (
-				<section key={ section.id } className="woodev-stacked__section">
-					{ renderSection( tab, section.id, { title: section.label ?? '', subtitle: section.subtitle } ) }
-				</section>
-			) ) }
+			<div className="woodev-stacked">
+				{ ( tab.sections || [] ).map( ( section ) => (
+					<section key={ section.id } className="woodev-stacked__section">
+						{ renderSection( tab, section.id, { title: section.label ?? '', subtitle: section.subtitle } ) }
+					</section>
+				) ) }
+			</div>
 		</div>
 	);
 }

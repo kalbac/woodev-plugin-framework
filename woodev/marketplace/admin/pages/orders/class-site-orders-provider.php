@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Refused;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flows\Label_Exception;
@@ -114,6 +115,13 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	private $data_status;
 
 	/**
+	 * Whether a label can be asked for a posting: no remote call is made for one that cannot have it.
+	 *
+	 * @var Label_Availability
+	 */
+	private $availability;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
@@ -129,9 +137,11 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param string                       $adapter_id The marketplace's id.
 	 * @param callable|null                $log_error  `function ( string $line ): void`, for failures that are not a refusal.
 	 * @param Site_Orders_Data_Status|null $data_status The «Статус данных» block (since 2.1.13); null shows none.
+	 * @param Label_Availability|null      $availability Whether a label can be asked for a posting (since 2.1.13); null for an adapter that says nothing.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null ) {
 		$this->data_status = $data_status;
+		$this->availability = $availability ?? new Label_Availability( null );
 		$this->accounts   = $accounts;
 		$this->reader     = $reader;
 		$this->rows       = $rows;
@@ -584,6 +594,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 					'filename' => '',
 				],
 			];
+		}
+
+		$unavailable = $this->availability->reason( $call['targets'][0]['status_raw'], $call['targets'][0]['is_terminal'] );
+
+		if ( '' !== $unavailable ) {
+			return $this->refused_result( $unavailable, $key ); // No remote call for a posting that cannot have a label.
 		}
 
 		try {
