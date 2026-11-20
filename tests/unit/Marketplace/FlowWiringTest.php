@@ -10,7 +10,6 @@ namespace Woodev\Tests\Unit\Marketplace;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use Brain\Monkey\Filters;
-use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -135,8 +134,6 @@ final class FlowWiringTest extends TestCase {
 		parent::setUp();
 
 		Flow_Wiring::forget();
-		// The flows are wired for a front request: the admin screens (the order screen included) hook nothing.
-		Functions\when( 'is_admin' )->justReturn( false );
 
 		// The wiring also hooks the orders-list filter, which is wp-admin only.
 		Functions\when( 'is_admin' )->justReturn( false );
