@@ -20,6 +20,13 @@ use Woodev\Tests\Unit\TestCase;
 /**
  * The box shows the posting, both statuses, the dates, payment, delivery, the address and the amounts of the order, and the
  * marketplace's own actions as buttons: the cancellation of an adapter that can cancel and the link to labels of one that has them.
+ *
+ * Each test runs in its own process: the box formats dates with `wc_date_format()`, and a Brain Monkey stub of it would stay defined
+ * for every later test — `LicensePureOperationsTest` asserts the path where that function is ABSENT, so a leaked stub fails it
+ * depending on the run order (same as `BuyerTrackingTest`).
+ *
+ * @runTestsInSeparateProcesses
+ * @preserveGlobalState disabled
  */
 final class OrderDetailsBoxTest extends TestCase {
 	/**
