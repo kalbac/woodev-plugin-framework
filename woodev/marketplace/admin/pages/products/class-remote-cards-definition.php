@@ -31,6 +31,16 @@ final class Remote_Cards_Definition {
 	public const OPEN_PRODUCT = 'open_product';
 
 	/**
+	 * Row action: open the card in the seller's cabinet on the marketplace.
+	 */
+	public const OPEN_REMOTE = 'open_remote';
+
+	/**
+	 * Row action: the site forgets the card; the product can then be exported again or linked to another card.
+	 */
+	public const UNLINK = 'unlink';
+
+	/**
 	 * Row action: import this one card as a shop product. The records engine keeps one id space for the row and the bulk actions, so
 	 * the bulk twin of this action has an id of its own ({@see self::IMPORT_SELECTED}); the server handles both alike.
 	 */
@@ -93,7 +103,7 @@ final class Remote_Cards_Definition {
 				'max_per_page'     => 100,
 				'max_selection'    => $importable ? self::MAX_IMPORT : 1,
 			],
-			'row_actions'  => self::row_actions( $importable ),
+			'row_actions'  => self::row_actions( $marketplace, $importable ),
 			'bulk_actions' => self::bulk_actions( $marketplace, $importable ),
 			'activity'     => [
 				'refresh_ms'     => 10000,
@@ -107,11 +117,12 @@ final class Remote_Cards_Definition {
 	}
 
 	/**
-	 * @param bool $importable Whether the adapter can import cards.
+	 * @param string $marketplace Marketplace name.
+	 * @param bool   $importable  Whether the adapter can import cards.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function row_actions( bool $importable ): array {
-		$actions = [ self::open_product(), self::link_to(), self::near_confirm(), self::near_dismiss() ];
+	private static function row_actions( string $marketplace, bool $importable ): array {
+		$actions = [ self::open_remote( $marketplace ), self::open_product(), self::unlink(), self::link_to(), self::near_confirm(), self::near_dismiss() ];
 
 		return $importable ? array_merge( [ self::import( self::IMPORT ) ], $actions ) : $actions;
 	}
@@ -337,9 +348,47 @@ final class Remote_Cards_Definition {
 		return [
 			'id'          => self::OPEN_PRODUCT,
 			'label'       => __( 'Открыть товар', 'woodev-plugin-framework' ),
+			'icon'        => 'edit',
+			'effect'      => 'read',
+			'interaction' => 'link',
+		];
+	}
+
+	/**
+	 * «Открыть на {marketplace}»: the card in the seller's cabinet, in a new tab. A link, so it needs no dialog.
+	 *
+	 * @param string $marketplace Marketplace name.
+	 * @return array<string,mixed>
+	 */
+	private static function open_remote( string $marketplace ): array {
+		return [
+			'id'          => self::OPEN_REMOTE,
+			/* translators: %s: marketplace name. */
+			'label'       => sprintf( __( 'Открыть на %s', 'woodev-plugin-framework' ), $marketplace ),
 			'icon'        => 'external',
 			'effect'      => 'read',
 			'interaction' => 'link',
+		];
+	}
+
+	/**
+	 * «Отвязать»: the site forgets the card. It is the card's twin of the products table's «Снять связь»; the same service does it, and
+	 * nothing is sent to the marketplace.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function unlink(): array {
+		return [
+			'id'             => self::UNLINK,
+			'label'          => __( 'Отвязать', 'woodev-plugin-framework' ),
+			'icon'           => 'editor-unlink',
+			'tone'           => 'danger',
+			'effect'         => 'mutate',
+			'interaction'    => 'dialog',
+			'scope'          => 'selection',
+			'capability'     => 'edit_products',
+			'scope_sentence' => __( 'Сайт забудет карточку: товар можно будет выгрузить заново или связать с другой карточкой. Карточка на маркетплейсе не меняется.', 'woodev-plugin-framework' ),
+			'confirm_label'  => __( 'Отвязать', 'woodev-plugin-framework' ),
 		];
 	}
 
@@ -351,7 +400,7 @@ final class Remote_Cards_Definition {
 	private static function link_to(): array {
 		return [
 			'id'             => self::LINK_TO,
-			'label'          => __( 'Связать с…', 'woodev-plugin-framework' ),
+			'label'          => __( 'Связать с товаром…', 'woodev-plugin-framework' ),
 			'icon'           => 'admin-links',
 			'effect'         => 'mutate',
 			'interaction'    => 'dialog',
@@ -411,6 +460,8 @@ final class Remote_Cards_Definition {
 			Standard_Messages::matching( __( 'карточки', 'woodev-plugin-framework' ) ),
 			Standard_Messages::views(),
 			[
+				/* translators: %s: marketplace name. */
+				'description'            => sprintf( __( 'Это карточки товаров, которые уже есть в вашем кабинете %s. Загрузите их в магазин одним нажатием или свяжите с товарами сайта — тогда остатки и цены будут обновляться сами.', 'woodev-plugin-framework' ), $marketplace ),
 				'empty'                  => __( 'Список карточек ещё не загружен.', 'woodev-plugin-framework' ),
 				'empty_action'           => self::REFRESH,
 				'empty_filtered'         => __( 'По этим фильтрам карточек нет.', 'woodev-plugin-framework' ),

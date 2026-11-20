@@ -8,7 +8,8 @@
 @use '../components/woodev-dialog';
 
 .woodev-records {
-	// The filter labels of «Заказы доставки» and the settings: sentence case, never upper case. A labelled `SelectControl`
+	// The filter labels of «Заказы доставки» (WooCommerce's `.woocommerce-filters-label`: 13px, normal weight, #3c434a) and the
+	// settings: sentence case, never upper case. A labelled `SelectControl`
 	// draws its label with the InputControl's own emotion class, `components-input-control__label`, and emotion writes that
 	// rule as `&&&` — three classes, (0,3,0), upper case at 11px — which beats any selector of two. So these selectors
 	// carry four classes: `.woodev-records` in front, and the label class said twice. The other controls use
@@ -19,18 +20,29 @@
 	// of the row puts them on one bottom edge.
 	.woodev-records__toolbar .components-base-control__label,
 	.woodev-records__toolbar .components-input-control__label.components-input-control__label {
+		color: #3c434a;
 		display: block;
 		font-size: 13px;
-		font-weight: 500;
+		font-weight: 400;
 		line-height: 1.4;
 		text-transform: none;
 	}
 
-	// The page-size select's label sits beside it, but is the same emotion label: no upper case there either.
+	// The page-size select sits in the card's footer in the slot of WooCommerce's own picker ({@see HIDE_VENDOR_PAGE_SIZE}); its label
+	// is beside it, and is the same emotion label: no upper case there either.
 	.woodev-records__page-size .components-input-control__label.components-input-control__label {
 		font-size: 13px;
 		font-weight: 500;
 		text-transform: none;
+	}
+
+	// The section's description: a full-width row under the page title, where the filters start.
+	&__description {
+		color: #3c434a;
+		font-size: 13px;
+		line-height: 1.5;
+		margin: 0 0 16px;
+		max-width: none;
 	}
 
 	// The card heading is drawn, like «Заказы доставки»: [title] [action | Apply] [search] [⋮] in one row. WooCommerce's header
@@ -210,6 +222,13 @@
 			line-height: 20px;
 			width: 20px;
 		}
+
+		// No frame under the pointer or after a click; the keyboard's focus ring stays.
+		&:hover:not( :disabled ),
+		&:focus:not( :focus-visible ) {
+			box-shadow: none;
+			outline: none;
+		}
 	}
 
 	.woodev-records__col-expand {
@@ -234,26 +253,38 @@
 	// (`.is-sorted`); the name column is the one that is always sorted, so it stays white like the rest.
 	.woocommerce-table__item.woodev-records__col-expand,
 	.woocommerce-table__item.woodev-records__col-select,
+	.woocommerce-table__item.woodev-records__col-image,
 	.woocommerce-table__item.woodev-records__col-name {
 		background: #fff;
 		position: sticky;
 		z-index: 2;
 	}
 
+	// The row under the pointer and the row that is open (a variable product with its variations) are grey in WooCommerce's own
+	// `#e0e0e0` — the pinned cells too, or they would stay white in a grey row.
 	.woocommerce-table__table tbody tr:hover > .woodev-records__col-expand,
 	.woocommerce-table__table tbody tr:hover > .woodev-records__col-select,
+	.woocommerce-table__table tbody tr:hover > .woodev-records__col-image,
 	.woocommerce-table__table tbody tr:hover > .woodev-records__col-name {
+		background: #e0e0e0;
+	}
+
+	// A rule of its own: a browser without `:has()` drops this one and keeps the hover rule above.
+	.woocommerce-table__table tbody tr:has( .woodev-records__expand[aria-expanded='true'] ) > .woocommerce-table__item {
 		background: #e0e0e0;
 	}
 
 	.woocommerce-table__header.woodev-records__col-expand,
 	.woocommerce-table__header.woodev-records__col-select,
+	.woocommerce-table__header.woodev-records__col-image,
 	.woocommerce-table__header.woodev-records__col-name {
 		background: #f8f9fa;
 		position: sticky;
 		z-index: 3;
 	}
 
+	// The pinned columns, left to right: the expand button, the checkbox, the photo, the name. Each `left` is the width of what
+	// stands before it (the expand column 28px, the checkbox 40px, the photo 52px).
 	.woodev-records__col-expand {
 		left: 0;
 	}
@@ -266,6 +297,14 @@
 		left: 28px;
 	}
 
+	.woodev-records__col-image {
+		left: 40px;
+	}
+
+	&.has-expand .woodev-records__col-image {
+		left: 68px;
+	}
+
 	.woodev-records__col-name {
 		left: 40px;
 	}
@@ -274,16 +313,19 @@
 		left: 68px;
 	}
 
-	// The table collapses its borders, and a pinned cell does not take its border along: the row line would break where the opaque cell
-	// is. The line is drawn inside the cell instead. The name column adds a soft shadow on its right edge, so a column sliding under it
-	// reads as sliding under something.
-	.woodev-records__col-expand,
-	.woodev-records__col-select {
-		box-shadow: inset 0 -1px 0 #e2e4e7;
+	&.has-image .woodev-records__col-name {
+		left: 92px;
 	}
 
+	&.has-expand.has-image .woodev-records__col-name {
+		left: 120px;
+	}
+
+	// The table collapses nothing (`border-collapse: separate`), so every pinned cell keeps the row line WooCommerce gives it: no line
+	// of our own under it, or the row would show two. The name column adds a soft shadow on its right edge, so a column sliding under
+	// it reads as sliding under something.
 	.woodev-records__col-name {
-		box-shadow: inset 0 -1px 0 #e2e4e7, 4px 0 4px -4px rgba( 0, 0, 0, 0.18 );
+		box-shadow: 4px 0 4px -4px rgba( 0, 0, 0, 0.18 );
 	}
 
 	// Text of two lines at most, then «…»: the name, and a link in that column.
@@ -329,10 +371,45 @@
 		width: 120px;
 	}
 
-	// The photo of a card: a small square.
+	// The photo: a small square in a 52px column, pinned beside the checkbox.
 	.woodev-records__col-image {
-		padding-right: 0;
-		width: 44px;
+		box-sizing: border-box;
+		max-width: 52px;
+		min-width: 52px;
+		padding-left: 6px;
+		padding-right: 6px;
+		width: 52px;
+	}
+
+	// On a 1024px screen (the card is 908px wide with the menu collapsed) the fixed columns give a little back, so a table with a photo and a
+	// row of three action icons fits without a sideways scroll: the article 10px, «На сайте» 10px, the photo 6px (the name's `left` follows).
+	@media ( max-width: 1100px ) {
+		.woodev-records__col-sku,
+		.woodev-records__col-offer_id {
+			max-width: 120px;
+			min-width: 120px;
+			width: 120px;
+		}
+
+		.woodev-records__col-on_site {
+			max-width: 110px;
+			min-width: 110px;
+			width: 110px;
+		}
+
+		.woodev-records__col-image {
+			max-width: 46px;
+			min-width: 46px;
+			width: 46px;
+		}
+
+		&.has-image .woodev-records__col-name {
+			left: 86px;
+		}
+
+		&.has-expand.has-image .woodev-records__col-name {
+			left: 114px;
+		}
 	}
 
 	.woodev-records__thumb {
@@ -489,17 +566,17 @@
 		border-left: 1px solid rgba( 0, 0, 0, 0.18 );
 	}
 
-	// The account-wide buttons: a row at the top of the page, where «Заказы доставки» has «Создать заказ»; in the empty table the
-	// same button sits under the sentence.
+	// The account-wide buttons: the right end of the filter row; in the empty table the same button sits under the sentence.
 	&__account-actions {
 		align-items: center;
 		display: flex;
 		flex-wrap: nowrap;
 		gap: 8px;
+	}
 
-		&.is-page-top {
-			margin: 0 0 16px;
-		}
+	// In the filter row they take its right end (the margin pushes them there; «Статус данных» before them does the same).
+	.woodev-records__toolbar > .woodev-records__account-actions {
+		margin-left: auto;
 	}
 
 	.woodev-records__state.is-empty &__account-actions {

@@ -169,6 +169,8 @@ final class Remote_Cards_Actions {
 				return $this->preview_import( $account, $ids );
 			case Remote_Cards_Definition::LINK_TO:
 				return $this->preview_link( $account, (string) ( $ids[0] ?? '' ), $payload );
+			case Remote_Cards_Definition::UNLINK:
+				return $this->preview_unlink( $account, (string) ( $ids[0] ?? '' ) );
 			case Remote_Cards_Definition::NEAR_CONFIRM:
 			case Remote_Cards_Definition::NEAR_DISMISS:
 				return $this->preview_near( $account, $action, (string) ( $ids[0] ?? '' ) );
@@ -205,6 +207,8 @@ final class Remote_Cards_Actions {
 				return $this->apply_import( $account, $ids );
 			case Remote_Cards_Definition::LINK_TO:
 				return $this->apply_link( $account, (string) ( $ids[0] ?? '' ), $payload );
+			case Remote_Cards_Definition::UNLINK:
+				return $this->apply_unlink( $account, (string) ( $ids[0] ?? '' ) );
 			case Remote_Cards_Definition::NEAR_CONFIRM:
 				return $this->apply_near_confirm( $account, (string) ( $ids[0] ?? '' ) );
 			case Remote_Cards_Definition::NEAR_DISMISS:
@@ -502,7 +506,7 @@ final class Remote_Cards_Actions {
 	}
 
 	/**
-	 * `link_to`, `near_confirm` and `near_dismiss` act on one card. The table selects many rows for «Импортировать», so a request that
+	 * `link_to`, `unlink`, `near_confirm` and `near_dismiss` act on one card. The table selects many rows for «Импортировать», so a request that
 	 * names several is refused rather than acting on the first.
 	 *
 	 * @param string   $action Action id.
@@ -511,7 +515,7 @@ final class Remote_Cards_Actions {
 	 * @throws Action_State_Exception When the action is a one-card action and the request names more than one row.
 	 */
 	private function require_one_card( string $action, array $ids ): void {
-		$one_card = [ Remote_Cards_Definition::LINK_TO, Remote_Cards_Definition::NEAR_CONFIRM, Remote_Cards_Definition::NEAR_DISMISS ];
+		$one_card = [ Remote_Cards_Definition::LINK_TO, Remote_Cards_Definition::UNLINK, Remote_Cards_Definition::NEAR_CONFIRM, Remote_Cards_Definition::NEAR_DISMISS ];
 
 		if ( in_array( $action, $one_card, true ) && count( array_unique( $ids ) ) > 1 ) {
 			throw new Action_State_Exception( __( 'Это действие выполняется для одной карточки. Выберите одну.', 'woodev-plugin-framework' ) );
@@ -586,6 +590,58 @@ final class Remote_Cards_Actions {
 			'rows'      => [ $this->rows->row( $account->id(), array_merge( $card, [ 'wc_product_id' => $product['id'] ] ) ) ],
 			'messages'  => [ 'action_status_done' => $text ],
 		];
+	}
+
+	/**
+	 * The product (or variation) that carries a card.
+	 *
+	 * @param array<string,mixed>|null $card Card.
+	 * @return int Product or variation id, 0 when no product carries the card.
+	 */
+	private function carrying_product( ?array $card ): int {
+		return (int) ( $card['wc_product_id'] ?? 0 );
+	}
+
+	/**
+	 * «Отвязать»: the plan is the products table's own plan of «Снять связь» for the product that carries the card.
+	 *
+	 * @param Account $account Account.
+	 * @param string  $row_id  Row id.
+	 * @return array<string,mixed>
+	 */
+	private function preview_unlink( Account $account, string $row_id ): array {
+		$product_id = $this->carrying_product( $this->card( $account, $row_id ) );
+
+		if ( $product_id <= 0 ) {
+			return $this->refused_preview( __( 'Карточка уже не связана ни с одним товаром.', 'woodev-plugin-framework' ) );
+		}
+
+		return $this->bulk->preview( $account, Site_Products_Bulk::DETACH, [ $product_id ], [ $product_id => $product_id ] );
+	}
+
+	/**
+	 * «Отвязать»: the products table's «Снять связь» runs for the product that carries the card, and the row comes back as a card no
+	 * product carries.
+	 *
+	 * @param Account $account Account.
+	 * @param string  $row_id  Row id.
+	 * @return array<string,mixed>
+	 */
+	private function apply_unlink( Account $account, string $row_id ): array {
+		$card       = $this->card( $account, $row_id );
+		$product_id = $this->carrying_product( $card );
+
+		if ( $product_id <= 0 ) {
+			return $this->refused_apply( __( 'Карточка уже не связана ни с одним товаром.', 'woodev-plugin-framework' ), (string) ( $card['offer_id'] ?? '' ) );
+		}
+
+		$answer = $this->bulk->apply( $account, Site_Products_Bulk::DETACH, [ $product_id ], [ $product_id => $product_id ] );
+
+		if ( $answer['accepted'] > 0 ) {
+			$answer['rows'] = [ $this->rows->row( $account->id(), array_merge( (array) $card, [ 'wc_product_id' => 0 ] ) ) ];
+		}
+
+		return $answer;
 	}
 
 	/**

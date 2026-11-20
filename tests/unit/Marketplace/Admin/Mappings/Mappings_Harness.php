@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mapping_Products;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Controller;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Profile_Choices;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Profile_Editor;
+use Woodev\Framework\Marketplace\Catalog\Cached_Catalog_Fields;
 use Woodev\Framework\Marketplace\Catalog\Catalog_Schema;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Field_Definition;
@@ -28,7 +29,14 @@ require_once __DIR__ . '/wp-term-stub.php';
 /**
  * A catalogue of two selectable categories and one disabled node, with a dictionary attribute. It records what it was asked.
  */
-final class Fake_Tree_Schema implements Catalog_Schema {
+final class Fake_Tree_Schema implements Catalog_Schema, Cached_Catalog_Fields {
+	/**
+	 * Whether the fields of a category are in the schema's cache: only then {@see self::cached_fields()} answers.
+	 *
+	 * @var bool
+	 */
+	public $warm = false;
+
 	/**
 	 * When set, every call throws it (the adapter cannot reach the marketplace).
 	 *
@@ -80,6 +88,25 @@ final class Fake_Tree_Schema implements Catalog_Schema {
 	public function fields( array $remote_category ): array {
 		$this->enter( 'fields' );
 
+		return $this->field_list();
+	}
+
+	/**
+	 * The three fields, when the cache is warm; nothing otherwise. It never counts as a `fields` call: that is the request.
+	 *
+	 * @param array<string,mixed> $remote_category Category identity.
+	 * @return Field_Definition[]|null
+	 */
+	public function cached_fields( array $remote_category ): ?array {
+		$this->calls['cached_fields'] = ( $this->calls['cached_fields'] ?? 0 ) + 1;
+
+		return $this->warm ? $this->field_list() : null;
+	}
+
+	/**
+	 * @return Field_Definition[]
+	 */
+	private function field_list(): array {
 		return [
 			new Field_Definition( '1', 'Бренд', true, Field_Definition::TYPE_STRING ),
 			new Field_Definition( '2', 'Цвет', true, Field_Definition::TYPE_DICTIONARY ),

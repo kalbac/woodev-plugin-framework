@@ -49,18 +49,28 @@ final class Site_Products_Rows {
 	private $edit_url;
 
 	/**
+	 * Address of a product's picture: `function ( int $product_id ): string`; the WooCommerce placeholder's when the product has none.
+	 *
+	 * @var callable|null
+	 */
+	private $image_url;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.4
+	 * @since 2.1.13 `$image_url` adds the photo column.
 	 *
 	 * @param string               $marketplace Merchant-facing name of the marketplace.
 	 * @param array<string,string> $warehouses  Warehouse id => name of the account.
 	 * @param callable             $edit_url    `function ( int $product_id ): string`, '' when there is none.
+	 * @param callable|null        $image_url   `function ( int $product_id ): string`, '' when there is none; null leaves the photo cell empty.
 	 */
-	public function __construct( string $marketplace, array $warehouses, callable $edit_url ) {
+	public function __construct( string $marketplace, array $warehouses, callable $edit_url, ?callable $image_url = null ) {
 		$this->marketplace = $marketplace;
 		$this->warehouses  = $warehouses;
 		$this->edit_url    = $edit_url;
+		$this->image_url   = $image_url;
 	}
 
 	/**
@@ -120,7 +130,7 @@ final class Site_Products_Rows {
 		return [
 			'id'           => Site_Products_Ids::row_id( $account_id, $product_id ),
 			'revision'     => substr( md5( (string) wp_json_encode( [ $name, $offers ] ) ), 0, 16 ),
-			'cells'        => $cells,
+			'cells'        => [ 'image' => $this->image_cell( $product_id, $name ) ] + $cells,
 			'actions'      => [
 				[
 					'id'      => 'edit',
@@ -131,6 +141,31 @@ final class Site_Products_Rows {
 			'selectable'   => true,
 			'has_children' => $has_children,
 			'activity'     => $activity,
+		];
+	}
+
+	/**
+	 * The photo cell: the product's picture, or the WooCommerce placeholder, in the size of a table thumbnail.
+	 *
+	 * @param int    $product_id Product or variation.
+	 * @param string $name       Name, for the picture's alternative text.
+	 * @return array<int,array{type:string,value:array{url:string,alt:string}}>|null Null when there is no address.
+	 */
+	private function image_cell( int $product_id, string $name ): ?array {
+		$url = null === $this->image_url ? '' : (string) call_user_func( $this->image_url, $product_id );
+
+		if ( '' === $url ) {
+			return null;
+		}
+
+		return [
+			[
+				'type'  => 'image',
+				'value' => [
+					'url' => $url,
+					'alt' => $this->clip( $name ),
+				],
+			],
 		];
 	}
 

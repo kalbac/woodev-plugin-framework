@@ -129,6 +129,73 @@ final class Mapping_Editor {
 	}
 
 	/**
+	 * How many attributes of its category each mapping fills, and how many required ones it leaves empty. It is local: the fields come
+	 * from the adapter's cache ({@see Cached_Catalog_Fields}) and {@see Category_Finder::fields()} is never called, so the list's page
+	 * load makes no request to the marketplace however many mappings there are.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return array<int,array{filled:int,total:int,required_missing:int}> By mapping id; a mapping whose category fields are not cached is left out.
+	 */
+	public function attribute_counts(): array {
+		$counts = [];
+
+		foreach ( $this->mappings->all_term_bound() as $mapping ) {
+			$counted = $this->attribute_summary( $this->categories->find_by_identity( $mapping['category'] ), $mapping['attributes'] );
+
+			if ( null !== $counted ) {
+				$counts[ $mapping['mapping_id'] ] = $counted;
+			}
+		}
+
+		return $counts;
+	}
+
+	/**
+	 * How many attributes of the mapped category the mapping fills, and how many of the required ones it leaves empty. It counts from the
+	 * fields the adapter's schema already holds ({@see Cached_Catalog_Fields}) and never asks the marketplace for them.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param array<string,mixed>|null $entry  The category's catalog entry; null when the category is not in the catalog any more.
+	 * @param array<string,mixed>      $stored Stored sources by attribute id.
+	 * @return array{filled:int,total:int,required_missing:int}|null Null when there is nothing to count: no category, or its fields are not cached.
+	 */
+	private function attribute_summary( ?array $entry, array $stored ): ?array {
+		if ( null === $entry ) {
+			return null;
+		}
+
+		try {
+			$fields = $this->categories->cached_fields( $entry['identity'] );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		if ( null === $fields ) {
+			return null;
+		}
+
+		$summary = [
+			'filled'           => 0,
+			'total'            => count( $fields ),
+			'required_missing' => 0,
+		];
+
+		foreach ( $fields as $field ) {
+			$source = $stored[ $field->id() ] ?? null;
+
+			if ( is_array( $source ) && '' !== (string) ( $source['source'] ?? '' ) ) {
+				++$summary['filled'];
+			} elseif ( $field->is_required() ) {
+				++$summary['required_missing'];
+			}
+		}
+
+		return $summary;
+	}
+
+	/**
 	 * Returns a term-bound mapping as stored, without asking the marketplace anything.
 	 *
 	 * @since 2.1.0

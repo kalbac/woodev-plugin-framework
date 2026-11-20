@@ -9,9 +9,10 @@ import type { CSSProperties } from 'react';
 
 /**
  * WooCommerce's pagination always offers 25/50/75/100 and cannot be told otherwise (7.0 `TableCard` passes no
- * `showPerPagePicker`); the shell draws PHP's own sizes instead and hides that picker.
+ * `showPerPagePicker`); the shell draws PHP's own sizes in the same footer slot and hides the vendor control.
  */
-export const HIDE_VENDOR_PAGE_SIZE = '.woodev-records .woocommerce-pagination__per-page-picker{display:none}';
+export const HIDE_VENDOR_PAGE_SIZE =
+	'.woodev-records .woocommerce-pagination__per-page-picker>:not(.woodev-records__page-size){display:none}';
 
 export const STYLES = {
 	toolbar: { display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' },
@@ -35,5 +36,4 @@ export const STYLES = {
 		background: '#f0f6fc',
 		borderLeft: '4px solid #72aee6',
 	},
-	pageSize: { display: 'flex', justifyContent: 'flex-end', marginTop: '12px' },
 } satisfies Record< string, CSSProperties >;

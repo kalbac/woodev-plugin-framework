@@ -61,6 +61,8 @@ export const MESSAGE_KEYS = {
 	advancedFilters: 'advanced_filters',
 	/** Label above the «Статус данных» block. */
 	dataStatus: 'data_status',
+	/** One or two sentences under the page title: what the table is for, in the seller's words. */
+	description: 'description',
 	/** Label of the page-size control. */
 	perPage: 'per_page',
 	/** Start of a date range. */

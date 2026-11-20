@@ -11,9 +11,9 @@
  * @package woodev-plugin-framework
  */
 
-import type { MutableRefObject, ReactNode } from 'react';
+import type { MutableRefObject, ReactNode, RefObject } from 'react';
 import { SelectControl } from '@wordpress/components';
-import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { createRecordsApi } from './api';
 import { DataStatus } from './data-status';
 import type { RecordsExtensions, TableHandle } from './extensions';
@@ -98,6 +98,53 @@ function Summary( { text }: { text: string } ) {
 	);
 }
 
+/** The place WooCommerce's footer gives its own page-size picker. */
+const PER_PAGE_SLOT = '.woocommerce-pagination__per-page-picker';
+
+/**
+ * The footer's page-size slot inside `host`, found again after every render (the card is made again when its columns change).
+ *
+ * @param host The element that holds the card.
+ */
+function usePerPageSlot( host: RefObject< HTMLElement > ): Element | null {
+	const [ slot, setSlot ] = useState< Element | null >( null );
+
+	useLayoutEffect( () => {
+		setSlot( host.current?.querySelector( PER_PAGE_SLOT ) ?? null );
+	} );
+
+	return slot;
+}
+
+interface PageSizeProps {
+	label: string;
+	perPage: number;
+	sizes: number[];
+	onChange: ( size: string ) => void;
+}
+
+/** PHP's own page sizes, drawn inside the card's footer in place of WooCommerce's fixed 25/50/75/100 picker. */
+function PageSize( { label, perPage, sizes, onChange }: PageSizeProps ) {
+	const options = ( sizes.includes( perPage ) ? sizes : [ ...sizes, perPage ] ).map( ( size ) => ( {
+		value: String( size ),
+		label: String( size ),
+	} ) );
+
+	return (
+		<div className="woodev-records__page-size">
+			<SelectControl
+				__next40pxDefaultSize
+				__nextHasNoMarginBottom
+				label={ label }
+				labelPosition="side"
+				value={ String( perPage ) }
+				options={ options }
+				onChange={ onChange }
+			/>
+		</div>
+	);
+}
+
 interface TableBodyProps {
 	title: string;
 	/** The card header's own controls, bulk group and search; `null` when the table has neither. */
@@ -130,6 +177,8 @@ function TableBody( {
 	onChange,
 }: TableBodyProps ) {
 	const TableCard = getTableCard();
+	const host = useRef< HTMLDivElement >( null );
+	const perPageSlot = usePerPageSlot( host );
 	const data = records.list.data;
 	const summaryLabel = message( messages, MESSAGE_KEYS.summaryLabel );
 	// WooCommerce reports one page-size choice as two callbacks (size, then the page clamped to the new size). Both are
@@ -210,7 +259,7 @@ function TableBody( {
 		}
 	};
 
-	// The page-size control below is the only one shown, and lists PHP's sizes. Should WooCommerce's own picker ever
+	// The page-size control in the footer is the only one shown, and lists PHP's sizes. Should WooCommerce's own picker ever
 	// call in (its CSS hook not matching), a size PHP did not declare is dropped together with the page clamp that
 	// WooCommerce computes for it right afterwards.
 	const changePerPage = ( value: string | number ) => {
@@ -236,53 +285,49 @@ function TableBody( {
 		param === 'per_page' ? changePerPage : () => {};
 
 	const sizes = definition.pagination.per_page_options;
-	const sizeOptions = ( sizes.includes( query.perPage ) ? sizes : [ ...sizes, query.perPage ] ).map( ( size ) => ( {
-		value: String( size ),
-		label: String( size ),
-	} ) );
 
 	return (
 		<>
 			<style>{ HIDE_VENDOR_PAGE_SIZE }</style>
-			<TableCard
-				// Remounted when the columns change: WooCommerce reads the visible-column list once, on mount.
-				key={ headers.map( ( header ) => header.key ).join( ',' ) }
-				className="woodev-records__table"
-				title={ title }
-				headers={ headers }
-				rows={ lines.map( ( line ) => line.cells ) }
-				rowKey={ ( _row, index ) => lines[ index ]?.key ?? String( index ) }
-				rowHeader={ rowHeaderIndex }
-				rowsPerPage={ query.perPage }
-				totalRows={ data?.total ?? 0 }
-				query={ {
-					orderby: sortedColumnId( definition, query ),
-					order: query.direction,
-					paged: String( query.page ),
-					per_page: query.perPage,
-				} }
-				isLoading={ records.list.status === 'loading' }
-				actions={ headerActions ? [ headerActions ] : undefined }
-				hasSearch={ searchFilter( definition ) !== undefined }
-				summary={ summaryLabel !== '' && data ? [ { label: summaryLabel, value: data.total } ] : undefined }
-				showMenu={ definition.columns.some( ( column ) => ! column.required ) }
-				onSort={ sortBy }
-				onPageChange={ changePage }
-				onQueryChange={ onQueryChange }
-			/>
-			{ sizes.length > 1 && (
-				<div className="woodev-records__page-size" style={ STYLES.pageSize }>
-					<SelectControl
-						__next40pxDefaultSize
-						__nextHasNoMarginBottom
+			<div ref={ host }>
+				<TableCard
+					// Remounted when the columns change: WooCommerce reads the visible-column list once, on mount.
+					key={ headers.map( ( header ) => header.key ).join( ',' ) }
+					className="woodev-records__table"
+					title={ title }
+					headers={ headers }
+					rows={ lines.map( ( line ) => line.cells ) }
+					rowKey={ ( _row, index ) => lines[ index ]?.key ?? String( index ) }
+					rowHeader={ rowHeaderIndex }
+					rowsPerPage={ query.perPage }
+					totalRows={ data?.total ?? 0 }
+					query={ {
+						orderby: sortedColumnId( definition, query ),
+						order: query.direction,
+						paged: String( query.page ),
+						per_page: query.perPage,
+					} }
+					isLoading={ records.list.status === 'loading' }
+					actions={ headerActions ? [ headerActions ] : undefined }
+					hasSearch={ searchFilter( definition ) !== undefined }
+					summary={ summaryLabel !== '' && data ? [ { label: summaryLabel, value: data.total } ] : undefined }
+					showMenu={ definition.columns.some( ( column ) => ! column.required ) }
+					onSort={ sortBy }
+					onPageChange={ changePage }
+					onQueryChange={ onQueryChange }
+				/>
+			</div>
+			{ sizes.length > 1 &&
+				perPageSlot &&
+				createPortal(
+					<PageSize
 						label={ message( messages, MESSAGE_KEYS.perPage ) || title }
-						labelPosition="side"
-						value={ String( query.perPage ) }
-						options={ sizeOptions }
-						onChange={ ( next: string ) => changePerPage( next ) }
-					/>
-				</div>
-			) }
+						perPage={ query.perPage }
+						sizes={ sizes }
+						onChange={ changePerPage }
+					/>,
+					perPageSlot
+				) }
 		</>
 	);
 }
@@ -360,6 +405,13 @@ function HeaderActions( { definition, query, selection, handle, extensions, hasB
 			) }
 		</div>
 	);
+}
+
+/** The shell's class: `has-expand` and `has-image` tell the stylesheet which pinned columns come before the name column. */
+function rootClassName( definition: Definition ): string {
+	const hasImage = definition.columns.some( ( column ) => column.id === 'image' );
+
+	return `woodev-records${ definition.children ? ' has-expand' : '' }${ hasImage ? ' has-image' : '' }`;
 }
 
 /** Whether the keyboard focus is inside the table header's search box right now. */
@@ -448,6 +500,7 @@ export function RecordsTable( {
 	const emptyButton =
 		hasBulk && emptyAction !== '' ? extensions.renderAccountActions?.( chosen, handle, [ emptyAction ] ) ?? null : null;
 	const summary = message( messages, MESSAGE_KEYS.summary );
+	const description = message( messages, MESSAGE_KEYS.description );
 	const limitNote = selection.limitReached ? message( messages, MESSAGE_KEYS.selectionLimit ) : '';
 	const headerActions = (
 		<HeaderActions
@@ -465,11 +518,11 @@ export function RecordsTable( {
 
 	return (
 		<div
-			className={ `woodev-records${ definition.children ? ' has-expand' : '' }` }
+			className={ rootClassName( definition ) }
 			data-owner={ owner }
 			data-table={ table }
 		>
-			{ hasBulk && extensions.renderAccountActions?.( chosen, handle ) }
+			{ description !== '' && <p className="woodev-records__description">{ description }</p> }
 			<FiltersBar
 				definition={ definition }
 				account={ envelope.context.account_id }
@@ -478,6 +531,7 @@ export function RecordsTable( {
 				messages={ messages }
 				onChange={ change }
 				leading={ leadingFilter }
+				trailing={ hasBulk ? extensions.renderAccountActions?.( chosen, handle ) : null }
 				aside={
 					<DataStatus
 						status={ records.list.data?.data_status }

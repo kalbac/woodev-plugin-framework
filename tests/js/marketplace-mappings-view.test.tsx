@@ -43,8 +43,33 @@ const MESSAGES: Record< string, string > = {
 	requestFailed: 'Запрос не удался',
 	addMapping: 'Добавить сопоставление',
 	addProfile: 'Добавить профиль',
+	descriptionMappings: 'Сопоставление связывает категории магазина с категориями маркетплейса.',
+	descriptionProfiles: 'Профиль хранит общие правила выгрузки.',
 	emptyMappings: 'Сопоставлений пока нет',
+	createFirstMapping: 'Создать первое сопоставление',
+	emptyNoShopCategories: 'В магазине пока нет категорий товаров',
+	createShopCategory: 'Создать категорию товаров',
+	shopCategoriesUrl: 'edit-tags.php?taxonomy=product_cat&post_type=product',
 	emptyProfiles: 'Профилей пока нет',
+	createFirstProfile: 'Создать первый профиль',
+	columnShopCategories: 'Категории магазина',
+	columnAttributes: 'Атрибуты',
+	attributesHelp: 'Без обязательных атрибутов товар выгрузить нельзя.',
+	attributesOf: '{filled} из {total}',
+	attributesUncached: 'Откройте сопоставление, чтобы загрузить характеристики.',
+	attributesMissing: 'Не заполнены обязательные атрибуты: {count}',
+	columnProperties: 'Свойства профиля',
+	columnUsedIn: 'Используется в',
+	notConfigured: 'Не настроен',
+	columnActions: 'Действия',
+	edit: 'Редактировать',
+	close: 'Закрыть',
+	deleteMappingTitle: 'Удалить сопоставление?',
+	deleteMappingText: 'Сопоставление «{name}» будет удалено.',
+	deleteProfileTitle: 'Удалить профиль?',
+	deleteProfileText: 'Профиль «{name}» будет удалён.',
+	profileInUseTitle: 'Профиль «{name}» используется',
+	profileInUseText: 'Он выбран в этих сопоставлениях:',
 	backToMappings: '← Все сопоставления',
 	backToProfiles: '← Все профили',
 	newMapping: 'Новое сопоставление',
@@ -135,7 +160,7 @@ function option( value: string, label: string ) {
 const STATE: MappingsState = {
 	messages: MESSAGES,
 	mappings: [ { id: 1, name: 'Платья', terms: [ 5 ], category_label: 'Одежда › Платья', profile_id: 3, products: 12 } ],
-	profiles: [ { id: 3, name: 'Основной', mappings: 1 } ],
+	profiles: [ { id: 3, name: 'Основной', mappings: 1, properties: [ 'Вес', 'НДС' ], used_in: [ 'Платья' ] } ],
 	shop_categories: [
 		{ id: 5, label: 'Одежда', mapping_id: 1, mapping_name: 'Платья' },
 		{ id: 6, label: 'Обувь', mapping_id: null, mapping_name: '' },
@@ -210,7 +235,9 @@ function FakeTableCard( props: TableCardProps & { actions?: React.ReactNode[] } 
 				<thead>
 					<tr>
 						{ props.headers.map( ( header ) => (
-							<th key={ header.key }>{ header.label }</th>
+							<th key={ header.key } className={ header.cellClassName }>
+								{ header.label }
+							</th>
 						) ) }
 					</tr>
 				</thead>
@@ -304,25 +331,98 @@ describe( 'registration', () => {
 
 describe( 'lists', () => {
 	test( 'shows the mappings and profiles PHP sent, each in a table card with its add button in the header', async () => {
-		serve( { 'GET ': STATE } );
+		serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: { 1: { filled: 1, total: 3, required_missing: 1 } } } } );
 		openView();
 
 		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
 		expect( within( mappings ).getByRole( 'button', { name: 'Платья' } ) ).toBeInTheDocument();
 		expect( within( mappings ).getByText( 'Одежда › Платья' ) ).toBeInTheDocument();
-		expect( within( mappings ).getByText( 'Основной' ) ).toBeInTheDocument();
+		expect( within( mappings ).getByText( 'Одежда' ) ).toBeInTheDocument();
+		expect( within( mappings ).getByRole( 'button', { name: 'Основной' } ) ).toBeInTheDocument();
 		expect( within( mappings ).getByText( '12' ) ).toBeInTheDocument();
+		expect( within( mappings ).getByRole( 'button', { name: 'Редактировать' } ) ).toBeInTheDocument();
+		expect( within( mappings ).getByRole( 'button', { name: 'Удалить' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'button', { name: 'Добавить сопоставление' } ) ).toBeInTheDocument();
+		expect( screen.getByText( STATE.messages.descriptionMappings ) ).toBeInTheDocument();
 
 		await userEvent.click( screen.getByRole( 'tab', { name: 'Профили' } ) );
 		const profiles = await screen.findByRole( 'table', { name: 'Профили' } );
 		expect( within( profiles ).getByRole( 'button', { name: 'Основной' } ) ).toBeInTheDocument();
-		expect( within( profiles ).getByText( '1' ) ).toBeInTheDocument();
+		expect( within( profiles ).getByText( 'Вес, НДС' ) ).toBeInTheDocument();
+		expect( within( profiles ).getByText( 'Платья' ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'button', { name: 'Добавить профиль' } ) ).toBeInTheDocument();
+		expect( screen.getByText( STATE.messages.descriptionProfiles ) ).toBeInTheDocument();
+		// Both lists stand in the wrapper that keeps a table off the page's edge.
+		expect( profiles.closest( '.woodev-marketplace-table' ) ).not.toBeNull();
+	} );
+
+	test( 'the card has a header row — the list\'s name at the left, the add button in the card — and every column carries its width class, the row buttons being icons named by their label', async () => {
+		serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: [] } } );
+		openView();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		const card = mappings.closest( '[data-testid="table-card"]' ) as HTMLElement;
+
+		expect( within( card ).getByRole( 'heading', { name: 'Сопоставления' } ) ).toBeInTheDocument();
+		expect( within( card ).getByRole( 'button', { name: 'Добавить сопоставление' } ) ).toBeInTheDocument();
+		expect( Array.from( mappings.querySelectorAll( 'th' ) ).map( ( th ) => th.className ) ).toEqual( [
+			'woodev-mappings-col-name',
+			'woodev-mappings-col-category',
+			'woodev-mappings-col-shop',
+			'woodev-mappings-col-profile',
+			'woodev-mappings-col-attributes',
+			'woodev-mappings-col-products',
+			'woodev-mappings-col-actions',
+		] );
+		const edit = within( mappings ).getByRole( 'button', { name: 'Редактировать' } );
+		expect( edit ).toHaveTextContent( '' );
+		expect( edit.querySelector( '.dashicons-edit' ) ).not.toBeNull();
+	} );
+
+	test( 'the «Атрибуты» column is read after the list: «N из M» and an orange «!» while a required attribute is empty', async () => {
+		const calls = serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: { 1: { filled: 1, total: 3, required_missing: 1 } } } } );
+		openView();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		expect( await within( mappings ).findByText( '1 из 3' ) ).toBeInTheDocument();
+		expect( within( mappings ).getByRole( 'img', { name: 'Не заполнены обязательные атрибуты: 1' } ) ).toBeInTheDocument();
+		expect( calls[ 0 ].path ).toBe( BASE );
+		expect( calls[ 1 ].path ).toBe( `${ BASE }/attribute-counts` );
+	} );
+
+	test( 'a mapping whose category fields are not cached is a dash that says how to load them', async () => {
+		serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: [] } } );
+		openView();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		expect( await within( mappings ).findByLabelText( 'Откройте сопоставление, чтобы загрузить характеристики.' ) ).toHaveTextContent( '—' );
+		expect( within( mappings ).queryByText( /из/ ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a failed counts read leaves a plain dash and the list as it was', async () => {
+		serve( { 'GET ': STATE, 'GET /attribute-counts': new Error( 'нет связи' ) } );
+		openView();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		await act( async () => {} );
+		expect( within( mappings ).queryByText( /из/ ) ).not.toBeInTheDocument();
+		expect( within( mappings ).queryByLabelText( 'Откройте сопоставление, чтобы загрузить характеристики.' ) ).not.toBeInTheDocument();
+		expect( within( mappings ).getByRole( 'button', { name: 'Платья' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'the profile of a mapping is a link to that profile on the other tab', async () => {
+		serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: [] }, 'GET /profiles/3': { id: 3, name: 'Основной', values: { offer_id_source: 'sku', currency_kind: 'account', price_override: false } } } );
+		const { history } = openViewWithUrl();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		await userEvent.click( within( mappings ).getByRole( 'button', { name: 'Основной' } ) );
+
+		expect( history[ history.length - 1 ] ).toEqual( { tab: 'profiles', profile: '3' } );
+		expect( await screen.findByLabelText( 'Название профиля' ) ).toHaveValue( 'Основной' );
 	} );
 
 	test( 'a count of zero is drawn, not left as an empty cell', async () => {
-		serve( { 'GET ': { ...STATE, mappings: [ { ...STATE.mappings[ 0 ], products: 0 } ], profiles: [ { id: 3, name: 'Основной', mappings: 0 } ] } } );
+		serve( { 'GET ': { ...STATE, mappings: [ { ...STATE.mappings[ 0 ], products: 0 } ], profiles: [ { id: 3, name: 'Основной', mappings: 0, properties: [], used_in: [] } ] } } );
 		openView();
 
 		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
@@ -330,7 +430,59 @@ describe( 'lists', () => {
 
 		await userEvent.click( screen.getByRole( 'tab', { name: 'Профили' } ) );
 		const profiles = await screen.findByRole( 'table', { name: 'Профили' } );
-		expect( within( profiles ).getByText( '0' ) ).toBeInTheDocument();
+		expect( within( profiles ).getByText( 'Не настроен' ) ).toBeInTheDocument();
+	} );
+
+	test( 'a mapping is deleted from the list in the shared dialog, and only its confirming button deletes', async () => {
+		const calls = serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: [] }, 'DELETE /mappings/1': { id: 1, notices: [] } } );
+		openView();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		await userEvent.click( within( mappings ).getByRole( 'button', { name: 'Удалить' } ) );
+
+		const dialog = await screen.findByRole( 'dialog', { name: 'Удалить сопоставление?' } );
+		expect( within( dialog ).getByText( 'Сопоставление «Платья» будет удалено.' ) ).toBeInTheDocument();
+		expect( calls.some( ( call ) => call.method === 'DELETE' ) ).toBe( false );
+
+		await userEvent.click( within( dialog ).getByRole( 'button', { name: 'Да, удалить' } ) );
+
+		expect( ( await screen.findAllByText( 'Сопоставление удалено.' ) ).length ).toBeGreaterThan( 0 );
+		expect( calls.filter( ( call ) => call.method === 'DELETE' ) ).toHaveLength( 1 );
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a profile some mapping chooses cannot be deleted: the dialog lists those mappings and offers only «Закрыть»', async () => {
+		const calls = serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: [] } } );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'tab', { name: 'Профили' } ) );
+		const profiles = await screen.findByRole( 'table', { name: 'Профили' } );
+		await userEvent.click( within( profiles ).getByRole( 'button', { name: 'Удалить' } ) );
+
+		const dialog = await screen.findByRole( 'dialog', { name: 'Профиль «Основной» используется' } );
+		expect( within( dialog ).getByText( 'Платья' ) ).toBeInTheDocument();
+		expect( within( dialog ).queryByRole( 'button', { name: 'Да, удалить' } ) ).not.toBeInTheDocument();
+
+		// The footer's button (the header's «✕» carries the same name).
+		const footer = dialog.querySelector( '.woodev-dialog__footer' ) as HTMLElement;
+		expect( within( footer ).getAllByRole( 'button' ) ).toHaveLength( 1 );
+		await userEvent.click( within( footer ).getByRole( 'button', { name: 'Закрыть' } ) );
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
+		expect( calls.some( ( call ) => call.method === 'DELETE' ) ).toBe( false );
+	} );
+
+	test( 'a profile nothing uses is deleted from the list after the dialog confirms', async () => {
+		const free = { ...STATE, profiles: [ { id: 4, name: 'Запасной', mappings: 0, properties: [], used_in: [] } ] };
+		const calls = serve( { 'GET ': free, 'GET /attribute-counts': { counts: [] }, 'DELETE /profiles/4': { id: 4, notices: [] } } );
+		openView();
+
+		await userEvent.click( await screen.findByRole( 'tab', { name: 'Профили' } ) );
+		const profiles = await screen.findByRole( 'table', { name: 'Профили' } );
+		await userEvent.click( within( profiles ).getByRole( 'button', { name: 'Удалить' } ) );
+		await userEvent.click( within( await screen.findByRole( 'dialog', { name: 'Удалить профиль?' } ) ).getByRole( 'button', { name: 'Да, удалить' } ) );
+
+		expect( ( await screen.findAllByText( 'Профиль удалён.' ) ).length ).toBeGreaterThan( 0 );
+		expect( calls.filter( ( call ) => call.method === 'DELETE' ) ).toHaveLength( 1 );
 	} );
 
 	test( 'the category search is a search box (it has the magnifier), not a bare text field', async () => {
@@ -342,17 +494,26 @@ describe( 'lists', () => {
 		expect( await screen.findByRole( 'searchbox', { name: 'Категория маркетплейса' } ) ).toBeInTheDocument();
 	} );
 
-	test( 'a list with no rows is a card with the PHP sentence and the add button, not a table', async () => {
-		serve( { 'GET ': { ...STATE, mappings: [], profiles: [] } } );
+	test( 'a list with no rows is the PHP explanation and a button that creates the first one, not a table', async () => {
+		serve( { 'GET ': { ...STATE, mappings: [], profiles: [] }, 'GET /attribute-counts': { counts: [] } } );
 		openView();
 
 		expect( await screen.findByText( 'Сопоставлений пока нет' ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'button', { name: 'Добавить сопоставление' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Создать первое сопоставление' } ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'table' ) ).not.toBeInTheDocument();
 
 		await userEvent.click( screen.getByRole( 'tab', { name: 'Профили' } ) );
 		expect( await screen.findByText( 'Профилей пока нет' ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'button', { name: 'Добавить профиль' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Создать первый профиль' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'a shop with no product categories is sent to create one before the first mapping', async () => {
+		serve( { 'GET ': { ...STATE, mappings: [], shop_categories: [] }, 'GET /attribute-counts': { counts: [] } } );
+		openView();
+
+		expect( await screen.findByText( 'В магазине пока нет категорий товаров' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'Создать категорию товаров' } ) ).toHaveAttribute( 'href', 'edit-tags.php?taxonomy=product_cat&post_type=product' );
+		expect( screen.queryByRole( 'button', { name: 'Создать первое сопоставление' } ) ).not.toBeInTheDocument();
 	} );
 
 	test( 'the list is replaced by the form and brought back through the URL: Back, Forward and a bookmark work', async () => {

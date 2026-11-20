@@ -191,4 +191,25 @@ final class SiteProductsRowsCellsTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'tooltip', $state[0] );
 	}
+
+	/**
+	 * The photo column: the product's picture (or the placeholder, which the picture callable answers with) in front of the name, the
+	 * variation's own picture on its row; no callable, no photo cell.
+	 */
+	public function test_the_photo_cell_is_the_picture_the_callable_gives_for_the_row_s_own_product(): void {
+		$offer = [
+			'product_id'   => 11, 'label' => 'S', 'link_id' => null, 'group' => 'not_linked', 'sku' => '', 'offer_id' => '',
+			'site_stock'   => 1, 'remote_stock' => null, 'site_price' => '1', 'remote_price' => null, 'sync_stock' => false,
+			'sync_price'   => false, 'warehouse_id' => null, 'error' => '', 'stock_pool' => null,
+		];
+		$edit  = static function ( int $id ): string {
+			return 'https://shop.test/edit/' . $id;
+		};
+		$rows  = new Site_Products_Rows( 'Тестмаркет', [], $edit, static fn( int $id ): string => 'https://shop.test/img-' . $id . '.jpg' );
+		$child = $rows->child( 1, 10, $offer, [] );
+
+		$this->assertSame( [ [ 'type' => 'image', 'value' => [ 'url' => 'https://shop.test/img-11.jpg', 'alt' => 'S' ] ] ], $child['cells']['image'] );
+		$this->assertNull( ( new Site_Products_Rows( 'Тестмаркет', [], $edit ) )->child( 1, 10, $offer, [] )['cells']['image'] );
+		$this->assertSame( 'image', array_key_first( $child['cells'] ), 'The photo is the first cell.' );
+	}
 }

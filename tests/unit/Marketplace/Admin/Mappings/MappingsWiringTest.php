@@ -103,7 +103,8 @@ final class MappingsWiringTest extends TestCase {
 		Mappings_Module::controller( $plugin )->register_routes();
 
 		$base = 'woodev/v1/admin/marketplace/ozon/mappings';
-		$this->assertCount( 10, $routes, 'ten patterns carry the handlers' );
+		$this->assertCount( 11, $routes, 'eleven patterns carry the handlers' );
+		$this->assertArrayHasKey( $base . '/attribute-counts', $routes );
 		$this->assertArrayHasKey( $base, $routes );
 		$this->assertArrayHasKey( $base . '/categories', $routes );
 		$this->assertArrayHasKey( $base . '/mappings/(?P<id>[1-9][0-9]{0,18})/check', $routes );
@@ -116,7 +117,7 @@ final class MappingsWiringTest extends TestCase {
 				$this->assertIsCallable( $endpoint['permission_callback'] );
 			}
 		}
-		$this->assertSame( 14, $handlers );
+		$this->assertSame( 15, $handlers );
 	}
 
 	/**

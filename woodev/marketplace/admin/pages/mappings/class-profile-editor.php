@@ -76,22 +76,75 @@ final class Profile_Editor {
 	 * Lists the profiles for the list.
 	 *
 	 * @since 2.1.0
+	 * @since 2.1.13 Each profile names what it sets (`properties`) and the mappings that use it (`used_in`).
 	 *
-	 * @return array<int,array{id:int,name:string,mappings:int}>
+	 * @return array<int,array{id:int,name:string,mappings:int,properties:string[],used_in:string[]}>
 	 */
 	public function summaries(): array {
-		$rows = [];
+		$rows    = [];
+		$used_in = $this->mapping_names_by_profile();
 
 		foreach ( $this->profiles->all() as $profile ) {
 			$id     = (int) $profile->id();
 			$rows[] = [
-				'id'       => $id,
-				'name'     => $profile->name(),
-				'mappings' => $this->mappings->count_using_profile( $id ),
+				'id'         => $id,
+				'name'       => $profile->name(),
+				'mappings'   => $this->mappings->count_using_profile( $id ),
+				'properties' => $this->property_labels( $profile->settings() ),
+				'used_in'    => $used_in[ $id ] ?? [],
 			];
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * The names of the mappings each profile is chosen in.
+	 *
+	 * @return array<int,string[]> Mapping names by profile id.
+	 */
+	private function mapping_names_by_profile(): array {
+		$names = [];
+
+		foreach ( $this->mappings->all_term_bound() as $mapping ) {
+			if ( null !== $mapping['profile_id'] ) {
+				$names[ $mapping['profile_id'] ][] = $mapping['name'];
+			}
+		}
+
+		return $names;
+	}
+
+	/**
+	 * What a profile sets, in a merchant's words: one label per group of settings that has a value, so a profile with none says
+	 * «не настроен» in the list.
+	 *
+	 * @param array<string,mixed> $settings Stored settings.
+	 * @return string[]
+	 */
+	private function property_labels( array $settings ): array {
+		$has   = static function ( array $keys ) use ( $settings ): bool {
+			foreach ( $keys as $key ) {
+				if ( ! empty( $settings[ $key ] ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		};
+		$known = array_filter(
+			[
+				__( 'Источники данных', 'woodev-plugin-framework' ) => $has( $this->choices->settings() ),
+				__( 'Габариты', 'woodev-plugin-framework' )         => $has( [ 'fallback_width', 'fallback_height', 'fallback_depth' ] ),
+				__( 'Вес', 'woodev-plugin-framework' )              => $has( [ 'fallback_weight' ] ),
+				__( 'Единицы измерения', 'woodev-plugin-framework' ) => $has( [ 'units' ] ),
+				__( 'НДС', 'woodev-plugin-framework' )              => $has( [ 'vat_rate' ] ),
+				__( 'Валюта', 'woodev-plugin-framework' )           => $has( [ 'currency_rule' ] ),
+				__( 'Цена', 'woodev-plugin-framework' )             => $has( [ 'price_rule' ] ),
+			]
+		);
+
+		return array_keys( $known );
 	}
 
 	/**
