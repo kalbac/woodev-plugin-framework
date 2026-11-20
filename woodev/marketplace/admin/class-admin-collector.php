@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin;
 
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Marketplace_Orders_Page;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 
 defined( 'ABSPATH' ) || exit;
@@ -56,6 +57,11 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		 * `admin_menu` priority of the submenu clean-up: after every registration, whoever made it.
 		 */
 		private const CLEAN_UP_PRIORITY = 99;
+
+		/**
+		 * `admin_menu` priority of placing «Заказы маркетплейсов»: after «Заказы доставки» has moved to its own place (99).
+		 */
+		private const PLACE_ORDERS_PRIORITY = 100;
 
 		/**
 		 * @var self|null
@@ -146,7 +152,7 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		}
 
 		/**
-		 * Registers every menu with WooCommerce Admin: each root, then its children.
+		 * Registers every menu with WooCommerce Admin: each root, then its children; then the shared «Заказы маркетплейсов» page.
 		 *
 		 * Without WooCommerce Admin there is nothing to register into, and no classic page replaces the React ones, so the
 		 * merchant is told once, in the admin's own notice.
@@ -154,6 +160,7 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		 * @internal
 		 *
 		 * @since 2.0.29
+		 * @since 2.1.13 Registers the shared orders page.
 		 *
 		 * @return void
 		 */
@@ -169,15 +176,23 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 					wc_admin_register_page( $arguments );
 				}
 			}
+
+			$orders = $this->get_orders_page()->build_registration( self::capability_check() );
+
+			if ( null !== $orders ) {
+				wc_admin_register_page( $orders );
+			}
 		}
 
 		/**
-		 * Removes the copy of the root WordPress put into each submenu, see {@see Menu::remove_root_entry()}. After every
-		 * registration and before core picks the root's link from the first entry that is left (`wp-admin/includes/menu.php`).
+		 * Removes the copy of the root WordPress put into each submenu, see {@see Menu::remove_root_entry()}, and points each «Заказы»
+		 * entry at the shared orders page ({@see Marketplace_Orders_Page::link_menu_entries()}). After every registration and before
+		 * core picks the root's link from the first entry that is left (`wp-admin/includes/menu.php`).
 		 *
 		 * @internal
 		 *
 		 * @since 2.0.29
+		 * @since 2.1.13 Links the «Заказы» entries to the shared orders page.
 		 *
 		 * @return void
 		 */
@@ -188,13 +203,44 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 				return;
 			}
 
+			$orders = $this->get_orders_page();
+
 			foreach ( $this->get_menus() as $menu ) {
 				$slug = $menu->get_root_slug();
 
 				if ( isset( $submenu[ $slug ] ) && is_array( $submenu[ $slug ] ) ) {
-					$submenu[ $slug ] = $menu->remove_root_entry( $submenu[ $slug ] ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the submenu is the menu API's data.
+					$submenu[ $slug ] = $orders->link_menu_entries( $menu, $menu->remove_root_entry( $submenu[ $slug ] ) ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the submenu is the menu API's data.
 				}
 			}
+		}
+
+		/**
+		 * Places «Заказы маркетплейсов» after «Заказы доставки» in the WooCommerce submenu. Later than the delivery page's own move
+		 * (priority 99), so its neighbour is already where it belongs.
+		 *
+		 * @internal
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return void
+		 */
+		public function place_orders_page(): void {
+			global $submenu;
+
+			if ( isset( $submenu['woocommerce'] ) && is_array( $submenu['woocommerce'] ) ) {
+				$submenu['woocommerce'] = Marketplace_Orders_Page::place_in_menu( $submenu['woocommerce'] ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the submenu is the menu API's data.
+			}
+		}
+
+		/**
+		 * The shared orders page over the menus of the request.
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return Marketplace_Orders_Page
+		 */
+		public function get_orders_page(): Marketplace_Orders_Page {
+			return new Marketplace_Orders_Page( $this->get_menus() );
 		}
 
 		/**
@@ -334,34 +380,47 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		}
 
 		/**
-		 * The manifest the bundle reads: every menu, limited to the pages the current user may open.
+		 * The manifest the bundle reads: every menu, limited to the pages the current user may open, and the shared orders page
+		 * (`ordersPage`) when the user may open the orders of a marketplace.
 		 *
 		 * @since 2.0.29
+		 * @since 2.1.13 Carries `ordersPage`, and `movedTo` on each «Заказы» page.
 		 *
-		 * @return array{menus: array<int,array<string,mixed>>}
+		 * @return array{menus: array<int,array<string,mixed>>, ordersPage?: array<string,mixed>}
 		 */
 		public function build_manifest(): array {
 			$menus = [];
-			$can   = static function ( string $capability ): bool {
-				return current_user_can( $capability ); // phpcs:ignore WordPress.WP.Capabilities.Undetermined -- the capability is the page's own.
-			};
+			$names = [];
 
 			foreach ( $this->get_menus() as $menu ) {
 				$plugin = $this->plugins[ $menu->get_plugin_id() ] ?? null;
-				$entry  = $menu->build_manifest( $can, \Woodev\Framework\Help\Help_Links::topics_of( $plugin ) );
+				$entry  = $menu->build_manifest( self::capability_check(), \Woodev\Framework\Help\Help_Links::topics_of( $plugin ) );
 
 				if ( null !== $entry ) {
-					$menus[] = $entry;
+					$menus[] = Marketplace_Orders_Page::mark_moved( $entry );
+				}
+
+				if ( null !== $plugin ) {
+					$names[ $menu->get_plugin_id() ] = $plugin->get_marketplace_adapter()->settings_descriptor()->marketplace_name();
 				}
 			}
 
-			return [ 'menus' => $menus ];
+			$manifest = [ 'menus' => $menus ];
+			$orders   = Marketplace_Orders_Page::build_manifest( $menus, $names );
+
+			if ( null !== $orders ) {
+				$manifest['ordersPage'] = $orders;
+			}
+
+			return $manifest;
 		}
 
 		/**
-		 * URL of a page of a menu, inside the wc-admin app.
+		 * URL of a page of a menu, inside the wc-admin app. The «Заказы» page is shown on the shared orders page, so its URL is that
+		 * page's, with the plugin's marketplace preset.
 		 *
 		 * @since 2.0.29
+		 * @since 2.1.13 The «Заказы» page leads to «Заказы маркетплейсов».
 		 *
 		 * @param Menu                $menu  The menu.
 		 * @param Page                $page  A page of it.
@@ -369,16 +428,17 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		 * @return string
 		 */
 		public function get_page_url( Menu $menu, Page $page, array $query = [] ): string {
-			return add_query_arg(
-				array_merge(
+			$args = Marketplace_Orders_Page::serves( $page )
+				? Marketplace_Orders_Page::url_query( $menu->get_plugin_id(), $query )
+				: array_merge(
 					[
 						'page' => 'wc-admin',
 						'path' => $menu->get_page_path( $page ),
 					],
 					$query
-				),
-				admin_url( 'admin.php' )
-			);
+				);
+
+			return add_query_arg( $args, admin_url( 'admin.php' ) );
 		}
 
 		/**
@@ -407,6 +467,15 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		}
 
 		/**
+		 * @return callable Receives a capability, returns whether the current user holds it.
+		 */
+		private static function capability_check(): callable {
+			return static function ( string $capability ): bool {
+				return current_user_can( $capability ); // phpcs:ignore WordPress.WP.Capabilities.Undetermined -- the capability is the page's own.
+			};
+		}
+
+		/**
 		 * @return void
 		 */
 		private function add_hooks(): void {
@@ -418,6 +487,7 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 
 			add_action( 'admin_menu', [ $this, 'register_menus' ], self::REGISTER_PRIORITY );
 			add_action( 'admin_menu', [ $this, 'clean_up_submenus' ], self::CLEAN_UP_PRIORITY );
+			add_action( 'admin_menu', [ $this, 'place_orders_page' ], self::PLACE_ORDERS_PRIORITY );
 			add_action( 'admin_head', [ $this, 'print_menu_styles' ] );
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy' ] );

@@ -17,11 +17,13 @@ use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Row_Normalizer;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Activity;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Cancel;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Data_Status;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Ids;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Reader;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Rows;
+use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Order_Canceller;
@@ -95,11 +97,27 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	 */
 	private $transients = [];
 
+	/**
+	 * The «Статус данных» part the provider is built with; none by default.
+	 *
+	 * @var Site_Orders_Data_Status|null
+	 */
+	private $data_status;
+
+	/**
+	 * The options, by name.
+	 *
+	 * @var array<string,mixed>
+	 */
+	private $options = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->transients = [];
-		$this->forbidden  = [];
+		$this->transients  = [];
+		$this->options     = [];
+		$this->data_status = null;
+		$this->forbidden   = [];
 		$this->notes     = [];
 		$this->logged    = [];
 		$this->meta      = new Fake_Order_Meta();
@@ -258,7 +276,8 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			Sqlite_Tables::MARKETPLACE_ID,
 			function ( string $line ): void {
 				$this->logged[] = $line;
-			}
+			},
+			$this->data_status
 		);
 	}
 
@@ -354,12 +373,17 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( [], $definition['bulk_actions'] );
 		$this->assertSame( [ 'date', 'order', 'posting', 'status', 'total' ], $definition['sorts']['keys'] );
 		$this->assertSame( [ 'key' => 'date', 'direction' => 'desc' ], $definition['sorts']['default'] );
-		$this->assertSame( [ 'q', 'state', 'wc_status', 'date' ], array_column( $definition['filters'], 'id' ) );
-		$this->assertSame( 'date_range', $definition['filters'][3]['type'] );
+		$this->assertSame( [ 'q', 'state', 'date', 'posting_status', 'wc_status' ], array_column( $definition['filters'], 'id' ) );
+		$this->assertSame( 'date_range', $definition['filters'][2]['type'] );
+		$this->assertSame( [ false, false, false, true, true ], array_map( static function ( array $filter ): bool {
+			return ! empty( $filter['advanced'] );
+		}, $definition['filters'] ), 'Both statuses wait under «Расширенные фильтры».' );
+		$this->assertTrue( $definition['filters'][3]['options_source'], 'The marketplace statuses arrive with each list.' );
+		$this->assertSame( [ 'visibility', 'media-document', 'remove' ], array_column( $definition['row_actions'], 'icon' ) );
 		$this->assertTrue( $definition['filters'][1]['views'], 'The posting state is the counted row.' );
 		$this->assertSame( 'Всё время', $definition['messages']['period_all'], 'The date range is the period picker, which needs its words.' );
 		$this->assertArrayNotHasKey( 'summary_label', $definition['messages'], 'The count word comes with each list, in the right plural form.' );
-		$this->assertSame( '2026-11-15', $definition['filters'][3]['today'], 'The period picker counts «Сегодня» from the site\'s day.' );
+		$this->assertSame( '2026-11-15', $definition['filters'][2]['today'], 'The period picker counts «Сегодня» from the site\'s day.' );
 		$this->assertSame( [ [ 'value' => (string) $this->account_id, 'label' => 'Основной' ] ], $definition['context']['options'] );
 		$this->assertNull( $definition['children'] );
 		$this->assertNull( $definition['analytics'] );
@@ -442,6 +466,75 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 
 		$this->assertSame( 2, array_sum( $processing ), 'Another filter does.' );
 		$this->assertSame( $this->list_body( [ 'filters' => [ 'wc_status' => 'wc-processing', 'state' => 'open' ] ] )['total'], $processing['open'] );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
+	public function test_the_marketplace_statuses_are_the_options_of_their_filter_with_counts_and_narrow_the_list( bool $hpos ): void {
+		$this->stock( $hpos );
+
+		$this->assertSame(
+			[
+				[ 'value' => 'awaiting_packaging', 'label' => 'Ожидает упаковки', 'count' => 1 ],
+				[ 'value' => 'cancelled', 'label' => 'Отменено', 'count' => 1 ],
+				[ 'value' => 'delivered', 'label' => 'Доставлено', 'count' => 1 ],
+				[ 'value' => 'delivering', 'label' => 'Доставляется', 'count' => 1 ],
+			],
+			$this->list_body()['facets']['posting_status'],
+			'The badge\'s own words, only for the statuses the orders are in.'
+		);
+
+		$body = $this->list_body( [ 'filters' => [ 'posting_status' => 'delivering' ] ] );
+
+		$this->assertSame( [ $this->row_id( 104 ) ], array_column( $body['rows'], 'id' ) );
+		$this->assertCount( 4, $body['facets']['posting_status'], 'The chosen status does not hide the others.' );
+	}
+
+	public function test_two_statuses_nobody_names_keep_their_codes_in_the_filter(): void {
+		$rows = new Site_Orders_Rows( [], '__return_true', '__return_false' );
+
+		$this->assertSame(
+			[
+				[ 'value' => 'delivering', 'label' => 'Доставляется', 'count' => 2 ],
+				[ 'value' => 'odd_one', 'label' => 'Другой статус (odd_one)', 'count' => 1 ],
+				[ 'value' => 'odd_two', 'label' => 'Другой статус (odd_two)', 'count' => 3 ],
+			],
+			$rows->posting_status_options( [ 'delivering' => 2, 'odd_one' => 1, 'odd_two' => 3 ] )
+		);
+	}
+
+	public function test_the_list_carries_the_data_status_of_the_account_only_when_the_table_has_one(): void {
+		$this->stock( false );
+		$this->assertArrayNotHasKey( 'data_status', array_filter( $this->list_body() ), 'No poll, no block.' );
+
+		Functions\when( 'get_option' )->alias(
+			function ( string $name, $fallback = false ) {
+				return $this->options[ $name ] ?? $fallback;
+			}
+		);
+		$this->options['woodev_fake-plugin_postings_polled'] = [ $this->account_id => 1795000000 ];
+		$asked             = [];
+		$this->data_status = new Site_Orders_Data_Status(
+			new Posting_Poll_Times( 'fake-plugin' ),
+			static function ( int $account_id ) use ( &$asked ) {
+				$asked[] = $account_id;
+
+				return true;
+			}
+		);
+
+		$status = $this->list_body()['data_status'];
+
+		$this->assertSame( [ $this->account_id ], $asked, 'The next run of this account\'s poll.' );
+		$this->assertSame(
+			[
+				[ 'label' => 'Последний опрос', 'value' => '2026-11-15' ],
+				[ 'label' => 'Следующий опрос', 'value' => 'Сейчас' ],
+			],
+			$status['items']
+		);
+		$this->assertNotSame( '', $status['title'] );
 	}
 
 	/**

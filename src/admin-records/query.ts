@@ -36,6 +36,7 @@ const URL_KEYS = {
 	search: 'search',
 	sort: 'orderby',
 	direction: 'order',
+	advanced: 'advanced_filters',
 } as const;
 
 const OPAQUE_VALUE = /^[A-Za-z0-9_.:-]{1,191}$/;
@@ -54,6 +55,54 @@ type FilterEncoder = ( value: FilterValue ) => string;
 
 export function filterUrlKey( filterId: string ): string {
 	return FILTER_KEY_PREFIX + filterId;
+}
+
+/** The filters drawn only while «Расширенные фильтры» is on. */
+export function advancedFilters( definition: Definition ): Filter[] {
+	return definition.filters.filter( ( filter ) => filter.advanced === true );
+}
+
+/**
+ * Whether the advanced filters are on screen: switched on, or one of them holds a value of its own — a link that narrows by
+ * one shows the filter that does it.
+ *
+ * @param definition The table's definition.
+ * @param query      The query on screen.
+ */
+export function isAdvancedOpen( definition: Definition, query: RecordsQuery ): boolean {
+	return (
+		query.advanced === true ||
+		advancedFilters( definition ).some( ( filter ) => ! sameFilterValue( query.filters[ filter.id ], filter.default ) )
+	);
+}
+
+/**
+ * The query after the merchant flips «Расширенные фильтры». Switching it off also puts every advanced filter back to its
+ * default: a filter the merchant can no longer see must not keep narrowing the table (the delivery page clears its own the same way).
+ *
+ * @param definition The table's definition.
+ * @param query      The query on screen.
+ * @param open       The switch's new position.
+ */
+export function toggleAdvanced( definition: Definition, query: RecordsQuery, open: boolean ): RecordsQuery {
+	if ( open ) {
+		return { ...query, advanced: true };
+	}
+
+	const filters = { ...query.filters };
+
+	advancedFilters( definition ).forEach( ( filter ) => {
+		if ( filter.default === undefined ) {
+			delete filters[ filter.id ];
+		} else {
+			filters[ filter.id ] = filter.default;
+		}
+	} );
+
+	const closed: RecordsQuery = { ...query };
+	delete closed.advanced;
+
+	return changeQuery( closed, { filters } );
 }
 
 /** The filters a merchant sets through `filters[...]`; the search box travels as `search`. */
@@ -237,8 +286,7 @@ export function readAccount( route: RouteQuery ): string {
  */
 export function readQuery( definition: Definition, route: RouteQuery ): RecordsQuery {
 	const page = readWholeNumber( route[ URL_KEYS.page ] );
-
-	return {
+	const query: RecordsQuery = {
 		account: readAccount( route ),
 		page: page !== undefined && page >= 1 && page <= MAX_PAGE ? page : 1,
 		perPage: readPerPage( definition, route[ URL_KEYS.perPage ] ),
@@ -246,6 +294,13 @@ export function readQuery( definition: Definition, route: RouteQuery ): RecordsQ
 		...readSort( definition, route ),
 		filters: readFilters( definition, route ),
 	};
+
+	// Only when it is on, so a table without advanced filters reads the query it always did.
+	if ( route[ URL_KEYS.advanced ] === '1' && advancedFilters( definition ).length > 0 ) {
+		query.advanced = true;
+	}
+
+	return query;
 }
 
 function writeFilter( filter: Filter, value: FilterValue | undefined ): string | undefined {
@@ -279,6 +334,7 @@ export function writeQuery( definition: Definition, query: RecordsQuery ): Route
 		[ URL_KEYS.perPage ]:
 			query.perPage === definition.pagination.default_per_page ? undefined : String( query.perPage ),
 		[ URL_KEYS.search ]: query.search === '' ? undefined : query.search,
+		[ URL_KEYS.advanced ]: query.advanced === true ? '1' : undefined,
 		...writeSort( definition, query ),
 	};
 

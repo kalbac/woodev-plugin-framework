@@ -23,6 +23,8 @@ use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\Label_Jobs;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
+use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
+use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 
@@ -131,8 +133,26 @@ final class Site_Orders_Module {
 			$adapter->id(),
 			static function ( string $line ) use ( $plugin ): void {
 				$plugin->log_error( $line );
-			}
+			},
+			self::data_status( $plugin, $adapter )
 		);
+	}
+
+	/**
+	 * The «Статус данных» block over the plugin's order poll; none for a marketplace whose orders are not polled.
+	 *
+	 * @param Marketplace_Plugin  $plugin  Plugin.
+	 * @param Marketplace_Adapter $adapter Adapter.
+	 * @return Site_Orders_Data_Status|null
+	 */
+	private static function data_status( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter ): ?Site_Orders_Data_Status {
+		if ( null === $adapter->posting_handler() ) {
+			return null;
+		}
+
+		$names = new Job_Names( $plugin->get_id() );
+
+		return Site_Orders_Data_Status::over_scheduler( new Posting_Poll_Times( $plugin->get_id() ), $names->hook( Posting_Jobs::JOB_POLL ), $names->group() );
 	}
 
 	/**

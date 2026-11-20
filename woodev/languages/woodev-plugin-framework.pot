@@ -12402,59 +12402,34 @@ msgstr ""
 msgid "Список карточек загружается с маркетплейса."
 msgstr ""
 
-#: marketplace/admin/product/class-panel-view.php:319
-msgid "Действие над отмеченными вариантами"
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:259
+msgid "Маркетплейс"
 msgstr ""
 
-#: marketplace/admin/product/class-panel-view.php:336
-msgid "Отметить все варианты"
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:263
+msgid "Здесь появятся отчёты по заказам маркетплейсов."
 msgstr ""
 
-#: marketplace/admin/product/class-panel-view.php:337
-msgid "Изображение"
+#: marketplace/admin/pages/orders/class-marketplace-orders-page.php:272
+msgid "Заказы маркетплейсов"
 msgstr ""
 
-#. translators: %s: marketplace name.
-#: marketplace/admin/product/class-panel-view.php:343
-#, php-format
-msgid "Слева — остаток на сайте, справа — на %s. Прочерк — данных пока нет."
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:89
+msgid "Последний опрос"
 msgstr ""
 
-#. translators: %s: marketplace name.
-#: marketplace/admin/product/class-panel-view.php:344
-#, php-format
-msgid "Слева — цена на сайте, справа — цена, которую %s получил в последний раз. Прочерк — данных пока нет."
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:93
+msgid "Следующий опрос"
 msgstr ""
 
-#. translators: %s: name of a variation.
-#: marketplace/admin/product/class-panel-view.php:364
-#, php-format
-msgid "Отметить вариант «%s»"
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:97
+msgid "Когда сайт в последний раз опрашивал маркетплейс о заказах аккаунта и когда опросит снова. За один опрос сайт может прочитать не все изменения — остальное он дочитает в следующих."
 msgstr ""
 
-#: marketplace/admin/product/class-panel-view.php:370
-msgid "Артикул будет отправлен на маркетплейс вместе с карточкой."
+#: marketplace/admin/pages/orders/class-site-orders-data-status.php:107
+msgid "Сейчас"
 msgstr ""
 
-#: marketplace/admin/product/class-panel-view.php:474
-msgid "отменить"
-msgstr ""
-
-#. translators: %d: number of problems.
-#: marketplace/admin/product/class-panel-view.php:621
-#, php-format
-msgid "Есть проблемы (%d) — нажмите, чтобы посмотреть"
-msgstr ""
-
-#: marketplace/admin/product/class-product-tab.php:543
-msgid "Выберите действие."
-msgstr ""
-
-#: marketplace/admin/product/class-product-tab.php:544
-#: marketplace/admin/product/class-variation-bulk-actions.php:213
-msgid "Отметьте варианты, с которыми нужно что-то сделать."
-msgstr ""
-
-#: marketplace/admin/product/class-variation-bulk-actions.php:197
-msgid "Страница устарела. Обновите её и повторите."
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:177
+msgid "Статус на маркетплейсе"
 msgstr ""
