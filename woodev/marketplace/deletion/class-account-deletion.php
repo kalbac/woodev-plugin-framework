@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * 1. only an account of this plugin's marketplace can be deleted (anything else is «not found»);
  * 2. the merchant types the account's identifier (Client-Id) exactly as it is stored (400 otherwise);
  * 3. an account that is still switched on is switched off first: the dialog says so before the merchant confirms, and the
- *    job refuses an enabled account, so the switch goes off before the job is queued;
+ *    job refuses an enabled account, so the switch goes off before the job is queued (and comes back on if the queue refuses);
  * 4. then the deletion is queued as a background job ({@see Account_Deletion_Job}); a deletion already queued or running is
  *    not queued twice.
  *
@@ -139,13 +139,20 @@ final class Account_Deletion {
 			throw new Account_Deletion_Refused( __( 'Идентификатор введён неверно. Введите его в точности как на карточке аккаунта.', 'woodev-plugin-framework' ), 400 );
 		}
 
-		if ( $account->is_enabled() ) {
+		$was_enabled = $account->is_enabled();
+
+		if ( $was_enabled ) {
 			$this->accounts->set_enabled( $account_id, false );
 		}
 
 		$this->progress->begin( $account_id );
 
 		if ( ! $this->scheduler->queue( $account_id ) ) {
+			// No job exists, so nothing is being deleted: an account that was working goes on working.
+			if ( $was_enabled ) {
+				$this->accounts->set_enabled( $account_id, true );
+			}
+
 			$this->progress->fail( $account_id, __( 'Не удалось поставить удаление в очередь. Проверьте, что Action Scheduler работает, и повторите.', 'woodev-plugin-framework' ) );
 
 			throw new Account_Deletion_Refused( __( 'Не удалось поставить удаление в очередь. Повторите позже.', 'woodev-plugin-framework' ), 500 );

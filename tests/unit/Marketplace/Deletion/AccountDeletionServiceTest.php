@@ -179,6 +179,23 @@ final class AccountDeletionServiceTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * An enabled account whose job cannot be queued is switched back on: nothing is being deleted, so it keeps working.
+	 *
+	 * @return void
+	 */
+	public function test_a_queue_that_refuses_leaves_an_enabled_account_enabled(): void {
+		$this->assertTrue( $this->accounts()->get( $this->account_id )->is_enabled() );
+		$this->scheduler->zero_for[ self::HOOK ] = true;
+
+		$this->assertRefused( 500, function (): void {
+			$this->service()->start( $this->account_id, self::IDENTIFIER );
+		} );
+
+		$this->assertTrue( $this->accounts()->get( $this->account_id )->is_enabled(), 'the switch went off for the job and came back' );
+		$this->assertSame( 'failed', $this->progress->get( $this->account_id )['state'] );
+	}
+
+	/**
 	 * An unknown account, and one of another marketplace, are «not found».
 	 *
 	 * @return void
