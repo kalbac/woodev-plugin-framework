@@ -80,3 +80,38 @@ export function marketplacePatch( query: Query, marketplace: string ): Query {
 export function tabPatch( query: Query, tab: string ): Query {
 	return fresh( query, { [ TAB_ARGUMENT ]: tab === ANALYTICS_TAB ? ANALYTICS_TAB : undefined } );
 }
+
+/**
+ * The patch that moves a URL naming a marketplace the page does not have (a plugin deactivated, access lost) onto the marketplace
+ * shown instead, with the same clearing as a switch: the stale link's account and filters belong to the other plugin's table, and
+ * handing them to this one answers 404 or narrows it silently. Null when the URL is fine.
+ *
+ * @param page  The page.
+ * @param query The route's query.
+ */
+export function stalePresetPatch( page: OrdersPageManifest, query: Query ): Query | null {
+	const asked = query[ MARKETPLACE_ARGUMENT ];
+	const shown = activeMarketplace( page, query );
+
+	return asked !== undefined && asked !== shown.id ? marketplacePatch( query, shown.id ) : null;
+}
+
+/**
+ * A query with a patch applied, as wc-admin's navigation would leave it: `undefined` removes an argument.
+ *
+ * @param query The route's query.
+ * @param patch The patch.
+ */
+export function patchedQuery( query: Record< string, string >, patch: Query ): Record< string, string > {
+	const next: Record< string, string > = { ...query };
+
+	Object.entries( patch ).forEach( ( [ key, value ] ) => {
+		if ( value === undefined ) {
+			delete next[ key ];
+		} else {
+			next[ key ] = value;
+		}
+	} );
+
+	return next;
+}

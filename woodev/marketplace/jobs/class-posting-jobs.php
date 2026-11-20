@@ -98,7 +98,7 @@ final class Posting_Jobs {
 	private $poll_option;
 
 	/**
-	 * Where a finished poll is recorded; null records nothing.
+	 * Where a poll attempt that ended without an error is recorded (a partial catch-up included); null records nothing.
 	 *
 	 * @var Posting_Poll_Times|null
 	 */
@@ -116,7 +116,7 @@ final class Posting_Jobs {
 	 * @param Job_Names               $names      Hook names of the plugin.
 	 * @param string                  $adapter_id The marketplace's id (the adapter's `id()`).
 	 * @param string                  $poll_option Key of the settings option that holds the poll interval, as {@see self::option_key()} builds it.
-	 * @param Posting_Poll_Times|null $poll_times Where a finished poll is recorded (since 2.1.13); null records nothing.
+	 * @param Posting_Poll_Times|null $poll_times Where a poll attempt that ended without an error is recorded (since 2.1.13); null records nothing.
 	 */
 	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id, string $poll_option, ?Posting_Poll_Times $poll_times = null ) {
 		$this->poll_times  = $poll_times;

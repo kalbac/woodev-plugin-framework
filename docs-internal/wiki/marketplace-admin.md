@@ -956,7 +956,9 @@ active marketplace plugin (operator review s238, LIST.md §4.1). It **hosts** ea
   `get_marketplace_page_url( 'orders', $query )` and the v1 redirect lead there (`Admin_Collector::get_page_url()`), and its
   route forwards in the browser (`movedTo` on its manifest entry → `MovedPage`, history `replace`, the old route's arguments kept).
 - **Client** (`src/marketplace-admin/orders-page/`, the marketplace bundle; manifest key `ordersPage`). URL arguments: `marketplace`
-  (a plugin id; anything else = the first marketplace) and `tab=analytics` (absent = «Заказы»); a switch of either drops every
+  (a plugin id; one the page does not have — a deactivated plugin, lost access — shows the first marketplace and is rewritten to
+  it with the switch's clearing BEFORE its table mounts, so a stale link's account and filters never reach another plugin's table:
+  `stalePresetPatch()`) and `tab=analytics` (absent = «Заказы»); a switch of either drops every
   argument of the table that was left. The marketplace select leads the filter row (`RecordsTable` prop `leadingFilter`) and is
   not drawn with one marketplace — the account select's rule. The help links are the plugin's «Заказы» page's. No merged «all
   marketplaces» list: accounts, actions and statuses are per marketplace, the same reason the table shows one account at a time.
@@ -969,10 +971,14 @@ active marketplace plugin (operator review s238, LIST.md §4.1). It **hosts** ea
 - **Orders table.** Icons: open `visibility`, labels `media-document`, cancel `remove`. Advanced filters: «Статус на маркетплейсе»
   (`posting_status`, `options_source`: its options are list facets — the stored `status_raw` codes under the account's other
   filters, with counts, named by `Posting_Status_Text`; two codes named alike keep the code in brackets) and «Статус заказа».
-  «Статус данных»: «Обновлено» = the last `poll_postings` run that read the account's postings to the end
+  «Статус данных»: «Последний опрос» = the last `poll_postings` ATTEMPT that ended without an error
   (`Jobs\Posting_Poll_Times`, option `woodev_{plugin id}_postings_polled`, written by `Posting_Jobs::poll()` since 2.1.13, so
-  «Ни разу» until the first poll after the update; a skipped or failed poll writes nothing), «Обновится» = the account's next
-  poll in Action Scheduler («Сейчас» while it runs). None for an adapter without a posting handler.
+  «Ни разу» until the first poll after the update; a skipped or failed poll writes nothing), «Следующий опрос» = the account's
+  next poll in Action Scheduler («Сейчас» while it runs). None for an adapter without a posting handler. ⚠ It is NOT a «read
+  to the end» certificate: `Posting_Handler::catch_up()` is void, and Ozon's catch-up stops inside its 20 s budget with a window
+  or cursor left (first 30-day catch-up, recovery after an outage) and returns normally — so a partial run is recorded too, and
+  the label and tooltip say «опрос», never «обновлено» (critic of PR #1890). Certifying completion needs an optional completion
+  signal from the handler — a contract this card did not add.
 
 ## Stored cards list (framework 2.1.13, #1863)
 

@@ -294,7 +294,8 @@ final class PostingJobsTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * A poll that read the postings to the end is recorded for the «Статус данных» block; a skipped or failed one is not.
+	 * A poll attempt that ended without an error is recorded as «Последний опрос» (a handler that stopped within its budget
+	 * included — `catch_up()` cannot say so); a skipped or failed one is not.
 	 *
 	 * @return void
 	 */

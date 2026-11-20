@@ -66,6 +66,13 @@ final class SiteOrdersDataStatusTest extends TestCase {
 		$this->assertSame( [ '2026-11-20 09:00', 'Сейчас' ], $this->values( true ), 'Action Scheduler answers true while the poll runs.' );
 	}
 
+	public function test_the_block_names_poll_attempts_and_never_promises_that_every_change_was_read(): void {
+		$block = ( new Site_Orders_Data_Status( new Posting_Poll_Times( 'ozon-seller' ), '__return_false' ) )->for_account( 7 );
+
+		$this->assertSame( [ 'Последний опрос', 'Следующий опрос' ], array_column( $block['items'], 'label' ), 'A void catch_up() cannot say the read finished, so the label says «опрос», not «Обновлено».' );
+		$this->assertStringContainsString( 'может прочитать не все изменения', $block['title'], 'The tooltip says a poll may leave the rest for the next one.' );
+	}
+
 	public function test_a_broken_option_reads_as_never(): void {
 		$this->options['woodev_ozon-seller_postings_polled'] = 'garbage';
 

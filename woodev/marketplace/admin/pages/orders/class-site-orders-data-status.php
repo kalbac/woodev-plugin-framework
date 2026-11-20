@@ -12,10 +12,11 @@ use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * When the account's orders were last read from the marketplace and when they will be read again — the two columns «Заказы
- * доставки» shows in its own «Статус данных» block. «Обновлено» is the last poll that read the postings to the end
- * ({@see Posting_Poll_Times}); «Обновится» is the next run of the account's recurring poll in Action Scheduler. Nothing here calls
- * the marketplace.
+ * When the site last polled the marketplace for the account's orders and when it polls again — the shape of the «Статус данных»
+ * block of «Заказы доставки». «Последний опрос» is the last poll ATTEMPT that ended without an error ({@see Posting_Poll_Times});
+ * it does not certify that every change was read — a marketplace handler may stop within its time budget and go on in the next
+ * poll, and the void `catch_up()` does not say so — and the words promise no more than that. «Следующий опрос» is the next run of
+ * the account's recurring poll in Action Scheduler. Nothing here calls the marketplace.
  *
  * @since 2.1.13
  */
@@ -85,15 +86,15 @@ final class Site_Orders_Data_Status {
 		return [
 			'items' => [
 				[
-					'label' => __( 'Обновлено', 'woodev-plugin-framework' ),
+					'label' => __( 'Последний опрос', 'woodev-plugin-framework' ),
 					'value' => null === $last ? __( 'Ни разу', 'woodev-plugin-framework' ) : self::date( $last ),
 				],
 				[
-					'label' => __( 'Обновится', 'woodev-plugin-framework' ),
+					'label' => __( 'Следующий опрос', 'woodev-plugin-framework' ),
 					'value' => self::next_value( $next ),
 				],
 			],
-			'title' => __( 'Когда заказы аккаунта в последний раз проверялись на маркетплейсе и когда проверятся снова.', 'woodev-plugin-framework' ),
+			'title' => __( 'Когда сайт в последний раз опрашивал маркетплейс о заказах аккаунта и когда опросит снова. За один опрос сайт может прочитать не все изменения — остальное он дочитает в следующих.', 'woodev-plugin-framework' ),
 		];
 	}
 

@@ -529,8 +529,8 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( [ $this->account_id ], $asked, 'The next run of this account\'s poll.' );
 		$this->assertSame(
 			[
-				[ 'label' => 'Обновлено', 'value' => '2026-11-15' ],
-				[ 'label' => 'Обновится', 'value' => 'Сейчас' ],
+				[ 'label' => 'Последний опрос', 'value' => '2026-11-15' ],
+				[ 'label' => 'Следующий опрос', 'value' => 'Сейчас' ],
 			],
 			$status['items']
 		);

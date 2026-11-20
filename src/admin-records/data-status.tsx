@@ -1,7 +1,7 @@
 /**
- * The «Статус данных» block at the end of the filter row: a label above a bordered bar with «label above value» columns
- * («Обновлено», «Обновится»), the shape «Заказы доставки» copied from WooCommerce's own block. Every word comes from PHP — the
- * list response's `data_status` and the definition's `data_status` message.
+ * The «Статус данных» block at the end of the filter row: a label above a bordered bar with «label above value» columns (the
+ * orders table's «Последний опрос», «Следующий опрос»), the shape «Заказы доставки» copied from WooCommerce's own block. Every
+ * word comes from PHP — the list response's `data_status` and the definition's `data_status` message.
  *
  * @package woodev-plugin-framework
  */

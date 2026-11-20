@@ -10,7 +10,7 @@
  */
 
 import { SelectControl } from '@wordpress/components';
-import { useMemo } from '@wordpress/element';
+import { useEffect, useMemo } from '@wordpress/element';
 import { RecordsTable, useActionExtensions } from '../../admin-records';
 import { createActivityExtensions } from '../../admin-records/activity';
 import { EmptyCard } from '../../admin-records/states';
@@ -18,7 +18,16 @@ import { getNavigate } from '../../admin-records/wc-runtime';
 import { FolderTabs } from '../../components/folder-tabs';
 import HelpLink, { ProblemsHelpContext } from '../../components/help-link';
 import type { OrdersPageManifest, OrdersPageMarketplace, WcPageProps } from '../types';
-import { ANALYTICS_TAB, ORDERS_TAB, activeMarketplace, activeTab, marketplacePatch, tabPatch } from './route';
+import {
+	ANALYTICS_TAB,
+	ORDERS_TAB,
+	activeMarketplace,
+	activeTab,
+	marketplacePatch,
+	patchedQuery,
+	stalePresetPatch,
+	tabPatch,
+} from './route';
 
 interface PageProps {
 	page: OrdersPageManifest;
@@ -77,9 +86,21 @@ function AnalyticsTab( { page }: { page: OrdersPageManifest } ) {
 	);
 }
 
-export function OrdersPage( { page, query }: PageProps ) {
+/**
+ * The page. A URL naming a marketplace the page does not have is put right first: the table is mounted with the cleaned query at
+ * once (never with the stale account and filters), and the URL is then patched the same way through wc-admin's navigation.
+ */
+export function OrdersPage( { page, query: routeQuery }: PageProps ) {
+	const stale = stalePresetPatch( page, routeQuery );
+	const query = stale === null ? routeQuery : patchedQuery( routeQuery, stale );
 	const marketplace = activeMarketplace( page, query );
 	const tab = activeTab( query );
+
+	useEffect( () => {
+		if ( stale !== null ) {
+			getNavigate()?.( stale );
+		}
+	}, [ stale === null ? '' : JSON.stringify( stale ) ] ); // eslint-disable-line react-hooks/exhaustive-deps -- the patch's content, not its identity.
 
 	return (
 		<ProblemsHelpContext.Provider value={ marketplace.problems ?? null }>

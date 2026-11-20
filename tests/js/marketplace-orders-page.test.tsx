@@ -173,6 +173,26 @@ describe( 'the page', () => {
 		expect( navigate ).toHaveBeenLastCalledWith( { marketplace: 'ozon-seller', account: undefined } );
 	} );
 
+	test( 'a stale preset with another plugin\'s account opens the shown marketplace from scratch and fixes the URL', async () => {
+		render( <OrdersPage page={ ordersPage( [ WB, OZON ] ) } query={ { marketplace: 'yandex-market', account: '7', filter_state: 'open' } } /> );
+		await screen.findByRole( 'table', { name: 'Заказы маркетплейсов' } );
+
+		const paths = fetchMock.mock.calls.map( ( [ options ] ) => decodeURIComponent( options.path ) );
+
+		expect( new Set( requestedOwners() ) ).toEqual( new Set( [ 'wildberries' ] ) );
+		expect( paths.some( ( path ) => path.includes( 'account_id' ) && path.includes( '7' ) ) ).toBe( false );
+		expect( paths.some( ( path ) => path.includes( 'state' ) ) ).toBe( false );
+		expect( navigate ).toHaveBeenCalledWith( { marketplace: 'wildberries', account: undefined, filter_state: undefined } );
+		expect( screen.getByRole( 'combobox', { name: 'Маркетплейс' } ) ).toHaveValue( 'wildberries' );
+	} );
+
+	test( 'a URL that names its marketplace is left alone', async () => {
+		render( <OrdersPage page={ ordersPage( [ OZON, WB ] ) } query={ { marketplace: 'ozon-seller', account: 'a1' } } /> );
+		await screen.findByRole( 'table', { name: 'Заказы маркетплейсов' } );
+
+		expect( navigate ).not.toHaveBeenCalled();
+	} );
+
 	test( 'the analytics tab is a shell in PHP\'s words and reads no table', () => {
 		render( <OrdersPage page={ ordersPage( [ OZON ] ) } query={ { tab: 'analytics' } } /> );
 

@@ -12,9 +12,11 @@ use Woodev\Framework\Marketplace\Data\Uninstaller;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * The time of the last poll that read an account's postings to the end, per account, in one option of the plugin's family (so the
- * uninstaller takes it with the rest). The «Заказы маркетплейсов» page shows it as «Обновлено»: a poll that was skipped (no licence,
- * a paused account) or failed records nothing, so the time never claims a read that did not happen.
+ * The time of the last poll attempt that ended without an error, per account, in one option of the plugin's family (so the
+ * uninstaller takes it with the rest). The «Заказы маркетплейсов» page shows it as «Последний опрос». A poll that was skipped (no
+ * licence, a paused account) or failed records nothing; a poll that stopped within the handler's time budget and left the rest for
+ * the next one IS recorded — `Posting_Handler::catch_up()` returns nothing to tell the two apart — so the time says when the site
+ * last asked, never that every change was read.
  *
  * @since 2.1.13
  */
@@ -43,7 +45,7 @@ final class Posting_Poll_Times {
 	}
 
 	/**
-	 * Records a finished poll of an account.
+	 * Records a poll attempt of an account that ended without an error.
 	 *
 	 * @since 2.1.13
 	 *
@@ -59,12 +61,12 @@ final class Posting_Poll_Times {
 	}
 
 	/**
-	 * The last finished poll of an account.
+	 * The last poll attempt of an account that ended without an error.
 	 *
 	 * @since 2.1.13
 	 *
 	 * @param int $account_id Account id.
-	 * @return int|null Unix time; null when no poll has finished since the record began.
+	 * @return int|null Unix time; null when no poll has ended without an error since the record began.
 	 */
 	public function last( int $account_id ): ?int {
 		$time = $this->all()[ $account_id ] ?? null;
