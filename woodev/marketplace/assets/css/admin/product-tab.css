@@ -387,60 +387,7 @@ button.woodev-mp-badge--problem:focus {
 	display: none !important;
 }
 
-/* The dialog of the badge's problems and of the help: one native `<dialog>`, built by the script. */
-.woodev-mp-dialog {
-	box-sizing: border-box;
-	width: min(560px, calc(100vw - 32px));
-	max-height: min(640px, calc(100vh - 64px));
-	padding: 0;
-	border: 1px solid #c3c4c7;
-	border-radius: 4px;
-	background: #fff;
-	color: #1d2327;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-}
-
-.woodev-mp-dialog[open] {
-	display: flex;
-	flex-direction: column;
-}
-
-.woodev-mp-dialog::backdrop {
-	background: rgba(0, 0, 0, 0.5);
-}
-
-.woodev-mp-dialog__head {
-	flex: 0 0 auto;
-	padding: 16px 20px 0;
-}
-
-.woodev-mp-dialog__title {
-	margin: 0;
-	padding: 0;
-	font-size: 18px;
-	line-height: 1.4;
-}
-
-.woodev-mp-dialog__body {
-	flex: 1 1 auto;
-	padding: 8px 20px;
-	overflow-y: auto;
-}
-
-.woodev-mp-dialog__body h3 {
-	margin: 16px 0 6px;
-	font-size: 14px;
-}
-
-.woodev-mp-dialog__body p {
-	margin: 0 0 10px;
-}
-
-.woodev-mp-dialog__close {
-	align-self: flex-end;
-	margin: 8px 20px 16px;
-}
-
+/* The dialog of the badge's problems and of the help is the shared `.woodev-dialog` (woodev-dialog.css); only its content is styled here. */
 .woodev-mp-problems__list {
 	margin: 0 0 12px;
 	padding: 0;
@@ -448,13 +395,13 @@ button.woodev-mp-badge--problem:focus {
 }
 
 .woodev-mp-problems__list .woodev-mp-issue,
-.woodev-mp-dialog__body > .woodev-mp-issue {
+.woodev-dialog__body > .woodev-mp-issue {
 	position: relative;
 	padding-left: 20px;
 }
 
 .woodev-mp-problems__list .woodev-mp-issue::before,
-.woodev-mp-dialog__body > .woodev-mp-issue::before {
+.woodev-dialog__body > .woodev-mp-issue::before {
 	position: absolute;
 	top: 4px;
 	left: 0;

@@ -18,7 +18,6 @@ export const STYLES = {
 	group: { margin: '0 0 8px' },
 	groupHeading: { fontWeight: 600 },
 	examples: { color: '#50575e' },
-	footer: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-end', marginTop: '24px' },
 	reason: { color: '#50575e' },
 	busy: { display: 'flex', gap: '8px', alignItems: 'center', margin: '0 0 16px' },
 } satisfies Record< string, CSSProperties >;

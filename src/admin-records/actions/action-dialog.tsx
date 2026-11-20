@@ -9,8 +9,9 @@
  * @package woodev-plugin-framework
  */
 
-import { Button, Modal, Notice, Spinner } from '@wordpress/components';
+import { Button, Notice, Spinner } from '@wordpress/components';
 import { ProblemsLink } from '../../components/help-link';
+import { WoodevDialog } from '../../components/woodev-dialog';
 import { useEffect } from '@wordpress/element';
 import type { TableHandle } from '../extensions';
 import type { Messages } from '../types';
@@ -214,12 +215,11 @@ export function ActionDialog( { flow, table }: ActionDialogProps ) {
 	const showForm = stage === 'input' || stage === 'planning' || stage === 'previewed' || ( stage === 'applying' && action.fields.length > 0 );
 
 	return (
-		<Modal
+		<WoodevDialog
 			title={ action.label }
 			onRequestClose={ flow.close }
-			shouldCloseOnClickOutside={ false }
-			shouldCloseOnEsc={ stage !== 'applying' }
-			isDismissible={ stage !== 'applying' }
+			dismissible={ stage !== 'applying' }
+			footer={ <Footer flow={ flow } table={ table } messages={ messages } /> }
 		>
 			<div className="woodev-records__dialog" data-action={ action.id } data-stage={ stage } aria-busy={ stage === 'planning' || stage === 'applying' }>
 				{ scope !== '' && (
@@ -246,10 +246,7 @@ export function ActionDialog( { flow, table }: ActionDialogProps ) {
 				{ stage === 'applying' && <Busy text={ actionMessage( messages, ACTION_MESSAGE_KEYS.applying ) } /> }
 				{ stage === 'done' && result && <ResultView result={ result } messages={ messages } /> }
 				{ stage === 'failed' && <FailureView state={ state } messages={ messages } /> }
-				<div className="woodev-records__dialog-footer" style={ STYLES.footer }>
-					<Footer flow={ flow } table={ table } messages={ messages } />
-				</div>
 			</div>
-		</Modal>
+		</WoodevDialog>
 	);
 }

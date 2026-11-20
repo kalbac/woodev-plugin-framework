@@ -5,6 +5,7 @@
 
 @use '../components/tokens' as wd;
 @use '../components/table-chrome';
+@use '../components/woodev-dialog';
 
 .woodev-records {
 	// The filter labels of «Заказы доставки» and the settings: sentence case, never upper case. A labelled `SelectControl`

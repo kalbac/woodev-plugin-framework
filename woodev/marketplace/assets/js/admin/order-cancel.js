@@ -14,6 +14,8 @@
 		return;
 	}
 
+	// The shared dialog (`woodev-dialog.js`): «✕», «Не отменять» and the backdrop close it, Esc comes with the native element.
+	var handle     = window.WoodevDialog.attach( dialog );
 	var select     = document.getElementById( 'woodev-mp-cancel-reason' );
 	var messageRow = document.getElementById( 'woodev-mp-cancel-message-row' );
 	var message    = document.getElementById( 'woodev-mp-cancel-message' );
@@ -63,7 +65,7 @@
 		message.value = '';
 		messageRow.hidden = true;
 		say( dialog.getAttribute( 'data-loading' ) );
-		dialog.showModal();
+		handle.open();
 
 		post( order.reasonsAction ).then( function ( answer ) {
 			if ( ! answer || ! answer.success ) {
@@ -97,9 +99,6 @@
 		}
 	} );
 	select.addEventListener( 'change', syncMessage );
-	document.getElementById( 'woodev-mp-cancel-close' ).addEventListener( 'click', function () {
-		dialog.close();
-	} );
 	confirm.addEventListener( 'click', function () {
 		confirm.disabled = true;
 		say( dialog.getAttribute( 'data-sending' ) );

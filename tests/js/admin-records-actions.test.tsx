@@ -14,6 +14,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import apiFetch from '@wordpress/api-fetch';
 import { RecordsTable, useActionExtensions } from '../../src/admin-records';
 import { bulkButton } from './bulk-actions';
+import { footerButton } from './dialog-parts';
 import { createActivityExtensions, type ActivityExtensions } from '../../src/admin-records/activity';
 import {
 	fixtureDefinition,
@@ -494,7 +495,7 @@ describe( 'apply', () => {
 		expect( within( dialog ).getByText( 'Не удалось сохранить' ) ).toBeInTheDocument();
 		expect( within( dialog ).getByText( 'Ошибка:' ) ).toBeInTheDocument();
 
-		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Закрыть' } ) );
+		fireEvent.click( footerButton( dialog, 'Закрыть' ) );
 		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument() );
 		expect( within( row( 'p1' ) ).getByRole( 'link', { name: 'Кружка (обновлена)' } ) ).toBeInTheDocument();
 		expect( document.querySelector( 'tr[data-key="p2"]' ) ).toBeNull();
@@ -679,7 +680,7 @@ describe( 'refusals and lost answers', () => {
 
 		await within( dialog ).findByText( 'Идёт фоновая работа по аккаунту.' );
 		expect( within( dialog ).queryByRole( 'button', { name: 'Выгрузить товар' } ) ).not.toBeInTheDocument();
-		expect( within( dialog ).getByRole( 'button', { name: 'Закрыть' } ) ).toBeInTheDocument();
+		expect( footerButton( dialog, 'Закрыть' ) ).toBeInTheDocument();
 		expect( applies() ).toHaveLength( 1 );
 	} );
 
@@ -825,7 +826,7 @@ describe( 'bulk actions', () => {
 
 		await within( dialog ).findByText( 'Готово.' );
 		expect( applies()[ 0 ].data ).toMatchObject( { ids: [ 'p1', 'p2' ], confirmed: true, payload: { warehouse: 'w1' } } );
-		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Закрыть' } ) );
+		fireEvent.click( footerButton( dialog, 'Закрыть' ) );
 		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument() );
 		expect( screen.getByRole( 'checkbox', { name: /Кружка/ } ) ).not.toBeChecked();
 	} );
