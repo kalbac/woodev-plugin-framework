@@ -381,6 +381,37 @@
 		width: 52px;
 	}
 
+	// On a 1024px screen (the card is 908px wide with the menu collapsed) the fixed columns give a little back, so a table with a photo and a
+	// row of three action icons fits without a sideways scroll: the article 10px, «На сайте» 10px, the photo 6px (the name's `left` follows).
+	@media ( max-width: 1100px ) {
+		.woodev-records__col-sku,
+		.woodev-records__col-offer_id {
+			max-width: 120px;
+			min-width: 120px;
+			width: 120px;
+		}
+
+		.woodev-records__col-on_site {
+			max-width: 110px;
+			min-width: 110px;
+			width: 110px;
+		}
+
+		.woodev-records__col-image {
+			max-width: 46px;
+			min-width: 46px;
+			width: 46px;
+		}
+
+		&.has-image .woodev-records__col-name {
+			left: 86px;
+		}
+
+		&.has-expand.has-image .woodev-records__col-name {
+			left: 114px;
+		}
+	}
+
 	.woodev-records__thumb {
 		background: #f0f0f1;
 		border-radius: 4px;
