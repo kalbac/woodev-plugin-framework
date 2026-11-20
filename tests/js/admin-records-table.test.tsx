@@ -605,15 +605,15 @@ describe( 'URL round trip', () => {
 	describe( 'footer pager', () => {
 		const pager = () => within( screen.getByTestId( 'card-footer' ) );
 
-		test( 'a table of one page still has the pager: the count, both arrows off, the jump field off and the size', async () => {
+		test( 'a table of one page has the size control and no page arrows or jump field', async () => {
 			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 2 } ) } );
 			await renderTable();
 
-			expect( pager().getByText( 'Страница 1 из 1' ) ).toBeInTheDocument();
-			expect( pager().getByRole( 'button', { name: 'Предыдущая страница' } ) ).toBeDisabled();
-			expect( pager().getByRole( 'button', { name: 'Следующая страница' } ) ).toBeDisabled();
-			expect( pager().getByRole( 'spinbutton', { name: 'Перейти на страницу' } ) ).toBeDisabled();
 			expect( pager().getByRole( 'combobox', { name: 'Строк на странице' } ) ).toBeInTheDocument();
+			expect( pager().queryByText( 'Страница 1 из 1' ) ).not.toBeInTheDocument();
+			expect( pager().queryByRole( 'button', { name: 'Предыдущая страница' } ) ).not.toBeInTheDocument();
+			expect( pager().queryByRole( 'button', { name: 'Следующая страница' } ) ).not.toBeInTheDocument();
+			expect( pager().queryByRole( 'spinbutton', { name: 'Перейти на страницу' } ) ).not.toBeInTheDocument();
 		} );
 
 		test( 'the arrows step one page, in the URL', async () => {

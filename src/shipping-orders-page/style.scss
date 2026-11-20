@@ -7,6 +7,7 @@
  */
 
 @use '../components/tokens' as wd;
+@use '../components/table-look';
 @use '../components/wp-recolor';
 @use '../components/field';
 @use '../components/stepper';
@@ -712,6 +713,36 @@
 	td {
 		padding-left: 12px;
 		padding-right: 12px;
+	}
+}
+
+// The same header height and one-row footer as the records tables ({@see ../components/table-look}).
+.woodev-orders {
+	@include table-look.header-height;
+	@include table-look.footer-row;
+}
+
+/**
+ * The widths of the columns (#1903, #1902) — WooCommerce's own orders list does it this way (`.column-order_number { width: 20ch }`):
+ * a column with predictable content gets a width in `ch`; a text column gets none, takes what is left and wraps, an unbroken
+ * email or tracking number included (`overflow-wrap: anywhere` lowers its minimum width to one character, so the table fits a
+ * 1024px screen). The checkbox and the action buttons keep their own pixels.
+ */
+.woodev-orders .woocommerce-table__table {
+	.woodev-orders-col-order {
+		width: 12ch;
+	}
+
+	.woodev-orders-col-date {
+		width: 12ch;
+	}
+
+	.woodev-orders-col-status {
+		width: 14ch;
+	}
+
+	.woodev-orders-col-text {
+		overflow-wrap: anywhere;
 	}
 }
 

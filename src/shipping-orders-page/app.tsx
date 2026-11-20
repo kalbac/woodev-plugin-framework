@@ -129,8 +129,11 @@ import OrderWizard from './order-wizard/order-wizard';
 import type { SaveResult } from './order-wizard/types';
 import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-globals';
 
-/** Rows per page — increment 1's REST default. */
-const DEFAULT_PER_PAGE = 20;
+/**
+ * Rows per page: the smallest of WooCommerce's own page-size picker (25, 50, 75, 100). A page of any other size (it was 20) leaves the
+ * picker's `<select>` with no matching option, so it shows its first one, 25, over a page of 20 rows (#1902).
+ */
+const DEFAULT_PER_PAGE = 25;
 
 /**
  * The id of the «Документ формируется…» snackbar. Given a fixed id so the page can TAKE IT DOWN the moment the wait
@@ -1285,13 +1288,14 @@ function buildHeaders( {
 			// the dropdown with no caption beside it (operator, rig, 13.09.2026).
 			required: true,
 		},
-		{ key: 'ID', label: __( 'Заказ', 'woodev-plugin-framework' ), isSortable: true, required: true },
-		{ key: 'date', label: __( 'Дата', 'woodev-plugin-framework' ), isSortable: true, required: true },
-		{ key: 'status', label: __( 'Статус', 'woodev-plugin-framework' ), required: true },
-		{ key: 'customer', label: __( 'Покупатель', 'woodev-plugin-framework' ) },
-		{ key: 'shipping', label: __( 'Доставка', 'woodev-plugin-framework' ) },
-		{ key: 'payment', label: __( 'Оплата', 'woodev-plugin-framework' ) },
-		{ key: 'tracking', label: __( 'Трек', 'woodev-plugin-framework' ) },
+		// The classes size the columns ({@see ./style.scss}): a predictable column gets a width in `ch`, a text column wraps.
+		{ key: 'ID', label: __( 'Заказ', 'woodev-plugin-framework' ), isSortable: true, required: true, cellClassName: 'woodev-orders-col-order' },
+		{ key: 'date', label: __( 'Дата', 'woodev-plugin-framework' ), isSortable: true, required: true, cellClassName: 'woodev-orders-col-date' },
+		{ key: 'status', label: __( 'Статус', 'woodev-plugin-framework' ), required: true, cellClassName: 'woodev-orders-col-status' },
+		{ key: 'customer', label: __( 'Покупатель', 'woodev-plugin-framework' ), cellClassName: 'woodev-orders-col-text' },
+		{ key: 'shipping', label: __( 'Доставка', 'woodev-plugin-framework' ), cellClassName: 'woodev-orders-col-text' },
+		{ key: 'payment', label: __( 'Оплата', 'woodev-plugin-framework' ), cellClassName: 'woodev-orders-col-text' },
+		{ key: 'tracking', label: __( 'Трек', 'woodev-plugin-framework' ), cellClassName: 'woodev-orders-col-text' },
 		{ key: 'actions', label: __( 'Действие', 'woodev-plugin-framework' ) },
 	];
 }

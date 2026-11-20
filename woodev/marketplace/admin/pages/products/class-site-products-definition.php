@@ -218,6 +218,7 @@ final class Site_Products_Definition {
 				'label'     => __( 'Остатки', 'woodev-plugin-framework' ),
 				'cell_type' => 'text',
 				'sort_key'  => 'stock',
+				'align'     => 'right',
 				/* translators: %s: marketplace name. */
 				'help'      => sprintf( __( 'Остаток на сайте / остаток на %s. «—» значит, что значения нет: например, товар ещё не выгружен.', 'woodev-plugin-framework' ), $marketplace ),
 			],
@@ -226,6 +227,7 @@ final class Site_Products_Definition {
 				'label'     => __( 'Цены', 'woodev-plugin-framework' ),
 				'cell_type' => 'text',
 				'sort_key'  => 'price',
+				'align'     => 'right',
 				/* translators: %s: marketplace name. */
 				'help'      => sprintf( __( 'Цена на сайте / цена на %s. «—» значит, что значения нет: например, товар ещё не выгружен.', 'woodev-plugin-framework' ), $marketplace ),
 			],

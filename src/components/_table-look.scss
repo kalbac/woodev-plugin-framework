@@ -1,0 +1,39 @@
+// What every table card of the admin shares — the delivery orders page and the records engine: the look of its header cells and
+// of its footer. Mixins only (no CSS of their own), so a bundle that uses one carries nothing else of this file.
+//
+// @package woodev-plugin-framework
+
+// A header cell is as tall as in WooCommerce's own orders list (`thead th { padding: .75em 1em }`; the sides stay the table's own).
+// A sortable heading is a button of its own height inside the cell, which would add to the padding: it gives its height back.
+@mixin header-height {
+	.woocommerce-table__header {
+		padding-bottom: 0.75em;
+		padding-top: 0.75em;
+
+		.components-button {
+			height: auto;
+			min-height: 0;
+			padding-bottom: 0;
+			padding-top: 0;
+		}
+	}
+}
+
+// The card's footer is ONE row: the pager (its page-size select, the page arrows when there are several pages), then the count.
+// WooCommerce stacks them in a column, the count under the pager: its `Flex` writes the direction with `!important`, which only
+// an `!important` of ours beats.
+@mixin footer-row {
+	.components-card__footer {
+		align-items: center;
+		column-gap: 32px;
+		flex-direction: row !important;
+		flex-wrap: wrap;
+		justify-content: center;
+
+		// The pager keeps a 16px margin under it for the stacked footer; in a row it would lift the pager above the count's middle.
+		> .woocommerce-pagination,
+		> .woocommerce-table__summary {
+			margin: 0;
+		}
+	}
+}
