@@ -83,7 +83,7 @@ infrastructure folders are new and sit outside the dependency scanner's scope.
 | `flows/` | `Flows` | export service, link writing/detaching/matching, labels, order query/store | F9b |
 | `settings/` | `Settings` | settings handler and sections | F10 |
 | `admin/guard/`, `admin/notices/`, `admin/diagnostics/`, `admin/shared/` | `Admin\…` | admin guard, key-expiry notices, diagnostics report, code-to-sentence mappers shared by several screens | F10 |
-| `admin/product/`, `admin/order/` | `Admin\Product`, `Admin\Order` | embedded classic product tab and order metabox | F11 |
+| `admin/product/`, `admin/order/` | `Admin\Product`, `Admin\Order` | embedded classic product tab and order metabox; the «Источник» filter of the WooCommerce orders list (`Order_Source_Filter`, #1880: views, dropdown, per-user choice in user meta, default shop-only; one singleton for every marketplace plugin, HPOS and posts list) | F11 |
 | `admin/pages/{products,orders,mappings,tools,diagnostics}/` | `Admin\Pages\…` | records providers and custom-view endpoints | F12a–F15 |
 
 Client code: `src/marketplace-admin/` (routing bundle, built to
