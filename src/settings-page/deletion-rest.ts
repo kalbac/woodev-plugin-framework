@@ -18,6 +18,8 @@ export interface DeletionCount {
 export interface DeletionPreview {
 	counts: DeletionCount[];
 	kept: string;
+	/** «Аккаунт включён. Выключить и удалить? …» while the account is switched on; '' once it is off. */
+	enabled_note: string;
 	warnings: string[];
 }
 
@@ -34,7 +36,6 @@ export interface DeletionProgress {
 export interface DeletionState {
 	deleted: boolean;
 	can_delete: boolean;
-	refusal: string;
 	preview: DeletionPreview | null;
 	deletion: DeletionProgress | null;
 }
@@ -51,8 +52,8 @@ export function fetchDeletion( url: string ): Promise< DeletionState > {
 }
 
 /**
- * Starts the deletion. The server checks the capability, the nonce, that the account is switched off and that `confirm` is its
- * identifier.
+ * Starts the deletion. The server checks the capability, the nonce and that `confirm` is the account's identifier, then
+ * switches an account that is still on off and queues the job.
  *
  * @param url     The account's deletion route.
  * @param confirm The identifier the merchant typed.

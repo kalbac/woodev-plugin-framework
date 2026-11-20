@@ -170,7 +170,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		abstract protected function get_marketplace_menu(): array;
 
 		/**
-		 * The pages besides «Настройки», in menu order. The default is the framework's five; a plugin overrides it to drop a page its
+		 * The pages besides «Настройки», in menu order. The default is the framework's five («Диагностика» is built into the menu only
+		 * while «Логирование» is on, whoever lists it); a plugin overrides it to drop a page its
 		 * marketplace cannot support, to add one, or to attach `legacy_page` URLs to a default (call the parent, then change the
 		 * array). «Настройки» is not listed: the framework adds it, by itself, when the plugin has settings providers — first while
 		 * {@see self::is_configured()} is false, last once it is true.
@@ -211,7 +212,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 					'view'  => 'tools',
 				],
 				[
-					'slug'  => 'diagnostics',
+					'slug'  => Page::DIAGNOSTICS_SLUG,
 					'title' => __( 'Диагностика', 'woodev-plugin-framework' ),
 					'kind'  => Page::KIND_CUSTOM,
 					'view'  => 'diagnostics',
@@ -575,7 +576,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				$settings = $this->has_settings_page() ? [ $this->build_settings_page() ] : [];
 
 				foreach ( $this->get_marketplace_pages() as $descriptor ) {
-					$pages[] = Page::from_array( (array) $descriptor );
+					$page = Page::from_array( (array) $descriptor );
+
+					if ( Page::DIAGNOSTICS_SLUG !== $page->get_slug() || $this->logging()->is_enabled() ) {
+						$pages[] = $page;
+					}
 				}
 
 				// WordPress links the root to the first page of the menu: «Настройки» (onboarding) until the plugin is configured,

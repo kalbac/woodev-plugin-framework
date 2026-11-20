@@ -13,8 +13,8 @@ use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Read-only: four counts (links, tasks, postings, documents), the sentence that WooCommerce orders stay, and the warnings that
- * apply to this account. Changes nothing and calls no marketplace.
+ * Read-only: four counts (links, tasks, postings, documents), the sentence that products and WooCommerce orders stay, the note that
+ * an enabled account is switched off first, and the warnings that apply to this account. Changes nothing and calls no marketplace.
  *
  * @since 2.1.5
  */
@@ -61,7 +61,7 @@ final class Account_Deletion_Preview {
 	 * @since 2.1.5
 	 *
 	 * @param Account $account Account.
-	 * @return array{counts:array<int,array{key:string,label:string,count:int}>,kept:string,warnings:string[]}
+	 * @return array{counts:array<int,array{key:string,label:string,count:int}>,kept:string,enabled_note:string,warnings:string[]}
 	 */
 	public function describe( Account $account ): array {
 		$numbers = $this->numbers( $account->id() );
@@ -76,10 +76,20 @@ final class Account_Deletion_Preview {
 		}
 
 		return [
-			'counts'   => $counts,
-			'kept'     => __( 'Заказы WooCommerce остаются в магазине: они удаляются отдельно.', 'woodev-plugin-framework' ),
-			'warnings' => $this->warnings( $account, $numbers['postings'] ),
+			'counts'       => $counts,
+			'kept'         => __( 'Товары и заказы WooCommerce остаются в магазине: заказы удаляются отдельно.', 'woodev-plugin-framework' ),
+			'enabled_note' => $account->is_enabled() ? self::enabled_note() : '',
+			'warnings'     => $this->warnings( $account, $numbers['postings'] ),
 		];
+	}
+
+	/**
+	 * What the merchant is told about an account that is still switched on: it is switched off, and what that stops.
+	 *
+	 * @return string
+	 */
+	private static function enabled_note(): string {
+		return __( 'Аккаунт включён. Выключить и удалить? Перед удалением плагин выключит аккаунт: остатки, цены и заказы по нему перестанут синхронизироваться. Связи товаров с карточками и записи об отправлениях будут удалены.', 'woodev-plugin-framework' );
 	}
 
 	/**

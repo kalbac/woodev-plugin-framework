@@ -10,6 +10,7 @@
 
 import type { ReactNode } from 'react';
 import type { AccountsTab } from './accounts-view';
+import TabDescription from './tab-description';
 
 /**
  * Whether a tab draws its sections stacked.
@@ -42,6 +43,7 @@ export interface StackedHeading {
 export default function StackedView( { tab, renderSection }: StackedViewProps ) {
 	return (
 		<div className="woodev-stacked">
+			<TabDescription tab={ tab } />
 			{ ( tab.sections || [] ).map( ( section ) => (
 				<section key={ section.id } className="woodev-stacked__section">
 					{ renderSection( tab, section.id, { title: section.label ?? '', subtitle: section.subtitle } ) }

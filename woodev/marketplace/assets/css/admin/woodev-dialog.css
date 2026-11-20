@@ -57,9 +57,13 @@ dialog.woodev-dialog::backdrop {
 	background: rgba(0, 0, 0, 0.5);
 }
 
-/* The Modal of `@wordpress/components`: its own header is hidden, ours is drawn, so the frame only lays the parts out. */
+/* The Modal of `@wordpress/components`: its own header is hidden, ours is drawn, so the frame only lays the parts out.
+   The frame never grows past the screen (the Modal's own limit is a percentage of the overlay, which a tall dialog slipped past at
+   1024x768, hiding the footer): the content takes the same limit, so the body scrolls while the header and footer stay in view. */
 .woodev-dialog.components-modal__frame {
 	min-width: min(420px, calc(100vw - 32px));
+	max-height: calc(100vh - 64px);
+	max-height: calc(100dvh - 64px);
 }
 
 .woodev-dialog.components-modal__frame.has-size-medium {
@@ -70,9 +74,21 @@ dialog.woodev-dialog::backdrop {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
+	max-height: inherit;
 	margin: 0;
 	padding: 0;
 	overflow: hidden;
+}
+
+/* Newer WordPress builds put one more element between the content and our parts (`.components-modal__children-container`, plain
+   `display: block` with no height limit). It joins the column, so the header, the body and the footer lay out the same with or
+   without it: the body takes what is left and scrolls, the other two never move. */
+.woodev-dialog .components-modal__children-container {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	max-height: inherit;
 }
 
 .woodev-dialog__header {

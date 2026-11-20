@@ -166,6 +166,27 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertSame( [ 'general', 'advanced' ], array_column( $tabs[0]['sections'], 'id' ) );
 	}
 
+	public function test_a_tab_carries_its_description_only_when_it_has_one(): void {
+		$handler = $this->make_connection_handler();
+		$section = [ Settings_Section::create( 'general', 'Общие', [ 'api_key' ] ) ];
+		$plain   = Settings_Provider::create( 'plain', 'Обычная', $handler, $section );
+		$told    = Settings_Provider::create( 'told', 'С описанием', $handler, $section, [ 'description' => 'Для чего эта вкладка.' ] );
+		$allow   = static function (): bool {
+			return true;
+		};
+
+		$tabs = Settings_Page_Registry::instance()->build_tabs(
+			[
+				[ 'provider' => $plain, 'is_woocommerce' => false ],
+				[ 'provider' => $told, 'is_woocommerce' => false ],
+			],
+			$allow
+		);
+
+		$this->assertArrayNotHasKey( 'description', $tabs[0], 'the schema of a tab without one is unchanged' );
+		$this->assertSame( 'Для чего эта вкладка.', $tabs[1]['description'] );
+	}
+
 	public function test_build_tabs_omits_tabs_the_user_cannot_access(): void {
 		$registry = Settings_Page_Registry::instance();
 

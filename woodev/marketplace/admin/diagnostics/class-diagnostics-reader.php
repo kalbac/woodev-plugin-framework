@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Diagnostics;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Age;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
@@ -278,7 +279,7 @@ final class Diagnostics_Reader {
 	}
 
 	/**
-	 * Formats a past timestamp as a relative Russian string (`5 мин назад`, `только что`).
+	 * Formats a past timestamp as a relative Russian string (`5 минут назад`, `только что`), the same words on every site locale.
 	 *
 	 * @since 2.1.2
 	 *
@@ -291,13 +292,7 @@ final class Diagnostics_Reader {
 			return '—';
 		}
 
-		$diff = $now - $timestamp;
-		if ( $diff < 60 ) {
-			return __( 'только что', 'woodev-plugin-framework' );
-		}
-
-		/* translators: %s: human-readable elapsed time from human_time_diff(). */
-		return sprintf( __( '%s назад', 'woodev-plugin-framework' ), human_time_diff( $timestamp, $now ) );
+		return Russian_Age::ago( $now - $timestamp );
 	}
 
 	/**

@@ -75,8 +75,8 @@ final class Settings_Module {
 
 		$section_providers = [ $accounts_sections, $defaults ];
 		$tabs              = [
-			new Settings_Tab( 'connection', __( 'Подключение', 'woodev-plugin-framework' ), [ $accounts_sections, 'connection_sections' ] ),
-			new Settings_Tab( 'parameters', __( 'Параметры аккаунта', 'woodev-plugin-framework' ), [ $accounts_sections, 'parameter_sections' ] ),
+			new Settings_Tab( 'connection', __( 'Подключение', 'woodev-plugin-framework' ), [ $accounts_sections, 'connection_sections' ], false, $accounts_sections->connection_description() ),
+			new Settings_Tab( 'parameters', __( 'Параметры аккаунта', 'woodev-plugin-framework' ), [ $accounts_sections, 'parameter_sections' ], false, $accounts_sections->parameters_description() ),
 		];
 
 		if ( $defaults->has_fields() ) {

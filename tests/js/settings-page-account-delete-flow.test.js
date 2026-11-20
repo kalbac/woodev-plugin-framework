@@ -18,10 +18,11 @@ const card = {
 const preview = {
 	counts: [ { key: 'links', label: 'Связи товаров с карточками', count: 12 }, { key: 'postings', label: 'Отправления', count: 3 } ],
 	kept: 'Заказы WooCommerce остаются в магазине.',
+	enabled_note: '',
 	warnings: [ 'Адрес уведомлений может остаться в кабинете.' ],
 };
 
-const state = ( overrides = {} ) => ( { deleted: false, can_delete: true, refusal: '', preview, deletion: null, ...overrides } );
+const state = ( overrides = {} ) => ( { deleted: false, can_delete: true, preview, deletion: null, ...overrides } );
 
 const flow = ( onClose = jest.fn() ) => render( createElement( AccountDeleteFlow, { card, onClose } ) );
 
@@ -34,7 +35,7 @@ test( 'a state belongs to one screen: preview, progress, done or the refusal', (
 	expect( phaseOf( state( { deletion: { state: 'failed', removed: {}, message: 'x', step: '' } } ) ) ).toBe( 'preview' );
 	expect( phaseOf( state( { deletion: { state: 'running', removed: {}, message: '', step: '' } } ) ) ).toBe( 'progress' );
 	expect( phaseOf( state( { deleted: true, can_delete: false, preview: null } ) ) ).toBe( 'done' );
-	expect( phaseOf( state( { can_delete: false, refusal: 'Сначала выключите аккаунт.', preview: null } ) ) ).toBe( 'error' );
+	expect( phaseOf( state( { can_delete: false, preview: null } ) ) ).toBe( 'error' );
 } );
 
 test( 'only the exact identifier confirms', () => {
@@ -108,12 +109,37 @@ test( 'a deletion already running opens on the progress, and the end shows what 
 	expect( screen.getAllByText( 'Уберите адрес в кабинете.' ).length ).toBeGreaterThan( 0 );
 }, 10000 );
 
-test( 'an account that cannot be deleted shows the reason and only closes', async () => {
-	fetchDeletion.mockResolvedValue( state( { can_delete: false, refusal: 'Сначала выключите аккаунт.', preview: null } ) );
+test( 'an account that cannot be deleted says so and only closes', async () => {
+	fetchDeletion.mockResolvedValue( state( { can_delete: false, preview: null } ) );
 	const onClose = jest.fn();
 	flow( onClose );
 
-	expect( ( await screen.findAllByText( 'Сначала выключите аккаунт.' ) ).length ).toBeGreaterThan( 0 );
+	expect( ( await screen.findAllByText( 'Аккаунт сейчас нельзя удалить.' ) ).length ).toBeGreaterThan( 0 );
 	fireEvent.click( footerButton( screen.getByRole( 'dialog' ), 'Закрыть' ) );
 	expect( onClose ).toHaveBeenCalledTimes( 1 );
+} );
+
+test( 'an enabled account is asked «Выключить и удалить?» and the button says so; the typed identifier is still required', async () => {
+	const note = 'Аккаунт включён. Выключить и удалить? Остатки, цены и заказы перестанут синхронизироваться.';
+	fetchDeletion.mockResolvedValue( state( { preview: { ...preview, enabled_note: note } } ) );
+	startDeletion.mockResolvedValue( state( { deletion: { state: 'running', removed: {}, message: '', step: '' } } ) );
+	flow();
+
+	expect( await screen.findByText( note ) ).toBeInTheDocument();
+	expect( screen.queryByRole( 'button', { name: 'Удалить аккаунт' } ) ).toBeNull();
+	expect( screen.getByRole( 'button', { name: 'Выключить и удалить' } ) ).toBeDisabled();
+
+	fireEvent.change( screen.getByRole( 'textbox' ), { target: { value: '41801' } } );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Выключить и удалить' } ) );
+
+	await waitFor( () => expect( startDeletion ).toHaveBeenCalledWith( card.delete_url, '41801' ) );
+} );
+
+test( 'a switched-off account has no note and the plain button', async () => {
+	fetchDeletion.mockResolvedValue( state() );
+	flow();
+
+	await screen.findByText( 'Связи товаров с карточками:' );
+	expect( screen.queryByText( /Выключить и удалить/ ) ).toBeNull();
+	expect( screen.getByRole( 'button', { name: 'Удалить аккаунт' } ) ).toBeInTheDocument();
 } );

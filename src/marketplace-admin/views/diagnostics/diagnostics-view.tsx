@@ -1,8 +1,9 @@
 /**
- * The «Диагностика» page: the operational state always, and the diagnostic sections and the support report while
- * «Логирование» is on.
+ * The «Диагностика» page: the operational state, the diagnostic sections and the support report.
  *
- * Every section is a card of the settings page's look: the heading inside, the lines as `dl.woodev-facts`.
+ * The menu lists the page only while «Логирование» is on, so the page has no switch of its own. One white wrapper card holds an
+ * intro sentence and a card per section (the heading inside, the lines as `dl.woodev-facts`). A page left open after the
+ * merchant switched «Логирование» off says so and keeps only the operational sections.
  *
  * @package woodev-plugin-framework
  */
@@ -13,7 +14,7 @@ import { ProblemsLink } from '../../../components/help-link';
 import type { PageViewProps } from '../../types';
 import { errorLines } from '../mappings/api';
 import { createDiagnosticsApi } from './api';
-import { copyOutcome, loggingSwitchLabel } from './report';
+import { copyOutcome } from './report';
 import type { DiagnosticsReport, DiagnosticsSection, DiagnosticsState } from './types';
 
 interface NoticeState {
@@ -62,15 +63,6 @@ export function DiagnosticsView( { menu }: PageViewProps ) {
 
 	const { messages } = state;
 
-	const toggle = () => {
-		api.setLogging( ! enabled )
-			.then( () => {
-				setNotice( null );
-				load();
-			} )
-			.catch( ( error ) => setNotice( { status: 'error', lines: errorLines( error, messages.switchFailed ) } ) );
-	};
-
 	const copy = () => {
 		// `navigator.clipboard` is undefined on a plain-http admin: say so and point at the text below instead of throwing.
 		if ( ! navigator.clipboard ) {
@@ -86,42 +78,41 @@ export function DiagnosticsView( { menu }: PageViewProps ) {
 
 	return (
 		<div className="woodev-settings woodev-settings--marketplace woodev-diagnostics-view">
-			{ notice && (
-				<Notice status={ notice.status } onRemove={ () => setNotice( null ) }>
-					{ notice.lines.join( ' ' ) }
-					<ProblemsLink status={ notice.status } />
-				</Notice>
-			) }
 			<Card className="woodev-settings__card">
 				<CardBody>
-					<h3 className="woodev-group__title">{ messages.loggingHeading }</h3>
-					<p className="woodev-group__desc">{ enabled ? messages.loggingOn : messages.loggingOff }</p>
-					<Button variant={ enabled ? 'secondary' : 'primary' } onClick={ toggle }>
-						{ loggingSwitchLabel( enabled, messages ) }
-					</Button>
+					<p className="woodev-settings__section-desc">{ messages.intro }</p>
+					{ notice && (
+						<Notice status={ notice.status } onRemove={ () => setNotice( null ) }>
+							{ notice.lines.join( ' ' ) }
+							<ProblemsLink status={ notice.status } />
+						</Notice>
+					) }
+					{ ! enabled && (
+						<Notice status="warning" isDismissible={ false }>
+							{ messages.loggingOff }
+						</Notice>
+					) }
+					<Sections sections={ state.operational } />
+					{ enabled && report && (
+						<>
+							<Sections sections={ report.diagnostic } />
+							<div className="woodev-group">
+								<h3 className="woodev-group__title">{ messages.reportHeading }</h3>
+								<p className="woodev-group__desc">{ messages.reportHint }</p>
+								<Button variant="primary" onClick={ copy }>
+									{ messages.copyReport }
+								</Button>
+								<textarea
+									className="large-text code woodev-diagnostics-view__report"
+									rows={ 18 }
+									readOnly
+									value={ report.report }
+								/>
+							</div>
+						</>
+					) }
 				</CardBody>
 			</Card>
-			<Sections sections={ state.operational } />
-			{ enabled && report && (
-				<>
-					<Sections sections={ report.diagnostic } />
-					<Card className="woodev-settings__card">
-						<CardBody>
-							<h3 className="woodev-group__title">{ messages.reportHeading }</h3>
-							<p className="woodev-group__desc">{ messages.reportHint }</p>
-							<Button variant="primary" onClick={ copy }>
-								{ messages.copyReport }
-							</Button>
-							<textarea
-								className="large-text code woodev-diagnostics-view__report"
-								rows={ 18 }
-								readOnly
-								value={ report.report }
-							/>
-						</CardBody>
-					</Card>
-				</>
-			) }
 		</div>
 	);
 }
@@ -130,35 +121,33 @@ export function Sections( { sections }: { sections: DiagnosticsSection[] } ) {
 	return (
 		<>
 			{ sections.map( ( section ) => (
-				<Card key={ section.title } className="woodev-settings__card">
-					<CardBody>
-						<h3 className="woodev-group__title">{ section.title }</h3>
-						<dl className="woodev-facts">
-							{ section.lines.map( ( line ) => (
-								<Fragment key={ line.label }>
-									<dt>{ line.label }</dt>
-									<dd>
-										{ line.monospace ? (
-											<code className="woodev-facts__code">
-												{ line.value }
-											</code>
-										) : (
-											line.value
-										) }
-										{ /* The link is a line of its own: beside the address it wrapped into it. */ }
-										{ line.link && (
-											<div className="woodev-facts__link">
-												<a href={ line.link.url }>
-													{ line.link.text }
-												</a>
-											</div>
-										) }
-									</dd>
-								</Fragment>
-							) ) }
-						</dl>
-					</CardBody>
-				</Card>
+				<div key={ section.title } className="woodev-group">
+					<h3 className="woodev-group__title">{ section.title }</h3>
+					<dl className="woodev-facts">
+						{ section.lines.map( ( line ) => (
+							<Fragment key={ line.label }>
+								<dt>{ line.label }</dt>
+								<dd>
+									{ line.monospace ? (
+										<code className="woodev-facts__code">
+											{ line.value }
+										</code>
+									) : (
+										line.value
+									) }
+									{ /* The link is a line of its own: beside the address it wrapped into it. */ }
+									{ line.link && (
+										<div className="woodev-facts__link">
+											<a href={ line.link.url }>
+												{ line.link.text }
+											</a>
+										</div>
+									) }
+								</dd>
+							</Fragment>
+						) ) }
+					</dl>
+				</div>
 			) ) }
 		</>
 	);

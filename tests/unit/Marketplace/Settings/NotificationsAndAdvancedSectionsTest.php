@@ -65,7 +65,6 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 				return 'https://shop.example/wp-json/' . ltrim( $path, '/' );
 			}
 		);
-		Functions\when( 'human_time_diff' )->justReturn( '2 мин' );
 		Functions\when( 'wc_string_to_bool' )->alias(
 			static function ( string $val ): bool {
 				return 'yes' === $val || '1' === $val || 'true' === $val;

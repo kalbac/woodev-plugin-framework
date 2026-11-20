@@ -246,7 +246,8 @@ final class Settings_Handler extends \Woodev_Abstract_Settings implements \Woode
 		$providers = [];
 
 		foreach ( $tabs as $index => $tab ) {
-			$args = 0 === $index ? $this->provider_args : array_diff_key( $this->provider_args, [ 'legacy_page' => true ] );
+			$args                = 0 === $index ? $this->provider_args : array_diff_key( $this->provider_args, [ 'legacy_page' => true ] );
+			$args['description'] = $tab->description();
 
 			$providers[] = Settings_Provider::create_lazy(
 				0 === $index ? $this->get_id() : $this->get_id() . '-' . $tab->slug(),
