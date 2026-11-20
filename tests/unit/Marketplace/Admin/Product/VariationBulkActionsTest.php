@@ -18,6 +18,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Selection;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Admin\Product\Variation_Bulk_Actions;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Json_Answer;
 use Woodev\Tests\Unit\TestCase;
 
 /**
@@ -106,8 +107,95 @@ final class VariationBulkActionsTest extends TestCase {
 		Actions\expectAdded( 'woocommerce_variable_product_bulk_edit_actions' )->once();
 		Actions\expectAdded( 'woocommerce_bulk_edit_variations' )->once();
 		Actions\expectAdded( 'admin_enqueue_scripts' )->once();
+		Actions\expectAdded( 'wp_ajax_woodev_fake_variations' )->once();
 
 		$this->group()->register();
+	}
+
+	public function test_the_tab_is_told_the_select_the_buttons_and_the_nonce_it_may_offer(): void {
+		Functions\when( 'wp_create_nonce' )->alias(
+			static function ( $action ) {
+				return 'ok:' . $action;
+			}
+		);
+
+		$facts = $this->group()->panel_facts();
+
+		$this->assertSame( 'woodev_fake_variations', $facts['action'] );
+		$this->assertSame( 'ok:woodev_fake_variations', $facts['nonce'] );
+		$this->assertSame( Variation_Bulk_Actions::ACTIONS, array_keys( $facts['select'] ), 'the same nine actions as the Variations tab, in the same order' );
+		$this->assertSame( 'Экспортировать / Обновить карточку', $facts['select']['export'] );
+		$this->assertSame( [ 'export', 'archive', 'detach' ], $facts['buttons'], 'the simple product\'s set' );
+
+		$this->caps = [ 'edit_product' ];
+		$local      = $this->group()->panel_facts();
+
+		$this->assertSame( [ 'detach', 'sync_price_on', 'sync_price_off', 'sync_stock_on', 'sync_stock_off' ], array_keys( $local['select'] ), 'a user without the shop right is not offered a write to the marketplace' );
+		$this->assertArrayNotHasKey( 'export', $local['select'] );
+		$this->assertSame( [ 'detach' ], $local['buttons'] );
+
+		$this->caps = [ 'edit_product', 'manage_woocommerce' ];
+		$withheld   = $this->group( null, [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::PULL_PRICES ] )->panel_facts();
+
+		$this->assertArrayNotHasKey( 'export', $withheld['select'] );
+		$this->assertArrayNotHasKey( 'pull_prices', $withheld['select'] );
+		$this->assertSame( [ 'archive', 'detach' ], $withheld['buttons'] );
+	}
+
+	public function test_the_ajax_runs_the_chosen_action_on_the_ticked_variations_of_the_product_through_the_tables_apply(): void {
+		$answer = $this->ajax( [ 'bulk_action' => 'send_price', 'variations' => [ '101', '103', '999' ] ] );
+
+		$this->assertTrue( $answer->success );
+		$this->assertSame( 'success', $answer->data['tone'] );
+		$this->assertCount( 1, $this->calls );
+		$this->assertSame( Site_Products_Bulk::SEND_PRICE, $this->calls[0]['action'] );
+		$this->assertSame( [ 101, 103 ], $this->calls[0]['offers'], 'a variation that is not the product\'s own is dropped' );
+		$this->assertSame( [ 101 => self::PRODUCT, 103 => self::PRODUCT ], $this->calls[0]['editable'] );
+	}
+
+	public function test_the_ajax_serves_the_buttons_archive_too(): void {
+		$answer = $this->ajax( [ 'bulk_action' => 'archive', 'variations' => [ '102' ] ] );
+
+		$this->assertTrue( $answer->success );
+		$this->assertSame( Site_Products_Bulk::ARCHIVE, $this->calls[0]['action'] );
+	}
+
+	public function test_the_ajax_refuses_a_forged_nonce_an_unknown_action_and_a_list_with_nothing_of_the_products(): void {
+		$forged = $this->ajax( [ '_wpnonce' => 'forged' ] );
+
+		$this->assertFalse( $forged->success );
+		$this->assertSame( 403, $forged->status );
+
+		foreach ( [ 'delete_all', 'reset', 'link_by_article', '' ] as $action ) {
+			$answer = $this->ajax( [ 'bulk_action' => $action ] );
+
+			$this->assertFalse( $answer->success, $action );
+			$this->assertSame( 400, $answer->status, $action );
+		}
+
+		$empty = $this->ajax( [ 'variations' => [ '999', '0' ] ] );
+
+		$this->assertFalse( $empty->success );
+		$this->assertSame( 400, $empty->status );
+		$this->assertSame( [], $this->calls, 'Nothing reached the table.' );
+	}
+
+	public function test_the_ajax_keeps_the_rights_and_the_licence_of_the_variations_tab(): void {
+		$this->caps = [ 'edit_product' ];
+
+		$answer = $this->ajax( [ 'bulk_action' => 'export' ] );
+
+		$this->assertTrue( $answer->success, 'a refusal is a notice, as on the Variations tab' );
+		$this->assertSame( 'error', $answer->data['tone'] );
+		$this->assertSame( 'У вас нет прав на это действие.', $answer->data['text'] );
+		$this->assertSame( [], $this->calls );
+	}
+
+	public function test_a_product_that_is_not_variable_is_refused(): void {
+		$answer = $this->ajax( [], false );
+
+		$this->assertFalse( $answer->success );
+		$this->assertSame( 400, $answer->status );
 	}
 
 	public function test_one_account_gets_one_group_named_after_the_marketplace_with_v1s_nine_actions(): void {
@@ -317,6 +405,53 @@ final class VariationBulkActionsTest extends TestCase {
 		$this->handle( 'woodev_fake_bulk_1_detach', [ 5, 5, 0, 6 ] );
 
 		$this->assertSame( [ 5, 6 ], $this->calls[0]['offers'] );
+	}
+
+	/**
+	 * Runs the tab's own AJAX the way the table's select and the buttons call it.
+	 *
+	 * @param array<string,mixed> $post     What to change in the request.
+	 * @param bool                $variable Whether the product is a variable one.
+	 * @return Json_Answer
+	 */
+	private function ajax( array $post, bool $variable = true ): Json_Answer {
+		$product = Mockery::mock( '\WC_Product' );
+
+		$product->shouldReceive( 'is_type' )->with( 'variable' )->andReturn( $variable );
+		$product->shouldReceive( 'get_id' )->andReturn( self::PRODUCT );
+		$product->shouldReceive( 'get_children' )->andReturn( [ 101, 102, 103 ] );
+
+		Json_Answer::install();
+		Functions\when( 'wp_unslash' )->returnArg();
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\when( 'sanitize_key' )->alias( 'strtolower' );
+		Functions\when( 'wc_get_product' )->justReturn( $product );
+		Functions\when( 'wp_verify_nonce' )->alias(
+			static function ( $nonce, $action ) {
+				return 'ok:' . $action === $nonce ? 1 : false;
+			}
+		);
+
+		$_POST = array_merge(
+			[
+				'_wpnonce'    => 'ok:woodev_fake_variations',
+				'bulk_action' => 'export',
+				'account_id'  => '1',
+				'product_id'  => (string) self::PRODUCT,
+				'variations'  => [ '101' ],
+			],
+			$post
+		);
+
+		try {
+			$this->group()->handle_ajax();
+		} catch ( Json_Answer $answer ) {
+			return $answer;
+		} finally {
+			$_POST = [];
+		}
+
+		$this->fail( 'The handler sent no answer.' );
 	}
 
 	/**

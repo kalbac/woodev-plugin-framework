@@ -25,6 +25,11 @@ final class Panel_View {
 	public const WRAPPER_CLASS = 'woodev-mp-block';
 
 	/**
+	 * The most buttons that still show their words; a group of more shows only the icons.
+	 */
+	public const LABELLED_MAX = 3;
+
+	/**
 	 * Names.
 	 *
 	 * @var Screen_Names
@@ -114,17 +119,6 @@ final class Panel_View {
 		echo '</div>';
 	}
 
-	/**
-	 * Prints the marketplace fields inside one variation (WooCommerce prints this after the variation's own attributes).
-	 *
-	 * Keys of `$screen`: `blocks`, `nonce`, `loop` (position of the variation in the form), `settings_url`, `mappings_url`, and optionally
-	 * `extension` (from {@see Product_Extension::screen()} with the loop: the adapter's own fields of the variation).
-	 *
-	 * @since 2.1.2
-	 *
-	 * @param array<string,mixed> $screen What to print.
-	 * @return void
-	 */
 	public function render_variation( array $screen ): void {
 		if ( [] === $screen['blocks'] ) {
 			return;
@@ -143,6 +137,7 @@ final class Panel_View {
 			printf( '<h4>%s %s</h4>', esc_html( ( $several ? $this->names->name() . ' · ' . $block['account']->name() : $this->names->name() ) . ':' ), $this->state_badge( $block['badge'], $this->problems( $block, $screen ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in state_badge().
 			$this->identifiers( $block, $base, $id );
 			$this->settings_fields( $block, $base, $id, false );
+			$this->variation_buttons( $block, $screen );
 			echo '</div>';
 		}
 
@@ -151,24 +146,14 @@ final class Panel_View {
 		echo '</div>';
 	}
 
-	/**
-	 * Prints the state of the variation in its collapsed header (WooCommerce's `woocommerce_variation_header`), so the merchant sees without
-	 * opening the variation whether it is on the marketplace and whether anything is wrong: one badge per account, the same badge (check, or
-	 * orange «!» with the problems dialog) as inside the opened variation.
-	 *
-	 * Keys of `$screen`: `blocks` (one per account, from {@see Panel_Reader}), `settings_url`, `mappings_url`.
-	 *
-	 * @since 2.1.13
-	 *
-	 * @param array<string,mixed> $screen What to print.
-	 * @return void
-	 */
 	public function render_variation_header( array $screen ): void {
 		$several = count( $screen['blocks'] ) > 1;
 
+		// One slot per marketplace (a name and its badge on one baseline, with room to its right): another marketplace's plugin prints its own
+		// slot after this one, so the header holds as many as there are marketplaces.
 		foreach ( $screen['blocks'] as $block ) {
 			printf(
-				'<span class="woodev-mp-header-state"><span class="woodev-mp-header-state__name">%1$s</span> %2$s</span>',
+				'<span class="woodev-mp-header-state"><span class="woodev-mp-header-state__name">%1$s</span>%2$s</span>',
 				esc_html( $several ? $this->names->name() . ' · ' . $block['account']->name() : $this->names->name() ),
 				$this->state_badge( $block['badge'], $this->problems( $block, $screen ) ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in state_badge().
 			);
@@ -256,34 +241,15 @@ final class Panel_View {
 		);
 	}
 
-	/**
-	 * Prints the fields and the table of a variable product's block.
-	 *
-	 * @param array<string,mixed> $block  Block.
-	 * @param string              $base   Name base.
-	 * @param string              $id     Id prefix.
-	 * @param array<string,mixed> $screen Screen.
-	 * @return void
-	 */
 	private function parent_fields( array $block, string $base, string $id, array $screen ): void {
 		echo '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">' . esc_html__( 'Остатки, цены и проверка — у каждого варианта, во вкладке «Вариации».', 'woodev-plugin-framework' ) . '</span></p>';
 
 		$this->mapping_field( $block['mapping'], $base, $id, $screen );
 		$this->buttons( $block, $screen );
-		$this->variation_table( $block );
+		$this->variation_table( $block, $screen );
 	}
 
-	/**
-	 * Words what a variation's article is waiting for, for the table of the variations.
-	 *
-	 * @param array<string,mixed> $row Row of the variation.
-	 * @return string Escaped markup, '' when there is nothing to say.
-	 */
 	private function article_note( array $row ): string {
-		if ( $row['planned'] ) {
-			return ' <span class="woodev-mp-note">' . esc_html__( '(будет отправлен)', 'woodev-plugin-framework' ) . '</span>';
-		}
-
 		$pending = (string) ( $row['pending'] ?? '' );
 		$failed  = ! empty( $row['rename_failed'] );
 
@@ -298,58 +264,164 @@ final class Panel_View {
 		) . '</span>';
 	}
 
-	/**
-	 * Prints the table of the variations.
-	 *
-	 * @param array<string,mixed> $block Parent block.
-	 * @return void
-	 */
-	private function variation_table( array $block ): void {
+	private function variation_table( array $block, array $screen ): void {
 		if ( [] === $block['rows'] ) {
 			echo '<p class="form-field">' . esc_html__( 'У товара пока нет вариантов, которые продаются на маркетплейсе (виртуальные и скачиваемые не выгружаются).', 'woodev-plugin-framework' ) . '</p>';
 			return;
 		}
 
-		// The wrapper scrolls on a narrow screen: the cells keep to one line each (an article and its «(будет отправлен)» stay together).
-		echo '<div class="woodev-mp-variations-wrap"><table class="widefat striped woodev-mp-variations"><thead><tr>';
+		// Ticking, the select above the table and the buttons of a row exist only when the tab was given the variations' actions.
+		$facts = $screen['variations'] ?? null;
 
-		$headings = [
-			__( 'Вариант', 'woodev-plugin-framework' ),
-			__( 'Состояние', 'woodev-plugin-framework' ),
-			__( 'Артикул', 'woodev-plugin-framework' ),
-			__( 'Остаток', 'woodev-plugin-framework' ),
-			__( 'Цена', 'woodev-plugin-framework' ),
-		];
+		printf(
+			'<div class="woodev-mp-variants" data-account="%1$d" data-product="%2$d" data-action="%3$s" data-nonce="%4$s">',
+			(int) $block['account']->id(),
+			(int) $block['product_id'],
+			esc_attr( (string) ( $facts['action'] ?? '' ) ),
+			esc_attr( (string) ( $facts['nonce'] ?? '' ) )
+		);
 
-		foreach ( $headings as $heading ) {
-			echo '<th scope="col">' . esc_html( $heading ) . '</th>';
+		if ( null !== $facts ) {
+			$this->variants_toolbar( $facts, sprintf( '%s_a%d_bulk', $this->names->tab_key(), $block['account']->id() ) );
 		}
 
-		echo '</tr></thead><tbody>';
+		// The wrapper scrolls on a narrow screen: the cells keep to one line each.
+		echo '<div class="woodev-mp-variations-wrap"><table class="woodev-mp-variations"><thead><tr>' . $this->variation_head( null !== $facts ) . '</tr></thead><tbody>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in variation_head().
 
 		foreach ( $block['rows'] as $row ) {
-			printf(
-				'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td>%5$s</td></tr>',
-				esc_html( '' !== $row['name'] ? $row['name'] : '#' . $row['id'] ),
-				$this->badge( $row['badge'] ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in badge().
-				esc_html( $row['offer_id'] ) . $this->article_note( $row ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in article_note().
-				'' === $row['stock'] ? '—' : esc_html( $row['stock'] ),
-				'' === $row['price'] ? '—' : esc_html( trim( $row['price'] . ' ' . $row['currency'] ) )
-			);
+			echo '<tr>' . $this->variation_row( $row, $block, $facts ) . '</tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in variation_row().
 		}
 
-		echo '</tbody></table></div>';
+		echo '</tbody></table></div></div>';
 	}
 
 	/**
-	 * Prints the article of a card the marketplace already has, when the adapter can change it there: the same line with «изменить» as before the export. The
-	 * marketplace keeps the old article until it confirms the new one, so the line says which of the two it is waiting on, and what the marketplace answered when it refused.
+	 * Prints the line above the table: «Выберите действие» + «Применить» (the same actions as the Variations tab's «Bulk actions») and the
+	 * line that answers both the select and the buttons of the rows.
 	 *
-	 * @param array<string,mixed> $ids  The article section of the block.
-	 * @param string              $base  Name base.
-	 * @param string              $id    Id prefix.
+	 * @param array{select:array<string,string>} $facts The variations' actions ({@see \Woodev\Framework\Marketplace\Admin\Product\Variation_Bulk_Actions::panel_facts()}).
+	 * @param string                             $id    Id of the select.
 	 * @return void
 	 */
+	private function variants_toolbar( array $facts, string $id ): void {
+		echo '<div class="woodev-mp-variants__toolbar">';
+
+		if ( [] !== $facts['select'] ) {
+			$options = '<option value="">' . esc_html__( 'Выберите действие', 'woodev-plugin-framework' ) . '</option>';
+
+			foreach ( $facts['select'] as $action => $label ) {
+				$options .= sprintf( '<option value="%1$s">%2$s</option>', esc_attr( (string) $action ), esc_html( $label ) );
+			}
+
+			printf(
+				'<label class="screen-reader-text" for="%1$s">%2$s</label><select id="%1$s" class="woodev-mp-variants__select">%3$s</select> <button type="button" class="button woodev-mp-variants__apply">%4$s</button>',
+				esc_attr( $id ),
+				esc_html__( 'Действие над отмеченными вариантами', 'woodev-plugin-framework' ),
+				$options, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
+				esc_html__( 'Применить', 'woodev-plugin-framework' )
+			);
+		}
+
+		echo '<span class="woodev-mp-result woodev-mp-note" role="status" aria-live="polite"></span></div>';
+	}
+
+	/**
+	 * Builds the heading cells of the table of the variants.
+	 *
+	 * @param bool $with_actions Whether the table has the tick column and the «Действия» column.
+	 * @return string Escaped markup.
+	 */
+	private function variation_head( bool $with_actions ): string {
+		$name  = $this->names->name();
+		$cells = $with_actions ? '<td class="woodev-mp-variations__check"><input type="checkbox" class="woodev-mp-variants__all" aria-label="' . esc_attr__( 'Отметить все варианты', 'woodev-plugin-framework' ) . '" /></td>' : '';
+		$cells .= '<th scope="col" class="woodev-mp-variations__image"><span class="screen-reader-text">' . esc_html__( 'Изображение', 'woodev-plugin-framework' ) . '</span></th>';
+
+		foreach ( [ __( 'Вариант', 'woodev-plugin-framework' ), __( 'Состояние', 'woodev-plugin-framework' ), __( 'Артикул', 'woodev-plugin-framework' ) ] as $heading ) {
+			$cells .= '<th scope="col">' . esc_html( $heading ) . '</th>';
+		}
+
+		$cells .= '<th scope="col">' . esc_html__( 'Остаток', 'woodev-plugin-framework' ) . $this->help_tip( sprintf( /* translators: %s: marketplace name. */ __( 'Слева — остаток на сайте, справа — на %s. Прочерк — данных пока нет.', 'woodev-plugin-framework' ), $name ) ) . '</th>';
+		$cells .= '<th scope="col">' . esc_html__( 'Цена', 'woodev-plugin-framework' ) . $this->help_tip( sprintf( /* translators: %s: marketplace name. */ __( 'Слева — цена на сайте, справа — цена, которую %s получил в последний раз. Прочерк — данных пока нет.', 'woodev-plugin-framework' ), $name ) ) . '</th>';
+
+		return $cells . ( $with_actions ? '<th scope="col" class="woodev-mp-variations__actions">' . esc_html__( 'Действия', 'woodev-plugin-framework' ) . '</th>' : '' );
+	}
+
+	/**
+	 * Builds the cells of one variant: the tick, the picture, the name, the state, the article, the stock and the price as «сайт / маркетплейс»,
+	 * and the buttons.
+	 *
+	 * @param array<string,mixed>      $row   Row of {@see Panel_Reader}.
+	 * @param array<string,mixed>      $block Parent block.
+	 * @param array<string,mixed>|null $facts The variations' actions, null for none.
+	 * @return string Escaped markup.
+	 */
+	private function variation_row( array $row, array $block, ?array $facts ): string {
+		$name  = '' !== $row['name'] ? $row['name'] : '#' . $row['id'];
+		$image = (string) ( $row['image'] ?? '' );
+		$cells = '';
+
+		if ( null !== $facts ) {
+			$cells .= sprintf( '<td class="woodev-mp-variations__check"><input type="checkbox" class="woodev-mp-variants__check" value="%1$d" aria-label="%2$s" /></td>', (int) $row['id'], esc_attr( sprintf( /* translators: %s: name of a variation. */ __( 'Отметить вариант «%s»', 'woodev-plugin-framework' ), $name ) ) );
+		}
+
+		$cells .= '<td class="woodev-mp-variations__image">' . ( '' === $image ? '' : sprintf( '<img src="%s" alt="" width="36" height="36" loading="lazy" />', esc_url( $image ) ) ) . '</td>';
+		// The words in `data-label` are the headings of a row that is stacked on a narrow panel (the heading row is hidden then).
+		$cells .= '<td class="woodev-mp-variations__name">' . esc_html( $name ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__state">' . $this->badge( $row['badge'] ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__article" data-label="' . esc_attr__( 'Артикул', 'woodev-plugin-framework' ) . '">' . esc_html( $row['offer_id'] ) . ( $row['planned'] ? $this->help_tip( __( 'Артикул будет отправлен на маркетплейс вместе с карточкой.', 'woodev-plugin-framework' ) ) : '' ) . $this->article_note( $row ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__stock" data-label="' . esc_attr__( 'Остаток', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_stock'] ?? '' ), (string) $row['stock'] ) ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__price" data-label="' . esc_attr__( 'Цена', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_price'] ?? '' ), (string) $row['price'] ) ) . '</td>';
+
+		if ( null !== $facts ) {
+			$group  = $this->button_group(
+				$this->labels_for( (bool) ( $row['is_new'] ?? true ), ! empty( $row['can_archive'] ), ! empty( $row['can_detach'] ) ),
+				(bool) ( $row['is_new'] ?? true ),
+				$this->variation_attributes( (int) $row['id'], (int) $block['product_id'], (int) $block['account']->id(), $facts ),
+				'woodev-mp-buttons__row--icons'
+			);
+			$cells .= '<td class="woodev-mp-variations__actions">' . $group . '</td>';
+		}
+
+		return $cells;
+	}
+
+	/**
+	 * Words a pair of figures as «сайт / маркетплейс»; a figure that is not known is a dash.
+	 *
+	 * @param string $site   The figure on the site, '' when there is none.
+	 * @param string $remote The figure the marketplace has, '' when there is none.
+	 * @return string E.g. «500 / 480», «— / 0».
+	 */
+	private function site_and_remote( string $site, string $remote ): string {
+		return $this->figure( $site ) . ' / ' . $this->figure( $remote );
+	}
+
+	/**
+	 * Words one figure: whole numbers without decimals, '—' for nothing.
+	 *
+	 * @param string $value Figure as stored.
+	 * @return string
+	 */
+	private function figure( string $value ): string {
+		if ( '' === $value || ! is_numeric( $value ) ) {
+			return '—';
+		}
+
+		$number = (float) $value;
+
+		return (string) ( floor( $number ) === $number ? (int) $number : round( $number, 2 ) );
+	}
+
+	/**
+	 * Builds the «?» that opens a tooltip (WooCommerce draws it from `data-tip`).
+	 *
+	 * @param string $tip Text of the tooltip.
+	 * @return string Escaped markup.
+	 */
+	private function help_tip( string $tip ): string {
+		return sprintf( '<span class="woocommerce-help-tip" tabindex="0" aria-label="%1$s" data-tip="%1$s"></span>', esc_attr( $tip ) );
+	}
+
 	private function renamable_article( array $ids, string $base, string $id ): void {
 		$waiting = '' !== $ids['pending'] && '' === $ids['rename_error'];
 		$failed  = '' !== $ids['pending'] && '' !== $ids['rename_error'];
@@ -366,17 +438,41 @@ final class Panel_View {
 		$this->row(
 			$id . 'offer_id',
 			__( 'Артикул', 'woodev-plugin-framework' ),
-			sprintf(
-				'<span class="woodev-mp-article"><span class="woodev-mp-article__value">%1$s</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="%2$s">%3$s</button>%7$s</span><input type="text" class="short woodev-mp-article__input" id="%2$s" name="%4$s" value="%5$s" placeholder="%6$s" maxlength="50" hidden />',
-				esc_html( $waiting ? $ids['pending'] : $ids['offer_id'] ),
-				esc_attr( $id . 'offer_id' ),
-				esc_html__( 'изменить', 'woodev-plugin-framework' ),
-				esc_attr( $base . '[offer_id]' ),
-				esc_attr( '' !== $ids['pending'] ? $ids['pending'] : $ids['offer_id'] ),
-				esc_attr( $ids['offer_id'] ),
+			$this->article_control(
+				$id . 'offer_id',
+				$base . '[offer_id]',
+				$waiting ? $ids['pending'] : $ids['offer_id'],
+				'' !== $ids['pending'] ? $ids['pending'] : $ids['offer_id'],
+				$ids['offer_id'],
 				'' === $note ? '' : ' <span class="woodev-mp-note' . ( $failed ? ' woodev-mp-error' : '' ) . '">(' . esc_html( $note ) . ')</span>'
 			),
 			sprintf( /* translators: %s: marketplace name. */ __( 'Артикул товара на маркетплейсе. Его можно изменить и после отправки: новый артикул уйдёт на %s отдельным запросом, а до подтверждения товар остаётся под прежним. Если артикул занят или не подходит, останется прежний, а ответ маркетплейса будет в значке «!» у статуса.', 'woodev-plugin-framework' ), $this->names->name() )
+		);
+	}
+
+	/**
+	 * Builds the article: a line with «изменить» that gives way to an input, and beside the input «отменить», which puts the saved article
+	 * back and shows the line again (the script does both; the input keeps posting its value while it is hidden).
+	 *
+	 * @param string $target      Id of the input.
+	 * @param string $name        Name of the input.
+	 * @param string $shown       The article the line shows.
+	 * @param string $value       The value the input starts with: what «отменить» goes back to.
+	 * @param string $placeholder The grey text of an empty input.
+	 * @param string $note        Escaped markup that follows the line (what the article is waiting for), '' for none.
+	 * @return string Escaped markup.
+	 */
+	private function article_control( string $target, string $name, string $shown, string $value, string $placeholder, string $note = '' ): string {
+		return sprintf(
+			'<span class="woodev-mp-article"><span class="woodev-mp-article__value">%1$s</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="%2$s">%3$s</button>%4$s</span><span class="woodev-mp-article__editor" hidden><input type="text" class="woodev-mp-article__input" id="%2$s" name="%5$s" value="%6$s" placeholder="%7$s" maxlength="50" /> <button type="button" class="button-link woodev-mp-article__cancel" aria-controls="%2$s">%8$s</button></span>',
+			esc_html( $shown ),
+			esc_attr( $target ),
+			esc_html__( 'изменить', 'woodev-plugin-framework' ),
+			$note, // Escaped by the caller.
+			esc_attr( $name ),
+			esc_attr( $value ),
+			esc_attr( $placeholder ),
+			esc_html__( 'отменить', 'woodev-plugin-framework' )
 		);
 	}
 
@@ -399,15 +495,7 @@ final class Panel_View {
 			$this->row(
 				$id . 'offer_id',
 				__( 'Артикул', 'woodev-plugin-framework' ),
-				sprintf(
-					'<span class="woodev-mp-article"><span class="woodev-mp-article__value">%1$s</span> <button type="button" class="button-link woodev-mp-article__edit" aria-controls="%2$s">%3$s</button></span><input type="text" class="short woodev-mp-article__input" id="%2$s" name="%4$s" value="%5$s" placeholder="%6$s" maxlength="50" hidden />',
-					esc_html( $planned ),
-					esc_attr( $id . 'offer_id' ),
-					esc_html__( 'изменить', 'woodev-plugin-framework' ),
-					esc_attr( $base . '[offer_id]' ),
-					esc_attr( $ids['offer_id'] ),
-					esc_attr( $ids['auto'] )
-				),
+				$this->article_control( $id . 'offer_id', $base . '[offer_id]', $planned, $ids['offer_id'], $ids['auto'] ),
 				$this->renames
 					? __( 'Артикул товара на маркетплейсе. По умолчанию берётся артикул (SKU) товара; нажмите «изменить», чтобы задать другой. После отправки артикул тоже можно изменить.', 'woodev-plugin-framework' )
 					: __( 'Артикул товара на маркетплейсе. По умолчанию берётся артикул (SKU) товара; нажмите «изменить», чтобы задать другой. После отправки артикул уже не меняется.', 'woodev-plugin-framework' )
@@ -420,7 +508,6 @@ final class Panel_View {
 				__( 'Артикул', 'woodev-plugin-framework' ),
 				'<span>' . esc_html( $ids['offer_id'] ) . '</span>' . $this->article_note(
 					[
-						'planned' => false,
 						'pending' => $ids['pending'] ?? '',
 						'rename_failed' => ! empty( $ids['rename_error'] ),
 					]
@@ -438,7 +525,7 @@ final class Panel_View {
 		$parts = array_values( array_filter( array_map( 'trim', explode( '·', rtrim( trim( $ids['summary'] ), '·' ) ) ), 'strlen' ) );
 		$last  = (string) array_pop( $parts );
 		$last  = '' === $ids['card_url'] || '' === $last ? esc_html( $last ) : sprintf(
-			'<a href="%1$s" target="_blank" rel="noopener noreferrer" title="%2$s">%3$s</a>',
+			'<a class="tips" href="%1$s" target="_blank" rel="noopener noreferrer" data-tip="%2$s">%3$s</a>',
 			esc_url( $ids['card_url'] ),
 			esc_attr( sprintf( /* translators: %s: marketplace name. */ __( 'Открыть на %s', 'woodev-plugin-framework' ), $this->names->name() ) ),
 			esc_html( $last )
@@ -520,15 +607,6 @@ final class Panel_View {
 		];
 	}
 
-	/**
-	 * Builds the state badge of a product with what the check found: a check mark when nothing is wrong; an orange badge with «!» that opens a
-	 * dialog listing every problem when something is. The dialog's content travels in a `<template>` next to the badge (the script copies it
-	 * into one dialog it creates on the page), so a variation loaded later by WooCommerce works without any request.
-	 *
-	 * @param array{label:string,tone:string}   $badge    Badge of {@see Card_State_Badge}.
-	 * @param array{count:int,html:string}|null $problems What {@see self::problems()} found; null for a plain badge without a mark.
-	 * @return string Escaped markup.
-	 */
 	private function state_badge( array $badge, ?array $problems ): string {
 		if ( null === $problems ) {
 			return $this->badge( $badge );
@@ -536,14 +614,15 @@ final class Panel_View {
 
 		$label = '<span class="woodev-mp-badge__label">' . esc_html( $badge['label'] ) . '</span>';
 
+		// The mark stands to the right of the words. The tooltip is WooCommerce's (`tips` + `data-tip`), which draws on hover and on focus.
 		if ( 0 === $problems['count'] ) {
-			return sprintf( '<span class="woodev-mp-badge woodev-mp-badge--%1$s" title="%2$s"><span class="woodev-mp-badge__icon woodev-mp-badge__icon--ok" aria-hidden="true"></span>%3$s</span>', esc_attr( $badge['tone'] ), esc_attr__( 'Проблем не найдено', 'woodev-plugin-framework' ), $label );
+			return sprintf( '<span class="woodev-mp-badge woodev-mp-badge--%1$s tips" data-tip="%2$s">%3$s<span class="woodev-mp-badge__icon woodev-mp-badge__icon--ok" aria-hidden="true"></span></span>', esc_attr( $badge['tone'] ), esc_attr__( 'Проблем не найдено', 'woodev-plugin-framework' ), $label );
 		}
 
-		$hint = sprintf( /* translators: %d: number of problems. */ __( 'Замечаний: %d. Нажмите, чтобы посмотреть.', 'woodev-plugin-framework' ), $problems['count'] );
+		$hint = sprintf( /* translators: %d: number of problems. */ __( 'Есть проблемы (%d) — нажмите, чтобы посмотреть', 'woodev-plugin-framework' ), $problems['count'] );
 
 		return sprintf(
-			'<button type="button" class="woodev-mp-badge woodev-mp-badge--problem woodev-mp-badge--button" data-woodev-mp-dialog title="%1$s" aria-haspopup="dialog"><span class="woodev-mp-badge__icon woodev-mp-badge__icon--problem" aria-hidden="true"></span>%2$s</button><template data-title="%3$s">%4$s</template>',
+			'<button type="button" class="woodev-mp-badge woodev-mp-badge--problem woodev-mp-badge--button tips" data-woodev-mp-dialog data-tip="%1$s" aria-haspopup="dialog">%2$s<span class="screen-reader-text">%1$s</span><span class="woodev-mp-badge__icon woodev-mp-badge__icon--problem" aria-hidden="true"></span></button><template data-title="%3$s">%4$s</template>',
 			esc_attr( $hint ),
 			$label,
 			esc_attr__( 'Проверка товара', 'woodev-plugin-framework' ),
@@ -715,7 +794,7 @@ final class Panel_View {
 		if ( isset( $screen['mappings_url'] ) ) {
 			$title = __( 'Перейти на страницу сопоставлений', 'woodev-plugin-framework' );
 			$link  = sprintf(
-				'<a class="woodev-mp-row-link" href="%1$s" target="_blank" rel="noopener noreferrer" title="%2$s" aria-label="%2$s">%3$s</a>',
+				'<a class="woodev-mp-row-link tips" href="%1$s" target="_blank" rel="noopener noreferrer" data-tip="%2$s" aria-label="%2$s">%3$s</a>',
 				esc_url( (string) $screen['mappings_url'] ),
 				esc_attr( $title ),
 				'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'
@@ -725,40 +804,140 @@ final class Panel_View {
 		$this->row( $id . 'mapping_id', __( 'Сопоставление', 'woodev-plugin-framework' ), '<span class="woodev-mp-with-action">' . $select . $link . '</span>', __( 'Какой категории маркетплейса и какому набору характеристик соответствует товар. Обычно подходит «По категории»: сопоставление берётся из категории товара на сайте.', 'woodev-plugin-framework' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
 	}
 
+	private function buttons( array $block, array $screen ): void {
+		$confirm = $this->confirmations();
+		$group   = $this->button_group(
+			$this->button_labels( $block ),
+			$this->export_is_new( $block ),
+			function ( string $op ) use ( $block, $screen, $confirm ): ?string {
+				// The user may not press it: the guard would refuse, so the screen does not offer it.
+				return isset( $screen['ops'][ $op ] ) ? $this->op_attributes( $op, $block, $screen ) . ' data-confirm="' . esc_attr( $confirm[ $op ] ?? '' ) . '"' : null;
+			}
+		);
+
+		$this->print_button_line( $group );
+	}
+
 	/**
-	 * Prints the action buttons as one group in one row.
+	 * Prints the buttons of one variation inside its opened panel: the simple product's set, acting on this variation.
 	 *
-	 * @param array<string,mixed> $block  Block.
-	 * @param array<string,mixed> $screen Screen (`ops`).
+	 * @param array<string,mixed> $block  Block of the variation.
+	 * @param array<string,mixed> $screen Screen (`variations`, `parent_id`).
 	 * @return void
 	 */
-	private function buttons( array $block, array $screen ): void {
-		$labels  = $this->button_labels( $block );
-		$confirm = [
+	private function variation_buttons( array $block, array $screen ): void {
+		if ( ! isset( $screen['variations'] ) ) {
+			return;
+		}
+
+		$this->print_button_line(
+			$this->button_group(
+				$this->button_labels( $block ),
+				$this->export_is_new( $block ),
+				$this->variation_attributes( (int) $block['product_id'], (int) ( $screen['parent_id'] ?? 0 ), (int) $block['account']->id(), $screen['variations'] )
+			)
+		);
+	}
+
+	/**
+	 * Prints a group of buttons as one row of the form with the line that shows what the buttons answered.
+	 *
+	 * @param string $group Escaped markup of {@see self::button_group()}; nothing is printed for ''.
+	 * @return void
+	 */
+	private function print_button_line( string $group ): void {
+		if ( '' === $group ) {
+			return;
+		}
+
+		echo '<p class="form-field woodev-mp-buttons">' . $group . '<span class="woodev-mp-result woodev-mp-note" role="status" aria-live="polite"></span></p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in button_group().
+	}
+
+	/**
+	 * Builds the data attributes a variation's button carries: it posts to the variations' AJAX with the variation's id.
+	 *
+	 * @param int                 $variation_id Variation.
+	 * @param int                 $parent_id    Its variable product.
+	 * @param int                 $account_id   Account.
+	 * @param array<string,mixed> $facts        The variations' actions (`action`, `nonce`, `buttons`).
+	 * @return callable `function ( string $op ): ?string`: the escaped attributes of the button, null for a button not offered.
+	 */
+	private function variation_attributes( int $variation_id, int $parent_id, int $account_id, array $facts ): callable {
+		$confirm = $this->confirmations();
+
+		return function ( string $op ) use ( $variation_id, $parent_id, $account_id, $facts, $confirm ): ?string {
+			if ( ! in_array( $op, $facts['buttons'], true ) ) {
+				return null;
+			}
+
+			return sprintf(
+				'data-woodev-mp-vop="%1$s" data-action="%2$s" data-nonce="%3$s" data-product="%4$d" data-variation="%5$d" data-account="%6$d" data-confirm="%7$s"',
+				esc_attr( $op ),
+				esc_attr( (string) $facts['action'] ),
+				esc_attr( (string) $facts['nonce'] ),
+				$parent_id,
+				$variation_id,
+				$account_id,
+				esc_attr( $confirm[ $op ] ?? '' )
+			);
+		};
+	}
+
+	/**
+	 * Returns the question a destructive button asks before it acts (the second click answers it).
+	 *
+	 * @return array<string,string> `op` => question.
+	 */
+	private function confirmations(): array {
+		return [
 			'archive' => sprintf( /* translators: %s: marketplace name. */ __( 'Точно архивировать на %s? Нажмите ещё раз.', 'woodev-plugin-framework' ), $this->names->name() ),
 			'detach'  => __( 'Точно снять связь? Нажмите ещё раз.', 'woodev-plugin-framework' ),
 		];
+	}
 
-		// One group of adjacent buttons, one row, never two. A button is an icon and its words; the stylesheet shows only the icon while the row is too
-		// narrow for the words (a container query), so the name goes in `aria-label` and in a short tooltip: the explanations are in «Подсказки».
-		echo '<p class="form-field woodev-mp-buttons"><span class="woodev-mp-buttons__row button-group" role="group" aria-label="' . esc_attr__( 'Действия с карточкой', 'woodev-plugin-framework' ) . '">';
+	/**
+	 * Builds a group of buttons: ONE WordPress button group, one row, never two. A button is an icon and its words. Up to {@see self::LABELLED_MAX}
+	 * buttons keep their words (the script drops them, with `.is-compact`, when even that few do not fit the width they have); more are icons only. The name is in the
+	 * tooltip (WooCommerce's own, drawn from `data-tip`: a browser's `title` does not show in every host of the product screen) and in `aria-label`.
+	 *
+	 * @param array<string,string> $labels     `op` => label.
+	 * @param bool                 $is_new     Whether the export button sends a card for the first time (its icon).
+	 * @param callable             $attributes `function ( string $op ): ?string` giving the escaped attributes of a button, null for a button not offered.
+	 * @param string               $modifier   Extra class of the group.
+	 * @return string Escaped markup, '' when no button is offered.
+	 */
+	private function button_group( array $labels, bool $is_new, callable $attributes, string $modifier = '' ): string {
+		$buttons = [];
 
 		foreach ( $labels as $op => $label ) {
-			if ( ! isset( $screen['ops'][ $op ] ) ) {
-				continue; // The user may not press it: the guard would refuse, so the screen does not offer it.
+			$attrs = $attributes( (string) $op );
+
+			if ( null === $attrs ) {
+				continue;
 			}
 
-			printf(
-				'<button type="button" class="button woodev-mp-btn%1$s" %2$s data-confirm="%3$s" title="%4$s" aria-label="%4$s">%5$s<span class="woodev-mp-btn__text">%4$s</span></button>',
+			$buttons[] = sprintf(
+				'<button type="button" class="button woodev-mp-btn tips%1$s" %2$s aria-label="%3$s" data-tip="%3$s">%4$s<span class="woodev-mp-btn__text">%5$s</span></button>',
 				'export' === $op ? ' button-primary' : '',
-				$this->op_attributes( $op, $block, $screen ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in op_attributes().
-				esc_attr( $confirm[ $op ] ?? '' ),
+				$attrs, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped by the callback.
 				esc_attr( $label ),
-				$this->op_icon( $op, $this->export_is_new( $block ) ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static markup.
+				$this->op_icon( (string) $op, $is_new ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static markup.
+				esc_html( $label )
 			);
 		}
 
-		echo '</span><span class="woodev-mp-result woodev-mp-note" role="status" aria-live="polite"></span></p>';
+		if ( [] === $buttons ) {
+			return '';
+		}
+
+		$count = count( $buttons );
+
+		return sprintf(
+			'<span class="%1$s" role="group" aria-label="%2$s">%3$s</span>',
+			esc_attr( trim( 'woodev-mp-buttons__row button-group ' . ( $count > self::LABELLED_MAX ? 'woodev-mp-buttons__row--many ' : '' ) . $modifier ) ),
+			esc_attr__( 'Действия с карточкой', 'woodev-plugin-framework' ),
+			implode( '', $buttons )
+		);
 	}
 
 	private function op_attributes( string $op, array $block, array $screen ): string {
@@ -802,24 +981,30 @@ final class Panel_View {
 		return '<svg class="woodev-mp-btn__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . ( $paths[ $op ] ?? '' ) . '</svg>';
 	}
 
-	/**
-	 * Picks the buttons a block offers and their labels. The category-wide «Связать по артикулу» is not among them: it works on many products, so it
-	 * is a text button in the help dialog ({@see Panel_View::help()}), not one of the icons that act on this product.
-	 *
-	 * @param array<string,mixed> $block Block.
-	 * @return array<string,string> `op` => label.
-	 */
 	private function button_labels( array $block ): array {
 		$is_offer = 'offer' === $block['kind'];
-		$labels   = [
-			'export' => $this->export_is_new( $block ) ? __( 'Экспортировать', 'woodev-plugin-framework' ) : __( 'Обновить карточку', 'woodev-plugin-framework' ),
+
+		return $this->labels_for( $this->export_is_new( $block ), $is_offer ? $block['can_archive'] : $block['any_created'], $is_offer ? $block['can_detach'] : $block['any_linked'] );
+	}
+
+	/**
+	 * Names the buttons of a card by what can be done with it.
+	 *
+	 * @param bool $is_new      Whether the card has not been sent («Экспортировать» and not «Обновить карточку»).
+	 * @param bool $can_archive Whether a created card can be archived.
+	 * @param bool $can_detach  Whether the card has a link to take off.
+	 * @return array<string,string> `op` => label.
+	 */
+	private function labels_for( bool $is_new, bool $can_archive, bool $can_detach ): array {
+		$labels = [
+			'export' => $is_new ? __( 'Экспортировать', 'woodev-plugin-framework' ) : __( 'Обновить карточку', 'woodev-plugin-framework' ),
 		];
 
-		if ( $is_offer ? $block['can_archive'] : $block['any_created'] ) {
+		if ( $can_archive ) {
 			$labels['archive'] = sprintf( /* translators: %s: marketplace name. */ __( 'Архивировать на %s', 'woodev-plugin-framework' ), $this->names->name() );
 		}
 
-		if ( $is_offer ? $block['can_detach'] : $block['any_linked'] ) {
+		if ( $can_detach ) {
 			$labels['detach'] = __( 'Снять связь', 'woodev-plugin-framework' );
 		}
 
@@ -912,7 +1097,7 @@ final class Panel_View {
 	 * @return void
 	 */
 	private function row( string $target, string $label, string $control, string $tip ): void {
-		$tooltip = '' === $tip ? '' : sprintf( '<span class="woocommerce-help-tip" tabindex="0" aria-label="%1$s" data-tip="%1$s"></span>', esc_attr( $tip ) );
+		$tooltip = '' === $tip ? '' : $this->help_tip( $tip );
 
 		printf(
 			'<p class="form-field"><label%1$s>%2$s%3$s</label>%4$s</p>',
