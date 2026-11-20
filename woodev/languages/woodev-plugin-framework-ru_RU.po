@@ -12993,3 +12993,16 @@ msgstr ""
 #: marketplace/admin/shared/class-label-availability.php:49
 msgid "Отправление завершено — этикетка не нужна."
 msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:804
+msgid "Статус нового заказа"
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:807
+#, php-format
+msgid "В каком статусе WooCommerce создаётся заказ, пришедший с %s. Дальше статус меняется вместе с отправлением."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php:932
+msgid "Новые заказы"
+msgstr ""
