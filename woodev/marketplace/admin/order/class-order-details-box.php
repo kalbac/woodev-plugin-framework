@@ -61,6 +61,20 @@ final class Order_Details_Box {
 	private $labels_url;
 
 	/**
+	 * Folder URL of the module's assets, with a trailing slash.
+	 *
+	 * @var string
+	 */
+	private $assets_url;
+
+	/**
+	 * Plugin version, for the cache of the stylesheet.
+	 *
+	 * @var string
+	 */
+	private $version;
+
+	/**
 	 * Creates the box.
 	 *
 	 * @since 2.1.13
@@ -70,13 +84,17 @@ final class Order_Details_Box {
 	 * @param callable            $remote_status `function ( int $order_id ): string`, the marketplace's status of an order, '' for none.
 	 * @param Cancel_Modal|null   $modal         The cancel button, when the adapter can cancel.
 	 * @param string              $labels_url    URL of the page that makes labels and documents; '' for an adapter without them.
+	 * @param string              $assets_url    Folder URL of the module's assets, with a trailing slash.
+	 * @param string              $version       Plugin version.
 	 */
-	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, string $labels_url ) {
+	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, string $labels_url, string $assets_url, string $version ) {
 		$this->names         = $names;
 		$this->adapter       = $adapter;
 		$this->remote_status = $remote_status;
 		$this->modal         = $modal;
 		$this->labels_url    = $labels_url;
+		$this->assets_url    = $assets_url;
+		$this->version       = $version;
 	}
 
 	/**
@@ -112,7 +130,9 @@ final class Order_Details_Box {
 	public function render( \WC_Order $order ): void {
 		$heading = trim( $this->posting_number( $order ) . ' ' . $this->status_label( $order ) );
 
-		echo '<div class="panel-wrap woocommerce"><div id="order_data" class="panel woocommerce-order-data">';
+		$this->enqueue_style();
+
+		echo '<div class="panel-wrap woocommerce woodev-mp-details"><div id="order_data" class="panel woocommerce-order-data">';
 
 		if ( '' !== $heading ) {
 			echo '<h2 class="woocommerce-order-data__heading">' . esc_html( $heading ) . '</h2>';
@@ -124,6 +144,15 @@ final class Order_Details_Box {
 		echo '</div><div class="clear"></div>';
 		echo $this->actions( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo '</div></div>';
+	}
+
+	/**
+	 * Enqueues the stylesheet (in the footer: the box is printed in the page body).
+	 *
+	 * @return void
+	 */
+	private function enqueue_style(): void {
+		wp_enqueue_style( 'woodev-marketplace-order-details', $this->assets_url . 'css/admin/order-details' . \Woodev_Plugin::get_assets_suffix() . '.css', [], $this->version );
 	}
 
 	/**

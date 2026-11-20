@@ -84,6 +84,20 @@ final class OrderDetailsBoxTest extends TestCase {
 		$this->assertSame( 'high', $added[0][5] );
 	}
 
+	public function test_it_enqueues_its_stylesheet_and_wraps_the_box_for_it(): void {
+		$styles = [];
+		Functions\when( 'wp_enqueue_style' )->alias(
+			static function ( $handle, $src ) use ( &$styles ) {
+				$styles[ $handle ] = $src;
+			}
+		);
+
+		$html = $this->render( $this->box( $this->adapter() ), $this->order( 700 ) );
+
+		$this->assertStringContainsString( 'woodev-mp-details', $html );
+		$this->assertStringStartsWith( 'https://example.test/assets/css/admin/order-details', $styles['woodev-marketplace-order-details'] );
+	}
+
 	public function test_it_shows_what_the_order_holds(): void {
 		$html = $this->render( $this->box( $this->adapter() ), $this->order( 700 ) );
 
@@ -199,7 +213,9 @@ final class OrderDetailsBoxTest extends TestCase {
 				return $this->remote_status;
 			},
 			$modal,
-			$labels_url
+			$labels_url,
+			'https://example.test/assets/',
+			'1.0'
 		);
 	}
 

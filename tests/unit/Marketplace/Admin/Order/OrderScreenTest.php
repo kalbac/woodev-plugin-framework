@@ -230,7 +230,9 @@ final class OrderScreenTest extends TestCase {
 				return '';
 			},
 			null,
-			''
+			'',
+			'https://example.test/assets/',
+			'1.0'
 		);
 	}
 

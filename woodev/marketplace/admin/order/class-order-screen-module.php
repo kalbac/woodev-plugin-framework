@@ -62,7 +62,8 @@ final class Order_Screen_Module {
 		$adapter  = $plugin->get_marketplace_adapter();
 		$names    = new Screen_Names( $adapter->id(), $adapter->settings_descriptor()->marketplace_name() );
 		$registry = new Order_Registry( $db, ( new Schema( $adapter->id() ) )->table_name( 'postings', $db->prefix ) );
-		$box      = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names ), self::labels_url( $plugin, $adapter ) );
+		$assets   = self::assets_url( $plugin );
+		$box      = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets ), self::labels_url( $plugin, $adapter ), $assets, $plugin->get_version() );
 
 		( new Order_Screen( $adapter->order_meta(), $box ) )->register();
 	}
@@ -73,16 +74,25 @@ final class Order_Screen_Module {
 	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin  Plugin.
 	 * @param Marketplace_Adapter                              $adapter Adapter.
 	 * @param Screen_Names                                     $names   Names.
+	 * @param string                                           $assets  Assets folder URL.
 	 * @return Cancel_Modal|null
 	 */
-	private static function cancel_modal( $plugin, Marketplace_Adapter $adapter, Screen_Names $names ): ?Cancel_Modal {
+	private static function cancel_modal( $plugin, Marketplace_Adapter $adapter, Screen_Names $names, string $assets ): ?Cancel_Modal {
 		if ( ! $adapter instanceof Order_Canceller ) {
 			return null;
 		}
 
-		$assets_url = (string) preg_replace( '#/assets/?$#', '/marketplace/assets/', $plugin->get_framework_assets_url() );
+		return new Cancel_Modal( $names, $adapter, $assets, $plugin->get_version() );
+	}
 
-		return new Cancel_Modal( $names, $adapter, $assets_url, $plugin->get_version() );
+	/**
+	 * Returns the folder URL of the module's assets, with a trailing slash.
+	 *
+	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin Plugin.
+	 * @return string
+	 */
+	private static function assets_url( $plugin ): string {
+		return (string) preg_replace( '#/assets/?$#', '/marketplace/assets/', $plugin->get_framework_assets_url() );
 	}
 
 	/**
