@@ -8,6 +8,7 @@
 
 namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
+use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Rows;
 use Woodev\Tests\Unit\TestCase;
 
@@ -15,6 +16,12 @@ use Woodev\Tests\Unit\TestCase;
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Rows
  */
 final class RemoteCardsRowActionsTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		Functions\when( 'wc_placeholder_img_src' )->justReturn( 'https://example.test/placeholder.png' );
+	}
 
 	/**
 	 * @param bool $importable Whether the table offers «Импортировать».
