@@ -56,6 +56,7 @@ const MESSAGES: Record< string, string > = {
 	columnAttributes: 'Атрибуты',
 	attributesHelp: 'Без обязательных атрибутов товар выгрузить нельзя.',
 	attributesOf: '{filled} из {total}',
+	attributesUncached: 'Откройте сопоставление, чтобы загрузить характеристики.',
 	attributesMissing: 'Не заполнены обязательные атрибуты: {count}',
 	columnProperties: 'Свойства профиля',
 	columnUsedIn: 'Используется в',
@@ -364,13 +365,23 @@ describe( 'lists', () => {
 		expect( calls[ 1 ].path ).toBe( `${ BASE }/attribute-counts` );
 	} );
 
-	test( 'a mapping whose attributes cannot be counted shows a dash, and nothing else changes', async () => {
+	test( 'a mapping whose category fields are not cached is a dash that says how to load them', async () => {
+		serve( { 'GET ': STATE, 'GET /attribute-counts': { counts: [] } } );
+		openView();
+
+		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
+		expect( await within( mappings ).findByLabelText( 'Откройте сопоставление, чтобы загрузить характеристики.' ) ).toHaveTextContent( '—' );
+		expect( within( mappings ).queryByText( /из/ ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a failed counts read leaves a plain dash and the list as it was', async () => {
 		serve( { 'GET ': STATE, 'GET /attribute-counts': new Error( 'нет связи' ) } );
 		openView();
 
 		const mappings = await screen.findByRole( 'table', { name: 'Сопоставления' } );
 		await act( async () => {} );
 		expect( within( mappings ).queryByText( /из/ ) ).not.toBeInTheDocument();
+		expect( within( mappings ).queryByLabelText( 'Откройте сопоставление, чтобы загрузить характеристики.' ) ).not.toBeInTheDocument();
 		expect( within( mappings ).getByRole( 'button', { name: 'Платья' } ) ).toBeInTheDocument();
 	} );
 

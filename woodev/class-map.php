@@ -166,6 +166,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Capabilities\\Marketplace_Adapter' => 'woodev/marketplace/capabilities/interface-marketplace-adapter.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Article_Policy' => 'woodev/marketplace/catalog/interface-article-policy.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Bulk_Validation_Report' => 'woodev/marketplace/catalog/class-bulk-validation-report.php',
+	'Woodev\\Framework\\Marketplace\\Catalog\\Cached_Catalog_Fields' => 'woodev/marketplace/catalog/interface-cached-catalog-fields.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Card_Content' => 'woodev/marketplace/catalog/class-card-content.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Card_Exporter' => 'woodev/marketplace/catalog/interface-card-exporter.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Catalog_Schema' => 'woodev/marketplace/catalog/interface-catalog-schema.php',

@@ -129,14 +129,13 @@ final class Mapping_Editor {
 	}
 
 	/**
-	 * How many attributes of its category each mapping fills, and how many required ones it leaves empty. It reads the fields the
-	 * editor reads for the same category, so it is a separate read from {@see self::summaries()}: the list's first paint asks the
-	 * adapter for no fields, and this follows it.
+	 * How many attributes of its category each mapping fills, and how many required ones it leaves empty. It is local: the fields come
+	 * from the adapter's cache ({@see Cached_Catalog_Fields}) and {@see Category_Finder::fields()} is never called, so the list's page
+	 * load makes no request to the marketplace however many mappings there are.
 	 *
 	 * @since 2.1.13
 	 *
-	 * @return array<int,array{filled:int,total:int,required_missing:int}> By mapping id; a mapping whose fields cannot be read is left out.
-	 * @throws \Throwable When the stored mappings cannot be read.
+	 * @return array<int,array{filled:int,total:int,required_missing:int}> By mapping id; a mapping whose category fields are not cached is left out.
 	 */
 	public function attribute_counts(): array {
 		$counts = [];
@@ -153,13 +152,14 @@ final class Mapping_Editor {
 	}
 
 	/**
-	 * How many attributes of the mapped category the mapping fills, and how many of the required ones it leaves empty.
+	 * How many attributes of the mapped category the mapping fills, and how many of the required ones it leaves empty. It counts from the
+	 * fields the adapter's schema already holds ({@see Cached_Catalog_Fields}) and never asks the marketplace for them.
 	 *
 	 * @since 2.1.13
 	 *
 	 * @param array<string,mixed>|null $entry  The category's catalog entry; null when the category is not in the catalog any more.
 	 * @param array<string,mixed>      $stored Stored sources by attribute id.
-	 * @return array{filled:int,total:int,required_missing:int}|null Null when there is nothing to count: no category, or the adapter cannot give its fields.
+	 * @return array{filled:int,total:int,required_missing:int}|null Null when there is nothing to count: no category, or its fields are not cached.
 	 */
 	private function attribute_summary( ?array $entry, array $stored ): ?array {
 		if ( null === $entry ) {
@@ -167,8 +167,12 @@ final class Mapping_Editor {
 		}
 
 		try {
-			$fields = $this->categories->fields( $entry['identity'] );
+			$fields = $this->categories->cached_fields( $entry['identity'] );
 		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		if ( null === $fields ) {
 			return null;
 		}
 

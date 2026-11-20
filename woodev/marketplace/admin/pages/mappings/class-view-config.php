@@ -158,6 +158,7 @@ final class View_Config {
 			'attributesHelp' => __( 'Товары, у которых не заполнены обязательные атрибуты категории, выгрузить на маркетплейс нельзя.', 'woodev-plugin-framework' ),
 			/* translators: {filled} and {total} are replaced by the view: the attributes the mapping fills and the attributes its category has. */
 			'attributesOf'   => __( '{filled} из {total}', 'woodev-plugin-framework' ),
+			'attributesUncached' => __( 'Откройте сопоставление, чтобы загрузить характеристики.', 'woodev-plugin-framework' ),
 			/* translators: {count} is replaced by the view: the number of required attributes left empty. */
 			'attributesMissing' => __( 'Не заполнены обязательные атрибуты: {count}', 'woodev-plugin-framework' ),
 			'columnProperties' => __( 'Свойства профиля', 'woodev-plugin-framework' ),

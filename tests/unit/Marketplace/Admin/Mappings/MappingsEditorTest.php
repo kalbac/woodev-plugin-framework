@@ -8,7 +8,10 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Mappings;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Category_Finder;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mapping_Messages;
+use Woodev\Framework\Marketplace\Catalog\Catalog_Schema;
+use Woodev\Framework\Marketplace\Catalog\Field_Definition;
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/Mappings_Harness.php';
@@ -540,13 +543,14 @@ final class MappingsEditorTest extends TestCase {
 	}
 
 	/**
-	 * The «Атрибуты» column: how many attributes of the category the mapping fills and how many required ones it leaves empty. It is a
-	 * read of its own, so the first paint above never asks for fields.
+	 * The «Атрибуты» column: how many attributes of the category the mapping fills and how many required ones it leaves empty, counted
+	 * from the schema's cache. It is a read of its own, so the first paint above never asks for fields.
 	 *
 	 * @return void
 	 */
-	public function test_attribute_counts_follow_the_stored_sources_in_a_read_of_their_own(): void {
-		$id = $this->h->editor->save( null, $this->body() )['id'];
+	public function test_attribute_counts_come_from_the_cache_and_never_call_fields(): void {
+		$id                    = $this->h->editor->save( null, $this->body() )['id'];
+		$this->h->schema->warm = true;
 		$this->h->schema->calls = [];
 
 		$response = $this->h->controller->get_attribute_counts( new Json_Request() );
@@ -557,6 +561,52 @@ final class MappingsEditorTest extends TestCase {
 			$response->get_data()['counts'],
 			'Brand is filled; colour is required and empty; weight is optional.'
 		);
+		$this->assertArrayNotHasKey( 'fields', $this->h->schema->calls, 'The list never asks the marketplace for fields.' );
+	}
+
+	/**
+	 * A category the schema has not cached is a dash, not a request: the mapping is left out of the counts.
+	 *
+	 * @return void
+	 */
+	public function test_an_uncached_category_is_left_out_and_still_costs_no_request(): void {
+		$this->h->editor->save( null, $this->body() );
+		$this->h->schema->calls = [];
+
+		$response = $this->h->controller->get_attribute_counts( new Json_Request() );
+
+		$this->assertSame( [], $response->get_data()['counts'] );
+		$this->assertArrayNotHasKey( 'fields', $this->h->schema->calls );
+		$this->assertGreaterThan( 0, $this->h->schema->calls['cached_fields'] ?? 0, 'The cache was asked.' );
+	}
+
+	/**
+	 * A schema that does not implement the optional contract gives no cached fields at all.
+	 *
+	 * @return void
+	 */
+	public function test_a_schema_without_the_cache_contract_has_no_cached_fields(): void {
+		$plain  = new class() implements Catalog_Schema {
+			public $asked = 0;
+
+			public function categories(): array {
+				return [];
+			}
+
+			public function fields( array $remote_category ): array {
+				++$this->asked;
+
+				return [];
+			}
+
+			public function search_dictionary( Field_Definition $field, string $term ): array {
+				return [];
+			}
+		};
+		$finder = new Category_Finder( $plain );
+
+		$this->assertNull( $finder->cached_fields( [ 'category_id' => 10, 'type_id' => 1 ] ) );
+		$this->assertSame( 0, $plain->asked );
 	}
 
 	/**

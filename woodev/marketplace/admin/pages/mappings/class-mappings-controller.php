@@ -299,7 +299,7 @@ final class Mappings_Controller {
 
 	/**
 	 * `GET R/attribute-counts`: the «Атрибуты» column of the mappings list — how many attributes of its category each mapping fills. It
-	 * follows the first paint, which asks the adapter for no fields.
+	 * is a local read that follows the first paint: it counts from the adapter's cached fields and never reaches the marketplace.
 	 *
 	 * @since 2.1.13
 	 *
@@ -313,11 +313,7 @@ final class Mappings_Controller {
 			return $unknown;
 		}
 
-		return $this->remote(
-			function (): \WP_REST_Response {
-				return $this->respond( [ 'counts' => $this->mappings->attribute_counts() ] );
-			}
-		);
+		return $this->respond( [ 'counts' => $this->mappings->attribute_counts() ] );
 	}
 
 	/**

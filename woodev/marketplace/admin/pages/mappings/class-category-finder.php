@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 
+use Woodev\Framework\Marketplace\Catalog\Cached_Catalog_Fields;
 use Woodev\Framework\Marketplace\Catalog\Catalog_Schema;
 use Woodev\Framework\Marketplace\Catalog\Field_Definition;
 
@@ -150,6 +151,18 @@ final class Category_Finder {
 	 */
 	public function find_by_identity( array $identity ): ?array {
 		return [] === $identity ? null : $this->find( self::key_of( $identity ) );
+	}
+
+	/**
+	 * Lists the fields of a category the schema already holds, without a request to the marketplace.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param array<string,mixed> $identity Category identity from {@see self::find()}.
+	 * @return Field_Definition[]|null Null when the schema does not implement {@see Cached_Catalog_Fields} or has not cached the category.
+	 */
+	public function cached_fields( array $identity ): ?array {
+		return $this->schema instanceof Cached_Catalog_Fields ? $this->schema->cached_fields( $identity ) : null;
 	}
 
 	/**

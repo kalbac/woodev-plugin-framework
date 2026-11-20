@@ -157,10 +157,29 @@ function fill( text: string, values: Record< string, string | number > ): string
 	return Object.entries( values ).reduce( ( result, [ key, value ] ) => result.split( `{${ key }}` ).join( String( value ) ), text );
 }
 
-/** «3 из 12», and an orange «!» when a required attribute of the category is still empty; «—» until the counts have come, or when they cannot. */
-function Attributes( { counts, messages }: { counts: AttributeCounts | undefined; messages: Record< string, string > } ) {
+interface AttributesProps {
+	/** The mapping's counts; `undefined` when the adapter has not cached its category's fields. */
+	counts: AttributeCounts | undefined;
+	/** Whether the counts of the page have been read: before that a dash says nothing yet. */
+	loaded: boolean;
+	messages: Record< string, string >;
+}
+
+/**
+ * «3 из 12», and an orange «!» when a required attribute of the category is still empty. A mapping whose category fields are not
+ * cached is a dash that says how to get them: the form loads them.
+ */
+function Attributes( { counts, loaded, messages }: AttributesProps ) {
 	if ( counts === undefined ) {
-		return <Muted text="—" />;
+		return loaded ? (
+			<Tooltip text={ messages.attributesUncached } className="woodev-records__tooltip" delay={ 150 }>
+				<span className="woodev-mappings-list__muted" tabIndex={ 0 } aria-label={ messages.attributesUncached }>
+					—
+				</span>
+			</Tooltip>
+		) : (
+			<Muted text="—" />
+		);
 	}
 
 	const missing = counts.required_missing;
@@ -244,7 +263,7 @@ export function MappingsList( { state, counts, onOpen, onOpenProfile, onDelete }
 				<Clipped key="category" text={ category } />,
 				shop === '' ? <Muted key="shop" text="—" /> : <Clipped key="shop" text={ shop } />,
 				profile ? <LinkButton key="profile" name={ profile.name } onClick={ () => onOpenProfile( profile.id ) } /> : <Muted key="profile" text="—" />,
-				<Attributes key="attributes" counts={ counts?.[ mapping.id ] } messages={ messages } />,
+				<Attributes key="attributes" counts={ counts?.[ mapping.id ] } loaded={ counts !== null } messages={ messages } />,
 				String( mapping.products ),
 				<RowButtons
 					key="buttons"
