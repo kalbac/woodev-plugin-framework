@@ -31,23 +31,12 @@
 
 	// The pager of the card's footer ({@see ./pager}) is drawn under WooCommerce's own class names, so the vendor card's stylesheet styles it;
 	// WooCommerce's pagination is hidden, because it draws nothing for one page. The footer is one row, as in «Заказы доставки»:
-	// the pager (the page arrows only when there is more than one page), then the count. The page-size select's label is beside
-	// it, and is the same emotion label: no upper case there either.
+	// the pager (the page arrows only when there is more than one page), then the count.
 	.components-card__footer > .woocommerce-pagination:not( .woodev-records__pager ) {
 		display: none;
 	}
 
-	.components-card__footer > .woodev-records__pager {
-		order: -1;
-	}
-
 	@include table-look.footer-row;
-
-	.woodev-records__page-size .components-input-control__label.components-input-control__label {
-		font-size: 13px;
-		font-weight: 500;
-		text-transform: none;
-	}
 
 	// The section's description: a full-width row under the page title, where the filters start.
 	&__description {

@@ -10,9 +10,29 @@
  * @package woodev-plugin-framework
  */
 
+import type { RefObject } from 'react';
 import { Button, SelectControl } from '@wordpress/components';
+import { useLayoutEffect, useState } from '@wordpress/element';
 import { MESSAGE_KEYS, fillMessage, message } from './messages';
 import type { Messages } from './types';
+
+/** The card's footer, where the pager is drawn. */
+const FOOTER_SLOT = '.components-card__footer';
+
+/**
+ * The footer of the card inside `host`, found again after every render (the card is made again when its columns change).
+ *
+ * @param host The element that holds the card.
+ */
+export function useFooterSlot( host: RefObject< HTMLElement > ): Element | null {
+	const [ slot, setSlot ] = useState< Element | null >( null );
+
+	useLayoutEffect( () => {
+		setSlot( host.current?.querySelector( FOOTER_SLOT ) ?? null );
+	} );
+
+	return slot;
+}
 
 export interface PagerProps {
 	/** The page on screen, from 1. */

@@ -30,10 +30,22 @@
 		flex-wrap: wrap;
 		justify-content: center;
 
+		// Our pager is appended after the count (a portal), and stands in front of it, where WooCommerce's own pagination does.
+		> .woodev-records__pager {
+			order: -1;
+		}
+
 		// The pager keeps a 16px margin under it for the stacked footer; in a row it would lift the pager above the count's middle.
 		> .woocommerce-pagination,
 		> .woocommerce-table__summary {
 			margin: 0;
+		}
+
+		// The page-size select's label is beside it, and is the same emotion label as the filters': no upper case there either.
+		.woodev-records__page-size .components-input-control__label.components-input-control__label {
+			font-size: 13px;
+			font-weight: 500;
+			text-transform: none;
 		}
 	}
 }

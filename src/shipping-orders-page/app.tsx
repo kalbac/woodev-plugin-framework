@@ -33,7 +33,7 @@
  * @package woodev-plugin-framework
  */
 
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { createPortal, useEffect, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	Button,
@@ -125,6 +125,7 @@ import type { UrlFilters } from './filters';
 import { ExportsInProgressNotice } from './exports-in-progress';
 import { MatchLabelScope } from './match-labels';
 import PeriodPicker from './period-picker';
+import { Pager, useFooterSlot } from '../admin-records/pager';
 import OrderWizard from './order-wizard/order-wizard';
 import type { SaveResult } from './order-wizard/types';
 import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-globals';
@@ -134,6 +135,15 @@ import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-g
  * picker's `<select>` with no matching option, so it shows its first one, 25, over a page of 20 rows (#1902).
  */
 const DEFAULT_PER_PAGE = 25;
+
+/**
+ * The page sizes of WooCommerce's own picker. WooCommerce draws that picker only for a result of more rows than the smallest size,
+ * so a result of 25 rows or fewer gets the page's own picker in the footer, with the same sizes (#1903).
+ */
+const PER_PAGE_SIZES = [ 25, 50, 75, 100 ];
+
+/** The footer picker of a result of 25 rows or fewer draws no page arrows, so it needs none of the pager's sentences. */
+const NO_PAGER_MESSAGES = {};
 
 /**
  * The id of the «Документ формируется…» snackbar. Given a fixed id so the page can TAKE IT DOWN the moment the wait
@@ -1600,6 +1610,8 @@ export default function OrdersPage() {
 	const [ search, setSearch ] = useState( '' );
 	const [ rows, setRows ] = useState<OrderRow[] | null>( null );
 	const [ total, setTotal ] = useState( 0 );
+	const tableHost = useRef< HTMLDivElement >( null );
+	const footer = useFooterSlot( tableHost );
 	/**
 	 * #841 — both scope-link numbers, straight from the response that built the rows.
 	 * `null` means "we do not have them", which is why {@link ScopeLinks} does not
@@ -2843,46 +2855,66 @@ export default function OrdersPage() {
 			 * ordinary WordPress list puts directly above its table.
 			 */ }
 			{ scopeCounts && <ScopeLinks scope={ urlFilters.scope } counts={ scopeCounts } /> }
-			<TableCard
-				className="woodev-orders"
-				title={ __( 'Заказы доставки', 'woodev-plugin-framework' ) }
-				headers={ buildHeaders( {
-					selectAllChecked,
-					selectAllDisabled: 0 === checkableIds.length,
-					onSelectAll,
-				} ) }
-				rows={
-					null === rows
-						? []
-						: rows.map( ( row ) =>
-								buildRow( row, {
-									rowState: actionRowStates[ row.id ],
-									onActionClick,
-									onCancelConfirm,
-									selected: selectedIds.has( row.id ),
-									onToggleSelected,
-									onOpenPreview,
-									previewLoadingId,
-								} )
-						  )
-				}
-				rowsPerPage={ perPage }
-				totalRows={ total }
-				isLoading={ null === rows }
-				query={ { orderby, order: order.toLowerCase(), paged: String( page ) } }
-				onSort={ onSort }
-				onPageChange={ setPage }
-				onQueryChange={ onQueryChange }
-				actions={ actions }
-				hasSearch
-				showMenu
-				emptyMessage={ __( 'Заказов доставки пока нет.', 'woodev-plugin-framework' ) }
-				summary={
-					null === rows
-						? undefined
-						: [ { label: __( 'Заказов', 'woodev-plugin-framework' ), value: total } ]
-				}
-			/>
+			<div ref={ tableHost }>
+				<TableCard
+					className="woodev-orders"
+					title={ __( 'Заказы доставки', 'woodev-plugin-framework' ) }
+					headers={ buildHeaders( {
+						selectAllChecked,
+						selectAllDisabled: 0 === checkableIds.length,
+						onSelectAll,
+					} ) }
+					rows={
+						null === rows
+							? []
+							: rows.map( ( row ) =>
+									buildRow( row, {
+										rowState: actionRowStates[ row.id ],
+										onActionClick,
+										onCancelConfirm,
+										selected: selectedIds.has( row.id ),
+										onToggleSelected,
+										onOpenPreview,
+										previewLoadingId,
+									} )
+							  )
+					}
+					rowsPerPage={ perPage }
+					totalRows={ total }
+					isLoading={ null === rows }
+					query={ { orderby, order: order.toLowerCase(), paged: String( page ) } }
+					onSort={ onSort }
+					onPageChange={ setPage }
+					onQueryChange={ onQueryChange }
+					actions={ actions }
+					hasSearch
+					showMenu
+					emptyMessage={ __( 'Заказов доставки пока нет.', 'woodev-plugin-framework' ) }
+					summary={
+						null === rows
+							? undefined
+							: [ { label: __( 'Заказов', 'woodev-plugin-framework' ), value: total } ]
+					}
+				/>
+			</div>
+			{ /* WooCommerce's pagination draws no page-size picker for a result of 25 rows or fewer, so the footer gets ours
+			     there; above that its own picker is the one shown. */ }
+			{ footer &&
+				null !== rows &&
+				total <= PER_PAGE_SIZES[ 0 ] &&
+				createPortal(
+					<Pager
+						page={ 1 }
+						perPage={ perPage }
+						total={ total }
+						sizes={ PER_PAGE_SIZES }
+						sizeLabel={ __( 'Заказов на странице', 'woodev-plugin-framework' ) }
+						messages={ NO_PAGER_MESSAGES }
+						onPage={ setPage }
+						onPerPage={ onQueryChange( 'per_page' ) }
+					/>,
+					footer
+				) }
 			{ /* #875 — opened only once its data is in hand, from `previewCache`; see
 			     `onOpenPreview()` for the fetch, the icon spinner and the cache. */ }
 			{ null !== previewOrderId && previewCache[ previewOrderId ] && (
