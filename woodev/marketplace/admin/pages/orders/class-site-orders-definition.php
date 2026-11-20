@@ -259,6 +259,7 @@ final class Site_Orders_Definition {
 	private static function messages(): array {
 		return array_merge(
 			Standard_Messages::views(),
+			Standard_Messages::pager(),
 			Standard_Messages::period(),
 			self::own_messages()
 		);

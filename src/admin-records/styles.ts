@@ -7,20 +7,14 @@
 
 import type { CSSProperties } from 'react';
 
-/**
- * WooCommerce's pagination always offers 25/50/75/100 and cannot be told otherwise (7.0 `TableCard` passes no
- * `showPerPagePicker`); the shell draws PHP's own sizes in the same footer slot and hides the vendor control.
- */
-export const HIDE_VENDOR_PAGE_SIZE =
-	'.woodev-records .woocommerce-pagination__per-page-picker>:not(.woodev-records__page-size){display:none}';
-
 export const STYLES = {
 	toolbar: { display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' },
 	nowrap: { whiteSpace: 'nowrap' },
 	stack: { display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' },
 	actions: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' },
-	// The buttons of one row: one group on one line — a row of buttons never wraps under itself.
-	buttons: { display: 'inline-flex', flexWrap: 'nowrap', gap: '4px', alignItems: 'center' },
+	// The buttons of one row: one group on one line — a row of buttons never wraps under itself. Their gap is in `./style.scss`: an
+	// inline `gap` would beat the class that closes it for an icon group.
+	buttons: { display: 'inline-flex', flexWrap: 'nowrap', alignItems: 'center' },
 	reason: { display: 'block', flexBasis: '100%', color: '#50575e' },
 	childCell: { display: 'block', paddingLeft: '24px' },
 	dateRange: { display: 'flex', gap: '8px', alignItems: 'flex-end', border: 0, margin: 0, padding: 0 },

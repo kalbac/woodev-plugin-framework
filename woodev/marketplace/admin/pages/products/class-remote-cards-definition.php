@@ -459,9 +459,10 @@ final class Remote_Cards_Definition {
 			Standard_Messages::bulk(),
 			Standard_Messages::matching( __( 'карточки', 'woodev-plugin-framework' ) ),
 			Standard_Messages::views(),
+			Standard_Messages::pager(),
 			[
 				/* translators: %s: marketplace name. */
-				'description'            => sprintf( __( 'Это карточки товаров, которые уже есть в вашем кабинете %s. Загрузите их в магазин одним нажатием или свяжите с товарами сайта — тогда остатки и цены будут обновляться сами.', 'woodev-plugin-framework' ), $marketplace ),
+				'description'            => sprintf( __( 'На этой странице отображаются карточки товаров из вашего кабинета %s. Карточки можно загрузить в магазин или связать с товарами сайта, чтобы остатки и цены обновлялись автоматически.', 'woodev-plugin-framework' ), $marketplace ),
 				'empty'                  => __( 'Список карточек ещё не загружен.', 'woodev-plugin-framework' ),
 				'empty_action'           => self::REFRESH,
 				'empty_filtered'         => __( 'По этим фильтрам карточек нет.', 'woodev-plugin-framework' ),

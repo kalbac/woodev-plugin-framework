@@ -543,6 +543,38 @@ describe( 'the polish of s237', () => {
 		expect( screen.getByRole( 'img', { name: 'Остаток на сайте / на маркетплейсе.' } ) ).toHaveTextContent( '?' );
 	} );
 
+	test( 'the «?» shows its sentence on hover and on keyboard focus, hides it again, and a click on it does not reach the sort button', async () => {
+		const base = definition();
+		serve( () => fixtureList( [ mug ] ), {
+			...base,
+			columns: base.columns.map( ( column, index ) => ( index === 0 ? { ...column, help: 'Остаток на сайте / на маркетплейсе.' } : column ) ),
+		} );
+		render( <Page /> );
+		await screen.findByRole( 'table', { name: 'Товары' } );
+
+		// A sortable heading is a button: the «?» lives inside it, as in WooCommerce's table.
+		const header = cardProps.at( -1 )?.headers.find( ( entry ) => entry.key === base.columns[ 0 ].id );
+		const sort = jest.fn();
+		render( <button type="button" onClick={ sort }>{ header?.label }</button> );
+		const mark = screen.getByRole( 'img', { name: 'Остаток на сайте / на маркетплейсе.' } );
+		const sentence = () => screen.queryByText( 'Остаток на сайте / на маркетплейсе.' );
+
+		expect( sentence() ).not.toBeInTheDocument();
+
+		fireEvent.mouseEnter( mark );
+		expect( sentence() ).toBeInTheDocument();
+		fireEvent.mouseLeave( mark );
+		await waitFor( () => expect( sentence() ).not.toBeInTheDocument() );
+
+		fireEvent.focus( mark );
+		expect( sentence() ).toBeInTheDocument();
+		fireEvent.blur( mark );
+		await waitFor( () => expect( sentence() ).not.toBeInTheDocument() );
+
+		fireEvent.click( mark );
+		expect( sort ).not.toHaveBeenCalled();
+	} );
+
 	test( 'the row header is the first required column, so a photo column in front of the name does not take its place', async () => {
 		const base = definition();
 		const photo = { ...base.columns[ 0 ], id: 'photo', label: 'Фото', required: false };

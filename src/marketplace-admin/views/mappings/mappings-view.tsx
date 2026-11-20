@@ -15,11 +15,23 @@ import { FolderTabs } from '../../../components/folder-tabs';
 import type { PageViewProps } from '../../types';
 import { createApi, errorLines } from './api';
 import { MappingEditor } from './mapping-editor';
-import { MappingsList, ProfilesList } from './mapping-lists';
+import { RecordsList, type RouteArguments } from './mapping-lists';
 import { Notices, type NoticeState } from './notices';
 import { ProfileEditor } from './profile-editor';
 import { selectionArgument, useRoute, type Selection } from './route';
-import type { AttributeCountsById, MappingsState } from './types';
+import type { MappingsState } from './types';
+
+/** The arguments of the page's own route; every other one in the URL belongs to the list on screen (its page, sort and size). */
+const ROUTE_ARGUMENTS = [ 'page', 'path', 'tab', 'mapping', 'profile' ];
+
+/** The patch that drops the left list's page, sort and size from the URL. */
+function clearedListArguments( query: Record< string, string > ): Record< string, undefined > {
+	return Object.fromEntries(
+		Object.keys( query )
+			.filter( ( key ) => ! ROUTE_ARGUMENTS.includes( key ) )
+			.map( ( key ) => [ key, undefined ] )
+	);
+}
 
 export function MappingsView( { page, menu, query }: PageViewProps ) {
 	const api = useMemo( () => createApi( menu.pluginId ), [ menu.pluginId ] );
@@ -27,7 +39,6 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 	const [ state, setState ] = useState< MappingsState | null >( null );
 	const [ failure, setFailure ] = useState< NoticeState | null >( null );
 	const [ notice, setNotice ] = useState< NoticeState | null >( null );
-	const [ counts, setCounts ] = useState< AttributeCountsById | null >( null );
 
 	const load = useCallback( () => {
 		api.state()
@@ -36,23 +47,6 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 	}, [ api ] );
 
 	useEffect( load, [ load ] );
-
-	// The «Атрибуты» column follows the list: the first paint asks the marketplace for no fields. A failed read leaves the column
-	// with its dashes; the list itself is fine without it.
-	useEffect( () => {
-		if ( ! state ) {
-			return undefined;
-		}
-
-		let current = true;
-		api.attributeCounts()
-			.then( ( answer ) => current && setCounts( Array.isArray( answer.counts ) ? {} : answer.counts ) )
-			.catch( () => undefined );
-
-		return () => {
-			current = false;
-		};
-	}, [ api, state ] );
 
 	if ( failure ) {
 		return <Notices notice={ failure } onDismiss={ () => setFailure( null ) } />;
@@ -76,8 +70,8 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 
 	const pickMapping = ( selection: Selection ) => open( { mapping: selectionArgument( selection ) } );
 	const pickProfile = ( selection: Selection ) => open( { profile: selectionArgument( selection ) } );
-	/** A profile linked from a mapping's row: its form, on the other tab. */
-	const openProfile = ( id: number ) => open( { tab: 'profiles', mapping: undefined, profile: String( id ) } );
+	/** A link of a list (a name, «Редактировать», the profile of a mapping): the form it points at, which may be on the other tab. */
+	const follow = ( route: RouteArguments ) => open( route );
 	/** A delete asked in the list: the page shows what came of it, and the list is read again. */
 	const remove = async ( request: () => Promise< unknown >, sentence: string ) => {
 		try {
@@ -87,7 +81,6 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 			setNotice( { status: 'error', lines: errorLines( error, messages.requestFailed ) } );
 		}
 	};
-	const listing = tab === 'mappings' ? mapping === undefined : profile === undefined;
 
 	return (
 		<div className="woodev-mappings-view woodev-settings">
@@ -99,22 +92,20 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 					{ id: 'profiles', label: messages.tabProfiles },
 				] }
 				active={ tab }
-				// The other tab starts from its list, whatever was open here.
-				onSelect={ ( id ) => open( { tab: id === 'profiles' ? 'profiles' : undefined, mapping: undefined, profile: undefined } ) }
+				// The other tab starts from its list — from its first page, in its own order — whatever was open here.
+				onSelect={ ( id ) => open( { ...clearedListArguments( query ), tab: id === 'profiles' ? 'profiles' : undefined, mapping: undefined, profile: undefined } ) }
 			/>
-			{ listing && (
-				<p className="woodev-mappings-description">
-					{ tab === 'mappings' ? messages.descriptionMappings : messages.descriptionProfiles }
-				</p>
-			) }
 			<div className="woodev-mappings-body">
 				{ tab === 'mappings' ? (
 					mapping === undefined ? (
-						<MappingsList
+						<RecordsList
+							key="mapping"
+							kind="mapping"
+							owner={ menu.pluginId }
+							query={ query }
 							state={ state }
-							counts={ counts }
+							onFollow={ follow }
 							onOpen={ pickMapping }
-							onOpenProfile={ openProfile }
 							onDelete={ ( id ) => remove( () => api.deleteMapping( id ), messages.deletedMapping ) }
 						/>
 					) : (
@@ -144,8 +135,13 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 						</>
 					)
 				) : profile === undefined ? (
-					<ProfilesList
+					<RecordsList
+						key="profile"
+						kind="profile"
+						owner={ menu.pluginId }
+						query={ query }
 						state={ state }
+						onFollow={ follow }
 						onOpen={ pickProfile }
 						onDelete={ ( id ) => remove( () => api.deleteProfile( id ), messages.deletedProfile ) }
 					/>

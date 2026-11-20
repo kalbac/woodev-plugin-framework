@@ -18,59 +18,27 @@
 	}
 }
 
-// The section's description: a full-width row under the tabs, in the words of the records pages' own.
-.woodev-mappings-description {
-	color: #3c434a;
-	font-size: 13px;
-	line-height: 1.5;
-	margin: wd.$gap-lg 0 0;
-	max-width: none;
-}
-
 .woodev-mappings-back {
 	margin: 0 0 wd.$gap;
 }
 
-// --- The two lists --------------------------------------------------------------------------------------------
+// --- The two lists -------------------------------------------------------------------------------------------
+// They are records-engine tables (`src/admin-records/style.scss` draws them); only what is the page's own is here.
 
-.woodev-mappings-list {
-	// Every row is on one page: whatever pagination bar WooCommerce draws for it is noise.
-	.woocommerce-pagination,
-	.woocommerce-table__pagination {
-		display: none;
+.woodev-mappings-records {
+	// The name column is pinned at the left edge. The engine leaves 40px in front of it for the selection column, which these
+	// tables do not have.
+	.woodev-records .woodev-records__col-name {
+		left: 0;
 	}
 
-	// The card's header row: the list's name at the left, the add button at the right end — the shape of the records tables'.
-	.components-card__header > h2 {
-		flex: 0 0 auto;
-		font-size: 16px;
-		font-weight: 600;
-		line-height: 1.4;
-		margin: 0;
+	// «Добавить …» at the right end of the card's header.
+	.woodev-mappings-add {
+		margin-left: auto;
 	}
 
-	.woocommerce-table__actions {
-		flex: 0 0 auto;
-		margin: 0 0 0 auto;
-	}
-
-	// Tight cells, like the records tables': the five data columns and the actions fit a 1024px screen without a sideways scroll.
-	.woocommerce-table__header,
-	.woocommerce-table__item {
-		padding-left: 10px;
-		padding-right: 10px;
-	}
-
-	// A name or a profile is a link-button: it wraps inside its column instead of stretching it.
-	.components-button.is-link {
-		height: auto;
-		max-width: 100%;
-		overflow-wrap: anywhere;
-		text-align: left;
-		white-space: normal;
-	}
-
-	// A heading wraps too: a long one («Категории магазина») must not set the width of its column.
+	// A heading wraps («Категория маркетплейса»), so the text columns can be narrower than their headings and the table fits a
+	// 1024px screen without a sideways scroll.
 	.woocommerce-table__header .components-button {
 		height: auto;
 		padding: 4px 0;
@@ -78,119 +46,27 @@
 		white-space: normal;
 	}
 
-	// The widths of the columns. They add up to less than a 1024px screen's table, so the table never scrolls sideways; the text
-	// of a cell wraps (a long category list ends in «…» after two lines) instead of widening it.
-	.woodev-mappings-col-name,
-	.woodev-mappings-col-category,
-	.woodev-mappings-col-shop,
-	.woodev-mappings-col-properties,
-	.woodev-mappings-col-used {
-		box-sizing: border-box;
+	// The widths of the columns: hints for the browser's table layout; the text of a cell wraps instead of widening its column.
+	.woodev-records__col-category,
+	.woodev-records__col-shop,
+	.woodev-records__col-properties,
+	.woodev-records__col-used_in {
 		width: 22%;
 	}
 
-	.woodev-mappings-col-profile {
-		box-sizing: border-box;
-		width: 16%;
+	.woodev-records__col-profile {
+		width: 14%;
 	}
 
-	.woodev-mappings-col-attributes {
-		box-sizing: border-box;
-		width: 12%;
+	.woodev-records__col-attributes {
+		width: 10%;
 	}
 
-	// The count column is a number, and the actions column holds its two icons: as wide as their content.
-	.woodev-mappings-col-products,
-	.woodev-mappings-col-actions {
+	// The count and the row buttons are as wide as their content.
+	.woodev-records__col-products,
+	.woodev-records__col-actions {
 		width: 1%;
-		white-space: nowrap;
 	}
-
-	.woocommerce-table__header.is-numeric,
-	.woocommerce-table__item.is-numeric {
-		text-align: right;
-	}
-
-	// The buttons of a row: one group on one line.
-	&__buttons {
-		display: inline-flex;
-		flex-wrap: nowrap;
-		gap: 2px;
-		white-space: nowrap;
-	}
-
-	// An icon button of a row: 32px square, no frame until the pointer is on it.
-	&__icon.components-button.has-icon {
-		height: 32px;
-		min-width: 32px;
-		padding: 0;
-		width: 32px;
-
-		.dashicons {
-			font-size: 18px;
-			height: 18px;
-			line-height: 18px;
-			width: 18px;
-		}
-	}
-
-	// A long list of categories or properties is clipped to two lines; its full text is the cell's `title`.
-	&__clipped {
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 2;
-		display: -webkit-box;
-		line-clamp: 2;
-		max-width: 100%;
-		overflow: hidden;
-		overflow-wrap: anywhere;
-	}
-
-	&__muted {
-		color: wd.$muted;
-	}
-
-	&__attributes {
-		align-items: center;
-		display: inline-flex;
-		gap: 6px;
-		white-space: nowrap;
-	}
-
-	// The orange «!» of a category whose required attributes are not all filled.
-	&__warning {
-		align-items: center;
-		background: #f0b849;
-		border-radius: 50%;
-		color: #1e1e1e;
-		cursor: help;
-		display: inline-flex;
-		font-size: 11px;
-		font-weight: 700;
-		height: 16px;
-		justify-content: center;
-		line-height: 1;
-		width: 16px;
-	}
-
-	// The count column is a number: as wide as its heading and the figure, right-aligned, not half the table.
-	.woocommerce-table__header.is-numeric,
-	.woocommerce-table__item.is-numeric {
-		width: 1%;
-		white-space: nowrap;
-		text-align: right;
-	}
-
-	// The empty list: the explanation and the button that creates the first record, centred in the card like the records tables'.
-	&__empty {
-		color: wd.$muted;
-		padding: wd.$gap-lg 0;
-		text-align: center;
-
-		p {
-			margin: 0 0 wd.$gap;
-		}
-	}
-
 }
 
 // The list of the mappings a profile is chosen in, in the delete dialog (a portal: it stands outside the view).

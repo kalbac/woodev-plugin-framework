@@ -11,7 +11,8 @@
  */
 
 import type { ReactNode } from 'react';
-import { Button, Spinner, Tooltip } from '@wordpress/components';
+import { Button, Popover, Spinner } from '@wordpress/components';
+import { useState } from '@wordpress/element';
 import { cellText, renderCell } from './cells';
 import { MESSAGE_KEYS, fillMessage, firstMessage, joinLabel, message } from './messages';
 import { searchFilter } from './query';
@@ -48,6 +49,16 @@ const EMPTY_CELL: TableCell = { display: null, value: '' };
 
 function cell( display: ReactNode ): TableCell {
 	return { display, value: '' };
+}
+
+/**
+ * The column that names a row: the first one the definition marks `required`, else the first. It is the table's row header, and in a
+ * child row (a variation, a note) it is the one that is indented — a photo column in front of it stays in its place.
+ *
+ * @param definition The table's definition.
+ */
+export function nameColumnIndex( definition: Definition ): number {
+	return Math.max( 0, definition.columns.findIndex( ( column ) => column.required ) );
 }
 
 function rowName( definition: Definition, row: AdminRecord ): string {
@@ -160,12 +171,14 @@ function selectCell( input: TableModelInput, row: AdminRecord, family: string[] 
 }
 
 function dataCells( input: TableModelInput, row: AdminRecord, key: string, isChild: boolean ): TableCell[] {
+	const named = nameColumnIndex( input.definition );
+
 	return input.definition.columns.map( ( column, index ) => {
 		const content =
 			column.cell_type === 'actions'
 				? input.renderActions( row, key )
 				: renderCell( column.cell_type, row.cells[ column.id ] );
-		const indent = isChild && index === 0;
+		const indent = isChild && index === named;
 
 		return cell( indent ? <span style={ STYLES.childCell }>{ content }</span> : content );
 	} );
@@ -201,10 +214,11 @@ function childLine( input: TableModelInput, parent: AdminRecord, child: AdminRec
 	return { key, cells: [ ...leadCells( input, EMPTY_CELL, select ), ...dataCells( input, child, key, true ) ] };
 }
 
-/** A line that spans no data: its first declared column holds a status or a button, the rest stay empty. */
+/** A line that spans no data: its name column holds a status or a button, the rest stay empty. */
 function noteLine( input: TableModelInput, key: string, content: ReactNode ): TableLine {
+	const named = nameColumnIndex( input.definition );
 	const data = input.definition.columns.map( ( _column, index ) =>
-		index === 0 ? cell( <span style={ STYLES.childCell }>{ content }</span> ) : EMPTY_CELL
+		index === named ? cell( <span style={ STYLES.childCell }>{ content }</span> ) : EMPTY_CELL
 	);
 
 	return { key, cells: [ ...leadCells( input, EMPTY_CELL, EMPTY_CELL ), ...data ] };
@@ -265,8 +279,54 @@ export function buildLines( input: TableModelInput ): TableLine[] {
 }
 
 /**
- * A heading with its «?»: the sentence PHP wrote for the column — what it shows and in which format — on hover and on
- * keyboard focus. The «?» is not a button, so a click on it only moves the focus (it never sorts the column).
+ * The «?» of a heading: PHP's sentence in a popover on hover and on keyboard focus. It is not a button, so a click on it only moves the
+ * focus and never sorts the column.
+ *
+ * It is not `Tooltip`: a sortable heading is a `Button`, which is itself a tooltip anchor, and a `Tooltip` inside another one renders
+ * its child alone (`isNestedInTooltip` in `@wordpress/components`) — the mark showed nothing. A popover has no such rule; its look is
+ * the tooltip's ({@see ./style.scss}).
+ *
+ * @param help PHP's sentence.
+ */
+function HelpMark( { help }: { help: string } ) {
+	const [ anchor, setAnchor ] = useState< HTMLSpanElement | null >( null );
+	const [ shown, setShown ] = useState( false );
+	const show = () => setShown( true );
+	const hide = () => setShown( false );
+
+	return (
+		<>
+			<span
+				ref={ setAnchor }
+				className="woodev-records__help"
+				tabIndex={ 0 }
+				role="img"
+				aria-label={ help }
+				onMouseEnter={ show }
+				onMouseLeave={ hide }
+				onFocus={ show }
+				onBlur={ hide }
+				onClick={ ( event ) => event.stopPropagation() }
+			>
+				?
+			</span>
+			{ shown && (
+				<Popover
+					anchor={ anchor }
+					className="woodev-records__help-tip"
+					placement="top"
+					focusOnMount={ false }
+					animate={ false }
+				>
+					{ help }
+				</Popover>
+			) }
+		</>
+	);
+}
+
+/**
+ * A heading with its «?»: the sentence PHP wrote for the column — what it shows and in which format — on hover and on keyboard focus.
  *
  * @param label The column's label.
  * @param help  PHP's sentence.
@@ -275,11 +335,7 @@ export function HeadingWithHelp( { label, help }: { label: string; help: string 
 	return (
 		<span className="woodev-records__heading">
 			{ label }
-			<Tooltip text={ help } className="woodev-records__tooltip" delay={ 150 }>
-				<span className="woodev-records__help" tabIndex={ 0 } role="img" aria-label={ help }>
-					?
-				</span>
-			</Tooltip>
+			<HelpMark help={ help } />
 		</span>
 	);
 }

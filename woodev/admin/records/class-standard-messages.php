@@ -69,6 +69,26 @@ final class Standard_Messages {
 	}
 
 	/**
+	 * The card footer's pager: the page count, the two arrows and the jump-to-page field. The footer is always drawn, a one-page
+	 * table included (arrows off), like the footer of «Заказы доставки». The size of a page is the definition's own `per_page`
+	 * sentence («Товаров на странице»), which names the rows.
+	 *
+	 * `{page}` is the page on screen and `{pages}` the number of pages (the shell writes both).
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return array<string,string>
+	 */
+	public static function pager(): array {
+		return [
+			'page_status' => __( 'Страница {page} из {pages}', 'woodev-plugin-framework' ),
+			'page_prev'   => __( 'Предыдущая страница', 'woodev-plugin-framework' ),
+			'page_next'   => __( 'Следующая страница', 'woodev-plugin-framework' ),
+			'page_goto'   => __( 'Перейти на страницу', 'woodev-plugin-framework' ),
+		];
+	}
+
+	/**
 	 * The period picker: its label, «all time», the ten presets, the custom range and its two buttons.
 	 *
 	 * The apply button is «Применить период», not the bare «Применить»: the bulk-action button carries that name, and two controls

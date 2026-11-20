@@ -77,6 +77,7 @@ final class Profile_Editor {
 	 *
 	 * @since 2.1.0
 	 * @since 2.1.13 Each profile names what it sets (`properties`) and the mappings that use it (`used_in`).
+	 * @since 2.1.13 `properties` carry the values too: «Габариты: 20×15×2 см».
 	 *
 	 * @return array<int,array{id:int,name:string,mappings:int,properties:string[],used_in:string[]}>
 	 */
@@ -90,7 +91,7 @@ final class Profile_Editor {
 				'id'         => $id,
 				'name'       => $profile->name(),
 				'mappings'   => $this->mappings->count_using_profile( $id ),
-				'properties' => $this->property_labels( $profile->settings() ),
+				'properties' => Profile_Properties::describe( $profile->settings(), $this->choices ),
 				'used_in'    => $used_in[ $id ] ?? [],
 			];
 		}
@@ -113,38 +114,6 @@ final class Profile_Editor {
 		}
 
 		return $names;
-	}
-
-	/**
-	 * What a profile sets, in a merchant's words: one label per group of settings that has a value, so a profile with none says
-	 * «не настроен» in the list.
-	 *
-	 * @param array<string,mixed> $settings Stored settings.
-	 * @return string[]
-	 */
-	private function property_labels( array $settings ): array {
-		$has   = static function ( array $keys ) use ( $settings ): bool {
-			foreach ( $keys as $key ) {
-				if ( ! empty( $settings[ $key ] ) ) {
-					return true;
-				}
-			}
-
-			return false;
-		};
-		$known = array_filter(
-			[
-				__( 'Источники данных', 'woodev-plugin-framework' ) => $has( $this->choices->settings() ),
-				__( 'Габариты', 'woodev-plugin-framework' )         => $has( [ 'fallback_width', 'fallback_height', 'fallback_depth' ] ),
-				__( 'Вес', 'woodev-plugin-framework' )              => $has( [ 'fallback_weight' ] ),
-				__( 'Единицы измерения', 'woodev-plugin-framework' ) => $has( [ 'units' ] ),
-				__( 'НДС', 'woodev-plugin-framework' )              => $has( [ 'vat_rate' ] ),
-				__( 'Валюта', 'woodev-plugin-framework' )           => $has( [ 'currency_rule' ] ),
-				__( 'Цена', 'woodev-plugin-framework' )             => $has( [ 'price_rule' ] ),
-			]
-		);
-
-		return array_keys( $known );
 	}
 
 	/**
