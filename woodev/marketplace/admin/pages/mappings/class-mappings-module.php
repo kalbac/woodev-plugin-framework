@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 
+use Woodev\Framework\Admin\Records\Records_Definition;
+use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Mapping;
@@ -56,6 +58,38 @@ final class Mappings_Module {
 				}
 			}
 		);
+		add_action(
+			'rest_api_init',
+			static function () use ( $plugin ): void {
+				self::register_lists( $plugin );
+			},
+			5 // Before the REST registrar walks its controllers (priority 10), so the routes of a table registered now exist.
+		);
+	}
+
+	/**
+	 * Registers the two lists of the page, «Сопоставления» and «Профили», with the records engine; does nothing when the plugin has no
+	 * `mappings` page or its id cannot be a route segment.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param Marketplace_Plugin $plugin The marketplace plugin.
+	 * @return bool Whether the lists were registered.
+	 */
+	public static function register_lists( Marketplace_Plugin $plugin ): bool {
+		$parts = self::parts( $plugin );
+
+		if ( null === $parts || 1 !== preg_match( Records_Definition::SLUG_PATTERN, $plugin->get_id() ) ) {
+			return false;
+		}
+
+		$page_url = admin_url( 'admin.php?page=wc-admin&path=' . rawurlencode( $parts['path'] ) );
+		$registry = Records_Registry::instance();
+		$mappings = new Mapping_List_Provider( $page_url, $parts['mappings'], $parts['profiles'] );
+		$profiles = new Profile_List_Provider( $page_url, $parts['profiles'] );
+
+		return $registry->register( $plugin->get_id(), $mappings, $parts['capability'] )
+			&& $registry->register( $plugin->get_id(), $profiles, $parts['capability'] );
 	}
 
 	/**
@@ -67,14 +101,42 @@ final class Mappings_Module {
 	 * @return Mappings_Controller|null Null when the plugin has no mappings page or its id cannot be a route segment.
 	 */
 	public static function controller( Marketplace_Plugin $plugin ): ?Mappings_Controller {
+		$parts = self::parts( $plugin );
+
+		if ( null === $parts || 1 !== preg_match( Mappings_Controller::OWNER_PATTERN, $plugin->get_id() ) ) {
+			return null;
+		}
+
+		$adapter = $plugin->get_marketplace_adapter();
+
+		return new Mappings_Controller(
+			$plugin->get_id(),
+			$parts['capability'],
+			$parts['mappings'],
+			$parts['profiles'],
+			$parts['check'],
+			$parts['categories'],
+			$parts['choices'],
+			$adapter->price_source(),
+			$parts['fields']
+		);
+	}
+
+	/**
+	 * The services both the controller and the two lists are made of: one set of stores and editors, so the lists show exactly what the
+	 * forms save.
+	 *
+	 * @param Marketplace_Plugin $plugin The marketplace plugin.
+	 * @return array{path:string,capability:string,mappings:Mapping_Editor,profiles:Profile_Editor,check:Mapping_Check,categories:Category_Finder,choices:Profile_Choices,fields:array<string,string>}|null
+	 *   Null when the plugin has no mappings page.
+	 */
+	private static function parts( Marketplace_Plugin $plugin ): ?array {
 		global $wpdb;
 
 		$menu = $plugin->get_marketplace_admin_menu();
 		$page = null === $menu ? null : $menu->get_page( self::PAGE );
 
-		$owner_ok = 1 === preg_match( Mappings_Controller::OWNER_PATTERN, $plugin->get_id() );
-
-		if ( null === $menu || null === $page || ! $owner_ok ) {
+		if ( null === $menu || null === $page ) {
 			return null;
 		}
 
@@ -98,22 +160,18 @@ final class Mappings_Module {
 		$products   = new Mapping_Products( [ $mappings, 'terms_by_mapping' ] );
 		$fields     = self::product_fields( $adapter );
 		$links      = $schema->table_name( 'links', $prefix );
-		$editor     = new Mapping_Editor( $mappings, $profiles, $categories, $products, $fields, $links );
 		$validator  = new Export_Validator( $adapter->export_rules() );
-		$context    = self::context_builder( $adapter );
-		$check      = new Mapping_Check( $mappings, $profiles, $validator, $categories, $products, $context );
 
-		return new Mappings_Controller(
-			$plugin->get_id(),
-			$page->get_capability( $menu->get_capability() ),
-			$editor,
-			new Profile_Editor( $profiles, $mappings, $choices, $adapter->price_source() ),
-			$check,
-			$categories,
-			$choices,
-			$adapter->price_source(),
-			$fields
-		);
+		return [
+			'path'       => $menu->get_page_path( $page ),
+			'capability' => $page->get_capability( $menu->get_capability() ),
+			'mappings'   => new Mapping_Editor( $mappings, $profiles, $categories, $products, $fields, $links ),
+			'profiles'   => new Profile_Editor( $profiles, $mappings, $choices, $adapter->price_source() ),
+			'check'      => new Mapping_Check( $mappings, $profiles, $validator, $categories, $products, self::context_builder( $adapter ) ),
+			'categories' => $categories,
+			'choices'    => $choices,
+			'fields'     => $fields,
+		];
 	}
 
 	/**

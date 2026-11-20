@@ -162,7 +162,6 @@ final class Mappings_Controller {
 			$base                          => [ 'GET' => 'get_state' ],
 			$base . '/categories'          => [ 'GET' => 'get_categories' ],
 			$base . '/fields'              => [ 'GET' => 'get_fields' ],
-			$base . '/attribute-counts'    => [ 'GET' => 'get_attribute_counts' ],
 			$base . '/dictionary'          => [ 'GET' => 'get_dictionary' ],
 			$base . '/mappings'            => [ 'POST' => 'create_mapping' ],
 			$base . '/mappings' . $id      => [
@@ -295,25 +294,6 @@ final class Mappings_Controller {
 				return $this->respond( [ 'attributes' => $rows ] );
 			}
 		);
-	}
-
-	/**
-	 * `GET R/attribute-counts`: the «Атрибуты» column of the mappings list — how many attributes of its category each mapping fills. It
-	 * is a local read that follows the first paint: it counts from the adapter's cached fields and never reaches the marketplace.
-	 *
-	 * @since 2.1.13
-	 *
-	 * @param \WP_REST_Request $request Request.
-	 * @return \WP_REST_Response|\WP_Error
-	 */
-	public function get_attribute_counts( \WP_REST_Request $request ) {
-		$unknown = $this->reject_unknown_query( $request, [] );
-
-		if ( null !== $unknown ) {
-			return $unknown;
-		}
-
-		return $this->respond( [ 'counts' => $this->mappings->attribute_counts() ] );
 	}
 
 	/**

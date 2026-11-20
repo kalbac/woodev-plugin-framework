@@ -403,6 +403,7 @@ function HeaderActions( { definition, query, selection, handle, extensions, hasB
 					onSearch={ ( text ) => onChange( changeQuery( query, { search: text } ) ) }
 				/>
 			) }
+			{ extensions.renderHeaderActions?.( handle ) }
 		</div>
 	);
 }
@@ -498,7 +499,9 @@ export function RecordsTable( {
 	const chosen = { selectedIds: selection.selectedIds, matching: selection.matchingQuery, clear: selection.clear };
 	const emptyAction = message( messages, MESSAGE_KEYS.emptyAction );
 	const emptyButton =
-		hasBulk && emptyAction !== '' ? extensions.renderAccountActions?.( chosen, handle, [ emptyAction ] ) ?? null : null;
+		hasBulk && emptyAction !== ''
+			? extensions.renderAccountActions?.( chosen, handle, [ emptyAction ] ) ?? null
+			: extensions.renderEmptyActions?.( handle ) ?? null;
 	const summary = message( messages, MESSAGE_KEYS.summary );
 	const description = message( messages, MESSAGE_KEYS.description );
 	const limitNote = selection.limitReached ? message( messages, MESSAGE_KEYS.selectionLimit ) : '';
