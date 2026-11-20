@@ -553,12 +553,9 @@ final class MappingsEditorTest extends TestCase {
 		$this->h->schema->warm = true;
 		$this->h->schema->calls = [];
 
-		$response = $this->h->controller->get_attribute_counts( new Json_Request() );
-
-		$this->assertNotInstanceOf( \WP_Error::class, $response, $response instanceof \WP_Error ? $response->get_error_message() : '' );
 		$this->assertSame(
 			[ $id => [ 'filled' => 1, 'total' => 3, 'required_missing' => 1 ] ],
-			$response->get_data()['counts'],
+			$this->h->editor->attribute_counts(),
 			'Brand is filled; colour is required and empty; weight is optional.'
 		);
 		$this->assertArrayNotHasKey( 'fields', $this->h->schema->calls, 'The list never asks the marketplace for fields.' );
@@ -573,9 +570,7 @@ final class MappingsEditorTest extends TestCase {
 		$this->h->editor->save( null, $this->body() );
 		$this->h->schema->calls = [];
 
-		$response = $this->h->controller->get_attribute_counts( new Json_Request() );
-
-		$this->assertSame( [], $response->get_data()['counts'] );
+		$this->assertSame( [], $this->h->editor->attribute_counts() );
 		$this->assertArrayNotHasKey( 'fields', $this->h->schema->calls );
 		$this->assertGreaterThan( 0, $this->h->schema->calls['cached_fields'] ?? 0, 'The cache was asked.' );
 	}
@@ -615,16 +610,21 @@ final class MappingsEditorTest extends TestCase {
 	 * @return void
 	 */
 	public function test_a_profile_summary_names_what_it_sets_and_the_mappings_that_use_it(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( string $name, $default = false ) {
+				return $default;
+			}
+		);
 		$used = $this->h->profile_editor->save( null, [ 'name' => 'Основной', 'fallback_weight' => '2' ] )['id'];
 		$free = $this->h->profile_editor->save( null, [ 'name' => 'Запасной' ] )['id'];
 		$this->h->editor->save( null, $this->body( [ 'profile_id' => $used ] ) );
 
 		$summaries = array_column( $this->h->profile_editor->summaries(), null, 'id' );
 
-		$this->assertContains( 'Вес', $summaries[ $used ]['properties'] );
+		$this->assertContains( 'Вес: 2 кг', $summaries[ $used ]['properties'], 'the value is there, in the shop\'s unit' );
 		$this->assertSame( [ 'Платья' ], $summaries[ $used ]['used_in'] );
 		$this->assertSame( 1, $summaries[ $used ]['mappings'] );
-		$this->assertNotContains( 'Вес', $summaries[ $free ]['properties'] );
+		$this->assertSame( [], $summaries[ $free ]['properties'] );
 		$this->assertSame( [], $summaries[ $free ]['used_in'] );
 	}
 }

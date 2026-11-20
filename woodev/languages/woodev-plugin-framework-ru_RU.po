@@ -12867,3 +12867,89 @@ msgstr ""
 #: marketplace/class-marketplace-plugin.php:204
 msgid "Сопоставление и профили"
 msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-list-definition.php:64
+msgid "На этой странице настраивается соответствие категорий вашего магазина категориям Ozon и указывается, откуда брать значения характеристик товаров."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-list-definition.php:66
+msgid "Не удалось загрузить сопоставления. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-list-definition.php:67
+msgid "Сопоставлений на странице"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-list-provider.php:135
+msgid "сопоставление"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-list-provider.php:135
+msgid "сопоставления"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-list-provider.php:135
+msgid "сопоставлений"
+msgstr ""
+
+#. translators: 1: attributes the mapping fills, 2: attributes its category has.
+#: marketplace/admin/pages/mappings/class-mapping-list-provider.php:169
+#, php-format
+msgid "%1$d из %2$d"
+msgstr ""
+
+#. translators: %d: number of required attributes left empty.
+#: marketplace/admin/pages/mappings/class-mapping-list-provider.php:184
+#, php-format
+msgid "Не заполнены обязательные атрибуты: %d"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-list-definition.php:56
+msgid "На этой странице хранятся профили выгрузки — общие правила для габаритов, веса, НДС и цены. Профиль настраивается один раз и выбирается в нужных сопоставлениях."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-list-definition.php:58
+msgid "Не удалось загрузить профили. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-list-definition.php:59
+msgid "Профилей на странице"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-list-provider.php:108
+msgid "профиль"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-list-provider.php:108
+msgid "профиля"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-list-provider.php:108
+msgid "профилей"
+msgstr ""
+
+#. translators: %d: how many of the profile's data sources the merchant changed from the default.
+#: marketplace/admin/pages/mappings/class-profile-properties.php:89
+#, php-format
+msgid "изменены (%d)"
+msgstr ""
+
+#. translators: %s: the exchange rate the merchant typed.
+#: marketplace/admin/pages/mappings/class-profile-properties.php:167
+#, php-format
+msgid "по курсу %s"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-properties.php:171
+msgid "из поля товара"
+msgstr ""
+
+#. translators: %s: the markup in percent.
+#: marketplace/admin/pages/mappings/class-profile-properties.php:188
+#, php-format
+msgid "наценка %s%%"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-profile-properties.php:191
+msgid "своё правило"
+msgstr ""

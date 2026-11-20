@@ -68,6 +68,13 @@ export interface RecordsExtensions {
 	 * just the actions of those ids (the empty table offers one of them in its own body).
 	 */
 	renderAccountActions?: ( selection: SelectionHandle, table: TableHandle, only?: string[] ) => ReactNode;
+	/**
+	 * A control of the page drawn in the table card's header, after the bulk group and the search («Добавить сопоставление»). It
+	 * is also in the header of the empty table.
+	 */
+	renderHeaderActions?: ( table: TableHandle ) => ReactNode;
+	/** What the empty table offers in its own body, when PHP names no account action for it («Создать первое сопоставление»). */
+	renderEmptyActions?: ( table: TableHandle ) => ReactNode;
 	/** F6 — runs a declared account action for a button of the account line; the payload comes from the server unchanged. */
 	onAccountAction?: ( action: ActionDescriptor, payload: Record< string, string >, table: TableHandle ) => void;
 	/** F6 — always mounted, bulk actions or not: the host of the action dialog that a row action opens. */

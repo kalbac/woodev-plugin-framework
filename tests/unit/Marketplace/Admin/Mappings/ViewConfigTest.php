@@ -71,7 +71,7 @@ final class ViewConfigTest extends TestCase {
 
 		$messages = View_Config::messages();
 
-		foreach ( [ 'backToMappings', 'backToProfiles', 'newMapping', 'newProfile', 'groupCategories', 'groupPrice', 'fallbackDimensions', 'columnProfile', 'checkHeading' ] as $key ) {
+		foreach ( [ 'backToMappings', 'backToProfiles', 'newMapping', 'newProfile', 'groupCategories', 'groupPrice', 'fallbackDimensions', 'checkHeading' ] as $key ) {
 			$this->assertNotSame( '', $messages[ $key ] ?? '', $key );
 		}
 
