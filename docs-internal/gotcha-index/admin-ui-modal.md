@@ -8,6 +8,7 @@
 - [admin-ui/modal] **a backdrop's `opacity` dims the dialog too when the dialog is its child.** → [modal-backdrop-opacity-dims-the-whole-dialog](../gotchas/modal-backdrop-opacity-dims-the-whole-dialog.md) (s48)
 - [admin-ui/modal] **The `woodev-modal` script and style handles are registered on the STOREFRONT hook only — an admin script that depends on them silently never loads; register them where the admin surface enqueues.** → [the-modal-shell-handles-are-registered-on-the-storefront-hook-only](../gotchas/the-modal-shell-handles-are-registered-on-the-storefront-hook-only.md) (s163)
 - [admin-ui/modal] **`woodev-modal.css` resets `div`/`form` to `display: block` at CLASS specificity and loads after ours — a single-class form inside the shell loses its flex/gaps; scope it under `.woodev-modal`.** → [woodev-modal-css-resets-display-so-a-single-class-form-loses-to-it](../gotchas/woodev-modal-css-resets-display-so-a-single-class-form-loses-to-it.md) (s164)
+- [admin-ui/modal] **Newer WP Modal adds `.components-modal__children-container` (display:block) — flex/scroll rules on `__content` never apply, the footer is clipped; make it the flex column.** → [newer-wp-modal-wraps-content-in-a-children-container-that-ignores-flex-and-scroll-rules](../gotchas/newer-wp-modal-wraps-content-in-a-children-container-that-ignores-flex-and-scroll-rules.md) (s239)
 
 ## Related
 
