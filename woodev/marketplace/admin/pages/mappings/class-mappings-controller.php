@@ -162,6 +162,7 @@ final class Mappings_Controller {
 			$base                          => [ 'GET' => 'get_state' ],
 			$base . '/categories'          => [ 'GET' => 'get_categories' ],
 			$base . '/fields'              => [ 'GET' => 'get_fields' ],
+			$base . '/attribute-counts'    => [ 'GET' => 'get_attribute_counts' ],
 			$base . '/dictionary'          => [ 'GET' => 'get_dictionary' ],
 			$base . '/mappings'            => [ 'POST' => 'create_mapping' ],
 			$base . '/mappings' . $id      => [
@@ -292,6 +293,29 @@ final class Mappings_Controller {
 				$rows    = $this->mappings->attribute_rows( $entry['identity'], $sources );
 
 				return $this->respond( [ 'attributes' => $rows ] );
+			}
+		);
+	}
+
+	/**
+	 * `GET R/attribute-counts`: the «Атрибуты» column of the mappings list — how many attributes of its category each mapping fills. It
+	 * follows the first paint, which asks the adapter for no fields.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function get_attribute_counts( \WP_REST_Request $request ) {
+		$unknown = $this->reject_unknown_query( $request, [] );
+
+		if ( null !== $unknown ) {
+			return $unknown;
+		}
+
+		return $this->remote(
+			function (): \WP_REST_Response {
+				return $this->respond( [ 'counts' => $this->mappings->attribute_counts() ] );
 			}
 		);
 	}

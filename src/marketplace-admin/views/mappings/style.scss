@@ -18,6 +18,15 @@
 	}
 }
 
+// The section's description: a full-width row under the tabs, in the words of the records pages' own.
+.woodev-mappings-description {
+	color: #3c434a;
+	font-size: 13px;
+	line-height: 1.5;
+	margin: wd.$gap-lg 0 0;
+	max-width: none;
+}
+
 .woodev-mappings-back {
 	margin: 0 0 wd.$gap;
 }
@@ -52,6 +61,52 @@
 		justify-content: flex-end;
 	}
 
+	// The buttons of a row: one group on one line.
+	&__buttons {
+		display: inline-flex;
+		flex-wrap: nowrap;
+		gap: 4px;
+		white-space: nowrap;
+	}
+
+	// A long list of categories or properties is clipped to two lines; its full text is the cell's `title`.
+	&__clipped {
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		display: -webkit-box;
+		line-clamp: 2;
+		max-width: 260px;
+		overflow: hidden;
+		overflow-wrap: anywhere;
+	}
+
+	&__muted {
+		color: wd.$muted;
+	}
+
+	&__attributes {
+		align-items: center;
+		display: inline-flex;
+		gap: 6px;
+		white-space: nowrap;
+	}
+
+	// The orange «!» of a category whose required attributes are not all filled.
+	&__warning {
+		align-items: center;
+		background: #f0b849;
+		border-radius: 50%;
+		color: #1e1e1e;
+		cursor: help;
+		display: inline-flex;
+		font-size: 11px;
+		font-weight: 700;
+		height: 16px;
+		justify-content: center;
+		line-height: 1;
+		width: 16px;
+	}
+
 	// The count column is a number: as wide as its heading and the figure, right-aligned, not half the table.
 	.woocommerce-table__header.is-numeric,
 	.woocommerce-table__item.is-numeric {
@@ -60,14 +115,23 @@
 		text-align: right;
 	}
 
+	// The empty list: the explanation and the button that creates the first record, centred in the card like the records tables'.
 	&__empty {
-		margin: 0;
 		color: wd.$muted;
+		padding: wd.$gap-lg 0;
+		text-align: center;
+
+		p {
+			margin: 0 0 wd.$gap;
+		}
 	}
 
-	&--empty .components-card__header {
-		justify-content: flex-end;
-	}
+}
+
+// The list of the mappings a profile is chosen in, in the delete dialog (a portal: it stands outside the view).
+.woodev-mappings-delete__used {
+	list-style: disc;
+	margin: 0 0 0 20px;
 }
 
 // --- The forms ------------------------------------------------------------------------------------------------

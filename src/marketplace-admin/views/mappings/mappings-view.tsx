@@ -1,5 +1,5 @@
 /**
- * The «Сопоставление» page: two tabs (mappings, profiles). Each shows its list; opening a record, or adding one,
+ * The «Сопоставление и профили» page: two tabs (mappings, profiles). Each shows its list; opening a record, or adding one,
  * replaces the list with the record's form, and «← Все …» brings the list back. Where the page is lives in the URL
  * ({@see ./route}).
  *
@@ -19,7 +19,7 @@ import { MappingsList, ProfilesList } from './mapping-lists';
 import { Notices, type NoticeState } from './notices';
 import { ProfileEditor } from './profile-editor';
 import { selectionArgument, useRoute, type Selection } from './route';
-import type { MappingsState } from './types';
+import type { AttributeCountsById, MappingsState } from './types';
 
 export function MappingsView( { page, menu, query }: PageViewProps ) {
 	const api = useMemo( () => createApi( menu.pluginId ), [ menu.pluginId ] );
@@ -27,6 +27,7 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 	const [ state, setState ] = useState< MappingsState | null >( null );
 	const [ failure, setFailure ] = useState< NoticeState | null >( null );
 	const [ notice, setNotice ] = useState< NoticeState | null >( null );
+	const [ counts, setCounts ] = useState< AttributeCountsById | null >( null );
 
 	const load = useCallback( () => {
 		api.state()
@@ -35,6 +36,23 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 	}, [ api ] );
 
 	useEffect( load, [ load ] );
+
+	// The «Атрибуты» column follows the list: the first paint asks the marketplace for no fields. A failed read leaves the column
+	// with its dashes; the list itself is fine without it.
+	useEffect( () => {
+		if ( ! state ) {
+			return undefined;
+		}
+
+		let current = true;
+		api.attributeCounts()
+			.then( ( answer ) => current && setCounts( Array.isArray( answer.counts ) ? {} : answer.counts ) )
+			.catch( () => undefined );
+
+		return () => {
+			current = false;
+		};
+	}, [ api, state ] );
 
 	if ( failure ) {
 		return <Notices notice={ failure } onDismiss={ () => setFailure( null ) } />;
@@ -58,6 +76,18 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 
 	const pickMapping = ( selection: Selection ) => open( { mapping: selectionArgument( selection ) } );
 	const pickProfile = ( selection: Selection ) => open( { profile: selectionArgument( selection ) } );
+	/** A profile linked from a mapping's row: its form, on the other tab. */
+	const openProfile = ( id: number ) => open( { tab: 'profiles', mapping: undefined, profile: String( id ) } );
+	/** A delete asked in the list: the page shows what came of it, and the list is read again. */
+	const remove = async ( request: () => Promise< unknown >, sentence: string ) => {
+		try {
+			await request();
+			done( sentence );
+		} catch ( error ) {
+			setNotice( { status: 'error', lines: errorLines( error, messages.requestFailed ) } );
+		}
+	};
+	const listing = tab === 'mappings' ? mapping === undefined : profile === undefined;
 
 	return (
 		<div className="woodev-mappings-view woodev-settings">
@@ -72,10 +102,21 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 				// The other tab starts from its list, whatever was open here.
 				onSelect={ ( id ) => open( { tab: id === 'profiles' ? 'profiles' : undefined, mapping: undefined, profile: undefined } ) }
 			/>
+			{ listing && (
+				<p className="woodev-mappings-description">
+					{ tab === 'mappings' ? messages.descriptionMappings : messages.descriptionProfiles }
+				</p>
+			) }
 			<div className="woodev-mappings-body">
 				{ tab === 'mappings' ? (
 					mapping === undefined ? (
-						<MappingsList state={ state } onOpen={ pickMapping } />
+						<MappingsList
+							state={ state }
+							counts={ counts }
+							onOpen={ pickMapping }
+							onOpenProfile={ openProfile }
+							onDelete={ ( id ) => remove( () => api.deleteMapping( id ), messages.deletedMapping ) }
+						/>
 					) : (
 						<>
 							<Back label={ messages.backToMappings } onClick={ () => pickMapping( undefined ) } />
@@ -103,7 +144,11 @@ export function MappingsView( { page, menu, query }: PageViewProps ) {
 						</>
 					)
 				) : profile === undefined ? (
-					<ProfilesList state={ state } onOpen={ pickProfile } />
+					<ProfilesList
+						state={ state }
+						onOpen={ pickProfile }
+						onDelete={ ( id ) => remove( () => api.deleteProfile( id ), messages.deletedProfile ) }
+					/>
 				) : (
 					<>
 						<Back label={ messages.backToProfiles } onClick={ () => pickProfile( undefined ) } />

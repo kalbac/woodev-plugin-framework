@@ -538,4 +538,43 @@ final class MappingsEditorTest extends TestCase {
 		$this->assertSame( 0, $this->h->schema->calls['fields'] ?? 0, 'the first paint never asks for fields' );
 		$this->assertSame( 'private, no-store', $response->get_headers()['Cache-Control'] ?? ( $response->headers['Cache-Control'] ?? 'private, no-store' ) );
 	}
+
+	/**
+	 * The «Атрибуты» column: how many attributes of the category the mapping fills and how many required ones it leaves empty. It is a
+	 * read of its own, so the first paint above never asks for fields.
+	 *
+	 * @return void
+	 */
+	public function test_attribute_counts_follow_the_stored_sources_in_a_read_of_their_own(): void {
+		$id = $this->h->editor->save( null, $this->body() )['id'];
+		$this->h->schema->calls = [];
+
+		$response = $this->h->controller->get_attribute_counts( new Json_Request() );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $response, $response instanceof \WP_Error ? $response->get_error_message() : '' );
+		$this->assertSame(
+			[ $id => [ 'filled' => 1, 'total' => 3, 'required_missing' => 1 ] ],
+			$response->get_data()['counts'],
+			'Brand is filled; colour is required and empty; weight is optional.'
+		);
+	}
+
+	/**
+	 * The profiles list says what each profile sets and which mappings choose it, so «Удалить» can name them.
+	 *
+	 * @return void
+	 */
+	public function test_a_profile_summary_names_what_it_sets_and_the_mappings_that_use_it(): void {
+		$used = $this->h->profile_editor->save( null, [ 'name' => 'Основной', 'fallback_weight' => '2' ] )['id'];
+		$free = $this->h->profile_editor->save( null, [ 'name' => 'Запасной' ] )['id'];
+		$this->h->editor->save( null, $this->body( [ 'profile_id' => $used ] ) );
+
+		$summaries = array_column( $this->h->profile_editor->summaries(), null, 'id' );
+
+		$this->assertContains( 'Вес', $summaries[ $used ]['properties'] );
+		$this->assertSame( [ 'Платья' ], $summaries[ $used ]['used_in'] );
+		$this->assertSame( 1, $summaries[ $used ]['mappings'] );
+		$this->assertNotContains( 'Вес', $summaries[ $free ]['properties'] );
+		$this->assertSame( [], $summaries[ $free ]['used_in'] );
+	}
 }

@@ -10,6 +10,7 @@
 
 import apiFetch from '@wordpress/api-fetch';
 import type {
+	AttributeCountsById,
 	AttributeRow,
 	CategoryChoice,
 	CheckStep,
@@ -67,6 +68,8 @@ export function createApi( pluginId: string ) {
 		state: () => apiFetch< MappingsState >( { path: base } ),
 		searchCategories: ( search: string ) =>
 			apiFetch< { results: CategoryChoice[] } >( { path: withQuery( `${ base }/categories`, { search } ) } ),
+		/** The «Атрибуты» column, read after the list is on screen; `counts` is `[]` (not `{}`) when there is none. */
+		attributeCounts: () => apiFetch< { counts: AttributeCountsById | [] } >( { path: `${ base }/attribute-counts` } ),
 		fields: ( category: string, mappingId: number | null ) =>
 			apiFetch< { attributes: AttributeRow[] } >( {
 				path: withQuery( `${ base }/fields`, { category, mapping_id: mappingId } ),

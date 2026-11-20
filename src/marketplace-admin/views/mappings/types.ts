@@ -21,6 +21,14 @@ export interface ShopCategory {
 	mapping_name: string;
 }
 
+/** How many attributes of its category a mapping fills. */
+export interface AttributeCounts {
+	filled: number;
+	total: number;
+	/** Required attributes left empty: the products of the mapping cannot be exported while there are any. */
+	required_missing: number;
+}
+
 export interface MappingSummary {
 	id: number;
 	name: string;
@@ -30,10 +38,17 @@ export interface MappingSummary {
 	products: number;
 }
 
+/** The counts by mapping id; a mapping whose fields could not be read has none. */
+export type AttributeCountsById = Record< string, AttributeCounts >;
+
 export interface ProfileSummary {
 	id: number;
 	name: string;
 	mappings: number;
+	/** What the profile sets, one merchant's word per group; empty for a profile with nothing set. */
+	properties: string[];
+	/** The names of the mappings that choose the profile. */
+	used_in: string[];
 }
 
 export interface SourceSetting {

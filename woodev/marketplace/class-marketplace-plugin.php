@@ -195,10 +195,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 					'tables' => [ 'orders' ],
 				],
 				[
-					'slug'  => 'mappings',
-					'title' => __( 'Сопоставление', 'woodev-plugin-framework' ),
-					'kind'  => Page::KIND_CUSTOM,
-					'view'  => 'mappings',
+					'slug'    => 'mappings',
+					'title'   => __( 'Сопоставление', 'woodev-plugin-framework' ),
+					// The menu is narrow, so its entry stays short; the page says both of its tabs.
+					'heading' => __( 'Сопоставление и профили', 'woodev-plugin-framework' ),
+					'kind'    => Page::KIND_CUSTOM,
+					'view'    => 'mappings',
 				],
 				[
 					'slug'  => 'tools',
