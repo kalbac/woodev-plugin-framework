@@ -12467,149 +12467,59 @@ msgstr ""
 msgid "Статус на маркетплейсе"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-profile-editor.php:137
-msgid "Источники данных"
+#: marketplace/admin/product/class-panel-view.php:319
+msgid "Действие над отмеченными вариантами"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-profile-editor.php:138
-msgid "Габариты"
+#: marketplace/admin/product/class-panel-view.php:336
+msgid "Отметить все варианты"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-profile-editor.php:140
-msgid "Единицы измерения"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-profile-editor.php:141
-msgid "НДС"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-profile-editor.php:142
-msgid "Валюта"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:147
-msgid "Сопоставление связывает категории вашего магазина с категориями маркетплейса и подсказывает, откуда брать значения характеристик. Так товар попадает в нужный раздел сразу с заполненными данными."
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:148
-msgid "Профиль хранит общие правила выгрузки: габариты, вес, НДС, цену. Настройте его один раз и выбирайте в нескольких сопоставлениях."
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:149
-msgid "Сопоставлений пока нет. Сопоставление связывает категории вашего магазина с категориями маркетплейса: так товары попадают в нужный раздел и получают нужные характеристики."
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:150
-msgid "Создать первое сопоставление"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:151
-msgid "В магазине пока нет категорий товаров, а сопоставление работает по категориям. Создайте категорию товаров и вернитесь сюда."
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:152
-msgid "Создать категорию товаров"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:154
-msgid "Профилей пока нет. Профиль — это набор общих настроек для группы товаров, например габариты и вес по умолчанию, ставка НДС, правило цены. Создайте его один раз и выбирайте в сопоставлениях."
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:155
-msgid "Создать первый профиль"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:156
-msgid "Категории магазина"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:157
-msgid "Атрибуты"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:158
-msgid "Товары, у которых не заполнены обязательные атрибуты категории, выгрузить на маркетплейс нельзя."
-msgstr ""
-
-#. translators: {filled} and {total} are replaced by the view: the attributes the mapping fills and the attributes its category has.
-#: marketplace/admin/pages/mappings/class-view-config.php:160
-msgid "{filled} из {total}"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:161
-msgid "Откройте сопоставление, чтобы загрузить характеристики."
-msgstr ""
-
-#. translators: {count} is replaced by the view: the number of required attributes left empty.
-#: marketplace/admin/pages/mappings/class-view-config.php:163
-msgid "Не заполнены обязательные атрибуты: {count}"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:164
-msgid "Свойства профиля"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:165
-msgid "Используется в"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:166
-msgid "Не настроен"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:170
-msgid "Удалить сопоставление?"
-msgstr ""
-
-#. translators: {name} is replaced by the view: the mapping's name.
-#: marketplace/admin/pages/mappings/class-view-config.php:172
-msgid "Сопоставление «{name}» будет удалено. Товары и категории магазина не изменятся."
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:173
-msgid "Удалить профиль?"
-msgstr ""
-
-#. translators: {name} is replaced by the view: the profile's name.
-#: marketplace/admin/pages/mappings/class-view-config.php:175
-msgid "Профиль «{name}» будет удалён. Сопоставления, где его нет, не изменятся."
-msgstr ""
-
-#. translators: {name} is replaced by the view: the profile's name.
-#: marketplace/admin/pages/mappings/class-view-config.php:177
-msgid "Профиль «{name}» используется"
-msgstr ""
-
-#: marketplace/admin/pages/mappings/class-view-config.php:178
-msgid "Он выбран в этих сопоставлениях. Удалить его можно, когда в них будет выбран другой профиль:"
-msgstr ""
-
-#: marketplace/admin/pages/products/class-remote-cards-actions.php:616
-#: marketplace/admin/pages/products/class-remote-cards-actions.php:635
-msgid "Карточка уже не связана ни с одним товаром."
-msgstr ""
-
-#: marketplace/admin/pages/products/class-remote-cards-definition.php:383
-#: marketplace/admin/pages/products/class-remote-cards-definition.php:391
-msgid "Отвязать"
-msgstr ""
-
-#: marketplace/admin/pages/products/class-remote-cards-definition.php:403
-msgid "Связать с товаром…"
+#: marketplace/admin/product/class-panel-view.php:337
+msgid "Изображение"
 msgstr ""
 
 #. translators: %s: marketplace name.
-#: marketplace/admin/pages/products/class-remote-cards-definition.php:464
+#: marketplace/admin/product/class-panel-view.php:343
 #, php-format
-msgid "Это карточки товаров, которые уже есть в вашем кабинете %s. Загрузите их в магазин одним нажатием или свяжите с товарами сайта — тогда остатки и цены будут обновляться сами."
+msgid "Слева — остаток на сайте, справа — на %s. Прочерк — данных пока нет."
 msgstr ""
 
 #. translators: %s: marketplace name.
-#: marketplace/admin/pages/products/class-site-products-definition.php:434
+#: marketplace/admin/product/class-panel-view.php:344
 #, php-format
-msgid "Здесь видно, какие товары вашего магазина уже выгружены на %s, а какие ещё нет. Отметьте товары, чтобы отправить их на маркетплейс, обновить остатки и цены или связать с готовой карточкой."
+msgid "Слева — цена на сайте, справа — цена, которую %s получил в последний раз. Прочерк — данных пока нет."
 msgstr ""
 
-#: marketplace/class-marketplace-plugin.php:203
-msgid "Сопоставление и профили"
+#. translators: %s: name of a variation.
+#: marketplace/admin/product/class-panel-view.php:364
+#, php-format
+msgid "Отметить вариант «%s»"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:371
+msgid "Артикул будет отправлен на маркетплейс вместе с карточкой."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:475
+msgid "отменить"
+msgstr ""
+
+#. translators: %d: number of problems.
+#: marketplace/admin/product/class-panel-view.php:622
+#, php-format
+msgid "Есть проблемы (%d) — нажмите, чтобы посмотреть"
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:543
+msgid "Выберите действие."
+msgstr ""
+
+#: marketplace/admin/product/class-product-tab.php:544
+#: marketplace/admin/product/class-variation-bulk-actions.php:213
+msgid "Отметьте варианты, с которыми нужно что-то сделать."
+msgstr ""
+
+#: marketplace/admin/product/class-variation-bulk-actions.php:197
+msgid "Страница устарела. Обновите её и повторите."
 msgstr ""

@@ -657,6 +657,12 @@ final class Panel_Reader {
 			$sent   = $facts['price']['sent'] ?? null;
 			$rows[] = [
 				'id'       => $child_id,
+				'image'    => $this->image_url( $child ),
+				'is_new'   => Card_State_Badge::is_unsent( $state ),
+				'can_archive' => Link_Record::STATE_CREATED === $state,
+				'can_detach'  => null !== $record && Link_Record::STATE_UNLINKED !== $state,
+				'site_stock'  => $child->managing_stock() && null !== $child->get_stock_quantity() ? (string) $child->get_stock_quantity() : '',
+				'site_price'  => (string) $child->get_price(),
 				'name'     => function_exists( 'wc_get_formatted_variation' ) && $child instanceof \WC_Product_Variation ? wp_strip_all_tags( (string) wc_get_formatted_variation( $child, true, false ) ) : '',
 				'badge'    => Card_State_Badge::of( $state ),
 				'offer_id' => null === $record || null === $record->offer_id() ? $this->contexts->offer_id( $account, $child, $record ?? Link_Record::offer( $account->id(), $child_id, (int) $child->get_parent_id(), '' ) ) : (string) $record->offer_id(),
@@ -670,5 +676,18 @@ final class Panel_Reader {
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * Returns the address of a variation's small picture: its own, else WooCommerce's placeholder (the table never has an empty cell).
+	 *
+	 * @param \WC_Product $product Variation.
+	 * @return string
+	 */
+	private function image_url( \WC_Product $product ): string {
+		$id  = (int) $product->get_image_id();
+		$url = $id > 0 ? wp_get_attachment_image_url( $id, 'thumbnail' ) : false;
+
+		return is_string( $url ) && '' !== $url ? $url : wc_placeholder_img_src( 'thumbnail' );
 	}
 }

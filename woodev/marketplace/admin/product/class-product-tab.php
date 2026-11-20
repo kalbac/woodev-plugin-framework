@@ -178,6 +178,13 @@ final class Product_Tab {
 	private $extension;
 
 	/**
+	 * The actions of the variations (the table's select and each variation's buttons); null without them.
+	 *
+	 * @var Variation_Bulk_Actions|null
+	 */
+	private $variation_actions;
+
+	/**
 	 * Blocks of the variations read in this request, by variation id.
 	 *
 	 * @var array<int,array<int,array<string,mixed>>>
@@ -189,25 +196,27 @@ final class Product_Tab {
 	 *
 	 * @since 2.1.2
 	 *
-	 * @param Admin_Guard            $guard     Authorisation (built with {@see Admin_Guard::for_store()}).
-	 * @param Wpdb_Account_Store     $accounts  Accounts.
-	 * @param Wpdb_Link_Store        $links     Links.
-	 * @param Panel_Reader           $reader    Read side.
-	 * @param Panel_View             $view      Markup.
-	 * @param Link_Settings_Writer   $writer    Write side.
-	 * @param Link_Form_Input        $input     Parses the posted body.
-	 * @param Export_Service         $export    Export.
-	 * @param Link_Scheduler         $scheduler Linking jobs.
-	 * @param License_Gate           $license   Licence.
-	 * @param Link_Detacher          $detacher  Detaches a card.
-	 * @param Stock_Intents          $stock     Stock and archive intents.
-	 * @param Screen_Names           $names     Names.
-	 * @param array<string,string>   $urls      `settings`, `mappings`, `assets`.
-	 * @param string                 $version   Plugin version.
-	 * @param string[]               $withheld  Operations the marketplace cannot serve (`export`, `link`): no button, and the AJAX refuses them.
-	 * @param Product_Extension|null $extension The adapter's own fields of the tab, null for none (2.1.7).
+	 * @param Admin_Guard                 $guard     Authorisation (built with {@see Admin_Guard::for_store()}).
+	 * @param Wpdb_Account_Store          $accounts  Accounts.
+	 * @param Wpdb_Link_Store             $links     Links.
+	 * @param Panel_Reader                $reader    Read side.
+	 * @param Panel_View                  $view      Markup.
+	 * @param Link_Settings_Writer        $writer    Write side.
+	 * @param Link_Form_Input             $input     Parses the posted body.
+	 * @param Export_Service              $export    Export.
+	 * @param Link_Scheduler              $scheduler Linking jobs.
+	 * @param License_Gate                $license   Licence.
+	 * @param Link_Detacher               $detacher  Detaches a card.
+	 * @param Stock_Intents               $stock     Stock and archive intents.
+	 * @param Screen_Names                $names     Names.
+	 * @param array<string,string>        $urls      `settings`, `mappings`, `assets`.
+	 * @param string                      $version   Plugin version.
+	 * @param string[]                    $withheld  Operations the marketplace cannot serve (`export`, `link`): no button, and the AJAX refuses them.
+	 * @param Product_Extension|null      $extension The adapter's own fields of the tab, null for none (2.1.7).
+	 * @param Variation_Bulk_Actions|null $variation_actions The actions of the variations (2.1.13); null leaves a variable product's table without them.
 	 */
-	public function __construct( Admin_Guard $guard, Wpdb_Account_Store $accounts, Wpdb_Link_Store $links, Panel_Reader $reader, Panel_View $view, Link_Settings_Writer $writer, Link_Form_Input $input, Export_Service $export, Link_Scheduler $scheduler, License_Gate $license, Link_Detacher $detacher, Stock_Intents $stock, Screen_Names $names, array $urls, string $version, array $withheld = [], ?Product_Extension $extension = null ) {
+	public function __construct( Admin_Guard $guard, Wpdb_Account_Store $accounts, Wpdb_Link_Store $links, Panel_Reader $reader, Panel_View $view, Link_Settings_Writer $writer, Link_Form_Input $input, Export_Service $export, Link_Scheduler $scheduler, License_Gate $license, Link_Detacher $detacher, Stock_Intents $stock, Screen_Names $names, array $urls, string $version, array $withheld = [], ?Product_Extension $extension = null, ?Variation_Bulk_Actions $variation_actions = null ) {
+		$this->variation_actions = $variation_actions;
 		$this->guard     = $guard;
 		$this->accounts  = $accounts;
 		$this->links     = $links;
@@ -300,6 +309,10 @@ final class Product_Tab {
 			$screen['extension'] = $this->extension->screen( $product );
 		}
 
+		if ( null !== $this->variation_actions && $product->is_type( 'variable' ) ) {
+			$screen['variations'] = $this->variation_actions->panel_facts();
+		}
+
 		$this->view->render_tab( $screen );
 	}
 
@@ -330,6 +343,11 @@ final class Product_Tab {
 
 		if ( null !== $this->extension ) {
 			$screen['extension'] = $this->extension->screen( $product, (int) $loop );
+		}
+
+		if ( null !== $this->variation_actions ) {
+			$screen['variations']    = $this->variation_actions->panel_facts();
+			$screen['parent_id']     = (int) $product->get_parent_id();
 		}
 
 		$this->view->render_variation( $screen );
@@ -522,6 +540,8 @@ final class Product_Tab {
 					'close'   => __( 'Закрыть', 'woodev-plugin-framework' ),
 					'working' => __( 'Выполняем…', 'woodev-plugin-framework' ),
 					'failed'  => __( 'Не получилось: страница не ответила. Обновите её и повторите.', 'woodev-plugin-framework' ),
+					'pickAction'   => __( 'Выберите действие.', 'woodev-plugin-framework' ),
+					'pickVariants' => __( 'Отметьте варианты, с которыми нужно что-то сделать.', 'woodev-plugin-framework' ),
 				],
 			]
 		);
