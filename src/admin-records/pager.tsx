@@ -1,6 +1,6 @@
 /**
- * The card footer's pager: the page count with its two arrows, the jump-to-page field and the page-size select, always drawn
- * — a table of one page included, with the arrows and the field off — like the footer of «Заказы доставки».
+ * The card footer's pager: the page count with its two arrows and the jump-to-page field — drawn only when the result has more
+ * than one page — and the page-size select, always drawn, like the footer of «Заказы доставки».
  *
  * WooCommerce's own `Pagination` draws nothing for one page and offers the page size only above 25 rows, and it cannot be told
  * otherwise (its arrows and its page-size picker are `null` for `pageCount <= 1` in 7.0 and in trunk). So the shell draws the footer
@@ -10,9 +10,29 @@
  * @package woodev-plugin-framework
  */
 
+import type { RefObject } from 'react';
 import { Button, SelectControl } from '@wordpress/components';
+import { useLayoutEffect, useState } from '@wordpress/element';
 import { MESSAGE_KEYS, fillMessage, message } from './messages';
 import type { Messages } from './types';
+
+/** The card's footer, where the pager is drawn. */
+const FOOTER_SLOT = '.components-card__footer';
+
+/**
+ * The footer of the card inside `host`, found again after every render (the card is made again when its columns change).
+ *
+ * @param host The element that holds the card.
+ */
+export function useFooterSlot( host: RefObject< HTMLElement > ): Element | null {
+	const [ slot, setSlot ] = useState< Element | null >( null );
+
+	useLayoutEffect( () => {
+		setSlot( host.current?.querySelector( FOOTER_SLOT ) ?? null );
+	} );
+
+	return slot;
+}
 
 export interface PagerProps {
 	/** The page on screen, from 1. */
@@ -106,7 +126,6 @@ function PagePicker( { page, pages, messages, onPage }: ArrowsProps ) {
 					min={ 1 }
 					max={ pages }
 					defaultValue={ page }
-					disabled={ pages < 2 }
 					onBlur={ ( event ) => jump( event.currentTarget ) }
 					onKeyDown={ ( event ) => event.key === 'Enter' && jump( event.currentTarget ) }
 				/>
@@ -146,12 +165,18 @@ function PageSize( { label, perPage, sizes, onChange }: PageSizeProps ) {
 
 export function Pager( { page, perPage, total, sizes, sizeLabel, messages, onPage, onPerPage }: PagerProps ) {
 	const pages = Math.max( 1, Math.ceil( total / perPage ) );
+	const hasPages = pages > 1;
+	const hasSizes = sizes.length > 1;
+
+	if ( ! hasPages && ! hasSizes ) {
+		return null;
+	}
 
 	return (
 		<div className="woocommerce-pagination woodev-records__pager">
-			<PageArrows page={ page } pages={ pages } messages={ messages } onPage={ onPage } />
-			<PagePicker page={ page } pages={ pages } messages={ messages } onPage={ onPage } />
-			{ sizes.length > 1 && <PageSize label={ sizeLabel } perPage={ perPage } sizes={ sizes } onChange={ onPerPage } /> }
+			{ hasPages && <PageArrows page={ page } pages={ pages } messages={ messages } onPage={ onPage } /> }
+			{ hasPages && <PagePicker page={ page } pages={ pages } messages={ messages } onPage={ onPage } /> }
+			{ hasSizes && <PageSize label={ sizeLabel } perPage={ perPage } sizes={ sizes } onChange={ onPerPage } /> }
 		</div>
 	);
 }

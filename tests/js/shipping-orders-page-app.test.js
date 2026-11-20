@@ -98,7 +98,7 @@ jest.mock( '../../src/shipping-orders-page/order-wizard/order-wizard', () => ( {
  */
 let lastHeaders = null;
 
-function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary, onPageChange } ) {
+function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary, onPageChange, totalRows } ) {
 	lastHeaders = headers;
 
 	return (
@@ -134,6 +134,10 @@ function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage
 			{ summary && (
 				<div>{ summary.map( ( entry ) => `${ entry.label }: ${ entry.value }` ).join( ', ' ) }</div>
 			) }
+			{ /* The footer the page draws its own page-size picker into; WooCommerce draws its own above 25 rows (its smallest size). */ }
+			<div className="components-card__footer">
+				{ totalRows > 25 && <div data-testid="vendor-pagination" /> }
+			</div>
 		</div>
 	);
 }
@@ -4823,5 +4827,41 @@ describe( 'carrier-declared document types (#1257)', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
 
 		await waitFor( () => expect( fetchBulkDocument ).toHaveBeenCalledWith( [ 1, 2 ], 'handover_act', expect.anything() ) );
+	} );
+} );
+
+describe( 'page-size picker of a result of 25 rows or fewer (#1903)', () => {
+	const pageSizePicker = () => screen.queryByRole( 'combobox', { name: 'Заказов на странице' } );
+
+	test( 'a short result still has the picker, on the page size the rows were asked for', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( pageSizePicker() ).toBeInTheDocument() );
+		expect( pageSizePicker() ).toHaveValue( '25' );
+		expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { perPage: 25 } ) );
+		expect( screen.queryByTestId( 'vendor-pagination' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'choosing a size asks for that many rows', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+		await waitFor( () => expect( pageSizePicker() ).toBeInTheDocument() );
+
+		fireEvent.change( pageSizePicker(), { target: { value: '50' } } );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { perPage: 50, page: 1 } ) ) );
+		expect( pageSizePicker() ).toHaveValue( '50' );
+	} );
+
+	test( 'above 25 rows WooCommerce draws the picker, so the page draws none of its own', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ], { total: 40 } ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'vendor-pagination' ) ).toBeInTheDocument() );
+		expect( pageSizePicker() ).not.toBeInTheDocument();
 	} );
 } );

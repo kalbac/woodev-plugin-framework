@@ -4,6 +4,7 @@
 // @package woodev-plugin-framework
 
 @use '../components/tokens' as wd;
+@use '../components/table-look';
 @use '../components/table-chrome';
 @use '../components/woodev-dialog';
 
@@ -29,21 +30,13 @@
 	}
 
 	// The pager of the card's footer ({@see ./pager}) is drawn under WooCommerce's own class names, so the vendor card's stylesheet styles it;
-	// WooCommerce's pagination is hidden, because it draws nothing for one page. The footer stacks the pager over the count, as in «Заказы
-	// доставки». The page-size select's label is beside it, and is the same emotion label: no upper case there either.
+	// WooCommerce's pagination is hidden, because it draws nothing for one page. The footer is one row, as in «Заказы доставки»:
+	// the pager (the page arrows only when there is more than one page), then the count.
 	.components-card__footer > .woocommerce-pagination:not( .woodev-records__pager ) {
 		display: none;
 	}
 
-	.components-card__footer > .woodev-records__pager {
-		order: -1;
-	}
-
-	.woodev-records__page-size .components-input-control__label.components-input-control__label {
-		font-size: 13px;
-		font-weight: 500;
-		text-transform: none;
-	}
+	@include table-look.footer-row;
 
 	// The section's description: a full-width row under the page title, where the filters start.
 	&__description {
@@ -172,18 +165,52 @@
 		}
 	}
 
-	// Columns. A class per column id is on its header and every cell (`TableCard`'s `cellClassName`). Numbers, dates, the
-	// posting number and the order's status never break across lines: a cell that wraps mid-number is unreadable and makes
-	// every row three lines tall.
+	// Columns. A class per column id is on its header and every cell (`TableCard`'s `cellClassName`). Widths follow
+	// WooCommerce's own orders list (`.column-order_number { width: 20ch }` and so on): a column whose content is predictable —
+	// an article, a status, a date, a sum, a count, a posting number — gets a width in `ch`, one rule per kind of column. A text
+	// column (the name, categories, the profile, the buyer) gets none: it takes what is left and wraps. The checkbox, the photo and
+	// the row's icon buttons are pixel elements and keep their `px` below. A cell never breaks a number, a date, a status or a
+	// sum across lines: a cell that wraps mid-number is unreadable and makes every row three lines tall.
+	.woodev-records__col-order,
 	.woodev-records__col-posting,
 	.woodev-records__col-date,
-	.woodev-records__col-order,
 	.woodev-records__col-total,
 	.woodev-records__col-status,
 	.woodev-records__col-state,
+	.woodev-records__col-on_site,
 	.woodev-records__col-stock,
 	.woodev-records__col-price {
 		white-space: nowrap;
+	}
+
+	.woodev-records__col-order {
+		width: 14ch;
+	}
+
+	.woodev-records__col-posting {
+		width: 18ch;
+	}
+
+	.woodev-records__col-date {
+		width: 12ch;
+	}
+
+	.woodev-records__col-status,
+	.woodev-records__col-state,
+	.woodev-records__col-on_site {
+		width: 14ch;
+	}
+
+	// A sum, a price, a stock: the numbers of a row end at the same edge (the column's `align: right`).
+	.woodev-records__col-total,
+	.woodev-records__col-price,
+	.woodev-records__col-stock {
+		width: 12ch;
+	}
+
+	.woodev-records__col-products,
+	.woodev-records__col-attributes {
+		width: 10ch;
 	}
 
 	// WooCommerce pads a cell 24px each side; eight columns lose 380px to it, which is what pushed the actions off a 1024px screen.
@@ -193,6 +220,8 @@
 		padding-left: 10px;
 		padding-right: 10px;
 	}
+
+	@include table-look.header-height;
 
 	// The first column is inset like the card's title above it (24px, WooCommerce's own inset), as the first column of «Заказы доставки» is
 	// inset from the card's edge. The checkbox and expand columns keep their own narrow cells.
@@ -204,6 +233,7 @@
 	// The row's buttons are one group on one line, the last column of the row.
 	.woodev-records__col-actions {
 		white-space: nowrap;
+		width: 1%;
 	}
 
 	// The checkbox column is as wide as its box with the same padding on the left and the right, like «Заказы доставки». The
@@ -255,14 +285,11 @@
 		max-width: 28px;
 	}
 
-	// The product's name column: a FIXED width (a long name never stretches the table), the name wraps to two lines and then ends
-	// in «…» (its full text is the `title`). It stays at the left edge while the table scrolls sideways — with the checkbox column
-	// before it, whose width the `left` offsets add up (the expand column too, on a table whose rows expand).
+	// The name column is a text column: no width, it takes what is left. Only a floor, so a name never wraps in a column too narrow
+	// for one of its words. It stays at the left edge while the table scrolls sideways (the pinned columns' `left` offsets below add
+	// up what stands before it).
 	.woodev-records__col-name {
-		box-sizing: border-box;
-		min-width: 180px;
-		max-width: 180px;
-		width: 180px;
+		min-width: 16ch;
 	}
 
 	// A pinned cell is opaque, so what scrolls under it does not show through. WooCommerce paints the sorted column grey
@@ -358,13 +385,11 @@
 		white-space: normal;
 	}
 
-	// The article: a fixed width, one line, «…» at the end of a longer one (the full value is the line's `title`).
+	// The article: 14ch, one line, «…» at the end of a longer one (the full value is the line's `title`).
 	.woodev-records__col-sku,
 	.woodev-records__col-offer_id {
-		box-sizing: border-box;
-		max-width: 130px;
-		min-width: 130px;
-		width: 130px;
+		max-width: 14ch;
+		width: 14ch;
 
 		.woodev-records__stack,
 		.woodev-records__stack > span,
@@ -380,13 +405,6 @@
 		}
 	}
 
-	.woodev-records__col-on_site {
-		box-sizing: border-box;
-		max-width: 120px;
-		min-width: 120px;
-		width: 120px;
-	}
-
 	// The photo: a small square in a 52px column, pinned beside the checkbox.
 	.woodev-records__col-image {
 		box-sizing: border-box;
@@ -395,37 +413,6 @@
 		padding-left: 6px;
 		padding-right: 6px;
 		width: 52px;
-	}
-
-	// On a 1024px screen (the card is 908px wide with the menu collapsed) the fixed columns give a little back, so a table with a photo and a
-	// row of three action icons fits without a sideways scroll: the article 10px, «На сайте» 10px, the photo 6px (the name's `left` follows).
-	@media ( max-width: 1100px ) {
-		.woodev-records__col-sku,
-		.woodev-records__col-offer_id {
-			max-width: 120px;
-			min-width: 120px;
-			width: 120px;
-		}
-
-		.woodev-records__col-on_site {
-			max-width: 110px;
-			min-width: 110px;
-			width: 110px;
-		}
-
-		.woodev-records__col-image {
-			max-width: 46px;
-			min-width: 46px;
-			width: 46px;
-		}
-
-		&.has-image .woodev-records__col-name {
-			left: 86px;
-		}
-
-		&.has-expand.has-image .woodev-records__col-name {
-			left: 114px;
-		}
 	}
 
 	.woodev-records__thumb {

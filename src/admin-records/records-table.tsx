@@ -11,15 +11,15 @@
  * @package woodev-plugin-framework
  */
 
-import type { MutableRefObject, ReactNode, RefObject } from 'react';
-import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
+import type { MutableRefObject, ReactNode } from 'react';
+import { createPortal, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { createRecordsApi } from './api';
 import { DataStatus } from './data-status';
 import type { RecordsExtensions, TableHandle } from './extensions';
 import { FiltersBar, SearchBox, ViewsRow, isNarrowed } from './filters';
 import { MESSAGE_KEYS, firstMessage, message } from './messages';
 import { changeQuery, searchFilter, writeQuery } from './query';
-import { Pager } from './pager';
+import { Pager, useFooterSlot } from './pager';
 import { RowActions } from './row-actions';
 import { useSelection, type Selection } from './selection';
 import { EmptyCard, ErrorState, LoadingState } from './states';
@@ -103,24 +103,6 @@ function Summary( { text }: { text: string } ) {
 			<p>{ rest }</p>
 		</details>
 	);
-}
-
-/** The card's footer, where the pager is drawn. */
-const FOOTER_SLOT = '.components-card__footer';
-
-/**
- * The footer of the card inside `host`, found again after every render (the card is made again when its columns change).
- *
- * @param host The element that holds the card.
- */
-function useFooterSlot( host: RefObject< HTMLElement > ): Element | null {
-	const [ slot, setSlot ] = useState< Element | null >( null );
-
-	useLayoutEffect( () => {
-		setSlot( host.current?.querySelector( FOOTER_SLOT ) ?? null );
-	} );
-
-	return slot;
 }
 
 interface TableBodyProps {

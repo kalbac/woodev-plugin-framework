@@ -5,16 +5,10 @@
 @use '../components/select-look';
 
 // The wrapper a table list stands in: a white panel with inner padding, so the table card never touches the edge of the page. The
-// card inside gives up its own frame, or the panel would hold a frame in a frame.
+// card inside keeps its own frame and corners, like every other table card.
 .woodev-marketplace-table {
 	background: #fff;
 	border: 1px solid #dcdcde;
 	border-radius: 8px;
 	padding: 16px;
-
-	.components-card,
-	.woocommerce-table .components-card {
-		border: 0;
-		box-shadow: none;
-	}
 }
