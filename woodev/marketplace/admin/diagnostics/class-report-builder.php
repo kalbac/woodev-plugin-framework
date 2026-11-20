@@ -471,25 +471,25 @@ final class Report_Builder {
 	}
 
 	/**
-	 * The key's last day and the days left, counted now from the stored expiry date: «06.02.2027 (дней: 79)», or «06.02.2027 (срок истёк)».
+	 * The key's last day and the days left, counted now from the stored expiry date: «6 февраля 2027 (ещё 79 дней)», or «6 февраля 2027 (срок истёк)».
 	 *
 	 * @param \DateTimeImmutable $expires_at Expiry.
 	 * @param int                $now        Current timestamp.
 	 * @return string
 	 */
 	private function expiry_text( \DateTimeImmutable $expires_at, int $now ): string {
-		$date = (string) wp_date( 'd.m.Y', $expires_at->getTimestamp() );
+		$date = (string) wp_date( 'j F Y', $expires_at->getTimestamp() );
 
 		if ( $expires_at->getTimestamp() <= $now ) {
-			/* translators: %s: key expiry date in d.m.Y format. */
+			/* translators: %s: key expiry date, like «6 февраля 2027». */
 			return sprintf( __( '%s (срок истёк)', 'woodev-plugin-framework' ), $date );
 		}
 
 		return sprintf(
-			/* translators: 1: key expiry date in d.m.Y format, 2: whole days remaining. */
-			__( '%1$s (дней: %2$d)', 'woodev-plugin-framework' ),
+			/* translators: 1: key expiry date, like «6 февраля 2027», 2: the days left, like «ещё 77 дней». */
+			__( '%1$s (%2$s)', 'woodev-plugin-framework' ),
 			$date,
-			Key_Expiry::days_left( $expires_at, new \DateTimeImmutable( '@' . $now ) )
+			Key_Expiry::days_left_phrase( Key_Expiry::days_left( $expires_at, new \DateTimeImmutable( '@' . $now ) ) )
 		);
 	}
 

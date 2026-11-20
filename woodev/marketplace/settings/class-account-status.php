@@ -207,8 +207,8 @@ final class Account_Status {
 			return sprintf( __( 'Ключ перестанет действовать меньше чем через сутки (%s).', 'woodev-plugin-framework' ), $date ) . $tail;
 		}
 
-		/* translators: 1: key expiry date in d.m.Y format, 2: whole days remaining. */
-		return sprintf( __( 'Ключ истекает %1$s (осталось дней: %2$d).', 'woodev-plugin-framework' ), $date, $days ) . $tail;
+		/* translators: 1: key expiry date in d.m.Y format, 2: the days left, like «ещё 77 дней». */
+		return sprintf( __( 'Ключ истекает %1$s (%2$s).', 'woodev-plugin-framework' ), $date, Key_Expiry::days_left_phrase( $days ) ) . $tail;
 	}
 
 	/**
@@ -277,10 +277,10 @@ final class Account_Status {
 			$date    = (string) wp_date( 'd.m.Y', $expires_at->getTimestamp() );
 			$days    = Key_Expiry::days_left( $expires_at, $now );
 			$parts[] = sprintf(
-				/* translators: 1: expiry date in d.m.Y format, 2: whole days remaining. */
-				__( 'ключ до %1$s (дней: %2$d)', 'woodev-plugin-framework' ),
+				/* translators: 1: expiry date in d.m.Y format, 2: the days left, like «ещё 77 дней». */
+				__( 'ключ до %1$s (%2$s)', 'woodev-plugin-framework' ),
 				$date,
-				$days
+				Key_Expiry::days_left_phrase( $days )
 			);
 		}
 

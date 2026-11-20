@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Account;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -46,6 +48,23 @@ final class Key_Expiry {
 		$seconds = $expires_at->getTimestamp() - $now->getTimestamp();
 
 		return (int) floor( $seconds / 86400 );
+	}
+
+	/**
+	 * The days left as a phrase with the right plural: «ещё 1 день», «ещё 3 дня», «ещё 77 дней».
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param int $days Whole days left ({@see self::days_left()}).
+	 * @return string
+	 */
+	public static function days_left_phrase( int $days ): string {
+		return sprintf(
+			/* translators: 1: number of days, 2: the word «день» in the form that goes with it. */
+			__( 'ещё %1$d %2$s', 'woodev-plugin-framework' ),
+			$days,
+			Russian_Plural::pick( $days, __( 'день', 'woodev-plugin-framework' ), __( 'дня', 'woodev-plugin-framework' ), __( 'дней', 'woodev-plugin-framework' ) )
+		);
 	}
 
 	/**

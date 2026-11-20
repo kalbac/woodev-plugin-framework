@@ -14,6 +14,7 @@ namespace Woodev\Tests\Unit\Marketplace\Admin;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Marketplace\Admin\Admin_Collector;
+use Woodev\Framework\Marketplace\Admin\Page;
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/Test_Marketplace_Plugin.php';
@@ -325,6 +326,112 @@ final class AdminCollectorTest extends TestCase {
 		$_SERVER['REQUEST_URI'] = '/wp-admin/admin.php?page=ozon-seller';
 
 		$this->assertNull( $this->collector->resolve_legacy_redirect() );
+	}
+
+	private function diagnostics_plugin(): Test_Marketplace_Plugin {
+		return new Test_Marketplace_Plugin(
+			'ozon-seller',
+			[ 'id' => 'ozon-seller', 'title' => 'OZON-SELLER' ],
+			[
+				[ 'slug' => 'products', 'title' => 'T', 'kind' => 'records', 'tables' => [ 'products' ] ],
+				[ 'slug' => Page::DIAGNOSTICS_SLUG, 'title' => 'D', 'kind' => 'custom', 'view' => 'diagnostics' ],
+			]
+		);
+	}
+
+	/**
+	 * Sets the request to a bookmark of «Диагностика» and registers a plugin that declares it.
+	 *
+	 * @param bool $logging_on Whether «Логирование» is on.
+	 */
+	private function diagnostics_collector( bool $logging_on ): void {
+		Functions\stubs(
+			[
+				'wp_unslash'    => null,
+				'wp_parse_url'  => 'parse_url',
+				'wp_doing_ajax' => false,
+				'esc_url'       => null,
+				'admin_url'     => static function ( string $path = '' ): string {
+					return 'https://shop.test/wp-admin/' . $path;
+				},
+				'add_query_arg' => static function ( array $args, string $url ): string {
+					return $url . '?' . http_build_query( $args, '', '&', PHP_QUERY_RFC3986 );
+				},
+			]
+		);
+
+		$plugin = $this->diagnostics_plugin();
+		$plugin->set_logging_on( $logging_on );
+		$this->collector->register_plugin( $plugin );
+
+		$_SERVER['REQUEST_URI'] = '/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fdiagnostics';
+	}
+
+	public function test_a_bookmark_to_a_hidden_diagnostics_page_is_explained_in_russian(): void {
+		$this->diagnostics_collector( false );
+
+		$text = $this->collector->resolve_hidden_diagnostics_explanation();
+
+		$this->assertNotNull( $text );
+		$this->assertStringContainsString( 'Включите «Логирование» в', $text );
+		$this->assertStringContainsString( 'чтобы увидеть диагностику.', $text );
+	}
+
+	public function test_the_explanation_links_to_the_settings_page_when_the_plugin_has_one(): void {
+		$this->diagnostics_collector( false );
+		$this->collector->reset_for_tests();
+		$plugin = new Test_Marketplace_Plugin(
+			'ozon-seller',
+			[ 'id' => 'ozon-seller', 'title' => 'OZON-SELLER' ],
+			[
+				[ 'slug' => 'products', 'title' => 'T', 'kind' => 'records', 'tables' => [ 'products' ] ],
+				[ 'slug' => Page::DIAGNOSTICS_SLUG, 'title' => 'D', 'kind' => 'custom', 'view' => 'diagnostics' ],
+			],
+			[ new \stdClass() ]
+		);
+		$plugin->set_logging_on( false );
+		$this->collector->register_plugin( $plugin );
+
+		$text = (string) $this->collector->resolve_hidden_diagnostics_explanation();
+
+		$this->assertStringContainsString( '<a href="https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fsettings">настройках</a>', $text );
+	}
+
+	public function test_nothing_is_explained_while_logging_is_on_because_the_page_is_there(): void {
+		$this->diagnostics_collector( true );
+
+		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
+	}
+
+	public function test_a_user_without_the_capability_keeps_the_wordpress_refusal(): void {
+		$this->diagnostics_collector( false );
+		Functions\when( 'current_user_can' )->justReturn( false );
+
+		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
+	}
+
+	public function test_another_page_of_the_menu_is_not_explained(): void {
+		$this->diagnostics_collector( false );
+		$_SERVER['REQUEST_URI'] = '/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Forders';
+
+		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
+	}
+
+	public function test_a_plugin_that_does_not_declare_diagnostics_is_not_explained(): void {
+		$this->diagnostics_collector( false );
+		$this->collector->reset_for_tests();
+		$plugin = $this->plugin( 'ozon-seller', [ 'products' ] );
+		$plugin->set_logging_on( false );
+		$this->collector->register_plugin( $plugin );
+
+		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
+	}
+
+	public function test_an_ajax_request_is_never_explained(): void {
+		$this->diagnostics_collector( false );
+		Functions\when( 'wp_doing_ajax' )->justReturn( true );
+
+		$this->assertNull( $this->collector->resolve_hidden_diagnostics_explanation() );
 	}
 
 	public function test_an_ajax_request_is_never_redirected(): void {

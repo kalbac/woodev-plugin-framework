@@ -322,6 +322,80 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		}
 
 		/**
+		 * Tells a merchant who opens «Диагностика» from a bookmark, while «Логирование» is off, what to switch on.
+		 *
+		 * The menu leaves the page out, so core denies the request with its English refusal; this runs just before that, on the same
+		 * hook as the v1 redirect. A user who could not open the page anyway keeps core's refusal.
+		 *
+		 * @internal
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return void
+		 */
+		public function maybe_explain_hidden_diagnostics(): void {
+			$explanation = $this->resolve_hidden_diagnostics_explanation();
+
+			if ( null === $explanation ) {
+				return;
+			}
+
+			wp_die(
+				wp_kses( $explanation, [ 'a' => [ 'href' => [] ] ] ),
+				esc_html__( 'Диагностика недоступна', 'woodev-plugin-framework' ),
+				[
+					'response'  => 403,
+					'back_link' => true,
+				]
+			);
+		}
+
+		/**
+		 * The explanation (HTML) for the current request when it is a bookmark to a hidden «Диагностика», else null. Split from
+		 * the `wp_die()` so a test can reach it.
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return string|null
+		 */
+		public function resolve_hidden_diagnostics_explanation(): ?string {
+			if ( wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+				return null;
+			}
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput -- read-only URL routing, no state change.
+			$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+			$request     = Page::parse_query( (string) wp_parse_url( $request_uri, PHP_URL_QUERY ) );
+
+			if ( 'wc-admin' !== ( $request['page'] ?? '' ) || ! isset( $request['path'] ) ) {
+				return null;
+			}
+
+			foreach ( $this->get_menus() as $menu ) {
+				$plugin = $this->plugins[ $menu->get_plugin_id() ] ?? null;
+				$page   = null === $plugin ? null : $plugin->get_hidden_diagnostics_page();
+
+				if ( null === $page || $menu->get_page_path( $page ) !== $request['path'] || ! current_user_can( $page->get_capability( $menu->get_capability() ) ) ) {
+					continue;
+				}
+
+				$settings = $menu->get_page( Page::SETTINGS_SLUG );
+
+				if ( null === $settings ) {
+					return esc_html__( 'Включите «Логирование» в настройках, чтобы увидеть диагностику.', 'woodev-plugin-framework' );
+				}
+
+				return sprintf(
+					/* translators: %s: the link «настройках» to the plugin's settings page. */
+					esc_html__( 'Включите «Логирование» в %s, чтобы увидеть диагностику.', 'woodev-plugin-framework' ),
+					sprintf( '<a href="%1$s">%2$s</a>', esc_url( $this->get_page_url( $menu, $settings ) ), esc_html__( 'настройках', 'woodev-plugin-framework' ) )
+				);
+			}
+
+			return null;
+		}
+
+		/**
 		 * Enqueues the routing bundle once, on every WooCommerce Admin screen.
 		 *
 		 * Every screen, not only the menu's own: wc-admin navigates between its pages without a reload, so a bundle loaded only on
@@ -491,6 +565,7 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 			add_action( 'admin_head', [ $this, 'print_menu_styles' ] );
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy' ] );
+			add_action( 'admin_page_access_denied', [ $this, 'maybe_explain_hidden_diagnostics' ], 20 );
 		}
 
 		/**

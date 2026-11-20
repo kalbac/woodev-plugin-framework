@@ -210,8 +210,8 @@ final class Key_Expiry_Notices {
 			/* translators: %s: expiry date in d.m.Y format. */
 			$when = sprintf( __( 'Ключ истекает сегодня (%s).', 'woodev-plugin-framework' ), esc_html( (string) $date ) );
 		} else {
-			/* translators: 1: expiry date in d.m.Y format, 2: whole days remaining. */
-			$when = sprintf( __( 'Ключ истекает %1$s (осталось дней: %2$d).', 'woodev-plugin-framework' ), esc_html( (string) $date ), (int) $days );
+			/* translators: 1: expiry date in d.m.Y format, 2: the days left, like «ещё 77 дней». */
+			$when = sprintf( __( 'Ключ истекает %1$s (%2$s).', 'woodev-plugin-framework' ), esc_html( (string) $date ), esc_html( Key_Expiry::days_left_phrase( (int) $days ) ) );
 		}
 
 		$advice = trim( $descriptor->key_renewal_advice() );
