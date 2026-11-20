@@ -88,6 +88,15 @@ final class MarketplacePluginTest extends TestCase {
 		$this->assertSame( 'products', $plugin->get_marketplace_admin_menu()->get_landing_page()->get_slug() );
 	}
 
+	public function test_diagnostics_is_in_the_menu_only_while_logging_is_on(): void {
+		$plugin = new Test_Marketplace_Plugin( 'ozon', self::MENU, null, [ new \stdClass() ] );
+		$this->add_account( $plugin, [ 'cabinet' => '123', 'token' => 'secret' ] );
+		$plugin->set_logging_on( false );
+
+		$this->assertSame( [ 'products', 'orders', 'mappings', 'tools', 'settings' ], $this->slugs_of( $plugin ) );
+		$this->assertNull( $plugin->get_marketplace_admin_menu()->get_page( 'diagnostics' ), 'no menu item, and no page to open by URL' );
+	}
+
 	public function test_the_registrations_follow_the_order_so_wordpress_files_the_children_the_same_way(): void {
 		$plugin = new Test_Marketplace_Plugin( 'ozon', self::MENU, null, [ new \stdClass() ] );
 		$paths  = static function ( Test_Marketplace_Plugin $plugin ): array {

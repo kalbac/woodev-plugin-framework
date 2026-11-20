@@ -20,11 +20,10 @@ defined( 'ABSPATH' ) || exit;
  * |---|---|
  * | `GET R` | the «Логирование» state and the operational sections (licence, account health, key expiry) |
  * | `GET R/report` | the diagnostic sections and the support report text; 403 with {@see Logging::REFUSAL} while logging is off |
- * | `POST R/logging` `{enabled}` | switches «Логирование» on or off |
  *
- * The page explains itself only while «Логирование» is on: the report is refused with 403 otherwise, so the text never
- * reaches a merchant who did not switch it on. Operational state is always shown. Every route checks the capability
- * first, and the switch takes a real boolean, nothing else.
+ * The menu lists the page only while «Логирование» is on (the switch lives in the plugin's settings, «Дополнительно»), and the
+ * report is refused with 403 otherwise, so the text never reaches a merchant who did not switch it on. Every route checks the
+ * capability first.
  *
  * @since 2.1.5
  */
@@ -73,17 +72,13 @@ final class Diagnostics_Controller {
 	 */
 	public static function messages(): array {
 		return [
-			'loggingHeading'  => __( 'Логирование', 'woodev-plugin-framework' ),
-			'enableLogging'   => __( 'Включить логирование', 'woodev-plugin-framework' ),
-			'disableLogging'  => __( 'Выключить логирование', 'woodev-plugin-framework' ),
-			'loggingOn'       => __( 'Логирование включено: ниже подробная диагностика и отчёт для поддержки.', 'woodev-plugin-framework' ),
-			'loggingOff'      => __( 'Сейчас показано только состояние подключения. Чтобы увидеть, что происходит с уведомлениями, очередью и ошибками, и получить отчёт для поддержки, включите логирование.', 'woodev-plugin-framework' ),
+			'intro'           => __( 'Что происходит с подключением, уведомлениями, очередью и ошибками. Если нужна помощь поддержки, скопируйте отчёт в конце страницы и отправьте его в обращении. Страница показывается, пока включено «Логирование» (настройки плагина, раздел «Дополнительно»).', 'woodev-plugin-framework' ),
+			'loggingOff'      => __( 'Логирование выключено, поэтому подробной диагностики нет. Включите его в настройках плагина, раздел «Дополнительно», и обновите страницу.', 'woodev-plugin-framework' ),
 			'reportHeading'   => __( 'Отчёт для поддержки', 'woodev-plugin-framework' ),
 			'reportHint'      => __( 'Скопируйте этот текст и отправьте в поддержку. Ключи доступа в него не попадают.', 'woodev-plugin-framework' ),
 			'copyReport'      => __( 'Скопировать отчёт для поддержки', 'woodev-plugin-framework' ),
 			'copied'          => __( 'Скопировано', 'woodev-plugin-framework' ),
 			'copyFailed'      => __( 'Не удалось скопировать: выделите текст ниже и скопируйте вручную.', 'woodev-plugin-framework' ),
-			'switchFailed'    => __( 'Не удалось сохранить настройку. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
 			'reportFailed'    => __( 'Не удалось получить отчёт. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
 		];
 	}
@@ -130,18 +125,6 @@ final class Diagnostics_Controller {
 				[
 					'methods'             => 'GET',
 					'callback'            => [ $this, 'get_report' ],
-					'permission_callback' => [ $this, 'check_permission' ],
-				],
-			]
-		);
-
-		register_rest_route(
-			\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
-			$base . '/logging',
-			[
-				[
-					'methods'             => 'POST',
-					'callback'            => [ $this, 'set_logging' ],
 					'permission_callback' => [ $this, 'check_permission' ],
 				],
 			]
@@ -200,26 +183,5 @@ final class Diagnostics_Controller {
 				'report'     => $this->builder->support_report( $operational, $diagnostic ),
 			]
 		);
-	}
-
-	/**
-	 * `POST R/logging`: switches «Логирование». The body is `{enabled: true|false}` and nothing else.
-	 *
-	 * @since 2.1.5
-	 *
-	 * @param \WP_REST_Request $request Request.
-	 * @return \WP_REST_Response|\WP_Error
-	 */
-	public function set_logging( \WP_REST_Request $request ) {
-		$body = $request->get_json_params();
-		$body = is_array( $body ) ? $body : [];
-
-		if ( [ 'enabled' ] !== array_keys( $body ) || ! is_bool( $body['enabled'] ) ) {
-			return new \WP_Error( 'woodev_diagnostics_bad_body', __( 'Укажите, включить логирование или выключить.', 'woodev-plugin-framework' ), [ 'status' => 400 ] );
-		}
-
-		$this->logging->set_enabled( $body['enabled'] );
-
-		return new \WP_REST_Response( [ 'logging' => [ 'enabled' => $this->logging->is_enabled() ] ] );
 	}
 }

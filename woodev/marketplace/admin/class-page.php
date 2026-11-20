@@ -57,6 +57,11 @@ if ( ! class_exists( Page::class, false ) ) :
 		public const LANDING_SLUG = 'products';
 
 		/**
+		 * Slug of «Диагностика»: the menu lists it only while the merchant has «Логирование» switched on.
+		 */
+		public const DIAGNOSTICS_SLUG = 'diagnostics';
+
+		/**
 		 * Slugs and menu ids are lower-case words joined by dashes, so they are safe inside a URL path and a DOM id.
 		 */
 		public const SLUG_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';

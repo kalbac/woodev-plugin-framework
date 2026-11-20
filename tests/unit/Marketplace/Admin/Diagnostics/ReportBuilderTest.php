@@ -61,7 +61,6 @@ final class ReportBuilderTest extends TestCase {
 				return gmdate( $format, $ts ?? self::NOW );
 			}
 		);
-		Functions\when( 'human_time_diff' )->justReturn( '5 мин' );
 		Functions\when( 'get_bloginfo' )->justReturn( '6.7.1' );
 		Functions\when( 'wp_using_ext_object_cache' )->justReturn( true );
 		Functions\when( 'wp_get_theme' )->justReturn(

@@ -31,6 +31,11 @@ final class Settings_Provider {
 	private string $label;
 
 	/**
+	 * @var string what the tab is for: HTML already escaped by the owning plugin; '' for none.
+	 */
+	private string $description;
+
+	/**
 	 * @var \Woodev_Abstract_Settings settings handler.
 	 */
 	private $handler;
@@ -73,6 +78,7 @@ final class Settings_Provider {
 	private function __construct( string $id, string $label, $handler, array $sections, array $args ) {
 		$this->id                = '' !== $id ? $id : (string) $handler->get_id();
 		$this->label             = $label;
+		$this->description       = isset( $args['description'] ) ? trim( (string) $args['description'] ) : '';
 		$this->handler           = $handler;
 		$this->sections          = array_values( $sections );
 		$this->capability        = isset( $args['capability'] ) && '' !== $args['capability'] ? (string) $args['capability'] : null;
@@ -107,7 +113,7 @@ final class Settings_Provider {
 	 * @param Settings_Section[]        $sections section grouping; a non-`Settings_Section`
 	 *                                            entry is accepted here and dropped later by
 	 *                                            {@see self::get_sections()} without notice.
-	 * @param array<string,mixed>       $args     optional: capability, legacy_option_key, legacy_page, supports.
+	 * @param array<string,mixed>       $args     optional: capability, legacy_option_key, legacy_page, supports, description.
 	 * @return self
 	 */
 	public static function create( string $id, string $label, $handler, array $sections, array $args = [] ): self {
@@ -164,7 +170,7 @@ final class Settings_Provider {
 	 * @param \Woodev_Abstract_Settings $handler  settings handler.
 	 * @param callable                  $sections returns the section grouping; like {@see self::create()}, a non-`Settings_Section`
 	 *                                            entry is dropped by {@see self::get_sections()}.
-	 * @param array<string,mixed>       $args     optional: capability, legacy_option_key, legacy_page, supports.
+	 * @param array<string,mixed>       $args     optional: capability, legacy_option_key, legacy_page, supports, description.
 	 * @return self
 	 */
 	public static function create_lazy( string $id, string $label, $handler, callable $sections, array $args = [] ): self {
@@ -194,6 +200,17 @@ final class Settings_Provider {
 	 */
 	public function get_label(): string {
 		return $this->label;
+	}
+
+	/**
+	 * Returns the sentence or two that explain the tab, as HTML the owning plugin has already escaped; '' when the tab has none.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @return string
+	 */
+	public function get_description(): string {
+		return $this->description;
 	}
 
 	/**

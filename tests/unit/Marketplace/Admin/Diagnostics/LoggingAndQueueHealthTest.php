@@ -76,6 +76,7 @@ final class LoggingAndQueueHealthTest extends TestCase {
 				'page_title' => 'Fake MP',
 			]
 		);
+		$plugin->set_logging_on( null ); // This test is about the real option reader.
 
 		// Logging OFF: debug and API request logs stay silent, error log still writes (redacted).
 		$plugin->log_debug( 'Verbose trace with token=super-secret-value' );

@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
-import AccountsView, { isAccountsTab, splitAccountSections, cardStatus, canDelete } from '../../src/settings-page/accounts-view';
+import AccountsView, { isAccountsTab, splitAccountSections, cardStatus, canDelete, identifierLine } from '../../src/settings-page/accounts-view';
 import { fetchDeletion } from '../../src/settings-page/deletion-rest';
 
 jest.mock( '../../src/settings-page/deletion-rest' );
@@ -25,9 +25,10 @@ const account = ( id, overrides = {} ) => ( {
 
 const adder = { id: 'account_connection_new', label: 'Подключение', is_connection: true, card: { new: true } };
 
-const view = ( sections ) => render( createElement( AccountsView, {
-	tab: { id: 'ozon-seller', sections },
-	renderSection: ( tab, id ) => createElement( 'div', { 'data-testid': `block-${ id }` } ),
+const view = ( sections, props = {}, tab = {} ) => render( createElement( AccountsView, {
+	tab: { id: 'ozon-seller', sections, ...tab },
+	renderSection: ( t, id ) => createElement( 'div', { 'data-testid': `block-${ id }` } ),
+	...props,
 } ) );
 
 test( 'a tab is the accounts tab when a section carries a card', () => {
@@ -48,14 +49,28 @@ test( 'the status line says «Выключен» for a switched-off account and 
 	expect( cardStatus( { ...account( 1 ), status: null } ).ok ).toBe( false );
 } );
 
-test( 'with no account the tab is one big «Добавить аккаунт» button that opens the form', () => {
+test( 'with no account the wrapper says to add the first one, and «Добавить аккаунт» opens the form', () => {
 	view( [ adder ] );
 
+	expect( screen.getByText( /Пока нет ни одного аккаунта/ ) ).toBeInTheDocument();
 	expect( screen.queryByTestId( 'block-account_connection_new' ) ).not.toBeInTheDocument();
 
 	fireEvent.click( screen.getByRole( 'button', { name: 'Добавить аккаунт' } ) );
 
 	expect( screen.getByTestId( 'block-account_connection_new' ) ).toBeInTheDocument();
+	expect( screen.queryByText( /Пока нет ни одного аккаунта/ ) ).not.toBeInTheDocument();
+} );
+
+test( 'the wrapper is one white card with the tab description, which may carry a link, and the add button in its header', () => {
+	const { container } = view( [ account( 1 ), adder ], {}, { description: 'Ключи выдаёт <a href="https://seller.ozon.ru/app/settings/api-keys">личный кабинет</a>.' } );
+
+	const header = container.querySelector( '.woodev-accounts__header' );
+	expect( container.querySelectorAll( '.woodev-accounts' ) ).toHaveLength( 1 );
+	expect( container.querySelector( '.woodev-accounts' ) ).toHaveClass( 'woodev-settings__card' );
+	expect( header ).toContainElement( screen.getByRole( 'link', { name: 'личный кабинет' } ) );
+	expect( screen.getByRole( 'link', { name: 'личный кабинет' } ) ).toHaveAttribute( 'href', 'https://seller.ozon.ru/app/settings/api-keys' );
+	expect( header ).toContainElement( screen.getByRole( 'button', { name: 'Добавить аккаунт' } ) );
+	expect( screen.queryByText( /Пока нет ни одного аккаунта/ ) ).not.toBeInTheDocument();
 } );
 
 test( 'a card shows title, identifier and status, and opens its fields on «Редактировать»', () => {
@@ -71,28 +86,73 @@ test( 'a card shows title, identifier and status, and opens its fields on «Ре
 	expect( screen.getByTestId( 'block-account_connection_1' ) ).toBeInTheDocument();
 } );
 
-test( '«Удалить» of an enabled account is disabled and the reason is visible text under the buttons', () => {
-	view( [ account( 1, { delete_url: '/wp-json/x/deletion', delete_hint: 'Чтобы удалить аккаунт, сначала выключите его.' } ), adder ] );
-
-	expect( screen.getByRole( 'button', { name: 'Удалить' } ) ).toBeDisabled();
-	expect( screen.getByText( 'Чтобы удалить аккаунт, сначала выключите его.' ) ).toBeVisible();
-} );
-
-test( 'a card that can be deleted shows no hint', () => {
-	view( [ account( 1, { enabled: false, delete_url: '/wp-json/x/deletion', delete_hint: '' } ), adder ] );
+test( '«Удалить» of an enabled account is available: the dialog switches it off first, so there is no hint', () => {
+	view( [ account( 1, { delete_url: '/wp-json/x/deletion', delete_hint: '' } ), adder ] );
 
 	expect( screen.getByRole( 'button', { name: 'Удалить' } ) ).toBeEnabled();
 	expect( document.querySelector( '.woodev-account-card__hint' ) ).toBeNull();
 } );
 
-test( '«Удалить» is available for a switched-off account only when the screen offers deleting', () => {
+test( 'a screen that does not offer deleting keeps «Удалить» disabled and says so as visible text', () => {
+	view( [ account( 1, { delete_hint: 'Удаление аккаунта недоступно.' } ), adder ] );
+
+	expect( screen.getByRole( 'button', { name: 'Удалить' } ) ).toBeDisabled();
+	expect( screen.getByText( 'Удаление аккаунта недоступно.' ) ).toBeVisible();
+} );
+
+test( '«Удалить» needs only the deletion route, whether the account is on or off', () => {
 	expect( canDelete( account( 1, { enabled: false, delete_url: '/wp-json/x/deletion' } ).card ) ).toBe( true );
-	expect( canDelete( account( 1, { enabled: true, delete_url: '/wp-json/x/deletion' } ).card ) ).toBe( false );
+	expect( canDelete( account( 1, { enabled: true, delete_url: '/wp-json/x/deletion' } ).card ) ).toBe( true );
 	expect( canDelete( account( 1, { enabled: false } ).card ) ).toBe( false );
 } );
 
+test( 'the card line is «Client-Id: … · description», and just the identifier without a description', () => {
+	expect( identifierLine( account( 1 ).card ) ).toBe( 'Client-Id: 41801' );
+	expect( identifierLine( account( 1, { description: 'Одежда и обувь' } ).card ) ).toBe( 'Client-Id: 41801 · Одежда и обувь' );
+
+	view( [ account( 1, { description: 'Одежда и обувь' } ), adder ] );
+	expect( screen.getByText( 'Client-Id: 41801 · Одежда и обувь' ) ).toBeInTheDocument();
+} );
+
+test( 'a card has an on/off switch that saves at once through the page', async () => {
+	const onToggleEnabled = jest.fn().mockResolvedValue( undefined );
+	view( [ account( 1 ), account( 2, { enabled: false } ), adder ], { onToggleEnabled } );
+
+	const [ first, second ] = screen.getAllByRole( 'checkbox', { name: 'Аккаунт включён' } );
+	expect( first ).toBeChecked();
+	expect( second ).not.toBeChecked();
+
+	fireEvent.click( first );
+
+	expect( onToggleEnabled ).toHaveBeenCalledWith( expect.objectContaining( { id: 'account_connection_1' } ), false );
+	await waitFor( () => expect( first ).toBeEnabled() );
+
+	fireEvent.click( second );
+	expect( onToggleEnabled ).toHaveBeenLastCalledWith( expect.objectContaining( { id: 'account_connection_2' } ), true );
+	await waitFor( () => expect( second ).toBeEnabled() );
+} );
+
+test( 'the switch waits for the save and survives a failed one', async () => {
+	let reject;
+	const onToggleEnabled = jest.fn( () => new Promise( ( resolve, fail ) => { reject = fail; } ) );
+	view( [ account( 1 ), adder ], { onToggleEnabled } );
+
+	const toggle = screen.getByRole( 'checkbox', { name: 'Аккаунт включён' } );
+	fireEvent.click( toggle );
+	expect( toggle ).toBeDisabled();
+
+	reject( new Error( 'boom' ) );
+	await waitFor( () => expect( toggle ).toBeEnabled() );
+} );
+
+test( 'without a save handler the switch is read-only', () => {
+	view( [ account( 1 ), adder ] );
+
+	expect( screen.getByRole( 'checkbox', { name: 'Аккаунт включён' } ) ).toBeDisabled();
+} );
+
 test( 'pressing «Удалить» on a switched-off account opens the deletion dialog, and closing it reloads the cards', async () => {
-	fetchDeletion.mockResolvedValue( { deleted: false, can_delete: true, refusal: '', preview: { counts: [], kept: '', warnings: [] }, deletion: null } );
+	fetchDeletion.mockResolvedValue( { deleted: false, can_delete: true, preview: { counts: [], kept: '', enabled_note: '', warnings: [] }, deletion: null } );
 	const onAccountsChanged = jest.fn();
 
 	render( createElement( AccountsView, {
@@ -108,7 +168,7 @@ test( 'pressing «Удалить» on a switched-off account opens the deletion 
 	expect( onAccountsChanged ).toHaveBeenCalledTimes( 1 );
 } );
 
-test( 'the header has no on/off button any more: the switch lives in the form', () => {
+test( 'the header has no on/off BUTTON: the switch is a toggle', () => {
 	view( [ account( 1 ), account( 2, { enabled: false } ), adder ] );
 
 	expect( screen.queryByRole( 'button', { name: 'Выключить' } ) ).not.toBeInTheDocument();
