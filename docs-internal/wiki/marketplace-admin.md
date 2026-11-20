@@ -839,8 +839,12 @@ C2 tabs and the mapping/profile forms. Delivery code was not touched (invariant 
   `Settings_Group::with_footnote()` puts the price example after the fields; `Settings_Section` has an `actions_layout` flag
   (`ACTIONS_ROW`, serialised only when set) that `SectionView` draws with `ToolsRow` (one primary button, the rest secondary); the
   diagnostics lines are `dl.woodev-facts`.
-- **Mappings and profiles (C2).** The page is two folder tabs. Each shows a `TableCard` list (all rows on one page, client-side sort,
-  «Добавить…» in the header; an empty list is a plain card because there is no `emptyMessage`). Opening a record, or «Добавить…»,
+- **Mappings and profiles (C2).** The page is two folder tabs. Each shows a **records-engine table** (since #1898, framework 2.1.13: `Mapping_List_Provider` / `Profile_List_Provider` with their
+  definitions, registered by `Mappings_Module::register_lists()`; `views/mappings/mapping-lists.tsx` mounts `RecordsTable`). The section
+  description is the definition's `description` message; «Добавить…» (`renderHeaderActions`) and «Создать первое…» (`renderEmptyActions`)
+  are the page's two additive extension seams; the name and «Редактировать» are real links that the page follows in place; «Удалить» is
+  the page's own shared dialog and REST route — the engine runs no action of these tables. «Свойства профиля» carries the values
+  (`Profile_Properties`: «Габариты: 20×15×2 см · Вес: 300 г · НДС: 20%»). Opening a record, or «Добавить…»,
   **replaces the list with the form**; «← Все сопоставления» / «← Все профили» brings it back. The place is in the URL — `tab=profiles`,
   `mapping=new|<id>`, `profile=new|<id>` (`views/mappings/route.ts`, through `wc.navigation`) — so Back, Forward and a bookmark work.
   Saving a new record or deleting one rewrites the history entry (`wc.navigation.getHistory().replace`, pushing where the runtime lacks it), so Back

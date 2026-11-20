@@ -36,6 +36,37 @@
 	.woodev-mappings-add {
 		margin-left: auto;
 	}
+
+	// A heading wraps («Категория маркетплейса»), so the text columns can be narrower than their headings and the table fits a
+	// 1024px screen without a sideways scroll.
+	.woocommerce-table__header .components-button {
+		height: auto;
+		padding: 4px 0;
+		text-align: left;
+		white-space: normal;
+	}
+
+	// The widths of the columns: hints for the browser's table layout; the text of a cell wraps instead of widening its column.
+	.woodev-records__col-category,
+	.woodev-records__col-shop,
+	.woodev-records__col-properties,
+	.woodev-records__col-used_in {
+		width: 22%;
+	}
+
+	.woodev-records__col-profile {
+		width: 14%;
+	}
+
+	.woodev-records__col-attributes {
+		width: 10%;
+	}
+
+	// The count and the row buttons are as wide as their content.
+	.woodev-records__col-products,
+	.woodev-records__col-actions {
+		width: 1%;
+	}
 }
 
 // The list of the mappings a profile is chosen in, in the delete dialog (a portal: it stands outside the view).
