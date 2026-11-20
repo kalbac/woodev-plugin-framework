@@ -144,6 +144,13 @@ abstract class Sync_Test_Case extends TestCase {
 	protected $log = [];
 
 	/**
+	 * Lines written to the debug log (successes).
+	 *
+	 * @var string[]
+	 */
+	protected $debug = [];
+
+	/**
 	 * Most prices one request of the fake marketplace takes.
 	 *
 	 * @var int
@@ -540,6 +547,16 @@ abstract class Sync_Test_Case extends TestCase {
 	 */
 	public function log_line( string $line ): void {
 		$this->log[] = $line;
+	}
+
+	/**
+	 * Writes a line to the test's debug log, where a success goes.
+	 *
+	 * @param string $line Line.
+	 * @return void
+	 */
+	public function debug_line( string $line ): void {
+		$this->debug[] = $line;
 	}
 
 	/**
