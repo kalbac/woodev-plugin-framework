@@ -508,6 +508,7 @@ describe( 'URL round trip', () => {
 	} );
 
 	test( 'a page size PHP declared is written, another is ignored', async () => {
+		serve( { rows: () => fixtureList( [ mug, shirt ], { total: 150 } ) } );
 		const { navigate } = await renderTable( { query: { paged: '2' } } );
 
 		fireEvent.click( screen.getByRole( 'button', { name: '75 per page' } ) );
@@ -625,6 +626,32 @@ describe( 'URL round trip', () => {
 			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: '3' } ) );
 
 			fireEvent.click( pager().getByRole( 'button', { name: 'Предыдущая страница' } ) );
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: undefined } ) );
+		} );
+
+		test( 'a read that leaves fewer pages than the page on screen moves the URL to the last page', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 100 } ) } );
+			const { navigate } = await renderTable( { query: { paged: '6' } } );
+
+			await waitFor( () => expect( navigate ).toHaveBeenCalledTimes( 1 ) );
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: '4' } ) );
+		} );
+
+		test( 'a page inside the result, and the last page itself, are left alone', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 100 } ) } );
+			const { navigate } = await renderTable( { query: { paged: '4' } } );
+
+			await screen.findByText( 'Страница 4 из 4' );
+			expect( navigate ).not.toHaveBeenCalled();
+		} );
+
+		test( 'an empty result sends a stale page back to the first one', async () => {
+			serve( { rows: () => fixtureList( [], { total: 0 } ) } );
+			const tableProps = props( { query: { paged: '3' } } );
+			const navigate = tableProps.navigate as jest.Mock;
+			render( <RecordsTable { ...tableProps } /> );
+
+			await waitFor( () => expect( navigate ).toHaveBeenCalledTimes( 1 ) );
 			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: undefined } ) );
 		} );
 

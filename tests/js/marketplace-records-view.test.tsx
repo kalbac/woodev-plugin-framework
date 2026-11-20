@@ -59,7 +59,8 @@ beforeEach( () => {
 		return Promise.resolve(
 			route.endsWith( '/definition' )
 				? fixtureDefinitionEnvelope( fixtureDefinition() )
-				: fixtureList( [ fixtureRow( 'p1', 'Кружка' ) ] )
+				// A long list: the tests that open a later page (`paged=3`) must find that page inside the result.
+				: fixtureList( [ fixtureRow( 'p1', 'Кружка' ) ], { total: 500 } )
 		);
 	} );
 } );
