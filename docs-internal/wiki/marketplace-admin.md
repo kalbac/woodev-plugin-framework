@@ -1293,7 +1293,7 @@ hand-made focus trap, scroll-lock class, CSS reset for a map's content), enqueue
 the same behaviour from the native element with no JS of their own. The pickup map keeps `WoodevModal`; it is a delivery
 screen and is not touched.
 
-Height: the React frame is capped at `calc(100vh - 64px)` (`100dvh` where known) and its content inherits the cap, so a tall dialog (the account deletion preview at 1024×768) scrolls its BODY while the header and footer stay in view; the Modal's own cap is a percentage of the overlay and let such a dialog run past the screen (`tests/js/woodev-dialog-css.test.ts` reads the rules, jsdom has no layout).
+Height: the React frame is capped at `calc(100vh - 64px)` (`100dvh` where known) and its content inherits the cap, so a tall dialog (the account deletion preview at 1024×768) scrolls its BODY while the header and footer stay in view; the Modal's own cap is a percentage of the overlay and let such a dialog run past the screen The WP/WC build on the rig also puts a `.components-modal__children-container` (`display: block`, no limit) between the content and our parts, so that element joins the flex column with the same cap; verified in Chromium at 1024×768, 1024×600, 1280×720 and 375×667 (footer inside the viewport, body scrolls; a short dialog is unchanged). `tests/js/woodev-dialog-css.test.ts` reads the rules, jsdom has no layout.
 
 Rules: the «✕» is an EMPTY button (the stylesheet draws it as a mask); a footer button and the «✕» may both be named «Закрыть»,
 so a test that means the footer button asks for it inside `.woodev-dialog__footer` (`tests/js/dialog-parts.ts`); a request in

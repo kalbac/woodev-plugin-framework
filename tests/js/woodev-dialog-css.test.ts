@@ -32,6 +32,15 @@ describe( 'the shared dialog stylesheet', () => {
 		expect( rule( '.woodev-dialog__footer' ) ).toMatch( /flex:\s*0 0 auto/ );
 	} );
 
+	test( 'a wrapper WordPress puts between the content and our parts joins the column, with the same limit', () => {
+		const wrapper = rule( '.woodev-dialog .components-modal__children-container' );
+
+		expect( wrapper ).toMatch( /display:\s*flex/ );
+		expect( wrapper ).toMatch( /flex-direction:\s*column/ );
+		expect( wrapper ).toMatch( /min-height:\s*0/ );
+		expect( wrapper ).toMatch( /max-height:\s*inherit/ );
+	} );
+
 	test( 'the native dialog is limited to the viewport as well', () => {
 		expect( rule( 'dialog.woodev-dialog' ) ).toMatch( /max-height:\s*min\(680px, calc\(100vh - 64px\)\)/ );
 	} );

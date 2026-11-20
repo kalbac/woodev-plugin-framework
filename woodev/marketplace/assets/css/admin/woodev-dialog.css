@@ -80,6 +80,17 @@ dialog.woodev-dialog::backdrop {
 	overflow: hidden;
 }
 
+/* Newer WordPress builds put one more element between the content and our parts (`.components-modal__children-container`, plain
+   `display: block` with no height limit). It joins the column, so the header, the body and the footer lay out the same with or
+   without it: the body takes what is left and scrolls, the other two never move. */
+.woodev-dialog .components-modal__children-container {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	max-height: inherit;
+}
+
 .woodev-dialog__header {
 	display: flex;
 	flex: 0 0 auto;
