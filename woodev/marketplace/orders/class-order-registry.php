@@ -204,19 +204,28 @@ final class Order_Registry {
 	}
 
 	/**
-	 * Reads the account the posting of a WooCommerce order belongs to.
+	 * Reads what the order screen needs of the posting of a WooCommerce order: its account, its status and whether it is finished.
 	 *
 	 * @since 2.1.13
 	 *
 	 * @param int $order_id WooCommerce order id.
-	 * @return int The account id; 0 when no posting is registered for the order.
+	 * @return array{account_id:int,status_raw:string,is_terminal:bool}|null Null when no posting is registered for the order.
 	 */
-	public function account_of_order( int $order_id ): int {
-		$account_id = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The order screen needs the current account.
-			$this->db->prepare( 'SELECT account_id FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id )
+	public function posting_of_order( int $order_id ): ?array {
+		$row = $this->db->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The order screen shows the current posting.
+			$this->db->prepare( 'SELECT account_id, status_raw, is_terminal FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id ),
+			'ARRAY_A'
 		);
 
-		return null === $account_id ? 0 : (int) $account_id;
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+
+		return [
+			'account_id'  => (int) $row['account_id'],
+			'status_raw'  => (string) $row['status_raw'],
+			'is_terminal' => 1 === (int) $row['is_terminal'],
+		];
 	}
 
 	/**

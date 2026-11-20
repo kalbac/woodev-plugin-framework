@@ -11,6 +11,8 @@ use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
@@ -117,6 +119,8 @@ final class Order_Screen_Module {
 
 		$table_url = rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/admin/records/' . $plugin->get_id() . '/' . Site_Orders_Provider::TABLE );
 
-		return new Label_Button( $table_url, [ $registry, 'account_of_order' ], $assets, $plugin->get_version() );
+		$readiness = $adapter instanceof Label_Readiness ? $adapter : null;
+
+		return new Label_Button( $table_url, [ $registry, 'posting_of_order' ], new Label_Availability( $readiness ), $assets, $plugin->get_version() );
 	}
 }

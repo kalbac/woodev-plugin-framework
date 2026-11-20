@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Admin\Order\Label_Button;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Details_Box;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Tests\Unit\TestCase;
 
@@ -247,9 +248,14 @@ final class OrderDetailsBoxTest extends TestCase {
 	private function label_button( int $account_id ): Label_Button {
 		return new Label_Button(
 			'https://example.test/wp-json/woodev/v1/admin/records/fake/orders',
-			static function () use ( $account_id ): int {
-				return $account_id;
+			static function () use ( $account_id ): array {
+				return [
+					'account_id'  => $account_id,
+					'status_raw'  => 'awaiting_deliver',
+					'is_terminal' => false,
+				];
 			},
+			new Label_Availability( null ),
 			'https://example.test/assets/',
 			'1.0'
 		);
