@@ -66,6 +66,9 @@ final class OrderSourceFilterTest extends TestCase {
 		Order_Source_Filter::instance()->reset_for_tests();
 
 		Functions\when( 'is_admin' )->justReturn( true );
+		// `wc_get_order_statuses()` lists the checkout draft; WooCommerce's «All» does not count it.
+		Functions\when( 'wc_get_order_statuses' )->justReturn( array_fill_keys( array_merge( $this->counted_statuses(), [ 'wc-checkout-draft' ] ), 'Status' ) );
+		Functions\when( 'get_post_stati' )->justReturn( array_merge( $this->counted_statuses(), [ 'draft' ] ) );
 		Functions\when( 'get_current_user_id' )->justReturn( self::USER );
 		Functions\when( 'sanitize_text_field' )->returnArg();
 		Functions\when( 'wp_unslash' )->returnArg();
@@ -97,13 +100,22 @@ final class OrderSourceFilterTest extends TestCase {
 			function ( array $args ) {
 				$this->order_queries[] = $args;
 
-				if ( isset( $args['status'] ) ) {
+				if ( isset( $args['status'] ) && $this->counted_statuses() !== $args['status'] ) {
 					return (object) [ 'total' => $this->status_totals[ implode( ',', (array) $args['status'] ) ] ?? 0 ];
 				}
 
 				return (object) [ 'total' => isset( $args['meta_query'] ) || isset( $args['created_via'] ) ? $this->totals['marketplace'] : $this->totals['all'] ];
 			}
 		);
+	}
+
+	/**
+	 * The statuses WooCommerce's «All» counts.
+	 *
+	 * @return string[]
+	 */
+	private function counted_statuses(): array {
+		return [ 'wc-pending', 'wc-processing', 'wc-on-hold', 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' ];
 	}
 
 	protected function tearDown(): void {
@@ -255,44 +267,47 @@ final class OrderSourceFilterTest extends TestCase {
 		$this->assertSame( '', (string) ob_get_clean() );
 	}
 
-	public function test_the_hidden_line_is_printed_on_the_orders_list_while_marketplace_orders_are_hidden(): void {
-		Functions\when( 'get_current_screen' )->justReturn( (object) [ 'id' => 'woocommerce_page_wc-orders' ] );
+	public function test_the_hidden_line_is_one_more_view_a_plain_element_and_never_a_notice(): void {
+		$views = $this->filter()->add_views( [ 'all' => '<a>Все (10)</a>' ] );
 
-		ob_start();
-		$this->filter()->render_hidden_notice();
-		$html = (string) ob_get_clean();
-
-		$this->assertStringContainsString( 'Заказы маркетплейсов скрыты · ', $html );
-		$this->assertStringContainsString( 'woodev_order_source=all', $html );
-		$this->assertStringContainsString( 'показать</a>', $html );
+		$this->assertSame( 'woodev_source_hidden', array_key_last( $views ), 'It stands after the source views.' );
+		$this->assertStringContainsString( '<span class="woodev-order-source-hidden">Заказы маркетплейсов скрыты · ', $views['woodev_source_hidden'] );
+		$this->assertStringContainsString( 'woodev_order_source=all', $views['woodev_source_hidden'] );
+		$this->assertStringContainsString( 'показать</a>', $views['woodev_source_hidden'] );
+		// WooCommerce's order screens move every `.notice` into a hidden list.
+		$this->assertStringNotContainsString( 'notice', $views['woodev_source_hidden'] );
+		$this->assertFalse( has_action( 'admin_notices' ) );
 	}
 
 	public function test_the_hidden_line_is_silent_when_nothing_is_hidden(): void {
-		Functions\when( 'get_current_screen' )->justReturn( (object) [ 'id' => 'edit-shop_order' ] );
-
 		// The choice is every order.
 		$_GET['woodev_order_source'] = 'all';
-		ob_start();
-		$this->filter()->render_hidden_notice();
-		$this->assertSame( '', (string) ob_get_clean() );
+		$this->assertArrayNotHasKey( 'woodev_source_hidden', $this->filter()->add_views( [] ) );
 
 		// The shop is chosen but no marketplace order exists.
 		$_GET = [];
 		Order_Source_Filter::instance()->reset_for_tests();
 		$this->totals['marketplace'] = 0;
-		ob_start();
-		$this->filter()->render_hidden_notice();
-		$this->assertSame( '', (string) ob_get_clean() );
+		$this->assertArrayNotHasKey( 'woodev_source_hidden', $this->filter()->add_views( [] ) );
+
+		// One marketplace is chosen: nothing of the marketplaces is hidden from the manager.
+		$_GET['woodev_order_source'] = 'fake-seller';
+		Order_Source_Filter::instance()->reset_for_tests();
+		$this->totals['marketplace'] = 3;
+		$this->assertArrayNotHasKey( 'woodev_source_hidden', $this->filter()->add_views( [] ) );
 	}
 
-	public function test_the_hidden_line_is_silent_on_other_screens(): void {
-		Functions\when( 'get_current_screen' )->justReturn( (object) [ 'id' => 'dashboard' ] );
+	public function test_the_source_views_count_the_statuses_woocommerce_all_counts_and_no_others(): void {
+		$this->filter()->add_views( [] );
 
-		ob_start();
-		$this->filter()->render_hidden_notice();
+		$this->assertCount( 2, $this->order_queries );
 
-		$this->assertSame( '', (string) ob_get_clean() );
-		$this->assertSame( [], $this->order_queries, 'Not even a count is paid for on another screen.' );
+		foreach ( $this->order_queries as $query ) {
+			$this->assertSame( $this->counted_statuses(), $query['status'] );
+			$this->assertNotContains( 'wc-checkout-draft', $query['status'], 'A checkout draft is no order of the shop.' );
+			$this->assertNotContains( 'trash', $query['status'] );
+			$this->assertNotContains( 'auto-draft', $query['status'] );
+		}
 	}
 
 	public function test_an_hpos_shop_on_a_woocommerce_older_than_8_2_gets_no_filter_at_all(): void {

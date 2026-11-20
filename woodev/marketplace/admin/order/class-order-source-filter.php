@@ -250,7 +250,9 @@ final class Order_Source_Filter {
 	}
 
 	/**
-	 * Adds «Все | Магазин | Маркетплейсы» to the list's views, after the order statuses.
+	 * Adds «Все | Магазин | Маркетплейсы» to the list's views, after the order statuses, and, while marketplace orders are hidden,
+	 * the line that says so. The line is one more view, a plain element: WooCommerce's order screens move every `.notice` into a
+	 * hidden list, so a notice would never be seen.
 	 *
 	 * @internal
 	 *
@@ -272,6 +274,10 @@ final class Order_Source_Filter {
 		foreach ( $items as $value => [ $text, $count ] ) {
 			$views[ 'woodev_source_' . $value ] = $label . $this->view_link( $value, $text, $count );
 			$label                              = '';
+		}
+
+		if ( Order_Source_Choice::SHOP === $this->choice() && $counts['marketplace'] > 0 ) {
+			$views['woodev_source_hidden'] = $this->hidden_line();
 		}
 
 		return $views;
@@ -302,34 +308,6 @@ final class Order_Source_Filter {
 		}
 
 		echo '</select>';
-	}
-
-	/**
-	 * Says, on the orders list, that marketplace orders are hidden and how to show them.
-	 *
-	 * @internal
-	 *
-	 * @since 2.1.13
-	 *
-	 * @return void
-	 */
-	public function render_hidden_notice(): void {
-		if ( ! $this->is_screen( self::LEGACY_SCREEN ) && ! $this->is_screen( self::HPOS_SCREEN ) ) {
-			return;
-		}
-
-		if ( Order_Source_Choice::SHOP !== $this->choice() || $this->counts()['marketplace'] < 1 ) {
-			return;
-		}
-
-		printf(
-			'<div class="notice notice-info inline"><p>%s</p></div>',
-			sprintf(
-				/* translators: %s: the «показать» link. */
-				esc_html__( 'Заказы маркетплейсов скрыты · %s', 'woodev-plugin-framework' ),
-				'<a href="' . esc_url( $this->url_for( Order_Source_Choice::ALL ) ) . '">' . esc_html__( 'показать', 'woodev-plugin-framework' ) . '</a>'
-			)
-		);
 	}
 
 	/**
@@ -384,8 +362,6 @@ final class Order_Source_Filter {
 		add_filter( 'views_' . self::LEGACY_SCREEN, [ $this, 'add_views' ] );
 		add_filter( 'wp_count_posts', [ $this, 'filter_posts_counts' ], 10, 3 );
 		add_action( 'restrict_manage_posts', [ $this, 'render_dropdown' ], 10, 2 );
-
-		add_action( 'admin_notices', [ $this, 'render_hidden_notice' ] );
 	}
 
 	/**
@@ -483,7 +459,18 @@ final class Order_Source_Filter {
 	}
 
 	/**
-	 * Counts the orders a constraint matches, in every status the list's «Все» view shows, without loading them.
+	 * The order statuses WooCommerce's «All» view counts: those that show in the admin's all list, which leaves out the checkout draft
+	 * (`wc_get_order_statuses()` lists it), trash and auto-draft.
+	 *
+	 * @return string[]
+	 */
+	private function all_statuses(): array {
+		return array_values( array_intersect( array_keys( wc_get_order_statuses() ), get_post_stati( [ 'show_in_admin_all_list' => true ] ) ) );
+	}
+
+	/**
+	 * Counts the orders a constraint matches, without loading them. Unless the constraint names statuses these are the ones
+	 * WooCommerce's own «All» counts ({@see self::all_statuses()}).
 	 *
 	 * @param array<string,mixed> $constraint `wc_get_orders()` arguments that narrow the orders.
 	 * @return int
@@ -491,6 +478,7 @@ final class Order_Source_Filter {
 	private function count_orders( array $constraint ): int {
 		$result = wc_get_orders(
 			array_merge(
+				[ 'status' => $this->all_statuses() ],
 				$constraint,
 				[
 					'type'     => self::ORDER_TYPE,
@@ -517,6 +505,22 @@ final class Order_Source_Filter {
 				Order_Source_Choice::MARKETPLACES => __( 'Все маркетплейсы', 'woodev-plugin-framework' ),
 			],
 			$this->sources
+		);
+	}
+
+	/**
+	 * «Заказы маркетплейсов скрыты · показать».
+	 *
+	 * @return string
+	 */
+	private function hidden_line(): string {
+		return sprintf(
+			'<span class="woodev-order-source-hidden">%s</span>',
+			sprintf(
+				/* translators: %s: the «показать» link. */
+				esc_html__( 'Заказы маркетплейсов скрыты · %s', 'woodev-plugin-framework' ),
+				'<a href="' . esc_url( $this->url_for( Order_Source_Choice::ALL ) ) . '">' . esc_html__( 'показать', 'woodev-plugin-framework' ) . '</a>'
+			)
 		);
 	}
 
