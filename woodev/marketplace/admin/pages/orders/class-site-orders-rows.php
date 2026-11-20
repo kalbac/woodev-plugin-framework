@@ -80,6 +80,37 @@ final class Site_Orders_Rows {
 	}
 
 	/**
+	 * The options of the «Статус на маркетплейсе» filter: each stored code under the name its badge shows, so the filter and the
+	 * column say the same words, with its count. Two codes the framework names alike («Другой статус» for every code nobody names)
+	 * keep the code in brackets, so the merchant can tell the options apart.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param array<string,int> $counts Orders by stored posting status.
+	 * @return array<int,array{value:string,label:string,count:int}> The records engine's facet shape.
+	 */
+	public function posting_status_options( array $counts ): array {
+		$labels = [];
+
+		foreach ( array_keys( $counts ) as $code ) {
+			$labels[ (string) $code ] = Posting_Status_Text::label( (string) $code, $this->status_names );
+		}
+
+		$uses    = array_count_values( $labels );
+		$options = [];
+
+		foreach ( $labels as $code => $label ) {
+			$options[] = [
+				'value' => (string) $code,
+				'label' => $uses[ $label ] > 1 ? $label . ' (' . $code . ')' : $label,
+				'count' => (int) $counts[ $code ],
+			];
+		}
+
+		return $options;
+	}
+
+	/**
 	 * Builds a row.
 	 *
 	 * @since 2.1.5

@@ -163,6 +163,9 @@ class Fake_Provider implements Records_Provider, Provides_Field_Options {
 	/** @var array<string,mixed> */
 	public $definition;
 
+	/** @var array<string,mixed>|null The «Статус данных» block a list read carries; none when null. */
+	public $data_status;
+
 	/** @var array<int,array<string,mixed>> */
 	public $rows = [];
 
@@ -221,10 +224,16 @@ class Fake_Provider implements Records_Provider, Provides_Field_Options {
 			throw $this->throw;
 		}
 
-		return [
+		$result = [
 			'rows'  => $this->rows,
 			'total' => $this->total ?? count( $this->rows ),
 		];
+
+		if ( null !== $this->data_status ) {
+			$result['data_status'] = $this->data_status;
+		}
+
+		return $result;
 	}
 
 	public function get_children( array $context, string $parent_id, array $query ): array {

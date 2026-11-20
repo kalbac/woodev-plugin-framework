@@ -209,9 +209,9 @@ final class AdminCollectorTest extends TestCase {
 		$this->collector->clean_up_submenus();
 
 		$this->assertSame(
-			[ 'wc-admin&path=/ozon-seller/products', 'wc-admin&path=/ozon-seller/orders' ],
+			[ 'wc-admin&path=/ozon-seller/products', 'admin.php?page=wc-admin&path=%2Fwoodev-marketplace-orders&marketplace=ozon-seller' ],
 			array_column( $GLOBALS['submenu'][ $root ], 2 ),
-			'no copy of the root: the root links to the first page'
+			'no copy of the root: the root links to the first page; «Заказы» links to the shared orders page'
 		);
 
 		foreach ( $GLOBALS['submenu'][ $root ] as $entry ) {
@@ -262,7 +262,7 @@ final class AdminCollectorTest extends TestCase {
 		return [
 			'v1 products page'              => [ '/wp-admin/admin.php?page=ozon-seller-products', 'path=%2Fozon-seller%2Fproducts' ],
 			'v1 root'                       => [ '/wp-admin/admin.php?page=ozon-seller', 'path=%2Fozon-seller%2Fproducts' ],
-			'v1 orders page with a pager'   => [ '/wp-admin/admin.php?page=ozon-seller-orders&paged=3', 'path=%2Fozon-seller%2Forders' ],
+			'v1 orders page with a pager'   => [ '/wp-admin/admin.php?page=ozon-seller-orders&paged=3', 'path=%2Fwoodev-marketplace-orders&marketplace=ozon' ],
 			'unreleased v2 slug'            => [ '/wp-admin/admin.php?page=woodev-ozon-products', null ],
 			'the destination itself'        => [ '/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fproducts', null ],
 			'an unrelated page naming us'   => [ '/wp-admin/admin.php?page=wc-status&tab=logs&log_file=ozon-seller-2026.log', null ],
@@ -334,5 +334,59 @@ final class AdminCollectorTest extends TestCase {
 		$_SERVER['REQUEST_URI'] = '/wp-admin/admin-ajax.php?page=ozon-seller';
 
 		$this->assertNull( $this->collector->resolve_legacy_redirect() );
+	}
+	public function test_the_manifest_carries_the_shared_orders_page_and_the_plugins_orders_page_points_at_it(): void {
+		$this->collector->register_plugin( $this->plugin( 'ozon-seller' ) );
+		$this->collector->register_plugin( $this->plugin( 'wildberries', [ 'products' ] ) );
+
+		$manifest = $this->collector->build_manifest();
+		$pages    = array_column( $manifest['menus'][0]['pages'], null, 'id' );
+
+		$this->assertSame( [ 'ozon-seller' ], array_column( $manifest['ordersPage']['marketplaces'], 'id' ), 'Only a plugin with the orders page.' );
+		$this->assertSame( 'orders', $manifest['ordersPage']['marketplaces'][0]['table'] );
+		$this->assertSame( [ 'path' => '/woodev-marketplace-orders', 'query' => [ 'marketplace' => 'ozon-seller' ] ], $pages['orders']['movedTo'] );
+		$this->assertArrayNotHasKey( 'movedTo', $pages['products'] );
+	}
+
+	public function test_the_url_of_the_orders_page_is_the_shared_page_with_the_marketplace_preset(): void {
+		Functions\stubs(
+			[
+				'admin_url'     => static function ( string $path = '' ): string {
+					return 'https://shop.test/wp-admin/' . $path;
+				},
+				'add_query_arg' => static function ( array $args, string $url ): string {
+					return $url . '?' . http_build_query( $args, '', '&', PHP_QUERY_RFC3986 );
+				},
+			]
+		);
+		$menu = ( new Test_Marketplace_Plugin( 'ozon-seller', [ 'id' => 'ozon-seller', 'title' => 'OZON' ] ) )->get_marketplace_admin_menu();
+
+		$this->assertSame(
+			'https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-marketplace-orders&marketplace=ozon-seller&account=3',
+			$this->collector->get_page_url( $menu, $menu->get_page( 'orders' ), [ 'account' => '3' ] )
+		);
+		$this->assertSame(
+			'https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fproducts',
+			$this->collector->get_page_url( $menu, $menu->get_page( 'products' ) ),
+			'Every other page keeps its own URL.'
+		);
+	}
+
+	public function test_the_shared_orders_page_is_placed_after_the_delivery_orders_in_the_woocommerce_menu(): void {
+		$GLOBALS['submenu'] = [
+			'woocommerce' => [
+				[ 'Заказы', 'edit_shop_orders', 'wc-orders', 'Заказы' ],
+				[ 'Заказы доставки', 'manage_woocommerce', 'wc-admin&path=/woodev-shipping-orders', 'Заказы доставки' ],
+				[ 'Клиенты', 'manage_woocommerce', 'wc-admin&path=/customers', 'Клиенты' ],
+				[ 'Заказы маркетплейсов', 'manage_woocommerce', 'wc-admin&path=/woodev-marketplace-orders', 'Заказы маркетплейсов' ],
+			],
+		];
+
+		$this->collector->place_orders_page();
+
+		$this->assertSame(
+			[ 'wc-orders', 'wc-admin&path=/woodev-shipping-orders', 'wc-admin&path=/woodev-marketplace-orders', 'wc-admin&path=/customers' ],
+			array_column( $GLOBALS['submenu']['woocommerce'], 2 )
+		);
 	}
 }

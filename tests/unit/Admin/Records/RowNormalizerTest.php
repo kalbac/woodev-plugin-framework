@@ -171,6 +171,35 @@ class RowNormalizerTest extends TestCase {
 		$this->assertContractBroken( $this->page( [], 20, [ 'facets' => [ 'state' => [ [ 'value' => 'ok', 'label' => 'x', 'count' => -1 ] ] ] ] ) );
 	}
 
+	public function test_the_data_status_block_is_plain_text_pairs_and_absent_when_the_provider_sends_none(): void {
+		$this->assertNull( $this->page( [] )['data_status'] );
+
+		$status = $this->page(
+			[],
+			20,
+			[
+				'data_status' => [
+					'items' => [ [ 'label' => '<b>Обновлено</b>', 'value' => '20 ноя 2026 14:05' ], [ 'label' => 'Обновится', 'value' => 'Сейчас' ] ],
+					'title' => 'Когда проверялись заказы',
+				],
+			]
+		)['data_status'];
+
+		$this->assertSame(
+			[
+				'items' => [ [ 'label' => 'Обновлено', 'value' => '20 ноя 2026 14:05' ], [ 'label' => 'Обновится', 'value' => 'Сейчас' ] ],
+				'title' => 'Когда проверялись заказы',
+			],
+			$status
+		);
+
+		$pair = [ 'label' => 'a', 'value' => 'b' ];
+		$this->assertContractBroken( $this->page( [], 20, [ 'data_status' => [ 'items' => [] ] ] ) );
+		$this->assertContractBroken( $this->page( [], 20, [ 'data_status' => [ 'items' => [ $pair, $pair, $pair, $pair ] ] ] ) );
+		$this->assertContractBroken( $this->page( [], 20, [ 'data_status' => [ 'items' => [ [ 'label' => 'a', 'value' => 5 ] ] ] ] ) );
+		$this->assertContractBroken( $this->page( [], 20, [ 'data_status' => 'stale' ] ) );
+	}
+
 	public function test_cell_types_stack_progress_date_and_number(): void {
 		$definition = Records_Definition::from_array(
 			Records_Definitions::standard(

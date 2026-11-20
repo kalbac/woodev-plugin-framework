@@ -162,15 +162,6 @@ final class Site_Orders_Definition {
 			],
 		];
 
-		if ( [] !== $statuses ) {
-			$filters[] = [
-				'id'      => 'wc_status',
-				'label'   => __( 'Статус заказа', 'woodev-plugin-framework' ),
-				'type'    => 'select',
-				'options' => $statuses,
-			];
-		}
-
 		$filters[] = [
 			'id'    => 'date',
 			'label' => __( 'Дата заказа', 'woodev-plugin-framework' ),
@@ -178,6 +169,26 @@ final class Site_Orders_Definition {
 			// The period picker counts «Сегодня» and the rest from the site's day, which is the day the server reads the range in.
 			'today' => wp_date( 'Y-m-d' ),
 		];
+
+		// The two statuses are the rarer questions: under «Расширенные фильтры», as on «Заказы доставки». The marketplace's own
+		// statuses come with every list read (the provider's facets), so only the ones the shop's orders are in are offered.
+		$filters[] = [
+			'id'             => 'posting_status',
+			'label'          => __( 'Статус на маркетплейсе', 'woodev-plugin-framework' ),
+			'type'           => 'select',
+			'options_source' => true,
+			'advanced'       => true,
+		];
+
+		if ( [] !== $statuses ) {
+			$filters[] = [
+				'id'       => 'wc_status',
+				'label'    => __( 'Статус заказа', 'woodev-plugin-framework' ),
+				'type'     => 'select',
+				'options'  => $statuses,
+				'advanced' => true,
+			];
+		}
 
 		return $filters;
 	}
@@ -194,6 +205,7 @@ final class Site_Orders_Definition {
 				'id'          => self::OPEN,
 				'label'       => __( 'Открыть заказ', 'woodev-plugin-framework' ),
 				'short_label' => __( 'Открыть', 'woodev-plugin-framework' ),
+				'icon'        => 'visibility',
 				'effect'      => 'read',
 				'interaction' => 'link',
 			],
@@ -201,6 +213,7 @@ final class Site_Orders_Definition {
 				'id'           => self::LABEL,
 				'label'        => __( 'Скачать этикетки', 'woodev-plugin-framework' ),
 				'short_label'  => __( 'Этикетки', 'woodev-plugin-framework' ),
+				'icon'         => 'media-document',
 				'effect'       => 'mutate',
 				'interaction'  => 'download',
 				'capability'   => self::EDIT,
@@ -210,6 +223,7 @@ final class Site_Orders_Definition {
 				'id'             => self::CANCEL,
 				'label'          => __( 'Отменить отправление', 'woodev-plugin-framework' ),
 				'short_label'    => __( 'Отменить', 'woodev-plugin-framework' ),
+				'icon'           => 'remove',
 				'tone'           => 'danger',
 				'effect'         => 'mutate',
 				'interaction'    => 'dialog',
@@ -296,6 +310,8 @@ final class Site_Orders_Definition {
 			'action_options_loading' => __( 'Загружаем список…', 'woodev-plugin-framework' ),
 			'activity_stale'         => __( 'Данные о ходе работы устарели: обновляем.', 'woodev-plugin-framework' ),
 			'activity_failed'        => __( 'Не удаётся получить ход работы. Попробуем ещё раз.', 'woodev-plugin-framework' ),
+			'advanced_filters'       => __( 'Расширенные фильтры', 'woodev-plugin-framework' ),
+			'data_status'            => __( 'Статус данных', 'woodev-plugin-framework' ),
 		];
 	}
 }

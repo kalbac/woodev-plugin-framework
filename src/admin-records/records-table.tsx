@@ -15,6 +15,7 @@ import type { MutableRefObject, ReactNode } from 'react';
 import { SelectControl } from '@wordpress/components';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { createRecordsApi } from './api';
+import { DataStatus } from './data-status';
 import type { RecordsExtensions, TableHandle } from './extensions';
 import { FiltersBar, SearchBox, ViewsRow, isNarrowed } from './filters';
 import { MESSAGE_KEYS, firstMessage, message } from './messages';
@@ -44,6 +45,8 @@ export interface RecordsTableProps {
 	fallbackMessages?: Messages;
 	/** The action and activity parts. */
 	extensions?: RecordsExtensions;
+	/** A control of the page drawn first in the filter row (the marketplace of «Заказы маркетплейсов»). */
+	leadingFilter?: ReactNode;
 }
 
 /**
@@ -374,6 +377,7 @@ export function RecordsTable( {
 	navigate,
 	fallbackMessages = {},
 	extensions = {},
+	leadingFilter,
 }: RecordsTableProps ) {
 	const api = useMemo( () => createRecordsApi( owner, table ), [ owner, table ] );
 	const [ route, go ] = useRoute( pageQuery, navigate );
@@ -473,6 +477,13 @@ export function RecordsTable( {
 				facets={ records.list.data?.facets ?? {} }
 				messages={ messages }
 				onChange={ change }
+				leading={ leadingFilter }
+				aside={
+					<DataStatus
+						status={ records.list.data?.data_status }
+						label={ message( messages, MESSAGE_KEYS.dataStatus ) }
+					/>
+				}
 			/>
 			{ extensions.renderActivity?.( handle ) }
 			{ extensions.renderActions?.( handle ) }

@@ -136,7 +136,7 @@ final class Definition_Parser {
 		foreach ( $list as $i => $filter ) {
 			$path   = "definition.filters[$i]";
 			$filter = self::map( $filter, $path );
-			self::allow_keys( $filter, [ 'id', 'label', 'type', 'options', 'options_source', 'default', 'views', 'today' ], $path );
+			self::allow_keys( $filter, [ 'id', 'label', 'type', 'options', 'options_source', 'default', 'views', 'today', 'advanced' ], $path );
 
 			$entry = [
 				'id'             => self::slug( $filter, 'id', $path ),
@@ -151,6 +151,10 @@ final class Definition_Parser {
 			if ( self::filter_views( $filter, $entry['type'], $path ) ) {
 				$entry['views'] = true;
 				++$views_count;
+			}
+
+			if ( self::filter_advanced( $filter, $entry, $path ) ) {
+				$entry['advanced'] = true;
 			}
 
 			$today = self::filter_today( $filter, $entry['type'], $path );
@@ -252,6 +256,25 @@ final class Definition_Parser {
 		}
 
 		return $views;
+	}
+
+	/**
+	 * Whether the filter is drawn only while the merchant has «Расширенные фильтры» switched on (`advanced`), the way the
+	 * delivery orders page keeps its rarer filters out of sight. The search box and the counted view row are always on
+	 * screen, so neither can be one.
+	 *
+	 * @param array<string,mixed> $filter Raw filter.
+	 * @param array<string,mixed> $entry  The filter parsed so far (`type`, and `views` when it is the view row).
+	 * @param string              $path   Error path.
+	 */
+	private static function filter_advanced( array $filter, array $entry, string $path ): bool {
+		$advanced = self::flag( $filter, 'advanced', $path, false );
+
+		if ( $advanced && ( 'search' === $entry['type'] || ! empty( $entry['views'] ) ) ) {
+			throw new \InvalidArgumentException( "$path.advanced: the search box and the counted view row are always shown." );
+		}
+
+		return $advanced;
 	}
 
 	/**
