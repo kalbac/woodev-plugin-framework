@@ -418,6 +418,7 @@ final class Site_Products_Definition {
 			Standard_Messages::bulk(),
 			Standard_Messages::matching( __( 'товары', 'woodev-plugin-framework' ) ),
 			Standard_Messages::views(),
+			Standard_Messages::pager(),
 			self::action_messages()
 		);
 	}
@@ -431,7 +432,7 @@ final class Site_Products_Definition {
 	private static function shell_messages( string $marketplace ): array {
 		return [
 			/* translators: %s: marketplace name. */
-			'description'           => sprintf( __( 'Здесь видно, какие товары вашего магазина уже выгружены на %s, а какие ещё нет. Отметьте товары, чтобы отправить их на маркетплейс, обновить остатки и цены или связать с готовой карточкой.', 'woodev-plugin-framework' ), $marketplace ),
+			'description'           => sprintf( __( 'На этой странице отображаются товары вашего магазина и их состояние на %s. Отсюда товары можно выгрузить на маркетплейс, обновить остатки и цены или связать с уже существующими карточками.', 'woodev-plugin-framework' ), $marketplace ),
 			'empty'                 => __( 'Товаров не найдено. Добавьте аккаунт в настройках или измените фильтры.', 'woodev-plugin-framework' ),
 			'empty_filtered'        => __( 'По этим фильтрам товаров нет.', 'woodev-plugin-framework' ),
 			'error'                 => __( 'Не удалось загрузить товары. Повторите чуть позже.', 'woodev-plugin-framework' ),

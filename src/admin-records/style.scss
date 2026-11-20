@@ -28,8 +28,17 @@
 		text-transform: none;
 	}
 
-	// The page-size select sits in the card's footer in the slot of WooCommerce's own picker ({@see HIDE_VENDOR_PAGE_SIZE}); its label
-	// is beside it, and is the same emotion label: no upper case there either.
+	// The pager of the card's footer ({@see ./pager}) is drawn under WooCommerce's own class names, so the vendor card's stylesheet styles it;
+	// WooCommerce's pagination is hidden, because it draws nothing for one page. The footer stacks the pager over the count, as in «Заказы
+	// доставки». The page-size select's label is beside it, and is the same emotion label: no upper case there either.
+	.components-card__footer > .woocommerce-pagination:not( .woodev-records__pager ) {
+		display: none;
+	}
+
+	.components-card__footer > .woodev-records__pager {
+		order: -1;
+	}
+
 	.woodev-records__page-size .components-input-control__label.components-input-control__label {
 		font-size: 13px;
 		font-weight: 500;
@@ -183,6 +192,13 @@
 	.woocommerce-table__item {
 		padding-left: 10px;
 		padding-right: 10px;
+	}
+
+	// The first column is inset like the card's title above it (24px, WooCommerce's own inset), as the first column of «Заказы доставки» is
+	// inset from the card's edge. The checkbox and expand columns keep their own narrow cells.
+	.woocommerce-table__header:first-child:not( .woodev-records__col-select, .woodev-records__col-expand ),
+	.woocommerce-table__item:first-child:not( .woodev-records__col-select, .woodev-records__col-expand ) {
+		padding-left: 24px;
 	}
 
 	// The row's buttons are one group on one line, the last column of the row.
@@ -509,6 +525,12 @@
 		}
 	}
 
+	// The row's buttons sit 4px apart; a group of icon-only ones closes that gap (the inline style of the row carries no `gap` for it
+	// to beat).
+	.woodev-records__buttons {
+		gap: 4px;
+	}
+
 	// The row's icon-only buttons: ONE group like «Заказы доставки» — a single frame, the buttons flush, a hairline between them, the
 	// corners round at the two ends. 2.5em square, the colours by tone (green: the main action, red: the destructive one, grey).
 	.woodev-records__buttons.is-group {
@@ -669,8 +691,14 @@
 // the rig: 50px tall, 1px #757575 frame, 4px corners, 13px semibold text, a bold chevron). The settings' own select look
 // (`components/select-look`) is one class-pair shorter, so these selectors beat it. The bulk group's select, in the card header,
 // keeps the group's frame.
+//
+// `components/wp-recolor` draws EVERY input backdrop with `border-radius: 8px !important` and a shadow on the container, which is why the
+// selects came out rounder than the pickers beside them: the radius and the shadow are taken back here, the radius with `!important`
+// of its own.
 .woodev-marketplace-view.woodev-marketplace-view .woodev-records__toolbar {
 	.components-select-control .components-input-control__container {
+		border-radius: 4px;
+		box-shadow: none;
 		min-height: 50px;
 		min-width: 200px;
 	}
@@ -686,7 +714,7 @@
 
 	.components-select-control .components-input-control__backdrop {
 		border: 1px solid #757575;
-		border-radius: 4px;
+		border-radius: 4px !important;
 		box-shadow: none;
 	}
 
@@ -749,10 +777,25 @@
 	}
 }
 
-// The tooltip of a badge or a «?»: sentences one under another, not one long line. It is a popover, so it sits outside `.woodev-records`.
+// The tooltip of a badge: sentences one under another, not one long line. It is a popover, so it sits outside `.woodev-records`.
 .components-tooltip.woodev-records__tooltip {
 	max-width: 320px;
 	white-space: pre-line;
+}
+
+// The popover of a heading's «?» ({@see HelpMark}), drawn like a tooltip: WordPress's own black, 12px, 2px-cornered box.
+.components-popover.woodev-records__help-tip .components-popover__content {
+	background: #1e1e1e;
+	border: 0;
+	border-radius: 2px;
+	box-shadow: none;
+	color: #f0f0f0;
+	font-size: 12px;
+	line-height: 1.4;
+	max-width: 320px;
+	padding: 4px 8px;
+	white-space: pre-line;
+	width: max-content;
 }
 
 // The action dialog is a portal: it sits outside `.woodev-records`, so its rules stand on their own.

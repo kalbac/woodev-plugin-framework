@@ -65,6 +65,12 @@ export const MESSAGE_KEYS = {
 	description: 'description',
 	/** Label of the page-size control. */
 	perPage: 'per_page',
+	/** The pager's page count: `{page}` is the page on screen and `{pages}` how many there are. */
+	pageStatus: 'page_status',
+	/** The pager's two arrows and its jump-to-page field. */
+	pagePrev: 'page_prev',
+	pageNext: 'page_next',
+	pageGoto: 'page_goto',
 	/** Start of a date range. */
 	dateFrom: 'date_from',
 	/** End of a date range. */

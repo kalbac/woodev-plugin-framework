@@ -12,7 +12,6 @@
  */
 
 import type { MutableRefObject, ReactNode, RefObject } from 'react';
-import { SelectControl } from '@wordpress/components';
 import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { createRecordsApi } from './api';
 import { DataStatus } from './data-status';
@@ -20,12 +19,20 @@ import type { RecordsExtensions, TableHandle } from './extensions';
 import { FiltersBar, SearchBox, ViewsRow, isNarrowed } from './filters';
 import { MESSAGE_KEYS, firstMessage, message } from './messages';
 import { changeQuery, searchFilter, writeQuery } from './query';
+import { Pager } from './pager';
 import { RowActions } from './row-actions';
 import { useSelection, type Selection } from './selection';
 import { EmptyCard, ErrorState, LoadingState } from './states';
 import './style.scss';
-import { HIDE_VENDOR_PAGE_SIZE, STYLES } from './styles';
-import { SelectionBar, buildHeaders, buildLines, visibleRowIds, type TableModelInput } from './table-model';
+import { STYLES } from './styles';
+import {
+	SelectionBar,
+	buildHeaders,
+	buildLines,
+	nameColumnIndex,
+	visibleRowIds,
+	type TableModelInput,
+} from './table-model';
 import type { AdminRecord, Definition, Direction, Messages, RecordsQuery, RouteQuery } from './types';
 import { useRecords, type Records } from './use-records';
 import { getNavigate, getTableCard, type Navigate, type TableCardProps } from './wc-runtime';
@@ -98,51 +105,22 @@ function Summary( { text }: { text: string } ) {
 	);
 }
 
-/** The place WooCommerce's footer gives its own page-size picker. */
-const PER_PAGE_SLOT = '.woocommerce-pagination__per-page-picker';
+/** The card's footer, where the pager is drawn. */
+const FOOTER_SLOT = '.components-card__footer';
 
 /**
- * The footer's page-size slot inside `host`, found again after every render (the card is made again when its columns change).
+ * The footer of the card inside `host`, found again after every render (the card is made again when its columns change).
  *
  * @param host The element that holds the card.
  */
-function usePerPageSlot( host: RefObject< HTMLElement > ): Element | null {
+function useFooterSlot( host: RefObject< HTMLElement > ): Element | null {
 	const [ slot, setSlot ] = useState< Element | null >( null );
 
 	useLayoutEffect( () => {
-		setSlot( host.current?.querySelector( PER_PAGE_SLOT ) ?? null );
+		setSlot( host.current?.querySelector( FOOTER_SLOT ) ?? null );
 	} );
 
 	return slot;
-}
-
-interface PageSizeProps {
-	label: string;
-	perPage: number;
-	sizes: number[];
-	onChange: ( size: string ) => void;
-}
-
-/** PHP's own page sizes, drawn inside the card's footer in place of WooCommerce's fixed 25/50/75/100 picker. */
-function PageSize( { label, perPage, sizes, onChange }: PageSizeProps ) {
-	const options = ( sizes.includes( perPage ) ? sizes : [ ...sizes, perPage ] ).map( ( size ) => ( {
-		value: String( size ),
-		label: String( size ),
-	} ) );
-
-	return (
-		<div className="woodev-records__page-size">
-			<SelectControl
-				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-				label={ label }
-				labelPosition="side"
-				value={ String( perPage ) }
-				options={ options }
-				onChange={ onChange }
-			/>
-		</div>
-	);
 }
 
 interface TableBodyProps {
@@ -178,7 +156,7 @@ function TableBody( {
 }: TableBodyProps ) {
 	const TableCard = getTableCard();
 	const host = useRef< HTMLDivElement >( null );
-	const perPageSlot = usePerPageSlot( host );
+	const footer = useFooterSlot( host );
 	const data = records.list.data;
 	const summaryLabel = message( messages, MESSAGE_KEYS.summaryLabel );
 	// WooCommerce reports one page-size choice as two callbacks (size, then the page clamped to the new size). Both are
@@ -240,10 +218,9 @@ function TableBody( {
 	const headers = buildHeaders( model );
 	const lines = buildLines( model );
 	const leadColumns = headers.length - definition.columns.length;
-	// The row header is the table's name column: the first column the definition marks `required`, else the first one. A photo
-	// column in front of the name must not take that place (WooCommerce draws the row-header cell in its own grey).
-	const firstRequired = definition.columns.findIndex( ( column ) => column.required );
-	const rowHeaderIndex = leadColumns + Math.max( 0, firstRequired );
+	// The row header is the table's name column. A photo column in front of the name must not take that place (WooCommerce draws
+	// the row-header cell in its own grey).
+	const rowHeaderIndex = leadColumns + nameColumnIndex( definition );
 
 	const go = ( change: Partial< RecordsQuery > ) => {
 		const next = changeQuery( latest.current, change );
@@ -284,11 +261,8 @@ function TableBody( {
 	const onQueryChange: TableCardProps[ 'onQueryChange' ] = ( param ) =>
 		param === 'per_page' ? changePerPage : () => {};
 
-	const sizes = definition.pagination.per_page_options;
-
 	return (
 		<>
-			<style>{ HIDE_VENDOR_PAGE_SIZE }</style>
 			<div ref={ host }>
 				<TableCard
 					// Remounted when the columns change: WooCommerce reads the visible-column list once, on mount.
@@ -317,16 +291,20 @@ function TableBody( {
 					onQueryChange={ onQueryChange }
 				/>
 			</div>
-			{ sizes.length > 1 &&
-				perPageSlot &&
+			{ footer &&
+				records.list.status !== 'loading' &&
 				createPortal(
-					<PageSize
-						label={ message( messages, MESSAGE_KEYS.perPage ) || title }
+					<Pager
+						page={ query.page }
 						perPage={ query.perPage }
-						sizes={ sizes }
-						onChange={ changePerPage }
+						total={ data?.total ?? 0 }
+						sizes={ definition.pagination.per_page_options }
+						sizeLabel={ message( messages, MESSAGE_KEYS.perPage ) || title }
+						messages={ messages }
+						onPage={ changePage }
+						onPerPage={ changePerPage }
 					/>,
-					perPageSlot
+					footer
 				) }
 		</>
 	);
@@ -422,6 +400,35 @@ function searchHasFocus(): boolean {
 	return active instanceof Element && active.closest( '.woodev-records__search' ) !== null;
 }
 
+/**
+ * Puts the page right when a list read leaves fewer pages than the one on screen: rows removed by a refresh or an account action, or a
+ * URL that names a page past the end. The last page replaces the page in the URL, through the same navigation as any other control, so the
+ * pager never says «Страница 6 из 5» and the query stays inside the result.
+ *
+ * @param records    The table's reads.
+ * @param definition The table's definition, once it is known.
+ * @param go         Writes a URL patch.
+ */
+function useLastPageClamp( records: Records, definition: Definition | null, go: Navigate ): void {
+	const latestGo = useRef( go );
+	latestGo.current = go;
+	const { query } = records;
+	const total = records.list.data?.total;
+	const ready = records.list.status === 'ready';
+
+	useEffect( () => {
+		if ( ! definition || ! query || ! ready || total === undefined ) {
+			return;
+		}
+
+		const lastPage = Math.max( 1, Math.ceil( total / query.perPage ) );
+
+		if ( query.page > lastPage ) {
+			latestGo.current( writeQuery( definition, changeQuery( query, { page: lastPage } ) ) );
+		}
+	}, [ definition, query, ready, total ] );
+}
+
 export function RecordsTable( {
 	owner,
 	table,
@@ -440,6 +447,7 @@ export function RecordsTable( {
 	const hasBulk =
 		definition !== null && definition.bulk_actions.length > 0 && extensions.renderBulkActions !== undefined;
 	const selection = useSelection( definition?.pagination.max_selection ?? 0, records.selectionEpoch );
+	useLastPageClamp( records, definition, go );
 	// The table and its empty card are two elements with a header each, so the search box is made again when a search
 	// finds nothing — and the merchant who is still typing must keep the keyboard. Read before the swap reaches the DOM.
 	const isEmpty = records.list.status === 'ready' && records.list.data?.total === 0;

@@ -135,12 +135,8 @@ function FakeTableCard( props: TableCardProps ) {
 			>
 				next page
 			</button>
-			{ /* WooCommerce's footer: its page-size picker is a container with the vendor control in it. */ }
-			<div className="woocommerce-pagination">
-				<div className="woocommerce-pagination__per-page-picker">
-					<div className="components-base-control vendor-picker" />
-				</div>
-			</div>
+			{ /* WooCommerce's footer: the shell draws its pager here; the vendor pagination in it is hidden by the stylesheet. */ }
+			<div className="components-card__footer" data-testid="card-footer" />
 			<button type="button" onClick={ () => props.onQueryChange( 'per_page' )( '50' ) }>
 				50 per page
 			</button>
@@ -512,6 +508,7 @@ describe( 'URL round trip', () => {
 	} );
 
 	test( 'a page size PHP declared is written, another is ignored', async () => {
+		serve( { rows: () => fixtureList( [ mug, shirt ], { total: 150 } ) } );
 		const { navigate } = await renderTable( { query: { paged: '2' } } );
 
 		fireEvent.click( screen.getByRole( 'button', { name: '75 per page' } ) );
@@ -534,7 +531,7 @@ describe( 'URL round trip', () => {
 				rows: () => fixtureList( [ mug, shirt ], { total: 150 } ),
 			} );
 
-		test( "the control offers PHP's sizes only and WooCommerce's own picker is hidden", async () => {
+		test( "the control offers PHP's sizes only, in the footer", async () => {
 			servePhpSizes();
 			const { navigate } = await renderTable( { query: { paged: '3' } } );
 
@@ -545,12 +542,8 @@ describe( 'URL round trip', () => {
 					.map( ( option ) => option.textContent )
 			).toEqual( [ '10', '20', '50' ] );
 			expect( select ).toHaveValue( '20' );
-			const css = Array.from( document.querySelectorAll( 'style' ) ).map( ( style ) => style.textContent );
-			expect( css.join( '' ) ).toContain(
-				'.woocommerce-pagination__per-page-picker>:not(.woodev-records__page-size){display:none}'
-			);
-			// In the card's footer, in the vendor picker's slot — not below the card.
-			expect( select.closest( '.woocommerce-pagination__per-page-picker' ) ).not.toBeNull();
+			// In the card's footer — not below the card.
+			expect( select.closest( '.components-card__footer' ) ).not.toBeNull();
 
 			fireEvent.change( select, { target: { value: '10' } } );
 			expect( navigate ).toHaveBeenLastCalledWith(
@@ -606,6 +599,75 @@ describe( 'URL round trip', () => {
 			await act( async () => {} );
 			fireEvent.click( screen.getByRole( 'button', { name: 'next page' } ) );
 			await waitFor( () => expect( navigate ).toHaveBeenCalledTimes( 1 ) );
+		} );
+	} );
+
+	describe( 'footer pager', () => {
+		const pager = () => within( screen.getByTestId( 'card-footer' ) );
+
+		test( 'a table of one page still has the pager: the count, both arrows off, the jump field off and the size', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 2 } ) } );
+			await renderTable();
+
+			expect( pager().getByText( 'Страница 1 из 1' ) ).toBeInTheDocument();
+			expect( pager().getByRole( 'button', { name: 'Предыдущая страница' } ) ).toBeDisabled();
+			expect( pager().getByRole( 'button', { name: 'Следующая страница' } ) ).toBeDisabled();
+			expect( pager().getByRole( 'spinbutton', { name: 'Перейти на страницу' } ) ).toBeDisabled();
+			expect( pager().getByRole( 'combobox', { name: 'Строк на странице' } ) ).toBeInTheDocument();
+		} );
+
+		test( 'the arrows step one page, in the URL', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 150 } ) } );
+			const { navigate } = await renderTable( { query: { paged: '2' } } );
+
+			expect( pager().getByText( 'Страница 2 из 6' ) ).toBeInTheDocument();
+
+			fireEvent.click( pager().getByRole( 'button', { name: 'Следующая страница' } ) );
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: '3' } ) );
+
+			fireEvent.click( pager().getByRole( 'button', { name: 'Предыдущая страница' } ) );
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: undefined } ) );
+		} );
+
+		test( 'a read that leaves fewer pages than the page on screen moves the URL to the last page', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 100 } ) } );
+			const { navigate } = await renderTable( { query: { paged: '6' } } );
+
+			await waitFor( () => expect( navigate ).toHaveBeenCalledTimes( 1 ) );
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: '4' } ) );
+		} );
+
+		test( 'a page inside the result, and the last page itself, are left alone', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 100 } ) } );
+			const { navigate } = await renderTable( { query: { paged: '4' } } );
+
+			await screen.findByText( 'Страница 4 из 4' );
+			expect( navigate ).not.toHaveBeenCalled();
+		} );
+
+		test( 'an empty result sends a stale page back to the first one', async () => {
+			serve( { rows: () => fixtureList( [], { total: 0 } ) } );
+			const tableProps = props( { query: { paged: '3' } } );
+			const navigate = tableProps.navigate as jest.Mock;
+			render( <RecordsTable { ...tableProps } /> );
+
+			await waitFor( () => expect( navigate ).toHaveBeenCalledTimes( 1 ) );
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: undefined } ) );
+		} );
+
+		test( 'the jump field takes a page that exists and puts back one that does not', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 150 } ) } );
+			const { navigate } = await renderTable( { query: { paged: '2' } } );
+			const field = pager().getByRole( 'spinbutton', { name: 'Перейти на страницу' } );
+
+			fireEvent.change( field, { target: { value: '99' } } );
+			fireEvent.blur( field );
+			expect( navigate ).not.toHaveBeenCalled();
+			expect( field ).toHaveValue( 2 );
+
+			fireEvent.change( field, { target: { value: '5' } } );
+			fireEvent.keyDown( field, { key: 'Enter' } );
+			expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { paged: '5' } ) );
 		} );
 	} );
 
