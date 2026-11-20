@@ -119,3 +119,7 @@ image and a fresh `composer install`, not by guessing.
 - [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — this was one of the masked Unit failures
 - [reflection-setaccessible-version-guard](reflection-setaccessible-version-guard.md) — another masked Unit failure (PHP-version-specific)
 - [the-local-php-is-four-versions-above-the-ci-floor](the-local-php-is-four-versions-above-the-ci-floor.md) — the other "green here, red on CI", by version rather than by order
+
+## s239 addendum — the reverse-order case
+
+A Brain Monkey stub of a global function that a production path calls conditionally (`wc_date_format`, #1895) persisted in the process and broke later tests only under the reverse execution order (`phpunit.xml` runs `depends,defects`; check both orders). The fix is again `@runTestsInSeparateProcesses` on the class that stubs it.
