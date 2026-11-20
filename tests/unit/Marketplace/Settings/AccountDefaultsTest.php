@@ -610,6 +610,87 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertFalse( $store->get( $id )->setting( Effective_Settings::KEY_SYNC_ON_LINK ), '«свои» starts from the value the account was working with' );
 	}
 
+	// «Статус нового заказа» ----------------------------------------------------------------------------------------------
+
+	public function test_the_new_order_status_is_offered_without_the_statuses_that_end_or_do_not_start_an_order(): void {
+		$this->stub_order_statuses();
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ] ) );
+		$handler             = $this->handler( $adapter, $store );
+
+		$field = "account_{$id}_default_order_status";
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-on-hold', 'wc-ozon-packing' ], array_column( $this->options_of( $handler, $field ), 'value' ) );
+		$this->assertSame( 'Новые заказы', $this->group_titles( $adapter, $store )[ $field ] );
+	}
+
+	public function test_an_adapter_without_orders_has_no_new_order_status_field(): void {
+		$this->stub_order_statuses();
+		[ $adapter, $store ] = $this->adapter_and_store( [], '', [ 'posting_handler' => null ] );
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ] ) );
+
+		$ids = $this->accounts_sections( $adapter, $store )->parameter_sections()[0]->get_setting_ids();
+
+		$this->assertNotContains( "account_{$id}_default_order_status", $ids );
+	}
+
+	public function test_a_chosen_new_order_status_lands_in_the_account_settings_where_the_order_writer_reads_it(): void {
+		$this->stub_order_statuses();
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'stock_mode' => 'off' ] ) );
+
+		$this->handler( $adapter, $store )->update_value( "account_{$id}_default_order_status", 'wc-on-hold' );
+
+		$account = $store->get( $id );
+		$this->assertSame( 'wc-on-hold', $account->setting( 'default_order_status' ) );
+		$this->assertSame( 'off', $account->setting( 'stock_mode' ), 'the other settings are left alone' );
+	}
+
+	public function test_a_new_order_status_that_is_not_on_offer_is_refused(): void {
+		$this->stub_order_statuses();
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'default_order_status' => 'wc-on-hold' ] ) );
+		$handler             = $this->handler( $adapter, $store );
+
+		foreach ( [ 'wc-completed', 'wc-failed', 'wc-nonexistent', 'processing' ] as $bad ) {
+			try {
+				$handler->update_value( "account_{$id}_default_order_status", $bad );
+			} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The handler may refuse by throwing; either way the stored value must stay.
+			}
+		}
+
+		$this->assertSame( 'wc-on-hold', $store->get( $id )->setting( 'default_order_status' ) );
+	}
+
+	public function test_an_account_without_a_status_shows_the_one_a_migration_left_else_processing(): void {
+		$this->stub_order_statuses();
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ] ) );
+		$sections            = $this->accounts_sections( $adapter, $store );
+		$field               = "account_{$id}_default_order_status";
+
+		$this->assertSame( 'wc-processing', $sections->read( $field ), 'nothing set anywhere' );
+
+		$this->options[ 'woodev_' . self::PLUGIN . '_default_order_status' ] = 'wc-on-hold';
+		$this->assertSame( 'wc-on-hold', $sections->read( $field ), 'the v1 value is shown selected' );
+
+		$this->options[ 'woodev_' . self::PLUGIN . '_default_order_status' ] = 'wc-completed';
+		$this->assertSame( 'wc-processing', $sections->read( $field ), 'a value that cannot be chosen is not shown' );
+	}
+
+	public function test_an_own_status_wins_over_the_migrated_one_and_saving_the_shown_default_stores_nothing(): void {
+		$this->stub_order_statuses();
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$this->options[ 'woodev_' . self::PLUGIN . '_default_order_status' ] = 'wc-on-hold';
+		$own   = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Own', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ 'default_order_status' => 'wc-pending' ] ) );
+		$bare  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Bare', true, [ 'merchant_uid' => '2', 'access_token' => 't2' ] ) );
+		$sections = $this->accounts_sections( $adapter, $store );
+
+		$sections->write( "account_{$bare}_default_order_status", 'wc-on-hold' );
+
+		$this->assertSame( 'wc-pending', $sections->read( "account_{$own}_default_order_status" ) );
+		$this->assertNull( $store->get( $bare )->setting( 'default_order_status' ), 'the shown default was not changed, so nothing is stored' );
+	}
+
 	// Runtime readers -----------------------------------------------------------------------------------------------------
 
 	public function test_the_runtime_readers_see_the_effective_values(): void {
@@ -856,7 +937,7 @@ final class AccountDefaultsTest extends TestCase {
 	 * @param string   $cabinet_url  Address the descriptor gives for the credentials link ('' for none).
 	 * @return array{0:Fake_Marketplace_Adapter,1:Wpdb_Account_Store}
 	 */
-	private function adapter_and_store( array $capabilities = [], string $cabinet_url = '' ): array {
+	private function adapter_and_store( array $capabilities = [], string $cabinet_url = '', array $policies = [] ): array {
 		$fields     = new Credential_Fields( 'merchant_uid', [ 'access_token' ] );
 		$descriptor = new Fake_Settings_Descriptor(
 			$fields,
@@ -874,7 +955,7 @@ final class AccountDefaultsTest extends TestCase {
 				'capabilities'        => $capabilities,
 				'credential_fields'   => $fields,
 				'settings_descriptor' => $descriptor,
-			]
+			] + $policies
 		);
 		$store      = Wpdb_Account_Store::for_adapter(
 			$this->db,
@@ -903,5 +984,49 @@ final class AccountDefaultsTest extends TestCase {
 
 	private function handler( Fake_Marketplace_Adapter $adapter, Wpdb_Account_Store $store ): Settings_Handler {
 		return new Settings_Handler( self::PLUGIN, [ $this->accounts_sections( $adapter, $store ) ], 'Fake Market' );
+	}
+
+	/**
+	 * WooCommerce's order statuses: the ones an import may use, the ones it may not, and a plugin's own.
+	 */
+	private function stub_order_statuses(): void {
+		Functions\when( 'wc_get_order_statuses' )->justReturn(
+			[
+				'wc-pending'      => 'Ожидает оплаты',
+				'wc-processing'   => 'В обработке',
+				'wc-on-hold'      => 'На удержании',
+				'wc-completed'    => 'Выполнен',
+				'wc-cancelled'    => 'Отменён',
+				'wc-refunded'     => 'Возврат',
+				'wc-failed'       => 'Не удался',
+				'wc-ozon-packing' => 'Сборка Ozon',
+			]
+		);
+	}
+
+	/**
+	 * The `{value, label}` options of a registered select.
+	 *
+	 * @return array<int,array{value:string,label:string}>
+	 */
+	private function options_of( Settings_Handler $handler, string $setting_id ): array {
+		return $handler->get_setting( $setting_id )->get_option_pairs();
+	}
+
+	/**
+	 * Setting id => title of the parameters group that holds it.
+	 *
+	 * @return array<string,string>
+	 */
+	private function group_titles( Fake_Marketplace_Adapter $adapter, Wpdb_Account_Store $store ): array {
+		$titles = [];
+
+		foreach ( $this->accounts_sections( $adapter, $store )->parameter_sections()[0]->get_groups() as $group ) {
+			foreach ( $group->get_setting_ids() as $setting_id ) {
+				$titles[ $setting_id ] = $group->get_title();
+			}
+		}
+
+		return $titles;
 	}
 }

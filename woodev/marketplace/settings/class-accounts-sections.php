@@ -796,6 +796,26 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			$this->register_override_switch( $handler, $key, self::OVERRIDE_EXCHANGE, __( 'Правило для этого аккаунта', 'woodev-plugin-framework' ) );
 			Shared_Fields::register_exchange( $handler, $id_for, $this->adapter, $this->shown_when_own( $key, self::OVERRIDE_EXCHANGE ) );
 		}
+
+		if ( $this->has_order_status_field() ) {
+			Field_Kit::add_select(
+				$handler,
+				self::setting_id( $key, Order_Status_Options::FIELD ),
+				__( 'Статус нового заказа', 'woodev-plugin-framework' ),
+				Order_Status_Options::choices(),
+				/* translators: %s: marketplace name. */
+				sprintf( __( 'В каком статусе WooCommerce создаётся заказ, пришедший с %s. Дальше статус меняется вместе с отправлением.', 'woodev-plugin-framework' ), $marketplace )
+			);
+		}
+	}
+
+	/**
+	 * Tells whether the account blocks offer «Статус нового заказа»: only an adapter that brings orders has one to choose.
+	 *
+	 * @return bool
+	 */
+	private function has_order_status_field(): bool {
+		return null !== $this->adapter->posting_handler();
 	}
 
 	/**
@@ -903,6 +923,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 			$all_ids  = array_merge( $all_ids, $exchange_ids );
 			$groups[] = Settings_Group::create( 'exchange_' . $key, __( 'Заказы и карточки', 'woodev-plugin-framework' ) )->with_fields( $exchange_ids );
+		}
+
+		if ( $this->has_order_status_field() ) {
+			$status_ids = [ self::setting_id( $key, Order_Status_Options::FIELD ) ];
+
+			$all_ids  = array_merge( $all_ids, $status_ids );
+			$groups[] = Settings_Group::create( 'order_status_' . $key, __( 'Новые заказы', 'woodev-plugin-framework' ) )->with_fields( $status_ids );
 		}
 
 		return Settings_Section::create(
@@ -1111,6 +1138,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				return $this->resolver()->import_enabled( $account );
 			case Effective_Settings::KEY_SYNC_ON_LINK:
 				return $this->resolver()->sync_on_link( $account );
+			case Order_Status_Options::FIELD:
+				return $this->order_status_of( $account );
 		}
 
 		if ( isset( Shared_Fields::PRICE_RULE_FIELDS[ $field ] ) ) {
@@ -1302,6 +1331,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			case Effective_Settings::KEY_SYNC_ON_LINK:
 				$this->save_sync_on_link( $id, self::to_bool( $value ) );
 				return;
+			case Order_Status_Options::FIELD:
+				if ( Order_Status_Options::accepts( $text ) ) {
+					$this->save_order_status( $id, $text );
+				}
+				return;
 		}
 	}
 
@@ -1391,6 +1425,36 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				return $current;
 			}
 		);
+	}
+
+	/**
+	 * Saves the status the account's new orders are created with into the `settings` JSON, where the plugin's order writer reads it.
+	 *
+	 * @param int    $id     Account id.
+	 * @param string $status Status with the `wc-` prefix.
+	 * @return void
+	 */
+	private function save_order_status( int $id, string $status ): void {
+		$this->store->update_settings(
+			$id,
+			static function ( array $current ) use ( $status ): array {
+				$current[ Order_Status_Options::FIELD ] = $status;
+
+				return $current;
+			}
+		);
+	}
+
+	/**
+	 * The status the account's new orders get: its own choice, else the shop's default (the value a migration left, else «В обработке»).
+	 *
+	 * @param Account $account Account.
+	 * @return string
+	 */
+	private function order_status_of( Account $account ): string {
+		$own = (string) $account->setting( Order_Status_Options::FIELD, '' );
+
+		return Order_Status_Options::accepts( $own ) ? $own : Order_Status_Options::shop_default( $this->plugin_id );
 	}
 
 	/**
@@ -1760,7 +1824,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		return array_values(
 			array_unique(
 				array_merge(
-					[ 'name', self::DESCRIPTION, 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', Effective_Settings::KEY_SYNC_ON_LINK, self::OVERRIDE_PRICES, self::OVERRIDE_EXCHANGE ],
+					[ 'name', self::DESCRIPTION, 'enabled', 'warehouse_id', 'oversize_warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', Effective_Settings::KEY_SYNC_ON_LINK, Order_Status_Options::FIELD, self::OVERRIDE_PRICES, self::OVERRIDE_EXCHANGE ],
 					$this->credential_field_names(),
 					array_keys( Shared_Fields::PRICE_RULE_FIELDS )
 				)
