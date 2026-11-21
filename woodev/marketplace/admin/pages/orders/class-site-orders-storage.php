@@ -174,6 +174,15 @@ final class Site_Orders_Storage {
 	}
 
 	/**
+	 * @since 2.1.13
+	 *
+	 * @return string The column of the order's id.
+	 */
+	public function id_column(): string {
+		return $this->hpos ? 'o.id' : 'o.ID';
+	}
+
+	/**
 	 * Every order of the store as `o`, for a read that does not start from the registry (the shop's own revenue).
 	 *
 	 * @since 2.1.13

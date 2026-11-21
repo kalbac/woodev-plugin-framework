@@ -7,7 +7,9 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Groups;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Sets;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
 use Woodev\Framework\Shipping\Admin\Orders\Analytics_Aggregator;
 
@@ -27,12 +29,6 @@ final class Orders_Analytics_Report {
 	 * Hours a posting may wait for packing or shipping before it counts as stuck; filter `woodev_marketplace_stuck_posting_hours`.
 	 */
 	public const STUCK_HOURS = 24;
-
-	/**
-	 * The marketplace statuses of a posting that waits on the shop: packing and handing over (Ozon's FBS words, and the neutral
-	 * one of the order layer).
-	 */
-	public const WAITING_STATUSES = [ 'awaiting_packaging', 'awaiting_deliver', 'awaiting_shipment' ];
 
 	/**
 	 * Most products and unlinked items listed.
@@ -62,6 +58,13 @@ final class Orders_Analytics_Report {
 	private $names;
 
 	/**
+	 * The marketplace's statuses of a posting that waits on the shop.
+	 *
+	 * @var string[]
+	 */
+	private $waiting;
+
+	/**
 	 * @var string
 	 */
 	private $created_via;
@@ -81,17 +84,19 @@ final class Orders_Analytics_Report {
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param Orders_Analytics_Query    $query       The reads.
-	 * @param array<int,string>         $accounts    Account labels by id: the accounts the tab may show.
-	 * @param Posting_Status_Names|null $names       The adapter's names of its statuses.
-	 * @param string                    $created_via The `created_via` of the marketplace's orders.
-	 * @param callable                  $order_url   `function ( int $order_id ): string`, the order's edit link or '' when the user may not edit it.
-	 * @param callable                  $product_url `function ( int $product_id ): string`, the product's edit link or ''.
+	 * @param Orders_Analytics_Query     $query       The reads.
+	 * @param array<int,string>          $accounts    Account labels by id: the accounts the tab may show.
+	 * @param Posting_Status_Names|null  $names       The adapter's names of its statuses.
+	 * @param string                     $created_via The `created_via` of the marketplace's orders.
+	 * @param callable                   $order_url   `function ( int $order_id ): string`, the order's edit link or '' when the user may not edit it.
+	 * @param callable                   $product_url `function ( int $product_id ): string`, the product's edit link or ''.
+	 * @param Posting_Status_Groups|null $groups      The adapter's waiting statuses; the framework's defaults without it.
 	 */
-	public function __construct( Orders_Analytics_Query $query, array $accounts, ?Posting_Status_Names $names, string $created_via, callable $order_url, callable $product_url ) {
+	public function __construct( Orders_Analytics_Query $query, array $accounts, ?Posting_Status_Names $names, string $created_via, callable $order_url, callable $product_url, ?Posting_Status_Groups $groups = null ) {
 		$this->query       = $query;
 		$this->accounts    = $accounts;
 		$this->names       = $names;
+		$this->waiting     = Posting_Status_Sets::waiting( $groups );
 		$this->created_via = $created_via;
 		$this->order_url   = $order_url;
 		$this->product_url = $product_url;
@@ -172,8 +177,8 @@ final class Orders_Analytics_Report {
 	/**
 	 * The half-open GMT window of two site days, both inclusive, with the offset that puts an order on its site day.
 	 *
-	 * One fixed offset for the whole window (the one at its midpoint), as the delivery tab does: an order within an hour of
-	 * midnight on a daylight-saving change can land on the neighbouring day of the chart; the totals are exact.
+	 * One fixed offset for the whole window (the one at its midpoint), as the delivery tab does: the shops run on Russian time zones,
+	 * which have no daylight saving; in a zone that has, an order near midnight around a change lands on the neighbouring day.
 	 *
 	 * @since 2.1.13
 	 *
@@ -359,7 +364,7 @@ final class Orders_Analytics_Report {
 	 */
 	private function stuck( array $accounts, int $hours, int $now ): array {
 		$hours = max( 1, $hours );
-		$found = $this->query->stuck( $accounts, self::WAITING_STATUSES, gmdate( 'Y-m-d H:i:s', $now - $hours * 3600 ) );
+		$found = $this->query->stuck( $accounts, $this->waiting, gmdate( 'Y-m-d H:i:s', $now - $hours * 3600 ) );
 		$items = [];
 
 		foreach ( $found['items'] as $item ) {

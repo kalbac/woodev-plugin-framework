@@ -10,7 +10,7 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
-import { AnalyticsTab } from '../../src/marketplace-admin/orders-page/analytics/analytics-tab';
+import { AnalyticsTab, chartPoints } from '../../src/marketplace-admin/orders-page/analytics/analytics-tab';
 import {
 	accountOf,
 	analyticsPath,
@@ -190,7 +190,7 @@ function installWooCommerce() {
 			),
 			Chart: ( props: any ) => (
 				<div data-testid="chart">
-					{ props.title }|{ props.interval }|{ Object.keys( props.data[ 0 ] ?? {} ).filter( ( key ) => key !== 'date' ).join( ',' ) }
+					{ props.title }|{ props.interval }|{ Object.entries( props.data[ 0 ] ?? {} ).filter( ( [ key ] ) => key !== 'date' ).map( ( [ , entry ]: any ) => entry.label ).join( ',' ) }
 				</div>
 			),
 			DateRangeFilterPicker: ( props: any ) => (
@@ -242,16 +242,38 @@ describe( 'the URL of the tab', () => {
 		expect( buildRequest( 'ozon-seller', {}, null ) ).toBeNull();
 	} );
 
-	test( 'a status link opens the «Заказы» tab on that account\'s open orders in that status and leaves nothing of the analytics behind', () => {
+	test( 'a status link opens the «Заказы» tab on that account\'s orders in that status, finished ones too, and leaves nothing of the analytics behind', () => {
 		expect( statusPatch( { marketplace: 'ozon-seller', tab: 'analytics', period: 'week', account: 'all', chart: 'revenue' }, 'ozon-seller', '2', 'awaiting_packaging' ) ).toEqual( {
 			tab: undefined,
 			period: undefined,
 			chart: undefined,
 			marketplace: 'ozon-seller',
 			account: '2',
-			filter_state: 'open',
+			filter_state: undefined,
 			filter_posting_status: 'awaiting_packaging',
 		} );
+	} );
+
+	test( 'two accounts with one name are two series, told apart in the legend', () => {
+		const same = [
+			{ id: '1', label: 'Магазин' },
+			{ id: '2', label: 'Магазин' },
+		];
+		const points = chartPoints(
+			response( {
+				accounts: same,
+				intervals: [ { start: '2026-11-01', end: '2026-11-01', totals: { orders: 3, revenue: 1500 }, accounts: { 1: { orders: 2, revenue: 1200 }, 2: { orders: 1, revenue: 300 } } } ],
+			} ),
+			'revenue'
+		);
+
+		expect( points ).toEqual( [
+			{
+				date: '2026-11-01T00:00:00',
+				'account-1': { label: 'Магазин (#1)', value: 1200 },
+				'account-2': { label: 'Магазин (#2)', value: 300 },
+			},
+		] );
 	} );
 
 	test( 'the best sellers are the top of the chosen sort; a share reads «count · percent»', () => {
@@ -335,7 +357,7 @@ describe( 'the tab', () => {
 
 		fireEvent.click( links[ 0 ] );
 
-		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { tab: undefined, account: '1', filter_state: 'open', filter_posting_status: 'awaiting_packaging' } ) );
+		expect( navigate ).toHaveBeenLastCalledWith( expect.objectContaining( { tab: undefined, account: '1', filter_state: undefined, filter_posting_status: 'awaiting_packaging' } ) );
 	} );
 
 	test( 'the stuck postings link their orders and say the threshold', async () => {
@@ -390,12 +412,19 @@ describe( 'the tab', () => {
 		expect( screen.queryByText( 'Такого аккаунта нет.' ) ).not.toBeInTheDocument();
 	} );
 
-	test( 'an empty period says so and still shows what is waiting now', async () => {
-		fetchMock.mockResolvedValue( response( { totals: { current: metrics( { orders: 0 } ), previous: null, delta: {} } } ) );
+	test( 'an empty period says so and still shows the shop share and what is there now', async () => {
+		fetchMock.mockResolvedValue(
+			response( {
+				totals: { current: metrics( { orders: 0, revenue: 0 } ), previous: null, delta: {} },
+				share: { shop_revenue: 100, marketplace_revenue: 100, share: 1, previous: null, delta: null },
+			} )
+		);
 		renderTab();
 
 		expect( await screen.findByText( MESSAGES.empty ) ).toBeInTheDocument();
-		expect( screen.queryByTestId( 'tiles' ) ).not.toBeInTheDocument();
+		expect( screen.getByTestId( 'tile-Доля в выручке магазина' ) ).toHaveTextContent( /100\s%/ );
+		expect( screen.queryByTestId( 'chart' ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'table', { name: 'Топ товаров' } ) ).not.toBeInTheDocument();
 		expect( screen.getByRole( 'table', { name: MESSAGES.statuses } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'table', { name: MESSAGES.stuck } ) ).toBeInTheDocument();
 	} );

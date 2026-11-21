@@ -12,16 +12,20 @@ use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Query;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Report;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Groups;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Sets;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 
 /**
  * Every storage test runs twice, with the orders in the posts table and in the HPOS table, over the catalogue of {@see Analytics_Shop},
- * and must give the same figures.
+ * and must give the same figures. The adapter classifies its codes the way the Ozon one does (packing and handing over wait on the
+ * shop; `cancelled` and `not_accepted` are rejections) unless a test says otherwise.
  *
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Report
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Query
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Storage
+ * @covers \Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Sets
  */
 final class OrdersAnalyticsReportTest extends TestCase {
 	/**
@@ -51,19 +55,36 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	}
 
 	/**
-	 * @param bool                      $hpos  Whether the orders live in the HPOS table.
-	 * @param Posting_Status_Names|null $names The adapter's status names.
+	 * An adapter's classification like Ozon's.
+	 *
+	 * @return Posting_Status_Groups
+	 */
+	private static function groups(): Posting_Status_Groups {
+		return new class() implements Posting_Status_Groups {
+			public function waiting_posting_statuses(): array {
+				return [ 'awaiting_packaging', 'awaiting_deliver' ];
+			}
+
+			public function rejected_posting_statuses(): array {
+				return [ 'cancelled', 'not_accepted' ];
+			}
+		};
+	}
+
+	/**
+	 * @param bool                       $hpos     Whether the orders live in the HPOS table.
+	 * @param Posting_Status_Names|null  $names    The adapter's status names.
+	 * @param bool                       $classify Whether the adapter classifies its codes ({@see self::groups()}); the defaults otherwise.
+	 * @param array<int,string>          $accounts Account labels.
 	 * @return Orders_Analytics_Report
 	 */
-	private function report( bool $hpos, ?Posting_Status_Names $names = null ): Orders_Analytics_Report {
-		$shop = new Analytics_Shop( $hpos );
+	private function report( bool $hpos, ?Posting_Status_Names $names = null, bool $classify = true, array $accounts = [ 1 => 'Основной', 2 => 'Второй' ] ): Orders_Analytics_Report {
+		$shop   = new Analytics_Shop( $hpos );
+		$groups = $classify ? self::groups() : null;
 
 		return new Orders_Analytics_Report(
-			new Orders_Analytics_Query( $shop->db, Sqlite_Tables::table( 'postings' ), $shop->storage() ),
-			[
-				1 => 'Основной',
-				2 => 'Второй',
-			],
+			new Orders_Analytics_Query( $shop->db, Sqlite_Tables::table( 'postings' ), $shop->storage(), Posting_Status_Sets::rejected( $groups ) ),
+			$accounts,
 			$names,
 			Analytics_Shop::CREATED_VIA,
 			static function ( int $id ): string {
@@ -71,7 +92,8 @@ final class OrdersAnalyticsReportTest extends TestCase {
 			},
 			static function ( int $id ): string {
 				return 'product:' . $id;
-			}
+			},
+			$groups
 		);
 	}
 
@@ -104,18 +126,28 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	/**
 	 * @dataProvider storages
 	 */
-	public function test_the_totals_count_the_site_days_of_the_period_and_leave_out_what_is_not_a_sale_attempt( bool $hpos ): void {
-		$answer = $this->report( $hpos )->build( $this->request() );
-		$now    = $answer['totals']['current'];
+	public function test_the_totals_count_the_site_days_of_the_period_pending_orders_included( bool $hpos ): void {
+		$now = $this->report( $hpos )->build( $this->request() )['totals']['current'];
 
-		$this->assertSame( 5, $now['orders'], '101–105: 105 is 00:30 on the 1st in Moscow, 106 is 00:30 on the 8th; 107 is pending and 108 trashed.' );
-		$this->assertSame( 1, $now['cancelled'] );
-		$this->assertSame( 0.2, $now['cancel_share'] );
-		$this->assertSame( 4, $now['sold'] );
-		$this->assertSame( 2000.0, $now['revenue'], 'Without the cancelled order.' );
-		$this->assertSame( 500.0, $now['avg_order'] );
-		$this->assertSame( 9.0, $now['units'], 'Product lines of the sold orders only: no shipping line, nothing of the cancelled order.' );
-		$this->assertSame( 2.25, $now['units_per_order'] );
+		$this->assertSame( 7, $now['orders'], '101–105, 107 and 109: 105 is 00:30 on the 1st in Moscow, 106 is 00:30 on the 8th; 107 is pending — the merchant\'s new-order status — and counts; 108 is trashed.' );
+		$this->assertSame( 2, $now['cancelled'], '103 is a cancelled order, 109 a posting the marketplace did not accept (its order is still «В обработке»).' );
+		$this->assertSame( 0.2857, $now['cancel_share'] );
+		$this->assertSame( 5, $now['sold'] );
+		$this->assertSame( 2070.0, $now['revenue'], 'Without the cancelled order and the rejected posting; with the pending one.' );
+		$this->assertSame( 414.0, $now['avg_order'] );
+		$this->assertSame( 9.0, $now['units'], 'Product lines of the sold orders only: no shipping line, nothing of the cancelled or the rejected one.' );
+		$this->assertSame( 1.8, $now['units_per_order'] );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
+	public function test_without_the_adapter_s_classification_only_the_cancelled_order_is_a_cancellation( bool $hpos ): void {
+		$now = $this->report( $hpos, null, false )->build( $this->request() )['totals']['current'];
+
+		$this->assertSame( [ 'cancelled' ], Posting_Status_Sets::rejected( null ) );
+		$this->assertSame( 1, $now['cancelled'], '`not_accepted` is the marketplace\'s code: the framework does not know it.' );
+		$this->assertSame( 2470.0, $now['revenue'] );
 	}
 
 	/**
@@ -123,21 +155,18 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	 */
 	public function test_the_previous_period_is_read_the_same_way_and_compared( bool $hpos ): void {
 		$answer = $this->report( $hpos )->build( $this->request() );
+		$delta  = $answer['totals']['delta'];
 
 		$this->assertSame( [ 'after' => '2026-10-25', 'before' => '2026-10-31' ], $answer['compare'] );
 		$this->assertSame( 2, $answer['totals']['previous']['orders'], '201 and 202; 105 belongs to the current period on the site\'s day.' );
 		$this->assertSame( 800.0, $answer['totals']['previous']['revenue'] );
 		$this->assertSame( 0.5, $answer['totals']['previous']['cancel_share'] );
-		$this->assertSame(
-			[
-				'orders'          => 150.0,
-				'revenue'         => 150.0,
-				'cancel_share'    => -60.0,
-				'avg_order'       => -37.5,
-				'units_per_order' => -43.8,
-			],
-			$answer['totals']['delta']
-		);
+		$this->assertSame( [ 'orders', 'revenue', 'cancel_share', 'avg_order', 'units_per_order' ], array_keys( $delta ) );
+		$this->assertEqualsWithDelta( 250.0, $delta['orders'], 0.05 );
+		$this->assertEqualsWithDelta( 158.8, $delta['revenue'], 0.051 );
+		$this->assertEqualsWithDelta( -42.9, $delta['cancel_share'], 0.051 );
+		$this->assertEqualsWithDelta( -48.3, $delta['avg_order'], 0.051 );
+		$this->assertEqualsWithDelta( -55.0, $delta['units_per_order'], 0.05 );
 	}
 
 	/**
@@ -162,9 +191,9 @@ final class OrdersAnalyticsReportTest extends TestCase {
 
 		$this->assertSame( [ '1', '2' ], array_column( $all['by_account'], 'id' ) );
 		$this->assertSame( [ 'Основной', 'Второй' ], array_column( $all['by_account'], 'label' ) );
-		$this->assertSame( 4, $all['by_account'][0]['current']['orders'] );
-		$this->assertSame( 1700.0, $all['by_account'][0]['current']['revenue'] );
-		$this->assertSame( 0.25, $all['by_account'][0]['current']['cancel_share'] );
+		$this->assertSame( 6, $all['by_account'][0]['current']['orders'] );
+		$this->assertSame( 1770.0, $all['by_account'][0]['current']['revenue'] );
+		$this->assertSame( 0.3333, $all['by_account'][0]['current']['cancel_share'] );
 		$this->assertSame( 300.0, $all['by_account'][1]['current']['revenue'] );
 		$this->assertSame( 0.0, $all['by_account'][1]['current']['cancel_share'] );
 		$this->assertNull( $all['by_account'][1]['previous']['avg_order'], 'Nothing sold before: no average.' );
@@ -177,6 +206,7 @@ final class OrdersAnalyticsReportTest extends TestCase {
 		$this->assertSame( [ 'awaiting_deliver' ], array_column( $one['statuses'], 'code' ) );
 		$this->assertSame( [ 'Худи — L' ], array_column( $one['products']['top'], 'label' ) );
 		$this->assertSame( 0, $one['products']['unlinked']['names'] );
+		$this->assertSame( [ '1', '2' ], array_column( $one['options'], 'id' ), 'The filter still offers every account.' );
 	}
 
 	/**
@@ -191,14 +221,16 @@ final class OrdersAnalyticsReportTest extends TestCase {
 		$this->assertSame( [ 'start' => '2026-11-01', 'end' => '2026-11-01' ], [ 'start' => $days[0]['start'], 'end' => $days[0]['end'] ] );
 		$this->assertSame( [ 'orders' => 2, 'revenue' => 1200.0 ], $days[0]['totals'], '101 and 105 (00:30 site time).' );
 		$this->assertSame( [ '1' => [ 'orders' => 2, 'revenue' => 1200.0 ] ], $days[0]['accounts'] );
-		$this->assertSame( [ 'orders' => 1, 'revenue' => 0.0 ], $days[4]['totals'], 'The cancelled order is an order without revenue.' );
+		$this->assertSame( [ 'orders' => 1, 'revenue' => 70.0 ], $days[1]['totals'], 'The pending order.' );
+		$this->assertSame( [ 'orders' => 1, 'revenue' => 0.0 ], $days[3]['totals'], 'The rejected posting is an order without revenue.' );
+		$this->assertSame( [ 'orders' => 1, 'revenue' => 0.0 ], $days[4]['totals'], 'So is the cancelled order.' );
 		$this->assertSame( [ '2' => [ 'orders' => 1, 'revenue' => 300.0 ] ], $days[6]['accounts'], '104 at 23:30 site time is on the 7th.' );
-		$this->assertSame( 5, array_sum( array_column( array_column( $days, 'totals' ), 'orders' ) ) );
+		$this->assertSame( 7, array_sum( array_column( array_column( $days, 'totals' ), 'orders' ) ) );
 
 		$weeks = $this->report( $hpos )->build( $this->request( [ 'interval' => 'week' ] ) )['intervals'];
 
 		$this->assertSame( [ '2026-11-01', '2026-11-02' ], array_column( $weeks, 'start' ), 'The 1st is a Sunday; weeks start on Monday, the first one at the period.' );
-		$this->assertSame( [ 2, 3 ], array_column( array_column( $weeks, 'totals' ), 'orders' ) );
+		$this->assertSame( [ 2, 5 ], array_column( array_column( $weeks, 'totals' ), 'orders' ) );
 	}
 
 	/**
@@ -207,25 +239,30 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	public function test_the_marketplace_share_of_the_shop_revenue_is_by_created_via( bool $hpos ): void {
 		$share = $this->report( $hpos )->build( $this->request() )['share'];
 
-		$this->assertSame( 3500.0, $share['shop_revenue'], 'The marketplace\'s 2000 and the checkout\'s 1500; nothing cancelled, pending or outside the period.' );
-		$this->assertSame( 2000.0, $share['marketplace_revenue'] );
-		$this->assertSame( 0.5714, $share['share'] );
+		$this->assertSame( 3570.0, $share['shop_revenue'], 'The marketplace\'s 2070 (its pending order included, the rejected posting not) and the checkout\'s 1500; not the unpaid checkout order, nothing cancelled or outside the period.' );
+		$this->assertSame( 2070.0, $share['marketplace_revenue'], 'The same sum as the revenue tile.' );
+		$this->assertSame( 0.5798, $share['share'] );
 		$this->assertSame( 0.8, $share['previous'], '800 of 1000.' );
-		$this->assertEqualsWithDelta( -28.6, $share['delta'], 0.05 );
+		$this->assertEqualsWithDelta( -27.5, $share['delta'], 0.051 );
 	}
 
 	/**
 	 * @dataProvider storages
 	 */
-	public function test_the_statuses_now_are_the_open_postings_of_live_orders_by_account( bool $hpos ): void {
+	public function test_the_statuses_now_are_every_posting_of_a_live_order_finished_ones_included( bool $hpos ): void {
 		$statuses = $this->report( $hpos )->build( $this->request() )['statuses'];
 
-		$this->assertSame( [ 'awaiting_packaging', 'awaiting_deliver', 'delivering', 'new' ], array_column( $statuses, 'code' ), 'The most frequent first, then by code; the trashed order\'s posting is not counted, finished ones neither.' );
-		$this->assertSame( [ 2, 1, 1, 1 ], array_column( $statuses, 'count' ) );
+		$this->assertSame(
+			[ 'awaiting_packaging', 'cancelled', 'delivered', 'awaiting_deliver', 'delivering', 'new', 'not_accepted' ],
+			array_column( $statuses, 'code' ),
+			'The most frequent first, then by code; delivered and cancelled postings count, the trashed order\'s does not.'
+		);
+		$this->assertSame( [ 2, 2, 2, 1, 1, 1, 1 ], array_column( $statuses, 'count' ) );
 		$this->assertSame( [ '1' => 2 ], $statuses[0]['accounts'] );
-		$this->assertSame( [ '2' => 1 ], $statuses[1]['accounts'] );
+		$this->assertSame( [ '2' => 1 ], $statuses[3]['accounts'] );
 		$this->assertSame( 'Ожидает упаковки', $statuses[0]['label'] );
 		$this->assertSame( 'warning', $statuses[0]['tone'] );
+		$this->assertSame( 'success', $statuses[2]['tone'] );
 	}
 
 	public function test_the_adapter_names_its_own_statuses(): void {
@@ -238,7 +275,7 @@ final class OrdersAnalyticsReportTest extends TestCase {
 		$statuses = $this->report( true, $names )->build( $this->request() )['statuses'];
 
 		$this->assertSame( 'Собрать заказ', $statuses[0]['label'] );
-		$this->assertSame( 'Ожидает отгрузки', $statuses[1]['label'], 'A status the adapter does not name keeps the shared word.' );
+		$this->assertSame( 'Ожидает отгрузки', $statuses[3]['label'], 'A status the adapter does not name keeps the shared word.' );
 	}
 
 	/**
@@ -275,6 +312,31 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	/**
 	 * @dataProvider storages
 	 */
+	public function test_without_the_adapter_s_classification_the_framework_s_own_words_wait_on_the_shop( bool $hpos ): void {
+		$stuck = $this->report( $hpos, null, false )->build( $this->request() )['stuck'];
+
+		$this->assertSame( [ 'new', 'awaiting_shipment' ], Posting_Status_Sets::waiting( null ) );
+		$this->assertSame( [ 'P-107' ], array_column( $stuck['items'], 'posting' ), 'The neutral `new`; the marketplace\'s own `awaiting_packaging` is not a framework word.' );
+	}
+
+	public function test_an_adapter_s_classification_is_cleaned(): void {
+		$groups = new class() implements Posting_Status_Groups {
+			public function waiting_posting_statuses(): array {
+				return [ 'a', '', 'a', 7 ];
+			}
+
+			public function rejected_posting_statuses(): array {
+				return [];
+			}
+		};
+
+		$this->assertSame( [ 'a' ], Posting_Status_Sets::waiting( $groups ) );
+		$this->assertSame( [], Posting_Status_Sets::rejected( $groups ), 'An adapter may say none of its codes is a rejection.' );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
 	public function test_the_products_of_the_sold_orders_and_the_items_sold_without_a_shop_product( bool $hpos ): void {
 		$products = $this->report( $hpos )->build( $this->request() )['products'];
 		$top      = [];
@@ -292,7 +354,7 @@ final class OrdersAnalyticsReportTest extends TestCase {
 				'13-14' => [ 'Худи — L', 'product:13', 3.0, 300.0 ],
 			],
 			$top,
-			'The cancelled order\'s line, the order outside the period and the checkout\'s order are not counted; a variation is its own row.'
+			'The cancelled order\'s and the rejected posting\'s lines, the order outside the period and the checkout\'s order are not counted; a variation is its own row.'
 		);
 		$this->assertSame(
 			[
@@ -337,21 +399,12 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	}
 
 	public function test_no_account_reads_nothing_and_still_answers(): void {
-		$shop   = new Analytics_Shop( true );
-		$report = new Orders_Analytics_Report(
-			new Orders_Analytics_Query( $shop->db, Sqlite_Tables::table( 'postings' ), $shop->storage() ),
-			[],
-			null,
-			Analytics_Shop::CREATED_VIA,
-			'strval',
-			'strval'
-		);
-		$answer = $report->build( $this->request() );
+		$answer = $this->report( true, null, true, [] )->build( $this->request() );
 
 		$this->assertSame( 0, $answer['totals']['current']['orders'] );
 		$this->assertSame( [], $answer['by_account'] );
 		$this->assertSame( [], $answer['statuses'] );
 		$this->assertSame( 0, $answer['stuck']['count'] );
-		$this->assertSame( 3500.0, $answer['share']['shop_revenue'], 'The shop\'s revenue does not depend on the accounts.' );
+		$this->assertSame( 3570.0, $answer['share']['shop_revenue'], 'The shop\'s revenue does not depend on the accounts.' );
 	}
 }

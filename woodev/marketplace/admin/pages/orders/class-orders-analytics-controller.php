@@ -9,7 +9,9 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
 use Woodev\Framework\Admin\Records\Records_Error;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Controller;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Groups;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Sets;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
@@ -130,8 +132,10 @@ final class Orders_Analytics_Controller {
 				return $labels;
 			},
 			static function ( array $labels ) use ( $db, $table, $adapter ): Orders_Analytics_Report {
+				$groups = $adapter instanceof Posting_Status_Groups ? $adapter : null;
+
 				return new Orders_Analytics_Report(
-					new Orders_Analytics_Query( $db, $table, Site_Orders_Storage::current() ),
+					new Orders_Analytics_Query( $db, $table, Site_Orders_Storage::current(), Posting_Status_Sets::rejected( $groups ) ),
 					$labels,
 					$adapter instanceof Posting_Status_Names ? $adapter : null,
 					$adapter->order_meta()->created_via(),
@@ -140,7 +144,8 @@ final class Orders_Analytics_Controller {
 					},
 					static function ( int $product_id ): string {
 						return current_user_can( 'edit_post', $product_id ) ? admin_url( 'post.php?post=' . $product_id . '&action=edit' ) : '';
-					}
+					},
+					$groups
 				);
 			}
 		);
@@ -181,12 +186,12 @@ final class Orders_Analytics_Controller {
 			'chartEmpty'      => __( 'За этот период данных нет.', 'woodev-plugin-framework' ),
 			'byAccount'       => __( 'По аккаунтам', 'woodev-plugin-framework' ),
 			'cancelled'       => __( 'Отменено', 'woodev-plugin-framework' ),
-			'statuses'        => __( 'Отправления в работе по статусам', 'woodev-plugin-framework' ),
-			'statusesHint'    => __( 'На маркетплейсе сейчас. Число открывает список заказов с этим статусом.', 'woodev-plugin-framework' ),
+			'statuses'        => __( 'Отправления по статусам', 'woodev-plugin-framework' ),
+			'statusesHint'    => __( 'Все отправления по их статусу на маркетплейсе сейчас, завершённые тоже. Число открывает список заказов с этим статусом.', 'woodev-plugin-framework' ),
 			'status'          => __( 'Статус на маркетплейсе', 'woodev-plugin-framework' ),
 			'count'           => __( 'Отправлений', 'woodev-plugin-framework' ),
 			'total'           => __( 'Всего', 'woodev-plugin-framework' ),
-			'statusesEmpty'   => __( 'Сейчас нет отправлений в работе.', 'woodev-plugin-framework' ),
+			'statusesEmpty'   => __( 'Отправлений пока нет.', 'woodev-plugin-framework' ),
 			'stuck'           => __( 'Зависшие отправления', 'woodev-plugin-framework' ),
 			'stuckEmpty'      => __( 'Зависших отправлений нет.', 'woodev-plugin-framework' ),
 			'order'           => __( 'Заказ', 'woodev-plugin-framework' ),
@@ -200,7 +205,7 @@ final class Orders_Analytics_Controller {
 			'unlinkedHint'    => __( 'Позиции заказов маркетплейса, для которых не нашёлся товар магазина. Свяжите их на странице «Товары», чтобы остатки и цены синхронизировались.', 'woodev-plugin-framework' ),
 			'unlinkedName'    => __( 'Название на маркетплейсе', 'woodev-plugin-framework' ),
 			'unlinkedEmpty'   => __( 'Все проданные позиции связаны с товарами магазина.', 'woodev-plugin-framework' ),
-			'footnote'        => __( 'Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же. Отменённые заказы входят в число заказов.', 'woodev-plugin-framework' ),
+			'footnote'        => __( 'Отменённые — отменённые заказы и отправления, которые маркетплейс отменил или не принял; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же.', 'woodev-plugin-framework' ),
 		];
 	}
 

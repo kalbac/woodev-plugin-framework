@@ -140,13 +140,31 @@ export function Summary( { data, messages: m, metric, path, query }: SummaryProp
 	);
 }
 
-/** The chart's points: one per interval, one series per account the figures cover. */
+/**
+ * The series of the chart: one per account the figures cover, keyed by the account id (names are the merchant's and need not be
+ * unique); a name two accounts share gets the account number beside it, so the legend tells them apart.
+ */
+export function chartSeries( data: AnalyticsResponse ): Array< { key: string; id: string; label: string } > {
+	const seen = new Map< string, number >();
+
+	data.accounts.forEach( ( account ) => seen.set( account.label, ( seen.get( account.label ) ?? 0 ) + 1 ) );
+
+	return data.accounts.map( ( account ) => ( {
+		key: `account-${ account.id }`,
+		id: account.id,
+		label: ( seen.get( account.label ) ?? 0 ) > 1 ? `${ account.label } (#${ account.id })` : account.label,
+	} ) );
+}
+
+/** The chart's points: one per interval, one series per account. */
 export function chartPoints( data: AnalyticsResponse, metric: ChartMetric ): Array< Record< string, unknown > > {
+	const series = chartSeries( data );
+
 	return data.intervals.map( ( interval ) => {
 		const point: Record< string, unknown > = { date: `${ interval.start }T00:00:00` };
 
-		data.accounts.forEach( ( account ) => {
-			point[ account.label ] = { label: account.label, value: interval.accounts[ account.id ]?.[ metric ] ?? 0 };
+		series.forEach( ( entry ) => {
+			point[ entry.key ] = { label: entry.label, value: interval.accounts[ entry.id ]?.[ metric ] ?? 0 };
 		} );
 
 		return point;
@@ -274,11 +292,12 @@ export function AnalyticsTab( { marketplace, messages: m, path, query, leading }
 			) }
 			{ tableProps !== null && (
 				<div className={ loading ? 'woodev-marketplace-analytics__body is-loading' : 'woodev-marketplace-analytics__body' }>
+					{ /* The tiles stay for an empty period: the shop share is read by `created_via`, apart from the registry. */ }
+					<Summary data={ tableProps.data } messages={ m } metric={ metric } path={ path } query={ query } />
 					{ empty ? (
 						<p className="woodev-marketplace-analytics__empty">{ m.empty }</p>
 					) : (
 						<>
-							<Summary data={ tableProps.data } messages={ m } metric={ metric } path={ path } query={ query } />
 							<ChartPanel data={ tableProps.data } messages={ m } metric={ metric } path={ path } query={ query } loading={ loading } />
 							<PeriodTables { ...tableProps } />
 							<p className="woodev-marketplace-analytics__footnote">{ m.footnote }</p>

@@ -98,8 +98,8 @@ export function analyticsPath( request: AnalyticsRequest, refresh: boolean ): st
 }
 
 /**
- * The patch that opens the «Заказы» tab on one account's open postings in one marketplace status — the rows a status count
- * stands for. It starts from the tab switch, so nothing of the analytics URL is left behind.
+ * The patch that opens the «Заказы» tab on one account's postings in one marketplace status, finished ones included («Состояние»
+ * left at «Все») — the rows a status count stands for. It starts from the tab switch, so nothing of the analytics URL is left behind.
  *
  * @param query       The route's query.
  * @param marketplace The plugin id.
@@ -111,7 +111,7 @@ export function statusPatch( query: Query, marketplace: string, account: string,
 		...tabPatch( query, ORDERS_TAB ),
 		[ MARKETPLACE_ARGUMENT ]: marketplace,
 		[ ACCOUNT_ARGUMENT ]: account,
-		filter_state: 'open',
+		filter_state: undefined,
 		filter_posting_status: status,
 	};
 }

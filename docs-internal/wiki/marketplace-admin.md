@@ -1025,15 +1025,24 @@ filters marketplace + account + WooCommerce's `DateRangeFilterPicker`). Delivery
   `…_unknown_account`, on which the tab drops the argument), `refresh`. The answer is a transient for 300 s keyed by the request,
   the accounts, the user and the storage (`SCHEMA_VERSION` in the key).
 - **SQL** (`Orders_Analytics_Query`): grouped statements over `postings AS pg` joined to the order on either storage
-  (`Site_Orders_Storage`, which now also gives `total_expression()`, `created_via_expression()`, `orders_from()`); days are site
-  days through one fixed offset (`DATE(DATE_ADD(date, INTERVAL offset SECOND))`). Population = live orders minus pending, failed and
-  checkout drafts; `wc-cancelled` is the cancellation; cancelled and refunded orders bring no revenue, units or products. Products
-  and units read `woocommerce_order_items` / `…_itemmeta` (`_product_id` 0 = sold without a shop product, grouped by item name).
-  The shop share is every shop order of the period vs those whose `created_via` is the adapter's `order_meta()->created_via()`.
-- **Now, not the period.** Statuses = open postings (`is_terminal = 0`) of live orders by `status_raw` and account; each count links
-  to the «Заказы» tab with `account`, `filter_state=open`, `filter_posting_status` — the same rows. Stuck = open postings in
-  `Orders_Analytics_Report::WAITING_STATUSES` (`awaiting_packaging`, `awaiting_deliver`, `awaiting_shipment`) first seen more than
-  `STUCK_HOURS` (24) ago; filter `woodev_marketplace_stuck_posting_hours( $hours, $plugin_id )`; the 20 oldest are listed.
+  (`Site_Orders_Storage`, which now also gives `total_expression()`, `created_via_expression()`, `id_column()`, `orders_from()`);
+  days are site days through one fixed offset (`DATE(DATE_ADD(date, INTERVAL offset SECOND))` — the shops run on Russian time
+  zones without daylight saving). Population = live orders minus failed and checkout drafts; `wc-pending` stays (a merchant may pick
+  it as the new-order status). A cancellation = `wc-cancelled` OR a posting in the adapter's rejected statuses (`not_accepted`
+  keeps its order «В обработке»); cancelled, rejected and refunded orders bring no revenue, units or products. Products and units
+  read `woocommerce_order_items` / `…_itemmeta` (`_product_id` 0 = sold without a shop product, grouped by item name). The shop
+  share is every shop order of the period (pending only when the marketplace made it, never one with a rejected posting) vs those
+  whose `created_via` is the adapter's `order_meta()->created_via()`.
+- **Raw codes belong to the adapter.** Optional `Admin\Shared\Posting_Status_Groups`: `waiting_posting_statuses()` (packing,
+  handing over) and `rejected_posting_statuses()`; `Posting_Status_Sets` reads it, defaulting to the framework's canonical words
+  (`new`, `awaiting_shipment` / `cancelled`). The Ozon adapter must implement it (`awaiting_packaging`, `awaiting_deliver` /
+  `cancelled`, `not_accepted`, …) — until then Ozon's stuck list is empty and `not_accepted` is not a cancellation.
+- **Now, not the period.** Statuses = every posting of a live order (finished ones too) by `status_raw` and account; each count
+  links to the «Заказы» tab with `account` + `filter_posting_status` and «Состояние» left at «Все» — the same rows. Stuck = open
+  postings in the waiting statuses first seen more than `STUCK_HOURS` (24) ago; filter
+  `woodev_marketplace_stuck_posting_hours( $hours, $plugin_id )`; the 20 oldest are listed.
+- **Tab.** The tiles (and so the shop share) show for an empty period too; the chart keys its series by account id (a shared name
+  gets «(#id)»).
 - **Words** are PHP's (`Orders_Analytics_Controller::messages()`, manifest `ordersPage.analytics`); the stuck sentence comes with
   the answer, since the threshold is per plugin.
 

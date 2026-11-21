@@ -14,9 +14,10 @@ defined( 'ABSPATH' ) || exit;
  * ({@see Site_Orders_Storage}) — and never orders one by one: every method is one grouped statement, and what comes back is a row
  * per account and day, per account, per product or per status. The only row-level read is the few oldest stuck postings.
  *
- * The population is the one the «Заказы» table lists (a live order: not a refund, a trashed order or a draft) without the orders
- * that never became a sale attempt: pending, failed and checkout drafts. Of those, `wc-cancelled` is a cancellation, and
- * cancelled or refunded orders bring no revenue, no units and no products.
+ * The population is the one the «Заказы» table lists (a live order: not a refund, a trashed order or a draft) without failed
+ * orders and checkout drafts. `wc-pending` stays in: a merchant may choose it as the status of a new marketplace order. A
+ * cancellation is an order in `wc-cancelled` OR a posting in one of the adapter's rejected statuses (`not_accepted` and the like,
+ * whose order may still be «В обработке»); cancelled, rejected and refunded orders bring no revenue, no units and no products.
  *
  * Every period read takes a scope `{ from, to, offset, accounts }`: `from` inclusive and `to` EXCLUSIVE GMT bounds of the order's
  * creation date, the site's UTC offset in seconds (used only to put an order on its site day) and the account ids to read.
@@ -27,7 +28,12 @@ final class Orders_Analytics_Query {
 	/**
 	 * Statuses that are not part of the population.
 	 */
-	public const EXCLUDED_STATUSES = [ 'wc-pending', 'wc-failed', 'wc-checkout-draft' ];
+	public const EXCLUDED_STATUSES = [ 'wc-failed', 'wc-checkout-draft' ];
+
+	/**
+	 * Statuses of a shop order nobody paid for yet: out of the shop's revenue unless the marketplace made the order.
+	 */
+	public const UNPAID_STATUSES = [ 'wc-pending' ];
 
 	/**
 	 * Statuses that bring no revenue.
@@ -62,6 +68,13 @@ final class Orders_Analytics_Query {
 	private $storage;
 
 	/**
+	 * The marketplace's statuses of a posting it cancelled or did not accept.
+	 *
+	 * @var string[]
+	 */
+	private $rejected;
+
+	/**
 	 * Creates the reader.
 	 *
 	 * @since 2.1.13
@@ -69,11 +82,13 @@ final class Orders_Analytics_Query {
 	 * @param \wpdb               $db       Database.
 	 * @param string              $postings Full name of the postings table.
 	 * @param Site_Orders_Storage $storage  Where the orders live.
+	 * @param string[]            $rejected The marketplace's statuses of a rejected posting ({@see \Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Sets::rejected()}).
 	 */
-	public function __construct( \wpdb $db, string $postings, Site_Orders_Storage $storage ) {
+	public function __construct( \wpdb $db, string $postings, Site_Orders_Storage $storage, array $rejected = [] ) {
 		$this->db       = $db;
 		$this->postings = $postings;
 		$this->storage  = $storage;
+		$this->rejected = array_values( $rejected );
 	}
 
 	/**
@@ -89,13 +104,11 @@ final class Orders_Analytics_Query {
 			return [];
 		}
 
-		$status = $this->storage->status_column();
-		$unsold = $this->list_sql( self::UNSOLD_STATUSES );
-		$rows   = $this->run(
+		$rows = $this->run(
 			'SELECT pg.account_id AS account, ' . $this->day_sql( $scope ) . ' AS site_day, COUNT(*) AS orders,'
-			. $this->db->prepare( ' SUM(CASE WHEN ' . $status . ' = %s THEN 1 ELSE 0 END) AS cancelled,', self::CANCELLED_STATUS ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The column is one of two fixed names.
-			. ' SUM(CASE WHEN ' . $status . ' NOT IN (' . $unsold . ') THEN 1 ELSE 0 END) AS sold,'
-			. ' SUM(CASE WHEN ' . $status . ' NOT IN (' . $unsold . ') THEN ' . $this->storage->total_expression( $this->db ) . ' ELSE 0 END) AS revenue'
+			. ' SUM(CASE WHEN ' . $this->cancelled_sql() . ' THEN 1 ELSE 0 END) AS cancelled,'
+			. ' SUM(CASE WHEN ' . $this->sold_sql() . ' THEN 1 ELSE 0 END) AS sold,'
+			. ' SUM(CASE WHEN ' . $this->sold_sql() . ' THEN ' . $this->storage->total_expression( $this->db ) . ' ELSE 0 END) AS revenue'
 			. ' FROM ' . $this->from_sql() . ' WHERE ' . $this->period_where( $scope )
 			. ' GROUP BY pg.account_id, site_day'
 		);
@@ -182,7 +195,9 @@ final class Orders_Analytics_Query {
 
 	/**
 	 * The shop's revenue in the period and the part of it made by orders of the marketplace (`created_via`). Every shop order,
-	 * not only the registry's: the denominator is the whole shop.
+	 * not only the registry's: the denominator is the whole shop. A pending order counts only when the marketplace made it (a
+	 * new marketplace order may be pending by the merchant's choice; a pending checkout order is not paid yet), and an order whose
+	 * posting the marketplace rejected counts nowhere, as in the period figures.
 	 *
 	 * @since 2.1.13
 	 *
@@ -191,15 +206,18 @@ final class Orders_Analytics_Query {
 	 * @return array{shop:float,marketplace:float}
 	 */
 	public function shop_revenue( array $scope, string $created_via ): array {
-		$total = $this->storage->total_expression( $this->db );
-		$date  = $this->storage->date_column();
-		$part  = '' === $created_via
-			? '0'
-			: $this->db->prepare( 'SUM(CASE WHEN ' . $this->storage->created_via_expression( $this->db ) . ' = %s THEN ' . $total . ' ELSE 0 END)', $created_via ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Fixed or prepared fragments.
-		$rows  = $this->run(
+		$total  = $this->storage->total_expression( $this->db );
+		$date   = $this->storage->date_column();
+		$status = $this->storage->status_column();
+		$unpaid = $status . ' NOT IN (' . $this->list_sql( self::UNPAID_STATUSES ) . ')';
+		$ours   = '' === $created_via ? '' : $this->db->prepare( $this->storage->created_via_expression( $this->db ) . ' = %s', $created_via ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- A prepared fragment.
+		$part   = '' === $ours ? '0' : 'SUM(CASE WHEN ' . $ours . ' THEN ' . $total . ' ELSE 0 END)';
+		$rows   = $this->run(
 			'SELECT SUM(' . $total . ') AS shop, ' . $part . ' AS marketplace'
 			. ' FROM ' . $this->storage->orders_from( $this->db ) . ' WHERE ' . $this->storage->live_condition()
-			. ' AND ' . $this->storage->status_column() . ' NOT IN (' . $this->list_sql( array_merge( self::EXCLUDED_STATUSES, self::UNSOLD_STATUSES ) ) . ')'
+			. ' AND ' . $status . ' NOT IN (' . $this->list_sql( array_merge( self::EXCLUDED_STATUSES, self::UNSOLD_STATUSES ) ) . ')'
+			. ' AND ' . ( '' === $ours ? $unpaid : '(' . $unpaid . ' OR ' . $ours . ')' )
+			. $this->not_rejected_sql()
 			. $this->db->prepare( ' AND ' . $date . ' >= %s AND ' . $date . ' < %s', $scope['from'], $scope['to'] ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The column is one of two fixed names.
 		);
 		$row   = $rows[0] ?? [];
@@ -211,8 +229,8 @@ final class Orders_Analytics_Query {
 	}
 
 	/**
-	 * How many open postings each marketplace status holds now, per account — the rows the «Заказы» table lists under the same
-	 * account, «В работе» and that status.
+	 * How many postings each marketplace status holds now, per account, finished ones included — the rows the «Заказы» table lists
+	 * under the same account and that status (with «Состояние» left at «Все»).
 	 *
 	 * @since 2.1.13
 	 *
@@ -226,7 +244,7 @@ final class Orders_Analytics_Query {
 
 		$rows = $this->run(
 			'SELECT pg.account_id AS account, pg.status_raw AS code, COUNT(*) AS total FROM ' . $this->from_sql()
-			. ' WHERE ' . $this->open_where( $accounts ) . " AND pg.status_raw <> '' GROUP BY pg.account_id, pg.status_raw"
+			. ' WHERE ' . $this->live_where( $accounts ) . " AND pg.status_raw <> '' GROUP BY pg.account_id, pg.status_raw"
 		);
 
 		return array_map(
@@ -339,20 +357,52 @@ final class Orders_Analytics_Query {
 	}
 
 	/**
-	 * The open postings of the accounts with a live order: the «В работе» rows of the «Заказы» table.
+	 * The postings of the accounts with a live order: the rows of the «Заказы» table.
+	 *
+	 * @param int[] $accounts Account ids.
+	 * @return string
+	 */
+	private function live_where( array $accounts ): string {
+		return 'pg.account_id IN (' . $this->ids_sql( $accounts ) . ') AND pg.wc_order_id IS NOT NULL AND ' . $this->storage->live_condition();
+	}
+
+	/**
+	 * The open ones of those: the «В работе» rows.
 	 *
 	 * @param int[] $accounts Account ids.
 	 * @return string
 	 */
 	private function open_where( array $accounts ): string {
-		return 'pg.account_id IN (' . $this->ids_sql( $accounts ) . ') AND pg.wc_order_id IS NOT NULL AND ' . $this->storage->live_condition() . ' AND pg.is_terminal = 0';
+		return $this->live_where( $accounts ) . ' AND pg.is_terminal = 0';
 	}
 
 	/**
-	 * @return string The condition of an order that was sold.
+	 * @return string The condition of a cancellation: the order is cancelled, or the marketplace rejected the posting.
+	 */
+	private function cancelled_sql(): string {
+		$order = $this->db->prepare( $this->storage->status_column() . ' = %s', self::CANCELLED_STATUS ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The column is one of two fixed names.
+
+		return [] === $this->rejected ? $order : '(' . $order . ' OR pg.status_raw IN (' . $this->list_sql( $this->rejected ) . '))';
+	}
+
+	/**
+	 * @return string `AND` no rejected posting is registered for the order `o`; nothing without rejected statuses.
+	 */
+	private function not_rejected_sql(): string {
+		if ( [] === $this->rejected ) {
+			return '';
+		}
+
+		return $this->db->prepare( ' AND NOT EXISTS (SELECT 1 FROM %i AS rj WHERE rj.wc_order_id = ', $this->postings )
+			. $this->storage->id_column() . ' AND rj.status_raw IN (' . $this->list_sql( $this->rejected ) . '))';
+	}
+
+	/**
+	 * @return string The condition of an order that was sold: neither cancelled, rejected nor refunded.
 	 */
 	private function sold_sql(): string {
-		return $this->storage->status_column() . ' NOT IN (' . $this->list_sql( self::UNSOLD_STATUSES ) . ')';
+		return 'NOT (' . $this->storage->status_column() . ' IN (' . $this->list_sql( self::UNSOLD_STATUSES ) . ')'
+			. ( [] === $this->rejected ? '' : ' OR pg.status_raw IN (' . $this->list_sql( $this->rejected ) . ')' ) . ')';
 	}
 
 	/**

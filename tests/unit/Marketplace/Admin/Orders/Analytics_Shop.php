@@ -26,12 +26,14 @@ use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
  * | 104 | 2 | processing | 07.11 20:30 (23:30 site) | 300 | #13 var #14 ×3 = 300 | awaiting_deliver | yes | 07.11 06:00 |
  * | 105 | 1 | processing | 31.10 21:30 (01.11 00:30 site) | 200 | «Кружка» ×2 = 200 | delivering | yes | |
  * | 106 | 1 | processing | 07.11 21:30 (08.11 00:30 site) | 999 | #11 ×9 | awaiting_packaging | yes | 07.11 21:30 |
- * | 107 | 1 | pending | 02.11 10:00 | 70 | | new | yes | |
- * | 108 | 1 | trash | 02.11 10:00 | 70 | | new | yes | |
+ * | 107 | 1 | pending (the merchant's new-order status) | 02.11 10:00 | 70 | | new | yes | 01.11 00:00 |
+ * | 108 | 1 | trash | 02.11 10:00 | 70 | | awaiting_packaging | yes | |
+ * | 109 | 1 | processing | 04.11 10:00 | 400 | #11 ×1 = 400 | not_accepted (rejected) | no | |
  * | 201 | 1 | completed | 28.10 10:00 | 800 | #11 ×4 = 800 | delivered | no | |
  * | 202 | 1 | cancelled | 29.10 10:00 | 100 | | cancelled | no | |
  * | 301 | — | completed | 04.11 10:00 | 1500 | the shop's own checkout | | | |
  * | 302 | — | cancelled | 04.11 11:00 | 50 | the shop's own checkout | | | |
+ * | 304 | — | pending | 04.11 12:00 | 999 | the shop's own checkout, not paid | | | |
  * | 303 | — | completed | 27.10 10:00 | 200 | the shop's own checkout | | | |
  */
 final class Analytics_Shop {
@@ -83,6 +85,8 @@ final class Analytics_Shop {
 		$this->posting( 1, 'P-107', 107, 'new', false );
 		$this->order( 108, 'trash', '2026-11-02 10:00:00', 70, [] );
 		$this->posting( 1, 'P-108', 108, 'awaiting_packaging', false );
+		$this->order( 109, 'wc-processing', '2026-11-04 10:00:00', 400, [ [ 'Футболка', 11, 0, 1, 400 ] ] );
+		$this->posting( 1, 'P-109', 109, 'not_accepted', true );
 
 		$this->order( 201, 'wc-completed', '2026-10-28 10:00:00', 800, [ [ 'Футболка', 11, 0, 4, 800 ] ] );
 		$this->posting( 1, 'P-201', 201, 'delivered', true );
@@ -91,6 +95,7 @@ final class Analytics_Shop {
 
 		$this->order( 301, 'wc-completed', '2026-11-04 10:00:00', 1500, [ [ 'Футболка', 11, 0, 1, 1500 ] ], 'checkout' );
 		$this->order( 302, 'wc-cancelled', '2026-11-04 11:00:00', 50, [], 'checkout' );
+		$this->order( 304, 'wc-pending', '2026-11-04 12:00:00', 999, [], 'checkout' );
 		$this->order( 303, 'wc-completed', '2026-10-27 10:00:00', 200, [], 'checkout' );
 	}
 
