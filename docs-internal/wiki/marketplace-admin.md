@@ -350,6 +350,17 @@ the bucket numbers come from `bucket_specs()`), ledger and order-registry lease 
 event ledger's payload caps, `Images_Rule`, `Dimensions_Rule`, `Currency_Rule`,
 `Validation_Context`'s optional `marketplace_name`.
 
+### The WooCommerce status follows a real posting transition (#1920)
+
+`Registry_Order_Writer` gives an order its mapped WooCommerce status (`Status_Map` + the account's «Статус нового заказа») only
+when the order is new (or still provisional) or when the posting's raw marketplace status differs from the last one the order
+registry row saw. The row is read before the write records the new status, so `status_raw` is the last-seen value; an empty
+`status_raw` counts as a change. Otherwise the writer hands `Order_Store::update()` the order's current status, which leaves it
+alone: a status the merchant set by hand lives until the next real transition. Delivered and cancelled are transitions like
+any other, so they reach the order when they are new, and a repeated identical status after a manual edit is left alone. The
+rule is the same on HPOS and CPT (it reads the registry, not order meta) and for grouped orders (it compares the folded raw status
+the row stores). It is marketplace-neutral: adapters add nothing.
+
 ## Persistence as built (F8, #1686)
 
 What the code settled in `woodev/marketplace/data/` (`Woodev\Framework\Marketplace\Data`), where the plan above left it open:
