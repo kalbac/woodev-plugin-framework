@@ -4,6 +4,7 @@
  */
 
 const path = require( 'node:path' );
+const { waitFor } = require( '@testing-library/dom' );
 
 const DIALOG_SCRIPT = path.join( __dirname, '../../woodev/marketplace/assets/js/admin/woodev-dialog.js' );
 const TAB_SCRIPT = path.join( __dirname, '../../woodev/marketplace/assets/js/admin/product-tab.js' );
@@ -582,8 +583,10 @@ describe( 'the account select', () => {
 			require( TAB_SCRIPT );
 		} );
 
-		// jQuery runs a ready callback on a timer, and the script waits one more tick after it.
-		return new Promise( ( resolve ) => window.setTimeout( resolve, 30 ) );
+		// jQuery runs a ready callback on a timer, and the script waits one more tick after it. Wait for the
+		// result, not for a guessed number of ms: a fixed 30 ms sleep lost the race on a loaded machine (#1892).
+		// The header class is the last thing the setup does before it syncs the select's visibility.
+		return waitFor( () => expect( document.querySelector( '.woodev-mp-account-switch--header' ) ).not.toBeNull() );
 	}
 
 	test( 'moves into the header, starts on the first account and shows only its block', async () => {
@@ -630,8 +633,8 @@ describe( 'the account select', () => {
 		const link = document.querySelector( '.woodev-mp-tab-link' );
 		link.classList.add( 'active' );
 		link.querySelector( 'a' ).click();
-		await new Promise( ( resolve ) => window.setTimeout( resolve, 30 ) );
 
-		expect( wrap.hidden ).toBe( false );
+		// The script reads the active tab one tick after the click.
+		await waitFor( () => expect( wrap.hidden ).toBe( false ) );
 	} );
 } );

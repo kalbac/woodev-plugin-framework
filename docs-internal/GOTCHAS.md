@@ -26,7 +26,7 @@
 | [`framework/wiring`](gotcha-index/framework-wiring.md) | 4 | Responsibilities that moved |
 | [`testing/*`](gotcha-index/testing.md) | 60 | Testing patterns |
 | [`js/*`](gotcha-index/js.md) | 9 | JavaScript language traps |
-| [`testing/js`](gotcha-index/testing-js.md) | 9 | JavaScript testing pitfalls |
+| [`testing/js`](gotcha-index/testing-js.md) | 10 | JavaScript testing pitfalls |
 | [`api/*`](gotcha-index/api.md) | 8 | API layer |
 | [`licensing/*`](gotcha-index/licensing.md) | 7 | License/EDD store |
 | [`build/*`](gotcha-index/build.md) | 29 | Build/CI/release |

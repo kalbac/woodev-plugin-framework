@@ -492,6 +492,17 @@ describe( 'the account line with buttons', () => {
 		],
 	} );
 
+	/**
+	 * The page, once its account line is drawn. The line is handed over by an effect that runs AFTER the commit which
+	 * draws the table, and draws itself in one more render, so `renderPage()` (which waits for the table) returns
+	 * before it; a test that read the line next lost that race on a loaded machine (#1892). The line is awaited, not
+	 * assumed.
+	 */
+	async function renderWithLine() {
+		await renderPage();
+		await waitFor( () => expect( document.querySelector( '.woodev-records__account-line' ) ).not.toBeNull() );
+	}
+
 	function lineButton( name: string ): HTMLElement {
 		const line = document.querySelector( '.woodev-records__account-line' ) as HTMLElement;
 
@@ -500,7 +511,7 @@ describe( 'the account line with buttons', () => {
 
 	test( 'draws each button beside the sentence', async () => {
 		serve( { account: LINE } );
-		await renderPage();
+		await renderWithLine();
 
 		const line = document.querySelector( '.woodev-records__account-line' ) as HTMLElement;
 
@@ -513,7 +524,7 @@ describe( 'the account line with buttons', () => {
 
 	test( 'a finished line keeps its sentence for the buttons', async () => {
 		serve( { account: { ...LINE, active: false, text: 'Готово: товаров 12 000.' } } );
-		await renderPage();
+		await renderWithLine();
 
 		expect( lineButton( 'Подробнее' ) ).toBeInTheDocument();
 	} );
@@ -527,7 +538,7 @@ describe( 'the account line with buttons', () => {
 
 	test( 'a button runs its account action with the account context, no ids and the payload it was given', async () => {
 		serve( { account: LINE } );
-		await renderPage();
+		await renderWithLine();
 
 		fireEvent.click( lineButton( 'Остановить' ) );
 
@@ -553,7 +564,7 @@ describe( 'the account line with buttons', () => {
 
 	test( 'a hidden field is never rendered: the dialog has no input for it', async () => {
 		serve( { account: LINE } );
-		await renderPage();
+		await renderWithLine();
 
 		fireEvent.click( lineButton( 'Остановить' ) );
 		const dialog = await screen.findByRole( 'dialog' );
@@ -565,7 +576,7 @@ describe( 'the account line with buttons', () => {
 	} );
 	test( 'a read-only report shows its preview groups and closes without applying anything', async () => {
 		serve( { account: LINE } );
-		await renderPage();
+		await renderWithLine();
 
 		fireEvent.click( lineButton( 'Подробнее' ) );
 
@@ -588,7 +599,7 @@ describe( 'the account line with buttons', () => {
 
 	test( 'an action that needs a hidden value has no standalone button: only the line runs it', async () => {
 		serve( { account: LINE } );
-		await renderPage();
+		await renderWithLine();
 
 		const toolbar = document.querySelector( '.woodev-records__account-actions' ) as HTMLElement;
 
