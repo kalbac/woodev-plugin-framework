@@ -77,8 +77,25 @@ export interface ManifestMenu {
 	pages: ManifestPage[];
 }
 
+/**
+ * A page the menu leaves out, which the user may still open from a bookmark: it explains, in PHP's words, what to switch on
+ * (`Admin_Collector::build_manifest()`; today only «Диагностика» while «Логирование» is off).
+ */
+export interface PageExplanation {
+	path: string;
+	title: string;
+	breadcrumbs: Breadcrumb[];
+	/** DOM id of the menu root, kept open while the page is on screen. */
+	domId: string;
+	message: string;
+	/** Where the switch is; absent when the plugin has no settings page. */
+	settings?: { url: string; label: string };
+}
+
 export interface Manifest {
 	menus: ManifestMenu[];
+	/** Pages the menu does not list but a bookmark can still reach; absent when there are none. */
+	explanations?: PageExplanation[];
 	/** Present when the user may open the orders of at least one marketplace. */
 	ordersPage?: OrdersPageManifest;
 }

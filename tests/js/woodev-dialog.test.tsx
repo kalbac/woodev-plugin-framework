@@ -37,6 +37,12 @@ describe( 'WoodevDialog', () => {
 		expect( () => footerOf( screen.getByRole( 'dialog' ) ) ).toThrow( 'no footer' );
 	} );
 
+	test( 'the overlay carries the class the shared stylesheet dims', () => {
+		render( <WoodevDialog title="T" onRequestClose={ jest.fn() }>x</WoodevDialog> );
+
+		expect( document.querySelector( '.components-modal__screen-overlay' ) ).toHaveClass( 'woodev-dialog-overlay' );
+	} );
+
 	test( 'the «✕» closes it', () => {
 		const onRequestClose = jest.fn();
 		render( <WoodevDialog title="T" onRequestClose={ onRequestClose }>x</WoodevDialog> );

@@ -59,6 +59,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		private $menu = false;
 
 		/**
+		 * @var Page|null The «Диагностика» page the menu left out because «Логирование» is off; null when it is listed or not declared.
+		 */
+		private $hidden_diagnostics_page = null;
+
+		/**
 		 * @var Settings_Handler|null|false Default settings handler; false before first build.
 		 */
 		private $settings_handler = false;
@@ -570,6 +575,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		}
 
 		/**
+		 * The «Диагностика» page this plugin declares but the menu leaves out while «Логирование» is off, so a bookmark to it can be
+		 * answered with an explanation instead of WordPress's refusal.
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return Page|null
+		 */
+		public function get_hidden_diagnostics_page(): ?Page {
+			$this->get_marketplace_admin_menu();
+
+			return $this->hidden_diagnostics_page;
+		}
+
+		/**
 		 * @return Menu|null
 		 */
 		private function build_menu(): ?Menu {
@@ -580,9 +599,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				foreach ( $this->get_marketplace_pages() as $descriptor ) {
 					$page = Page::from_array( (array) $descriptor );
 
-					if ( Page::DIAGNOSTICS_SLUG !== $page->get_slug() || $this->logging()->is_enabled() ) {
-						$pages[] = $page;
+					if ( Page::DIAGNOSTICS_SLUG === $page->get_slug() && ! $this->logging()->is_enabled() ) {
+						$this->hidden_diagnostics_page = $page;
+
+						continue;
 					}
+
+					$pages[] = $page;
 				}
 
 				// WordPress links the root to the first page of the menu: «Настройки» (onboarding) until the plugin is configured,

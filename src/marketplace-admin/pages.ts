@@ -5,6 +5,7 @@
  */
 
 import { createElement } from '@wordpress/element';
+import { ExplanationPage } from './explanation-page';
 import { MovedPage } from './orders-page/moved-page';
 import { createOrdersPageContainer } from './orders-page/orders-page';
 import { PageBody } from './page-view';
@@ -42,6 +43,16 @@ export function buildAdminPages( manifest: Manifest ): WcAdminPage[] {
 			wpOpenMenu: menu.domId,
 		} ) )
 	);
+
+	// A page the menu leaves out gets a route of its own that only explains, so a bookmark does not end on wc-admin's refusal.
+	for ( const explanation of manifest.explanations ?? [] ) {
+		pages.push( {
+			container: () => createElement( ExplanationPage, { explanation } ),
+			path: explanation.path,
+			breadcrumbs: explanation.breadcrumbs,
+			wpOpenMenu: explanation.domId,
+		} );
+	}
 
 	if ( manifest.ordersPage && manifest.ordersPage.marketplaces.length > 0 ) {
 		pages.push( {

@@ -56,6 +56,7 @@ export function WoodevDialog( {
 			// No `title` on the Modal: it would name the dialog by a heading of its own header, which is hidden. Ours names it.
 			__experimentalHideHeader
 			aria={ { labelledby: titleId } }
+			overlayClassName="woodev-dialog-overlay"
 			className={ [ 'woodev-dialog', className ].filter( Boolean ).join( ' ' ) }
 			onRequestClose={ onRequestClose }
 			shouldCloseOnClickOutside={ dismissible && shouldCloseOnClickOutside }
