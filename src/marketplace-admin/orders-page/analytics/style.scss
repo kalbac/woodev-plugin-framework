@@ -15,6 +15,14 @@
 		margin: 0;
 	}
 
+	// The filter row: the toolbar class alone is a block here, so WooCommerce's date picker (582px) pushed «Обновить» onto a row of its own.
+	&__filters {
+		align-items: flex-end;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+
 	&__body {
 		display: flex;
 		flex-direction: column;
