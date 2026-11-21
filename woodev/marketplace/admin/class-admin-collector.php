@@ -171,17 +171,44 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 				return;
 			}
 
+			foreach ( $this->build_registrations() as $arguments ) {
+				wc_admin_register_page( $arguments );
+			}
+		}
+
+		/**
+		 * Every `wc_admin_register_page()` call of the request: each menu (root, then its children), the shared orders page, and the
+		 * hidden «Диагностика» of a menu whose «Логирование» is off.
+		 *
+		 * The hidden page is registered WITHOUT a menu entry (`parent` empty, the way WooCommerce registers its own setup wizard), so
+		 * `wc_admin_is_registered_page()` is true for a bookmark to it and {@see self::enqueue_assets()} loads the bundle whose
+		 * route explains what to switch on. A page that is not registered is drawn by the client as «not allowed» before any of
+		 * our script runs.
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function build_registrations(): array {
+			$registrations = [];
+
 			foreach ( $this->get_menus() as $menu ) {
 				foreach ( $menu->build_registrations() as $arguments ) {
-					wc_admin_register_page( $arguments );
+					$registrations[] = $arguments;
 				}
 			}
 
 			$orders = $this->get_orders_page()->build_registration( self::capability_check() );
 
 			if ( null !== $orders ) {
-				wc_admin_register_page( $orders );
+				$registrations[] = $orders;
 			}
+
+			foreach ( $this->get_hidden_diagnostics() as [ $menu, $page ] ) {
+				$registrations[] = array_merge( $menu->build_page_args( $page ), [ 'parent' => '' ] );
+			}
+
+			return $registrations;
 		}
 
 		/**
@@ -322,6 +349,67 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		}
 
 		/**
+		 * The pages the menu leaves out but a bookmark can still reach, as the bundle reads them: for now «Диагностика» while
+		 * «Логирование» is off, which gets a route that says what to switch on instead of wc-admin's English «not allowed» screen
+		 * (that screen is drawn by the client, so WordPress never denies the request and no PHP hook sees it).
+		 *
+		 * Only for a user who holds the page's capability; anyone else keeps the refusal. The menu keeps no entry for it.
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		private function build_explanations(): array {
+			$can          = self::capability_check();
+			$explanations = [];
+
+			foreach ( $this->get_hidden_diagnostics() as [ $menu, $page ] ) {
+				$settings = $menu->get_page( Page::SETTINGS_SLUG );
+				$entry    = [
+					'path'        => $menu->get_page_path( $page ),
+					'title'       => $page->get_heading(),
+					'breadcrumbs' => [ [ $menu->get_page_path( $menu->get_landing_page() ), $menu->get_title() ], $page->get_heading() ],
+					'domId'       => $menu->get_root_dom_id(),
+					'message'     => __( 'Включите «Логирование» в настройках, чтобы увидеть диагностику.', 'woodev-plugin-framework' ),
+				];
+
+				if ( null !== $settings && $can( $settings->get_capability( $menu->get_capability() ) ) ) {
+					$entry['settings'] = [
+						'url'   => $this->get_page_url( $menu, $settings ),
+						'label' => __( 'Перейти к настройкам', 'woodev-plugin-framework' ),
+					];
+				}
+
+				$explanations[] = $entry;
+			}
+
+			return $explanations;
+		}
+
+		/**
+		 * The «Диагностика» pages the menus leave out while «Логирование» is off, that the current user may open.
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return array<int,array{0:Menu,1:Page}>
+		 */
+		private function get_hidden_diagnostics(): array {
+			$can    = self::capability_check();
+			$hidden = [];
+
+			foreach ( $this->get_menus() as $menu ) {
+				$plugin = $this->plugins[ $menu->get_plugin_id() ] ?? null;
+				$page   = null === $plugin ? null : $plugin->get_hidden_diagnostics_page();
+
+				if ( null !== $page && $can( $page->get_capability( $menu->get_capability() ) ) ) {
+					$hidden[] = [ $menu, $page ];
+				}
+			}
+
+			return $hidden;
+		}
+
+		/**
 		 * Enqueues the routing bundle once, on every WooCommerce Admin screen.
 		 *
 		 * Every screen, not only the menu's own: wc-admin navigates between its pages without a reload, so a bundle loaded only on
@@ -384,9 +472,9 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		 * (`ordersPage`) when the user may open the orders of a marketplace.
 		 *
 		 * @since 2.0.29
-		 * @since 2.1.13 Carries `ordersPage`, and `movedTo` on each «Заказы» page.
+		 * @since 2.1.13 Carries `ordersPage`, `movedTo` on each «Заказы» page, and `explanations` for a page the menu leaves out.
 		 *
-		 * @return array{menus: array<int,array<string,mixed>>, ordersPage?: array<string,mixed>}
+		 * @return array{menus: array<int,array<string,mixed>>, ordersPage?: array<string,mixed>, explanations?: array<int,array<string,mixed>>}
 		 */
 		public function build_manifest(): array {
 			$menus = [];
@@ -405,8 +493,13 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 				}
 			}
 
-			$manifest = [ 'menus' => $menus ];
-			$orders   = Marketplace_Orders_Page::build_manifest( $menus, $names );
+			$manifest     = [ 'menus' => $menus ];
+			$explanations = $this->build_explanations();
+			$orders       = Marketplace_Orders_Page::build_manifest( $menus, $names );
+
+			if ( [] !== $explanations ) {
+				$manifest['explanations'] = $explanations;
+			}
 
 			if ( null !== $orders ) {
 				$manifest['ordersPage'] = $orders;

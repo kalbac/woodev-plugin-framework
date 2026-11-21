@@ -160,7 +160,7 @@ final class KeyExpiryNoticesTest extends TestCase {
 		$this->assertSame( 'notice-warning', $captured[ $warn_key ]['params']['notice_class'] );
 		$this->assertTrue( $captured[ $warn_key ]['params']['dismissible'] );
 		$this->assertStringContainsString( 'Main Shop', $captured[ $warn_key ]['message'] );
-		$this->assertStringContainsString( 'осталось дней: 5', $captured[ $warn_key ]['message'] );
+		$this->assertStringContainsString( '(ещё 5 дней).', $captured[ $warn_key ]['message'] );
 		$this->assertStringContainsString( 'Открыть настройки', $captured[ $warn_key ]['message'] );
 
 		$this->assertArrayHasKey( $exp_key, $captured );
