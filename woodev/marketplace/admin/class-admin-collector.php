@@ -171,17 +171,44 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 				return;
 			}
 
+			foreach ( $this->build_registrations() as $arguments ) {
+				wc_admin_register_page( $arguments );
+			}
+		}
+
+		/**
+		 * Every `wc_admin_register_page()` call of the request: each menu (root, then its children), the shared orders page, and the
+		 * hidden «Диагностика» of a menu whose «Логирование» is off.
+		 *
+		 * The hidden page is registered WITHOUT a menu entry (`parent` empty, the way WooCommerce registers its own setup wizard), so
+		 * `wc_admin_is_registered_page()` is true for a bookmark to it and {@see self::enqueue_assets()} loads the bundle whose
+		 * route explains what to switch on. A page that is not registered is drawn by the client as «not allowed» before any of
+		 * our script runs.
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function build_registrations(): array {
+			$registrations = [];
+
 			foreach ( $this->get_menus() as $menu ) {
 				foreach ( $menu->build_registrations() as $arguments ) {
-					wc_admin_register_page( $arguments );
+					$registrations[] = $arguments;
 				}
 			}
 
 			$orders = $this->get_orders_page()->build_registration( self::capability_check() );
 
 			if ( null !== $orders ) {
-				wc_admin_register_page( $orders );
+				$registrations[] = $orders;
 			}
+
+			foreach ( $this->get_hidden_diagnostics() as [ $menu, $page ] ) {
+				$registrations[] = array_merge( $menu->build_page_args( $page ), [ 'parent' => '' ] );
+			}
+
+			return $registrations;
 		}
 
 		/**
@@ -336,14 +363,7 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 			$can          = self::capability_check();
 			$explanations = [];
 
-			foreach ( $this->get_menus() as $menu ) {
-				$plugin = $this->plugins[ $menu->get_plugin_id() ] ?? null;
-				$page   = null === $plugin ? null : $plugin->get_hidden_diagnostics_page();
-
-				if ( null === $page || ! $can( $page->get_capability( $menu->get_capability() ) ) ) {
-					continue;
-				}
-
+			foreach ( $this->get_hidden_diagnostics() as [ $menu, $page ] ) {
 				$settings = $menu->get_page( Page::SETTINGS_SLUG );
 				$entry    = [
 					'path'        => $menu->get_page_path( $page ),
@@ -364,6 +384,29 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 			}
 
 			return $explanations;
+		}
+
+		/**
+		 * The «Диагностика» pages the menus leave out while «Логирование» is off, that the current user may open.
+		 *
+		 * @since 2.1.13
+		 *
+		 * @return array<int,array{0:Menu,1:Page}>
+		 */
+		private function get_hidden_diagnostics(): array {
+			$can    = self::capability_check();
+			$hidden = [];
+
+			foreach ( $this->get_menus() as $menu ) {
+				$plugin = $this->plugins[ $menu->get_plugin_id() ] ?? null;
+				$page   = null === $plugin ? null : $plugin->get_hidden_diagnostics_page();
+
+				if ( null !== $page && $can( $page->get_capability( $menu->get_capability() ) ) ) {
+					$hidden[] = [ $menu, $page ];
+				}
+			}
+
+			return $hidden;
 		}
 
 		/**

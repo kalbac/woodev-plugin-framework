@@ -34,6 +34,22 @@ class Admin_Collector_On_Screen extends Admin_Collector {
 }
 
 /**
+ * A collector whose screen test is WooCommerce's own rule: the request is a wc-admin page only when its `path` was registered
+ * through `wc_admin_register_page()` (`PageController::get_current_page()` matches the registered pages, `is_registered_page()`
+ * reads the match). Starts from the unregistered state, unlike {@see Admin_Collector_On_Screen}, which answers true.
+ */
+class Admin_Collector_Registered_Paths extends Admin_Collector {
+
+	/** @return bool */
+	protected function is_wc_admin_screen(): bool {
+		$request = [];
+		parse_str( (string) parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_QUERY ), $request );
+
+		return 'wc-admin' === ( $request['page'] ?? '' ) && in_array( $request['path'] ?? null, array_column( $this->build_registrations(), 'path' ), true );
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Marketplace\Admin\Admin_Collector
  */
 final class AdminCollectorTest extends TestCase {
@@ -392,6 +408,48 @@ final class AdminCollectorTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'explanations', $manifest );
 		$this->assertContains( 'diagnostics', array_column( $manifest['menus'][0]['pages'], 'id' ) );
+	}
+
+	/**
+	 * A cold bookmark: the bundle is enqueued only when WooCommerce knows the path, so the hidden page must be registered with it.
+	 *
+	 * @param bool $logging_on Whether «Логирование» is on.
+	 * @param bool $may_open   Whether the user holds the capabilities.
+	 * @param bool $expected   Whether the routing bundle is loaded for the bookmark.
+	 *
+	 * @dataProvider provide_diagnostics_bookmarks
+	 */
+	public function test_a_diagnostics_bookmark_loads_the_bundle_only_through_a_server_registration( bool $logging_on, bool $may_open, bool $expected ): void {
+		$collector = new Admin_Collector_Registered_Paths();
+		$plugin    = $this->diagnostics_plugin();
+		$plugin->set_logging_on( $logging_on );
+		$collector->register_plugin( $plugin );
+		Functions\when( 'current_user_can' )->justReturn( $may_open );
+		Functions\stubs( [ 'admin_url' => 'https://shop.test/wp-admin/' ] );
+
+		$_SERVER['REQUEST_URI'] = '/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fdiagnostics';
+		$collector->enqueue_assets();
+
+		$this->assertSame( $expected, in_array( Admin_Collector::SCRIPT_HANDLE, $this->enqueued_handles, true ) );
+
+		$hidden = array_filter(
+			$collector->build_registrations(),
+			static function ( array $arguments ): bool {
+				return '/ozon-seller/diagnostics' === $arguments['path'] && '' === $arguments['parent'];
+			}
+		);
+		$this->assertCount( $expected && ! $logging_on ? 1 : 0, $hidden, 'registered with no menu parent only while hidden' );
+	}
+
+	/**
+	 * @return array<string,array{0:bool,1:bool,2:bool}>
+	 */
+	public function provide_diagnostics_bookmarks(): array {
+		return [
+			'logging off, user may open it'   => [ false, true, true ],
+			'logging off, user may not'       => [ false, false, false ],
+			'logging on: the page is a normal menu page' => [ true, true, true ],
+		];
 	}
 
 	public function test_a_user_without_the_diagnostics_capability_gets_no_explanation(): void {
