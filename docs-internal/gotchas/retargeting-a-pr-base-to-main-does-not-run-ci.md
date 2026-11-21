@@ -24,3 +24,7 @@ sleep 30 && gh pr checks N | wc -l   # expect ~19, not 1
 
 ## Related
 - [local-npm-run-build-is-not-assets-parity-evidence.md](local-npm-run-build-is-not-assets-parity-evidence.md) — the restacked bundle must still be built in the primary checkout
+
+## Addendum (s240, 21.11.2026) — deleting the base branch closes the stacked PR
+
+Merging the lower PR with `--delete-branch` (Ozon PR #113 under #114) CLOSED the stacked PR, because its base ref vanished; it was revived by re-pushing the base ref and retargeting. Retarget the stacked PR to `main` BEFORE merging the base, or merge without `--delete-branch`.

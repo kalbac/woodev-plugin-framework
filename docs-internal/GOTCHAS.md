@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 544 atomic gotchas across 30 topics. At session start read THIS file, then open
+> **Topic map.** 549 atomic gotchas across 30 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -11,18 +11,18 @@
 | Topic | Entries | Covers |
 |---|---|---|
 | [`naming/*`](gotcha-index/naming.md) | 1 | Identifier conventions |
-| [`php/*`](gotcha-index/php.md) | 25 | PHP / WordPress patterns |
+| [`php/*`](gotcha-index/php.md) | 26 | PHP / WordPress patterns |
 | [`settings-api/*`](gotcha-index/settings-api.md) | 7 | Settings API |
 | [`deprecation/*`](gotcha-index/deprecation.md) | 2 | Deprecation cycle |
 | [`bootstrap/*`](gotcha-index/bootstrap.md) | 5 | Multi-version loading |
 | [`compat/*`](gotcha-index/compat.md) | 3 | Backward compatibility, HPOS |
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 3 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
-| [`woocommerce/*`](gotcha-index/woocommerce.md) | 49 | WooCommerce-specific |
+| [`woocommerce/*`](gotcha-index/woocommerce.md) | 50 | WooCommerce-specific |
 | [`framework/*`](gotcha-index/framework.md) | 12 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 26 | Location provider layer |
-| [`rig/*`](gotcha-index/rig.md) | 34 | Local verification rig |
+| [`rig/*`](gotcha-index/rig.md) | 35 | Local verification rig |
 | [`framework/wiring`](gotcha-index/framework-wiring.md) | 4 | Responsibilities that moved |
 | [`testing/*`](gotcha-index/testing.md) | 60 | Testing patterns |
 | [`js/*`](gotcha-index/js.md) | 9 | JavaScript language traps |
@@ -39,7 +39,7 @@
 | [`shipping/*`](gotcha-index/shipping.md) | 13 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 4 | Payload size and wire cost |
 | [`i18n/*`](gotcha-index/i18n.md) | 15 | Localization |
-| [`tooling/*`](gotcha-index/tooling.md) | 132 | Dev tooling, codex critic |
+| [`tooling/*`](gotcha-index/tooling.md) | 134 | Dev tooling, codex critic |
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
