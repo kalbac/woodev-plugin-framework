@@ -29,17 +29,25 @@ function FakeTableCard( props: TableCardProps ) {
 	return (
 		<div data-testid="card">
 			<div data-testid="card-header">{ props.actions }</div>
-			<table aria-label={ props.title }>
-				<tbody>
-					{ props.rows.map( ( row, index ) => (
-						<tr key={ props.rowKey( row, index ) }>
-							{ row.map( ( cell, column ) => (
-								<td key={ column }>{ cell.display }</td>
-							) ) }
-						</tr>
-					) ) }
-				</tbody>
-			</table>
+			{ /*
+			 * No table while the list is loading, like the real card (it draws a skeleton). The double used to draw the
+			 * table at once, so `findByRole( 'table' )` resolved BEFORE the list answered and every assertion on the
+			 * counted views, rows or summary that followed raced the fetch — green on an idle machine, red when the
+			 * answer was a few ms late (#1892). Now the table role means "the list is here".
+			 */ }
+			{ ! props.isLoading && (
+				<table aria-label={ props.title }>
+					<tbody>
+						{ props.rows.map( ( row, index ) => (
+							<tr key={ props.rowKey( row, index ) }>
+								{ row.map( ( cell, column ) => (
+									<td key={ column }>{ cell.display }</td>
+								) ) }
+							</tr>
+						) ) }
+					</tbody>
+				</table>
+			) }
 			<footer data-testid="card-summary">
 				{ props.summary?.map( ( entry ) => `${ entry.value } ${ entry.label }` ).join( ', ' ) }
 			</footer>
