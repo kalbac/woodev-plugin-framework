@@ -14,6 +14,7 @@ namespace Woodev\Tests\Unit\Marketplace\Admin;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Marketplace\Admin\Admin_Collector;
+use Woodev\Framework\Marketplace\Admin\Page;
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/Test_Marketplace_Plugin.php';
@@ -29,6 +30,22 @@ class Admin_Collector_On_Screen extends Admin_Collector {
 	/** @return bool */
 	protected function is_wc_admin_screen(): bool {
 		return $this->on_screen;
+	}
+}
+
+/**
+ * A collector whose screen test is WooCommerce's own rule: the request is a wc-admin page only when its `path` was registered
+ * through `wc_admin_register_page()` (`PageController::get_current_page()` matches the registered pages, `is_registered_page()`
+ * reads the match). Starts from the unregistered state, unlike {@see Admin_Collector_On_Screen}, which answers true.
+ */
+class Admin_Collector_Registered_Paths extends Admin_Collector {
+
+	/** @return bool */
+	protected function is_wc_admin_screen(): bool {
+		$request = [];
+		parse_str( (string) parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_QUERY ), $request );
+
+		return 'wc-admin' === ( $request['page'] ?? '' ) && in_array( $request['path'] ?? null, array_column( $this->build_registrations(), 'path' ), true );
 	}
 }
 
@@ -325,6 +342,134 @@ final class AdminCollectorTest extends TestCase {
 		$_SERVER['REQUEST_URI'] = '/wp-admin/admin.php?page=ozon-seller';
 
 		$this->assertNull( $this->collector->resolve_legacy_redirect() );
+	}
+
+	private function diagnostics_plugin( bool $with_settings = false ): Test_Marketplace_Plugin {
+		return new Test_Marketplace_Plugin(
+			'ozon-seller',
+			[ 'id' => 'ozon-seller', 'title' => 'OZON-SELLER' ],
+			[
+				[ 'slug' => 'products', 'title' => 'T', 'kind' => 'records', 'tables' => [ 'products' ] ],
+				[ 'slug' => Page::DIAGNOSTICS_SLUG, 'title' => 'D', 'kind' => 'custom', 'view' => 'diagnostics' ],
+			],
+			$with_settings ? [ new \stdClass() ] : []
+		);
+	}
+
+	/**
+	 * Registers a plugin that declares «Диагностика» and answers the URL helpers the manifest needs.
+	 *
+	 * @param bool $logging_on    Whether «Логирование» is on.
+	 * @param bool $with_settings Whether the plugin has a settings page.
+	 */
+	private function diagnostics_collector( bool $logging_on, bool $with_settings = false ): void {
+		Functions\stubs(
+			[
+				'admin_url'     => static function ( string $path = '' ): string {
+					return 'https://shop.test/wp-admin/' . $path;
+				},
+				'add_query_arg' => static function ( array $args, string $url ): string {
+					return $url . '?' . http_build_query( $args, '', '&', PHP_QUERY_RFC3986 );
+				},
+			]
+		);
+
+		$plugin = $this->diagnostics_plugin( $with_settings );
+		$plugin->set_logging_on( $logging_on );
+		$this->collector->register_plugin( $plugin );
+	}
+
+	public function test_a_hidden_diagnostics_page_gets_an_explanation_route_in_the_manifest_but_no_menu_page(): void {
+		$this->diagnostics_collector( false );
+
+		$manifest = $this->collector->build_manifest();
+
+		$this->assertSame( [ 'products' ], array_column( $manifest['menus'][0]['pages'], 'id' ), 'the menu keeps no entry for it' );
+		$this->assertCount( 1, $manifest['explanations'] );
+		$this->assertSame( '/ozon-seller/diagnostics', $manifest['explanations'][0]['path'] );
+		$this->assertSame( 'Включите «Логирование» в настройках, чтобы увидеть диагностику.', $manifest['explanations'][0]['message'] );
+		$this->assertSame( $manifest['menus'][0]['domId'], $manifest['explanations'][0]['domId'] );
+		$this->assertArrayNotHasKey( 'settings', $manifest['explanations'][0], 'no settings page, no link' );
+	}
+
+	public function test_the_explanation_links_to_the_settings_page_when_the_plugin_has_one(): void {
+		$this->diagnostics_collector( false, true );
+
+		$explanation = $this->collector->build_manifest()['explanations'][0];
+
+		$this->assertSame( 'https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fsettings', $explanation['settings']['url'] );
+		$this->assertSame( 'Перейти к настройкам', $explanation['settings']['label'] );
+	}
+
+	public function test_nothing_is_explained_while_logging_is_on_because_the_page_is_there(): void {
+		$this->diagnostics_collector( true );
+
+		$manifest = $this->collector->build_manifest();
+
+		$this->assertArrayNotHasKey( 'explanations', $manifest );
+		$this->assertContains( 'diagnostics', array_column( $manifest['menus'][0]['pages'], 'id' ) );
+	}
+
+	/**
+	 * A cold bookmark: the bundle is enqueued only when WooCommerce knows the path, so the hidden page must be registered with it.
+	 *
+	 * @param bool $logging_on Whether «Логирование» is on.
+	 * @param bool $may_open   Whether the user holds the capabilities.
+	 * @param bool $expected   Whether the routing bundle is loaded for the bookmark.
+	 *
+	 * @dataProvider provide_diagnostics_bookmarks
+	 */
+	public function test_a_diagnostics_bookmark_loads_the_bundle_only_through_a_server_registration( bool $logging_on, bool $may_open, bool $expected ): void {
+		$collector = new Admin_Collector_Registered_Paths();
+		$plugin    = $this->diagnostics_plugin();
+		$plugin->set_logging_on( $logging_on );
+		$collector->register_plugin( $plugin );
+		Functions\when( 'current_user_can' )->justReturn( $may_open );
+		Functions\stubs( [ 'admin_url' => 'https://shop.test/wp-admin/' ] );
+
+		$_SERVER['REQUEST_URI'] = '/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fdiagnostics';
+		$collector->enqueue_assets();
+
+		$this->assertSame( $expected, in_array( Admin_Collector::SCRIPT_HANDLE, $this->enqueued_handles, true ) );
+
+		$hidden = array_filter(
+			$collector->build_registrations(),
+			static function ( array $arguments ): bool {
+				return '/ozon-seller/diagnostics' === $arguments['path'] && '' === $arguments['parent'];
+			}
+		);
+		$this->assertCount( $expected && ! $logging_on ? 1 : 0, $hidden, 'registered with no menu parent only while hidden' );
+	}
+
+	/**
+	 * @return array<string,array{0:bool,1:bool,2:bool}>
+	 */
+	public function provide_diagnostics_bookmarks(): array {
+		return [
+			'logging off, user may open it'   => [ false, true, true ],
+			'logging off, user may not'       => [ false, false, false ],
+			'logging on: the page is a normal menu page' => [ true, true, true ],
+		];
+	}
+
+	public function test_a_user_without_the_diagnostics_capability_gets_no_explanation(): void {
+		$this->diagnostics_collector( false );
+		Functions\when( 'current_user_can' )->alias(
+			static function ( string $capability ): bool {
+				return 'manage_woocommerce' !== $capability;
+			}
+		);
+
+		$this->assertArrayNotHasKey( 'explanations', $this->collector->build_manifest() );
+	}
+
+	public function test_a_plugin_that_does_not_declare_diagnostics_gets_no_explanation(): void {
+		Functions\stubs( [ 'admin_url' => 'https://shop.test/wp-admin/' ] );
+		$plugin = $this->plugin( 'ozon-seller', [ 'products' ] );
+		$plugin->set_logging_on( false );
+		$this->collector->register_plugin( $plugin );
+
+		$this->assertArrayNotHasKey( 'explanations', $this->collector->build_manifest() );
 	}
 
 	public function test_an_ajax_request_is_never_redirected(): void {

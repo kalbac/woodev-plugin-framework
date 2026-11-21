@@ -47,3 +47,28 @@ window.matchMedia = ( query ) => ( {
 	removeListener: () => {},
 	dispatchEvent: () => false,
 } );
+
+// ---------------------------------------------------------------------------------------------
+// Not a jsdom hole — the one shared knob for async assertions (#1892).
+//
+// Testing Library's `findBy*` / `waitFor` give up after 1000 ms by default. That is wall-clock,
+// not CPU time, and it is the same budget for a 5-row table and for the shipping-orders app that
+// mounts ~3 000 lines of React. On an idle machine every such wait finishes in tens of ms; with
+// two or three agents running their own suites next to this one (or a starved CI runner) a render
+// stretches 10–50× and the wait dies as "Unable to find an element …" — a different test each
+// run (`admin-records-matching`, `admin-records-chrome`, the shipping-orders bulk test), green
+// when run alone. Measured: 4 of 5 full runs failed under 30 busy loops on a 10-core Mac with the
+// 1000 ms default.
+//
+// So the budget is raised once, here. A wait that succeeds still returns on the first poll that
+// passes, so a green suite costs nothing extra; only a real failure takes longer to report. It is
+// kept below the per-test limit (`testTimeout`, jest-unit.config.js) so a genuine miss is reported
+// as the missing element rather than as a bare jest timeout.
+// Do NOT raise individual waits, and do not retry tests: a wait that needs more than this has a
+// real defect (a promise that never resolves, a missing act()).
+//
+// `@testing-library/dom` is one hoisted copy, shared by `@testing-library/react`, so this applies
+// to every import path the suites use.
+const { configure } = require( '@testing-library/dom' );
+
+configure( { asyncUtilTimeout: 5000 } );

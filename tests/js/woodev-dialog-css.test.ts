@@ -41,6 +41,12 @@ describe( 'the shared dialog stylesheet', () => {
 		expect( wrapper ).toMatch( /max-height:\s*inherit/ );
 	} );
 
+	test( 'the native backdrop and the React overlay are dimmed by the same rule, so every dialog dims alike', () => {
+		const dimming = rule( 'dialog.woodev-dialog::backdrop,\n.woodev-dialog-overlay.components-modal__screen-overlay' );
+
+		expect( dimming ).toMatch( /background:\s*rgba\(0, 0, 0, 0\.5\)/ );
+	} );
+
 	test( 'the native dialog is limited to the viewport as well', () => {
 		expect( rule( 'dialog.woodev-dialog' ) ).toMatch( /max-height:\s*min\(680px, calc\(100vh - 64px\)\)/ );
 	} );

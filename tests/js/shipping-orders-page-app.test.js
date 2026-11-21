@@ -98,6 +98,30 @@ jest.mock( '../../src/shipping-orders-page/order-wizard/order-wizard', () => ( {
  */
 let lastHeaders = null;
 
+/**
+ * The page mounts a search-box debounce (`SEARCH_DEBOUNCE_MS`, 400 ms, `app.tsx`) whose tick calls `setPage( 1 )`
+ * even though the box never changed. A test that pages and then asserts on page 2 therefore has to page AFTER that
+ * tick, or the tick lands in between and quietly sends the view back to page 1 (#1892). On an idle machine the whole
+ * test used to finish inside the 400 ms, so it never showed; on a loaded one it failed every time (6 of 6 runs of
+ * the bulk-resurrect test under load) with a third `fetchOrders` call carrying the default rows.
+ * Waits that long first, then presses the fake pager's button. The product behaviour (a mount tick that resets the
+ * page) is not changed here: this is a test of what the page does AFTER the tick.
+ */
+const SEARCH_DEBOUNCE_MS = 400;
+
+async function goToNextPage() {
+	// Waited out through `waitFor`, not a bare timer inside `act`: `waitFor` turns React's act environment off, so the
+	// debounce tick's own state updates are not reported as "not wrapped in act".
+	const start = Date.now();
+	await waitFor( () => expect( Date.now() - start ).toBeGreaterThanOrEqual( SEARCH_DEBOUNCE_MS + 50 ), { interval: 25 } );
+
+	// Async `act`, so the page's own (already resolved) fetch answer lands inside it too.
+	await act( async () => {
+		screen.getByText( 'Следующая страница' ).click();
+	} );
+}
+
+
 function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary, onPageChange, totalRows } ) {
 	lastHeaders = headers;
 
@@ -769,9 +793,7 @@ describe( 'the display mode is a TOGGLE, not a picker (#835, operator 09.09.2026
 			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { page: 1 } ) )
 		);
 
-		act( () => {
-			screen.getByText( 'Следующая страница' ).click();
-		} );
+		await goToNextPage();
 
 		await waitFor( () =>
 			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) )
@@ -1440,9 +1462,7 @@ describe( 'the period filter (SP-10 #826, increment 7; #855)', () => {
 			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { page: 1 } ) )
 		);
 
-		act( () => {
-			screen.getByText( 'Следующая страница' ).click();
-		} );
+		await goToNextPage();
 
 		await waitFor( () =>
 			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) )
@@ -3423,7 +3443,7 @@ describe( 'the cb column and bulk actions (#874)', () => {
 
 			// A refetch lands first — the merchant paged away while the bulk request flew.
 			fetchOrders.mockResolvedValueOnce( resultOf( [ checkableRow( { id: 7, order_number: '7' } ) ] ) );
-			fireEvent.click( screen.getByText( 'Следующая страница' ) );
+			await goToNextPage();
 
 			await waitFor( () => expect( fetchOrders.mock.calls.length ).toBe( callsBefore + 1 ) );
 			await waitFor( () => expect( screen.getByText( 'Заказ 7' ) ).toBeInTheDocument() );

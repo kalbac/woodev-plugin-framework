@@ -130,6 +130,43 @@ describe( 'a page container', () => {
 	} );
 } );
 
+describe( 'a page the menu leaves out', () => {
+	const EXPLANATION = {
+		path: '/ozon-seller/diagnostics',
+		title: 'Диагностика',
+		breadcrumbs: [ [ '/ozon-seller/products', 'OZON Seller' ], 'Диагностика' ] as ManifestPage[ 'breadcrumbs' ],
+		domId: OZON.domId,
+		message: 'Включите «Логирование» в настройках, чтобы увидеть диагностику.',
+		settings: { url: 'https://shop.test/wp-admin/admin.php?page=wc-admin&path=%2Fozon-seller%2Fsettings', label: 'Перейти к настройкам' },
+	};
+
+	test( 'gets a route that says what to switch on and links to the settings', () => {
+		const pages = buildAdminPages( { menus: [ OZON ], explanations: [ EXPLANATION ] } );
+		const route = pages[ pages.length - 1 ];
+
+		expect( route.path ).toBe( '/ozon-seller/diagnostics' );
+		expect( route.wpOpenMenu ).toBe( OZON.domId );
+
+		render( createElement( route.container, {} ) );
+
+		expect( screen.getByText( EXPLANATION.message ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'Перейти к настройкам' } ) ).toHaveAttribute( 'href', EXPLANATION.settings.url );
+	} );
+
+	test( 'a plugin without a settings page shows the sentence alone', () => {
+		const pages = buildAdminPages( { menus: [ OZON ], explanations: [ { ...EXPLANATION, settings: undefined } ] } );
+
+		render( createElement( pages[ pages.length - 1 ].container, {} ) );
+
+		expect( screen.getByText( EXPLANATION.message ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'link' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a manifest without explanations adds no extra route', () => {
+		expect( buildAdminPages( { menus: [ OZON ] } ).map( ( entry ) => entry.path ) ).not.toContain( '/ozon-seller/diagnostics' );
+	} );
+} );
+
 describe( 'the bundle entry', () => {
 	afterEach( () => {
 		removeFilter( 'woocommerce_admin_pages_list', 'woodev/marketplace-admin' );

@@ -12,6 +12,7 @@
 - [testing/js] **A test that advances the WHOLE interval does not pin the delay — it passes for 0 too.** → [advancing-the-whole-interval-does-not-pin-a-delay](../gotchas/advancing-the-whole-interval-does-not-pin-a-delay.md) (s64)
 - [testing/js] **`toEqual( [] )` against a "was not called" recorder can pass while the call happened.** → [jest-toequal-empty-array-ignores-undefined](../gotchas/jest-toequal-empty-array-ignores-undefined.md) (s52)
 - [testing/js] **jsdom's `element.click()` skips the mousedown focus a real pointer gives a `tabindex="0"` element — `activeElement` cannot tell keyboard from tap. Pass an explicit keyboard flag.** → [jsdom-click-skips-the-mousedown-focus-a-real-pointer-gives](../gotchas/jsdom-click-skips-the-mousedown-focus-a-real-pointer-gives.md) (s156)
+- [testing/js] **Async jest tests pass idle and fail under CPU load: Testing Library's 1000 ms default, doubles that draw while loading, fixed `setTimeout` sleeps, effect-delayed state — fix the wait, never retry.** → [async-jest-tests-pass-idle-and-fail-under-cpu-load](../gotchas/async-jest-tests-pass-idle-and-fail-under-cpu-load.md) (s240, #1892)
 
 ## Related
 

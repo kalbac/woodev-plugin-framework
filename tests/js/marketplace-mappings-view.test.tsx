@@ -321,26 +321,29 @@ function FakeTableCard( props: TableCardProps & { actions?: React.ReactNode[] } 
 		<div data-testid="table-card" className={ props.className }>
 			<h2>{ props.title }</h2>
 			<div>{ props.actions }</div>
-			<table aria-label={ props.title }>
-				<thead>
-					<tr>
-						{ props.headers.map( ( header ) => (
-							<th key={ header.key } className={ header.cellClassName }>
-								{ header.label }
-							</th>
-						) ) }
-					</tr>
-				</thead>
-				<tbody>
-					{ props.rows.map( ( row, index ) => (
-						<tr key={ props.rowKey( row, index ) }>
-							{ row.map( ( cell, column ) => (
-								<td key={ column }>{ cell.display }</td>
+			{ /* No table while the list is loading, like the real card: the table role means "the list is here" (#1892). */ }
+			{ ! props.isLoading && (
+				<table aria-label={ props.title }>
+					<thead>
+						<tr>
+							{ props.headers.map( ( header ) => (
+								<th key={ header.key } className={ header.cellClassName }>
+									{ header.label }
+								</th>
 							) ) }
 						</tr>
-					) ) }
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{ props.rows.map( ( row, index ) => (
+							<tr key={ props.rowKey( row, index ) }>
+								{ row.map( ( cell, column ) => (
+									<td key={ column }>{ cell.display }</td>
+								) ) }
+							</tr>
+						) ) }
+					</tbody>
+				</table>
+			) }
 		</div>
 	);
 }
