@@ -13,11 +13,11 @@ import { SelectControl } from '@wordpress/components';
 import { useEffect, useMemo } from '@wordpress/element';
 import { RecordsTable, useActionExtensions } from '../../admin-records';
 import { createActivityExtensions } from '../../admin-records/activity';
-import { EmptyCard } from '../../admin-records/states';
 import { getNavigate } from '../../admin-records/wc-runtime';
 import { FolderTabs } from '../../components/folder-tabs';
 import HelpLink, { ProblemsHelpContext } from '../../components/help-link';
 import type { OrdersPageManifest, OrdersPageMarketplace, WcPageProps } from '../types';
+import { AnalyticsTab } from './analytics/analytics-tab';
 import {
 	ANALYTICS_TAB,
 	ORDERS_TAB,
@@ -77,15 +77,6 @@ function OrdersTable( props: MarketplaceProps ) {
 	);
 }
 
-/** The «Аналитика» tab: its reports are decided later; until then it says so in PHP's words. */
-function AnalyticsTab( { page }: { page: OrdersPageManifest } ) {
-	return (
-		<div className="woodev-records">
-			<EmptyCard title={ page.labels.analytics } actions={ null } text={ page.labels.analyticsEmpty } />
-		</div>
-	);
-}
-
 /**
  * The page. A URL naming a marketplace the page does not have is put right first: the table is mounted with the cleaned query at
  * once (never with the stale account and filters), and the URL is then patched the same way through wc-admin's navigation.
@@ -118,7 +109,14 @@ export function OrdersPage( { page, query: routeQuery }: PageProps ) {
 					/>
 				</div>
 				{ tab === ANALYTICS_TAB ? (
-					<AnalyticsTab page={ page } />
+					<AnalyticsTab
+						key={ marketplace.id }
+						marketplace={ marketplace.id }
+						messages={ page.analytics }
+						path={ page.path }
+						query={ query }
+						leading={ <MarketplaceSelect page={ page } query={ query } marketplace={ marketplace } /> }
+					/>
 				) : (
 					<OrdersTable key={ marketplace.id } page={ page } query={ query } marketplace={ marketplace } />
 				) }

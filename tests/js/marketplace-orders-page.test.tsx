@@ -35,8 +35,9 @@ const LABELS = {
 	tabs: 'Разделы страницы',
 	orders: 'Заказы',
 	analytics: 'Аналитика',
-	analyticsEmpty: 'Здесь появятся отчёты по заказам маркетплейсов.',
 };
+
+const ANALYTICS = { intro: 'На этой странице отображаются заказы маркетплейса за выбранный период.', refresh: 'Обновить', loadFailed: 'Не удалось загрузить аналитику.' };
 
 function ordersPage( marketplaces: OrdersPageManifest[ 'marketplaces' ] ): OrdersPageManifest {
 	return {
@@ -46,6 +47,7 @@ function ordersPage( marketplaces: OrdersPageManifest[ 'marketplaces' ] ): Order
 		domId: 'toplevel_page_woocommerce',
 		marketplaces,
 		labels: LABELS,
+		analytics: ANALYTICS,
 	};
 }
 
@@ -193,11 +195,12 @@ describe( 'the page', () => {
 		expect( navigate ).not.toHaveBeenCalled();
 	} );
 
-	test( 'the analytics tab is a shell in PHP\'s words and reads no table', () => {
+	test( 'the analytics tab reads the marketplace\'s analytics in PHP\'s words and no table', () => {
 		render( <OrdersPage page={ ordersPage( [ OZON ] ) } query={ { tab: 'analytics' } } /> );
 
-		expect( screen.getByText( LABELS.analyticsEmpty ) ).toBeInTheDocument();
-		expect( fetchMock ).not.toHaveBeenCalled();
+		expect( screen.getByText( ANALYTICS.intro ) ).toBeInTheDocument();
+		expect( requestedOwners() ).toEqual( [] );
+		expect( fetchMock.mock.calls.every( ( [ options ] ) => String( options.path ).includes( '/admin/marketplace/ozon-seller/orders/analytics' ) ) ).toBe( true );
 
 		fireEvent.click( screen.getByRole( 'tab', { name: 'Заказы' } ) );
 

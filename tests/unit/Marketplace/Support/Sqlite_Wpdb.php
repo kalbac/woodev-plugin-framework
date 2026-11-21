@@ -231,7 +231,7 @@ final class Sqlite_Wpdb extends \wpdb {
 		}
 
 		try {
-			$statement = $this->pdo->query( (string) $query );
+			$statement = $this->pdo->query( self::to_sqlite( (string) $query ) );
 		} catch ( \PDOException $e ) {
 			$this->last_error = $e->getMessage();
 
@@ -242,7 +242,7 @@ final class Sqlite_Wpdb extends \wpdb {
 	}
 
 	/**
-	 * Rewrites the MySQL forms the stores use into SQLite's: `INSERT IGNORE`, the upsert, `GREATEST()` and `DELETE … LIMIT`.
+	 * Rewrites the MySQL forms the stores use into SQLite's: `INSERT IGNORE`, the upsert, `GREATEST()`, `DELETE … LIMIT` and `DATE_ADD()`.
 	 *
 	 * @param string $sql MySQL statement.
 	 * @return string
@@ -258,6 +258,15 @@ final class Sqlite_Wpdb extends \wpdb {
 		}
 		// SQLite has no `DELETE … LIMIT` unless it was compiled with it: bound the delete by the rowids it would have taken.
 		$sql = (string) preg_replace( '/^DELETE FROM (\S+) WHERE (.+) LIMIT (\d+)$/s', 'DELETE FROM $1 WHERE rowid IN (SELECT rowid FROM $1 WHERE $2 LIMIT $3)', $sql );
+
+		// The analytics day of an order (#1891): `DATE_ADD( col, INTERVAL n SECOND )` is SQLite's `DATETIME( col, '+n seconds' )`.
+		$sql = (string) preg_replace_callback(
+			'/DATE_ADD\(\s*([^,()]+?)\s*,\s*INTERVAL\s+(-?\d+)\s+SECOND\s*\)/',
+			static function ( array $match ): string {
+				return 'DATETIME(' . $match[1] . ", '" . ( (int) $match[2] >= 0 ? '+' : '' ) . (int) $match[2] . " seconds')";
+			},
+			$sql
+		);
 
 		return str_replace( 'GREATEST(', 'MAX(', $sql );
 	}
