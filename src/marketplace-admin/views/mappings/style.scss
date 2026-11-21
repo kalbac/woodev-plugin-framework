@@ -30,6 +30,9 @@
 	// tables do not have.
 	.woodev-records .woodev-records__col-name {
 		left: 0;
+		// The name is a link clamped to two lines: «сопоставление» (13 letters) must fit one of them. This table has the room for it —
+		// 730px of a 750px card at a 1024px window with the menu expanded — which the products table (the engine's 12ch) does not.
+		min-width: 13ch;
 	}
 
 	// «Добавить …» at the right end of the card's header.
