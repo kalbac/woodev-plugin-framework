@@ -1,6 +1,242 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.13] — 2026-11-21
+### Bug Fixes
+- **marketplace**: Critic round 2 of #1849 (catalogue, busy picker, statuses, views, heading, near-match count)
+
+- **marketplace**: Name every handled event type; Diagnostics address links to the Notifications tab (PR #1850 review)
+
+- Keep the shared select placeholder; marketplace mapping editor passes its own
+
+- **marketplace**: Disarm a pending confirmation when another button takes the result line
+
+- **marketplace**: Products table fits 1040px, article clipped to two lines, parent keeps every state group
+
+- Variants table lets the scroll shadows show; wiki drops the removed logging line
+
+- Variants table rows stay transparent so the scroll shadows show on every row
+
+- **marketplace**: Product tab round 2 — healthy default account, variation header problems, narrow-panel fit
+
+- **records**: Clear a field's value when its hiding switch turns on (#1862)
+
+- **marketplace**: Products tables fit 1024 collapsed, quiet «Обновить список», chevron expander, ID labels (#1861 round 2)
+
+- **marketplace**: Article change — reserve the destination everywhere, survive DB errors, never orphan a waiting change (#1860 round 2)
+
+- **marketplace**: Schema revision 3 for the article change columns (#1860)
+
+- **marketplace**: Cards list refresh recovery, notification follow-ups, fenced finish (#1863)
+
+- **marketplace**: Draw the variation bulk result as a real dismissible WP notice (#1859)
+
+- **marketplace**: Keep the variation bulk notice's box against WooCommerce's #variable_product_options .notice reset; catalogues (#1859)
+
+- **records**: A silent reload keeps the merchant's selection (#1873)
+
+- **marketplace**: Log a successful offer_id rename at debug, not error
+
+- **marketplace**: Data status names poll attempts; a stale marketplace preset is cleared before its table mounts (#1878)
+
+- **marketplace**: The mappings list's «Атрибуты» read is local-only, through an optional cached-fields contract
+
+- **marketplace**: Orders source filter — WC 8.2 gate, status counts follow the choice
+
+- **marketplace**: Orders source filter — visible hidden-orders line, counts like WC «All»
+
+- **marketplace**: Ozon product tab fits real widths — label fit measured, wider article input, stacked variants at 1024
+
+- **marketplace**: Mappings lists fit 1024 without a sideways scroll, icon row actions, header row with the add button at the right
+
+- **marketplace**: Restore an enabled account when queueing its deletion fails
+
+- **marketplace**: Dialog height, connection header spacing, one Russian age formatter
+
+- **marketplace**: Shared dialog keeps its footer in view when WP wraps the content
+
+- **marketplace**: The products tables fit a 1024px screen with the photo column and three row icons
+
+- **marketplace**: Show the buyer's note in the marketplace order details box
+
+- **marketplace**: Lay out the marketplace order details box
+
+- **marketplace**: Records tables chrome after the operator's review — descriptions, «?» help, variation photos, always-on pager, selects, icon groups, first column
+
+- **marketplace**: A records table never stays on a page past the end of its result
+
+- **marketplace**: Analytics critic round — pending orders, rejected postings, all statuses (#1891)
+
+- **marketplace**: Analytics claims nothing without the adapter's status classification (#1891)
+
+- **shipping-orders**: Align sortable headers over their values, fit the tables at 1024px (#1909)
+
+- **marketplace-admin**: One dialog backdrop, Russian note for hidden diagnostics, days-left plural (#1897)
+
+- **marketplace-admin**: Move the days-left phrase out of the pure Account layer (#1897)
+
+- **marketplace-admin**: Explain a hidden diagnostics bookmark through a client route (#1897)
+
+- **marketplace-admin**: Register the hidden diagnostics path with wc-admin so a bookmark loads the bundle (#1897)
+
+
+### Documentation
+- Save session s237 — framework 2.1.12, Ozon live check, marketplace UI polish
+
+- S237 evening — operator UI review collected into #1857–#1863; overnight handoff
+
+- Save session s238 — overnight on the operator's review, second review into cards #1875–#1885; overnight handoff
+
+- Save session s239 — marketplace admin cards, shared table look, 5 gotchas, overnight handoff
+
+- S239 handoff — operator approved the 2.1.13 release and the «Аналитика» scope (#1891)
+
+
+### Features
+- **marketplace**: Redesign the product Ozon tab — status dialog, button group, account select (#1857, #1858)
+
+- **marketplace**: «Весь магазин» switch in the link-by-SKU dialog; fix the searchable select (#1862)
+
+- **marketplace**: Change the article of a sent card, queued and visible (#1860)
+
+- **marketplace**: Products tables in the style of «Заказы доставки» (#1861)
+
+- **marketplace**: Keep the cards list in its own table, refreshed by page (#1863)
+
+- **marketplace**: Marketplace group in the Variations tab's Bulk actions (#1859)
+
+- **records**: The cards list reloads itself when the account's load finishes (#1873)
+
+- **marketplace**: Shared «Заказы маркетплейсов» page — server side (#1878)
+
+- **marketplace**: «Заказы маркетплейсов» page in the browser — tabs, marketplace select, advanced filters, data status (#1878)
+
+- **marketplace**: One shared dialog mechanism and look for the marketplace admin
+
+- **marketplace**: Mappings and profiles as tables with row actions, the shared delete dialog, v1 columns and empty states
+
+- **marketplace**: Products tables — footer page size, filter row buttons, photo column, sticky-cell fixes, card row actions, section descriptions
+
+- **marketplace**: «Источник» filter on the WooCommerce orders list
+
+- **marketplace**: Ozon product tab — problem badge, article cancel, button labels and tooltips, variants table
+
+- **marketplace**: Tools/diagnostics wrapper, connection account cards with switch and description
+
+- **marketplace**: A marketplace order opens read-only on both order screens
+
+- **marketplace**: Order box status badge, wide values, «Этикетка» button; settings spacing
+
+- **marketplace**: The «Этикетка» button is off for a posting that cannot have a label
+
+- **marketplace**: Mappings and profiles lists on the records engine, with profile values
+
+- **marketplace**: «Статус нового заказа» on the account parameters tab
+
+- **marketplace**: «Аналитика» tab of «Заказы маркетплейсов» (#1891)
+
+
+### Tests
+- **marketplace**: The orders page URL leads to «Заказы маркетплейсов» (#1878)
+
+- **marketplace**: The row-actions test stubs the WooCommerce placeholder
+
+- Drop the duplicate is_admin stub main already has in FlowWiringTest
+
+- Run OrderDetailsBoxTest in separate processes so its wc_date_format stub does not leak
+
+- Stop async jest tests failing under CPU load (#1892)
+
+
+### Build
+- Marketplace-admin bundles for the Orders/Products polish
+
+- Bundles for the settings and diagnostics polish
+
+- Bundles for the settings polish round 2
+
+- Bundles for the product tab and mappings polish
+
+- Bundles for the records tables polish (wave 2)
+
+- Bundles for the product tab and settings polish (wave 2)
+
+- Rebuild bundles for #1862
+
+- Catalogues and bundles for #1857 #1858
+
+- Catalogues and bundles for #1861
+
+- Catalogues for #1863
+
+- Catalogues for #1860
+
+- Catalogues and bundles for #1873
+
+- Catalogues and bundles for #1875
+
+- Catalogues and bundles for #1878
+
+- Catalogues and bundles for #1880
+
+- Catalogues and bundles for #1880
+
+- Catalogues and bundles for #1881
+
+- Catalogues and bundles for #1876
+
+- Catalogues and bundles for #1876
+
+- Catalogues and bundles for #1883
+
+- Catalogues and bundles for #1883
+
+- Catalogues and bundles for #1883
+
+- Catalogues and bundles for #1881
+
+- Catalogues and bundles for #1879
+
+- Catalogues and bundles for #1879
+
+- Catalogues and bundles for #1881
+
+- Catalogues and bundles for #1898
+
+- Catalogues and bundles for #1898
+
+- Catalogues and bundles for #1898
+
+- Catalogues and bundles for #115
+
+- Catalogues and bundles for #1903
+
+- Catalogues and bundles for #1907
+
+- Catalogues and bundles for #1897
+
+- Catalogues and bundles for #1909
+
+- Catalogues and bundles for #1891; docs: gotcha count 544 after the parallel merges
+
+
+### Polish
+- **marketplace**: Orders and Products tables fit 1024, one status badge, grouped bulk select
+
+- **marketplace**: Settings tabs, accounts, notifications and diagnostics (s237 audit 29-44, 46-51)
+
+- **marketplace**: Mappings lists, one select look, product Ozon tab layout
+
+- **marketplace**: Products table fits 1040px, no edge fade, Russian footer plural, one select look
+
+- **marketplace**: Product tab, settings and diagnostics re-check fixes
+
+
+### Style
+- **marketplace**: The mappings and profiles tables fit a 1024px screen; wiki note
+
+
+
 ## [2.1.12] — 2026-11-18
 ### Bug Fixes
 - **marketplace**: Count put-offs in a row, not over a whole walk (#1835)
