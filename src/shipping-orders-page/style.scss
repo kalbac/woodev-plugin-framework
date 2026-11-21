@@ -696,23 +696,42 @@
 }
 
 /**
- * FIT (s164, operator's rig 09.10.2026): at a 1400 px window the «Действие» column with four icon buttons ran past the
- * card and the fourth was cut off. WooCommerce's table pads every cell 24 px a side (measured: `padding: 16px 24px`),
- * nine columns' worth; the text columns wrap, so the padding is what decides whether the table fits. 12 px a side
- * hands back ~110 px — measured on the rig with this SCSS compiled and injected through Playwright, 1400 px window:
+ * FIT (s164, operator's rig 09.10.2026; narrowed again in #1909): at a 1400 px window the «Действие» column with four icon buttons ran
+ * past the card and the fourth was cut off. WooCommerce's table pads every cell 24 px a side (measured: `padding: 16px 24px`),
+ * nine columns' worth; the text columns wrap, so the padding is what decides whether the table fits. 12 px a side handed back ~110 px
+ * (1400 px window: table 1234 → 1160 of a 1160 card).
  *
- * | window  | padding | table / card | right edge of the widest group |
- * |---------|---------|--------------|--------------------------------|
- * | 1400 px | 24 px   | 1234 / 1160  | 1410 (card ends 1360) — cut    |
- * | 1400 px | 12 px   | 1160 / 1160  | 1348 with FIVE icons — fits    |
+ * #1909, measured on the rig (card 784 px at a 1024 window with the WP menu expanded, 908 folded; real rows: three icons, «Неизвестно»):
  *
- * Below ~1300 px a five-icon group still outgrows the card; the card then scrolls like any WooCommerce table.
+ * | cell padding | table at 1024, menu expanded | with «Не доставлено» in a row | with four icons | with five icons |
+ * |--------------|------------------------------|--------------------------------|-----------------|-----------------|
+ * | 12 px        | 849 — scrolls inside the card | —                              | —               | —               |
+ * | 10 px        | 784 — fits                   | 800 — scrolls                  | 813 — scrolls   | 846 — scrolls   |
+ * | 8 px         | 784 — fits                   | 784 — fits                     | 797 — scrolls   | 829 — scrolls   |
+ * | 7 px         | 784 — fits                   | 784 — fits                     | 784 — fits      | scrolls         |
+ *
+ * So the cells pad 7 px (critic's four-icons + «Не доставлено» row). Five icon buttons (5 × 32.5 px) are the one row that still outgrows a 784 px card; the card then scrolls like any
+ * WooCommerce table, and no padding or column width can change that (the group alone is 165 px of a table whose text columns are
+ * already at their minimum).
  */
+$orders-cell-padding: 7px;
+
 .woodev-orders .woocommerce-table__table {
 	th,
 	td {
-		padding-left: 12px;
-		padding-right: 12px;
+		padding-left: $orders-cell-padding;
+		padding-right: $orders-cell-padding;
+	}
+
+	// The heading of a sortable column («Заказ», «Дата») is WooCommerce's button inside a cell that pads 16px on the left, and the
+	// button pads 12px more: the label stood 17px to the right of the values under it. The cell pads like every other cell and the
+	// button adds none, so the label starts above the first letter of its column. (The sort arrow hangs in the button's own padding.)
+	.woocommerce-table__header.is-left-aligned.is-sortable {
+		padding-left: $orders-cell-padding;
+
+		.components-button {
+			padding-left: 0;
+		}
 	}
 }
 
@@ -738,7 +757,7 @@
 	}
 
 	.woodev-orders-col-status {
-		width: 14ch;
+		width: 12ch;
 	}
 
 	.woodev-orders-col-text {
@@ -2007,5 +2026,22 @@
 		margin: 0;
 		color: wd.$muted;
 		font-size: 12px;
+	}
+}
+
+/**
+ * The two tables of the tab (#1909): the carrier table has nine columns and its headings («Оплачено за доставку», «Отказ / возврат»)
+ * stood on one line, which made it 1195 px wide — it scrolled inside its card on a 1280 px screen. The cells pad like the orders table's,
+ * and a heading wraps, so both tables fit a 784 px card (1024 px, WP menu expanded). Measured on the rig: 1195 → 784.
+ */
+.woodev-analytics__table {
+	.woocommerce-table__header,
+	.woocommerce-table__item {
+		padding-left: $orders-cell-padding;
+		padding-right: $orders-cell-padding;
+	}
+
+	.woocommerce-table__header {
+		white-space: normal;
 	}
 }
