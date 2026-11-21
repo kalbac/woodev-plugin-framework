@@ -13,8 +13,9 @@ defined( 'ABSPATH' ) || exit;
  * The adapter maps its raw statuses (Ozon ~13 FBS statuses; Wildberries `supplierStatus` x `wbStatus`) to the canonical
  * vocabulary below; this map turns a canonical status into a WooCommerce order status.
  *
- * `delivered` becomes `completed`, `cancelled` becomes `cancelled`, everything else takes the configured default. A
- * merchant-editable table is a v2.1 proposal.
+ * `delivered` becomes `completed`, `cancelled` becomes `cancelled`, everything else takes the configured default. The order
+ * writer applies the map to an existing order only when the marketplace status changed (#1920). A merchant-editable table is a
+ * v2.1 proposal.
  *
  * @since 2.0.29
  */

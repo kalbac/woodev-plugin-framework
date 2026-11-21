@@ -24,7 +24,8 @@ defined( 'ABSPATH' ) || exit;
  * 3. register it with the token-fenced `UPDATE … WHERE wc_order_id IS NULL AND claim_token = …`; zero rows → the claim was
  *    lost or another writer registered first: an order this writer created is discarded **before it ever took stock**, the
  *    loss is reported, and {@see Order_Claim_Exception::lost()} is thrown — the current holder completes the work;
- * 4. after `holds()`, give the order its data and status (this is when WooCommerce reduces stock), then record the refresh
+ * 4. after `holds()`, give the order its data and — for a new order, or when the marketplace status really changed since the
+ *    last refresh (#1920) — its mapped status (this is when WooCommerce reduces stock), then record the refresh
  *    in the row, fenced by the token. When that record loses, the order may hold this writer's older view:
  *    {@see Order_Claim_Exception::stale()} tells the caller to refresh again.
  *
@@ -196,9 +197,17 @@ final class Registry_Order_Writer implements Order_Writer {
 		$this->ensure_holds( $order, $token, 'update' );
 		$this->checkpoint( 'before_update' );
 
-		// Spec 5.5 step 3: everything but delivered / cancelled takes the configured default, on new and existing orders alike.
-		$default = self::bare_status( (string) call_user_func( $this->default_status, $order->account_id() ) );
-		$this->store->update( $wc_order, $order, $map->wc_status( $order->status_canonical(), $default ), $members, $created );
+		// Spec 5.5 step 3: everything but delivered / cancelled takes the configured default. A new order takes it from the
+		// map; an existing one only when the marketplace's own status really changed (#1920), so a status the merchant set by
+		// hand lives until the next real transition. Handing the store the order's current status leaves it untouched.
+		$wc_status = $wc_order->get_status();
+
+		if ( $created || self::status_changed( $row, $order ) ) {
+			$default   = self::bare_status( (string) call_user_func( $this->default_status, $order->account_id() ) );
+			$wc_status = $map->wc_status( $order->status_canonical(), $default );
+		}
+
+		$this->store->update( $wc_order, $order, $wc_status, $members, $created );
 
 		$recorded = $this->registry->record(
 			$order->account_id(),
@@ -443,6 +452,23 @@ final class Registry_Order_Writer implements Order_Writer {
 			null,
 			$dates
 		);
+	}
+
+	/**
+	 * Tells whether the marketplace's status differs from the one the registry row saw at the previous refresh.
+	 *
+	 * The row is read before this write records the new status, so `status_raw` is the last-seen one. A row that saw no status
+	 * yet (an empty `status_raw`: a first write that died before recording) differs from any real status, so it counts as a change.
+	 * The column keeps 32 characters, so the new status is cut the same way before the comparison.
+	 *
+	 * @param array{status_raw:string}|null $row   Registry row as it was before this write.
+	 * @param Order_DTO                     $order Whole order.
+	 * @return bool
+	 */
+	private static function status_changed( ?array $row, Order_DTO $order ): bool {
+		$last_seen = null === $row ? '' : $row['status_raw'];
+
+		return substr( $order->status_raw(), 0, 32 ) !== $last_seen;
 	}
 
 	/**
