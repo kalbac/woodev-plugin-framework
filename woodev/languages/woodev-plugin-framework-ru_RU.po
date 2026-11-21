@@ -13006,3 +13006,31 @@ msgstr ""
 #: marketplace/settings/class-accounts-sections.php:932
 msgid "Новые заказы"
 msgstr ""
+
+#: marketplace/admin/class-admin-collector.php:373
+msgid "Включите «Логирование» в настройках, чтобы увидеть диагностику."
+msgstr ""
+
+#: marketplace/admin/class-admin-collector.php:379
+msgid "Перейти к настройкам"
+msgstr ""
+
+#: marketplace/admin/diagnostics/class-report-builder.php:491
+#, php-format
+msgid "%1$s (%2$s)"
+msgstr "%1$s (%2$s)"
+
+#: marketplace/admin/notices/class-key-expiry-notices.php:215
+#, php-format
+msgid "Ключ истекает %1$s (%2$s)."
+msgstr ""
+
+#: marketplace/admin/shared/class-russian-plural.php:56
+#, php-format
+msgid "ещё %1$d %2$s"
+msgstr ""
+
+#: marketplace/settings/class-account-status.php:282
+#, php-format
+msgid "ключ до %1$s (%2$s)"
+msgstr ""
