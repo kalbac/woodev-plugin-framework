@@ -707,13 +707,14 @@
  * |--------------|------------------------------|--------------------------------|-----------------|-----------------|
  * | 12 px        | 849 — scrolls inside the card | —                              | —               | —               |
  * | 10 px        | 784 — fits                   | 800 — scrolls                  | 813 — scrolls   | 846 — scrolls   |
- * | 8 px         | 784 — fits                   | 784 — fits                     | 784 — fits      | 810 — scrolls   |
+ * | 8 px         | 784 — fits                   | 784 — fits                     | 797 — scrolls   | 829 — scrolls   |
+ * | 7 px         | 784 — fits                   | 784 — fits                     | 784 — fits      | scrolls         |
  *
- * So the cells pad 8 px. Five icon buttons (5 × 32.5 px) are the one row that still outgrows a 784 px card; the card then scrolls like any
+ * So the cells pad 7 px (critic's four-icons + «Не доставлено» row). Five icon buttons (5 × 32.5 px) are the one row that still outgrows a 784 px card; the card then scrolls like any
  * WooCommerce table, and no padding or column width can change that (the group alone is 165 px of a table whose text columns are
  * already at their minimum).
  */
-$orders-cell-padding: 8px;
+$orders-cell-padding: 7px;
 
 .woodev-orders .woocommerce-table__table {
 	th,

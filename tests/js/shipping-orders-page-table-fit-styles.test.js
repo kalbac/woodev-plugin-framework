@@ -7,7 +7,7 @@
  *
  *  1. a sortable heading («Заказ», «Дата») pads exactly like the cells under it, and its button adds no left padding — otherwise
  *     the label stands 17px to the right of its values (the cell's 16px + the button's 12px against the cell's own padding);
- *  2. the cells pad 8px, the one value that keeps the orders table inside a 784px card (1024px window, menu expanded) even for
+ *  2. the cells pad 7px, the one value that keeps the orders table inside a 784px card (1024px window, menu expanded) even for
  *     a «Не доставлено» badge or four action icons;
  *  3. the analytics tables pad the same and let a heading wrap, so the nine-column carrier table is not 1195px wide.
  *
@@ -42,8 +42,8 @@ function block( source, needle ) {
 }
 
 describe( 'the orders table cells', () => {
-	test( 'pad 8px through one variable', () => {
-		expect( scss ).toContain( '$orders-cell-padding: 8px;' );
+	test( 'pad 7px through one variable', () => {
+		expect( scss ).toContain( '$orders-cell-padding: 7px;' );
 
 		const table = block( scss, '.woodev-orders .woocommerce-table__table {\n\tth,' );
 
