@@ -994,7 +994,8 @@ active marketplace plugin (operator review s238, LIST.md §4.1). It **hosts** ea
   argument of the table that was left. The marketplace select leads the filter row (`RecordsTable` prop `leadingFilter`) and is
   not drawn with one marketplace — the account select's rule. The help links are the plugin's «Заказы» page's. No merged «all
   marketplaces» list: accounts, actions and statuses are per marketplace, the same reason the table shows one account at a time.
-- **«Аналитика»** is a shell (`EmptyCard` with PHP's sentence); its reports are a separate card.
+- **«Аналитика»** (#1891, first version: card items 1–6 and 8; not assembly speed, not a marketplace comparison) — see the next
+  section.
 - **Engine additions (generic, optional).** A filter may declare `advanced` (not the search, not the counted view row): it is
   drawn only under the «Расширенные фильтры» switch (message `advanced_filters`), which is the URL argument `advanced_filters=1`
   and never part of the list request; a link that sets such a filter opens the row; switching off puts every advanced filter back
@@ -1011,6 +1012,41 @@ active marketplace plugin (operator review s238, LIST.md §4.1). It **hosts** ea
   or cursor left (first 30-day catch-up, recovery after an outage) and returns normally — so a partial run is recorded too, and
   the label and tooltip say «опрос», never «обновлено» (critic of PR #1890). Certifying completion needs an optional completion
   signal from the handler — a contract this card did not add.
+
+## «Аналитика» of «Заказы маркетплейсов» (framework 2.1.13, #1891)
+
+The tab's figures for one marketplace plugin, in the look of the delivery «Аналитика» (tiles with the previous period, a chart, tables;
+filters marketplace + account + WooCommerce's `DateRangeFilterPicker`). Delivery code is not touched; the tab imports only its pure
+`date-range.ts` / `format.ts` and `Analytics_Aggregator::days_in_range()` / `pick_interval()`.
+
+- **Route.** `GET woodev/v1/admin/marketplace/{plugin id}/orders/analytics` (`Orders_Analytics_Controller`, registered by
+  `Site_Orders_Module::register()` with the plugin's «Заказы» page capability). `after`/`before` (≤ 800 days), optional
+  `compare_after`/`compare_before`, `interval`, `account` (`all` or an ENABLED account of the marketplace, else 400
+  `…_unknown_account`, on which the tab drops the argument), `refresh`. The answer is a transient for 300 s keyed by the request,
+  the accounts, the user and the storage (`SCHEMA_VERSION` in the key).
+- **SQL** (`Orders_Analytics_Query`): grouped statements over `postings AS pg` joined to the order on either storage
+  (`Site_Orders_Storage`, which now also gives `total_expression()`, `created_via_expression()`, `id_column()`, `orders_from()`);
+  days are site days through one fixed offset (`DATE(DATE_ADD(date, INTERVAL offset SECOND))` — the shops run on Russian time
+  zones without daylight saving). Population = live orders minus failed and checkout drafts; `wc-pending` stays (a merchant may pick
+  it as the new-order status). A cancellation = `wc-cancelled` OR a posting in the adapter's rejected statuses (`not_accepted`
+  keeps its order «В обработке»); cancelled, rejected and refunded orders bring no revenue, units or products. Products and units
+  read `woocommerce_order_items` / `…_itemmeta` (`_product_id` 0 = sold without a shop product, grouped by item name). The shop
+  share is every shop order of the period (pending only when the marketplace made it, never one with a rejected posting) vs those
+  whose `created_via` is the adapter's `order_meta()->created_via()`.
+- **Raw codes belong to the adapter.** Optional `Admin\Shared\Posting_Status_Groups`: `waiting_posting_statuses()` (packing,
+  handing over) and `rejected_posting_statuses()`, read by `Posting_Status_Sets`. Without the contract nothing is guessed: the
+  answer has `classified: false` and `stuck: null` (the tab draws no stuck block, never «Зависших отправлений нет.»), only
+  `wc-cancelled` orders are cancellations and the footnote says so (`footnoteOrders`). Explicit empty lists are believed. The Ozon
+  adapter implements it in its own repo (ozon#118: waiting `awaiting_packaging`, `awaiting_deliver`; rejected `cancelled`,
+  `not_accepted`, `cancelled_from_split_pending`).
+- **Now, not the period.** Statuses = every posting of a live order (finished ones too) by `status_raw` and account; each count
+  links to the «Заказы» tab with `account` + `filter_posting_status` and «Состояние» left at «Все» — the same rows. Stuck = open
+  postings in the waiting statuses first seen more than `STUCK_HOURS` (24) ago; filter
+  `woodev_marketplace_stuck_posting_hours( $hours, $plugin_id )`; the 20 oldest are listed.
+- **Tab.** The tiles (and so the shop share) show for an empty period too; the chart keys its series by account id (a shared name
+  gets «(#id)»).
+- **Words** are PHP's (`Orders_Analytics_Controller::messages()`, manifest `ordersPage.analytics`); the stuck sentence comes with
+  the answer, since the threshold is per plugin.
 
 ## Stored cards list (framework 2.1.13, #1863)
 

@@ -1,0 +1,78 @@
+// The «Аналитика» tab of «Заказы маркетплейсов» (#1891). WooCommerce's components bring their own cards; this spaces them like the
+// delivery tab does (`.woodev-analytics` in the delivery bundle, which this page does not load), dims the body while a new period
+// loads and keeps the figures of a column on one line.
+//
+// @package woodev-plugin-framework
+
+@use '../../../components/tokens' as wd;
+
+.woodev-marketplace-analytics {
+	display: flex;
+	flex-direction: column;
+	gap: wd.$gap-lg;
+
+	> .woodev-records__description {
+		margin: 0;
+	}
+
+	// The filter row: the toolbar class alone is a block here, so WooCommerce's date picker (582px) pushed «Обновить» onto a row of its own.
+	&__filters {
+		align-items: flex-end;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+
+	&__body {
+		display: flex;
+		flex-direction: column;
+		gap: wd.$gap-lg;
+		transition: opacity 0.15s;
+
+		&.is-loading {
+			opacity: 0.55;
+			pointer-events: none;
+		}
+	}
+
+	&__section {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+
+		> .woodev-records__description {
+			margin: 0;
+		}
+	}
+
+	&__tile-note {
+		display: block;
+		color: wd.$muted;
+		font-size: 12px;
+	}
+
+	&__empty {
+		margin: 0;
+		padding: wd.$gap-lg;
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius;
+		background: wd.$surface;
+		color: wd.$muted;
+	}
+
+	&__footnote {
+		margin: 0;
+		color: wd.$muted;
+		font-size: 12px;
+	}
+
+	// A money figure is two words to the browser («3 980 ₽»): a narrow column must not break it.
+	.woocommerce-table__item.woodev-marketplace-analytics__number,
+	.woocommerce-table__header.woodev-marketplace-analytics__number {
+		white-space: nowrap;
+	}
+
+	&__status {
+		white-space: nowrap;
+	}
+}

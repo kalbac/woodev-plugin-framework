@@ -63,6 +63,12 @@ final class Site_Orders_Module {
 			'rest_api_init',
 			static function () use ( $plugin, $accounts, $db ): void {
 				self::register_provider( $plugin, $accounts, $db );
+
+				$analytics = Orders_Analytics_Controller::for_plugin( $plugin, $accounts, $db );
+
+				if ( null !== $analytics ) {
+					$analytics->register_routes();
+				}
 			},
 			5 // Before the REST registrar walks its controllers (priority 10), so the routes of a table registered now exist.
 		);

@@ -64,8 +64,9 @@ export interface OrdersPageManifest {
 		tabs: string;
 		orders: string;
 		analytics: string;
-		analyticsEmpty: string;
 	};
+	/** The words of the «Аналитика» tab (`Orders_Analytics_Controller::messages()`). */
+	analytics: Record< string, string >;
 }
 
 export interface ManifestMenu {

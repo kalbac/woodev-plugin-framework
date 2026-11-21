@@ -256,12 +256,12 @@ final class Marketplace_Orders_Page {
 			'domId'        => self::PARENT_DOM_ID,
 			'marketplaces' => $marketplaces,
 			'labels'       => [
-				'marketplace'    => __( 'Маркетплейс', 'woodev-plugin-framework' ),
-				'tabs'           => __( 'Разделы страницы', 'woodev-plugin-framework' ),
-				'orders'         => __( 'Заказы', 'woodev-plugin-framework' ),
-				'analytics'      => __( 'Аналитика', 'woodev-plugin-framework' ),
-				'analyticsEmpty' => __( 'Здесь появятся отчёты по заказам маркетплейсов.', 'woodev-plugin-framework' ),
+				'marketplace' => __( 'Маркетплейс', 'woodev-plugin-framework' ),
+				'tabs'        => __( 'Разделы страницы', 'woodev-plugin-framework' ),
+				'orders'      => __( 'Заказы', 'woodev-plugin-framework' ),
+				'analytics'   => __( 'Аналитика', 'woodev-plugin-framework' ),
 			],
+			'analytics'    => Orders_Analytics_Controller::messages(),
 		];
 	}
 

@@ -13034,3 +13034,139 @@ msgstr ""
 #, php-format
 msgid "ключ до %1$s (%2$s)"
 msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:163
+msgid "На этой странице отображаются заказы маркетплейса за выбранный период: выручка и отмены по аккаунтам, проданные товары, статусы отправлений и отправления, которые ждут упаковки или отгрузки."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:165
+msgid "Все аккаунты"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:170
+msgid "За выбранный период заказов с маркетплейса нет. Выберите период шире."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:175
+msgid "Средний чек"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:176
+msgid "Товаров в заказе"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:177
+msgid "Доля в выручке магазина"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:179
+#, php-format
+msgid "отменено заказов: %s"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:181
+#, php-format
+msgid "выручка магазина: %s"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:182
+msgid "по всем аккаунтам маркетплейса"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:183
+msgid "Заказы по аккаунтам"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:184
+msgid "Выручка по аккаунтам"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:185
+msgid "Аккаунты"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:187
+msgid "По аккаунтам"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:189
+msgid "Отправления по статусам"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:190
+msgid "Все отправления по их статусу на маркетплейсе сейчас, завершённые тоже. Число открывает список заказов с этим статусом."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:192
+msgid "Отправлений"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:193
+msgid "Всего"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:194
+msgid "Отправлений пока нет."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:195
+msgid "Зависшие отправления"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:196
+msgid "Зависших отправлений нет."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:199
+msgid "Ждёт, ч"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:200
+msgid "Топ товаров"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:202
+msgid "Продано, шт."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:203
+msgid "За этот период товары не продавались."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:204
+msgid "Продано, но не связано с сайтом"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:205
+msgid "Позиции заказов маркетплейса, для которых не нашёлся товар магазина. Свяжите их на странице «Товары», чтобы остатки и цены синхронизировались."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:206
+msgid "Название на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:207
+msgid "Все проданные позиции связаны с товарами магазина."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:208
+msgid "Отменённые — отменённые заказы и отправления, которые маркетплейс отменил или не принял; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:209
+msgid "Отменённые — заказы со статусом «Отменён»; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:367
+#, php-format
+msgid "Отправления, которые ждут упаковки или отгрузки дольше %d часа с момента, когда заказ пришёл в магазин."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:392
+#, php-format
+msgid "Показаны самые старые: %1$d из %2$d."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:447
+msgid "Такого аккаунта нет."
+msgstr ""

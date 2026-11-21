@@ -144,14 +144,53 @@ final class Site_Orders_Storage {
 	/**
 	 * The order total: a column on HPOS, a meta value (as a number) on the posts store.
 	 *
+	 * @since 2.1.13 Public, for the «Аналитика» sums.
+	 *
 	 * @param \wpdb $db Database.
-	 * @return string
+	 * @return string A fixed or prepared fragment over the order `o`.
 	 */
-	private function total_expression( \wpdb $db ): string {
+	public function total_expression( \wpdb $db ): string {
 		if ( $this->hpos ) {
 			return 'o.total_amount';
 		}
 
 		return $db->prepare( '(SELECT CAST(tm.meta_value AS DECIMAL(20,6)) FROM %i AS tm WHERE tm.post_id = o.ID AND tm.meta_key = %s LIMIT 1)', $db->postmeta, '_order_total' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Both values are placeholders.
+	}
+
+	/**
+	 * The plugin that created the order (`created_via`): a column of the operational data table on HPOS, a meta value on the posts store.
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param \wpdb $db Database.
+	 * @return string A prepared fragment over the order `o`.
+	 */
+	public function created_via_expression( \wpdb $db ): string {
+		if ( $this->hpos ) {
+			return $db->prepare( '(SELECT od.created_via FROM %i AS od WHERE od.order_id = o.id LIMIT 1)', $db->prefix . 'wc_order_operational_data' );
+		}
+
+		return $db->prepare( '(SELECT cm.meta_value FROM %i AS cm WHERE cm.post_id = o.ID AND cm.meta_key = %s LIMIT 1)', $db->postmeta, '_created_via' );
+	}
+
+	/**
+	 * @since 2.1.13
+	 *
+	 * @return string The column of the order's id.
+	 */
+	public function id_column(): string {
+		return $this->hpos ? 'o.id' : 'o.ID';
+	}
+
+	/**
+	 * Every order of the store as `o`, for a read that does not start from the registry (the shop's own revenue).
+	 *
+	 * @since 2.1.13
+	 *
+	 * @param \wpdb $db Database.
+	 * @return string A prepared fragment.
+	 */
+	public function orders_from( \wpdb $db ): string {
+		return $db->prepare( '%i AS o', $this->table );
 	}
 }

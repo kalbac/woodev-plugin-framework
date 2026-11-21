@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Orders;
 use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Framework\Marketplace\Admin\Page;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Marketplace_Orders_Page;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Controller;
 use Woodev\Tests\Unit\TestCase;
 
 /**
@@ -164,7 +165,8 @@ final class MarketplaceOrdersPageTest extends TestCase {
 			$manifest['marketplaces'],
 			'The marketplace name when the plugin gives one, the menu title otherwise.'
 		);
-		$this->assertSame( [ 'marketplace', 'tabs', 'orders', 'analytics', 'analyticsEmpty' ], array_keys( $manifest['labels'] ) );
+		$this->assertSame( [ 'marketplace', 'tabs', 'orders', 'analytics' ], array_keys( $manifest['labels'] ) );
+		$this->assertSame( array_keys( Orders_Analytics_Controller::messages() ), array_keys( $manifest['analytics'] ), 'The «Аналитика» tab gets its words from PHP.' );
 		$this->assertNull(
 			Marketplace_Orders_Page::build_manifest( [ [ 'pluginId' => 'x', 'title' => 'X', 'pages' => [ $entries[0]['pages'][0] ] ] ], [] ),
 			'No orders page the user may open: no page.'
