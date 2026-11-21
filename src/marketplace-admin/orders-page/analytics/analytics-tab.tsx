@@ -300,7 +300,7 @@ export function AnalyticsTab( { marketplace, messages: m, path, query, leading }
 						<>
 							<ChartPanel data={ tableProps.data } messages={ m } metric={ metric } path={ path } query={ query } loading={ loading } />
 							<PeriodTables { ...tableProps } />
-							<p className="woodev-marketplace-analytics__footnote">{ m.footnote }</p>
+							<p className="woodev-marketplace-analytics__footnote">{ tableProps.data.classified ? m.footnote : m.footnoteOrders }</p>
 						</>
 					) }
 					<NowTables { ...tableProps } />

@@ -12,8 +12,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The registry stores a posting's status as the marketplace sent it (`status_raw`); only the adapter knows what those codes mean.
  * An adapter that implements this tells the «Аналитика» tab which codes wait on the shop (packing, handing over) and which ones
- * the marketplace cancelled or did not accept. Without it the tab uses {@see Posting_Status_Sets}' defaults, the framework's own
- * canonical words.
+ * the marketplace cancelled or did not accept. Without it the framework does not guess: the tab shows no stuck postings block and
+ * counts only cancelled WooCommerce orders as cancellations ({@see Posting_Status_Sets}). Empty lists are a real answer: «none of
+ * my codes is one of these».
  *
  * @since 2.1.13
  */

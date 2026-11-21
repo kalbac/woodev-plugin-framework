@@ -72,6 +72,7 @@ const MESSAGES: Record< string, string > = {
 	unlinkedName: 'Название на маркетплейсе',
 	unlinkedEmpty: 'Все проданные позиции связаны с товарами магазина.',
 	footnote: 'Выручка — сумма заказов без отменённых и возвращённых.',
+	footnoteOrders: 'Отменённые — заказы со статусом «Отменён».',
 };
 
 const metrics = ( overrides = {} ) => ( {
@@ -105,6 +106,7 @@ function response( overrides: Partial< AnalyticsResponse > = {} ): AnalyticsResp
 		],
 		intervals: [ { start: '2026-11-01', end: '2026-11-01', totals: { orders: 2, revenue: 1200 }, accounts: { 1: { orders: 2, revenue: 1200 } } } ],
 		share: { shop_revenue: 3500, marketplace_revenue: 2000, share: 0.5714, previous: 0.8, delta: -28.6 },
+		classified: true,
 		statuses: [ { code: 'awaiting_packaging', label: 'Ожидает упаковки', tone: 'warning', count: 3, accounts: { 1: 2, 2: 1 } } ],
 		stuck: {
 			threshold_hours: 24,
@@ -429,8 +431,20 @@ describe( 'the tab', () => {
 		expect( screen.getByRole( 'table', { name: MESSAGES.stuck } ) ).toBeInTheDocument();
 	} );
 
+	test( 'an adapter that does not classify its statuses gets no stuck block and no promise about rejections', async () => {
+		fetchMock.mockResolvedValue( response( { classified: false, stuck: null } ) );
+		renderTab();
+
+		expect( await screen.findByRole( 'table', { name: MESSAGES.statuses } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'table', { name: MESSAGES.stuck } ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( MESSAGES.stuckEmpty ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( MESSAGES.stuck ) ).not.toBeInTheDocument();
+		expect( screen.getByText( MESSAGES.footnoteOrders ) ).toBeInTheDocument();
+		expect( screen.queryByText( MESSAGES.footnote ) ).not.toBeInTheDocument();
+	} );
+
 	test( 'an empty table is the empty card with its sentence', async () => {
-		fetchMock.mockResolvedValue( response( { stuck: { ...response().stuck, count: 0, items: [] } } ) );
+		fetchMock.mockResolvedValue( response( { stuck: { ...response().stuck!, count: 0, items: [] } } ) );
 		renderTab();
 
 		expect( await screen.findByText( MESSAGES.stuckEmpty ) ).toBeInTheDocument();

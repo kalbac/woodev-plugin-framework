@@ -76,11 +76,12 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	 * @param Posting_Status_Names|null  $names    The adapter's status names.
 	 * @param bool                       $classify Whether the adapter classifies its codes ({@see self::groups()}); the defaults otherwise.
 	 * @param array<int,string>          $accounts Account labels.
+	 * @param Posting_Status_Groups|null $explicit Another classification than {@see self::groups()}, when classified.
 	 * @return Orders_Analytics_Report
 	 */
-	private function report( bool $hpos, ?Posting_Status_Names $names = null, bool $classify = true, array $accounts = [ 1 => 'Основной', 2 => 'Второй' ] ): Orders_Analytics_Report {
+	private function report( bool $hpos, ?Posting_Status_Names $names = null, bool $classify = true, array $accounts = [ 1 => 'Основной', 2 => 'Второй' ], ?Posting_Status_Groups $explicit = null ): Orders_Analytics_Report {
 		$shop   = new Analytics_Shop( $hpos );
-		$groups = $classify ? self::groups() : null;
+		$groups = $classify ? ( $explicit ?? self::groups() ) : null;
 
 		return new Orders_Analytics_Report(
 			new Orders_Analytics_Query( $shop->db, Sqlite_Tables::table( 'postings' ), $shop->storage(), Posting_Status_Sets::rejected( $groups ) ),
@@ -143,10 +144,12 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	 * @dataProvider storages
 	 */
 	public function test_without_the_adapter_s_classification_only_the_cancelled_order_is_a_cancellation( bool $hpos ): void {
-		$now = $this->report( $hpos, null, false )->build( $this->request() )['totals']['current'];
+		$answer = $this->report( $hpos, null, false )->build( $this->request() );
+		$now    = $answer['totals']['current'];
 
-		$this->assertSame( [ 'cancelled' ], Posting_Status_Sets::rejected( null ) );
-		$this->assertSame( 1, $now['cancelled'], '`not_accepted` is the marketplace\'s code: the framework does not know it.' );
+		$this->assertFalse( $answer['classified'], 'The answer says the classification is unavailable, so the tab does not promise rejections.' );
+		$this->assertSame( [], Posting_Status_Sets::rejected( null ), 'No guess from canonical words.' );
+		$this->assertSame( 1, $now['cancelled'], 'Only the cancelled order: `not_accepted` is the marketplace\'s code, the framework does not know it.' );
 		$this->assertSame( 2470.0, $now['revenue'] );
 	}
 
@@ -312,11 +315,40 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	/**
 	 * @dataProvider storages
 	 */
-	public function test_without_the_adapter_s_classification_the_framework_s_own_words_wait_on_the_shop( bool $hpos ): void {
-		$stuck = $this->report( $hpos, null, false )->build( $this->request() )['stuck'];
+	public function test_without_the_adapter_s_classification_there_is_no_stuck_block_at_all( bool $hpos ): void {
+		$answer = $this->report( $hpos, null, false )->build( $this->request() );
 
-		$this->assertSame( [ 'new', 'awaiting_shipment' ], Posting_Status_Sets::waiting( null ) );
-		$this->assertSame( [ 'P-107' ], array_column( $stuck['items'], 'posting' ), 'The neutral `new`; the marketplace\'s own `awaiting_packaging` is not a framework word.' );
+		$this->assertNull( Posting_Status_Sets::waiting( null ) );
+		$this->assertNull( $answer['stuck'], 'Not «none stuck»: P-101 has waited 146 hours, but only the adapter knows its code waits on the shop.' );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
+	public function test_an_adapter_that_classifies_with_empty_lists_is_believed( bool $hpos ): void {
+		$none = new class() implements Posting_Status_Groups {
+			public function waiting_posting_statuses(): array {
+				return [];
+			}
+
+			public function rejected_posting_statuses(): array {
+				return [];
+			}
+		};
+
+		$answer = $this->report( $hpos, null, true, [ 1 => 'Основной', 2 => 'Второй' ], $none )->build( $this->request() );
+
+		$this->assertTrue( $answer['classified'] );
+		$this->assertSame( 0, $answer['stuck']['count'], 'The adapter says none of its codes waits on the shop: «none stuck» is its answer.' );
+		$this->assertSame( [], $answer['stuck']['items'] );
+		$this->assertSame( 1, $answer['totals']['current']['cancelled'] );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
+	public function test_with_the_adapter_s_classification_the_answer_says_so( bool $hpos ): void {
+		$this->assertTrue( $this->report( $hpos )->build( $this->request() )['classified'] );
 	}
 
 	public function test_an_adapter_s_classification_is_cleaned(): void {

@@ -115,7 +115,12 @@ export interface AnalyticsResponse {
 	intervals: AnalyticsInterval[];
 	share: AnalyticsShare;
 	statuses: AnalyticsStatus[];
-	stuck: AnalyticsStuck;
+	/**
+	 * Whether the adapter classifies its posting statuses (`Posting_Status_Groups`). Without it `stuck` is null — the tab draws no such
+	 * block — and only cancelled orders count as cancellations.
+	 */
+	classified: boolean;
+	stuck: AnalyticsStuck | null;
 	/** `top` holds the best sellers by units AND by revenue; the table sorts them. */
 	products: { top: AnalyticsProduct[]; unlinked: AnalyticsUnlinked };
 	currency: string;

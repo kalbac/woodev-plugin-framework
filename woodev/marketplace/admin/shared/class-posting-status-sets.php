@@ -7,45 +7,34 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Shared;
 
-use Woodev\Framework\Marketplace\Orders\Status_Map;
-
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Reads {@see Posting_Status_Groups} when the adapter implements it, and falls back to the framework's canonical words otherwise
- * (`new`, `awaiting_shipment` wait on the shop; `cancelled` is rejected). No marketplace's own codes live here.
+ * Reads {@see Posting_Status_Groups}. Without the contract the classification is UNKNOWN, never guessed from the framework's
+ * canonical words: the codes are the marketplace's own, so a guess would claim «no stuck postings» or «no rejections» the framework
+ * cannot know. No marketplace's own codes live here.
  *
  * @since 2.1.13
  */
 final class Posting_Status_Sets {
 	/**
-	 * Waiting statuses of an adapter without the contract.
-	 */
-	public const DEFAULT_WAITING = [ Status_Map::NEW, Status_Map::AWAITING_SHIPMENT ];
-
-	/**
-	 * Rejected statuses of an adapter without the contract.
-	 */
-	public const DEFAULT_REJECTED = [ Status_Map::CANCELLED ];
-
-	/**
 	 * @since 2.1.13
 	 *
 	 * @param Posting_Status_Groups|null $groups The adapter's groups.
-	 * @return string[]
+	 * @return string[]|null The waiting statuses; null when the adapter does not say.
 	 */
-	public static function waiting( ?Posting_Status_Groups $groups ): array {
-		return null === $groups ? self::DEFAULT_WAITING : self::clean( $groups->waiting_posting_statuses() );
+	public static function waiting( ?Posting_Status_Groups $groups ): ?array {
+		return null === $groups ? null : self::clean( $groups->waiting_posting_statuses() );
 	}
 
 	/**
 	 * @since 2.1.13
 	 *
 	 * @param Posting_Status_Groups|null $groups The adapter's groups.
-	 * @return string[]
+	 * @return string[] The rejected statuses; none when the adapter does not say (only cancelled orders are cancellations then).
 	 */
 	public static function rejected( ?Posting_Status_Groups $groups ): array {
-		return null === $groups ? self::DEFAULT_REJECTED : self::clean( $groups->rejected_posting_statuses() );
+		return null === $groups ? [] : self::clean( $groups->rejected_posting_statuses() );
 	}
 
 	/**

@@ -58,9 +58,9 @@ final class Orders_Analytics_Report {
 	private $names;
 
 	/**
-	 * The marketplace's statuses of a posting that waits on the shop.
+	 * The marketplace's statuses of a posting that waits on the shop; null when the adapter does not classify its codes.
 	 *
-	 * @var string[]
+	 * @var string[]|null
 	 */
 	private $waiting;
 
@@ -148,7 +148,9 @@ final class Orders_Analytics_Report {
 			'intervals'  => self::intervals( $current['days'], $request['after'], $request['before'], $interval, (int) $request['week_start'] ),
 			'share'      => self::share( $current['shop'], null === $previous ? null : $previous['shop'] ),
 			'statuses'   => $this->statuses( $this->query->status_rows( $accounts ) ),
-			'stuck'      => $this->stuck( $accounts, (int) $request['stuck_hours'], (int) $request['now'] ),
+			// Whether the adapter classifies its codes: without it there is no stuck block and only cancelled orders are cancellations.
+			'classified' => null !== $this->waiting,
+			'stuck'      => null === $this->waiting ? null : $this->stuck( $accounts, $this->waiting, (int) $request['stuck_hours'], (int) $request['now'] ),
 			'products'   => $this->products( $this->query->product_rows( $this->scope( $request['after'], $request['before'], $request['timezone'], $accounts ) ) ),
 		];
 	}
@@ -357,14 +359,15 @@ final class Orders_Analytics_Report {
 	/**
 	 * The stuck postings: how many and the oldest, with how long each has waited.
 	 *
-	 * @param int[] $accounts Account ids.
-	 * @param int   $hours    Threshold in hours.
-	 * @param int   $now      Unix time.
+	 * @param int[]    $accounts Account ids.
+	 * @param string[] $waiting  The adapter's waiting statuses.
+	 * @param int      $hours    Threshold in hours.
+	 * @param int      $now      Unix time.
 	 * @return array<string,mixed>
 	 */
-	private function stuck( array $accounts, int $hours, int $now ): array {
+	private function stuck( array $accounts, array $waiting, int $hours, int $now ): array {
 		$hours = max( 1, $hours );
-		$found = $this->query->stuck( $accounts, $this->waiting, gmdate( 'Y-m-d H:i:s', $now - $hours * 3600 ) );
+		$found = $this->query->stuck( $accounts, $waiting, gmdate( 'Y-m-d H:i:s', $now - $hours * 3600 ) );
 		$items = [];
 
 		foreach ( $found['items'] as $item ) {

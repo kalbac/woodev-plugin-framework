@@ -1034,9 +1034,11 @@ filters marketplace + account + WooCommerce's `DateRangeFilterPicker`). Delivery
   share is every shop order of the period (pending only when the marketplace made it, never one with a rejected posting) vs those
   whose `created_via` is the adapter's `order_meta()->created_via()`.
 - **Raw codes belong to the adapter.** Optional `Admin\Shared\Posting_Status_Groups`: `waiting_posting_statuses()` (packing,
-  handing over) and `rejected_posting_statuses()`; `Posting_Status_Sets` reads it, defaulting to the framework's canonical words
-  (`new`, `awaiting_shipment` / `cancelled`). The Ozon adapter must implement it (`awaiting_packaging`, `awaiting_deliver` /
-  `cancelled`, `not_accepted`, …) — until then Ozon's stuck list is empty and `not_accepted` is not a cancellation.
+  handing over) and `rejected_posting_statuses()`, read by `Posting_Status_Sets`. Without the contract nothing is guessed: the
+  answer has `classified: false` and `stuck: null` (the tab draws no stuck block, never «Зависших отправлений нет.»), only
+  `wc-cancelled` orders are cancellations and the footnote says so (`footnoteOrders`). Explicit empty lists are believed. The Ozon
+  adapter implements it in its own repo (ozon#118: waiting `awaiting_packaging`, `awaiting_deliver`; rejected `cancelled`,
+  `not_accepted`, `cancelled_from_split_pending`).
 - **Now, not the period.** Statuses = every posting of a live order (finished ones too) by `status_raw` and account; each count
   links to the «Заказы» tab with `account` + `filter_posting_status` and «Состояние» left at «Все» — the same rows. Stuck = open
   postings in the waiting statuses first seen more than `STUCK_HOURS` (24) ago; filter

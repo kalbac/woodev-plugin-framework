@@ -12,6 +12,8 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Controller;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Query;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Report;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Groups;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Sets;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\TestCase;
 
@@ -32,6 +34,13 @@ final class OrdersAnalyticsControllerTest extends TestCase {
 	 * @var int
 	 */
 	private $builds = 0;
+
+	/**
+	 * Whether the adapter of the test classifies its posting statuses.
+	 *
+	 * @var bool
+	 */
+	private $classified = true;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -77,7 +86,17 @@ final class OrdersAnalyticsControllerTest extends TestCase {
 				++$this->builds;
 				$shop = new Analytics_Shop( true );
 
-				return new Orders_Analytics_Report( new Orders_Analytics_Query( $shop->db, Sqlite_Tables::table( 'postings' ), $shop->storage() ), $accounts, null, Analytics_Shop::CREATED_VIA, 'strval', 'strval' );
+				$groups = $this->classified ? new class() implements Posting_Status_Groups {
+					public function waiting_posting_statuses(): array {
+						return [ 'awaiting_packaging' ];
+					}
+
+					public function rejected_posting_statuses(): array {
+						return [ 'not_accepted' ];
+					}
+				} : null;
+
+				return new Orders_Analytics_Report( new Orders_Analytics_Query( $shop->db, Sqlite_Tables::table( 'postings' ), $shop->storage(), Posting_Status_Sets::rejected( $groups ) ), $accounts, null, Analytics_Shop::CREATED_VIA, 'strval', 'strval', $groups );
 			}
 		);
 	}
@@ -186,6 +205,15 @@ final class OrdersAnalyticsControllerTest extends TestCase {
 		$answer = $this->controller()->get_report( $this->request( [] ) );
 
 		$this->assertSame( 3, $answer->data['stuck']['threshold_hours'] );
+	}
+
+	public function test_without_the_adapter_s_classification_the_answer_has_no_stuck_block(): void {
+		$this->classified = false;
+
+		$answer = $this->controller()->get_report( $this->request( [] ) );
+
+		$this->assertFalse( $answer->data['classified'] );
+		$this->assertNull( $answer->data['stuck'], 'No hint, no «none stuck».' );
 	}
 
 	public function test_a_long_stuck_list_says_how_much_is_shown(): void {

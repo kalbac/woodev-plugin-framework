@@ -233,6 +233,11 @@ export function stuckRows( items: AnalyticsStuckItem[], withAccount: boolean ): 
 function StuckTable( { data, messages: m, loading }: TablesProps ) {
 	const several = data.accounts.length > 1;
 
+	// The adapter does not say which of its statuses wait on the shop: nothing to claim, not even «none».
+	if ( data.stuck === null ) {
+		return null;
+	}
+
 	return (
 		<Card
 			title={ m.stuck }

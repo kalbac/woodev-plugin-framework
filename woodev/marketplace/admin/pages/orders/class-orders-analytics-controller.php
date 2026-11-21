@@ -206,6 +206,7 @@ final class Orders_Analytics_Controller {
 			'unlinkedName'    => __( 'Название на маркетплейсе', 'woodev-plugin-framework' ),
 			'unlinkedEmpty'   => __( 'Все проданные позиции связаны с товарами магазина.', 'woodev-plugin-framework' ),
 			'footnote'        => __( 'Отменённые — отменённые заказы и отправления, которые маркетплейс отменил или не принял; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же.', 'woodev-plugin-framework' ),
+			'footnoteOrders'  => __( 'Отменённые — заказы со статусом «Отменён»; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же.', 'woodev-plugin-framework' ),
 		];
 	}
 
@@ -342,8 +343,10 @@ final class Orders_Analytics_Controller {
 			return new \WP_Error( 'woodev_marketplace_analytics_failed', __( 'Не удалось собрать аналитику. Попробуйте позже.', 'woodev-plugin-framework' ), [ 'status' => 500 ] );
 		}
 
-		$answer['stuck']['hint'] = self::stuck_hint( $params['stuck_hours'] );
-		$answer['stuck']['more'] = self::stuck_more( count( $answer['stuck']['items'] ), $answer['stuck']['count'] );
+		if ( is_array( $answer['stuck'] ) ) {
+			$answer['stuck']['hint'] = self::stuck_hint( $params['stuck_hours'] );
+			$answer['stuck']['more'] = self::stuck_more( count( $answer['stuck']['items'] ), $answer['stuck']['count'] );
+		}
 
 		set_transient( $key, $answer, self::CACHE_SECONDS );
 
