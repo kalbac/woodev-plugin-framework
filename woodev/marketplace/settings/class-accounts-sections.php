@@ -936,7 +936,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			self::params_section_id( $account->id() ),
 			$this->account_title( $account ),
 			$all_ids
-		)->with_groups( $groups )->stacked( $this->identifier_line( $account ) );
+		)->with_groups( $groups )->account_tab();
 	}
 
 	/**
@@ -953,23 +953,6 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			},
 			$fields
 		);
-	}
-
-	/**
-	 * «Client-Id: 4180680» — the muted line under an account's heading; empty when the account holds no identifier.
-	 *
-	 * @param Account $account Account.
-	 * @return string
-	 */
-	private function identifier_line( Account $account ): string {
-		$id_field   = $this->adapter->credential_fields()->identifier();
-		$identifier = trim( (string) ( $account->credentials()[ $id_field ] ?? '' ) );
-
-		if ( '' === $identifier ) {
-			return '';
-		}
-
-		return $this->adapter->settings_descriptor()->field_spec( $id_field )->label() . ': ' . $identifier;
 	}
 
 	/**

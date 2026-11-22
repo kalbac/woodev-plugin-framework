@@ -297,4 +297,14 @@ class SettingsSectionTest extends TestCase {
 		$this->assertSame( 'Client-Id: 1', $stacked->get_subtitle() );
 		$this->assertSame( '', $section->stacked()->get_subtitle() );
 	}
+
+	public function test_account_tab_returns_a_stacked_copy_the_client_draws_as_a_tab(): void {
+		$section = Settings_Section::create( 'a', 'A', [] );
+		$tab     = $section->account_tab();
+
+		$this->assertFalse( $section->is_account_tab(), 'immutable: the original is not a tab' );
+		$this->assertTrue( $tab->is_account_tab() );
+		$this->assertTrue( $tab->is_stacked(), 'never a page sub-tab' );
+		$this->assertSame( '', $tab->get_subtitle() );
+	}
 }

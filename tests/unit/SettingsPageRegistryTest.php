@@ -728,6 +728,26 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertTrue( $sections[1]['stacked'] );
 		$this->assertArrayNotHasKey( 'subtitle', $sections[1] );
 		$this->assertArrayNotHasKey( 'stacked', $sections[2] );
+		$this->assertArrayNotHasKey( 'account_tab', $sections[0] );
+	}
+
+	public function test_build_sections_flags_an_account_tab_as_stacked_and_leaves_the_others_without_the_flag(): void {
+		$provider = Settings_Provider::create(
+			'ozon',
+			'Ozon',
+			$this->make_connection_handler(),
+			[
+				Settings_Section::create( 'shop', 'Shop', [ 'token' ] )->account_tab(),
+				Settings_Section::create( 'shared', 'Shared', [ 'token' ] )->stacked(),
+			]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertTrue( $sections[0]['account_tab'] );
+		$this->assertTrue( $sections[0]['stacked'] );
+		$this->assertArrayNotHasKey( 'subtitle', $sections[0] );
+		$this->assertArrayNotHasKey( 'account_tab', $sections[1] );
 	}
 
 	public function test_build_sections_flags_advanced_actions_and_carries_a_copy_field_only_for_a_section_that_asked(): void {
