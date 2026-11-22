@@ -13,6 +13,7 @@
 import type { ReactNode } from 'react';
 import { Button, Popover, Spinner } from '@wordpress/components';
 import { useState } from '@wordpress/element';
+import { isRowBusy } from './activity/busy';
 import { cellText, renderCell } from './cells';
 import { MESSAGE_KEYS, fillMessage, firstMessage, joinLabel, message } from './messages';
 import { searchFilter } from './query';
@@ -65,10 +66,10 @@ function rowName( definition: Definition, row: AdminRecord ): string {
 	return cellText( definition.columns.map( ( column ) => row.cells[ column.id ] ) );
 }
 
-/** Rows a checkbox can select: the row itself and, for an expanded parent, its loaded children. */
+/** Rows a checkbox can select: the row itself and, for an expanded parent, its loaded children — a busy row is blocked, so it is not one. */
 function selectableFamily( row: AdminRecord, children: ChildrenState | undefined ): string[] {
 	return [ row, ...( children?.rows ?? [] ) ]
-		.filter( ( member ) => member.selectable )
+		.filter( ( member ) => member.selectable && ! isRowBusy( member ) )
 		.map( ( member ) => member.id );
 }
 
@@ -164,20 +165,49 @@ function selectCell( input: TableModelInput, row: AdminRecord, family: string[] 
 			label={ label }
 			// Every row under the filter is selected, the rows on screen — a variation opened later included — with it.
 			checked={ selection.selectedIds.includes( row.id ) || ( selection.matching && row.selectable ) }
-			disabled={ ! row.selectable }
+			// A row with a process in flight is blocked, its checkbox included (as in «Заказы доставки»).
+			disabled={ ! row.selectable || isRowBusy( row ) }
 			onChange={ ( checked ) => selection.set( family, checked ) }
 		/>
 	);
 }
 
+/**
+ * The column that holds a busy row's marker: the actions column, else the last one. Never a pinned column — a sticky cell is the
+ * containing block of an absolutely positioned child, and the bar must run along the whole row.
+ */
+function markerColumnIndex( definition: Definition ): number {
+	const actions = definition.columns.findIndex( ( column ) => column.cell_type === 'actions' );
+
+	return actions >= 0 ? actions : definition.columns.length - 1;
+}
+
+/**
+ * A busy row's bar (#1937): an empty element in one of the row's cells, which `style.scss` turns into the bottom edge of the whole
+ * row (`tr:has( .woodev-records__row-busy )`) — the seam «Заказы доставки» uses, because `TableCard` gives the `<tr>` no class.
+ */
+function BusyMarker() {
+	return <span className="woodev-records__row-busy" aria-hidden="true" />;
+}
+
 function dataCells( input: TableModelInput, row: AdminRecord, key: string, isChild: boolean ): TableCell[] {
 	const named = nameColumnIndex( input.definition );
+	const markerAt = isRowBusy( row ) ? markerColumnIndex( input.definition ) : -1;
 
 	return input.definition.columns.map( ( column, index ) => {
-		const content =
+		const body =
 			column.cell_type === 'actions'
 				? input.renderActions( row, key )
 				: renderCell( column.cell_type, row.cells[ column.id ] );
+		const content =
+			index === markerAt ? (
+				<>
+					<BusyMarker />
+					{ body }
+				</>
+			) : (
+				body
+			);
 		const indent = isChild && index === named;
 
 		return cell( indent ? <span style={ STYLES.childCell }>{ content }</span> : content );

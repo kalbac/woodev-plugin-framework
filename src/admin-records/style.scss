@@ -7,10 +7,14 @@
 @use '../components/table-look';
 @use '../components/table-chrome';
 @use '../components/woodev-dialog';
+@use '../components/row-busy';
 
 $cell-padding: 8px;
 
 .woodev-records {
+	// A row with a process in flight: the bar along its bottom edge, the same mechanism as «Заказы доставки» (#1937).
+	@include row-busy.mark( '.woodev-records__row-busy' );
+
 	// The filter labels of «Заказы доставки» (WooCommerce's `.woocommerce-filters-label`: 13px, normal weight, #3c434a) and the
 	// settings: sentence case, never upper case. A labelled `SelectControl`
 	// draws its label with the InputControl's own emotion class, `components-input-control__label`, and emotion writes that
@@ -264,6 +268,31 @@ $cell-padding: 8px;
 	.woodev-records__col-actions {
 		white-space: nowrap;
 		width: 1%;
+	}
+
+	// The sentences under the buttons (why an action is off, the row's lock and its processes) are text, not buttons: they wrap. In a
+	// `nowrap` cell one «Карточка сейчас импортируется — дождитесь результата» is a single 460px line that widens the whole table past
+	// its card and is clipped at the right edge (#1937). `anywhere` also lets an unbroken word shrink, so the text adds NOTHING to the
+	// column's minimum width: the table can never be wider than it is without the text. `max-width` is what it asks for when the card
+	// has room to spare. «Заказы доставки» says nothing in text here (its bar and a lock icon speak for the row), so this is this
+	// table's own rule. (An icon-only action's reason is `screen-reader-text`, clipped to 1px: it keeps its own box.)
+	.woodev-records__col-actions .woodev-records__reason:not( .screen-reader-text ),
+	.woodev-records__col-actions .woodev-records__activity {
+		flex: 0 0 100%;
+		max-width: 12rem;
+		overflow-wrap: anywhere;
+		white-space: normal;
+	}
+
+	// A table that shows such text lets the actions column take what it needs from the card's spare width, which a `1%` column never
+	// does (it stays as narrow as its buttons and the text would be four letters wide). A table without text keeps the `1%` above, so its
+	// layout does not change by a pixel. A browser without `:has()` keeps the narrow column: the text still fits the card.
+	.woocommerce-table__table:has(
+			.woodev-records__reason:not( .screen-reader-text ),
+			.woodev-records__activity
+		)
+		.woodev-records__col-actions {
+		width: auto;
 	}
 
 	// The checkbox column is as wide as its box with the same padding on the left and the right, like «Заказы доставки». The

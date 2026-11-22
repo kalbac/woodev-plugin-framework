@@ -261,17 +261,114 @@ describe( 'locks and blocked actions', () => {
 		);
 	} );
 
-	test( 'an action the row does not block stays enabled even while the row is busy', async () => {
+	test( 'an action the row does not block is off too while the row is busy (#1937)', async () => {
 		const busy = { ...idle(), processes: [ process( 'obs-1' ) ] };
-		serve( { rows: [ row( 'p1', 'Кружка', busy ) ] } );
+		serve( { rows: [ row( 'p1', 'Кружка', busy ), row( 'p2', 'Футболка' ) ] } );
 		await renderTable();
 
-		expect( exportButton( 'p1' ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+		expect( exportButton( 'p1' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( exportButton( 'p2' ) ).not.toHaveAttribute( 'aria-disabled', 'true' );
+	} );
+} );
+
+describe( 'the busy row (#1937, the mechanism of «Заказы доставки»)', () => {
+	const marker = ( key: string ) => tableRow( key ).querySelector( '.woodev-records__row-busy' );
+	// The selection column exists once the table has bulk actions to offer: a bulk renderer (here an empty one) switches it on.
+	const withSelection = () => ( { extensions: { ...activity.extensions, renderBulkActions: () => null } } );
+	const rowCheckbox = ( key: string ) => within( tableRow( key ) ).getByRole( 'checkbox', { name: /Выбрать строку/ } );
+
+	test( 'a row with a process in flight carries the marker and a disabled checkbox; an idle row neither', async () => {
+		const busy = { ...idle(), processes: [ process( 'obs-1' ) ] };
+		serve( { rows: [ row( 'p1', 'Кружка', busy ), row( 'p2', 'Футболка' ) ] } );
+		await renderTable( withSelection() );
+
+		expect( marker( 'p1' ) ).toBeInTheDocument();
+		expect( rowCheckbox( 'p1' ) ).toBeDisabled();
+		expect( marker( 'p2' ) ).toBeNull();
+		expect( rowCheckbox( 'p2' ) ).toBeEnabled();
+	} );
+
+	test( 'the list response alone makes the row busy, on a table that mounts no activity part', async () => {
+		const busy = locked( [ process( 'import', { label: 'Импортируется', completed: null, total: null, percent: null, text: '' } ) ] );
+		serve( { rows: [ row( 'p1', 'Кружка', busy ), row( 'p2', 'Футболка' ) ] } );
+		await renderTable( { extensions: { renderBulkActions: () => null } } );
+
+		expect( marker( 'p1' ) ).toBeInTheDocument();
+		expect( rowCheckbox( 'p1' ) ).toBeDisabled();
+		expect( exportButton( 'p1' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( marker( 'p2' ) ).toBeNull();
+	} );
+
+	test( 'a row ticked before it went busy is left out of what a bulk action receives', async () => {
+		const ticked = ( chosen: { selectedIds: string[] } ) => <output aria-label="bulk-ids">{ chosen.selectedIds.join( ',' ) }</output>;
+		serve( {
+			rows: [ row( 'p1', 'Кружка' ), row( 'p2', 'Футболка' ) ],
+			activity: () => answer( [ row( 'p1', 'Кружка', locked( [ process( 'obs-1' ) ] ) ) ] ),
+		} );
+		await renderTable( { extensions: { ...activity.extensions, renderBulkActions: ticked } } );
+		fireEvent.click( rowCheckbox( 'p1' ) );
+		fireEvent.click( rowCheckbox( 'p2' ) );
+		expect( screen.getByLabelText( 'bulk-ids' ) ).toHaveTextContent( 'p1,p2' );
+
+		await wait( 2000 );
+
+		expect( marker( 'p1' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'bulk-ids' ) ).toHaveTextContent( /^p2$/ );
+	} );
+
+	test( 'a queued and a waiting process are in flight too', async () => {
+		serve( {
+			rows: [
+				row( 'p1', 'Кружка', { ...idle(), processes: [ process( 'a', { state: 'queued' } ) ] } ),
+				row( 'p2', 'Футболка', { ...idle(), processes: [ process( 'b', { state: 'waiting' } ) ] } ),
+			],
+		} );
+		await renderTable( withSelection() );
+
+		expect( marker( 'p1' ) ).toBeInTheDocument();
+		expect( marker( 'p2' ) ).toBeInTheDocument();
+	} );
+
+	test( 'a finished or failed process leaves the row free, with its text kept', async () => {
+		serve( {
+			rows: [
+				row( 'p1', 'Кружка', { ...idle(), processes: [ process( 'a', { state: 'completed', text: 'Готово' } ) ] } ),
+				row( 'p2', 'Футболка', { ...idle(), processes: [ process( 'b', { state: 'failed', text: 'Ошибка' } ) ] } ),
+			],
+		} );
+		await renderTable( withSelection() );
+
+		expect( marker( 'p1' ) ).toBeNull();
+		expect( marker( 'p2' ) ).toBeNull();
+		expect( rowCheckbox( 'p1' ) ).toBeEnabled();
+		expect( activityOf( 'p1' ) ).toHaveTextContent( 'Готово' );
+	} );
+
+	test( 'a lock without a process in flight is not busy', async () => {
+		serve( { rows: [ row( 'p1', 'Кружка', locked() ) ] } );
+		await renderTable( withSelection() );
+
+		expect( marker( 'p1' ) ).toBeNull();
+	} );
+
+	test( 'the row stops being busy when the next read says the process is over', async () => {
+		const busy = locked( [ process( 'obs-1', { text: 'Идёт' } ) ] );
+		serve( {
+			rows: [ row( 'p1', 'Кружка', busy ) ],
+			activity: () => answer( [ row( 'p1', 'Кружка', idle() ) ] ),
+		} );
+		await renderTable( withSelection() );
+		expect( marker( 'p1' ) ).toBeInTheDocument();
+
+		await wait( 2000 );
+
+		expect( marker( 'p1' ) ).toBeNull();
+		expect( rowCheckbox( 'p1' ) ).toBeEnabled();
 	} );
 } );
 
 describe( 'processes', () => {
-	test( 'several processes coexist, each with its own progress', async () => {
+	test( 'several processes coexist, each with its own text', async () => {
 		serve( {
 			rows: [
 				row(
@@ -293,26 +390,21 @@ describe( 'processes', () => {
 		expect( items[ 0 ] ).toHaveTextContent( '1 из 2' );
 		expect( items[ 1 ] ).toHaveTextContent( 'Цены' );
 		expect( items[ 1 ] ).toHaveTextContent( 'В очереди' );
-		expect( within( items[ 0 ] ).getByRole( 'progressbar' ) ).toHaveAttribute( 'value', '1' );
-		expect( within( items[ 1 ] ).getByRole( 'progressbar' ) ).toHaveAttribute( 'value', '0' );
+		// The progress is the busy row's bar along its bottom edge, never a small bar in the cell.
+		expect( within( activityOf( 'p1' ) ).queryByRole( 'progressbar' ) ).toBeNull();
 	} );
 
-	test( 'a process with no measurable total is an indeterminate indicator with no percentage', async () => {
+	test( 'a process with no measurable total shows PHP\'s text and no percentage, however long it runs', async () => {
 		const unknown = process( 'obs-1', { completed: null, total: null, percent: null, text: 'Идёт обработка' } );
 		serve( { rows: [ row( 'p1', 'Кружка', { ...idle(), processes: [ unknown ] } ) ] } );
 		await renderTable();
 
-		const bar = within( activityOf( 'p1' ) ).getByRole( 'progressbar' );
-
-		expect( bar ).not.toHaveAttribute( 'value' );
-		expect( bar ).not.toHaveAttribute( 'max' );
 		expect( activityOf( 'p1' ).textContent ).not.toMatch( /\d+\s?%/ );
 		expect( activityOf( 'p1' ) ).toHaveTextContent( 'Идёт обработка' );
 
 		// Time passing never invents a percentage.
 		await wait( 60_000 );
 		expect( activityOf( 'p1' ).textContent ).not.toMatch( /\d+\s?%/ );
-		expect( within( activityOf( 'p1' ) ).getByRole( 'progressbar' ) ).not.toHaveAttribute( 'value' );
 	} );
 
 	test( 'a finished process draws no indicator', async () => {

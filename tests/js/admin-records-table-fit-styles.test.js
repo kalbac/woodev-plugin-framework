@@ -105,3 +105,42 @@ describe( 'the records table footer', () => {
 		expect( hidden ).toMatch( /display:\s*none/ );
 	} );
 } );
+
+describe( 'the busy-row bar (#1937)', () => {
+	test( 'sits above the pinned cells (sticky, z-index 2), or it would start after them', () => {
+		const shared = fs.readFileSync( path.join( __dirname, '../../src/components/_row-busy.scss' ), 'utf8' );
+		const pinned = Number( /\.woodev-records__col-name \{[^}]*?\}/.test( scss ) && /position: sticky;\s*z-index: (\d+)/.exec( scss )[ 1 ] );
+		const bar = Number( /^\s*z-index: (\d+);/m.exec( shared )[ 1 ] );
+
+		expect( bar ).toBeGreaterThan( pinned );
+	} );
+} );
+
+describe( 'the text of a busy or locked row in the actions column (#1937)', () => {
+	const rule = block( scss, '.woodev-records__col-actions .woodev-records__reason' );
+
+	test( 'wraps on a line of its own and adds nothing to the column minimum, so the table is never wider than without it', () => {
+		expect( rule ).toMatch( /white-space:\s*normal/ );
+		expect( rule ).toMatch( /overflow-wrap:\s*anywhere/ );
+		expect( rule ).toMatch( /flex:\s*0 0 100%/ );
+		expect( rule ).toMatch( /max-width:\s*12rem/ );
+		// A floor would widen the column past the card (#1937: 813px idle, 940px busy in a 784px card).
+		expect( rule ).not.toMatch( /min-width/ );
+	} );
+
+	test( 'only a table that shows such text frees the 1% actions column; a table without it keeps its layout', () => {
+		expect( block( scss, '.woodev-records__col-actions {' ) ).toMatch( /width:\s*1%/ );
+
+		const freed = block( scss, '.woocommerce-table__table:has(' );
+
+		expect( freed ).toMatch( /width:\s*auto/ );
+	} );
+
+	test( 'the inline styles do not set a flex-basis of their own (it would beat the stylesheet)', () => {
+		const inline = fs.readFileSync( path.join( __dirname, '../../src/admin-records/styles.ts' ), 'utf8' );
+		const activity = fs.readFileSync( path.join( __dirname, '../../src/admin-records/activity/styles.ts' ), 'utf8' );
+
+		expect( inline ).not.toMatch( /flexBasis/ );
+		expect( activity ).not.toMatch( /flexBasis/ );
+	} );
+} );

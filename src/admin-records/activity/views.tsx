@@ -3,8 +3,8 @@
  * inside its actions cell. Every sentence is PHP's; the views add structure only.
  *
  * - The lock reason is visible text, not colour.
- * - A process with no measurable total gets an indeterminate indicator (`<progress>` without a value) and PHP's own
- *   text — never a percentage computed from elapsed time.
+ * - A process is PHP's label and text, never a percentage computed from elapsed time. A row with a process in flight
+ *   is marked busy by the table itself (`table-model`), not by this view (#1937).
  * - Several processes are listed side by side; one never hides another.
  *
  * @package woodev-plugin-framework
@@ -20,21 +20,11 @@ import { ACTIVITY_STYLES } from './styles';
 import type { ActivityProcess, RowActivity } from './types';
 import { useActivityLoop } from './use-activity-loop';
 
+/** A process's label and PHP's own text; its progress is the busy row's bar, not a bar of its own. */
 function ProcessLine( { process }: { process: ActivityProcess } ) {
-	const measured = process.total !== null && process.completed !== null;
-
 	return (
 		<li className="woodev-records__process" data-state={ process.state } style={ ACTIVITY_STYLES.process }>
 			<span>{ process.label }</span>
-			{ ( process.state === 'queued' || process.state === 'running' || process.state === 'waiting' ) && (
-				<progress
-					aria-label={ process.label }
-					style={ ACTIVITY_STYLES.meter }
-					// Without both counts the attribute is absent: the browser draws an indeterminate indicator.
-					value={ measured ? process.completed ?? undefined : undefined }
-					max={ measured ? process.total ?? undefined : undefined }
-				/>
-			) }
 			{ process.text !== '' && <span>{ process.text }</span> }
 		</li>
 	);

@@ -9,6 +9,7 @@
 
 import type { ReactNode } from 'react';
 import { Button, Tooltip } from '@wordpress/components';
+import { isRowBusy } from './activity/busy';
 import { STYLES } from './styles';
 import type { ActionDescriptor, AdminRecord, RowActionState } from './types';
 
@@ -128,6 +129,8 @@ export function RowActions( { row, rowKey, descriptors, onAction, blockedReason,
 		buttons.push( { action, state, reason: reasonFor( action, state ), isLink } );
 	} );
 
+	// A row with a process in flight takes no action until the process settles — the text beside it says why.
+	const busy = isRowBusy( row );
 	const grouped = buttons.length > 0 && buttons.every( ( { action } ) => isIconOnly( action ) );
 
 	return (
@@ -139,7 +142,7 @@ export function RowActions( { row, rowKey, descriptors, onAction, blockedReason,
 						action={ action }
 						reason={ reason }
 						reasonId={ reasonId( action ) }
-						canRun={ reason === '' && ( isLink || onAction !== undefined ) }
+						canRun={ ! busy && reason === '' && ( isLink || onAction !== undefined ) }
 						href={ isLink ? state.url : undefined }
 						onClick={ () => ( isLink ? undefined : onAction?.( action, row ) ) }
 					/>
