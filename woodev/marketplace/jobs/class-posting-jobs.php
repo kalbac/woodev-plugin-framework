@@ -106,21 +106,30 @@ final class Posting_Jobs {
 	private $poll_times;
 
 	/**
+	 * Where each account's history ends; null keeps every write live.
+	 *
+	 * @var Posting_History_Cutoffs|null
+	 */
+	private $cutoffs;
+
+	/**
 	 * Creates the jobs.
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Job_Gate                $gate       Gate of licence, account and pause.
-	 * @param Wpdb_Account_Store      $accounts   Accounts.
-	 * @param Posting_Handler         $handler    The marketplace's order flow.
-	 * @param Error_Classifier        $classifier Error classifier of the marketplace.
-	 * @param Job_Names               $names      Hook names of the plugin.
-	 * @param string                  $adapter_id The marketplace's id (the adapter's `id()`).
-	 * @param string                  $poll_option Key of the settings option that holds the poll interval, as {@see self::option_key()} builds it.
-	 * @param Posting_Poll_Times|null $poll_times Where a poll attempt that ended without an error is recorded (since 2.1.13); null records nothing.
+	 * @param Job_Gate                     $gate       Gate of licence, account and pause.
+	 * @param Wpdb_Account_Store           $accounts   Accounts.
+	 * @param Posting_Handler              $handler    The marketplace's order flow.
+	 * @param Error_Classifier             $classifier Error classifier of the marketplace.
+	 * @param Job_Names                    $names      Hook names of the plugin.
+	 * @param string                       $adapter_id The marketplace's id (the adapter's `id()`).
+	 * @param string                       $poll_option Key of the settings option that holds the poll interval, as {@see self::option_key()} builds it.
+	 * @param Posting_Poll_Times|null      $poll_times Where a poll attempt that ended without an error is recorded (since 2.1.13); null records nothing.
+	 * @param Posting_History_Cutoffs|null $cutoffs Where each account's history ends (since 2.1.15); null, or no record of polls, keeps every write live.
 	 */
-	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id, string $poll_option, ?Posting_Poll_Times $poll_times = null ) {
+	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id, string $poll_option, ?Posting_Poll_Times $poll_times = null, ?Posting_History_Cutoffs $cutoffs = null ) {
 		$this->poll_times  = $poll_times;
+		$this->cutoffs     = $cutoffs;
 		$this->gate       = $gate;
 		$this->accounts   = $accounts;
 		$this->handler    = $handler;
@@ -153,7 +162,7 @@ final class Posting_Jobs {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( $this->refresh_hook(), [ $this, 'refresh' ], 10, 3 );
+		add_action( $this->refresh_hook(), [ $this, 'refresh' ], 10, 2 );
 		add_action( $this->poll_hook(), [ $this, 'poll' ] );
 		add_action( 'action_scheduler_init', [ $this, 'ensure_polls' ] );
 	}
@@ -183,21 +192,16 @@ final class Posting_Jobs {
 	/**
 	 * Queues the refresh of a posting unless one is already pending.
 	 *
-	 * A refresh queued while history is being written (the first poll of an account) is marked as history too — a third action
-	 * argument — so its order, written minutes later by Action Scheduler, sends no WooCommerce e-mail (#1925). An action queued
-	 * before this argument existed carries two and is live, as it always was.
-	 *
 	 * @since 2.1.0
 	 *
 	 * @param int    $account_id     Account id.
 	 * @param string $posting_number Posting number.
 	 * @param int    $delay          Seconds from now.
-	 * @param bool   $history        True when the posting belongs to the history import (a retry of a history refresh passes it on).
 	 * @return void
 	 * @throws Persistence_Exception When Action Scheduler could not store the action.
 	 */
-	public function queue_refresh( int $account_id, string $posting_number, int $delay = 0, bool $history = false ): void {
-		$args    = ( $history || History_Import::is_active() ) ? [ $account_id, $posting_number, true ] : [ $account_id, $posting_number ];
+	public function queue_refresh( int $account_id, string $posting_number, int $delay = 0 ): void {
+		$args    = [ $account_id, $posting_number ];
 		$pending = as_get_scheduled_actions(
 			[
 				'hook'     => $this->refresh_hook(),
@@ -222,21 +226,19 @@ final class Posting_Jobs {
 	/**
 	 * Runs `refresh_posting`.
 	 *
-	 * A refresh the history import queued ({@see self::queue_refresh()}) writes its order inside {@see History_Import}, and so does
-	 * its retry: WooCommerce mails nothing for an order that was placed weeks ago.
+	 * The order is written inside {@see History_Import} with the account's cutoff, so an order of the account's history sends no
+	 * WooCommerce e-mail whoever queued this refresh and whenever it runs (#1925).
 	 *
 	 * @since 2.1.0
 	 *
 	 * @param int|string $account_id     Account id (Action Scheduler passes the stored argument).
 	 * @param string     $posting_number Posting number.
-	 * @param bool       $history        True for a refresh queued by the history import; absent from an action queued before it existed.
 	 * @return void
 	 * @throws \Throwable When the marketplace refused the call for good (Action Scheduler records the failure).
 	 */
-	public function refresh( $account_id, $posting_number, $history = false ): void {
+	public function refresh( $account_id, $posting_number ): void {
 		$account_id     = (int) $account_id;
 		$posting_number = (string) $posting_number;
-		$history        = (bool) $history;
 
 		[ $account, $wait ] = $this->gate->check( $account_id );
 
@@ -245,14 +247,19 @@ final class Posting_Jobs {
 		}
 
 		if ( $wait > 0 ) {
-			$this->queue_refresh( $account_id, $posting_number, $wait, $history );
+			$this->queue_refresh( $account_id, $posting_number, $wait );
 			return;
 		}
 
 		try {
-			$this->write_posting( $account_id, $posting_number, $history );
+			History_Import::during(
+				$this->stored_cutoff( $account_id ),
+				function () use ( $account_id, $posting_number ): void {
+					$this->handler->refresh( $account_id, $posting_number );
+				}
+			);
 		} catch ( Order_Claim_Exception $e ) {
-			$this->queue_refresh( $account_id, $posting_number, Order_Claim_Exception::RETRY_SECONDS, $history );
+			$this->queue_refresh( $account_id, $posting_number, Order_Claim_Exception::RETRY_SECONDS );
 		} catch ( \Throwable $e ) {
 			$delay = $this->settle( $account, $e );
 
@@ -260,16 +267,16 @@ final class Posting_Jobs {
 				throw $e;
 			}
 
-			$this->queue_refresh( $account_id, $posting_number, $delay, $history );
+			$this->queue_refresh( $account_id, $posting_number, $delay );
 		}
 	}
 
 	/**
 	 * Runs `poll_postings`.
 	 *
-	 * The first poll of an account — before any poll of it has ended without an error — reads the marketplace's history, and runs
-	 * inside {@see History_Import}: it sends no WooCommerce e-mail for what it writes, and the refreshes it queues are marked the same
-	 * way (#1925). Later polls are the shop's live orders and mail as WooCommerce always does.
+	 * The first poll of an account fixes the account's history cutoff — the moment it began — and every poll and refresh after it
+	 * writes inside {@see History_Import} with that cutoff: the orders the marketplace created before it send no WooCommerce e-mail,
+	 * however many polls the import takes (#1925). The orders created after it mail as WooCommerce always does.
 	 *
 	 * @since 2.1.0
 	 *
@@ -285,7 +292,12 @@ final class Posting_Jobs {
 		}
 
 		try {
-			$this->catch_up( $account, $this->is_first_poll( $account ) );
+			History_Import::during(
+				$this->poll_cutoff( $account ),
+				function () use ( $account ): void {
+					$this->handler->catch_up( $account );
+				}
+			);
 		} catch ( \Throwable $e ) {
 			$this->settle( $account, $e );
 
@@ -335,6 +347,44 @@ final class Posting_Jobs {
 	}
 
 	/**
+	 * The history cutoff of an account the poll is about to read, fixed when the poll is the account's first.
+	 *
+	 * An account that has already ended a poll without an error when the record began has no history: its cutoff is 0 and its orders
+	 * are all live, as they were. Without the record of polls nothing tells the two apart, and the cutoff is 0.
+	 *
+	 * @param Account $account Account.
+	 * @return int Unix time; 0 for no history.
+	 */
+	private function poll_cutoff( Account $account ): int {
+		if ( null === $this->cutoffs || null === $this->poll_times ) {
+			return 0;
+		}
+
+		$stored = $this->cutoffs->get( $account->id() );
+
+		if ( null !== $stored ) {
+			return $stored;
+		}
+
+		$cutoff = null === $this->poll_times->last( $account->id() ) ? time() : 0;
+
+		$this->cutoffs->remember( $account->id(), $cutoff );
+
+		return $cutoff;
+	}
+
+	/**
+	 * The history cutoff of an account a refresh is about to write: the one its first poll fixed, 0 when no poll has begun. A refresh
+	 * never fixes it — an order pushed to the shop before the first poll is a live one.
+	 *
+	 * @param int $account_id Account id.
+	 * @return int Unix time; 0 for no history.
+	 */
+	private function stored_cutoff( int $account_id ): int {
+		return null === $this->cutoffs ? 0 : (int) $this->cutoffs->get( $account_id );
+	}
+
+	/**
 	 * Applies what a failure means for the account and returns how long to wait before a temporary one is tried again.
 	 *
 	 * A refused key pauses the account, whatever the caller does with the failure next.
@@ -359,57 +409,5 @@ final class Posting_Jobs {
 		}
 
 		return $error->is( Remote_Error::RETRY ) ? Backoff::seconds_after( 1 ) : null;
-	}
-
-	/**
-	 * Tells whether the account has not been polled yet: no poll of it has ended without an error. Without the record of polls there
-	 * is no way to know, and the poll is taken for a live one.
-	 *
-	 * @param Account $account Account.
-	 * @return bool
-	 */
-	private function is_first_poll( Account $account ): bool {
-		return null !== $this->poll_times && null === $this->poll_times->last( $account->id() );
-	}
-
-	/**
-	 * Asks the order flow to catch up, as history when the poll is the account's first.
-	 *
-	 * @param Account $account Account.
-	 * @param bool    $history True for the account's first poll.
-	 * @return void
-	 */
-	private function catch_up( Account $account, bool $history ): void {
-		if ( ! $history ) {
-			$this->handler->catch_up( $account );
-			return;
-		}
-
-		History_Import::during(
-			function () use ( $account ): void {
-				$this->handler->catch_up( $account );
-			}
-		);
-	}
-
-	/**
-	 * Asks the order flow to read one posting, as history when the refresh was queued by the history import.
-	 *
-	 * @param int    $account_id     Account id.
-	 * @param string $posting_number Posting number.
-	 * @param bool   $history        True for a history refresh.
-	 * @return void
-	 */
-	private function write_posting( int $account_id, string $posting_number, bool $history ): void {
-		if ( ! $history ) {
-			$this->handler->refresh( $account_id, $posting_number );
-			return;
-		}
-
-		History_Import::during(
-			function () use ( $account_id, $posting_number ): void {
-				$this->handler->refresh( $account_id, $posting_number );
-			}
-		);
 	}
 }

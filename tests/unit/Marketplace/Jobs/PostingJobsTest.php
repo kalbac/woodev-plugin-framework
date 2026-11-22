@@ -11,6 +11,7 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Flows\History_Import;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
+use Woodev\Framework\Marketplace\Jobs\Posting_History_Cutoffs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
@@ -149,87 +150,96 @@ final class PostingJobsTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * The first poll of an account reads the history, and writes it — and queues the refreshes of its postings — as history; the
-	 * polls after it are live orders (#1925).
+	 * The first poll of an account fixes the account's history cutoff — the moment it began — and every poll after it, whether the
+	 * first one finished the import or only a part of it, writes with that same cutoff (#1925).
 	 *
 	 * @return void
 	 */
-	public function test_only_the_first_poll_of_an_account_is_history(): void {
-		$jobs                       = $this->jobs_that_record_polls();
-		$this->handler->on_catch_up = function () use ( $jobs ): void {
-			$jobs->queue_refresh( $this->account_id, 'P-' . count( $this->handler->caught_up ) );
-		};
+	public function test_every_poll_after_the_first_keeps_the_cutoff_of_the_first(): void {
+		$jobs = $this->jobs_that_record_polls();
+
+		$before = time();
+		$jobs->poll( $this->account_id );
+		$after  = time();
+		$cutoff = $this->handler->cutoffs[0];
+
+		$this->assertGreaterThanOrEqual( $before, $cutoff );
+		$this->assertLessThanOrEqual( $after, $cutoff );
 
 		$jobs->poll( $this->account_id );
 		$jobs->poll( $this->account_id );
 
-		$this->assertSame( [ true, false ], $this->handler->history );
-		$this->assertSame( [ $this->account_id, 'P-1', true ], $this->scheduler->of( self::REFRESH )[0]['args'], 'the refresh the first poll queued is history' );
-		$this->assertSame( [ $this->account_id, 'P-2' ], $this->scheduler->of( self::REFRESH )[1]['args'], 'the refresh a later poll queued is live' );
-		$this->assertFalse( History_Import::is_active(), 'the poll closes its history stretch' );
+		$this->assertSame( [ $cutoff, $cutoff, $cutoff ], $this->handler->cutoffs, 'a poll that returned normally did not close the history' );
+		$this->assertSame( 0, History_Import::cutoff(), 'the poll closes its history stretch' );
 	}
 
 	/**
-	 * A poll that failed read nothing: the account has still not been polled, so the next poll is the history again.
+	 * A refresh — queued by the marketplace's own code, with the two arguments it always had — writes with the cutoff the first poll
+	 * fixed, wherever it runs and whoever queued it.
 	 *
 	 * @return void
 	 */
-	public function test_a_failed_first_poll_leaves_the_next_one_as_history(): void {
+	public function test_a_refresh_writes_with_the_cutoff_of_its_account(): void {
+		$jobs = $this->jobs_that_record_polls();
+
+		$jobs->refresh( $this->account_id, 'P-0' );
+		$jobs->poll( $this->account_id );
+		$jobs->refresh( $this->account_id, 'P-1' );
+		$jobs->refresh( (string) $this->account_id, 'P-2' );
+
+		$cutoff = $this->handler->cutoffs[1];
+		$this->assertGreaterThan( 0, $cutoff );
+		$this->assertSame( [ 0, $cutoff, $cutoff, $cutoff ], $this->handler->cutoffs, 'a refresh before the first poll fixes no cutoff and is live' );
+	}
+
+	/**
+	 * A poll that failed still fixed the cutoff: the retry is the same history, not a new one.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_first_poll_keeps_its_cutoff_for_the_retry(): void {
 		$jobs                 = $this->jobs_that_record_polls();
 		$this->handler->fails = Fake_Remote_Exception::of( Remote_Error::RETRY, 'busy' );
 
 		try {
 			$jobs->poll( $this->account_id );
 		} catch ( Fake_Remote_Exception $e ) {
-			$this->assertFalse( History_Import::is_active(), 'a failure closes the history stretch too' );
+			$this->assertSame( 0, History_Import::cutoff(), 'a failure closes the history stretch too' );
 		}
 
 		$this->handler->fails = null;
 		$jobs->poll( $this->account_id );
 
-		$this->assertSame( [ true, true ], $this->handler->history );
+		$this->assertSame( $this->handler->cutoffs[0], $this->handler->cutoffs[1] );
+		$this->assertGreaterThan( 0, $this->handler->cutoffs[0] );
 	}
 
 	/**
-	 * Without the record of polls nothing tells a first poll from a later one: the poll is live, as it was before.
+	 * An account that was polled before the cutoffs were recorded has no history to protect; without the record of polls nothing
+	 * tells a first poll from a later one. Both stay live, as they were.
 	 *
 	 * @return void
 	 */
-	public function test_a_poll_without_the_record_of_polls_is_live(): void {
+	public function test_an_account_that_was_polled_before_has_no_history(): void {
+		$jobs = $this->jobs_that_record_polls();
+		( new Posting_Poll_Times( self::PLUGIN_ID ) )->record( $this->account_id, time() - 3600 );
+
+		$jobs->poll( $this->account_id );
 		$this->jobs()->poll( $this->account_id );
 
-		$this->assertSame( [ false ], $this->handler->history );
+		$this->assertSame( [ 0, 0 ], $this->handler->cutoffs );
 	}
 
 	/**
-	 * A refresh queued by the history import writes as history, and so does its retry; a refresh queued by anything else — one
-	 * queued before the history flag existed included — is live.
+	 * A refresh that waits for the licence is queued as it always was, with two arguments.
 	 *
 	 * @return void
 	 */
-	public function test_a_history_refresh_writes_as_history_and_keeps_the_flag_on_retry(): void {
-		$this->jobs()->refresh( $this->account_id, 'P-1', true );
-		$this->jobs()->refresh( $this->account_id, 'P-2' );
-		$this->assertSame( [ true, false ], $this->handler->history );
-		$this->assertFalse( History_Import::is_active() );
-
-		$this->handler->fails = Order_Claim_Exception::busy( 'P-1' );
-		$this->jobs()->refresh( $this->account_id, 'P-1', true );
-
-		$this->assertSame( [ $this->account_id, 'P-1', true ], $this->scheduler->of( self::REFRESH )[0]['args'], 'a busy history posting is retried as history' );
-		$this->assertFalse( History_Import::is_active(), 'a failed history write closes the stretch' );
-	}
-
-	/**
-	 * A history refresh that waits for the licence keeps its flag too.
-	 *
-	 * @return void
-	 */
-	public function test_a_history_refresh_deferred_by_the_licence_stays_history(): void {
+	public function test_a_deferred_refresh_keeps_its_two_arguments(): void {
 		$this->licensed = false;
-		$this->jobs()->refresh( $this->account_id, 'P-1', true );
+		$this->jobs_that_record_polls()->refresh( $this->account_id, 'P-1' );
 
-		$this->assertSame( [ $this->account_id, 'P-1', true ], $this->scheduler->of( self::REFRESH )[0]['args'] );
+		$this->assertSame( [ $this->account_id, 'P-1' ], $this->scheduler->of( self::REFRESH )[0]['args'] );
 	}
 
 	/**
@@ -544,6 +554,6 @@ final class PostingJobsTest extends Sync_Test_Case {
 			}
 		);
 
-		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $this->handler, $this->classifier, $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ), new Posting_Poll_Times( self::PLUGIN_ID ) );
+		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $this->handler, $this->classifier, $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ), new Posting_Poll_Times( self::PLUGIN_ID ), new Posting_History_Cutoffs( self::PLUGIN_ID ) );
 	}
 }

@@ -358,6 +358,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Jobs\\Noop_Event_Handler' => 'woodev/marketplace/jobs/class-noop-event-handler.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Poll_Task_Runner' => 'woodev/marketplace/jobs/class-poll-task-runner.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Posting_Handler' => 'woodev/marketplace/jobs/interface-posting-handler.php',
+	'Woodev\\Framework\\Marketplace\\Jobs\\Posting_History_Cutoffs' => 'woodev/marketplace/jobs/class-posting-history-cutoffs.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Posting_Jobs' => 'woodev/marketplace/jobs/class-posting-jobs.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Posting_Poll_Times' => 'woodev/marketplace/jobs/class-posting-poll-times.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Flush_Runner' => 'woodev/marketplace/jobs/class-price-flush-runner.php',

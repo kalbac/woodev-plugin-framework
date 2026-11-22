@@ -110,8 +110,8 @@ final class Wc_Order_Store implements Order_Store {
 	}
 
 	/**
-	 * Saves a new order that takes no stock yet. While the marketplace's history is written, WooCommerce mails nothing for it
-	 * ({@see History_Import}).
+	 * Saves a new order that takes no stock yet. An order the marketplace created before the account's history cutoff
+	 * is history, and WooCommerce mails nothing for it ({@see History_Import}).
 	 *
 	 * @since 2.1.0
 	 *
@@ -120,6 +120,8 @@ final class Wc_Order_Store implements Order_Store {
 	 */
 	public function create( Order_DTO $order ): \WC_Order {
 		return History_Import::quietly(
+			$order,
+			true,
 			function () use ( $order ): \WC_Order {
 				return $this->save_new( $order );
 			}
@@ -172,8 +174,8 @@ final class Wc_Order_Store implements Order_Store {
 	}
 
 	/**
-	 * Brings the order in line with the DTO and saves it. While the marketplace's history is written, the status change that
-	 * follows mails nothing either ({@see History_Import}).
+	 * Brings the order in line with the DTO and saves it. The first save of a history order — the one that gives it its first real
+	 * status — mails nothing either ({@see History_Import}); a later change of that order mails as usual.
 	 *
 	 * @since 2.1.0
 	 *
@@ -186,6 +188,8 @@ final class Wc_Order_Store implements Order_Store {
 	 */
 	public function update( \WC_Order $wc_order, Order_DTO $order, string $wc_status, array $members, bool $created ): void {
 		History_Import::quietly(
+			$order,
+			$created,
 			function () use ( $wc_order, $order, $wc_status, $members, $created ): void {
 				$this->save_changes( $wc_order, $order, $wc_status, $members, $created );
 			}
