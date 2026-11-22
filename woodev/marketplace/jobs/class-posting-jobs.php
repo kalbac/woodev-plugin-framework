@@ -366,11 +366,10 @@ final class Posting_Jobs {
 			return $stored;
 		}
 
-		$cutoff = null === $this->poll_times->last( $account->id() ) ? time() : 0;
+		$this->cutoffs->remember( $account->id(), null === $this->poll_times->last( $account->id() ) ? time() : 0 );
 
-		$this->cutoffs->remember( $account->id(), $cutoff );
-
-		return $cutoff;
+		// Read back: a poll of the same account in another request may have recorded its cutoff first, and that one stays.
+		return (int) $this->cutoffs->get( $account->id() );
 	}
 
 	/**

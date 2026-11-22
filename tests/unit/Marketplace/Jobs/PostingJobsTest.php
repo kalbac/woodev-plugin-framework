@@ -553,6 +553,17 @@ final class PostingJobsTest extends Sync_Test_Case {
 				return true;
 			}
 		);
+		Functions\when( 'add_option' )->alias(
+			function ( string $name, $value ): bool {
+				if ( array_key_exists( $name, $this->options ) ) {
+					return false;
+				}
+
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
 
 		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $this->handler, $this->classifier, $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ), new Posting_Poll_Times( self::PLUGIN_ID ), new Posting_History_Cutoffs( self::PLUGIN_ID ) );
 	}
