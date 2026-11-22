@@ -18,10 +18,13 @@ use Woodev\Framework\Marketplace\Orders\Order_DTO;
 use Woodev\Framework\Marketplace\Orders\Order_Line;
 use Woodev\Framework\Marketplace\Orders\Status_Map;
 use Woodev\Framework\Marketplace\Price\Money;
+use Woodev\Tests\Integration\Mailer_Listens;
 use Woodev\Tests\Integration\TestCase;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
 
 class OrderStoresTest extends TestCase {
+	use Mailer_Listens;
+
 	private const ACCOUNT = 7;
 
 	/**
@@ -319,6 +322,9 @@ class OrderStoresTest extends TestCase {
 	 */
 	public function test_history_orders_send_no_woocommerce_email_and_live_orders_do( bool $hpos ): void {
 		$this->use_datastore( $hpos );
+		// On WC 8.5.1 and 9.3.0 the mailer of an earlier test has lost its listeners and no order mails at all: without this the
+		// «mails» assertions below fail whatever the code does, and the «mails nothing» ones prove nothing.
+		$this->ensure_mailer_listens();
 		update_option( 'woocommerce_notify_low_stock', 'yes' );
 		update_option( 'woocommerce_notify_low_stock_amount', 2 );
 
