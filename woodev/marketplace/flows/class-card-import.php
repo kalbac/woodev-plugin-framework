@@ -52,9 +52,10 @@ defined( 'ABSPATH' ) || exit;
  *   ({@see self::WAITING}) so the caller can bring it back after that card. The preview of «Импортировать» makes the same decision
  *   ({@see Group_Assembler::group_of()}).
  *
- * **Mapping of the category.** A created product whose category the import chose (the setting «Создавать категории при импорте» is
- * on) leaves the run with the shop category mapped to the card's marketplace category and type, when it had no mapping
- * ({@see Import_Mapping}); a mapping that exists is never changed.
+ * **Mapping of the category.** A product the import creates, while the setting «Создавать категории при импорте» is on, gets its
+ * shop category mapped to the card's marketplace category and type when it has no mapping ({@see Import_Mapping}) — after the first
+ * save and **before** the product is filled and priced, so the profile that governs the import is the one the export reads. A
+ * mapping that exists is the merchant's and is not changed.
  *
  * What the merchant should know goes into an import note ({@see Link_Report_Store::set_import_note()}); a successful import
  * clears the card's note. This class never talks to the marketplace; the card is already read.
@@ -320,9 +321,10 @@ final class Card_Import {
 	 * @return string
 	 */
 	private function finish( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
+		$notes    = $this->category_mapping( $content );
 		$warnings = (array) call_user_func( $this->complete, $account, $content, $product, $this->settings->import_publish(), $renew, $stored );
 
-		return $this->link( $account, $content, $this->groups->place( $account, $product, $content, $fence ), $fence, self::CREATED, $warnings );
+		return $this->link( $account, $content, $this->groups->place( $account, $product, $content, $fence ), $fence, self::CREATED, array_merge( $notes, $warnings ) );
 	}
 
 	/**
@@ -369,9 +371,10 @@ final class Card_Import {
 		$this->groups->offer( $variation, $content );
 
 		$switched_on = $this->groups->sells_at_once( $variation, $this->settings->import_publish() );
+		$notes       = $this->category_mapping( $content );
 		$warnings    = (array) call_user_func( $this->complete, $account, Group_Assembler::variation_content( $content ), $variation, $switched_on, $renew, $stored );
 
-		return $this->link( $account, $content, $variation, $fence, self::CREATED, $warnings );
+		return $this->link( $account, $content, $variation, $fence, self::CREATED, array_merge( $notes, $warnings ) );
 	}
 
 	/**
@@ -400,7 +403,7 @@ final class Card_Import {
 
 		$this->groups->parent_row( $account, $product, $content, $fence );
 
-		$warnings = array_merge( $warnings, $this->groups->notice( $account, $product, $content ), $this->category_mapping( $content, $done ) );
+		$warnings = array_merge( $warnings, $this->groups->notice( $account, $product, $content ) );
 
 		if ( [] === $warnings ) {
 			$this->notes->clear_import_note( $account->id(), $article );
@@ -412,15 +415,15 @@ final class Card_Import {
 	}
 
 	/**
-	 * Gives the shop category of a product the import made the mapping the merchant would otherwise make by hand. Only a created
-	 * product's category was chosen by the import, and only while the import creates categories ({@see Import_Mapping}).
+	 * Gives the shop category of a product the import is making the mapping the merchant would otherwise make by hand, when the import
+	 * chooses categories ({@see Import_Mapping}). It is done **before** the product is filled: the profile of the mapping in force then
+	 * governs the description, the weight and the price the writer sets, as it governs every later export.
 	 *
 	 * @param Card_Content $content Card.
-	 * @param string       $done    The outcome of the link.
 	 * @return string[] The note for the merchant, if there is one.
 	 */
-	private function category_mapping( Card_Content $content, string $done ): array {
-		if ( null === $this->mapping || self::CREATED !== $done || ! $this->settings->import_create_categories() ) {
+	private function category_mapping( Card_Content $content ): array {
+		if ( null === $this->mapping || ! $this->settings->import_create_categories() ) {
 			return [];
 		}
 

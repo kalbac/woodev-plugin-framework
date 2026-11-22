@@ -103,6 +103,13 @@ final class CardImportTest extends Export_Test_Case {
 	private $started = [];
 
 	/**
+	 * Whether the type of the card was mapped when the writer filled the product; null before it did.
+	 *
+	 * @var bool|null
+	 */
+	private $mapped_at_complete;
+
+	/**
 	 * What gives the category of a created product its mapping; null builds an importer that leaves the mappings alone.
 	 *
 	 * @var Import_Mapping|null
@@ -133,6 +140,7 @@ final class CardImportTest extends Export_Test_Case {
 		$this->next_id               = 900;
 		$this->started               = [];
 		$this->category_mapping      = null;
+		$this->mapped_at_complete    = null;
 		$this->categories            = [];
 
 		Functions\when( 'get_option' )->alias(
@@ -278,6 +286,7 @@ final class CardImportTest extends Export_Test_Case {
 
 		unset( $this->started[ $id ] );
 		$this->writes[ count( $this->writes ) - 1 ][2] = $publish;
+		$this->mapped_at_complete                      = null !== $this->mappings()->for_category( Import_Fake_Schema::PHONES );
 
 		if ( null !== $this->cut_after_first_save ) {
 			$this->mark( $product );
@@ -853,5 +862,18 @@ final class CardImportTest extends Export_Test_Case {
 
 		$this->assertSame( [ 'OW-IMPORT-2' => 'Категория «Гаджеты»: на маркетплейсе карточки разных типов, сопоставление создано по типу «Электроника › Смартфоны».' ], $notes, 'the first card has no note' );
 		$this->assertNull( $this->mappings()->for_category( Import_Fake_Schema::TABLETS ) );
+	}
+
+	/**
+	 * The mapping is there before the writer fills and prices the product, so the profile that fills it is the one the export reads.
+	 *
+	 * @return void
+	 */
+	public function test_the_mapping_is_made_before_the_product_is_filled(): void {
+		$this->mapping_categories();
+
+		$this->import( $this->typed_card( Import_Fake_Schema::PHONES ) );
+
+		$this->assertTrue( $this->mapped_at_complete );
 	}
 }

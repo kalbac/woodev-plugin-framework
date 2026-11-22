@@ -191,6 +191,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Catalog\\Card_Content' => 'woodev/marketplace/catalog/class-card-content.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Card_Exporter' => 'woodev/marketplace/catalog/interface-card-exporter.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Catalog_Schema' => 'woodev/marketplace/catalog/interface-catalog-schema.php',
+	'Woodev\\Framework\\Marketplace\\Catalog\\Dictionary_Label_Lookup' => 'woodev/marketplace/catalog/interface-dictionary-label-lookup.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Dictionary_Resolution' => 'woodev/marketplace/catalog/class-dictionary-resolution.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Export_Validator' => 'woodev/marketplace/catalog/class-export-validator.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Field_Definition' => 'woodev/marketplace/catalog/class-field-definition.php',

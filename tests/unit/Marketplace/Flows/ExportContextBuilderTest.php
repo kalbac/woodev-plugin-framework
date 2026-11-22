@@ -7,6 +7,7 @@
 
 namespace Woodev\Tests\Unit\Marketplace\Flows;
 
+use Woodev\Framework\Marketplace\Catalog\Field_Definition;
 use Woodev\Framework\Marketplace\Catalog\Source;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Price\Money;
@@ -205,5 +206,33 @@ final class ExportContextBuilderTest extends Export_Test_Case {
 	 */
 	public function test_a_missing_product_is_null(): void {
 		$this->assertNull( $this->contexts()->product( 99999 ) );
+	}
+
+	/**
+	 * Facts that can resolve a dictionary label give the validator its `dictionary_lookup`; the facts' own one wins; plain facts give none.
+	 *
+	 * @return void
+	 */
+	public function test_the_builder_hands_the_facts_dictionary_lookup_to_the_validator(): void {
+		$field   = new Field_Definition( '10096', 'Цвет', false, Field_Definition::TYPE_DICTIONARY );
+		$product = $this->add_product();
+
+		$this->assertNull( $this->contexts()->build( $this->account_now(), $product, null )->context()->dictionary_lookup(), 'plain facts: no lookup' );
+
+		$plain       = $this->facts;
+		$this->facts = new Lookup_Export_Facts( $plain );
+		$lookup      = $this->contexts()->build( $this->account_now(), $product, null )->context()->dictionary_lookup();
+
+		$this->assertNotNull( $lookup );
+		$this->assertSame( '901', call_user_func( $lookup, $field, 'красный' ) );
+		$this->assertNull( call_user_func( $lookup, $field, 'синий' ) );
+
+		$plain->facts['dictionary_lookup'] = static function (): string {
+			return 'own';
+		};
+
+		$own = $this->contexts()->build( $this->account_now(), $product, null )->context()->dictionary_lookup();
+
+		$this->assertSame( 'own', call_user_func( $own, $field, 'красный' ) );
 	}
 }

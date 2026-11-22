@@ -110,10 +110,12 @@ final class ImportMappingTest extends TestCase {
 	/**
 	 * Builds the writer over the stores and the catalogue of the test.
 	 *
+	 * @param bool   $resolves_labels Whether the marketplace resolves a dictionary label to a value id locally.
+	 * @param string $marketplace     The marketplace's name for the merchant's sentences.
 	 * @return Import_Mapping
 	 */
-	private function writer(): Import_Mapping {
-		return new Import_Mapping( $this->mappings, new Import_Category( $this->mappings ), new Category_Finder( $this->schema ) );
+	private function writer( bool $resolves_labels = false, string $marketplace = 'Ozon' ): Import_Mapping {
+		return new Import_Mapping( $this->mappings, new Import_Category( $this->mappings ), new Category_Finder( $this->schema ), $marketplace, $resolves_labels );
 	}
 
 	/**
@@ -175,7 +177,7 @@ final class ImportMappingTest extends TestCase {
 		$this->assertSame( 'Смартфоны', $found['mapping']['name'] );
 		$this->assertNull( $found['mapping']['wc_product_id'], 'a term-bound mapping, the kind the «Сопоставление» page lists' );
 		$this->assertNull( $found['mapping']['profile_id'], 'the profile of a mapping made by hand: none' );
-		$this->assertSame( [], $found['mapping']['attributes'], 'a card with no aspects links nothing' );
+		$this->assertSame( [], $this->links_of( Import_Fake_Schema::PHONES ), 'a card with no aspects links nothing' );
 	}
 
 	/**
@@ -205,10 +207,10 @@ final class ImportMappingTest extends TestCase {
 		$this->mappings->link_term_if_absent( 61, $mine );
 		$before = $this->mappings->find( $mine );
 
-		$note = $this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный' ], 2 ) );
+		$note = $this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Размер' => '42' ], 2 ) );
 
 		$this->assertSame( '', $note );
-		$this->assertSame( $before, $this->mappings->find( $mine ), 'the mapping is as the merchant left it' );
+		$this->assertSame( $before, $this->mappings->find( $mine ), 'the mapping is as the merchant left it, and no «Размер» link was added' );
 		$this->assertCount( 1, $this->mappings->all_term_bound(), 'and no other was made' );
 		$this->assertCount( 1, $this->terms, 'the card\'s own path was not even looked up' );
 	}
@@ -244,7 +246,7 @@ final class ImportMappingTest extends TestCase {
 		$second = $writer->ensure( $this->card( Import_Fake_Schema::TABLETS, [ 'Электроника', 'Гаджеты' ] ) );
 
 		$this->assertSame( '', $first );
-		$this->assertSame( 'Категория «Гаджеты»: на маркетплейсе карточки разных типов, сопоставление создано по типу «Электроника › Смартфоны».', $second );
+		$this->assertSame( 'Категория «Гаджеты»: в Ozon карточки разных типов, сопоставление создано по типу «Электроника › Смартфоны».', $second );
 		$this->assertCount( 1, $this->mappings->all_term_bound(), 'one mapping, by the first type' );
 		$this->assertNotNull( $this->mappings->for_category( Import_Fake_Schema::PHONES ) );
 		$this->assertNull( $this->mappings->for_category( Import_Fake_Schema::TABLETS ) );
@@ -264,14 +266,13 @@ final class ImportMappingTest extends TestCase {
 	}
 
 	/**
-	 * Point 4: a characteristic the import wrote as a product attribute is linked to it, by name, and the rest is not.
+	 * Point 4: a characteristic the import wrote as a product attribute is linked to it, by name, and the rest is not. A dictionary
+	 * characteristic is linked only when the marketplace resolves its labels locally.
 	 *
 	 * @return void
 	 */
 	public function test_the_attributes_the_import_wrote_are_linked_to_their_characteristics(): void {
-		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный', 'размер' => '42', 'Вариант' => 'A-1' ], 3 ) );
-
-		$attributes = $this->mappings->for_category( Import_Fake_Schema::PHONES )['mapping']['attributes'];
+		$this->writer( true )->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный', 'размер' => '42', 'Вариант' => 'A-1' ], 3 ) );
 
 		$this->assertSame(
 			[
@@ -284,9 +285,104 @@ final class ImportMappingTest extends TestCase {
 					'wc_key' => 'размер',
 				],
 			],
-			$attributes,
+			$this->links_of( Import_Fake_Schema::PHONES ),
 			'«Цвет» and «Размер» are linked (the case of a name does not matter); «Вариант» is no characteristic and is left out'
 		);
+	}
+
+	/**
+	 * Must 2: a marketplace that cannot resolve a dictionary label locally gets no link on a dictionary characteristic — the export's
+	 * validation would refuse the label — while the other characteristics are linked as before.
+	 *
+	 * @return void
+	 */
+	public function test_a_dictionary_characteristic_is_not_linked_when_labels_cannot_be_resolved(): void {
+		$this->writer( false )->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный', 'Размер' => '42' ], 3 ) );
+
+		$this->assertSame( [ '9533' ], $this->linked_ids( Import_Fake_Schema::PHONES ) );
+	}
+
+	/**
+	 * Must 1: the first card of a type decides nothing for good — a standalone card made the mapping with no links, a later grouped
+	 * card of the same type adds its links to the table the import made, a third adds the one the second lacked.
+	 *
+	 * @return void
+	 */
+	public function test_a_later_card_adds_the_links_the_first_card_did_not_have(): void {
+		$writer = $this->writer( true );
+
+		$writer->ensure( $this->card( Import_Fake_Schema::PHONES ) );
+		$this->assertSame( [], $this->links_of( Import_Fake_Schema::PHONES ), 'a standalone card: nothing to link yet' );
+
+		$writer->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный' ], 3 ) );
+		$this->assertSame( [ '10096' ], $this->linked_ids( Import_Fake_Schema::PHONES ) );
+
+		$writer->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'синий', 'Размер' => '42' ], 3 ) );
+		$this->assertSame( [ '10096', '9533' ], $this->linked_ids( Import_Fake_Schema::PHONES ) );
+		$this->assertCount( 1, $this->mappings->all_term_bound(), 'still the one mapping' );
+	}
+
+	/**
+	 * A row that is in the table is never overwritten by a later card.
+	 *
+	 * @return void
+	 */
+	public function test_a_later_card_never_overwrites_a_link(): void {
+		$writer = $this->writer( true );
+
+		$writer->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Размер' => '42' ], 3 ) );
+		$writer->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'размер' => '44' ], 3 ) );
+
+		$this->assertSame( 'Размер', $this->links_of( Import_Fake_Schema::PHONES )['9533']['wc_key'] );
+	}
+
+	/**
+	 * A mapping the merchant has changed since the import made it is the merchant's: a later card adds nothing, whatever was changed.
+	 *
+	 * @return void
+	 */
+	public function test_a_mapping_the_merchant_changed_is_not_completed_by_a_later_card(): void {
+		foreach ( [ 'name', 'profile', 'table' ] as $change ) {
+			$this->setUp();
+
+			$writer = $this->writer( true );
+			$writer->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Размер' => '42' ], 3 ) );
+
+			$stored   = $this->mappings->for_category( Import_Fake_Schema::PHONES )['mapping'];
+			$name     = 'name' === $change ? 'Мои телефоны' : $stored['name'];
+			$profile  = 'profile' === $change ? 7 : $stored['profile_id'];
+			$table    = 'table' === $change ? [ '85' => [ 'source' => Source::FIXED, 'value' => 'Acme' ] ] : $stored['attributes'];
+			$this->mappings->update( $stored['mapping_id'], $name, $stored['category'], $profile, $table );
+			$before = $this->mappings->find( $stored['mapping_id'] );
+
+			$writer->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный' ], 3 ) );
+
+			$this->assertSame( $before, $this->mappings->find( $stored['mapping_id'] ), 'changed: ' . $change );
+		}
+	}
+
+	/**
+	 * Returns the ids of the fields the mapping of a type links, as strings (PHP keeps a numeric key an integer).
+	 *
+	 * @param array<string,int> $remote The type.
+	 * @return string[]
+	 */
+	private function linked_ids( array $remote ): array {
+		return array_map( 'strval', array_keys( $this->links_of( $remote ) ) );
+	}
+
+	/**
+	 * Returns the attribute sources of the mapping of a type, without the import's mark.
+	 *
+	 * @param array<string,int> $remote The type.
+	 * @return array<string,array<string,string>>
+	 */
+	private function links_of( array $remote ): array {
+		$found = $this->mappings->for_category( $remote );
+
+		$this->assertNotNull( $found );
+
+		return array_diff_key( $found['mapping']['attributes'], [ '_import_created' => true ] );
 	}
 
 	/**
@@ -297,7 +393,7 @@ final class ImportMappingTest extends TestCase {
 	public function test_a_card_alone_in_its_group_links_no_attribute(): void {
 		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный' ], 1 ) );
 
-		$this->assertSame( [], $this->mappings->for_category( Import_Fake_Schema::PHONES )['mapping']['attributes'] );
+		$this->assertSame( [], $this->links_of( Import_Fake_Schema::PHONES ) );
 	}
 
 	/**
@@ -313,7 +409,7 @@ final class ImportMappingTest extends TestCase {
 		$found = $this->mappings->for_category( Import_Fake_Schema::PHONES );
 
 		$this->assertNotNull( $found );
-		$this->assertSame( [], $found['mapping']['attributes'] );
+		$this->assertSame( [], $this->links_of( Import_Fake_Schema::PHONES ) );
 	}
 
 	/**
@@ -327,5 +423,17 @@ final class ImportMappingTest extends TestCase {
 
 		$this->assertSame( [], $this->mappings->all_term_bound() );
 		$this->assertCount( 1, $this->terms, 'no category was made either' );
+	}
+
+	/**
+	 * Without a marketplace name the sentence says «на маркетплейсе».
+	 *
+	 * @return void
+	 */
+	public function test_the_note_falls_back_to_a_neutral_marketplace(): void {
+		$writer = $this->writer( false, '' );
+		$writer->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Гаджеты' ] ) );
+
+		$this->assertStringContainsString( ': на маркетплейсе карточки разных типов', $writer->ensure( $this->card( Import_Fake_Schema::TABLETS, [ 'Электроника', 'Гаджеты' ] ) ) );
 	}
 }

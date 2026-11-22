@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Category_Finder;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Catalog\Dictionary_Label_Lookup;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Data\Link_Progress_Store;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
@@ -625,7 +626,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 				new Wpdb_Profile_Store( $this->db, $this->table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
 				new Shop_Price_Writer( $this->contexts )
 			);
-			$mapping    = new Import_Mapping( $mappings, $categories, new Category_Finder( $adapter->catalog_schema() ) );
+			$mapping    = new Import_Mapping( $mappings, $categories, new Category_Finder( $adapter->catalog_schema() ), $adapter->settings_descriptor()->marketplace_name(), $adapter->export_facts() instanceof Dictionary_Label_Lookup );
 			$import     = new Card_Import( $this->links, $this->linker, $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links ), [ $writer, 'start' ], [ $writer, 'complete' ], $mapping );
 
 			( new Import_Jobs( $this->gate, $adapter, $import, $notes, $scheduler, $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();

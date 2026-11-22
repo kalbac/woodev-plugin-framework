@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Flows;
 
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Catalog\Article_Policy;
+use Woodev\Framework\Marketplace\Catalog\Dictionary_Label_Lookup;
 use Woodev\Framework\Marketplace\Catalog\Mapping;
 use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Data\Link_Record;
@@ -158,6 +159,7 @@ final class Export_Context_Builder implements Price_Context {
 		$article = $this->facts->offer_id_for( $this->frozen_offer_id( $link ) ?? $this->pinned->of( $product, $account->id() ), $product, $profile );
 
 		$facts = array_merge(
+			$this->dictionary_facts(),
 			$this->facts->facts( $account, $product, $mapping, $profile ),
 			$this->own_facts( $account ),
 			[
@@ -294,6 +296,16 @@ final class Export_Context_Builder implements Price_Context {
 		}
 
 		return $this->ledger->sent_offer_id( (int) $link->link_id() );
+	}
+
+	/**
+	 * Returns the local dictionary lookup of the marketplace's facts, when they offer one ({@see Dictionary_Label_Lookup}). It comes
+	 * first, so a `dictionary_lookup` the facts carry themselves wins.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function dictionary_facts(): array {
+		return $this->facts instanceof Dictionary_Label_Lookup ? [ 'dictionary_lookup' => [ $this->facts, 'dictionary_value_id' ] ] : [];
 	}
 
 	/**
