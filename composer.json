@@ -127,7 +127,7 @@
     "prefer-stable": true,
     "extra": {
         "woodev": {
-            "planned-release": "2.1.15"
+            "planned-release": "2.1.16"
         }
     }
 }
