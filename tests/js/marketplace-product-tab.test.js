@@ -553,6 +553,29 @@ describe( 'fitting to the width the panel has', () => {
 } );
 
 describe( 'the account select', () => {
+	// One variation as the framework prints it for a product with two accounts: the slot in the collapsed header and the block in the opened
+	// variation, one per account, and the slot of another marketplace that has the same account ids.
+	const VARIATION = `
+		<div class="woocommerce_variation"><h3>
+			<span class="woodev-mp-header-state" data-marketplace="fake" data-account="2"></span>
+			<span class="woodev-mp-header-state" data-marketplace="fake" data-account="4" hidden></span>
+			<span class="woodev-mp-header-state" data-marketplace="other" data-account="2"></span>
+			<span class="woodev-mp-header-state" data-marketplace="other" data-account="4" hidden></span></h3>
+			<div class="woodev-mp-block woodev-mp-block--variation" data-marketplace="fake" data-account="2"></div>
+			<div class="woodev-mp-block woodev-mp-block--variation" data-marketplace="fake" data-account="4" hidden></div></div>`;
+
+	/**
+	 * Tells whether a part of a variation is on screen.
+	 *
+	 * @param {string} selector Class of the part.
+	 * @param {string} marketplace Marketplace id.
+	 * @param {string} account Account id.
+	 * @return {boolean} False when it carries `hidden`.
+	 */
+	function isShown( selector, marketplace, account ) {
+		return ! document.querySelector( `#variable_product_options ${ selector }[data-marketplace="${ marketplace }"][data-account="${ account }"]` ).hidden;
+	}
+
 	beforeEach( () => {
 		jest.useRealTimers();
 	} );
@@ -565,13 +588,15 @@ describe( 'the account select', () => {
 	async function loadWithSelect( stored ) {
 		document.body.innerHTML = `
 			<div id="woocommerce-product-data"><h2 class="hndle"><span>Product data</span></h2>
-				<ul class="wc-tabs"><li class="general"><a href="#g">General</a></li><li class="woodev-mp-tab-link"><a href="#o">Ozon</a></li></ul>
+				<ul class="wc-tabs"><li class="general"><a href="#g">General</a></li><li class="woodev-mp-tab-link"><a href="#o">Ozon</a></li>
+					<li class="variations_tab"><a href="#v">Variations</a></li></ul>
 				<div class="woodev-mp-tab">
-					<div class="woodev-mp-account-switch" data-remember="woodev_fake_account">
+					<div class="woodev-mp-account-switch" data-remember="woodev_fake_account" data-marketplace="fake">
 						<select><option value="2">One</option><option value="4">Two</option></select></div>
 					<div class="woodev-mp-block" data-account="2"></div>
 					<div class="woodev-mp-block" data-account="4" hidden></div>
 				</div>
+				<div id="variable_product_options">${ VARIATION }</div>
 			</div>`;
 
 		window.localStorage.clear();
@@ -622,6 +647,60 @@ describe( 'the account select', () => {
 		expect( document.querySelector( '[data-account="2"]' ).hidden ).toBe( true );
 		expect( document.querySelector( '[data-account="4"]' ).hidden ).toBe( false );
 		expect( window.localStorage.getItem( 'woodev_mp_woodev_fake_account' ) ).toBe( '4' );
+	} );
+
+	test( 'the variations start on the picked account: one slot in the header and one block per variation', async () => {
+		await loadWithSelect( '4' );
+
+		expect( isShown( '.woodev-mp-header-state', 'fake', '2' ) ).toBe( false );
+		expect( isShown( '.woodev-mp-header-state', 'fake', '4' ) ).toBe( true );
+		expect( isShown( '.woodev-mp-block--variation', 'fake', '2' ) ).toBe( false );
+		expect( isShown( '.woodev-mp-block--variation', 'fake', '4' ) ).toBe( true );
+	} );
+
+	test( 'picking another account swaps the variations too, and leaves another marketplace\'s variations alone', async () => {
+		await loadWithSelect( null );
+
+		const select = document.querySelector( '.woodev-mp-account-switch select' );
+		select.value = '4';
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( isShown( '.woodev-mp-header-state', 'fake', '2' ) ).toBe( false );
+		expect( isShown( '.woodev-mp-header-state', 'fake', '4' ) ).toBe( true );
+		expect( isShown( '.woodev-mp-block--variation', 'fake', '2' ) ).toBe( false );
+		expect( isShown( '.woodev-mp-block--variation', 'fake', '4' ) ).toBe( true );
+		expect( isShown( '.woodev-mp-header-state', 'other', '2' ) ).toBe( true );
+		expect( isShown( '.woodev-mp-header-state', 'other', '4' ) ).toBe( false );
+	} );
+
+	test( 'variations that WooCommerce loads later start on the picked account', async () => {
+		await loadWithSelect( null );
+
+		const select = document.querySelector( '.woodev-mp-account-switch select' );
+		select.value = '4';
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// The AJAX answer replaces the variations with the markup of the server, which starts on the default account.
+		document.getElementById( 'variable_product_options' ).innerHTML = VARIATION;
+		expect( isShown( '.woodev-mp-block--variation', 'fake', '2' ) ).toBe( true );
+
+		global.jQuery( document.body ).trigger( 'woocommerce_variations_loaded' );
+
+		expect( isShown( '.woodev-mp-header-state', 'fake', '2' ) ).toBe( false );
+		expect( isShown( '.woodev-mp-header-state', 'fake', '4' ) ).toBe( true );
+		expect( isShown( '.woodev-mp-block--variation', 'fake', '2' ) ).toBe( false );
+		expect( isShown( '.woodev-mp-block--variation', 'fake', '4' ) ).toBe( true );
+	} );
+
+	test( 'is shown while the «Variations» tab is the open one, too', async () => {
+		await loadWithSelect( null );
+
+		const wrap = document.querySelector( '.woodev-mp-account-switch' );
+		const tab  = document.querySelector( '.variations_tab' );
+		tab.classList.add( 'active' );
+		tab.querySelector( 'a' ).click();
+
+		await waitFor( () => expect( wrap.hidden ).toBe( false ) );
 	} );
 
 	test( 'is shown only while the marketplace tab is the open one', async () => {

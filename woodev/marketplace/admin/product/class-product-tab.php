@@ -333,12 +333,14 @@ final class Product_Tab {
 			return;
 		}
 
+		$blocks = $this->variation_blocks( $product );
 		$screen = [
-			'blocks'       => $this->variation_blocks( $product ),
-			'nonce'        => wp_create_nonce( $this->names->save_nonce() ),
-			'loop'         => (int) $loop,
-			'settings_url' => $this->urls['settings'],
-			'mappings_url' => $this->urls['mappings'],
+			'blocks'          => $blocks,
+			'default_account' => $this->default_account_id( array_column( $blocks, 'account' ) ),
+			'nonce'           => wp_create_nonce( $this->names->save_nonce() ),
+			'loop'            => (int) $loop,
+			'settings_url'    => $this->urls['settings'],
+			'mappings_url'    => $this->urls['mappings'],
 		];
 
 		if ( null !== $this->extension ) {
@@ -375,9 +377,10 @@ final class Product_Tab {
 		if ( [] !== $blocks ) {
 			$this->view->render_variation_header(
 				[
-					'blocks'       => $blocks,
-					'settings_url' => $this->urls['settings'],
-					'mappings_url' => $this->urls['mappings'],
+					'blocks'          => $blocks,
+					'default_account' => $this->default_account_id( array_column( $blocks, 'account' ) ),
+					'settings_url'    => $this->urls['settings'],
+					'mappings_url'    => $this->urls['mappings'],
 				]
 			);
 		}

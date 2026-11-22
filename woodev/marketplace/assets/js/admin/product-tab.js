@@ -247,13 +247,22 @@
 	);
 
 	/**
-	 * Picks the account the tab shows: its block is shown, the others are hidden (all of them stay in the form, so «Обновить» saves each).
+	 * Picks the account that «Product data» shows: its block in the tab is shown, the others are hidden (all of them stay in the form, so
+	 * «Обновить» saves each). The «Variations» tab follows the same pick: a variation's block and its slot in the collapsed header carry the
+	 * account and the marketplace they belong to, so the same select decides which of them is on screen, one slot per marketplace.
 	 *
-	 * @param {jQuery} $panel  The tab's panel.
-	 * @param {string} account Account id.
+	 * @param {jQuery} $panel      The tab's panel.
+	 * @param {string} marketplace Marketplace id of the select, so another marketplace's variations are left alone.
+	 * @param {string} account     Account id.
 	 */
-	function showAccount( $panel, account ) {
-		$panel.find( '.woodev-mp-block[data-account]' ).each(
+	function showAccount( $panel, marketplace, account ) {
+		var $variationParts = $( '#variable_product_options [data-account]' ).filter(
+			function () {
+				return this.getAttribute( 'data-marketplace' ) === marketplace;
+			}
+		);
+
+		$panel.find( '.woodev-mp-block[data-account]' ).add( $variationParts ).each(
 			function () {
 				$( this ).prop( 'hidden', String( $( this ).data( 'account' ) ) !== String( account ) );
 			}
@@ -262,8 +271,8 @@
 
 	/**
 	 * Sets up the account select, when the tab has one (two or more accounts): moves it into the header of «Product data», right of
-	 * Virtual / Downloadable, shows it only while this tab is open, and starts on the account the merchant used last in this browser
-	 * (else the first one).
+	 * Virtual / Downloadable, shows it only while this tab or the «Variations» tab is open, and starts on the account the merchant used last in
+	 * this browser (else the first one). Variations that WooCommerce loads later get the pick as they arrive.
 	 */
 	function setUpAccountSwitch() {
 		var $switch = $( '.woodev-mp-account-switch' );
@@ -272,12 +281,13 @@
 			return;
 		}
 
-		var $panel  = $switch.closest( '.woodev-mp-tab' );
-		var $select = $switch.find( 'select' );
-		var key     = 'woodev_mp_' + $switch.data( 'remember' );
-		var $header = $( '#woocommerce-product-data .hndle' ).first();
-		var $link   = $( '.woodev-mp-tab-link' );
-		var last    = '';
+		var $panel      = $switch.closest( '.woodev-mp-tab' );
+		var $select     = $switch.find( 'select' );
+		var marketplace = $switch.attr( 'data-marketplace' ) || '';
+		var key         = 'woodev_mp_' + $switch.data( 'remember' );
+		var $header     = $( '#woocommerce-product-data .hndle' ).first();
+		var $link       = $( '.woodev-mp-tab-link' );
+		var last        = '';
 
 		try {
 			last = window.localStorage.getItem( key ) || '';
@@ -289,12 +299,12 @@
 			$select.val( last );
 		}
 
-		showAccount( $panel, $select.val() );
+		showAccount( $panel, marketplace, $select.val() );
 
 		$select.on(
 			'change',
 			function () {
-				showAccount( $panel, $select.val() );
+				showAccount( $panel, marketplace, $select.val() );
 
 				try {
 					window.localStorage.setItem( key, $select.val() );
@@ -302,6 +312,14 @@
 					// Private window: the choice simply is not remembered.
 					return;
 				}
+			}
+		);
+
+		// The variations arrive after the tab is opened (and again after a save or a page): they start on the account that is picked now.
+		$( document ).on(
+			'woocommerce_variations_loaded',
+			function () {
+				showAccount( $panel, marketplace, $select.val() );
 			}
 		);
 
@@ -315,8 +333,11 @@
 			return; // No tab link to follow: the select simply stays in the header.
 		}
 
+		// The select drives the tab of the marketplace and the «Variations» tab, so it is shown while either is open.
 		var sync = function () {
-			$switch.prop( 'hidden', ! $link.hasClass( 'active' ) );
+			var $variationsTab = $( '#woocommerce-product-data ul.wc-tabs li.variations_tab' );
+
+			$switch.prop( 'hidden', ! ( $link.hasClass( 'active' ) || $variationsTab.hasClass( 'active' ) ) );
 		};
 
 		sync();
