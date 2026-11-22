@@ -605,13 +605,45 @@ describe( 'URL round trip', () => {
 	describe( 'footer pager', () => {
 		const pager = () => within( screen.getByTestId( 'card-footer' ) );
 
-		test( 'a table of one page has the size control and no page arrows or jump field', async () => {
+		const footerIsHidden = () => document.querySelector( '.woodev-records__no-footer' ) !== null;
+
+		test( 'a result that fits the smallest page size draws no footer: no size control, no arrows, no count', async () => {
 			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 2 } ) } );
 			await renderTable();
 
-			expect( pager().getByRole( 'combobox', { name: 'Строк на странице' } ) ).toBeInTheDocument();
+			expect( footerIsHidden() ).toBe( true );
+			expect( pager().queryByRole( 'combobox', { name: 'Строк на странице' } ) ).not.toBeInTheDocument();
 			expect( pager().queryByText( 'Страница 1 из 1' ) ).not.toBeInTheDocument();
 			expect( pager().queryByRole( 'button', { name: 'Предыдущая страница' } ) ).not.toBeInTheDocument();
+			expect( pager().queryByRole( 'button', { name: 'Следующая страница' } ) ).not.toBeInTheDocument();
+			expect( pager().queryByRole( 'spinbutton', { name: 'Перейти на страницу' } ) ).not.toBeInTheDocument();
+		} );
+
+		test( 'a result exactly as big as the smallest page size still draws no footer', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 25 } ) } );
+			await renderTable();
+
+			expect( footerIsHidden() ).toBe( true );
+			expect( pager().queryByRole( 'combobox', { name: 'Строк на странице' } ) ).not.toBeInTheDocument();
+		} );
+
+		test( 'a result just above the smallest page size has two pages: arrows, jump field and size control', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 26 } ) } );
+			await renderTable();
+
+			expect( footerIsHidden() ).toBe( false );
+			expect( pager().getByText( 'Страница 1 из 2' ) ).toBeInTheDocument();
+			expect( pager().getByRole( 'spinbutton', { name: 'Перейти на страницу' } ) ).toBeInTheDocument();
+			expect( pager().getByRole( 'combobox', { name: 'Строк на странице' } ) ).toBeInTheDocument();
+		} );
+
+		test( 'one page at a big page size keeps the size control, so the size can be made smaller; no arrows', async () => {
+			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 30 } ) } );
+			await renderTable( { query: { per_page: '50' } } );
+
+			expect( footerIsHidden() ).toBe( false );
+			expect( pager().getByRole( 'combobox', { name: 'Строк на странице' } ) ).toBeInTheDocument();
+			expect( pager().queryByText( 'Страница 1 из 1' ) ).not.toBeInTheDocument();
 			expect( pager().queryByRole( 'button', { name: 'Следующая страница' } ) ).not.toBeInTheDocument();
 			expect( pager().queryByRole( 'spinbutton', { name: 'Перейти на страницу' } ) ).not.toBeInTheDocument();
 		} );

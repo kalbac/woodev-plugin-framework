@@ -40,6 +40,11 @@ $cell-padding: 8px;
 
 	@include table-look.footer-row;
 
+	// One page at every page size: the pager and the count have nothing to say, so the whole footer goes ({@see ./pager} `fitsOnePage`).
+	&__no-footer .components-card__footer {
+		display: none;
+	}
+
 	// The section's description: a full-width row under the page title, where the filters start.
 	&__description {
 		color: #3c434a;

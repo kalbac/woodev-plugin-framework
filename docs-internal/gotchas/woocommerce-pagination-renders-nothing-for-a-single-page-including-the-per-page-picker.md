@@ -14,6 +14,7 @@ A records table with few rows shows no pager and no «rows per page» control, s
 
 - ❌ Rely on `Pagination` for the per-page picker.
 - ✅ Render the picker and the row count in our own footer row (always visible), and mount `Pagination` only for more than one page.
+- ✅ Operator rule (22.11.2026, s241): a records table whose whole result fits the smallest page size has NO footer at all (no picker, no count) — `fitsOnePage()` in `src/admin-records/pager.tsx`, class `woodev-records__no-footer` hides the vendor footer. «Заказы доставки» keeps its picker on a short result (#1903).
 
 ## Related
 
