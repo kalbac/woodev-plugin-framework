@@ -97,3 +97,11 @@ describe( 'the mappings page', () => {
 		expect( name ).toMatch( /min-width: 13ch;/ );
 	} );
 } );
+
+describe( 'the records table footer', () => {
+	test( 'a table of one page hides the whole card footer: size control, arrows and count', () => {
+		const hidden = block( scss, '&__no-footer .components-card__footer {' );
+
+		expect( hidden ).toMatch( /display:\s*none/ );
+	} );
+} );

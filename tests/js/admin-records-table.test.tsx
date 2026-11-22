@@ -136,7 +136,13 @@ function FakeTableCard( props: TableCardProps ) {
 				next page
 			</button>
 			{ /* WooCommerce's footer: the shell draws its pager here; the vendor pagination in it is hidden by the stylesheet. */ }
-			<div className="components-card__footer" data-testid="card-footer" />
+			<div className="components-card__footer" data-testid="card-footer">
+				{ props.summary?.map( ( item ) => (
+					<span key={ item.label } data-testid="card-summary">
+						{ `${ item.label }: ${ item.value }` }
+					</span>
+				) ) }
+			</div>
 			<button type="button" onClick={ () => props.onQueryChange( 'per_page' )( '50' ) }>
 				50 per page
 			</button>
@@ -606,12 +612,34 @@ describe( 'URL round trip', () => {
 		const pager = () => within( screen.getByTestId( 'card-footer' ) );
 
 		const footerIsHidden = () => document.querySelector( '.woodev-records__no-footer' ) !== null;
+		/**
+		 * The count in the footer, as the merchant sees it. jsdom has no cascade, so «hidden» is the stylesheet's rule applied by hand:
+		 * the footer is not drawn under `.woodev-records__no-footer` (that rule is pinned in admin-records-table-fit-styles.test.js).
+		 */
+		const count = () => {
+			const summary = within( screen.getByTestId( 'card-footer' ) ).queryByTestId( 'card-summary' );
+
+			return summary?.closest( '.woodev-records__no-footer' ) ? null : summary;
+		};
+
+		/** The default definition without a count label draws no count at all; the footer tests need one to see it hidden. */
+		const definitionWithCount = () => {
+			const definition = fixtureDefinition();
+
+			return fixtureDefinitionEnvelope( {
+				...definition,
+				messages: { ...definition.messages, summary_label: 'Всего' },
+			} );
+		};
+		const serveRows = ( rows: ( path: string ) => ListEnvelope | Promise< ListEnvelope > ) =>
+			serve( { definition: definitionWithCount, rows } );
 
 		test( 'a result that fits the smallest page size draws no footer: no size control, no arrows, no count', async () => {
-			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 2 } ) } );
+			serveRows( () => fixtureList( [ mug, shirt ], { total: 2 } ) );
 			await renderTable();
 
 			expect( footerIsHidden() ).toBe( true );
+			expect( count() ).not.toBeInTheDocument();
 			expect( pager().queryByRole( 'combobox', { name: 'Строк на странице' } ) ).not.toBeInTheDocument();
 			expect( pager().queryByText( 'Страница 1 из 1' ) ).not.toBeInTheDocument();
 			expect( pager().queryByRole( 'button', { name: 'Предыдущая страница' } ) ).not.toBeInTheDocument();
@@ -620,32 +648,85 @@ describe( 'URL round trip', () => {
 		} );
 
 		test( 'a result exactly as big as the smallest page size still draws no footer', async () => {
-			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 25 } ) } );
+			serveRows( () => fixtureList( [ mug, shirt ], { total: 25 } ) );
 			await renderTable();
 
 			expect( footerIsHidden() ).toBe( true );
+			expect( count() ).not.toBeInTheDocument();
 			expect( pager().queryByRole( 'combobox', { name: 'Строк на странице' } ) ).not.toBeInTheDocument();
 		} );
 
 		test( 'a result just above the smallest page size has two pages: arrows, jump field and size control', async () => {
-			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 26 } ) } );
+			serveRows( () => fixtureList( [ mug, shirt ], { total: 26 } ) );
 			await renderTable();
 
 			expect( footerIsHidden() ).toBe( false );
+			expect( count() ).toHaveTextContent( 'Всего: 26' );
 			expect( pager().getByText( 'Страница 1 из 2' ) ).toBeInTheDocument();
 			expect( pager().getByRole( 'spinbutton', { name: 'Перейти на страницу' } ) ).toBeInTheDocument();
 			expect( pager().getByRole( 'combobox', { name: 'Строк на странице' } ) ).toBeInTheDocument();
 		} );
 
 		test( 'one page at a big page size keeps the size control, so the size can be made smaller; no arrows', async () => {
-			serve( { rows: () => fixtureList( [ mug, shirt ], { total: 30 } ) } );
+			serveRows( () => fixtureList( [ mug, shirt ], { total: 30 } ) );
 			await renderTable( { query: { per_page: '50' } } );
 
 			expect( footerIsHidden() ).toBe( false );
+			expect( count() ).toHaveTextContent( 'Всего: 30' );
 			expect( pager().getByRole( 'combobox', { name: 'Строк на странице' } ) ).toBeInTheDocument();
 			expect( pager().queryByText( 'Страница 1 из 1' ) ).not.toBeInTheDocument();
 			expect( pager().queryByRole( 'button', { name: 'Следующая страница' } ) ).not.toBeInTheDocument();
 			expect( pager().queryByRole( 'spinbutton', { name: 'Перейти на страницу' } ) ).not.toBeInTheDocument();
+		} );
+
+		describe( 'while a search is loading', () => {
+			const searchRows = ( first: ListEnvelope, held: Deferred< ListEnvelope > ) => ( path: string ) =>
+				path.includes( 'search=' ) ? held.promise : first;
+
+			test( 'a hidden footer stays hidden on the old total, and appears with the response that needs it', async () => {
+				const held = defer< ListEnvelope >();
+				serveRows( searchRows( fixtureList( [ mug, shirt ], { total: 2 } ), held ) );
+				const { rerender, tableProps } = await renderTable();
+
+				expect( footerIsHidden() ).toBe( true );
+
+				rerender( <RecordsTable { ...tableProps } query={ { search: 'кружка' } } /> );
+				await screen.findByTestId( 'table-loading' );
+
+				expect( footerIsHidden() ).toBe( true );
+
+				await act( async () => {
+					held.resolve( fixtureList( [ mug, shirt ], { total: 60 } ) );
+				} );
+				await screen.findByRole( 'table', { name: 'Товары' } );
+
+				expect( footerIsHidden() ).toBe( false );
+				expect( count() ).toHaveTextContent( 'Всего: 60' );
+				expect( pager().getByRole( 'combobox', { name: 'Строк на странице' } ) ).toBeInTheDocument();
+			} );
+
+			test( 'a shown footer stays shown on the old total, and goes with the response that needs none', async () => {
+				const held = defer< ListEnvelope >();
+				serveRows( searchRows( fixtureList( [ mug, shirt ], { total: 60 } ), held ) );
+				const { rerender, tableProps } = await renderTable();
+
+				expect( footerIsHidden() ).toBe( false );
+				expect( count() ).toHaveTextContent( 'Всего: 60' );
+
+				rerender( <RecordsTable { ...tableProps } query={ { search: 'кружка' } } /> );
+				await screen.findByTestId( 'table-loading' );
+
+				expect( footerIsHidden() ).toBe( false );
+
+				await act( async () => {
+					held.resolve( fixtureList( [ mug, shirt ], { total: 2 } ) );
+				} );
+				await screen.findByRole( 'table', { name: 'Товары' } );
+
+				expect( footerIsHidden() ).toBe( true );
+				expect( count() ).not.toBeInTheDocument();
+				expect( pager().queryByRole( 'combobox', { name: 'Строк на странице' } ) ).not.toBeInTheDocument();
+			} );
 		} );
 
 		test( 'the arrows step one page, in the URL', async () => {
