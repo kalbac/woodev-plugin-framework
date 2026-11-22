@@ -52,6 +52,11 @@ defined( 'ABSPATH' ) || exit;
  *   ({@see self::WAITING}) so the caller can bring it back after that card. The preview of «Импортировать» makes the same decision
  *   ({@see Group_Assembler::group_of()}).
  *
+ * **Mapping of the category.** A product the import creates, while the setting «Создавать категории при импорте» is on, gets its
+ * shop category mapped to the card's marketplace category and type when it has no mapping ({@see Import_Mapping}) — after the first
+ * save and **before** the product is filled and priced, so the profile that governs the import is the one the export reads. A
+ * mapping that exists is the merchant's and is not changed.
+ *
  * What the merchant should know goes into an import note ({@see Link_Report_Store::set_import_note()}); a successful import
  * clears the card's note. This class never talks to the marketplace; the card is already read.
  *
@@ -118,19 +123,27 @@ final class Card_Import {
 	private $complete;
 
 	/**
+	 * Gives the shop category of an imported card its mapping; null leaves the mappings to the merchant.
+	 *
+	 * @var Import_Mapping|null
+	 */
+	private $mapping;
+
+	/**
 	 * Creates the importer.
 	 *
 	 * @since 2.1.6
 	 *
-	 * @param Wpdb_Link_Store    $links    Links.
-	 * @param Card_Linker        $linker   Linker.
-	 * @param Link_Report_Store  $notes    Import notes.
-	 * @param Effective_Settings $settings The shop's import settings.
-	 * @param Group_Assembler    $groups   Assembles the cards of one group into one variable product.
-	 * @param callable           $start    `function ( Account, Card_Content, bool $create_categories, ?callable $prepare ): \WC_Product`, `Product_Writer::start()`; `$prepare` is called on the unsaved product.
-	 * @param callable           $complete `function ( Account, Card_Content, \WC_Product, bool $publish, callable $renew, ?callable $stored ): string[]`, `Product_Writer::complete()`.
+	 * @param Wpdb_Link_Store     $links    Links.
+	 * @param Card_Linker         $linker   Linker.
+	 * @param Link_Report_Store   $notes    Import notes.
+	 * @param Effective_Settings  $settings The shop's import settings.
+	 * @param Group_Assembler     $groups   Assembles the cards of one group into one variable product.
+	 * @param callable            $start    `function ( Account, Card_Content, bool $create_categories, ?callable $prepare ): \WC_Product`, `Product_Writer::start()`; `$prepare` is called on the unsaved product.
+	 * @param callable            $complete `function ( Account, Card_Content, \WC_Product, bool $publish, callable $renew, ?callable $stored ): string[]`, `Product_Writer::complete()`.
+	 * @param Import_Mapping|null $mapping Gives the category of a created product its mapping when the import creates categories ({@see self::link()}).
 	 */
-	public function __construct( Wpdb_Link_Store $links, Card_Linker $linker, Link_Report_Store $notes, Effective_Settings $settings, Group_Assembler $groups, callable $start, callable $complete ) {
+	public function __construct( Wpdb_Link_Store $links, Card_Linker $linker, Link_Report_Store $notes, Effective_Settings $settings, Group_Assembler $groups, callable $start, callable $complete, ?Import_Mapping $mapping = null ) {
 		$this->links    = $links;
 		$this->linker   = $linker;
 		$this->notes    = $notes;
@@ -138,6 +151,7 @@ final class Card_Import {
 		$this->groups   = $groups;
 		$this->start    = $start;
 		$this->complete = $complete;
+		$this->mapping  = $mapping;
 	}
 
 	/**
@@ -307,9 +321,10 @@ final class Card_Import {
 	 * @return string
 	 */
 	private function finish( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
+		$notes    = $this->category_mapping( $content );
 		$warnings = (array) call_user_func( $this->complete, $account, $content, $product, $this->settings->import_publish(), $renew, $stored );
 
-		return $this->link( $account, $content, $this->groups->place( $account, $product, $content, $fence ), $fence, self::CREATED, $warnings );
+		return $this->link( $account, $content, $this->groups->place( $account, $product, $content, $fence ), $fence, self::CREATED, array_merge( $notes, $warnings ) );
 	}
 
 	/**
@@ -356,9 +371,10 @@ final class Card_Import {
 		$this->groups->offer( $variation, $content );
 
 		$switched_on = $this->groups->sells_at_once( $variation, $this->settings->import_publish() );
+		$notes       = $this->category_mapping( $content );
 		$warnings    = (array) call_user_func( $this->complete, $account, Group_Assembler::variation_content( $content ), $variation, $switched_on, $renew, $stored );
 
-		return $this->link( $account, $content, $variation, $fence, self::CREATED, $warnings );
+		return $this->link( $account, $content, $variation, $fence, self::CREATED, array_merge( $notes, $warnings ) );
 	}
 
 	/**
@@ -396,6 +412,24 @@ final class Card_Import {
 		}
 
 		return $done;
+	}
+
+	/**
+	 * Gives the shop category of a product the import is making the mapping the merchant would otherwise make by hand, when the import
+	 * chooses categories ({@see Import_Mapping}). It is done **before** the product is filled: the profile of the mapping in force then
+	 * governs the description, the weight and the price the writer sets, as it governs every later export.
+	 *
+	 * @param Card_Content $content Card.
+	 * @return string[] The note for the merchant, if there is one.
+	 */
+	private function category_mapping( Card_Content $content ): array {
+		if ( null === $this->mapping || ! $this->settings->import_create_categories() ) {
+			return [];
+		}
+
+		$note = $this->mapping->ensure( $content );
+
+		return '' === $note ? [] : [ $note ];
 	}
 
 	/**

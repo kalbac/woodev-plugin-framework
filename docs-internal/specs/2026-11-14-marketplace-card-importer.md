@@ -446,6 +446,24 @@ Settings (card I4), both on «Общие», group «Заказы и карточ
 | `import_publish` | «Сразу публиковать импортированные товары» | **off** (draft) for a new shop; an upgraded v1 shop keeps its value | `product_status = publish` → on, anything else → off |
 | `import_create_categories` | «Создавать категории для импортированных товаров» | on (v1) | `create_new_category` |
 
+**The mapping of a category the import chose (#1940, no setting of its own — it follows `import_create_categories`).**
+`Import_Mapping::ensure()` runs in `Card_Import` after the product's first save and **before** `Product_Writer::complete()`: the
+profile that fills and prices the product is then the one the export reads (a new leaf mapping has no profile and shadows an
+ancestor's, in the import and in the export alike). It gives the card's shop category a mapping «shop category ↔ marketplace category
+and type» when the card's pair (`remote_category()`) has none — no profile (a mapping made by hand starts the same), no request to
+the marketplace. A pair or a shop category that already has a mapping is never changed. A card of another type landing in a category
+that an earlier card's type mapped gets a note, «Категория «X»: в Ozon карточки разных типов, сопоставление создано по типу «Y»» (the
+marketplace's `settings_descriptor()->marketplace_name()`; «на маркетплейсе» without one). The attribute table links each aspect the
+import wrote as a product attribute (a group of several cards, §2.6.1) to the field of the same name from
+`Cached_Catalog_Fields::cached_fields()` (`wc_attribute`, the aspect's name as key); no cached fields → no links.
+
+The mapping the import creates carries a mark in its attribute table (`_import_created`, a fingerprint of name, category, profile and
+rows; the table's readers skip it). A later card of the same pair **adds the links the table lacks** while the mark still matches —
+never overwriting a row; a mapping the merchant renamed, re-profiled or whose table they saved no longer matches and is theirs.
+A **dictionary** characteristic is linked only when the adapter's `Export_Facts` implement `Catalog\Dictionary_Label_Lookup`: the
+export validator needs a label → dictionary value id lookup for a `wc_attribute` source, and `Export_Context_Builder` hands the
+contract's method to it as `dictionary_lookup` (the facts' own key wins). Without the contract such a field stays unlinked.
+
 Readers: `Effective_Settings::import_publish()` and `::import_create_categories()`. A draft is the safe meaning of «off»: the card's
 price is the marketplace's, and auto-import can fire with nobody watching.
 
