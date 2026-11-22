@@ -1,6 +1,30 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.14] — 2026-11-22
+### Bug Fixes
+- **admin-records**: Fit the products and mappings tables at 1024px (#1918)
+
+
+### Documentation
+- Save session s240
+
+- **s240**: Operator decisions on Ozon Seller questions (ozon#34 #35 #37 #43)
+
+- **s240**: Pilot key arrived for ozon#34
+
+- **s240**: Handoff back under its size budget
+
+
+### Features
+- **marketplace**: Map the WooCommerce order status only on a real posting status change
+
+
+### Build
+- Bundles and catalogues for #1918
+
+
+
 ## [2.1.13] — 2026-11-21
 ### Bug Fixes
 - **marketplace**: Critic round 2 of #1849 (catalogue, busy picker, statuses, views, heading, near-match count)
