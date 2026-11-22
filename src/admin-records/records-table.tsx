@@ -19,7 +19,7 @@ import type { RecordsExtensions, TableHandle } from './extensions';
 import { FiltersBar, SearchBox, ViewsRow, isNarrowed } from './filters';
 import { MESSAGE_KEYS, firstMessage, message } from './messages';
 import { changeQuery, searchFilter, writeQuery } from './query';
-import { Pager, useFooterSlot } from './pager';
+import { Pager, fitsOnePage, useFooterSlot } from './pager';
 import { RowActions } from './row-actions';
 import { useSelection, type Selection } from './selection';
 import { EmptyCard, ErrorState, LoadingState } from './states';
@@ -141,6 +141,14 @@ function TableBody( {
 	const footer = useFooterSlot( host );
 	const data = records.list.data;
 	const summaryLabel = message( messages, MESSAGE_KEYS.summaryLabel );
+	// One page at every page size: the footer (the pager and the count) is not drawn. The decision is taken from a READY result
+	// only: while a search or filter loads, `data` is still the previous result with its old total, so the footer keeps the
+	// last decision instead of vanishing or reappearing on a total that is about to be replaced.
+	const footerHidden = useRef( false );
+	if ( records.list.status === 'ready' && data ) {
+		footerHidden.current = fitsOnePage( data.total, query.perPage, definition.pagination.per_page_options );
+	}
+	const hasNoFooter = footerHidden.current;
 	// WooCommerce reports one page-size choice as two callbacks (size, then the page clamped to the new size). Both are
 	// computed from the query that was on screen, so the second would write the old size back: every change starts from
 	// the query the previous callback of the same event produced.
@@ -245,7 +253,7 @@ function TableBody( {
 
 	return (
 		<>
-			<div ref={ host }>
+			<div ref={ host } className={ hasNoFooter ? 'woodev-records__no-footer' : undefined }>
 				<TableCard
 					// Remounted when the columns change: WooCommerce reads the visible-column list once, on mount.
 					key={ headers.map( ( header ) => header.key ).join( ',' ) }
@@ -274,6 +282,7 @@ function TableBody( {
 				/>
 			</div>
 			{ footer &&
+				! hasNoFooter &&
 				records.list.status !== 'loading' &&
 				createPortal(
 					<Pager

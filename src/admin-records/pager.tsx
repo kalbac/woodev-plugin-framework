@@ -1,6 +1,7 @@
 /**
  * The card footer's pager: the page count with its two arrows and the jump-to-page field — drawn only when the result has more
- * than one page — and the page-size select, always drawn, like the footer of «Заказы доставки».
+ * than one page — and the page-size select, always drawn, like the footer of «Заказы доставки» (which keeps its picker on a short
+ * result, #1903). The records tables leave the footer out altogether when the result fits one page ({@see fitsOnePage}).
  *
  * WooCommerce's own `Pagination` draws nothing for one page and offers the page size only above 25 rows, and it cannot be told
  * otherwise (its arrows and its page-size picker are `null` for `pageCount <= 1` in 7.0 and in trunk). So the shell draws the footer
@@ -32,6 +33,18 @@ export function useFooterSlot( host: RefObject< HTMLElement > ): Element | null 
 	} );
 
 	return slot;
+}
+
+/**
+ * Whether the whole result fits on one page whatever page size is picked: the footer then has nothing to offer, and the records
+ * table leaves it out. A total above the smallest page size keeps it, because a smaller choice would make a second page.
+ *
+ * @param total   Rows in the whole result.
+ * @param perPage The page size on screen.
+ * @param sizes   PHP's page sizes.
+ */
+export function fitsOnePage( total: number, perPage: number, sizes: number[] ): boolean {
+	return total <= Math.min( perPage, ...sizes );
 }
 
 export interface PagerProps {
