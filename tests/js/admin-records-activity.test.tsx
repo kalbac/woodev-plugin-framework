@@ -299,6 +299,56 @@ describe( 'the busy row (#1937, the mechanism of «Заказы доставки
 		expect( marker( 'p2' ) ).toBeNull();
 	} );
 
+	test( 'a busy row shows its process label with an ellipsis in a veil; an idle row has no veil (operator, 23.11.2026)', async () => {
+		const busy = locked( [ process( 'import', { label: 'Импортируется', completed: null, total: null, percent: null, text: '' } ) ] );
+		serve( { rows: [ row( 'p1', 'Кружка', busy ), row( 'p2', 'Футболка' ) ] } );
+		await renderTable( { extensions: { renderBulkActions: () => null } } );
+
+		const veil = tableRow( 'p1' ).querySelector( '.woodev-records__row-busy-veil' );
+
+		expect( veil ).toHaveTextContent( /^Импортируется…$/ );
+		// A status region: aria-live polite, so a screen reader announces the label.
+		expect( veil ).toHaveAttribute( 'role', 'status' );
+		expect( tableRow( 'p2' ).querySelector( '.woodev-records__row-busy-veil' ) ).toBeNull();
+	} );
+
+	test( 'the veil names the FIRST process in flight and ignores a finished one; a label that already ends in an ellipsis gets no second', async () => {
+		const busy = locked( [
+			process( 'a', { state: 'completed', label: 'Готово' } ),
+			process( 'b', { label: 'Импортируется...' } ),
+			process( 'c', { state: 'queued', label: 'Цены' } ),
+		] );
+		serve( { rows: [ row( 'p1', 'Кружка', busy ) ] } );
+		await renderTable();
+
+		expect( tableRow( 'p1' ).querySelector( '.woodev-records__row-busy-veil' ) ).toHaveTextContent( /^Импортируется…$/ );
+	} );
+
+	test( 'a busy row prints no visible sentence in its actions cell: the lock, the reasons and the processes are screen-reader-only', async () => {
+		const busy = locked( [ process( 'import', { label: 'Импортируется', text: '2 из 8' } ) ] );
+		serve( { rows: [ row( 'p1', 'Кружка', busy ) ] } );
+		await renderTable();
+
+		const cell = tableRow( 'p1' ).querySelector( '.woodev-records__actions' ) as HTMLElement;
+		const sentences = cell.querySelectorAll( '.woodev-records__reason, .woodev-records__activity' );
+
+		expect( sentences.length ).toBeGreaterThan( 0 );
+		sentences.forEach( ( sentence ) => expect( sentence ).toHaveClass( 'screen-reader-text' ) );
+		// Still there for a screen reader: the button is described by the lock sentence, and the process text is in the cell.
+		expect( exportButton( 'p1' ) ).toHaveAccessibleDescription( 'Товар уже отправляется на маркетплейс.' );
+		expect( activityOf( 'p1' ) ).toHaveTextContent( '2 из 8' );
+	} );
+
+	test( 'a locked row that is not busy keeps its visible sentences', async () => {
+		serve( { rows: [ row( 'p1', 'Кружка', locked() ) ] } );
+		await renderTable();
+
+		const cell = tableRow( 'p1' ).querySelector( '.woodev-records__actions' ) as HTMLElement;
+
+		expect( cell.querySelector( '.woodev-records__reason' ) ).not.toHaveClass( 'screen-reader-text' );
+		expect( activityOf( 'p1' ) ).not.toHaveClass( 'screen-reader-text' );
+	} );
+
 	test( 'a row ticked before it went busy is left out of what a bulk action receives', async () => {
 		const ticked = ( chosen: { selectedIds: string[] } ) => <output aria-label="bulk-ids">{ chosen.selectedIds.join( ',' ) }</output>;
 		serve( {

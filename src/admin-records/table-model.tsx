@@ -13,7 +13,7 @@
 import type { ReactNode } from 'react';
 import { Button, Popover, Spinner } from '@wordpress/components';
 import { useState } from '@wordpress/element';
-import { isRowBusy } from './activity/busy';
+import { busyLabel, isRowBusy } from './activity/busy';
 import { cellText, renderCell } from './cells';
 import { MESSAGE_KEYS, fillMessage, firstMessage, joinLabel, message } from './messages';
 import { searchFilter } from './query';
@@ -183,11 +183,20 @@ function markerColumnIndex( definition: Definition ): number {
 }
 
 /**
- * A busy row's bar (#1937): an empty element in one of the row's cells, which `style.scss` turns into the bottom edge of the whole
- * row (`tr:has( .woodev-records__row-busy )`) — the seam «Заказы доставки» uses, because `TableCard` gives the `<tr>` no class.
+ * A busy row's bar and veil (#1937): two elements in one of the row's cells, which `style.scss` turns into the bottom edge of the
+ * whole row and a translucent veil over it (`tr:has( .woodev-records__row-busy )`) — the seam «Заказы доставки» uses, because
+ * `TableCard` gives the `<tr>` no class. The veil carries the process label in the middle of the row, so the actions cell holds no
+ * sentence and the row keeps its height; being a status region (`aria-live` polite), it is also what a screen reader hears.
  */
-function BusyMarker() {
-	return <span className="woodev-records__row-busy" aria-hidden="true" />;
+function BusyMarker( { label }: { label: string } ) {
+	return (
+		<>
+			<span className="woodev-records__row-busy-veil" role="status">
+				{ label }
+			</span>
+			<span className="woodev-records__row-busy" aria-hidden="true" />
+		</>
+	);
 }
 
 function dataCells( input: TableModelInput, row: AdminRecord, key: string, isChild: boolean ): TableCell[] {
@@ -202,7 +211,7 @@ function dataCells( input: TableModelInput, row: AdminRecord, key: string, isChi
 		const content =
 			index === markerAt ? (
 				<>
-					<BusyMarker />
+					<BusyMarker label={ busyLabel( row ) } />
 					{ body }
 				</>
 			) : (

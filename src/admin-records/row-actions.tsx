@@ -129,7 +129,7 @@ export function RowActions( { row, rowKey, descriptors, onAction, blockedReason,
 		buttons.push( { action, state, reason: reasonFor( action, state ), isLink } );
 	} );
 
-	// A row with a process in flight takes no action until the process settles — the text beside it says why.
+	// A row with a process in flight takes no action until the process settles — the veil over the row says why.
 	const busy = isRowBusy( row );
 	const grouped = buttons.length > 0 && buttons.every( ( { action } ) => isIconOnly( action ) );
 
@@ -150,16 +150,22 @@ export function RowActions( { row, rowKey, descriptors, onAction, blockedReason,
 			</span>
 			{ buttons
 				.filter( ( { reason } ) => reason !== '' )
-				.map( ( { action, reason } ) => (
-					<span
-						key={ action.id }
-						id={ reasonId( action ) }
-						className={ `woodev-records__reason${ isIconOnly( action ) ? ' screen-reader-text' : '' }` }
-						style={ isIconOnly( action ) ? undefined : STYLES.reason }
-					>
-						{ reason }
-					</span>
-				) ) }
+				.map( ( { action, reason } ) => {
+					// An icon says its reason in the tooltip; a busy row says what is going on in the veil over the row. In
+					// neither case may a sentence in the cell make the row taller; screen readers keep it (aria-describedby).
+					const spoken = isIconOnly( action ) || busy;
+
+					return (
+						<span
+							key={ action.id }
+							id={ reasonId( action ) }
+							className={ `woodev-records__reason${ spoken ? ' screen-reader-text' : '' }` }
+							style={ spoken ? undefined : STYLES.reason }
+						>
+							{ reason }
+						</span>
+					);
+				} ) }
 			{ children }
 		</span>
 	);

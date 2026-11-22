@@ -144,6 +144,19 @@ describe( 'a row with a process in flight (#1937)', () => {
 		expect( marked( 1 ).filter( Boolean ) ).toHaveLength( 0 );
 	} );
 
+	test( 'the veil and the bar travel together in the busy row\'s one cell; the veil says the first process\'s label', () => {
+		const definition = photoFirst();
+		const busy = fixtureRow( 'busy', 'Футболка', { activity: running } );
+		const idle = fixtureRow( 'idle', 'Кружка' );
+		const lines = buildLines( { ...input( definition, ready( [] ) ), rows: [ busy, idle ], expanded: [] } );
+		const veils = ( at: number ) => drawn( lines[ at ].cells ).flatMap( ( cell ) => [ ...cell.querySelectorAll( '.woodev-records__row-busy-veil' ) ] );
+
+		expect( veils( 0 ) ).toHaveLength( 1 );
+		expect( veils( 0 )[ 0 ] ).toHaveTextContent( 'Импорт…' );
+		expect( veils( 0 )[ 0 ].parentElement?.querySelector( '.woodev-records__row-busy' ) ).not.toBeNull();
+		expect( veils( 1 ) ).toHaveLength( 0 );
+	} );
+
 	test( 'a table with no actions column carries the bar in its last column', () => {
 		const definition = { ...photoFirst(), columns: photoFirst().columns.filter( ( column ) => column.cell_type !== 'actions' ) } as Definition;
 		const busy = fixtureRow( 'busy', 'Футболка', { activity: running } );
