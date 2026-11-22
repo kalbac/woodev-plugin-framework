@@ -76,6 +76,18 @@ final class Posting_History_Cutoffs {
 	}
 
 	/**
+	 * Forgets the cutoff of an account that was deleted, so an account that is added later under the same id starts a history of its own.
+	 *
+	 * @since 2.1.15
+	 *
+	 * @param int $account_id Account id.
+	 * @return void
+	 */
+	public function forget( int $account_id ): void {
+		delete_option( $this->option( $account_id ) );
+	}
+
+	/**
 	 * Name of the option of an account.
 	 *
 	 * @param int $account_id Account id.
