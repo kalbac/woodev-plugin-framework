@@ -75,6 +75,27 @@ final class Posting_Poll_Times {
 	}
 
 	/**
+	 * Forgets the polls of an account that was deleted, so an account added later under the same id is polled for the first time
+	 * ({@see Posting_Jobs} reads a recorded poll as «this account has no history to protect»). The other accounts' times stay.
+	 *
+	 * @since 2.1.15
+	 *
+	 * @param int $account_id Account id.
+	 * @return void
+	 */
+	public function forget( int $account_id ): void {
+		$times = $this->all();
+
+		if ( ! isset( $times[ $account_id ] ) ) {
+			return;
+		}
+
+		unset( $times[ $account_id ] );
+
+		update_option( $this->option, $times, false );
+	}
+
+	/**
 	 * @return array<int,int|string>
 	 */
 	private function all(): array {

@@ -257,7 +257,9 @@
 	position: relative;
 }
 
-.woodev-mp-tab .woodev-mp-block[hidden] {
+.woodev-mp-tab .woodev-mp-block[hidden],
+.woodev-mp-block--variation[hidden],
+.woodev-mp-header-state[hidden] {
 	display: none !important;
 }
 
@@ -401,15 +403,22 @@ button.woodev-mp-badge--problem:focus {
 	margin-left: 0;
 }
 
-/* The account select, in the header of «Product data» (the script moves it there). */
+/*
+ * The account select, in the header of «Product data» (the script moves it there). The thin divider that WooCommerce draws after the first
+ * label of the header (`label:first-child`, between «Product type» and Virtual) belongs after the select here, with the spacing WooCommerce gives
+ * its own: the wrapper carries it, and the label gives it up.
+ */
 .woodev-mp-account-switch--header {
 	display: inline-block;
-	margin-left: 12px;
+	margin: 0 1.4em 0 12px;
+	padding-right: 1em;
+	border-right: 1px solid #dfdfdf;
 	font-weight: 400;
 	vertical-align: baseline;
 }
 
-#woocommerce-product-data .hndle .woodev-mp-account-switch label {
+/* `:first-child` raises this over WooCommerce's `.hndle label:first-child`, which would draw the divider before the select. */
+#woocommerce-product-data .hndle .woodev-mp-account-switch label:first-child {
 	margin: 0 6px 0 0;
 	padding: 0;
 	border: 0;

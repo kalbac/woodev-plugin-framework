@@ -9,7 +9,9 @@ namespace Woodev\Tests\Unit\Marketplace\Jobs;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
+use Woodev\Framework\Marketplace\Flows\History_Import;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
+use Woodev\Framework\Marketplace\Jobs\Posting_History_Cutoffs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
@@ -145,6 +147,130 @@ final class PostingJobsTest extends Sync_Test_Case {
 
 		$this->assertCount( 1, $this->scheduler->of( self::REFRESH ) );
 		$this->assertEqualsWithDelta( Order_Claim_Exception::RETRY_SECONDS, $this->scheduler->of( self::REFRESH )[0]['delay'], 2 );
+	}
+
+	/**
+	 * The first poll of an account fixes the account's history cutoff — the moment it began — and every poll after it, whether the
+	 * first one finished the import or only a part of it, writes with that same cutoff (#1925).
+	 *
+	 * @return void
+	 */
+	public function test_every_poll_after_the_first_keeps_the_cutoff_of_the_first(): void {
+		$jobs = $this->jobs_that_record_polls();
+
+		$before = time();
+		$jobs->poll( $this->account_id );
+		$after  = time();
+		$cutoff = $this->handler->cutoffs[0];
+
+		$this->assertGreaterThanOrEqual( $before, $cutoff );
+		$this->assertLessThanOrEqual( $after, $cutoff );
+
+		$jobs->poll( $this->account_id );
+		$jobs->poll( $this->account_id );
+
+		$this->assertSame( [ $cutoff, $cutoff, $cutoff ], $this->handler->cutoffs, 'a poll that returned normally did not close the history' );
+		$this->assertSame( 0, History_Import::cutoff(), 'the poll closes its history stretch' );
+	}
+
+	/**
+	 * A refresh — queued by the marketplace's own code, with the two arguments it always had — writes with the cutoff the first poll
+	 * fixed, wherever it runs and whoever queued it.
+	 *
+	 * @return void
+	 */
+	public function test_a_refresh_writes_with_the_cutoff_of_its_account(): void {
+		$jobs = $this->jobs_that_record_polls();
+
+		$jobs->refresh( $this->account_id, 'P-0' );
+		$jobs->poll( $this->account_id );
+		$jobs->refresh( $this->account_id, 'P-1' );
+		$jobs->refresh( (string) $this->account_id, 'P-2' );
+
+		$cutoff = $this->handler->cutoffs[1];
+		$this->assertGreaterThan( 0, $cutoff );
+		$this->assertSame( [ 0, $cutoff, $cutoff, $cutoff ], $this->handler->cutoffs, 'a refresh before the first poll fixes no cutoff and is live' );
+	}
+
+	/**
+	 * A poll that failed still fixed the cutoff: the retry is the same history, not a new one.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_first_poll_keeps_its_cutoff_for_the_retry(): void {
+		$jobs                 = $this->jobs_that_record_polls();
+		$this->handler->fails = Fake_Remote_Exception::of( Remote_Error::RETRY, 'busy' );
+
+		try {
+			$jobs->poll( $this->account_id );
+		} catch ( Fake_Remote_Exception $e ) {
+			$this->assertSame( 0, History_Import::cutoff(), 'a failure closes the history stretch too' );
+		}
+
+		$this->handler->fails = null;
+		$jobs->poll( $this->account_id );
+
+		$this->assertSame( $this->handler->cutoffs[0], $this->handler->cutoffs[1] );
+		$this->assertGreaterThan( 0, $this->handler->cutoffs[0] );
+	}
+
+	/**
+	 * An account that was polled before the cutoffs were recorded has no history to protect; without the record of polls nothing
+	 * tells a first poll from a later one. Both stay live, as they were.
+	 *
+	 * @return void
+	 */
+	public function test_an_account_that_was_polled_before_has_no_history(): void {
+		$jobs = $this->jobs_that_record_polls();
+		( new Posting_Poll_Times( self::PLUGIN_ID ) )->record( $this->account_id, time() - 3600 );
+
+		$jobs->poll( $this->account_id );
+		$this->jobs()->poll( $this->account_id );
+
+		$this->assertSame( [ 0, 0 ], $this->handler->cutoffs );
+	}
+
+	/**
+	 * An account deleted and added again under the same id is a new account: once the deletion has forgotten its cutoff and its
+	 * recorded polls, its first poll is history again, with a cutoff of its own — not live, as an account polled before would be.
+	 *
+	 * @return void
+	 */
+	public function test_an_account_added_again_under_a_reused_id_has_its_history(): void {
+		$jobs = $this->jobs_that_record_polls();
+		Functions\when( 'delete_option' )->alias(
+			function ( string $name ): bool {
+				unset( $this->options[ $name ] );
+
+				return true;
+			}
+		);
+
+		$jobs->poll( $this->account_id );
+		$jobs->poll( $this->account_id );
+		$this->assertGreaterThan( 0, $this->handler->cutoffs[1], 'the first account is under its cutoff' );
+
+		( new Posting_History_Cutoffs( self::PLUGIN_ID ) )->forget( $this->account_id );
+		$jobs->poll( $this->account_id );
+		$this->assertSame( 0, $this->handler->cutoffs[2], 'the cutoff alone is not enough: the recorded poll still says «polled before»' );
+
+		( new Posting_Poll_Times( self::PLUGIN_ID ) )->forget( $this->account_id );
+		( new Posting_History_Cutoffs( self::PLUGIN_ID ) )->forget( $this->account_id );
+		$jobs->poll( $this->account_id );
+
+		$this->assertGreaterThan( 0, $this->handler->cutoffs[3], 'the account that reuses the id is read as history' );
+	}
+
+	/**
+	 * A refresh that waits for the licence is queued as it always was, with two arguments.
+	 *
+	 * @return void
+	 */
+	public function test_a_deferred_refresh_keeps_its_two_arguments(): void {
+		$this->licensed = false;
+		$this->jobs_that_record_polls()->refresh( $this->account_id, 'P-1' );
+
+		$this->assertSame( [ $this->account_id, 'P-1' ], $this->scheduler->of( self::REFRESH )[0]['args'] );
 	}
 
 	/**
@@ -443,5 +569,33 @@ final class PostingJobsTest extends Sync_Test_Case {
 		);
 
 		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $adapter->posting_handler(), $adapter->error_classifier(), $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ) );
+	}
+
+	/**
+	 * Jobs that keep the time of each finished poll, as the plugin's wiring does.
+	 *
+	 * @return Posting_Jobs
+	 */
+	private function jobs_that_record_polls(): Posting_Jobs {
+		Functions\when( 'update_option' )->alias(
+			function ( string $name, $value ): bool {
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'add_option' )->alias(
+			function ( string $name, $value ): bool {
+				if ( array_key_exists( $name, $this->options ) ) {
+					return false;
+				}
+
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
+
+		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $this->handler, $this->classifier, $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ), new Posting_Poll_Times( self::PLUGIN_ID ), new Posting_History_Cutoffs( self::PLUGIN_ID ) );
 	}
 }
