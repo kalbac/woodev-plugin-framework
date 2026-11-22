@@ -54,6 +54,34 @@ final class PanelReaderArticleTest extends TestCase {
 		$this->assertSame( 'ART-NEW', $ids['pending'], 'but the change is still shown' );
 	}
 
+	public function test_a_variable_product_has_an_unsent_variation_only_when_one_has_no_card(): void {
+		$created = Link_Record::offer( 3, 5, 41, 'ART-S', [ 'card_state' => Link_Record::STATE_CREATED ] );
+
+		$this->assertFalse( $this->has_unsent( [ 5 => $created, 6 => $created ] ), 'imported or exported: every card exists' );
+		$this->assertTrue( $this->has_unsent( [ 5 => $created, 6 => null ] ), 'a variation without a row' );
+		$this->assertTrue( $this->has_unsent( [ 5 => $created, 6 => $created->with( [ 'card_state' => Link_Record::STATE_UNLINKED ] ) ] ), 'a variation not linked' );
+		$this->assertTrue( $this->has_unsent( [ 5 => $created->with( [ 'card_state' => Link_Record::STATE_FAILED ] ) ] ), 'a card that failed was never created' );
+		$this->assertFalse( $this->has_unsent( [ 5 => $created->with( [ 'card_state' => Link_Record::STATE_ARCHIVED ] ), 6 => $created->with( [ 'card_state' => Link_Record::STATE_QUEUED ] ) ] ), 'an archived and a queued card both exist' );
+		$this->assertFalse( $this->has_unsent( [] ), 'no variation sold on the marketplace: nothing to export' );
+	}
+
+	/**
+	 * Asks the reader whether any variation of a product has no card.
+	 *
+	 * @param array<int,Link_Record|null> $records Rows of the variations.
+	 * @return bool
+	 */
+	private function has_unsent( array $records ): bool {
+		$reader = ( new \ReflectionClass( Panel_Reader::class ) )->newInstanceWithoutConstructor();
+		$method = new \ReflectionMethod( Panel_Reader::class, 'any_variation_without_card' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true ); // Needed before PHP 8.1; deprecated from 8.5.
+		}
+
+		return $method->invoke( $reader, $records );
+	}
+
 	/**
 	 * Reads the article section the way the reader does.
 	 *
