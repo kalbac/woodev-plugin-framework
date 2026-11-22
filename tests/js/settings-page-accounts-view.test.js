@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
-import AccountsView, { isAccountsTab, splitAccountSections, cardStatus, canDelete, identifierLine } from '../../src/settings-page/accounts-view';
+import AccountsView, { isAccountsTab, splitAccountSections, cardStatus, canDelete } from '../../src/settings-page/accounts-view';
 import { fetchDeletion } from '../../src/settings-page/deletion-rest';
 
 jest.mock( '../../src/settings-page/deletion-rest' );
@@ -73,11 +73,12 @@ test( 'the wrapper is one white card with the tab description, which may carry a
 	expect( screen.queryByText( /Пока нет ни одного аккаунта/ ) ).not.toBeInTheDocument();
 } );
 
-test( 'a card shows title, identifier and status, and opens its fields on «Редактировать»', () => {
+test( 'a card shows title and status, never the Client-Id, and opens its fields on «Редактировать»', () => {
 	view( [ account( 1 ), adder ] );
 
 	expect( screen.getByText( 'Shop 1' ) ).toBeInTheDocument();
-	expect( screen.getByText( 'Client-Id: 41801' ) ).toBeInTheDocument();
+	expect( screen.queryByText( /Client-Id/ ) ).not.toBeInTheDocument();
+	expect( screen.queryByText( /41801/ ) ).not.toBeInTheDocument();
 	expect( screen.getByText( 'Подключено' ) ).toBeInTheDocument();
 	expect( screen.queryByTestId( 'block-account_connection_1' ) ).not.toBeInTheDocument();
 
@@ -106,12 +107,14 @@ test( '«Удалить» needs only the deletion route, whether the account is 
 	expect( canDelete( account( 1, { enabled: false } ).card ) ).toBe( false );
 } );
 
-test( 'the card line is «Client-Id: … · description», and just the identifier without a description', () => {
-	expect( identifierLine( account( 1 ).card ) ).toBe( 'Client-Id: 41801' );
-	expect( identifierLine( account( 1, { description: 'Одежда и обувь' } ).card ) ).toBe( 'Client-Id: 41801 · Одежда и обувь' );
+test( 'the line under the name is the merchant\'s own description, and nothing without one', () => {
+	view( [ account( 1 ), adder ] );
+	expect( document.querySelector( '.woodev-account-card__identifier' ) ).toBeNull();
+	cleanup();
 
 	view( [ account( 1, { description: 'Одежда и обувь' } ), adder ] );
-	expect( screen.getByText( 'Client-Id: 41801 · Одежда и обувь' ) ).toBeInTheDocument();
+	expect( screen.getByText( 'Одежда и обувь' ) ).toBeInTheDocument();
+	expect( screen.queryByText( /Client-Id/ ) ).not.toBeInTheDocument();
 } );
 
 test( 'a card has an on/off switch that saves at once through the page', async () => {

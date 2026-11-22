@@ -136,6 +136,13 @@ final class Settings_Section {
 	private string $subtitle = '';
 
 	/**
+	 * Whether this section is one account's block, which the client shows as a tab of its own — see {@see self::account_tab()}.
+	 *
+	 * @var bool
+	 */
+	private bool $account_tab = false;
+
+	/**
 	 * The declared «Подробнее…» link — `[ topic, text ]`, empty when none ({@see \Woodev\Framework\Help\Help_Links}).
 	 *
 	 * @var array{topic:string,text:string}|array{}
@@ -498,6 +505,34 @@ final class Settings_Section {
 		$copy->subtitle = $subtitle;
 
 		return $copy;
+	}
+
+	/**
+	 * A copy that is one account's block of a tab that lists the accounts one after another. The client draws the accounts of such a
+	 * tab as tabs named after each section's title and shows one account at a time; with a single account it draws the block
+	 * with no tabs. A section like this is stacked too, so it never becomes a sub-tab of the page.
+	 *
+	 * @since 2.1.15
+	 *
+	 * @return self
+	 */
+	public function account_tab(): self {
+		$copy              = clone $this;
+		$copy->stacked     = true;
+		$copy->account_tab = true;
+
+		return $copy;
+	}
+
+	/**
+	 * Whether the client shows this section as an account's tab ({@see self::account_tab()}).
+	 *
+	 * @since 2.1.15
+	 *
+	 * @return bool
+	 */
+	public function is_account_tab(): bool {
+		return $this->account_tab;
 	}
 
 	/**

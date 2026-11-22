@@ -347,7 +347,7 @@ final class Notifications_Section implements Settings_Section_Provider {
 			$this->account_title( $account ),
 			[],
 			$this->facts_html( $facts )
-		)->with_copy_field( __( 'Адрес', 'woodev-plugin-framework' ), $url )->stacked( $this->identifier_line( $account ) )->with_actions( $this->tools_for_account( $id ), Settings_Section::ACTIONS_ROW )->with_advanced_actions(
+		)->with_copy_field( __( 'Адрес', 'woodev-plugin-framework' ), $url )->account_tab()->with_actions( $this->tools_for_account( $id ), Settings_Section::ACTIONS_ROW )->with_advanced_actions(
 			[ $this->tool_id( $id, 'update_types' ), $this->tool_id( $id, 'enable' ) ],
 			__( 'Дополнительно', 'woodev-plugin-framework' )
 		)->with_help( self::problems_help() );
@@ -436,22 +436,6 @@ final class Notifications_Section implements Settings_Section_Provider {
 		}
 
 		return '' !== trim( $account->external_id() ) ? trim( $account->external_id() ) : '#' . $account->id();
-	}
-
-	/**
-	 * «Client-Id: 4180680» — the muted line under an account's heading; empty when the account holds no identifier.
-	 *
-	 * @param Notification_Account $account Account.
-	 * @return string
-	 */
-	private function identifier_line( Notification_Account $account ): string {
-		$identifier = trim( $account->external_id() );
-
-		if ( '' === $identifier ) {
-			return '';
-		}
-
-		return $this->adapter->settings_descriptor()->field_spec( $this->adapter->credential_fields()->identifier() )->label() . ': ' . $identifier;
 	}
 
 	/**

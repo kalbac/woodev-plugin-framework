@@ -764,23 +764,36 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertStringContainsString( 'Подключите аккаунт на вкладке «Подключение»', $sections[0]->get_description() );
 	}
 
-	public function test_every_account_gets_its_own_stacked_parameters_section_under_its_name(): void {
+	public function test_every_account_gets_its_own_parameters_tab_named_after_it_with_no_identifier_beside_the_name(): void {
 		[ $adapter, $store ] = $this->adapter_and_store();
 		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop one', true, [ 'merchant_uid' => '1001', 'access_token' => 't1' ] ) );
 		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop two', true, [ 'merchant_uid' => '1002', 'access_token' => 't2' ] ) );
 
 		$sections = $this->accounts_sections( $adapter, $store )->parameter_sections();
 
-		$this->assertSame( [ 'Shop one', 'Shop two' ], array_map( static function ( $s ) { return $s->get_label(); }, $sections ) );
-		$this->assertSame( [ 'UID продавца: 1001', 'UID продавца: 1002' ], array_map( static function ( $s ) { return $s->get_subtitle(); }, $sections ), 'the identifier sits beside the name' );
-		$this->assertSame( [ true, true ], array_map( static function ( $s ) { return $s->is_stacked(); }, $sections ) );
+		$this->assertSame( [ 'Shop one', 'Shop two' ], array_map( static function ( $s ) { return $s->get_label(); }, $sections ), 'the tab is named after the account' );
+		$this->assertSame( [ '', '' ], array_map( static function ( $s ) { return $s->get_subtitle(); }, $sections ), 'no «Client-Id: …» line beside the name' );
+		$this->assertSame( [ true, true ], array_map( static function ( $s ) { return $s->is_account_tab(); }, $sections ) );
+		$this->assertSame( [ true, true ], array_map( static function ( $s ) { return $s->is_stacked(); }, $sections ), 'an account tab never becomes a page sub-tab' );
 		$this->assertSame( [], array_intersect( $sections[0]->get_setting_ids(), $sections[1]->get_setting_ids() ), 'two accounts, two separate blocks' );
+	}
+
+	public function test_one_account_is_one_parameters_section_the_client_draws_without_tabs(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Only shop', true, [ 'merchant_uid' => '1001', 'access_token' => 't1' ] ) );
+
+		$sections = $this->accounts_sections( $adapter, $store )->parameter_sections();
+
+		$this->assertCount( 1, $sections, 'the client shows tabs only when it is given more than one account block' );
+		$this->assertTrue( $sections[0]->is_account_tab() );
+		$this->assertSame( 'Only shop', $sections[0]->get_label() );
 	}
 
 	public function test_the_notice_without_accounts_is_not_stacked(): void {
 		[ $adapter, $store ] = $this->adapter_and_store();
 
 		$this->assertFalse( $this->accounts_sections( $adapter, $store )->parameter_sections()[0]->is_stacked() );
+		$this->assertFalse( $this->accounts_sections( $adapter, $store )->parameter_sections()[0]->is_account_tab() );
 	}
 
 	public function test_a_stacked_tab_draws_every_section_stacked_and_keeps_a_subtitle_that_is_already_there(): void {
