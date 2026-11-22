@@ -9,6 +9,7 @@ namespace Woodev\Tests\Unit\Marketplace\Jobs;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
+use Woodev\Framework\Marketplace\Flows\History_Import;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
@@ -145,6 +146,90 @@ final class PostingJobsTest extends Sync_Test_Case {
 
 		$this->assertCount( 1, $this->scheduler->of( self::REFRESH ) );
 		$this->assertEqualsWithDelta( Order_Claim_Exception::RETRY_SECONDS, $this->scheduler->of( self::REFRESH )[0]['delay'], 2 );
+	}
+
+	/**
+	 * The first poll of an account reads the history, and writes it — and queues the refreshes of its postings — as history; the
+	 * polls after it are live orders (#1925).
+	 *
+	 * @return void
+	 */
+	public function test_only_the_first_poll_of_an_account_is_history(): void {
+		$jobs                       = $this->jobs_that_record_polls();
+		$this->handler->on_catch_up = function () use ( $jobs ): void {
+			$jobs->queue_refresh( $this->account_id, 'P-' . count( $this->handler->caught_up ) );
+		};
+
+		$jobs->poll( $this->account_id );
+		$jobs->poll( $this->account_id );
+
+		$this->assertSame( [ true, false ], $this->handler->history );
+		$this->assertSame( [ $this->account_id, 'P-1', true ], $this->scheduler->of( self::REFRESH )[0]['args'], 'the refresh the first poll queued is history' );
+		$this->assertSame( [ $this->account_id, 'P-2' ], $this->scheduler->of( self::REFRESH )[1]['args'], 'the refresh a later poll queued is live' );
+		$this->assertFalse( History_Import::is_active(), 'the poll closes its history stretch' );
+	}
+
+	/**
+	 * A poll that failed read nothing: the account has still not been polled, so the next poll is the history again.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_first_poll_leaves_the_next_one_as_history(): void {
+		$jobs                 = $this->jobs_that_record_polls();
+		$this->handler->fails = Fake_Remote_Exception::of( Remote_Error::RETRY, 'busy' );
+
+		try {
+			$jobs->poll( $this->account_id );
+		} catch ( Fake_Remote_Exception $e ) {
+			$this->assertFalse( History_Import::is_active(), 'a failure closes the history stretch too' );
+		}
+
+		$this->handler->fails = null;
+		$jobs->poll( $this->account_id );
+
+		$this->assertSame( [ true, true ], $this->handler->history );
+	}
+
+	/**
+	 * Without the record of polls nothing tells a first poll from a later one: the poll is live, as it was before.
+	 *
+	 * @return void
+	 */
+	public function test_a_poll_without_the_record_of_polls_is_live(): void {
+		$this->jobs()->poll( $this->account_id );
+
+		$this->assertSame( [ false ], $this->handler->history );
+	}
+
+	/**
+	 * A refresh queued by the history import writes as history, and so does its retry; a refresh queued by anything else — one
+	 * queued before the history flag existed included — is live.
+	 *
+	 * @return void
+	 */
+	public function test_a_history_refresh_writes_as_history_and_keeps_the_flag_on_retry(): void {
+		$this->jobs()->refresh( $this->account_id, 'P-1', true );
+		$this->jobs()->refresh( $this->account_id, 'P-2' );
+		$this->assertSame( [ true, false ], $this->handler->history );
+		$this->assertFalse( History_Import::is_active() );
+
+		$this->handler->fails = Order_Claim_Exception::busy( 'P-1' );
+		$this->jobs()->refresh( $this->account_id, 'P-1', true );
+
+		$this->assertSame( [ $this->account_id, 'P-1', true ], $this->scheduler->of( self::REFRESH )[0]['args'], 'a busy history posting is retried as history' );
+		$this->assertFalse( History_Import::is_active(), 'a failed history write closes the stretch' );
+	}
+
+	/**
+	 * A history refresh that waits for the licence keeps its flag too.
+	 *
+	 * @return void
+	 */
+	public function test_a_history_refresh_deferred_by_the_licence_stays_history(): void {
+		$this->licensed = false;
+		$this->jobs()->refresh( $this->account_id, 'P-1', true );
+
+		$this->assertSame( [ $this->account_id, 'P-1', true ], $this->scheduler->of( self::REFRESH )[0]['args'] );
 	}
 
 	/**
@@ -443,5 +528,22 @@ final class PostingJobsTest extends Sync_Test_Case {
 		);
 
 		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $adapter->posting_handler(), $adapter->error_classifier(), $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ) );
+	}
+
+	/**
+	 * Jobs that keep the time of each finished poll, as the plugin's wiring does.
+	 *
+	 * @return Posting_Jobs
+	 */
+	private function jobs_that_record_polls(): Posting_Jobs {
+		Functions\when( 'update_option' )->alias(
+			function ( string $name, $value ): bool {
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
+
+		return new Posting_Jobs( $this->job_gate(), $this->accounts(), $this->handler, $this->classifier, $this->names(), Sqlite_Tables::MARKETPLACE_ID, Posting_Jobs::option_key( self::PLUGIN_ID ), new Posting_Poll_Times( self::PLUGIN_ID ) );
 	}
 }

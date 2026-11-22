@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Jobs;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Flows\History_Import;
 use Woodev\Framework\Marketplace\Orders\Order_Claim_Exception;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Sync\Stock_Mode;
@@ -152,7 +153,7 @@ final class Posting_Jobs {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( $this->refresh_hook(), [ $this, 'refresh' ], 10, 2 );
+		add_action( $this->refresh_hook(), [ $this, 'refresh' ], 10, 3 );
 		add_action( $this->poll_hook(), [ $this, 'poll' ] );
 		add_action( 'action_scheduler_init', [ $this, 'ensure_polls' ] );
 	}
@@ -182,16 +183,21 @@ final class Posting_Jobs {
 	/**
 	 * Queues the refresh of a posting unless one is already pending.
 	 *
+	 * A refresh queued while history is being written (the first poll of an account) is marked as history too — a third action
+	 * argument — so its order, written minutes later by Action Scheduler, sends no WooCommerce e-mail (#1925). An action queued
+	 * before this argument existed carries two and is live, as it always was.
+	 *
 	 * @since 2.1.0
 	 *
 	 * @param int    $account_id     Account id.
 	 * @param string $posting_number Posting number.
 	 * @param int    $delay          Seconds from now.
+	 * @param bool   $history        True when the posting belongs to the history import (a retry of a history refresh passes it on).
 	 * @return void
 	 * @throws Persistence_Exception When Action Scheduler could not store the action.
 	 */
-	public function queue_refresh( int $account_id, string $posting_number, int $delay = 0 ): void {
-		$args    = [ $account_id, $posting_number ];
+	public function queue_refresh( int $account_id, string $posting_number, int $delay = 0, bool $history = false ): void {
+		$args    = ( $history || History_Import::is_active() ) ? [ $account_id, $posting_number, true ] : [ $account_id, $posting_number ];
 		$pending = as_get_scheduled_actions(
 			[
 				'hook'     => $this->refresh_hook(),
@@ -216,16 +222,21 @@ final class Posting_Jobs {
 	/**
 	 * Runs `refresh_posting`.
 	 *
+	 * A refresh the history import queued ({@see self::queue_refresh()}) writes its order inside {@see History_Import}, and so does
+	 * its retry: WooCommerce mails nothing for an order that was placed weeks ago.
+	 *
 	 * @since 2.1.0
 	 *
 	 * @param int|string $account_id     Account id (Action Scheduler passes the stored argument).
 	 * @param string     $posting_number Posting number.
+	 * @param bool       $history        True for a refresh queued by the history import; absent from an action queued before it existed.
 	 * @return void
 	 * @throws \Throwable When the marketplace refused the call for good (Action Scheduler records the failure).
 	 */
-	public function refresh( $account_id, $posting_number ): void {
+	public function refresh( $account_id, $posting_number, $history = false ): void {
 		$account_id     = (int) $account_id;
 		$posting_number = (string) $posting_number;
+		$history        = (bool) $history;
 
 		[ $account, $wait ] = $this->gate->check( $account_id );
 
@@ -234,14 +245,14 @@ final class Posting_Jobs {
 		}
 
 		if ( $wait > 0 ) {
-			$this->queue_refresh( $account_id, $posting_number, $wait );
+			$this->queue_refresh( $account_id, $posting_number, $wait, $history );
 			return;
 		}
 
 		try {
-			$this->handler->refresh( $account_id, $posting_number );
+			$this->write_posting( $account_id, $posting_number, $history );
 		} catch ( Order_Claim_Exception $e ) {
-			$this->queue_refresh( $account_id, $posting_number, Order_Claim_Exception::RETRY_SECONDS );
+			$this->queue_refresh( $account_id, $posting_number, Order_Claim_Exception::RETRY_SECONDS, $history );
 		} catch ( \Throwable $e ) {
 			$delay = $this->settle( $account, $e );
 
@@ -249,12 +260,16 @@ final class Posting_Jobs {
 				throw $e;
 			}
 
-			$this->queue_refresh( $account_id, $posting_number, $delay );
+			$this->queue_refresh( $account_id, $posting_number, $delay, $history );
 		}
 	}
 
 	/**
 	 * Runs `poll_postings`.
+	 *
+	 * The first poll of an account — before any poll of it has ended without an error — reads the marketplace's history, and runs
+	 * inside {@see History_Import}: it sends no WooCommerce e-mail for what it writes, and the refreshes it queues are marked the same
+	 * way (#1925). Later polls are the shop's live orders and mail as WooCommerce always does.
 	 *
 	 * @since 2.1.0
 	 *
@@ -270,7 +285,7 @@ final class Posting_Jobs {
 		}
 
 		try {
-			$this->handler->catch_up( $account );
+			$this->catch_up( $account, $this->is_first_poll( $account ) );
 		} catch ( \Throwable $e ) {
 			$this->settle( $account, $e );
 
@@ -344,5 +359,57 @@ final class Posting_Jobs {
 		}
 
 		return $error->is( Remote_Error::RETRY ) ? Backoff::seconds_after( 1 ) : null;
+	}
+
+	/**
+	 * Tells whether the account has not been polled yet: no poll of it has ended without an error. Without the record of polls there
+	 * is no way to know, and the poll is taken for a live one.
+	 *
+	 * @param Account $account Account.
+	 * @return bool
+	 */
+	private function is_first_poll( Account $account ): bool {
+		return null !== $this->poll_times && null === $this->poll_times->last( $account->id() );
+	}
+
+	/**
+	 * Asks the order flow to catch up, as history when the poll is the account's first.
+	 *
+	 * @param Account $account Account.
+	 * @param bool    $history True for the account's first poll.
+	 * @return void
+	 */
+	private function catch_up( Account $account, bool $history ): void {
+		if ( ! $history ) {
+			$this->handler->catch_up( $account );
+			return;
+		}
+
+		History_Import::during(
+			function () use ( $account ): void {
+				$this->handler->catch_up( $account );
+			}
+		);
+	}
+
+	/**
+	 * Asks the order flow to read one posting, as history when the refresh was queued by the history import.
+	 *
+	 * @param int    $account_id     Account id.
+	 * @param string $posting_number Posting number.
+	 * @param bool   $history        True for a history refresh.
+	 * @return void
+	 */
+	private function write_posting( int $account_id, string $posting_number, bool $history ): void {
+		if ( ! $history ) {
+			$this->handler->refresh( $account_id, $posting_number );
+			return;
+		}
+
+		History_Import::during(
+			function () use ( $account_id, $posting_number ): void {
+				$this->handler->refresh( $account_id, $posting_number );
+			}
+		);
 	}
 }

@@ -11,6 +11,7 @@
 
 namespace Woodev\Tests\Integration\Marketplace;
 
+use Woodev\Framework\Marketplace\Flows\History_Import;
 use Woodev\Framework\Marketplace\Flows\Order_Query;
 use Woodev\Framework\Marketplace\Flows\Wc_Order_Store;
 use Woodev\Framework\Marketplace\Orders\Order_DTO;
@@ -302,6 +303,56 @@ class OrderStoresTest extends TestCase {
 		} finally {
 			remove_filter( 'wc_order_statuses', $statuses );
 		}
+	}
+
+	/**
+	 * WooCommerce mails the administrator for a new order and for a status change; an order written while the marketplace's history
+	 * is imported mails nobody, and an order written afterwards mails as WooCommerce always does (#1925). A checkout order made inside
+	 * the import's stretch but outside the store is covered by the unit test of `History_Import`.
+	 *
+	 * Mail is counted at `pre_wp_mail`, so a send attempt shows up whether or not the test site can deliver it.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_history_orders_send_no_woocommerce_email_and_live_orders_do( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$attempts = 0;
+		$count    = static function ( $short_circuit ) use ( &$attempts ) {
+			++$attempts;
+
+			return true;
+		};
+		add_filter( 'pre_wp_mail', $count );
+
+		$store = new Wc_Order_Store( $this->meta );
+		$write = function ( string $key ) use ( $store ): void {
+			$order    = $this->dto( $key, [ [ 'SKU-H', 1 ] ] );
+			$members  = [
+				$key => [
+					'status_canonical' => Status_Map::NEW,
+					'quantity'         => 1,
+				],
+			];
+			$wc_order = $store->create( $order );
+
+			$store->update( $wc_order, $order, 'processing', $members, true );
+			$store->update( $store->get( $wc_order->get_id() ), $order, 'cancelled', $members, false );
+		};
+
+		History_Import::during(
+			static function () use ( $write ): void {
+				$write( 'H-1' );
+			}
+		);
+		$this->assertSame( 0, $attempts, 'the history import mails nothing' );
+
+		$write( 'L-1' );
+		$this->assertGreaterThan( 0, $attempts, 'an order written after the import mails' );
+
+		remove_filter( 'pre_wp_mail', $count );
 	}
 
 	/**
