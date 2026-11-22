@@ -301,7 +301,12 @@ final class Import_Mapping {
 			return '';
 		}
 
-		$where = '' !== $this->marketplace_name ? sprintf( /* translators: %s: marketplace name */ __( 'в %s', 'woodev-plugin-framework' ), $this->marketplace_name ) : __( 'на маркетплейсе', 'woodev-plugin-framework' );
+		$where = __( 'на маркетплейсе', 'woodev-plugin-framework' );
+
+		if ( '' !== $this->marketplace_name ) {
+			/* translators: %s: marketplace name */
+			$where = sprintf( __( 'в %s', 'woodev-plugin-framework' ), $this->marketplace_name );
+		}
 
 		/* translators: 1: shop category name, 2: where the cards are («в Ozon»), 3: marketplace category and type of the mapping */
 		return sprintf( __( 'Категория «%1$s»: %2$s карточки разных типов, сопоставление создано по типу «%3$s».', 'woodev-plugin-framework' ), $this->term_name( $term_id ), $where, $entry['label'] );

@@ -11311,6 +11311,26 @@ msgstr ""
 msgid "Импорт другой карточки этой группы (артикул %s) не завершён. Импортируйте сначала её, затем повторите."
 msgstr ""
 
+#: marketplace/flows/class-import-mapping.php:158
+msgid "Сопоставление категории не создано: не удалось записать его в базу данных."
+msgstr ""
+
+#: marketplace/flows/class-import-mapping.php:304
+msgid "на маркетплейсе"
+msgstr ""
+
+#. translators: %s: marketplace name
+#: marketplace/flows/class-import-mapping.php:308
+#, php-format
+msgid "в %s"
+msgstr ""
+
+#. translators: 1: shop category name, 2: where the cards are («в Ozon»), 3: marketplace category and type of the mapping
+#: marketplace/flows/class-import-mapping.php:312
+#, php-format
+msgid "Категория «%1$s»: %2$s карточки разных типов, сопоставление создано по типу «%3$s»."
+msgstr ""
+
 #: marketplace/flows/class-group-assembler.php:334
 msgid "Вариант добавлен в опубликованный товар выключенным. Проверьте его и включите в карточке товара."
 msgstr ""
