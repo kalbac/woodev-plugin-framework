@@ -446,6 +446,15 @@ Settings (card I4), both on «Общие», group «Заказы и карточ
 | `import_publish` | «Сразу публиковать импортированные товары» | **off** (draft) for a new shop; an upgraded v1 shop keeps its value | `product_status = publish` → on, anything else → off |
 | `import_create_categories` | «Создавать категории для импортированных товаров» | on (v1) | `create_new_category` |
 
+**The mapping of a category the import chose (#1940, no setting of its own — it follows `import_create_categories`).** After a card is
+created and linked, `Import_Mapping::ensure()` gives its shop category a mapping «shop category ↔ marketplace category and type» when
+the card's pair (`remote_category()`) has none: no profile (a mapping made by hand starts the same), no request to the marketplace.
+A pair or a shop category that already has a mapping is never changed. A card of another type landing in a category that an earlier
+card's type mapped gets a note, «Категория «X»: на маркетплейсе карточки разных типов, сопоставление создано по типу «Y»». The
+attribute table links each aspect the import wrote as a product attribute (a group of several cards, §2.6.1) to the field of the
+same name from `Cached_Catalog_Fields::cached_fields()` (`wc_attribute`, the aspect's name as key); no cached fields → no links. The links
+are made once, from the card that creates the mapping.
+
 Readers: `Effective_Settings::import_publish()` and `::import_create_categories()`. A draft is the safe meaning of «off»: the card's
 price is the marketplace's, and auto-import can fire with nobody watching.
 

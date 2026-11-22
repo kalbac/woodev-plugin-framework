@@ -269,6 +269,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Flows\\Export_Service' => 'woodev/marketplace/flows/class-export-service.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Group_Assembler' => 'woodev/marketplace/flows/class-group-assembler.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Import_Category' => 'woodev/marketplace/flows/class-import-category.php',
+	'Woodev\\Framework\\Marketplace\\Flows\\Import_Mapping' => 'woodev/marketplace/flows/class-import-mapping.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Import_Outcome' => 'woodev/marketplace/flows/class-import-outcome.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Label_Access_Exception' => 'woodev/marketplace/flows/class-label-access-exception.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Label_Answer' => 'woodev/marketplace/flows/class-label-answer.php',

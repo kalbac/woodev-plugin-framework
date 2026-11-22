@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Category_Finder;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
@@ -33,6 +34,7 @@ use Woodev\Framework\Marketplace\Flows\Deleted_Product_Releaser;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Import_Category;
+use Woodev\Framework\Marketplace\Flows\Import_Mapping;
 use Woodev\Framework\Marketplace\Flows\Label_Download;
 use Woodev\Framework\Marketplace\Flows\Legacy_Order_Lines;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
@@ -616,12 +618,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 
 			$notes     = new Link_Report_Store( Uninstaller::option_prefix( $this->plugin_id ) );
 			$scheduler = new Import_Scheduler( $this->names );
-			$writer    = new Product_Writer(
-				new Import_Category( new Wpdb_Mapping_Store( $this->db, $this->table( 'mappings' ), $this->table( 'mapping_terms' ) ) ),
+			$mappings   = new Wpdb_Mapping_Store( $this->db, $this->table( 'mappings' ), $this->table( 'mapping_terms' ) );
+			$categories = new Import_Category( $mappings );
+			$writer     = new Product_Writer(
+				$categories,
 				new Wpdb_Profile_Store( $this->db, $this->table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
 				new Shop_Price_Writer( $this->contexts )
 			);
-			$import    = new Card_Import( $this->links, $this->linker, $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links ), [ $writer, 'start' ], [ $writer, 'complete' ] );
+			$mapping    = new Import_Mapping( $mappings, $categories, new Category_Finder( $adapter->catalog_schema() ) );
+			$import     = new Card_Import( $this->links, $this->linker, $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links ), [ $writer, 'start' ], [ $writer, 'complete' ], $mapping );
 
 			( new Import_Jobs( $this->gate, $adapter, $import, $notes, $scheduler, $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
 			( new Legacy_Order_Lines( $adapter->id() ) )->register();

@@ -9,6 +9,7 @@ namespace Woodev\Tests\Unit\Marketplace\Flows;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Category_Finder;
 use Woodev\Framework\Marketplace\Catalog\Card_Content;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
@@ -16,6 +17,8 @@ use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
+use Woodev\Framework\Marketplace\Flows\Import_Category;
+use Woodev\Framework\Marketplace\Flows\Import_Mapping;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Jobs\Claim_Lost;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -100,6 +103,20 @@ final class CardImportTest extends Export_Test_Case {
 	private $started = [];
 
 	/**
+	 * What gives the category of a created product its mapping; null builds an importer that leaves the mappings alone.
+	 *
+	 * @var Import_Mapping|null
+	 */
+	private $category_mapping;
+
+	/**
+	 * The shop's categories the import finds or makes: `[ id, name ]`, one level under the root.
+	 *
+	 * @var array<int,array{0:int,1:string}>
+	 */
+	private $categories = [];
+
+	/**
 	 * Stubs the options, the SKU lookup and the writer's world.
 	 *
 	 * @return void
@@ -115,6 +132,8 @@ final class CardImportTest extends Export_Test_Case {
 		$this->cut_before_first_save = null;
 		$this->next_id               = 900;
 		$this->started               = [];
+		$this->category_mapping      = null;
+		$this->categories            = [];
 
 		Functions\when( 'get_option' )->alias(
 			function ( string $name, $fallback = false ) {
@@ -164,7 +183,56 @@ final class CardImportTest extends Export_Test_Case {
 			},
 			function ( Account $account, Card_Content $content, \WC_Product $product, bool $publish, callable $renew ): array {
 				return $this->complete( $content, $product, $publish );
+			},
+			$this->category_mapping
+		);
+	}
+
+	/**
+	 * Makes the next import create the mapping of the category of a created product, over a shop whose categories are
+	 * `$this->categories`.
+	 *
+	 * @return void
+	 */
+	private function mapping_categories(): void {
+		Functions\when( 'get_terms' )->alias(
+			function ( array $args ): array {
+				return array_map( 'intval', array_column( array_filter( $this->categories, static function ( array $term ) use ( $args ): bool { return $term[1] === $args['name']; } ), 0 ) );
 			}
+		);
+		Functions\when( 'wp_insert_term' )->alias(
+			function ( string $name ): array {
+				$this->categories[] = [ 200 + count( $this->categories ), $name ];
+
+				return [ 'term_id' => end( $this->categories )[0] ];
+			}
+		);
+		Functions\when( 'get_term_field' )->alias(
+			function ( string $field, int $term_id ): string {
+				return (string) ( array_column( $this->categories, 1, 0 )[ $term_id ] ?? '' );
+			}
+		);
+
+		$mappings               = $this->mappings();
+		$this->category_mapping = new Import_Mapping( $mappings, new Import_Category( $mappings ), new Category_Finder( new Import_Fake_Schema() ) );
+	}
+
+	/**
+	 * Builds a card of a type of the fake catalogue, in a category of the given name.
+	 *
+	 * @param array<string,int> $type     The card's type.
+	 * @param string            $category Name of its category.
+	 * @param string            $article  Article of the card.
+	 * @return Card_Content
+	 */
+	private function typed_card( array $type, string $category = 'Смартфоны', string $article = self::ARTICLE ): Card_Content {
+		return new Card_Content(
+			$this->card( [ 'offer_id' => $article ] )->card(),
+			[
+				'name'            => 'Блокнот',
+				'remote_category' => $type,
+				'category_path'   => [ $category ],
+			]
 		);
 	}
 
@@ -721,5 +789,69 @@ final class CardImportTest extends Export_Test_Case {
 	public function test_a_card_with_no_article_is_skipped(): void {
 		$this->assertSame( Card_Import::SKIPPED, $this->import( $this->card( [ 'offer_id' => '' ] ) ) );
 		$this->assertSame( [], $this->writes );
+	}
+
+	/**
+	 * A created card whose category has no mapping leaves the import with one, while the import creates categories.
+	 *
+	 * @return void
+	 */
+	public function test_a_created_card_gets_the_mapping_of_its_category(): void {
+		$this->mapping_categories();
+
+		$this->assertSame( Card_Import::CREATED, $this->import( $this->typed_card( Import_Fake_Schema::PHONES ) ) );
+
+		$found = $this->mappings()->for_category( Import_Fake_Schema::PHONES );
+
+		$this->assertNotNull( $found );
+		$this->assertSame( [ 200 ], $found['term_ids'] );
+		$this->assertNull( $this->note(), 'a clean mapping is no note' );
+	}
+
+	/**
+	 * With «Создавать категории при импорте» off the import chose no category, so it makes no mapping.
+	 *
+	 * @return void
+	 */
+	public function test_without_the_create_categories_setting_no_mapping_is_made(): void {
+		$this->options[ Effective_Settings::option_name( Sqlite_Tables::MARKETPLACE_ID ) ] = [ 'import_create_categories' => false ];
+		$this->mapping_categories();
+
+		$this->assertSame( Card_Import::CREATED, $this->import( $this->typed_card( Import_Fake_Schema::PHONES ) ) );
+
+		$this->assertNull( $this->mappings()->for_category( Import_Fake_Schema::PHONES ) );
+		$this->assertSame( [], $this->categories, 'and no category either' );
+	}
+
+	/**
+	 * A product the merchant already had is only linked: its categories are the merchant's, never mapped by the import.
+	 *
+	 * @return void
+	 */
+	public function test_a_product_that_is_only_linked_gets_no_mapping(): void {
+		$product = $this->shop_product( 401 );
+		$this->unmarked( $product );
+		$this->mapping_categories();
+
+		$this->assertSame( Card_Import::LINKED_EXISTING, $this->import( $this->typed_card( Import_Fake_Schema::PHONES ) ) );
+
+		$this->assertNull( $this->mappings()->for_category( Import_Fake_Schema::PHONES ) );
+	}
+
+	/**
+	 * A card of another type than the one that mapped its category carries the sentence about it as its note.
+	 *
+	 * @return void
+	 */
+	public function test_the_note_of_a_card_of_another_type_says_which_type_mapped_the_category(): void {
+		$this->mapping_categories();
+		$this->import( $this->typed_card( Import_Fake_Schema::PHONES, 'Гаджеты' ) );
+
+		$this->assertSame( Card_Import::CREATED, $this->import( $this->typed_card( Import_Fake_Schema::TABLETS, 'Гаджеты', 'OW-IMPORT-2' ) ) );
+
+		$notes = array_column( $this->notes()->import_notes( $this->account_id ), 'text', 'offer_id' );
+
+		$this->assertSame( [ 'OW-IMPORT-2' => 'Категория «Гаджеты»: на маркетплейсе карточки разных типов, сопоставление создано по типу «Электроника › Смартфоны».' ], $notes, 'the first card has no note' );
+		$this->assertNull( $this->mappings()->for_category( Import_Fake_Schema::TABLETS ) );
 	}
 }
