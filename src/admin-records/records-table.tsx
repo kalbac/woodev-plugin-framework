@@ -20,6 +20,7 @@ import { FiltersBar, SearchBox, ViewsRow, isNarrowed } from './filters';
 import { MESSAGE_KEYS, firstMessage, message } from './messages';
 import { changeQuery, searchFilter, writeQuery } from './query';
 import { Pager, fitsOnePage, useFooterSlot } from './pager';
+import { withoutBusyRows } from './activity/busy';
 import { RowActions } from './row-actions';
 import { useSelection, type Selection } from './selection';
 import { EmptyCard, ErrorState, LoadingState } from './states';
@@ -359,7 +360,9 @@ interface HeaderActionsProps {
  */
 function HeaderActions( { definition, query, selection, handle, extensions, hasBulk, restoreFocus, onChange }: HeaderActionsProps ) {
 	const search = searchFilter( definition );
-	const chosen = { selectedIds: selection.selectedIds, matching: selection.matchingQuery, clear: selection.clear };
+	// A row that went busy after it was ticked stays ticked, but no bulk action may take it.
+	const selectedIds = withoutBusyRows( selection.selectedIds, [ ...handle.rows, ...handle.children ] );
+	const chosen = { selectedIds, matching: selection.matchingQuery, clear: selection.clear };
 
 	return (
 		<div className="woodev-table-toolbar">

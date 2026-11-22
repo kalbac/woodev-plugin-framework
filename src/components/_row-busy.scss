@@ -27,6 +27,8 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
+		// Above a table's pinned (sticky, `z-index: 2`) cells: the bar runs the whole width of the row, not from the first free column.
+		z-index: 3;
 		height: 2px;
 		overflow: hidden;
 		background: rgba( 0, 0, 0, 0.08 );

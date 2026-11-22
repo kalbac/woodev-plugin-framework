@@ -19,3 +19,15 @@ const IN_FLIGHT: ProcessState[] = [ 'queued', 'running', 'waiting' ];
 export function isRowBusy( row: Pick< AdminRecord, 'activity' > ): boolean {
 	return ( row.activity?.processes ?? [] ).some( ( process ) => IN_FLIGHT.includes( process.state ) );
 }
+
+/**
+ * The ids a bulk action may take: a row that started a process after it was ticked is still ticked, but it is blocked now.
+ *
+ * @param ids  The ticked ids.
+ * @param rows Every row on screen, children included.
+ */
+export function withoutBusyRows( ids: string[], rows: AdminRecord[] ): string[] {
+	const busy = new Set( rows.filter( isRowBusy ).map( ( row ) => row.id ) );
+
+	return ids.filter( ( id ) => ! busy.has( id ) );
+}

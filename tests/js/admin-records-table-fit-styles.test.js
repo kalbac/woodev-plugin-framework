@@ -105,3 +105,13 @@ describe( 'the records table footer', () => {
 		expect( hidden ).toMatch( /display:\s*none/ );
 	} );
 } );
+
+describe( 'the busy-row bar (#1937)', () => {
+	test( 'sits above the pinned cells (sticky, z-index 2), or it would start after them', () => {
+		const shared = fs.readFileSync( path.join( __dirname, '../../src/components/_row-busy.scss' ), 'utf8' );
+		const pinned = Number( /\.woodev-records__col-name \{[^}]*?\}/.test( scss ) && /position: sticky;\s*z-index: (\d+)/.exec( scss )[ 1 ] );
+		const bar = Number( /^\s*z-index: (\d+);/m.exec( shared )[ 1 ] );
+
+		expect( bar ).toBeGreaterThan( pinned );
+	} );
+} );

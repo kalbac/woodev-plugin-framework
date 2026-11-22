@@ -288,6 +288,34 @@ describe( 'the busy row (#1937, the mechanism of «Заказы доставки
 		expect( rowCheckbox( 'p2' ) ).toBeEnabled();
 	} );
 
+	test( 'the list response alone makes the row busy, on a table that mounts no activity part', async () => {
+		const busy = locked( [ process( 'import', { label: 'Импортируется', completed: null, total: null, percent: null, text: '' } ) ] );
+		serve( { rows: [ row( 'p1', 'Кружка', busy ), row( 'p2', 'Футболка' ) ] } );
+		await renderTable( { extensions: { renderBulkActions: () => null } } );
+
+		expect( marker( 'p1' ) ).toBeInTheDocument();
+		expect( rowCheckbox( 'p1' ) ).toBeDisabled();
+		expect( exportButton( 'p1' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( marker( 'p2' ) ).toBeNull();
+	} );
+
+	test( 'a row ticked before it went busy is left out of what a bulk action receives', async () => {
+		const ticked = ( chosen: { selectedIds: string[] } ) => <output aria-label="bulk-ids">{ chosen.selectedIds.join( ',' ) }</output>;
+		serve( {
+			rows: [ row( 'p1', 'Кружка' ), row( 'p2', 'Футболка' ) ],
+			activity: () => answer( [ row( 'p1', 'Кружка', locked( [ process( 'obs-1' ) ] ) ) ] ),
+		} );
+		await renderTable( { extensions: { ...activity.extensions, renderBulkActions: ticked } } );
+		fireEvent.click( rowCheckbox( 'p1' ) );
+		fireEvent.click( rowCheckbox( 'p2' ) );
+		expect( screen.getByLabelText( 'bulk-ids' ) ).toHaveTextContent( 'p1,p2' );
+
+		await wait( 2000 );
+
+		expect( marker( 'p1' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'bulk-ids' ) ).toHaveTextContent( /^p2$/ );
+	} );
+
 	test( 'a queued and a waiting process are in flight too', async () => {
 		serve( {
 			rows: [

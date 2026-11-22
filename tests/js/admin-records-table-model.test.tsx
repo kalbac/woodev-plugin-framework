@@ -11,7 +11,7 @@ import '@testing-library/jest-dom';
 import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { fixtureDefinition, fixtureRow } from '../../src/admin-records/testing/fixture';
-import { buildLines, nameColumnIndex, type TableModelInput } from '../../src/admin-records/table-model';
+import { SELECT_COLUMN, buildHeaders, buildLines, nameColumnIndex, type TableModelInput } from '../../src/admin-records/table-model';
 import type { Definition } from '../../src/admin-records/types';
 import type { ChildrenState } from '../../src/admin-records/use-records';
 
@@ -77,5 +77,79 @@ describe( 'a child row', () => {
 
 		expect( isIndented( note[ 1 ] ) ).toBe( false );
 		expect( isIndented( note[ 2 ] ) ).toBe( true );
+	} );
+} );
+
+describe( 'a row with a process in flight (#1937)', () => {
+	const running = { locked: false, reason: '', blocked_actions: [], observed_at: '', processes: [ { id: 'p', state: 'running' as const, label: 'Импорт', completed: null, total: null, percent: null, text: '' } ] };
+	const select = ( set: jest.Mock ) => ( {
+		selectedIds: [],
+		limitReached: false,
+		matching: false,
+		matchingQuery: null,
+		set,
+		selectMatching: () => undefined,
+		clear: () => undefined,
+	} );
+	const withSelection = ( rows: TableModelInput[ 'rows' ], children: TableModelInput[ 'children' ], set: jest.Mock ): TableModelInput => ( {
+		...input( photoFirst(), ready( [] ) ),
+		rows,
+		children,
+		selection: select( set ),
+	} );
+	const checkboxOf = ( cells: Array< { display: ReactNode } >, at: number ) => drawn( cells )[ at ].querySelector( 'input[type="checkbox"]' ) as HTMLInputElement;
+
+	test( 'the header checkbox selects only the idle rows', () => {
+		const set = jest.fn();
+		const idle = fixtureRow( 'idle', 'Кружка' );
+		const busy = fixtureRow( 'busy', 'Футболка', { activity: running } );
+		const model = withSelection( [ idle, busy ], {}, set );
+		const header = buildHeaders( model ).find( ( entry ) => entry.key === SELECT_COLUMN );
+
+		render( <div>{ header?.label }</div> ).container.querySelector( 'input' )?.click();
+
+		expect( set ).toHaveBeenCalledWith( [ 'idle' ], true );
+	} );
+
+	test( 'a parent selects its idle children only, and a busy child has a disabled checkbox', () => {
+		const set = jest.fn();
+		const parent = fixtureRow( 'p1', 'Футболка', { has_children: true } );
+		const idleChild = fixtureRow( 'v1', 'S' );
+		const busyChild = fixtureRow( 'v2', 'M', { activity: running } );
+		const model = withSelection( [ parent ], { p1: ready( [ idleChild, busyChild ] ) }, set );
+		model.expanded = [ 'p1' ];
+		const lines = buildLines( model );
+		// [expand, select, …]
+		const parentBox = checkboxOf( lines[ 0 ].cells, 1 );
+
+		parentBox.click();
+
+		expect( set ).toHaveBeenCalledWith( [ 'p1', 'v1' ], true );
+		expect( checkboxOf( lines[ 2 ].cells, 1 ) ).toBeDisabled();
+		expect( checkboxOf( lines[ 1 ].cells, 1 ) ).toBeEnabled();
+	} );
+
+	test( 'the bar sits in the actions column, never in a pinned one; an idle row has none', () => {
+		const definition = photoFirst();
+		const busy = fixtureRow( 'busy', 'Футболка', { activity: running } );
+		const idle = fixtureRow( 'idle', 'Кружка' );
+		const lines = buildLines( { ...input( definition, ready( [] ) ), rows: [ busy, idle ], expanded: [] } );
+		const marked = ( at: number ) => drawn( lines[ at ].cells ).map( ( cell ) => cell.querySelector( '.woodev-records__row-busy' ) !== null );
+		// The expand and select columns lead the declared ones.
+		const lead = 1;
+		const actionsAt = lead + definition.columns.findIndex( ( column ) => column.cell_type === 'actions' );
+
+		expect( marked( 0 ).filter( Boolean ) ).toHaveLength( 1 );
+		expect( marked( 0 )[ actionsAt ] ).toBe( true );
+		expect( marked( 1 ).filter( Boolean ) ).toHaveLength( 0 );
+	} );
+
+	test( 'a table with no actions column carries the bar in its last column', () => {
+		const definition = { ...photoFirst(), columns: photoFirst().columns.filter( ( column ) => column.cell_type !== 'actions' ) } as Definition;
+		const busy = fixtureRow( 'busy', 'Футболка', { activity: running } );
+		const lines = buildLines( { ...input( definition, ready( [] ) ), rows: [ busy ], expanded: [] } );
+		const marked = drawn( lines[ 0 ].cells ).map( ( cell ) => cell.querySelector( '.woodev-records__row-busy' ) !== null );
+
+		expect( marked.lastIndexOf( true ) ).toBe( marked.length - 1 );
 	} );
 } );

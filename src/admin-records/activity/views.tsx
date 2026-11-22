@@ -4,7 +4,7 @@
  *
  * - The lock reason is visible text, not colour.
  * - A process is PHP's label and text, never a percentage computed from elapsed time. A row with a process in flight
- *   carries the full-width bar of the busy-row mechanism instead of a bar of its own (#1937).
+ *   is marked busy by the table itself (`table-model`), not by this view (#1937).
  * - Several processes are listed side by side; one never hides another.
  *
  * @package woodev-plugin-framework
@@ -14,7 +14,6 @@ import { Button } from '@wordpress/components';
 import { ProblemsLink } from '../../components/help-link';
 import type { TableHandle } from '../extensions';
 import { healthNotice } from './messages';
-import { isRowBusy } from './busy';
 import type { Ownership } from './ownership';
 import { accountBlockedReason, useActivityState, type ActivityState } from './state';
 import { ACTIVITY_STYLES } from './styles';
@@ -37,12 +36,7 @@ interface RowActivityViewProps {
 	reasonShown: boolean;
 }
 
-/**
- * A row's lock sentence and its processes; nothing at all for a row with no activity.
- *
- * While a process is in flight the cell also holds the busy marker: an empty element that `style.scss` turns into the bar along
- * the bottom edge of the whole row (`tr:has( .woodev-records__row-busy )`), as `ActionsCell` does in «Заказы доставки».
- */
+/** A row's lock sentence and its processes; nothing at all for a row with no activity. */
 export function RowActivityView( { activity, reasonShown }: RowActivityViewProps ) {
 	if ( ! activity || ( ! activity.locked && activity.reason === '' && activity.processes.length === 0 ) ) {
 		return null;
@@ -50,7 +44,6 @@ export function RowActivityView( { activity, reasonShown }: RowActivityViewProps
 
 	return (
 		<span className="woodev-records__activity" data-locked={ activity.locked } style={ ACTIVITY_STYLES.row }>
-			{ isRowBusy( { activity } ) && <span className="woodev-records__row-busy" aria-hidden="true" /> }
 			{ activity.reason !== '' && ! reasonShown && (
 				<span className="woodev-records__lock" style={ ACTIVITY_STYLES.lock }>
 					{ activity.reason }
