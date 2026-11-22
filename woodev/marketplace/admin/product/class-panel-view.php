@@ -1022,7 +1022,12 @@ final class Panel_View {
 	private function button_labels( array $block ): array {
 		$is_offer = 'offer' === $block['kind'];
 
-		return $this->labels_for( $this->export_is_new( $block ), $is_offer ? $block['can_archive'] : $block['any_created'], $is_offer ? $block['can_detach'] : $block['any_linked'] );
+		return $this->labels_for(
+			$this->export_is_new( $block ),
+			$is_offer ? $block['can_archive'] : $block['any_created'],
+			$is_offer ? $block['can_detach'] : $block['any_linked'],
+			$is_offer || $block['any_unsent']
+		);
 	}
 
 	/**
@@ -1031,12 +1036,15 @@ final class Panel_View {
 	 * @param bool $is_new      Whether the card has not been sent («Экспортировать» and not «Обновить карточку»).
 	 * @param bool $can_archive Whether a created card can be archived.
 	 * @param bool $can_detach  Whether the card has a link to take off.
+	 * @param bool $can_export  Whether the export button is offered: not for a variable product whose every variation already has its card.
 	 * @return array<string,string> `op` => label.
 	 */
-	private function labels_for( bool $is_new, bool $can_archive, bool $can_detach ): array {
-		$labels = [
-			'export' => $is_new ? __( 'Экспортировать', 'woodev-plugin-framework' ) : __( 'Обновить карточку', 'woodev-plugin-framework' ),
-		];
+	private function labels_for( bool $is_new, bool $can_archive, bool $can_detach, bool $can_export = true ): array {
+		$labels = [];
+
+		if ( $can_export ) {
+			$labels['export'] = $is_new ? __( 'Экспортировать', 'woodev-plugin-framework' ) : __( 'Обновить карточку', 'woodev-plugin-framework' );
+		}
 
 		if ( $can_archive ) {
 			$labels['archive'] = sprintf( /* translators: %s: marketplace name. */ __( 'Архивировать на %s', 'woodev-plugin-framework' ), $this->names->name() );
@@ -1076,10 +1084,16 @@ final class Panel_View {
 		$hints  = [];
 
 		if ( 'parent' === $block['kind'] ) {
-			$hints[] = __( 'Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой. Остатки, цены, склад и проверка товара — у каждого варианта. Кнопка «Экспортировать» проверит все варианты сразу и покажет, что мешает.', 'woodev-plugin-framework' );
+			$hints[] = __( 'Это вариативный товар: на маркетплейс уходит каждый вариант отдельной карточкой. Остатки, цены, склад и проверка товара — у каждого варианта.', 'woodev-plugin-framework' );
+
+			if ( isset( $labels['export'] ) ) {
+				$hints[] = __( 'Кнопка «Экспортировать» проверит все варианты сразу и покажет, что мешает.', 'woodev-plugin-framework' );
+			}
 		}
 
-		$hints[] = sprintf( /* translators: %s: name of a button. */ __( 'Кнопки работают с уже сохранённым товаром: если меняли поля выше, сначала сохраните товар («Обновить» справа), затем нажмите «%s».', 'woodev-plugin-framework' ), $labels['export'] );
+		$hints[] = isset( $labels['export'] )
+			? sprintf( /* translators: %s: name of a button. */ __( 'Кнопки работают с уже сохранённым товаром: если меняли поля выше, сначала сохраните товар («Обновить» справа), затем нажмите «%s».', 'woodev-plugin-framework' ), $labels['export'] )
+			: __( 'Кнопки работают с уже сохранённым товаром: если меняли поля выше, сначала сохраните товар («Обновить» справа), затем нажмите нужную кнопку.', 'woodev-plugin-framework' );
 
 		foreach ( $this->button_tips() as $op => $tip ) {
 			if ( isset( $labels[ $op ], $screen['ops'][ $op ] ) ) {

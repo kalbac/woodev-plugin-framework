@@ -368,6 +368,7 @@ final class PanelViewTest extends TestCase {
 		$block['counts']      = [];
 		$block['any_created'] = true;
 		$block['any_linked']  = true;
+		$block['any_unsent']  = false;
 		$row                  = [
 			'id'       => 5,
 			'name'     => 'S',
@@ -552,6 +553,7 @@ final class PanelViewTest extends TestCase {
 		$block['counts']      = [];
 		$block['any_created'] = false;
 		$block['any_linked']  = false;
+		$block['any_unsent']  = true;
 		$block['rows']        = [
 			[
 				'id'       => 5,
@@ -577,6 +579,7 @@ final class PanelViewTest extends TestCase {
 		$block['counts']      = [ 'Не связан' => 1 ];
 		$block['any_created'] = false;
 		$block['any_linked']  = false;
+		$block['any_unsent']  = true;
 		$block['rows']        = [
 			[
 				'id'       => 5,
@@ -688,6 +691,60 @@ final class PanelViewTest extends TestCase {
 		$this->assertMatchesRegularExpression( '#<td class="woodev-mp-variations__actions"><span class="woodev-mp-buttons__row button-group woodev-mp-buttons__row--icons"#u', $html, 'a row of the table keeps to icons' );
 		$this->assertSame( 3, substr_count( $html, 'data-woodev-mp-vop="detach"' ) + substr_count( $html, 'data-woodev-mp-vop="archive"' ) + 1, 'the row of a created card: update, archive, detach; the row of an unsent one: export only' );
 		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Экспортировать</span>', $html, 'a card that was not sent is «Экспортировать»' );
+		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Обновить карточку</span>', $html );
+	}
+
+	public function test_a_variable_product_offers_the_export_only_while_a_variation_has_no_card(): void {
+		$one_unsent = $this->parent_block();
+		$html       = $this->render_tab( [ $one_unsent ], [ 'export' => 't1', 'archive' => 't2', 'detach' => 't3' ] );
+
+		$this->assertStringContainsString( 'data-woodev-mp-op="export"', $html, 'a variation without a card: the product exports' );
+		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Экспортировать</span>', $html );
+		$this->assertStringContainsString( 'Кнопка «Экспортировать» проверит все варианты сразу', $html );
+	}
+
+	public function test_a_variable_product_whose_every_variation_has_its_card_has_no_export_button_but_keeps_archive_and_detach(): void {
+		$block               = $this->parent_block();
+		$block['any_unsent'] = false;
+		$html                = $this->render_tab( [ $block ], [ 'export' => 't1', 'archive' => 't2', 'detach' => 't3' ] );
+
+		$this->assertStringNotContainsString( 'data-woodev-mp-op="export"', $html, 'every card exists: nothing to export at the product level' );
+		$this->assertStringNotContainsString( 'Экспортировать</span>', $html );
+		$this->assertStringContainsString( 'data-woodev-mp-op="archive"', $html );
+		$this->assertStringContainsString( 'data-woodev-mp-op="detach"', $html );
+		$this->assertStringNotContainsString( 'Кнопка «Экспортировать»', $html, 'the help does not name a button that is not there' );
+		$this->assertStringContainsString( 'затем нажмите нужную кнопку', $html );
+	}
+
+	public function test_a_variable_product_without_any_link_in_the_account_offers_the_export_for_the_whole_product(): void {
+		$block                = $this->parent_block();
+		$block['any_created'] = false;
+		$block['any_linked']  = false;
+		$block['any_unsent']  = true;
+		$html                 = $this->render_tab( [ $block ], [ 'export' => 't1', 'archive' => 't2', 'detach' => 't3' ] );
+
+		$this->assertStringContainsString( 'data-woodev-mp-op="export"', $html );
+		$this->assertStringNotContainsString( 'data-woodev-mp-op="archive"', $html );
+		$this->assertStringNotContainsString( 'data-woodev-mp-op="detach"', $html );
+	}
+
+	public function test_the_export_follows_the_account_the_block_belongs_to(): void {
+		$linked               = $this->parent_block();
+		$linked['any_unsent'] = false;
+		$other                = $this->parent_block();
+		$other['account']     = new Account( 5, 'fake', 'Другой', true );
+		$other['any_created'] = false;
+		$other['any_linked']  = false;
+		$html                 = $this->render_tab( [ $linked, $other ], [ 'export' => 't1', 'archive' => 't2', 'detach' => 't3' ] );
+
+		$this->assertSame( 0, preg_match( '#data-woodev-mp-op="export"[^>]*data-account="3"#', $html ), 'the account whose cards all exist has no export' );
+		$this->assertSame( 1, preg_match( '#data-woodev-mp-op="export"[^>]*data-account="5"#', $html ), 'the account with unsent variations has it' );
+	}
+
+	public function test_an_imported_simple_product_is_not_offered_as_a_first_export(): void {
+		$html = $this->render_tab( [ $this->block() ], [ 'export' => 't1' ] );
+
+		$this->assertStringNotContainsString( '<span class="woodev-mp-btn__text">Экспортировать</span>', $html, 'the card exists on the marketplace' );
 		$this->assertStringContainsString( '<span class="woodev-mp-btn__text">Обновить карточку</span>', $html );
 	}
 
@@ -809,6 +866,7 @@ final class PanelViewTest extends TestCase {
 		$block['counts']      = [];
 		$block['any_created'] = true;
 		$block['any_linked']  = true;
+		$block['any_unsent']  = true;
 		$row                  = [
 			'id'          => 5,
 			'name'        => 'S',

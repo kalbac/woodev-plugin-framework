@@ -285,7 +285,25 @@ final class Panel_Reader {
 					return Link_Record::STATE_UNLINKED !== $record->card_state();
 				}
 			),
+			'any_unsent'  => $this->any_variation_without_card( $records ),
 		];
+	}
+
+	/**
+	 * Tells whether a variation has no card on the marketplace yet: it has no row, or its row says the card was never sent. The product-level
+	 * «Экспортировать» is offered only then — a variable product whose every card exists is updated variation by variation.
+	 *
+	 * @param array<int,Link_Record|null> $records Rows of the variations, null where a variation has none.
+	 * @return bool
+	 */
+	private function any_variation_without_card( array $records ): bool {
+		foreach ( $records as $record ) {
+			if ( null === $record || Card_State_Badge::is_unsent( $record->card_state() ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
