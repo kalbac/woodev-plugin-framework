@@ -66,6 +66,11 @@ final class Source_Resolver {
 				return self::clean( [ $source->value() ] );
 			case Source::WC_ATTRIBUTE:
 				$read = self::clean( self::attribute_values( $source->wc_key(), $product ) );
+
+				if ( [] === $read && null !== $parent_product ) {
+					$read = self::clean( self::parent_attribute_values( $source->wc_key(), $parent_product ) );
+				}
+
 				break;
 			case Source::META:
 				$meta = $product->get_meta( $source->wc_key() );
@@ -111,8 +116,29 @@ final class Source_Resolver {
 	}
 
 	/**
+	 * Reads what a variable product's own (non-variation) attribute holds, for a variation that has no value of the name. The
+	 * importer writes the characteristics of a group's model on the parent, and WooCommerce's variation does not read its parent's
+	 * attributes. An attribute the parent offers for variations is only the list of the choices — the variation's own value is the
+	 * one that counts — so it is never read here.
+	 *
+	 * @param string      $key    Attribute key or name.
+	 * @param \WC_Product $parent The variation's parent.
+	 * @return string[]
+	 */
+	private static function parent_attribute_values( string $key, \WC_Product $parent ): array {
+		$attribute = self::find_attribute( $key, (array) $parent->get_attributes() );
+
+		if ( null === $attribute || ( method_exists( $attribute, 'get_variation' ) && $attribute->get_variation() ) ) {
+			return [];
+		}
+
+		return self::attribute_object_values( $attribute );
+	}
+
+	/**
 	 * Finds the attribute object a source names. WooCommerce stores a custom attribute under its slugged name (`Colour` is `colour`),
-	 * so the name matches the array key or the object's own name, compared case-insensitively with spaces as dashes.
+	 * so the name matches the array key or the object's own name, compared case-insensitively with spaces as dashes. A global
+	 * attribute is stored under its taxonomy (`pa_colour`) and is found by the same name.
 	 *
 	 * @param string       $key        Attribute key or name.
 	 * @param array<mixed> $attributes `WC_Product::get_attributes()`.
@@ -128,12 +154,23 @@ final class Source_Resolver {
 
 			$name = method_exists( $attribute, 'get_name' ) ? (string) $attribute->get_name() : '';
 
-			if ( (string) $array_key === $key || self::slug( (string) $array_key ) === $wanted || ( '' !== $name && self::slug( $name ) === $wanted ) ) {
+			if ( (string) $array_key === $key || self::slug( (string) $array_key ) === $wanted || ( '' !== $name && self::slug( $name ) === $wanted ) || self::slug( (string) $array_key ) === self::taxonomy_of( $wanted ) ) {
 				return $attribute;
 			}
 		}
 
 		return null;
+	}
+
+	/**
+	 * Returns the taxonomy a global attribute of a slugged name is stored under: `pa_` and the name, its dashes underscores, as
+	 * WooCommerce makes it.
+	 *
+	 * @param string $slug A name as {@see self::slug()} returns it.
+	 * @return string
+	 */
+	private static function taxonomy_of( string $slug ): string {
+		return 'pa_' . str_replace( '-', '_', $slug );
 	}
 
 	/**

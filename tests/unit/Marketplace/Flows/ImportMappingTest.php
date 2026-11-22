@@ -18,6 +18,9 @@ use Woodev\Framework\Marketplace\Flows\Import_Category;
 use Woodev\Framework\Marketplace\Flows\Import_Mapping;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
+use Woodev\Tests\Unit\Marketplace\Support\Wc_Attribute_Functions;
+
+require_once __DIR__ . '/../Support/wc-product-attribute-stub.php';
 
 /**
  * @covers \Woodev\Framework\Marketplace\Flows\Import_Mapping
@@ -54,6 +57,7 @@ final class ImportMappingTest extends TestCase {
 		Monkey\setUp();
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\stubTranslationFunctions();
+		Wc_Attribute_Functions::install();
 
 		$this->terms = [ [ 60, 'Электроника', 0 ] ];
 
@@ -125,9 +129,10 @@ final class ImportMappingTest extends TestCase {
 	 * @param string[]             $path    Category names from the root down.
 	 * @param array<string,string> $aspects Aspects of the card's group.
 	 * @param int                  $size    How many cards the group has.
+	 * @param array<int,array>     $characteristics The characteristics the adapter gave: `id` (optional), `name` and `values` each.
 	 * @return Card_Content
 	 */
-	private function card( array $remote, array $path = [ 'Электроника', 'Смартфоны' ], array $aspects = [], int $size = 0 ): Card_Content {
+	private function card( array $remote, array $path = [ 'Электроника', 'Смартфоны' ], array $aspects = [], int $size = 0, array $characteristics = [] ): Card_Content {
 		$group = [] === $aspects ? [] : [
 			'key'     => 'model-1',
 			'size'    => $size,
@@ -140,6 +145,7 @@ final class ImportMappingTest extends TestCase {
 				'remote_category' => $remote,
 				'category_path'   => $path,
 				'group'           => $group,
+				'characteristics' => $characteristics,
 			]
 		);
 	}
@@ -386,14 +392,214 @@ final class ImportMappingTest extends TestCase {
 	}
 
 	/**
-	 * The import writes aspects only for a group of several cards: a lone card in a group links nothing.
+	 * A card in a group of one is no longer left without links: the import writes its aspects as attributes like any card's.
 	 *
 	 * @return void
 	 */
-	public function test_a_card_alone_in_its_group_links_no_attribute(): void {
-		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный' ], 1 ) );
+	public function test_a_card_alone_in_its_group_links_its_aspects(): void {
+		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Размер' => '42' ], 1 ) );
 
-		$this->assertSame( [], $this->links_of( Import_Fake_Schema::PHONES ) );
+		$this->assertSame( [ '9533' ], $this->linked_ids( Import_Fake_Schema::PHONES ) );
+	}
+
+	/**
+	 * The pilot card of #1949: a simple card, no group, no aspect — its characteristics are written as attributes, and the plain ones
+	 * are linked (a dictionary one only when labels can be resolved, which the adapter of #131 will allow).
+	 *
+	 * @return void
+	 */
+	public function test_a_simple_card_links_its_plain_characteristics(): void {
+		$characteristics = [
+			[
+				'name'   => 'Бренд',
+				'values' => [ 'Acme' ],
+			],
+			[
+				'name'   => 'Цвет',
+				'values' => [ 'красный' ],
+			],
+		];
+
+		$this->writer( false )->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [], 0, $characteristics ) );
+
+		$this->assertSame(
+			[
+				'85' => [
+					'source' => Source::WC_ATTRIBUTE,
+					'wc_key' => 'Бренд',
+				],
+			],
+			$this->links_of( Import_Fake_Schema::PHONES ),
+			'«Бренд» is linked; «Цвет» is a dictionary field and waits for the label lookup'
+		);
+	}
+
+	/**
+	 * With the label lookup the dictionary characteristic is linked too: the attribute was written either way.
+	 *
+	 * @return void
+	 */
+	public function test_a_dictionary_characteristic_is_linked_once_labels_can_be_resolved(): void {
+		$characteristics = [
+			[
+				'name'   => 'Цвет',
+				'values' => [ 'красный' ],
+			],
+		];
+
+		$this->writer( true )->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [], 0, $characteristics ) );
+
+		$this->assertSame( [ '10096' ], $this->linked_ids( Import_Fake_Schema::PHONES ) );
+	}
+
+	/**
+	 * A variable group: the aspect and the other characteristics are linked together, under the names the attributes have.
+	 *
+	 * @return void
+	 */
+	public function test_a_group_links_its_aspects_and_its_other_characteristics(): void {
+		$characteristics = [
+			[
+				'name'   => 'Размер',
+				'values' => [ '42' ],
+			],
+			[
+				'name'   => 'Бренд',
+				'values' => [ 'Acme' ],
+			],
+		];
+
+		$this->writer( true )->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [ 'Цвет' => 'красный' ], 3, $characteristics ) );
+
+		$this->assertSame( [ '10096', '9533', '85' ], $this->linked_ids( Import_Fake_Schema::PHONES ) );
+	}
+
+	/**
+	 * A characteristic that names its field id is linked to that field, whatever the field is called; an id the schema does not
+	 * have links nothing — it is not matched by name behind the adapter's back.
+	 *
+	 * @return void
+	 */
+	public function test_a_characteristic_with_a_field_id_is_linked_by_the_id(): void {
+		$characteristics = [
+			[
+				'id'     => '9533',
+				'name'   => 'Габарит',
+				'values' => [ '42' ],
+			],
+			[
+				'id'     => '404',
+				'name'   => 'Бренд',
+				'values' => [ 'Acme' ],
+			],
+		];
+
+		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [], 0, $characteristics ) );
+
+		$this->assertSame(
+			[
+				'9533' => [
+					'source' => Source::WC_ATTRIBUTE,
+					'wc_key' => 'Габарит',
+				],
+			],
+			$this->links_of( Import_Fake_Schema::PHONES )
+		);
+	}
+
+	/**
+	 * Two characteristics whose names WordPress makes one slug of (here: punctuation) are two attributes, and each link names the
+	 * attribute that holds its own value — the second one under the prefixed name the writer stores it by.
+	 *
+	 * @return void
+	 */
+	public function test_characteristics_that_share_a_slug_are_linked_under_the_names_the_attributes_have(): void {
+		Wc_Attribute_Functions::lossy_slug();
+
+		$characteristics = [
+			[
+				'id'     => '9533',
+				'name'   => 'Размер, см',
+				'values' => [ '42' ],
+			],
+			[
+				'id'     => '85',
+				'name'   => 'Размер см',
+				'values' => [ 'Acme' ],
+			],
+		];
+
+		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [], 0, $characteristics ) );
+
+		$this->assertSame(
+			[
+				'9533' => [
+					'source' => Source::WC_ATTRIBUTE,
+					'wc_key' => 'Размер, см',
+				],
+				'85'   => [
+					'source' => Source::WC_ATTRIBUTE,
+					'wc_key' => '[85] Размер см',
+				],
+			],
+			$this->links_of( Import_Fake_Schema::PHONES )
+		);
+	}
+
+	/**
+	 * The product the attributes go to is asked: an attribute of the merchant's that holds the slug makes the link name the writer's
+	 * prefixed attribute, not the merchant's.
+	 *
+	 * @return void
+	 */
+	public function test_a_link_names_the_attribute_beside_a_merchants_that_holds_the_slug(): void {
+		Wc_Attribute_Functions::lossy_slug();
+
+		$merchant = new \WC_Product_Attribute();
+		$merchant->set_name( 'Размер см' );
+
+		$product = \Mockery::mock( 'WC_Product' );
+		$product->shouldReceive( 'get_attributes' )->andReturn( [ sanitize_title( 'Размер см' ) => $merchant ] );
+
+		$characteristics = [
+			[
+				'id'     => '9533',
+				'name'   => 'Размер, см',
+				'values' => [ '42' ],
+			],
+		];
+
+		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [], 0, $characteristics ), $product );
+
+		$this->assertSame( '[9533] Размер, см', $this->links_of( Import_Fake_Schema::PHONES )['9533']['wc_key'] );
+	}
+
+	/**
+	 * A mapping the merchant made is not touched by a card with characteristics either.
+	 *
+	 * @return void
+	 */
+	public function test_a_merchant_mapping_is_not_changed_by_a_card_with_characteristics(): void {
+		$mine = $this->mappings->create( 'Мои телефоны', null, Import_Fake_Schema::PHONES, 9, [ '85' => [ 'source' => Source::FIXED, 'value' => 'Acme' ] ] );
+		$this->mappings->link_term_if_absent( 61, $mine );
+		$before = $this->mappings->find( $mine );
+
+		$this->writer( true )->ensure(
+			$this->card(
+				Import_Fake_Schema::PHONES,
+				[ 'Электроника', 'Смартфоны' ],
+				[],
+				0,
+				[
+					[
+						'name'   => 'Размер',
+						'values' => [ '42' ],
+					],
+				]
+			)
+		);
+
+		$this->assertSame( $before, $this->mappings->find( $mine ) );
 	}
 
 	/**

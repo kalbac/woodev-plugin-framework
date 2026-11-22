@@ -26,14 +26,15 @@ defined( 'ABSPATH' ) || exit;
  * What it does, for a card whose pair has **no** mapping:
  *
  * - the shop category of the card's path has no mapping either → one is created for it, with no profile (a new mapping made by hand
- *   starts the same), and its attribute table links each characteristic the import wrote as a product attribute (the aspects of a
- *   card in a group of several, {@see Group_Assembler::place()}) to that attribute, by the characteristic's name;
+ *   starts the same), and its attribute table links each characteristic the import writes as a product attribute — every
+ *   characteristic the adapter gave and the aspects of the card's group, whatever the group's size ({@see Card_Attributes::of()}) —
+ *   to that attribute;
  * - the shop category already belongs to another mapping → nothing is changed, and the card's note says so: the cards of one shop
  *   category are mapped by the type of the first of them.
  *
  * A mapping that exists is the merchant's and is never changed — with one exception. A mapping this class created carries a mark (a
  * fingerprint of what it wrote, kept beside the attribute sources), so a later card of the same pair **adds the links it brings that
- * the table lacks**: the first card may have had no aspects, or fewer. A row that is there is never overwritten, and a mapping whose
+ * the table lacks**: the first card may have had fewer characteristics. A row that is there is never overwritten, and a mapping whose
  * name, category, profile or table the merchant changed no longer matches its mark and is not touched again.
  *
  * A dictionary characteristic is linked only when the marketplace can resolve a label to a dictionary value id locally
@@ -108,10 +109,11 @@ final class Import_Mapping {
 	 *
 	 * @since 2.1.15
 	 *
-	 * @param Card_Content $content The imported card.
+	 * @param Card_Content     $content The imported card.
+	 * @param \WC_Product|null $product The product that carries the card's attributes (the simple product, or the variable parent), so that a link names the attribute the writer will store ({@see Card_Attributes::of()}).
 	 * @return string What the merchant should read in the card's note, '' for nothing.
 	 */
-	public function ensure( Card_Content $content ): string {
+	public function ensure( Card_Content $content, ?\WC_Product $product = null ): string {
 		$remote = $content->remote_category();
 
 		if ( [] === $remote ) {
@@ -121,7 +123,7 @@ final class Import_Mapping {
 		$found = $this->mappings->for_category( $remote );
 
 		if ( null !== $found ) {
-			$this->add_missing_links( $found['mapping'], $content );
+			$this->add_missing_links( $found['mapping'], $content, $product );
 
 			return '';
 		}
@@ -134,21 +136,22 @@ final class Import_Mapping {
 
 		$holder = $this->mappings->mapping_id_for_term( $term_id );
 
-		return null === $holder ? $this->create( $content, $term_id ) : $this->another_type_note( $term_id, $holder );
+		return null === $holder ? $this->create( $content, $term_id, $product ) : $this->another_type_note( $term_id, $holder );
 	}
 
 	/**
 	 * Creates the mapping of a shop category and takes the category for it.
 	 *
-	 * @param Card_Content $content The card whose pair is mapped.
-	 * @param int          $term_id The shop category, held by no mapping.
+	 * @param Card_Content     $content The card whose pair is mapped.
+	 * @param int              $term_id The shop category, held by no mapping.
+	 * @param \WC_Product|null $product The product that carries the card's attributes.
 	 * @return string The note: '' when the mapping was made, or lost the category to a mapping saved at the same moment.
 	 */
-	private function create( Card_Content $content, int $term_id ): string {
+	private function create( Card_Content $content, int $term_id, ?\WC_Product $product ): string {
 		try {
 			$name       = mb_substr( $this->term_name( $term_id ), 0, Mapping_Input::MAX_NAME );
 			$category   = $content->remote_category();
-			$attributes = self::marked( $name, $category, null, $this->attribute_links( $content ) );
+			$attributes = self::marked( $name, $category, null, $this->attribute_links( $content, $product ) );
 			$id         = $this->mappings->create( $name, null, $category, null, $attributes );
 
 			if ( ! $this->mappings->link_term_if_absent( $term_id, $id ) ) {
@@ -167,16 +170,17 @@ final class Import_Mapping {
 	 *
 	 * @param array{mapping_id:int,name:string,category:array<string,mixed>,profile_id:int|null,attributes:array<string,mixed>} $mapping The stored mapping of the card's pair.
 	 * @param Card_Content                                                                                                      $content The card.
+	 * @param \WC_Product|null                                                                                                  $product The product that carries the card's attributes.
 	 * @return void
 	 */
-	private function add_missing_links( array $mapping, Card_Content $content ): void {
+	private function add_missing_links( array $mapping, Card_Content $content, ?\WC_Product $product ): void {
 		$stored = $mapping['attributes'];
 
 		if ( ! self::is_untouched( $mapping ) ) {
 			return;
 		}
 
-		$missing = array_diff_key( $this->attribute_links( $content ), $stored );
+		$missing = array_diff_key( $this->attribute_links( $content, $product ), $stored );
 
 		if ( [] === $missing ) {
 			return;
@@ -229,31 +233,26 @@ final class Import_Mapping {
 	}
 
 	/**
-	 * Links each characteristic the import wrote as a product attribute to that attribute. The import writes only the aspects of a
-	 * card in a group of several, and names the attribute as the marketplace names the characteristic, so the link is made by name
-	 * against the fields the schema holds for the pair — none when the schema has not cached them.
+	 * Links each characteristic the import writes as a product attribute ({@see Card_Attributes::of()}: the characteristics the
+	 * adapter gave and the aspects of the card's group, for a card of any group size) to that attribute. A characteristic that
+	 * carries its field id is linked to that field; one without is matched by name against the fields the schema holds for the pair —
+	 * none when the schema has not cached them.
 	 *
-	 * @param Card_Content $content The card.
+	 * @param Card_Content     $content The card.
+	 * @param \WC_Product|null $product The product that carries the card's attributes.
 	 * @return array<string,array<string,string>> Attribute sources by field id, in the stored shape.
 	 */
-	private function attribute_links( Card_Content $content ): array {
-		$group = $content->group();
-
-		if ( '' === Group_Assembler::key_of( $group ) || $group['size'] < 2 ) {
-			return [];
-		}
-
-		$fields = $this->fields_by_name( $content->remote_category() );
+	private function attribute_links( Card_Content $content, ?\WC_Product $product ): array {
+		$fields = $this->linkable_fields( $content->remote_category() );
 		$links  = [];
 
-		foreach ( $group['aspects'] as $name => $value ) {
-			$name  = trim( (string) $name );
-			$field = $fields[ mb_strtolower( $name ) ] ?? null;
+		foreach ( Card_Attributes::of( $content, $product ) as $attribute ) {
+			$field = '' !== $attribute['id'] ? ( $fields['by_id'][ $attribute['id'] ] ?? null ) : ( $fields['by_name'][ mb_strtolower( $attribute['name'] ) ] ?? null );
 
-			if ( '' !== $name && is_scalar( $value ) && '' !== trim( (string) $value ) && null !== $field ) {
+			if ( null !== $field ) {
 				$links[ $field->id() ] = [
 					'source' => Source::WC_ATTRIBUTE,
-					'wc_key' => $name,
+					'wc_key' => $attribute['name'],
 				];
 			}
 		}
@@ -262,24 +261,28 @@ final class Import_Mapping {
 	}
 
 	/**
-	 * Returns the fields of a pair a link may name, by lower-cased name; the first of two fields with one name wins. A dictionary
-	 * field is left out unless its labels can be resolved locally.
+	 * Returns the fields of a pair a link may name, by id and by lower-cased name (the first of two fields with one name wins). A
+	 * dictionary field is left out unless its labels can be resolved locally.
 	 *
 	 * @param array<string,mixed> $remote The pair.
-	 * @return array<string,Field_Definition>
+	 * @return array{by_id:array<string,Field_Definition>,by_name:array<string,Field_Definition>}
 	 */
-	private function fields_by_name( array $remote ): array {
-		$fields = [];
+	private function linkable_fields( array $remote ): array {
+		$fields = [
+			'by_id'   => [],
+			'by_name' => [],
+		];
 
 		foreach ( $this->finder->cached_fields( $remote ) ?? [] as $field ) {
-			$key = mb_strtolower( trim( $field->name() ) );
-
 			if ( Field_Definition::TYPE_DICTIONARY === $field->type() && ! $this->resolves_dictionary_labels ) {
 				continue;
 			}
 
-			if ( ! isset( $fields[ $key ] ) ) {
-				$fields[ $key ] = $field;
+			$fields['by_id'][ $field->id() ] = $field;
+			$name                            = mb_strtolower( trim( $field->name() ) );
+
+			if ( ! isset( $fields['by_name'][ $name ] ) ) {
+				$fields['by_name'][ $name ] = $field;
 			}
 		}
 

@@ -22,8 +22,9 @@ defined( 'ABSPATH' ) || exit;
  *   `is_created`, `archived`, `failed`, `status_text`, `oversize`), handed to `Card_Linker::link()` as it is;
  * - `$fields`: `name`, `description` (raw, the writer sanitises it), `prices` (Price_Pair|null), `weight_g`, `length_mm`,
  *   `width_mm`, `height_mm` (int|null), `primary_image` (string), `images` (string[]), `remote_category` (the descriptor
- *   `Mapping::remote_category()` stores), `category_path` (string[], root first) and `group` (`key`, `size`, `aspects`:
- *   {@see self::group()}). A missing member reads as unknown: '' for text, null for a number or price, [] for a list.
+ *   `Mapping::remote_category()` stores), `category_path` (string[], root first), `group` (`key`, `size`, `aspects`:
+ *   {@see self::group()}) and `characteristics` (`id`, `name`, `values` each: {@see self::characteristics()}). A missing member
+ *   reads as unknown: '' for text, null for a number or price, [] for a list.
  *
  * @since 2.1.6
  */
@@ -206,6 +207,51 @@ final class Card_Content {
 			'size'    => (int) ( $group['size'] ?? 0 ),
 			'aspects' => (array) ( $group['aspects'] ?? [] ),
 		];
+	}
+
+	/**
+	 * Returns the characteristics the card has a value for, which the import writes into the product as its attributes: `name` as the
+	 * marketplace names the characteristic, `values` (a dictionary characteristic gives the **labels**, not the marketplace's ids)
+	 * and, when the adapter knows it, the characteristic's field `id` in the category schema — it links the attribute to that field
+	 * without matching by name. The adapter lists only what belongs in a product's attributes: what the profile or a core product
+	 * field already carries (the name, the weight, the seller's code) is left out.
+	 *
+	 * Normalised here, whatever the adapter gave: a member with no name or no value is dropped, values are trimmed and distinct,
+	 * and of two members with one name (case ignored) the first stays.
+	 *
+	 * @since 2.1.15
+	 *
+	 * @return array<int,array{id:string,name:string,values:string[]}>
+	 */
+	public function characteristics(): array {
+		$found = [];
+
+		foreach ( (array) ( $this->fields['characteristics'] ?? [] ) as $member ) {
+			$member = (array) $member;
+			$name   = self::text( $member['name'] ?? '' );
+			$values = array_values( array_unique( array_filter( array_map( [ self::class, 'text' ], (array) ( $member['values'] ?? [] ) ), 'strlen' ) ) );
+			$key    = mb_strtolower( $name );
+
+			if ( '' !== $name && [] !== $values && ! isset( $found[ $key ] ) ) {
+				$found[ $key ] = [
+					'id'     => self::text( $member['id'] ?? '' ),
+					'name'   => $name,
+					'values' => $values,
+				];
+			}
+		}
+
+		return array_values( $found );
+	}
+
+	/**
+	 * Reads a trimmed text; anything that is no scalar reads as ''.
+	 *
+	 * @param mixed $value Value.
+	 * @return string
+	 */
+	private static function text( $value ): string {
+		return is_scalar( $value ) ? trim( (string) $value ) : '';
 	}
 
 	/**
