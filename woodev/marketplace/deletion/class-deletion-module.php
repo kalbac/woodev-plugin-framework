@@ -25,6 +25,8 @@ use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\Label_Jobs;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
+use Woodev\Framework\Marketplace\Jobs\Posting_History_Cutoffs;
+use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
@@ -123,7 +125,7 @@ final class Deletion_Module {
 		$steps = self::steps(
 			$queue,
 			$stores,
-			self::forget_options( $options, new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ), $stores['cards'] ),
+			self::forget_options( $plugin->get_id(), new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ), $stores['cards'] ),
 			new Pinned_Offer_Eraser( $db, $adapter->id() ),
 			new Wpdb_Event_Ledger( $db, $schema->table_name( 'events', $db->prefix ) )
 		);
@@ -224,18 +226,23 @@ final class Deletion_Module {
 	/**
 	 * Deletes the options, transients and cached rows an account owns. Runs once: it reports nothing removed.
 	 *
-	 * @param string             $options Option family of the plugin.
-	 * @param Wpdb_Catalog_Cache $cache   Catalogue cache.
-	 * @param Wpdb_Card_Store    $cards   The cards list, whose record of refreshes goes; its rows went with the stores.
+	 * @param string             $plugin_id Plugin id, whose option family the options are in.
+	 * @param Wpdb_Catalog_Cache $cache     Catalogue cache.
+	 * @param Wpdb_Card_Store    $cards     The cards list, whose record of refreshes goes; its rows went with the stores.
 	 * @return callable `function ( int $account_id ): int`
 	 */
-	private static function forget_options( string $options, Wpdb_Catalog_Cache $cache, Wpdb_Card_Store $cards ): callable {
+	private static function forget_options( string $plugin_id, Wpdb_Catalog_Cache $cache, Wpdb_Card_Store $cards ): callable {
+		$options  = Uninstaller::option_prefix( $plugin_id );
 		$progress = new Link_Progress_Store( $options );
 		$reports  = new Link_Report_Store( $options );
+		$cutoffs  = new Posting_History_Cutoffs( $plugin_id );
+		$polls    = new Posting_Poll_Times( $plugin_id );
 
-		return static function ( int $account_id ) use ( $progress, $reports, $cards, $cache ): int {
+		return static function ( int $account_id ) use ( $progress, $reports, $cutoffs, $polls, $cards, $cache ): int {
 			$progress->forget_account( $account_id );
 			$reports->forget_account( $account_id );
+			$cutoffs->forget( $account_id );
+			$polls->forget( $account_id );
 			$cards->forget( $account_id );
 			$cache->delete_keys( [ Warehouse_Options::key_for( $account_id ) ] );
 

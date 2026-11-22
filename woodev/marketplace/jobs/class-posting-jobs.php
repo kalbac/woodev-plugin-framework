@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Jobs;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Flows\History_Import;
 use Woodev\Framework\Marketplace\Orders\Order_Claim_Exception;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Sync\Stock_Mode;
@@ -105,21 +106,30 @@ final class Posting_Jobs {
 	private $poll_times;
 
 	/**
+	 * Where each account's history ends; null keeps every write live.
+	 *
+	 * @var Posting_History_Cutoffs|null
+	 */
+	private $cutoffs;
+
+	/**
 	 * Creates the jobs.
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Job_Gate                $gate       Gate of licence, account and pause.
-	 * @param Wpdb_Account_Store      $accounts   Accounts.
-	 * @param Posting_Handler         $handler    The marketplace's order flow.
-	 * @param Error_Classifier        $classifier Error classifier of the marketplace.
-	 * @param Job_Names               $names      Hook names of the plugin.
-	 * @param string                  $adapter_id The marketplace's id (the adapter's `id()`).
-	 * @param string                  $poll_option Key of the settings option that holds the poll interval, as {@see self::option_key()} builds it.
-	 * @param Posting_Poll_Times|null $poll_times Where a poll attempt that ended without an error is recorded (since 2.1.13); null records nothing.
+	 * @param Job_Gate                     $gate       Gate of licence, account and pause.
+	 * @param Wpdb_Account_Store           $accounts   Accounts.
+	 * @param Posting_Handler              $handler    The marketplace's order flow.
+	 * @param Error_Classifier             $classifier Error classifier of the marketplace.
+	 * @param Job_Names                    $names      Hook names of the plugin.
+	 * @param string                       $adapter_id The marketplace's id (the adapter's `id()`).
+	 * @param string                       $poll_option Key of the settings option that holds the poll interval, as {@see self::option_key()} builds it.
+	 * @param Posting_Poll_Times|null      $poll_times Where a poll attempt that ended without an error is recorded (since 2.1.13); null records nothing.
+	 * @param Posting_History_Cutoffs|null $cutoffs Where each account's history ends (since 2.1.15); null, or no record of polls, keeps every write live.
 	 */
-	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id, string $poll_option, ?Posting_Poll_Times $poll_times = null ) {
+	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Posting_Handler $handler, Error_Classifier $classifier, Job_Names $names, string $adapter_id, string $poll_option, ?Posting_Poll_Times $poll_times = null, ?Posting_History_Cutoffs $cutoffs = null ) {
 		$this->poll_times  = $poll_times;
+		$this->cutoffs     = $cutoffs;
 		$this->gate       = $gate;
 		$this->accounts   = $accounts;
 		$this->handler    = $handler;
@@ -216,6 +226,9 @@ final class Posting_Jobs {
 	/**
 	 * Runs `refresh_posting`.
 	 *
+	 * The order is written inside {@see History_Import} with the account's cutoff, so an order of the account's history sends no
+	 * WooCommerce e-mail whoever queued this refresh and whenever it runs (#1925).
+	 *
 	 * @since 2.1.0
 	 *
 	 * @param int|string $account_id     Account id (Action Scheduler passes the stored argument).
@@ -239,7 +252,12 @@ final class Posting_Jobs {
 		}
 
 		try {
-			$this->handler->refresh( $account_id, $posting_number );
+			History_Import::during(
+				$this->stored_cutoff( $account_id ),
+				function () use ( $account_id, $posting_number ): void {
+					$this->handler->refresh( $account_id, $posting_number );
+				}
+			);
 		} catch ( Order_Claim_Exception $e ) {
 			$this->queue_refresh( $account_id, $posting_number, Order_Claim_Exception::RETRY_SECONDS );
 		} catch ( \Throwable $e ) {
@@ -256,6 +274,10 @@ final class Posting_Jobs {
 	/**
 	 * Runs `poll_postings`.
 	 *
+	 * The first poll of an account fixes the account's history cutoff — the moment it began — and every poll and refresh after it
+	 * writes inside {@see History_Import} with that cutoff: the orders the marketplace created before it send no WooCommerce e-mail,
+	 * however many polls the import takes (#1925). The orders created after it mail as WooCommerce always does.
+	 *
 	 * @since 2.1.0
 	 *
 	 * @param int|string $account_id Account id.
@@ -270,7 +292,12 @@ final class Posting_Jobs {
 		}
 
 		try {
-			$this->handler->catch_up( $account );
+			History_Import::during(
+				$this->poll_cutoff( $account ),
+				function () use ( $account ): void {
+					$this->handler->catch_up( $account );
+				}
+			);
 		} catch ( \Throwable $e ) {
 			$this->settle( $account, $e );
 
@@ -317,6 +344,43 @@ final class Posting_Jobs {
 	 */
 	public static function wants_postings( Account $account ): bool {
 		return Effective_Settings::for_adapter( $account->adapter_id() )->orders_enabled( $account ) || Stock_Mode::is_site( $account );
+	}
+
+	/**
+	 * The history cutoff of an account the poll is about to read, fixed when the poll is the account's first.
+	 *
+	 * An account that has already ended a poll without an error when the record began has no history: its cutoff is 0 and its orders
+	 * are all live, as they were. Without the record of polls nothing tells the two apart, and the cutoff is 0.
+	 *
+	 * @param Account $account Account.
+	 * @return int Unix time; 0 for no history.
+	 */
+	private function poll_cutoff( Account $account ): int {
+		if ( null === $this->cutoffs || null === $this->poll_times ) {
+			return 0;
+		}
+
+		$stored = $this->cutoffs->get( $account->id() );
+
+		if ( null !== $stored ) {
+			return $stored;
+		}
+
+		$this->cutoffs->remember( $account->id(), null === $this->poll_times->last( $account->id() ) ? time() : 0 );
+
+		// Read back: a poll of the same account in another request may have recorded its cutoff first, and that one stays.
+		return (int) $this->cutoffs->get( $account->id() );
+	}
+
+	/**
+	 * The history cutoff of an account a refresh is about to write: the one its first poll fixed, 0 when no poll has begun. A refresh
+	 * never fixes it — an order pushed to the shop before the first poll is a live one.
+	 *
+	 * @param int $account_id Account id.
+	 * @return int Unix time; 0 for no history.
+	 */
+	private function stored_cutoff( int $account_id ): int {
+		return null === $this->cutoffs ? 0 : (int) $this->cutoffs->get( $account_id );
 	}
 
 	/**

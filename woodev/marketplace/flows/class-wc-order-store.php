@@ -110,7 +110,8 @@ final class Wc_Order_Store implements Order_Store {
 	}
 
 	/**
-	 * Saves a new order that takes no stock yet.
+	 * Saves a new order that takes no stock yet. An order the marketplace created before the account's history cutoff
+	 * is history, and WooCommerce mails nothing for it ({@see History_Import}).
 	 *
 	 * @since 2.1.0
 	 *
@@ -118,6 +119,22 @@ final class Wc_Order_Store implements Order_Store {
 	 * @return \WC_Order
 	 */
 	public function create( Order_DTO $order ): \WC_Order {
+		return History_Import::quietly(
+			$order,
+			true,
+			function () use ( $order ): \WC_Order {
+				return $this->save_new( $order );
+			}
+		);
+	}
+
+	/**
+	 * Builds and saves the new order.
+	 *
+	 * @param Order_DTO $order Whole order.
+	 * @return \WC_Order
+	 */
+	private function save_new( Order_DTO $order ): \WC_Order {
 		$wc_order = new \WC_Order();
 		$wc_order->set_created_via( $this->contract->created_via() );
 		$wc_order->set_status( self::INERT_STATUS );
@@ -157,7 +174,8 @@ final class Wc_Order_Store implements Order_Store {
 	}
 
 	/**
-	 * Brings the order in line with the DTO and saves it.
+	 * Brings the order in line with the DTO and saves it. The first save of a history order — the one that gives it its first real
+	 * status — mails nothing either ({@see History_Import}); a later change of that order mails as usual.
 	 *
 	 * @since 2.1.0
 	 *
@@ -169,6 +187,26 @@ final class Wc_Order_Store implements Order_Store {
 	 * @return void
 	 */
 	public function update( \WC_Order $wc_order, Order_DTO $order, string $wc_status, array $members, bool $created ): void {
+		History_Import::quietly(
+			$order,
+			$created,
+			function () use ( $wc_order, $order, $wc_status, $members, $created ): void {
+				$this->save_changes( $wc_order, $order, $wc_status, $members, $created );
+			}
+		);
+	}
+
+	/**
+	 * Writes the DTO into the order, gives it its status and saves it.
+	 *
+	 * @param \WC_Order                                                 $wc_order  The order.
+	 * @param Order_DTO                                                 $order     Whole order.
+	 * @param string                                                    $wc_status WooCommerce status, without `wc-`.
+	 * @param array<string,array{status_canonical:string,quantity:int}> $members  Member registry.
+	 * @param bool                                                      $created   True for the first real save.
+	 * @return void
+	 */
+	private function save_changes( \WC_Order $wc_order, Order_DTO $order, string $wc_status, array $members, bool $created ): void {
 		$this->set_buyer( $wc_order, $order );
 		$this->contract->write_meta( $wc_order, $order, $created );
 		$wc_order->update_meta_data( self::META_GROUP_MEMBERS, (string) wp_json_encode( $members ) );

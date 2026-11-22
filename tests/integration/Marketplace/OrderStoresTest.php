@@ -11,16 +11,20 @@
 
 namespace Woodev\Tests\Integration\Marketplace;
 
+use Woodev\Framework\Marketplace\Flows\History_Import;
 use Woodev\Framework\Marketplace\Flows\Order_Query;
 use Woodev\Framework\Marketplace\Flows\Wc_Order_Store;
 use Woodev\Framework\Marketplace\Orders\Order_DTO;
 use Woodev\Framework\Marketplace\Orders\Order_Line;
 use Woodev\Framework\Marketplace\Orders\Status_Map;
 use Woodev\Framework\Marketplace\Price\Money;
+use Woodev\Tests\Integration\Mailer_Listens;
 use Woodev\Tests\Integration\TestCase;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
 
 class OrderStoresTest extends TestCase {
+	use Mailer_Listens;
+
 	private const ACCOUNT = 7;
 
 	/**
@@ -305,6 +309,75 @@ class OrderStoresTest extends TestCase {
 	}
 
 	/**
+	 * WooCommerce mails the administrator for a new order, for a status change, and for a product that runs low. An order the
+	 * marketplace created before the account's history cutoff is written without any of them; an order created after the cutoff, and
+	 * an order written outside an import, mail as WooCommerce always does (#1925).
+	 *
+	 * Mail is counted at `pre_wp_mail`, so a send attempt shows up whether or not the test site can deliver it. The product holds
+	 * three units against a low-stock threshold of two, so an order of one unit crosses it.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_history_orders_send_no_woocommerce_email_and_live_orders_do( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		// On WC 8.5.1 and 9.3.0 the mailer of an earlier test has lost its listeners and no order mails at all: without this the
+		// «mails» assertions below fail whatever the code does, and the «mails nothing» ones prove nothing.
+		$this->ensure_mailer_listens();
+		update_option( 'woocommerce_notify_low_stock', 'yes' );
+		update_option( 'woocommerce_notify_low_stock_amount', 2 );
+
+		$attempts = 0;
+		$count    = static function ( $short_circuit ) use ( &$attempts ) {
+			++$attempts;
+
+			return true;
+		};
+		add_filter( 'pre_wp_mail', $count );
+
+		$cutoff = time();
+		$store  = new Wc_Order_Store( $this->meta );
+		$write  = function ( string $key, int $created_at, string $status ) use ( $store ): void {
+			$this->product( 'SKU-' . $key, 3 );
+
+			$order    = $this->dto( $key, [ [ 'SKU-' . $key, 1 ] ], gmdate( 'Y-m-d\TH:i:s\Z', $created_at ) );
+			$members  = [
+				$key => [
+					'status_canonical' => Status_Map::NEW,
+					'quantity'         => 1,
+				],
+			];
+			$wc_order = $store->create( $order );
+
+			$store->update( $wc_order, $order, $status, $members, true );
+		};
+
+		History_Import::during(
+			$cutoff,
+			static function () use ( $write, $cutoff ): void {
+				$write( 'H-1', $cutoff - DAY_IN_SECONDS, 'processing' );
+				$write( 'H-2', $cutoff - DAY_IN_SECONDS, 'cancelled' );
+			}
+		);
+		$this->assertSame( 0, $attempts, 'an order of the history mails nothing' );
+
+		History_Import::during(
+			$cutoff,
+			static function () use ( $write, $cutoff ): void {
+				$write( 'L-1', $cutoff + HOUR_IN_SECONDS, 'processing' );
+			}
+		);
+		$after_live = $attempts;
+		$this->assertGreaterThan( 0, $after_live, 'an order created after the cutoff mails' );
+
+		$write( 'L-2', $cutoff - DAY_IN_SECONDS, 'processing' );
+		$this->assertGreaterThan( $after_live, $attempts, 'an order written outside an import mails' );
+
+		remove_filter( 'pre_wp_mail', $count );
+	}
+
+	/**
 	 * An order that lost its registration goes to the trash and is no longer found.
 	 *
 	 * @dataProvider datastore_provider
@@ -389,15 +462,16 @@ class OrderStoresTest extends TestCase {
 	 *
 	 * @param string                  $key   Remote order key.
 	 * @param array<int,array{0:string,1:int}> $lines Article and quantity of each line.
+	 * @param string                  $created_at ISO 8601 creation time of the remote order; empty for none.
 	 * @return Order_DTO
 	 */
-	private function dto( string $key, array $lines ): Order_DTO {
+	private function dto( string $key, array $lines, string $created_at = '' ): Order_DTO {
 		$built = [];
 
 		foreach ( $lines as $line ) {
 			$built[] = new Order_Line( $line[0], [ 'item' => 1 ], $line[1], Money::from_string( '100.00', 'RUB' ), 'Товар ' . $line[0] );
 		}
 
-		return new Order_DTO( self::ACCOUNT, $key, '', 'new', Status_Map::NEW, $built );
+		return new Order_DTO( self::ACCOUNT, $key, '', 'new', Status_Map::NEW, $built, [], null, '' === $created_at ? [] : [ 'created_at' => $created_at ] );
 	}
 }
