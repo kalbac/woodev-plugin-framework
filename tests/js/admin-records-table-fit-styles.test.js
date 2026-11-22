@@ -115,3 +115,23 @@ describe( 'the busy-row bar (#1937)', () => {
 		expect( bar ).toBeGreaterThan( pinned );
 	} );
 } );
+
+describe( 'the text of a busy or locked row in the actions column (#1937)', () => {
+	const rule = block( scss, '.woodev-records__col-actions .woodev-records__reason' );
+
+	test( 'wraps on a line of its own at a fixed width, so the nowrap column never widens past the card', () => {
+		expect( rule ).toMatch( /white-space:\s*normal/ );
+		expect( rule ).toMatch( /overflow-wrap:\s*anywhere/ );
+		expect( rule ).toMatch( /flex:\s*0 0 100%/ );
+		expect( rule ).toMatch( /min-width:\s*12rem/ );
+		expect( rule ).toMatch( /max-width:\s*12rem/ );
+	} );
+
+	test( 'the inline styles do not set a flex-basis of their own (it would beat the stylesheet)', () => {
+		const inline = fs.readFileSync( path.join( __dirname, '../../src/admin-records/styles.ts' ), 'utf8' );
+		const activity = fs.readFileSync( path.join( __dirname, '../../src/admin-records/activity/styles.ts' ), 'utf8' );
+
+		expect( inline ).not.toMatch( /flexBasis/ );
+		expect( activity ).not.toMatch( /flexBasis/ );
+	} );
+} );

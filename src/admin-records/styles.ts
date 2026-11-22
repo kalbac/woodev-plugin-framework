@@ -15,7 +15,7 @@ export const STYLES = {
 	// The buttons of one row: one group on one line — a row of buttons never wraps under itself. Their gap is in `./style.scss`: an
 	// inline `gap` would beat the class that closes it for an icon group.
 	buttons: { display: 'inline-flex', flexWrap: 'nowrap', alignItems: 'center' },
-	reason: { display: 'block', flexBasis: '100%', color: '#50575e' },
+	reason: { display: 'block', color: '#50575e' },
 	childCell: { display: 'block', paddingLeft: '24px' },
 	dateRange: { display: 'flex', gap: '8px', alignItems: 'flex-end', border: 0, margin: 0, padding: 0 },
 	state: { padding: '32px 16px', textAlign: 'center', background: '#fff', border: '1px solid #dcdcde' },
