@@ -1,0 +1,55 @@
+// The busy-row indicator of every table of ours (#873 «Заказы доставки», #1937 the records tables): the row drops to
+// `opacity: 0.85` and an indeterminate bar runs along its BOTTOM EDGE, the full width of the table, until the process
+// settles.
+//
+// ⚠ The SEAM: WooCommerce's `table.tsx` gives the `<tr>` itself no class or attribute, so the page renders an otherwise-empty
+// MARKER element inside one of the row's cells while the row is busy, and `:has()` reaches the ancestor `<tr>` from there.
+// jsdom computes no layout and runs no animation: jest can only assert the marker exists; the look is verified on the rig.
+//
+// Use it INSIDE the page's own root selector, naming the marker class that page renders:
+//
+//     .woodev-orders { @include row-busy.mark( '.woodev-orders-row-busy' ); }
+//
+// @package woodev-plugin-framework
+
+@use './tokens' as wd;
+
+@mixin mark( $marker ) {
+	tr:has( #{$marker} ) {
+		position: relative;
+		opacity: 0.85;
+	}
+
+	// The marker IS the bar's track — a pseudo-element cannot itself carry a further pseudo-element, so the moving
+	// highlight is this real element's own `::after`.
+	#{$marker} {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 2px;
+		overflow: hidden;
+		background: rgba( 0, 0, 0, 0.08 );
+
+		// A sweep left to right: there is no real progress fraction to report (the process is a black box until it settles),
+		// which is what "indeterminate" means here.
+		&::after {
+			content: '';
+			position: absolute;
+			inset: 0;
+			width: 40%;
+			background: wd.$accent;
+			animation: woodev-row-busy-sweep 1.1s ease-in-out infinite;
+		}
+	}
+}
+
+@keyframes woodev-row-busy-sweep {
+	0% {
+		transform: translateX( -100% );
+	}
+
+	100% {
+		transform: translateX( 250% );
+	}
+}

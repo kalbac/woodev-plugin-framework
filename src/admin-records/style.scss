@@ -7,10 +7,14 @@
 @use '../components/table-look';
 @use '../components/table-chrome';
 @use '../components/woodev-dialog';
+@use '../components/row-busy';
 
 $cell-padding: 8px;
 
 .woodev-records {
+	// A row with a process in flight: the bar along its bottom edge, the same mechanism as «Заказы доставки» (#1937).
+	@include row-busy.mark( '.woodev-records__row-busy' );
+
 	// The filter labels of «Заказы доставки» (WooCommerce's `.woocommerce-filters-label`: 13px, normal weight, #3c434a) and the
 	// settings: sentence case, never upper case. A labelled `SelectControl`
 	// draws its label with the InputControl's own emotion class, `components-input-control__label`, and emotion writes that

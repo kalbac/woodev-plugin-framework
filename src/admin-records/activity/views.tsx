@@ -3,8 +3,8 @@
  * inside its actions cell. Every sentence is PHP's; the views add structure only.
  *
  * - The lock reason is visible text, not colour.
- * - A process with no measurable total gets an indeterminate indicator (`<progress>` without a value) and PHP's own
- *   text — never a percentage computed from elapsed time.
+ * - A process is PHP's label and text, never a percentage computed from elapsed time. A row with a process in flight
+ *   carries the full-width bar of the busy-row mechanism instead of a bar of its own (#1937).
  * - Several processes are listed side by side; one never hides another.
  *
  * @package woodev-plugin-framework
@@ -14,27 +14,18 @@ import { Button } from '@wordpress/components';
 import { ProblemsLink } from '../../components/help-link';
 import type { TableHandle } from '../extensions';
 import { healthNotice } from './messages';
+import { isRowBusy } from './busy';
 import type { Ownership } from './ownership';
 import { accountBlockedReason, useActivityState, type ActivityState } from './state';
 import { ACTIVITY_STYLES } from './styles';
 import type { ActivityProcess, RowActivity } from './types';
 import { useActivityLoop } from './use-activity-loop';
 
+/** A process's label and PHP's own text; its progress is the busy row's bar, not a bar of its own. */
 function ProcessLine( { process }: { process: ActivityProcess } ) {
-	const measured = process.total !== null && process.completed !== null;
-
 	return (
 		<li className="woodev-records__process" data-state={ process.state } style={ ACTIVITY_STYLES.process }>
 			<span>{ process.label }</span>
-			{ ( process.state === 'queued' || process.state === 'running' || process.state === 'waiting' ) && (
-				<progress
-					aria-label={ process.label }
-					style={ ACTIVITY_STYLES.meter }
-					// Without both counts the attribute is absent: the browser draws an indeterminate indicator.
-					value={ measured ? process.completed ?? undefined : undefined }
-					max={ measured ? process.total ?? undefined : undefined }
-				/>
-			) }
 			{ process.text !== '' && <span>{ process.text }</span> }
 		</li>
 	);
@@ -46,7 +37,12 @@ interface RowActivityViewProps {
 	reasonShown: boolean;
 }
 
-/** A row's lock sentence and its processes; nothing at all for a row with no activity. */
+/**
+ * A row's lock sentence and its processes; nothing at all for a row with no activity.
+ *
+ * While a process is in flight the cell also holds the busy marker: an empty element that `style.scss` turns into the bar along
+ * the bottom edge of the whole row (`tr:has( .woodev-records__row-busy )`), as `ActionsCell` does in «Заказы доставки».
+ */
 export function RowActivityView( { activity, reasonShown }: RowActivityViewProps ) {
 	if ( ! activity || ( ! activity.locked && activity.reason === '' && activity.processes.length === 0 ) ) {
 		return null;
@@ -54,6 +50,7 @@ export function RowActivityView( { activity, reasonShown }: RowActivityViewProps
 
 	return (
 		<span className="woodev-records__activity" data-locked={ activity.locked } style={ ACTIVITY_STYLES.row }>
+			{ isRowBusy( { activity } ) && <span className="woodev-records__row-busy" aria-hidden="true" /> }
 			{ activity.reason !== '' && ! reasonShown && (
 				<span className="woodev-records__lock" style={ ACTIVITY_STYLES.lock }>
 					{ activity.reason }

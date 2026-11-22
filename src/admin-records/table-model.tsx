@@ -13,6 +13,7 @@
 import type { ReactNode } from 'react';
 import { Button, Popover, Spinner } from '@wordpress/components';
 import { useState } from '@wordpress/element';
+import { isRowBusy } from './activity/busy';
 import { cellText, renderCell } from './cells';
 import { MESSAGE_KEYS, fillMessage, firstMessage, joinLabel, message } from './messages';
 import { searchFilter } from './query';
@@ -164,7 +165,8 @@ function selectCell( input: TableModelInput, row: AdminRecord, family: string[] 
 			label={ label }
 			// Every row under the filter is selected, the rows on screen — a variation opened later included — with it.
 			checked={ selection.selectedIds.includes( row.id ) || ( selection.matching && row.selectable ) }
-			disabled={ ! row.selectable }
+			// A row with a process in flight is blocked, its checkbox included (as in «Заказы доставки»).
+			disabled={ ! row.selectable || isRowBusy( row ) }
 			onChange={ ( checked ) => selection.set( family, checked ) }
 		/>
 	);

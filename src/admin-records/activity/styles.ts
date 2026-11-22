@@ -24,5 +24,4 @@ export const ACTIVITY_STYLES = {
 	lock: { color: '#50575e' },
 	processes: { listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '4px' },
 	process: { display: 'flex', flexDirection: 'column', gap: '2px' },
-	meter: { width: '160px', height: '8px' },
 } satisfies Record< string, CSSProperties >;
