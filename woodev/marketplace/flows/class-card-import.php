@@ -321,7 +321,7 @@ final class Card_Import {
 	 * @return string
 	 */
 	private function finish( Account $account, Card_Content $content, \WC_Product $product, Claim_Fence $fence, callable $renew, ?callable $stored ): string {
-		$notes    = $this->category_mapping( $content );
+		$notes    = $this->category_mapping( $content, $product );
 		$warnings = (array) call_user_func( $this->complete, $account, $content, $product, $this->settings->import_publish(), $renew, $stored );
 
 		return $this->link( $account, $content, $this->groups->place( $account, $product, $content, $fence ), $fence, self::CREATED, array_merge( $notes, $warnings ) );
@@ -371,7 +371,7 @@ final class Card_Import {
 		$this->groups->offer( $variation, $content );
 
 		$switched_on = $this->groups->sells_at_once( $variation, $this->settings->import_publish() );
-		$notes       = $this->category_mapping( $content );
+		$notes       = $this->category_mapping( $content, $this->parent_of( $variation ) ); // The characteristics are the variable product's.
 		$warnings    = (array) call_user_func( $this->complete, $account, Group_Assembler::variation_content( $content ), $variation, $switched_on, $renew, $stored );
 
 		return $this->link( $account, $content, $variation, $fence, self::CREATED, array_merge( $notes, $warnings ) );
@@ -415,19 +415,32 @@ final class Card_Import {
 	}
 
 	/**
+	 * Returns the variable product of a variation.
+	 *
+	 * @param \WC_Product $variation The variation.
+	 * @return \WC_Product|null Null when it cannot be read.
+	 */
+	private function parent_of( \WC_Product $variation ): ?\WC_Product {
+		$parent = wc_get_product( (int) $variation->get_parent_id() );
+
+		return $parent instanceof \WC_Product ? $parent : null;
+	}
+
+	/**
 	 * Gives the shop category of a product the import is making the mapping the merchant would otherwise make by hand, when the import
 	 * chooses categories ({@see Import_Mapping}). It is done **before** the product is filled: the profile of the mapping in force then
 	 * governs the description, the weight and the price the writer sets, as it governs every later export.
 	 *
-	 * @param Card_Content $content Card.
+	 * @param Card_Content     $content Card.
+	 * @param \WC_Product|null $product The product that will carry the card's attributes: the simple product, or the group's variable product.
 	 * @return string[] The note for the merchant, if there is one.
 	 */
-	private function category_mapping( Card_Content $content ): array {
+	private function category_mapping( Card_Content $content, ?\WC_Product $product ): array {
 		if ( null === $this->mapping || ! $this->settings->import_create_categories() ) {
 			return [];
 		}
 
-		$note = $this->mapping->ensure( $content );
+		$note = $this->mapping->ensure( $content, $product );
 
 		return '' === $note ? [] : [ $note ];
 	}

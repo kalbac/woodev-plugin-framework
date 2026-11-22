@@ -103,16 +103,7 @@ final class Fake_Shop {
 				return $this->posts( $args );
 			}
 		);
-		Functions\when( 'sanitize_title' )->alias(
-			static function ( string $title ): string {
-				return strtolower( rawurlencode( $title ) );
-			}
-		);
-		Functions\when( 'sanitize_text_field' )->alias(
-			static function ( string $text ): string {
-				return trim( strip_tags( $text ) );
-			}
-		);
+		Wc_Attribute_Functions::install();
 	}
 
 	/**
@@ -144,6 +135,12 @@ final class Fake_Shop {
 		$this->identity( $mock, $box );
 		$this->properties( $mock, $box );
 		$this->meta( $mock, $box );
+
+		$mock->shouldReceive( 'get_attribute' )->andReturnUsing(
+			static function ( string $name ) use ( $box ): string {
+				return self::attribute_text( (array) $box->props['attributes'], $name );
+			}
+		);
 
 		$mock->shouldReceive( 'save' )->andReturnUsing(
 			function () use ( $box ): int {
@@ -342,6 +339,21 @@ final class Fake_Shop {
 		sort( $found );
 
 		return array_slice( $found, 0, (int) $args['posts_per_page'] );
+	}
+
+	/**
+	 * Reads an attribute as `WC_Product::get_attribute()` does: by the sanitised name, or the global attribute of it. A product's
+	 * attribute gives its values, a variation's gives the one it holds.
+	 *
+	 * @param array<int|string,mixed> $attributes Attributes of the product or of the variation.
+	 * @param string                  $name       Attribute name.
+	 * @return string
+	 */
+	private static function attribute_text( array $attributes, string $name ): string {
+		$key   = sanitize_title( $name );
+		$found = $attributes[ $key ] ?? $attributes[ wc_attribute_taxonomy_name( $name ) ] ?? '';
+
+		return $found instanceof \WC_Product_Attribute ? implode( ', ', $found->get_options() ) : (string) $found;
 	}
 
 	/**

@@ -326,6 +326,7 @@ final class CardImportTest extends Export_Test_Case {
 		$product = \Mockery::mock( 'WC_Product' );
 		$product->shouldReceive( 'get_id' )->andReturn( $id );
 		$product->shouldReceive( 'get_parent_id' )->andReturn( (int) $props['parent_id'] );
+		$product->shouldReceive( 'get_attributes' )->andReturn( [] ); // The mapping reads the names the product's attributes have.
 		$product->shouldReceive( 'is_type' )->andReturnUsing(
 			static function ( $type ) use ( $props ): bool {
 				return $props['type'] === $type;

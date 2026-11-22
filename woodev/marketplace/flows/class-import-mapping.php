@@ -109,10 +109,11 @@ final class Import_Mapping {
 	 *
 	 * @since 2.1.15
 	 *
-	 * @param Card_Content $content The imported card.
+	 * @param Card_Content     $content The imported card.
+	 * @param \WC_Product|null $product The product that carries the card's attributes (the simple product, or the variable parent), so that a link names the attribute the writer will store ({@see Card_Attributes::of()}).
 	 * @return string What the merchant should read in the card's note, '' for nothing.
 	 */
-	public function ensure( Card_Content $content ): string {
+	public function ensure( Card_Content $content, ?\WC_Product $product = null ): string {
 		$remote = $content->remote_category();
 
 		if ( [] === $remote ) {
@@ -122,7 +123,7 @@ final class Import_Mapping {
 		$found = $this->mappings->for_category( $remote );
 
 		if ( null !== $found ) {
-			$this->add_missing_links( $found['mapping'], $content );
+			$this->add_missing_links( $found['mapping'], $content, $product );
 
 			return '';
 		}
@@ -135,21 +136,22 @@ final class Import_Mapping {
 
 		$holder = $this->mappings->mapping_id_for_term( $term_id );
 
-		return null === $holder ? $this->create( $content, $term_id ) : $this->another_type_note( $term_id, $holder );
+		return null === $holder ? $this->create( $content, $term_id, $product ) : $this->another_type_note( $term_id, $holder );
 	}
 
 	/**
 	 * Creates the mapping of a shop category and takes the category for it.
 	 *
-	 * @param Card_Content $content The card whose pair is mapped.
-	 * @param int          $term_id The shop category, held by no mapping.
+	 * @param Card_Content     $content The card whose pair is mapped.
+	 * @param int              $term_id The shop category, held by no mapping.
+	 * @param \WC_Product|null $product The product that carries the card's attributes.
 	 * @return string The note: '' when the mapping was made, or lost the category to a mapping saved at the same moment.
 	 */
-	private function create( Card_Content $content, int $term_id ): string {
+	private function create( Card_Content $content, int $term_id, ?\WC_Product $product ): string {
 		try {
 			$name       = mb_substr( $this->term_name( $term_id ), 0, Mapping_Input::MAX_NAME );
 			$category   = $content->remote_category();
-			$attributes = self::marked( $name, $category, null, $this->attribute_links( $content ) );
+			$attributes = self::marked( $name, $category, null, $this->attribute_links( $content, $product ) );
 			$id         = $this->mappings->create( $name, null, $category, null, $attributes );
 
 			if ( ! $this->mappings->link_term_if_absent( $term_id, $id ) ) {
@@ -168,16 +170,17 @@ final class Import_Mapping {
 	 *
 	 * @param array{mapping_id:int,name:string,category:array<string,mixed>,profile_id:int|null,attributes:array<string,mixed>} $mapping The stored mapping of the card's pair.
 	 * @param Card_Content                                                                                                      $content The card.
+	 * @param \WC_Product|null                                                                                                  $product The product that carries the card's attributes.
 	 * @return void
 	 */
-	private function add_missing_links( array $mapping, Card_Content $content ): void {
+	private function add_missing_links( array $mapping, Card_Content $content, ?\WC_Product $product ): void {
 		$stored = $mapping['attributes'];
 
 		if ( ! self::is_untouched( $mapping ) ) {
 			return;
 		}
 
-		$missing = array_diff_key( $this->attribute_links( $content ), $stored );
+		$missing = array_diff_key( $this->attribute_links( $content, $product ), $stored );
 
 		if ( [] === $missing ) {
 			return;
@@ -235,14 +238,15 @@ final class Import_Mapping {
 	 * carries its field id is linked to that field; one without is matched by name against the fields the schema holds for the pair —
 	 * none when the schema has not cached them.
 	 *
-	 * @param Card_Content $content The card.
+	 * @param Card_Content     $content The card.
+	 * @param \WC_Product|null $product The product that carries the card's attributes.
 	 * @return array<string,array<string,string>> Attribute sources by field id, in the stored shape.
 	 */
-	private function attribute_links( Card_Content $content ): array {
+	private function attribute_links( Card_Content $content, ?\WC_Product $product ): array {
 		$fields = $this->linkable_fields( $content->remote_category() );
 		$links  = [];
 
-		foreach ( Card_Attributes::of( $content ) as $attribute ) {
+		foreach ( Card_Attributes::of( $content, $product ) as $attribute ) {
 			$field = '' !== $attribute['id'] ? ( $fields['by_id'][ $attribute['id'] ] ?? null ) : ( $fields['by_name'][ mb_strtolower( $attribute['name'] ) ] ?? null );
 
 			if ( null !== $field ) {

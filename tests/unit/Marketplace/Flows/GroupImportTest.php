@@ -11,6 +11,8 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Import_Plan;
 use Woodev\Framework\Marketplace\Catalog\Card_Content;
+use Woodev\Framework\Marketplace\Catalog\Source;
+use Woodev\Framework\Marketplace\Catalog\Source_Resolver;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
@@ -698,6 +700,50 @@ final class GroupImportTest extends Export_Test_Case {
 		);
 		$this->assertSame( [ 'BLACK', 'RED' ], array_keys( $this->shape()[0]['variations'] ) );
 		$this->assertSame( [ rawurlencode( 'Цвет' ) => 'красный' ], array_change_key_case( $this->by_sku( 'RED' )['props']['attributes'], CASE_UPPER ), 'a variation holds only its chosen aspect' );
+	}
+
+	public function test_a_variation_of_an_imported_group_resolves_the_models_characteristics_from_its_parent(): void {
+		$this->import( $this->card( 'RED', 'красный', 2, [], self::GROUP, $this->characteristics( 'сталь' ) ) );
+		$this->import( $this->card( 'BLACK', 'чёрный', 2, [], self::GROUP, $this->characteristics( 'сталь' ) ) );
+
+		$parent    = wc_get_product( array_key_first( $this->products() ) );
+		$variation = wc_get_product( $this->shop->id_by_sku( 'BLACK' ) );
+		$brand     = new Source( Source::WC_ATTRIBUTE, '', 'Бренд' );
+		$colour    = new Source( Source::WC_ATTRIBUTE, '', 'Цвет' );
+
+		$this->assertSame( [ 'Acme' ], Source_Resolver::values( $brand, $variation, $parent ), 'the model\'s brand is on the parent, the variation holds only its colour' );
+		$this->assertTrue( Source_Resolver::has_value( $brand, $variation, $parent ), 'so a required «Бренд» passes validation' );
+		$this->assertSame( [ 'чёрный' ], Source_Resolver::values( $colour, $variation, $parent ), 'the variation\'s own colour, not the parent\'s list of choices' );
+	}
+
+	public function test_a_sibling_import_does_not_add_a_custom_attribute_beside_the_one_the_merchant_made_global(): void {
+		$brand = [
+			[
+				'name'   => 'Brand',
+				'values' => [ 'Acme' ],
+			],
+		];
+
+		$this->import( $this->card( 'RED', 'красный', 2, [], self::GROUP, $brand ) );
+
+		// The merchant replaces the custom «Brand» of the product by the shop's global attribute, with its own terms.
+		$parent = $this->shop->product( 'variable', (int) array_key_first( $this->products() ) );
+		$global = new \WC_Product_Attribute();
+
+		$global->set_name( 'pa_brand' );
+		$global->set_options( [ 7 ] );
+		$kept = array_filter(
+			$parent->get_attributes( 'edit' ),
+			static function ( \WC_Product_Attribute $attribute ): bool {
+				return 'Brand' !== $attribute->get_name();
+			}
+		);
+		$parent->set_attributes( array_merge( array_values( $kept ), [ $global ] ) );
+		$parent->save();
+
+		$this->import( $this->card( 'BLACK', 'чёрный', 2, [], self::GROUP, $brand ) );
+
+		$this->assertSame( [ 'Цвет', 'pa_brand' ], array_column( $this->attributes_of( array_values( $this->products() )[0] ), 0 ), 'no custom «Brand» beside the merchant\'s global one' );
 	}
 
 	public function test_importing_the_same_group_in_another_order_gives_the_same_attributes(): void {

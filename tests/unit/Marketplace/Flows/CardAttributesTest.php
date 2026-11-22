@@ -12,6 +12,7 @@ use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Catalog\Card_Content;
 use Woodev\Framework\Marketplace\Flows\Card_Attributes;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Shop;
+use Woodev\Tests\Unit\Marketplace\Support\Wc_Attribute_Functions;
 
 /**
  * @covers \Woodev\Framework\Marketplace\Flows\Card_Attributes
@@ -289,5 +290,173 @@ final class CardAttributesTest extends TestCase {
 		);
 
 		$this->assertSame( [ [ 'Размер', [ '10/20', '30' ], true, false ] ], $this->held( $product ) );
+	}
+
+	private const LONG_M  = 'Максимальная длина соединительного кабеля, м';
+	private const LONG_CM = 'Максимальная длина соединительного кабеля, см';
+
+	/**
+	 * The two long names of the marketplace that WordPress's `sanitize_title()` makes one slug of: it cuts at 200 characters of the
+	 * URL-encoded name, about 33 Cyrillic letters.
+	 *
+	 * @return Card_Content
+	 */
+	private function cable_card(): Card_Content {
+		return $this->card(
+			[
+				[
+					'id'     => '1',
+					'name'   => self::LONG_M,
+					'values' => [ '10' ],
+				],
+				[
+					'id'     => '2',
+					'name'   => self::LONG_CM,
+					'values' => [ '1000' ],
+				],
+			]
+		);
+	}
+
+	/**
+	 * Distinct characteristics that share a slug stay distinct attributes: the second is stored under a prefixed name, the one the
+	 * mapping will link too, and each keeps its own value.
+	 *
+	 * @return void
+	 */
+	public function test_two_names_that_share_a_slug_are_two_attributes_with_their_own_values(): void {
+		Wc_Attribute_Functions::lossy_slug();
+
+		$this->assertSame( sanitize_title( self::LONG_M ), sanitize_title( self::LONG_CM ), 'the premise: one slug' );
+
+		$product = $this->shop->product( 'simple' );
+
+		Card_Attributes::write( $product, $this->cable_card() );
+
+		$this->assertSame(
+			[
+				[ self::LONG_M, [ '10' ], true, false ],
+				[ '[2] ' . self::LONG_CM, [ '1000' ], true, false ],
+			],
+			$this->held( $product )
+		);
+		$this->assertSame( [ self::LONG_M, '[2] ' . self::LONG_CM ], array_column( Card_Attributes::of( $this->cable_card(), $product ), 'name' ), 'the product already holds both: the same names, nothing new' );
+		$this->assertFalse( Card_Attributes::write( $product, $this->cable_card() ), 'and a second write adds nothing' );
+	}
+
+	/**
+	 * A card that lists the same two names the other way round, onto a product that holds them, finds the same attributes.
+	 *
+	 * @return void
+	 */
+	public function test_the_order_of_the_card_does_not_rename_what_the_product_holds(): void {
+		Wc_Attribute_Functions::lossy_slug();
+
+		$product = $this->shop->product( 'simple' );
+
+		Card_Attributes::write( $product, $this->cable_card() );
+
+		$reversed = $this->card(
+			[
+				[
+					'id'     => '2',
+					'name'   => self::LONG_CM,
+					'values' => [ '1000' ],
+				],
+				[
+					'id'     => '1',
+					'name'   => self::LONG_M,
+					'values' => [ '10' ],
+				],
+			]
+		);
+
+		$this->assertSame( [ '[2] ' . self::LONG_CM, self::LONG_M ], array_column( Card_Attributes::of( $reversed, $product ), 'name' ) );
+		$this->assertFalse( Card_Attributes::write( $product, $reversed ) );
+	}
+
+	/**
+	 * An attribute of the merchant's that holds the slug is not changed, and the characteristic gets a free name instead of being
+	 * dropped or answering with the merchant's value.
+	 *
+	 * @return void
+	 */
+	public function test_a_merchants_attribute_that_holds_the_slug_is_kept_and_ours_is_made_beside_it(): void {
+		Wc_Attribute_Functions::lossy_slug();
+
+		$product  = $this->shop->product( 'simple' );
+		$merchant = new \WC_Product_Attribute();
+
+		$merchant->set_name( self::LONG_M );
+		$merchant->set_options( [ 'merchant\'s own' ] );
+		$product->set_attributes( [ $merchant ] );
+
+		Card_Attributes::write(
+			$product,
+			$this->card(
+				[
+					[
+						'id'     => '2',
+						'name'   => self::LONG_CM,
+						'values' => [ '1000' ],
+					],
+				]
+			)
+		);
+
+		$this->assertSame(
+			[
+				[ self::LONG_M, [ 'merchant\'s own' ], false, false ],
+				[ '[2] ' . self::LONG_CM, [ '1000' ], true, false ],
+			],
+			$this->held( $product )
+		);
+	}
+
+	/**
+	 * A characteristic with no field id (an aspect) is told apart by a short hash of its name.
+	 *
+	 * @return void
+	 */
+	public function test_a_collision_without_a_field_id_is_prefixed_by_a_hash_of_the_name(): void {
+		Wc_Attribute_Functions::lossy_slug();
+
+		$names = array_column( Card_Attributes::of( $this->card( [], [ self::LONG_M => '10', self::LONG_CM => '1000' ] ) ), 'name' );
+
+		$this->assertSame( self::LONG_M, $names[0] );
+		$this->assertMatchesRegularExpression( '/^\[[0-9a-f]{6}\] ' . preg_quote( self::LONG_CM, '/' ) . '$/u', $names[1] );
+	}
+
+	/**
+	 * The shop's global attribute of the characteristic's name is the same attribute: no custom twin is made beside it, and the name
+	 * the mapping links stays the characteristic's own.
+	 *
+	 * @return void
+	 */
+	public function test_a_global_attribute_of_the_same_name_is_not_duplicated(): void {
+		$product = $this->shop->product( 'simple' );
+		$global  = new \WC_Product_Attribute();
+
+		$global->set_name( 'pa_brand' );
+		$global->set_options( [ 12 ] );
+		$product->set_attributes( [ $global ] );
+
+		$card = $this->card(
+			[
+				[
+					'name'   => 'Brand',
+					'values' => [ 'Acme' ],
+				],
+				[
+					'name'   => 'Цвет',
+					'values' => [ 'красный' ],
+				],
+			]
+		);
+
+		$this->assertTrue( Card_Attributes::write( $product, $card ), 'the colour is new' );
+		$this->assertSame( [ 'pa_brand', sanitize_title( 'Цвет' ) ], array_keys( $product->get_attributes( 'edit' ) ), 'one global, one custom: no «brand» beside «pa_brand»' );
+		$this->assertSame( [ 'Brand', 'Цвет' ], array_column( Card_Attributes::of( $card, $product ), 'name' ) );
+		$this->assertSame( [ 12 ], $product->get_attributes( 'edit' )['pa_brand']->get_options(), 'its terms are not touched' );
 	}
 }

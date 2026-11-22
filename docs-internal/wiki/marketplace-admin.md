@@ -1138,7 +1138,13 @@ What to remember:
   attributes. `Import_Mapping` links the same list (`Card_Attributes::of()`), also for a group of one: by the
   characteristic's field id when it carries one, else by name; a dictionary one only when the adapter implements
   `Dictionary_Label_Lookup`. The adapter decides what is listed: what the profile or a core product field already
-  carries (name, weight, seller code) is left out.
+  carries (name, weight, seller code) is left out. «Already has» is decided by the attribute's name (case
+  ignored), never by WordPress's lossy slug alone: two names that share a slug (punctuation, the 200-character
+  cut of the URL-encoded name) get a prefixed second name (`[field id] …`) in the writer and the mapping alike
+  (`Card_Attributes::of( $content, $product )`; `Import_Mapping::ensure()` is given the product), a merchant's
+  attribute on the slug is left alone, and a global `pa_…` attribute of the same name is the same attribute.
+  A variation exports the model's characteristics from its parent: `Source_Resolver` falls back to the parent's
+  non-variation attribute (never to the parent's list of aspect choices).
 - **Convert first, link last** (`Group_Assembler::place()`). Row 1 ends the import of a linked
   card and the cards tab does not offer it again, so a card linked before its conversion could be
   left broken with no retry reaching it. Converted first, a card whose run was cut is still not

@@ -18,6 +18,9 @@ use Woodev\Framework\Marketplace\Flows\Import_Category;
 use Woodev\Framework\Marketplace\Flows\Import_Mapping;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
+use Woodev\Tests\Unit\Marketplace\Support\Wc_Attribute_Functions;
+
+require_once __DIR__ . '/../Support/wc-product-attribute-stub.php';
 
 /**
  * @covers \Woodev\Framework\Marketplace\Flows\Import_Mapping
@@ -54,6 +57,7 @@ final class ImportMappingTest extends TestCase {
 		Monkey\setUp();
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\stubTranslationFunctions();
+		Wc_Attribute_Functions::install();
 
 		$this->terms = [ [ 60, 'Электроника', 0 ] ];
 
@@ -501,6 +505,73 @@ final class ImportMappingTest extends TestCase {
 			],
 			$this->links_of( Import_Fake_Schema::PHONES )
 		);
+	}
+
+	/**
+	 * Two characteristics whose names WordPress makes one slug of (here: punctuation) are two attributes, and each link names the
+	 * attribute that holds its own value — the second one under the prefixed name the writer stores it by.
+	 *
+	 * @return void
+	 */
+	public function test_characteristics_that_share_a_slug_are_linked_under_the_names_the_attributes_have(): void {
+		Wc_Attribute_Functions::lossy_slug();
+
+		$characteristics = [
+			[
+				'id'     => '9533',
+				'name'   => 'Размер, см',
+				'values' => [ '42' ],
+			],
+			[
+				'id'     => '85',
+				'name'   => 'Размер см',
+				'values' => [ 'Acme' ],
+			],
+		];
+
+		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [], 0, $characteristics ) );
+
+		$this->assertSame(
+			[
+				'9533' => [
+					'source' => Source::WC_ATTRIBUTE,
+					'wc_key' => 'Размер, см',
+				],
+				'85'   => [
+					'source' => Source::WC_ATTRIBUTE,
+					'wc_key' => '[85] Размер см',
+				],
+			],
+			$this->links_of( Import_Fake_Schema::PHONES )
+		);
+	}
+
+	/**
+	 * The product the attributes go to is asked: an attribute of the merchant's that holds the slug makes the link name the writer's
+	 * prefixed attribute, not the merchant's.
+	 *
+	 * @return void
+	 */
+	public function test_a_link_names_the_attribute_beside_a_merchants_that_holds_the_slug(): void {
+		Wc_Attribute_Functions::lossy_slug();
+
+		$merchant = new \WC_Product_Attribute();
+		$merchant->set_name( 'Размер см' );
+
+		$product = \Mockery::mock( 'WC_Product' );
+		$product->shouldReceive( 'get_attributes' )->andReturn( [ sanitize_title( 'Размер см' ) => $merchant ] );
+
+		$characteristics = [
+			[
+				'id'     => '9533',
+				'name'   => 'Размер, см',
+				'values' => [ '42' ],
+			],
+		];
+
+		$this->writer()->ensure( $this->card( Import_Fake_Schema::PHONES, [ 'Электроника', 'Смартфоны' ], [], 0, $characteristics ), $product );
+
+		$this->assertSame( '[9533] Размер, см', $this->links_of( Import_Fake_Schema::PHONES )['9533']['wc_key'] );
 	}
 
 	/**

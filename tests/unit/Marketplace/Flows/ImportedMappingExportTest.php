@@ -18,6 +18,7 @@ use Woodev\Framework\Marketplace\Flows\Import_Mapping;
 use Woodev\Tests\Unit\Marketplace\Catalog\Validator_Test_Case;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
+use Woodev\Tests\Unit\Marketplace\Support\Wc_Attribute_Functions;
 
 /**
  * The rules the export validator runs on the mapping the import made: a linked dictionary characteristic must be resolvable, so it is
@@ -43,6 +44,7 @@ final class ImportedMappingExportTest extends Validator_Test_Case {
 		Monkey\setUp();
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\stubTranslationFunctions();
+		Wc_Attribute_Functions::install();
 		Functions\when( 'get_terms' )->justReturn( [ 71 ] );
 		Functions\when( 'get_term_field' )->justReturn( 'Смартфоны' );
 
