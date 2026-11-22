@@ -100,15 +100,63 @@ test( 'the notifications tab is the shared switches under their heading, then th
 	expect( screen.getByTestId( 'block-notifications_webhooks' ).compareDocumentPosition( bars[ 0 ] ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
 } );
 
-test( 'the description sits above the stacked cards, outside the column that spaces them', () => {
+test( 'the description is the first row of the one white wrapper, above the sections', () => {
 	const { container } = render( createElement( StackedView, {
 		tab: { id: 'tab', description: 'Что делает вкладка', sections: [ section( 'a', 'A', { stacked: true } ) ] },
 		renderSection: () => createElement( 'div' ),
 	} ) );
 
+	const wrapper = container.querySelector( '.woodev-accounts' );
 	const description = container.querySelector( '.woodev-settings__tab-desc' );
 
+	expect( wrapper ).toHaveClass( 'woodev-settings__card' ); // the wrapper «Подключение» uses
+	expect( wrapper ).toContainElement( description );
 	expect( description ).toHaveTextContent( 'Что делает вкладка' );
 	expect( container.querySelector( '.woodev-stacked' ) ).not.toContainElement( description );
-	expect( description.parentElement ).toHaveClass( 'woodev-stacked-tab' );
+	expect( description.compareDocumentPosition( container.querySelector( '.woodev-stacked' ) ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+} );
+
+test( 'a tab without a description draws no header row', () => {
+	const { container } = render( createElement( StackedView, {
+		tab: { id: 'tab', sections: [ account( 1 ) ] },
+		renderSection: () => createElement( 'div' ),
+	} ) );
+
+	expect( container.querySelector( '.woodev-accounts__header' ) ).toBeNull();
+} );
+
+test( 'two accounts: the tabs and the open account sit inside the same wrapper as the description', () => {
+	const { container } = render( createElement( StackedView, {
+		tab: { id: 'parameters', description: 'Параметры каждого аккаунта', sections: [ account( 1 ), account( 2 ) ] },
+		renderSection: ( tab, id ) => createElement( 'div', { 'data-testid': `block-${ id }` } ),
+	} ) );
+
+	const wrapper = container.querySelector( '.woodev-accounts' );
+
+	expect( container.querySelectorAll( '.woodev-accounts' ) ).toHaveLength( 1 );
+	expect( wrapper ).toContainElement( container.querySelector( '.woodev-subtabs' ) );
+	expect( wrapper ).toContainElement( screen.getByTestId( 'block-account_params_1' ) );
+	expect( wrapper ).toContainElement( container.querySelector( '.woodev-settings__tab-desc' ) );
+} );
+
+test( 'notifications: the shared switches and the account tabs are sections of one wrapper', () => {
+	const { container } = render( createElement( StackedView, {
+		tab: {
+			id: 'notifications',
+			sections: [
+				section( 'notifications_webhooks', 'Какие уведомления получать', { stacked: true } ),
+				section( 'notifications_account_1', 'Основной', { stacked: true, account_tab: true } ),
+				section( 'notifications_account_2', 'Второй', { stacked: true, account_tab: true } ),
+			],
+		},
+		renderSection: ( tab, id ) => createElement( 'div', { 'data-testid': `block-${ id }` } ),
+	} ) );
+
+	const sections = container.querySelectorAll( '.woodev-accounts .woodev-stacked > .woodev-stacked__section' );
+
+	expect( container.querySelectorAll( '.woodev-accounts' ) ).toHaveLength( 1 );
+	expect( sections ).toHaveLength( 2 ); // the switches, then the tabs with the open account
+	expect( sections[ 0 ] ).toContainElement( screen.getByTestId( 'block-notifications_webhooks' ) );
+	expect( sections[ 1 ].querySelector( '.woodev-subtabs' ) ).not.toBeNull();
+	expect( sections[ 1 ] ).toContainElement( screen.getByTestId( 'block-notifications_account_1' ) );
 } );

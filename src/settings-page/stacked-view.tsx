@@ -10,11 +10,16 @@
  * the settings page's own sub-tab bar (`SubTabsNav`). The shared sections around them (the notification switches) keep their
  * heading and their place.
  *
+ * The whole tab is ONE white wrapper, the one «Подключение» draws (`.woodev-accounts`): the description on top, then the shared
+ * sections, then the account tabs with the open account's block. The sections' own cards give up their frame inside it
+ * (`style.scss`), so the folder tab hangs off a single white box.
+ *
  * @package woodev-plugin-framework
  */
 
 import type { ReactNode } from 'react';
 import { useState } from '@wordpress/element';
+import { Card, CardBody } from '@wordpress/components';
 import SubTabsNav from '../components/sub-tabs-nav';
 import type { AccountSection, AccountsTab } from './accounts-view';
 import TabDescription from './tab-description';
@@ -78,9 +83,15 @@ export default function StackedView( { tab, renderSection }: StackedViewProps ) 
 	} );
 
 	return (
-		<div className="woodev-stacked-tab">
-			<TabDescription tab={ tab } />
-			<div className="woodev-stacked">{ blocks }</div>
-		</div>
+		<Card className="woodev-settings__card woodev-accounts woodev-stacked-tab">
+			<CardBody className="woodev-accounts__body">
+				{ tab.description && (
+					<div className="woodev-accounts__header">
+						<TabDescription tab={ tab } />
+					</div>
+				) }
+				<div className="woodev-stacked">{ blocks }</div>
+			</CardBody>
+		</Card>
 	);
 }

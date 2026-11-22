@@ -460,16 +460,17 @@ $marketplace-label-col: 280px;
 	}
 }
 
-// A tab of sections drawn one after another (stacked-view.tsx): its description, then a card per section; the heading is the card's
-// first child. The description has the room above it and the card below that «Подключение» has (24px each), not the 48px between cards.
-.woodev-stacked-tab > .woodev-settings__tab-desc {
-	margin-top: wd.$gap-lg;
-}
-
+// A tab of sections drawn one after another (stacked-view.tsx): ONE white wrapper (the `.woodev-accounts` one «Подключение» uses)
+// holding the description, the shared sections and the open account. A section after another is parted from it by a divider.
 .woodev-stacked {
 	display: flex;
 	flex-direction: column;
-	gap: wd.$gap-lg * 2;
+	gap: wd.$gap-lg;
+
+	> .woodev-stacked__section + .woodev-stacked__section {
+		padding-top: wd.$gap-lg;
+		border-top: 1px solid wd.$divider;
+	}
 }
 
 .woodev-settings__card-title {
@@ -701,7 +702,8 @@ $marketplace-label-col: 280px;
 	// An account's form sits in the account's own card: the settings card inside it gives up its border and padding, so the form is the card
 	// plus the connection box, two frames at most (a third made the «Сохранить» float between three borders).
 	.woodev-account-card__body,
-	.woodev-accounts__form {
+	.woodev-accounts__form,
+	.woodev-stacked__section {
 		.woodev-settings__card {
 			border: 0;
 			border-radius: 0;
