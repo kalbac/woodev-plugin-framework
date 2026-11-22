@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Deletion\Deletion_Module;
 use Woodev\Framework\Marketplace\Jobs\Posting_History_Cutoffs;
+use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 use Woodev\Tests\Unit\TestCase;
@@ -58,6 +59,13 @@ final class AccountOptionsForgottenTest extends TestCase {
 				return true;
 			}
 		);
+		Functions\when( 'update_option' )->alias(
+			function ( string $name, $value ): bool {
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
 		Functions\when( 'delete_option' )->alias(
 			function ( string $name ): bool {
 				unset( $this->options[ $name ] );
@@ -85,6 +93,26 @@ final class AccountOptionsForgottenTest extends TestCase {
 
 		$cutoffs->remember( self::DELETED, 1799000000 );
 		$this->assertSame( 1799000000, $cutoffs->get( self::DELETED ), 'the account that reuses the id records a fresh cutoff, not the old one' );
+	}
+
+	/**
+	 * The recorded polls of the deleted account go too — a recorded poll tells the next poll «this account has no history» — and the
+	 * other accounts' times stay.
+	 *
+	 * @return void
+	 */
+	public function test_the_polls_of_the_account_are_forgotten_and_the_others_stay(): void {
+		$polls = new Posting_Poll_Times( self::PLUGIN );
+		$polls->record( self::DELETED, 1795000100 );
+		$polls->record( self::KEPT, 1795000200 );
+
+		$this->forget_options( self::DELETED );
+
+		$this->assertNull( $polls->last( self::DELETED ) );
+		$this->assertSame( 1795000200, $polls->last( self::KEPT ) );
+
+		$this->forget_options( self::DELETED );
+		$this->assertSame( 1795000200, $polls->last( self::KEPT ), 'forgetting an account that has no record changes nothing' );
 	}
 
 	/**

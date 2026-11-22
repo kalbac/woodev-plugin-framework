@@ -26,6 +26,7 @@ use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\Label_Jobs;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Posting_History_Cutoffs;
+use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
@@ -235,11 +236,13 @@ final class Deletion_Module {
 		$progress = new Link_Progress_Store( $options );
 		$reports  = new Link_Report_Store( $options );
 		$cutoffs  = new Posting_History_Cutoffs( $plugin_id );
+		$polls    = new Posting_Poll_Times( $plugin_id );
 
-		return static function ( int $account_id ) use ( $progress, $reports, $cutoffs, $cards, $cache ): int {
+		return static function ( int $account_id ) use ( $progress, $reports, $cutoffs, $polls, $cards, $cache ): int {
 			$progress->forget_account( $account_id );
 			$reports->forget_account( $account_id );
 			$cutoffs->forget( $account_id );
+			$polls->forget( $account_id );
 			$cards->forget( $account_id );
 			$cache->delete_keys( [ Warehouse_Options::key_for( $account_id ) ] );
 

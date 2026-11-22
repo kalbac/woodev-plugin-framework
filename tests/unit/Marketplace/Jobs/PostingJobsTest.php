@@ -231,6 +231,37 @@ final class PostingJobsTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * An account deleted and added again under the same id is a new account: once the deletion has forgotten its cutoff and its
+	 * recorded polls, its first poll is history again, with a cutoff of its own — not live, as an account polled before would be.
+	 *
+	 * @return void
+	 */
+	public function test_an_account_added_again_under_a_reused_id_has_its_history(): void {
+		$jobs = $this->jobs_that_record_polls();
+		Functions\when( 'delete_option' )->alias(
+			function ( string $name ): bool {
+				unset( $this->options[ $name ] );
+
+				return true;
+			}
+		);
+
+		$jobs->poll( $this->account_id );
+		$jobs->poll( $this->account_id );
+		$this->assertGreaterThan( 0, $this->handler->cutoffs[1], 'the first account is under its cutoff' );
+
+		( new Posting_History_Cutoffs( self::PLUGIN_ID ) )->forget( $this->account_id );
+		$jobs->poll( $this->account_id );
+		$this->assertSame( 0, $this->handler->cutoffs[2], 'the cutoff alone is not enough: the recorded poll still says «polled before»' );
+
+		( new Posting_Poll_Times( self::PLUGIN_ID ) )->forget( $this->account_id );
+		( new Posting_History_Cutoffs( self::PLUGIN_ID ) )->forget( $this->account_id );
+		$jobs->poll( $this->account_id );
+
+		$this->assertGreaterThan( 0, $this->handler->cutoffs[3], 'the account that reuses the id is read as history' );
+	}
+
+	/**
 	 * A refresh that waits for the licence is queued as it always was, with two arguments.
 	 *
 	 * @return void
