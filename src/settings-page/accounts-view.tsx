@@ -3,7 +3,7 @@
  * another in the wrapper's header.
  *
  * Sections that carry a `card` (`Settings_Section::with_card()`) are drawn here instead of as sub-tabs. A card shows the on/off
- * switch, the account's title, «Client-Id · description», the stored connection status and «Редактировать» / «Удалить»; the
+ * switch, the account's title, the account's note, the stored connection status and «Редактировать» / «Удалить»; the
  * switch saves at once (`onToggleEnabled`). Opening a card renders the section's own connection block (fields and «Проверить
  * подключение») through `renderSection`, so saving and testing are the settings page's, unchanged. With no account the wrapper
  * says to add the first one.
@@ -50,6 +50,8 @@ export interface AccountSection {
 	label?: string;
 	subtitle?: string;
 	stacked?: boolean;
+	/** One account's block of a tab that lists the accounts (`Settings_Section::account_tab()`): drawn as a tab of its own. */
+	account_tab?: boolean;
 	card?: AccountCardSchema;
 	status?: SectionStatus | null;
 }
@@ -137,18 +139,6 @@ export function canDelete( card: AccountCardSchema ): boolean {
 	return !! card.delete_url;
 }
 
-/**
- * The muted line under an account's name: «Client-Id: 4180680 · Одежда и обувь».
- *
- * @param {AccountCardSchema} card the account's card.
- * @return {string} the line.
- */
-export function identifierLine( card: AccountCardSchema ): string {
-	const identifier = `${ card.identifier_label }: ${ card.identifier }`;
-
-	return card.description ? `${ identifier } · ${ card.description }` : identifier;
-}
-
 function AccountCard( { section, open, switching, onToggleOpen, onToggleEnabled, onDelete, children }: AccountCardProps ) {
 	const card = section.card;
 	const status = cardStatus( section );
@@ -169,7 +159,8 @@ function AccountCard( { section, open, switching, onToggleOpen, onToggleEnabled,
 				/>
 				<div className="woodev-account-card__main">
 					<strong className="woodev-account-card__title">{ card.title }</strong>
-					<span className="woodev-account-card__identifier">{ identifierLine( card ) }</span>
+					{ /* The merchant's own note; the Client-Id is in the «Редактировать» form, not repeated here. */ }
+					{ card.description && <span className="woodev-account-card__identifier">{ card.description }</span> }
 					{ ! statusShownBelow && (
 						<span className={ `woodev-account-card__status is-${ status.ok ? 'ok' : 'error' }` }>
 							{ status.text }

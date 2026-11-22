@@ -248,7 +248,7 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 		$this->assertStringContainsString( 'Лицензия не действует', $blocked->get_message() );
 	}
 
-	public function test_each_account_block_is_titled_with_its_name_and_the_client_id_sits_beside_it(): void {
+	public function test_each_account_block_is_a_tab_named_after_the_account_and_the_shared_switches_are_not(): void {
 		$fields     = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
 		$descriptor = new Fake_Settings_Descriptor( $fields, 'PushMarket', [ 'cabinet_id' => new Credential_Field_Spec( 'Client-Id', 'Client-Id' ) ] );
 		$adapter    = new Fake_Marketplace_Adapter(
@@ -288,9 +288,10 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 			}
 		);
 
-		$blocks = array_values(
+		$all_sections = $notif->sections();
+		$blocks       = array_values(
 			array_filter(
-				$notif->sections(),
+				$all_sections,
 				static function ( $section ): bool {
 					return 0 === strpos( $section->get_id(), 'notifications_account_' );
 				}
@@ -303,10 +304,16 @@ final class NotificationsAndAdvancedSectionsTest extends TestCase {
 			'the account name heads its block; without a name, the cabinet identifier does'
 		);
 		$this->assertSame(
-			[ 'Client-Id: 4180680', 'Client-Id: 5123456' ],
-			array_map( static function ( $section ) { return $section->get_subtitle(); }, $blocks ),
-			'the Client-Id sits under the heading'
+			[ true, true ],
+			array_map( static function ( $section ) { return $section->is_account_tab(); }, $blocks ),
+			'each account is a tab of its own'
 		);
+		$this->assertSame(
+			[ '', '' ],
+			array_map( static function ( $section ) { return $section->get_subtitle(); }, $blocks ),
+			'no Client-Id line beside the account name'
+		);
+		$this->assertFalse( $all_sections[0]->is_account_tab(), 'the switches are shared by every account: they never become a tab' );
 		$this->assertSame(
 			[
 				'topic' => 'notifications-problems',

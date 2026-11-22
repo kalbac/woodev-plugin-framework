@@ -14,6 +14,7 @@
 
 import { useState, useEffect } from '@wordpress/element';
 import { TabPanel } from '@wordpress/components';
+import SubTabsNav from './sub-tabs-nav';
 
 /**
  * Reads the current tab/section from the page URL.
@@ -109,27 +110,17 @@ export default function TabsNav( { tabs, renderSection, onTabChange } ) {
 				return (
 					<>
 						{ tab.sections.length > 1 && ! tab.sections.some( ( s ) => s.card || s.stacked ) && (
-							<nav className="woodev-subtabs">
-								{ tab.sections.map( ( s ) => (
-									<button
-										key={ s.id }
-										type="button"
-										className={
-											'woodev-subtabs__link' +
-											( s.id === current ? ' is-active' : '' )
-										}
-										onClick={ () => {
-											setActiveSection( ( prev ) => ( {
-												...prev,
-												[ tab.id ]: s.id,
-											} ) );
-											writeUrl( tab.id, s.id );
-										} }
-									>
-										{ s.label }
-									</button>
-								) ) }
-							</nav>
+							<SubTabsNav
+								tabs={ tab.sections }
+								current={ current }
+								onSelect={ ( sectionId ) => {
+									setActiveSection( ( prev ) => ( {
+										...prev,
+										[ tab.id ]: sectionId,
+									} ) );
+									writeUrl( tab.id, sectionId );
+								} }
+							/>
 						) }
 						{ renderSection( tab, current ) }
 					</>

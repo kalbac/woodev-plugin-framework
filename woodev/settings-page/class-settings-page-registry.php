@@ -378,6 +378,11 @@ final class Settings_Page_Registry {
 				}
 			}
 
+			// One account's block: the client draws it as a tab named after the section (Settings_Section::account_tab()).
+			if ( $section->is_account_tab() ) {
+				$entry['account_tab'] = true;
+			}
+
 			if ( $section->is_connection() ) {
 				$entry['is_connection'] = true;
 				$entry['action_label']  = $section->get_action_label();

@@ -254,7 +254,9 @@ describe( 'the heading of a stacked section sits inside its card (#1776)', () =>
 		const { container } = render( <App /> );
 		await waitFor( () => expect( screen.getAllByRole( 'textbox' ) ).toHaveLength( 2 ) );
 
-		const cards = container.querySelectorAll( '.woodev-settings__card' );
+		// The tab is one white wrapper; the sections' cards sit inside it.
+		expect( container.querySelectorAll( '.woodev-accounts' ) ).toHaveLength( 1 );
+		const cards = container.querySelectorAll( '.woodev-stacked__section .woodev-settings__card' );
 		expect( cards ).toHaveLength( 2 );
 
 		const title = cards[ 0 ].querySelector( '.components-card__body' ).firstElementChild;
