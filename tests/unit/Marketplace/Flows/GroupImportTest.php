@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Catalog\Card_Content;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
+use Woodev\Framework\Marketplace\Flows\Card_Attributes;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
@@ -146,8 +147,8 @@ final class GroupImportTest extends Export_Test_Case {
 	}
 
 	/**
-	 * Plays `Product_Writer::complete()`: the price and the image, then the final save with the status and without the marker.
-	 * A variation that is not published is switched off, as the writer's final save stores it.
+	 * Plays `Product_Writer::complete()`: the card's attributes (not a variation's), the price and the image, then the final save with
+	 * the status and without the marker. A variation that is not published is switched off, as the writer's final save stores it.
 	 *
 	 * @param Card_Content $content Card.
 	 * @param \WC_Product  $product The started product or variation.
@@ -163,6 +164,10 @@ final class GroupImportTest extends Export_Test_Case {
 			unset( $this->cut[ $article ] );
 
 			throw $cut;
+		}
+
+		if ( ! $product->is_type( 'variation' ) ) {
+			Card_Attributes::write( $product, $content );
 		}
 
 		$product->set_regular_price( (string) ( 100 + strlen( $article ) ) );
@@ -189,9 +194,10 @@ final class GroupImportTest extends Export_Test_Case {
 	 * @param int                 $size    How many cards the marketplace says the group has.
 	 * @param array<string,mixed> $card    Link card values that replace the defaults.
 	 * @param string              $group   Group key, '' for a card that stands alone.
+	 * @param array<int,array>    $characteristics The characteristics the adapter gave: `name` and `values` each.
 	 * @return Card_Content
 	 */
-	private function card( string $article, string $colour, int $size, array $card = [], string $group = self::GROUP ): Card_Content {
+	private function card( string $article, string $colour, int $size, array $card = [], string $group = self::GROUP, array $characteristics = [] ): Card_Content {
 		return new Card_Content(
 			array_merge(
 				[
@@ -207,6 +213,7 @@ final class GroupImportTest extends Export_Test_Case {
 				'name'          => 'Футболка ' . $colour,
 				'primary_image' => 'https://img.example.test/' . $article . '.jpg',
 				'images'        => [ 'https://img.example.test/' . $article . '-2.jpg', 'https://img.example.test/' . $article . '-3.jpg' ],
+				'characteristics' => $characteristics,
 				'group'         => [
 					'key'     => $group,
 					'size'    => $size,
@@ -618,6 +625,95 @@ final class GroupImportTest extends Export_Test_Case {
 		$this->assertSame( [ 'simple', '500', [] ], [ $red['type'], $red['props']['regular_price'], $red['meta'] ], 'the merchant\'s product is linked and left alone' );
 		$this->assertCount( 2, $this->products(), 'the black card is a product of the group of its own' );
 		$this->assertSame( 'variation', $this->by_sku( 'BLACK' )['type'] );
+	}
+
+	/**
+	 * Names of the characteristics for the tests below: a model's own (a brand) and one that differs by card (a material).
+	 *
+	 * @param string $material The card's material.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function characteristics( string $material ): array {
+		return [
+			[
+				'name'   => 'Бренд',
+				'values' => [ 'Acme' ],
+			],
+			[
+				'name'   => 'Материал',
+				'values' => [ $material ],
+			],
+		];
+	}
+
+	/**
+	 * What the product of a group holds as attributes: `[ name, values, used for variations ]` each, in order.
+	 *
+	 * @param array<string,mixed> $product A stored product.
+	 * @return array<int,array{0:string,1:array<int,string>,2:bool,3:bool}>
+	 */
+	private function attributes_of( array $product ): array {
+		return array_values(
+			array_map(
+				static function ( $attribute ): array {
+					return [ $attribute->get_name(), $attribute->get_options(), $attribute->get_variation(), $attribute->get_visible() ];
+				},
+				$product['props']['attributes']
+			)
+		);
+	}
+
+	public function test_a_card_alone_writes_all_its_characteristics_as_product_attributes(): void {
+		$this->import( $this->card( 'RED', '', 1, [], '', $this->characteristics( 'сталь' ) ) );
+
+		$product = $this->by_sku( 'RED' );
+
+		$this->assertSame( 'simple', $product['type'] );
+		$this->assertSame(
+			[
+				[ 'Бренд', [ 'Acme' ], false, true ],
+				[ 'Материал', [ 'сталь' ], false, true ],
+			],
+			$this->attributes_of( $product ),
+			'a simple product: every characteristic is its own, visible, no variation\'s'
+		);
+	}
+
+	public function test_a_group_keeps_its_aspects_as_variations_and_the_other_characteristics_as_the_products(): void {
+		$this->import( $this->card( 'RED', 'красный', 2, [], self::GROUP, $this->characteristics( 'сталь' ) ) );
+		$this->import( $this->card( 'BLACK', 'чёрный', 2, [], self::GROUP, array_merge( $this->characteristics( 'пластик' ), [ [ 'name' => 'Страна', 'values' => [ 'Россия' ] ] ] ) ) );
+
+		$parent = array_values( $this->products() )[0];
+
+		$this->assertSame( 'variable', $parent['type'] );
+		$this->assertSame(
+			[
+				[ 'Цвет', [ 'красный', 'чёрный' ], true, true ],
+				[ 'Бренд', [ 'Acme' ], false, true ],
+				[ 'Материал', [ 'сталь' ], false, true ],
+				[ 'Страна', [ 'Россия' ], false, true ],
+			],
+			$this->attributes_of( $parent ),
+			'«Цвет» varies; the model\'s characteristics stay as the first card gave them, a later card only adds what the product lacks'
+		);
+		$this->assertSame( [ 'BLACK', 'RED' ], array_keys( $this->shape()[0]['variations'] ) );
+		$this->assertSame( [ rawurlencode( 'Цвет' ) => 'красный' ], array_change_key_case( $this->by_sku( 'RED' )['props']['attributes'], CASE_UPPER ), 'a variation holds only its chosen aspect' );
+	}
+
+	public function test_importing_the_same_group_in_another_order_gives_the_same_attributes(): void {
+		$this->import( $this->card( 'RED', 'красный', 2, [], self::GROUP, $this->characteristics( 'сталь' ) ) );
+		$this->import( $this->card( 'BLACK', 'чёрный', 2, [], self::GROUP, $this->characteristics( 'сталь' ) ) );
+
+		$together = $this->attributes_of( array_values( $this->products() )[0] );
+
+		$this->empty_shop();
+
+		// A week apart: the red card was alone in its group, so it was a simple product with a plain «Цвет» until the black one came.
+		$this->import( $this->card( 'RED', 'красный', 1, [], self::GROUP, $this->characteristics( 'сталь' ) ) );
+		$this->assertSame( 'simple', array_values( $this->products() )[0]['type'] );
+		$this->import( $this->card( 'BLACK', 'чёрный', 2, [], self::GROUP, $this->characteristics( 'сталь' ) ) );
+
+		$this->assertSame( $together, $this->attributes_of( array_values( $this->products() )[0] ) );
 	}
 
 	public function test_a_card_with_no_aspect_is_told_apart_by_its_article(): void {

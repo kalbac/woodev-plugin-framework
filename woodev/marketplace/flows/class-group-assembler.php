@@ -56,7 +56,8 @@ defined( 'ABSPATH' ) || exit;
  * step tells from the stored state whether it has been done.
  *
  * The aspects are written as the product's own (custom) attributes, never as global attribute taxonomies. A card with no aspect
- * is told apart by its article under the attribute «Вариант».
+ * is told apart by its article under the attribute «Вариант». The card's other characteristics are the product's attributes too,
+ * not used for variations ({@see Card_Attributes}); a variation takes none of them ({@see self::variation_content()}).
  *
  * @since 2.1.6
  */
@@ -348,8 +349,9 @@ final class Group_Assembler {
 	}
 
 	/**
-	 * Makes the variable product offer the aspects of a card, so that the card's variation can be chosen in the shop. Saves the
-	 * product only when an aspect or a value is new to it.
+	 * Makes the variable product offer the aspects of a card, so that the card's variation can be chosen in the shop, and gives it
+	 * the card's other characteristics it lacks ({@see Card_Attributes}). Saves the product only when an attribute or a value is new
+	 * to it.
 	 *
 	 * @since 2.1.6
 	 *
@@ -360,14 +362,22 @@ final class Group_Assembler {
 	public function offer( \WC_Product $variation, Card_Content $content ): void {
 		$parent = wc_get_product( (int) $variation->get_parent_id() );
 
-		if ( $parent instanceof \WC_Product && $this->add_aspects( $parent, self::aspects( $content ) ) ) {
+		if ( ! $parent instanceof \WC_Product ) {
+			return;
+		}
+
+		$aspects_added = $this->add_aspects( $parent, self::aspects( $content ) ); // First: an aspect is then found, not made again as a plain attribute.
+		$others_added  = Card_Attributes::write( $parent, $content );
+
+		if ( $aspects_added || $others_added ) {
 			$parent->save();
 		}
 	}
 
 	/**
-	 * Returns the card as a variation takes it: without the other images. A variation shows one image; the gallery is the
-	 * product's, filled from the card the product was made from.
+	 * Returns the card as a variation takes it: without the other images and without the characteristics. A variation shows one
+	 * image; the gallery is the product's, filled from the card the product was made from. The characteristics are attributes of
+	 * the variable product ({@see self::offer()}).
 	 *
 	 * @since 2.1.6
 	 *

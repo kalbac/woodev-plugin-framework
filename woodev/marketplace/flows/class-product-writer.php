@@ -230,7 +230,8 @@ final class Product_Writer {
 	}
 
 	/**
-	 * Sets description, weight and dimensions (step 2, before the price).
+	 * Sets description, attributes, weight and dimensions (step 2, before the price). The attributes are the card's characteristics
+	 * ({@see Card_Attributes}); the variation of a group has none of its own.
 	 *
 	 * @param Card_Content $content Card.
 	 * @param \WC_Product  $product Product.
@@ -239,6 +240,10 @@ final class Product_Writer {
 	 */
 	private function fill( Card_Content $content, \WC_Product $product, Profile $profile ): void {
 		$this->describe( $content->description(), $product, (string) $profile->setting( 'description_source', 'description' ) );
+
+		if ( ! $product->is_type( 'variation' ) ) { // A variation's attributes are its chosen values; the card's characteristics are the product's.
+			Card_Attributes::write( $product, $content );
+		}
 
 		$units = (array) $profile->setting( 'units', [] );
 

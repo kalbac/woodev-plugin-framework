@@ -26,14 +26,15 @@ defined( 'ABSPATH' ) || exit;
  * What it does, for a card whose pair has **no** mapping:
  *
  * - the shop category of the card's path has no mapping either → one is created for it, with no profile (a new mapping made by hand
- *   starts the same), and its attribute table links each characteristic the import wrote as a product attribute (the aspects of a
- *   card in a group of several, {@see Group_Assembler::place()}) to that attribute, by the characteristic's name;
+ *   starts the same), and its attribute table links each characteristic the import writes as a product attribute — every
+ *   characteristic the adapter gave and the aspects of the card's group, whatever the group's size ({@see Card_Attributes::of()}) —
+ *   to that attribute;
  * - the shop category already belongs to another mapping → nothing is changed, and the card's note says so: the cards of one shop
  *   category are mapped by the type of the first of them.
  *
  * A mapping that exists is the merchant's and is never changed — with one exception. A mapping this class created carries a mark (a
  * fingerprint of what it wrote, kept beside the attribute sources), so a later card of the same pair **adds the links it brings that
- * the table lacks**: the first card may have had no aspects, or fewer. A row that is there is never overwritten, and a mapping whose
+ * the table lacks**: the first card may have had fewer characteristics. A row that is there is never overwritten, and a mapping whose
  * name, category, profile or table the merchant changed no longer matches its mark and is not touched again.
  *
  * A dictionary characteristic is linked only when the marketplace can resolve a label to a dictionary value id locally
@@ -229,31 +230,25 @@ final class Import_Mapping {
 	}
 
 	/**
-	 * Links each characteristic the import wrote as a product attribute to that attribute. The import writes only the aspects of a
-	 * card in a group of several, and names the attribute as the marketplace names the characteristic, so the link is made by name
-	 * against the fields the schema holds for the pair — none when the schema has not cached them.
+	 * Links each characteristic the import writes as a product attribute ({@see Card_Attributes::of()}: the characteristics the
+	 * adapter gave and the aspects of the card's group, for a card of any group size) to that attribute. A characteristic that
+	 * carries its field id is linked to that field; one without is matched by name against the fields the schema holds for the pair —
+	 * none when the schema has not cached them.
 	 *
 	 * @param Card_Content $content The card.
 	 * @return array<string,array<string,string>> Attribute sources by field id, in the stored shape.
 	 */
 	private function attribute_links( Card_Content $content ): array {
-		$group = $content->group();
-
-		if ( '' === Group_Assembler::key_of( $group ) || $group['size'] < 2 ) {
-			return [];
-		}
-
-		$fields = $this->fields_by_name( $content->remote_category() );
+		$fields = $this->linkable_fields( $content->remote_category() );
 		$links  = [];
 
-		foreach ( $group['aspects'] as $name => $value ) {
-			$name  = trim( (string) $name );
-			$field = $fields[ mb_strtolower( $name ) ] ?? null;
+		foreach ( Card_Attributes::of( $content ) as $attribute ) {
+			$field = '' !== $attribute['id'] ? ( $fields['by_id'][ $attribute['id'] ] ?? null ) : ( $fields['by_name'][ mb_strtolower( $attribute['name'] ) ] ?? null );
 
-			if ( '' !== $name && is_scalar( $value ) && '' !== trim( (string) $value ) && null !== $field ) {
+			if ( null !== $field ) {
 				$links[ $field->id() ] = [
 					'source' => Source::WC_ATTRIBUTE,
-					'wc_key' => $name,
+					'wc_key' => $attribute['name'],
 				];
 			}
 		}
@@ -262,24 +257,28 @@ final class Import_Mapping {
 	}
 
 	/**
-	 * Returns the fields of a pair a link may name, by lower-cased name; the first of two fields with one name wins. A dictionary
-	 * field is left out unless its labels can be resolved locally.
+	 * Returns the fields of a pair a link may name, by id and by lower-cased name (the first of two fields with one name wins). A
+	 * dictionary field is left out unless its labels can be resolved locally.
 	 *
 	 * @param array<string,mixed> $remote The pair.
-	 * @return array<string,Field_Definition>
+	 * @return array{by_id:array<string,Field_Definition>,by_name:array<string,Field_Definition>}
 	 */
-	private function fields_by_name( array $remote ): array {
-		$fields = [];
+	private function linkable_fields( array $remote ): array {
+		$fields = [
+			'by_id'   => [],
+			'by_name' => [],
+		];
 
 		foreach ( $this->finder->cached_fields( $remote ) ?? [] as $field ) {
-			$key = mb_strtolower( trim( $field->name() ) );
-
 			if ( Field_Definition::TYPE_DICTIONARY === $field->type() && ! $this->resolves_dictionary_labels ) {
 				continue;
 			}
 
-			if ( ! isset( $fields[ $key ] ) ) {
-				$fields[ $key ] = $field;
+			$fields['by_id'][ $field->id() ] = $field;
+			$name                            = mb_strtolower( trim( $field->name() ) );
+
+			if ( ! isset( $fields['by_name'][ $name ] ) ) {
+				$fields['by_name'][ $name ] = $field;
 			}
 		}
 

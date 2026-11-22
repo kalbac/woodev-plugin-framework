@@ -296,6 +296,38 @@ class ProductWriterTest extends TestCase {
 	}
 
 	/**
+	 * The card's characteristics are stored as the product's own visible attributes, none of them for variations, and a second
+	 * `complete()` on the same product — a resumed run — writes none of them twice.
+	 */
+	public function test_the_characteristics_are_stored_as_visible_product_attributes_once(): void {
+		$card = $this->card(
+			[
+				'characteristics' => [
+					[
+						'name'   => 'Бренд',
+						'values' => [ 'Acme' ],
+					],
+					[
+						'name'   => 'Материал',
+						'values' => [ 'сталь', 'алюминий' ],
+					],
+				],
+			]
+		);
+
+		$result  = $this->writer->write( $this->account(), $card, false, false, $this->renew() );
+		$product = $result['product'];
+
+		$this->writer->complete( $this->account(), $card, wc_get_product( $product->get_id() ), false, $this->renew() );
+
+		$attributes = array_values( wc_get_product( $product->get_id() )->get_attributes() );
+
+		$this->assertCount( 2, $attributes );
+		$this->assertSame( [ 'Бренд', [ 'Acme' ], true, false ], [ $attributes[0]->get_name(), $attributes[0]->get_options(), $attributes[0]->get_visible(), $attributes[0]->get_variation() ] );
+		$this->assertSame( [ 'сталь', 'алюминий' ], $attributes[1]->get_options() );
+	}
+
+	/**
 	 * One profile governs the price and the fields: a card whose own category is in no mapping, created under a category the
 	 * merchant mapped, is written with the profile of that ancestor — the profile the price and the first export read.
 	 */

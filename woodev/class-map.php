@@ -250,6 +250,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Diagnostics\\Sync_Reason' => 'woodev/marketplace/diagnostics/class-sync-reason.php',
 	'Woodev\\Framework\\Marketplace\\Diagnostics\\Why_Not_Syncing' => 'woodev/marketplace/diagnostics/class-why-not-syncing.php',
 	'Woodev\\Framework\\Marketplace\\Flow_Wiring' => 'woodev/marketplace/class-flow-wiring.php',
+	'Woodev\\Framework\\Marketplace\\Flows\\Card_Attributes' => 'woodev/marketplace/flows/class-card-attributes.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Card_Created_Seeder' => 'woodev/marketplace/flows/class-card-created-seeder.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Card_Identity' => 'woodev/marketplace/flows/class-card-identity.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Card_Import' => 'woodev/marketplace/flows/class-card-import.php',

@@ -108,6 +108,11 @@ final class Fake_Shop {
 				return strtolower( rawurlencode( $title ) );
 			}
 		);
+		Functions\when( 'sanitize_text_field' )->alias(
+			static function ( string $text ): string {
+				return trim( strip_tags( $text ) );
+			}
+		);
 	}
 
 	/**
