@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 549 atomic gotchas across 30 topics. At session start read THIS file, then open
+> **Topic map.** 550 atomic gotchas across 30 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -30,7 +30,7 @@
 | [`api/*`](gotcha-index/api.md) | 8 | API layer |
 | [`licensing/*`](gotcha-index/licensing.md) | 7 | License/EDD store |
 | [`build/*`](gotcha-index/build.md) | 29 | Build/CI/release |
-| [`admin-ui/*`](gotcha-index/admin-ui.md) | 17 | Admin pages / React UI |
+| [`admin-ui/*`](gotcha-index/admin-ui.md) | 18 | Admin pages / React UI |
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 6 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |
 | [`box-packer/*`](gotcha-index/box-packer.md) | 3 | Box-packer algorithm (S2) |

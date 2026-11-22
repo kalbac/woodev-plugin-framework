@@ -8,6 +8,8 @@
 @use '../components/table-chrome';
 @use '../components/woodev-dialog';
 
+$cell-padding: 8px;
+
 .woodev-records {
 	// The filter labels of «Заказы доставки» (WooCommerce's `.woocommerce-filters-label`: 13px, normal weight, #3c434a) and the
 	// settings: sentence case, never upper case. A labelled `SelectControl`
@@ -210,10 +212,11 @@
 		width: 12ch;
 	}
 
-	// A price and a stock of the products tables: «500 / 500» under a heading with its «?» mark, left-aligned.
+	// A price and a stock of the products tables: «500 / 500» under a heading with its «?» mark, left-aligned. The width is a floor: a price
+	// range («1000 – 1200 / —») widens its column, and 12ch keeps the narrow ones inside a 784px card (1024px window, menu expanded).
 	.woodev-records__col-price,
 	.woodev-records__col-stock {
-		width: 14ch;
+		width: 12ch;
 	}
 
 	.woodev-records__col-products,
@@ -222,23 +225,26 @@
 	}
 
 	// WooCommerce pads a cell 24px each side; eight columns lose 380px to it, which is what pushed the actions off a 1024px screen.
-	// (Now 10px: both products tables must fit a 1024px screen with the sidebar collapsed without scrolling.)
+	// (Now 8px, like «Заказы доставки» (#1909): the products table and the mappings table must fit a card of a 1024px window with the
+	// WordPress menu expanded (784px and 750px) without scrolling sideways.)
 	.woocommerce-table__header,
 	.woocommerce-table__item {
-		padding-left: 10px;
-		padding-right: 10px;
+		padding-left: $cell-padding;
+		padding-right: $cell-padding;
 	}
 
 	@include table-look.header-height;
 
 	// A sortable heading of a left-aligned column is WooCommerce's button inside a cell that pads 16px on the left, and the button pads
-	// 12px more: the label stood 19px to the right of the values under it. The cell pads like every other cell, and the button adds none,
-	// so the label starts exactly above the first letter of its column.
+	// 12px more: the label stood 19px to the right of the values under it. The cell pads like every other cell, and the button adds none
+	// on the left, so the label starts exactly above the first letter of its column; none on the right either, or every sortable column
+	// carries 12px of dead space after its sort arrow (the products table was 13px wider than a 784px card because of it).
 	.woocommerce-table__header.is-left-aligned.is-sortable {
-		padding-left: 10px;
+		padding-left: $cell-padding;
 
 		.components-button {
 			padding-left: 0;
+			padding-right: 0;
 		}
 	}
 
@@ -305,10 +311,10 @@
 	}
 
 	// The name column is a text column: no width, it takes what is left. Only a floor, so a name never wraps in a column too narrow
-	// for one of its words. It stays at the left edge while the table scrolls sideways (the pinned columns' `left` offsets below add
-	// up what stands before it).
+	// for one of its words (12ch: the products table must fit a 784px card). It stays at the left edge while the table scrolls sideways
+	// (the pinned columns' `left` offsets below add up what stands before it).
 	.woodev-records__col-name {
-		min-width: 16ch;
+		min-width: 12ch;
 	}
 
 	// A pinned cell is opaque, so what scrolls under it does not show through. WooCommerce paints the sorted column grey
@@ -404,8 +410,8 @@
 		white-space: normal;
 	}
 
-	// The article: 14ch (19ch in the products table, whose SKUs are longer), one line, «…» at the end of a longer one (the full value
-	// is the line's `title`).
+	// The article: 14ch (the products table too: «OW-OZ-TEST-3» fits, a longer one ends in «…»), one line; the full value is the line's
+	// `title`.
 	.woodev-records__col-sku,
 	.woodev-records__col-offer_id {
 		max-width: 14ch;
@@ -423,11 +429,6 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 		}
-	}
-
-	.woodev-records__col-sku {
-		max-width: 19ch;
-		width: 19ch;
 	}
 
 	// The photo: a small square in a 52px column, pinned beside the checkbox.
