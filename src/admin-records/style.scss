@@ -270,20 +270,29 @@ $cell-padding: 8px;
 		width: 1%;
 	}
 
-	// The sentences under the buttons (why an action is off, the row's lock and its processes) are text, not buttons: they wrap in a
-	// column of their own width. In a `nowrap` cell one «Карточка сейчас импортируется — дождитесь результата» is a single 460px line
-	// that widens the whole table past its card and is clipped at the right edge (#1937). `anywhere` lets an unbroken word shrink too.
-	// «Заказы доставки» says nothing in text here (its bar and a lock icon speak for the row), so the width is this table's own.
-	// (An icon-only action's reason is `screen-reader-text`, clipped to 1px: it keeps its own box.)
+	// The sentences under the buttons (why an action is off, the row's lock and its processes) are text, not buttons: they wrap. In a
+	// `nowrap` cell one «Карточка сейчас импортируется — дождитесь результата» is a single 460px line that widens the whole table past
+	// its card and is clipped at the right edge (#1937). `anywhere` also lets an unbroken word shrink, so the text adds NOTHING to the
+	// column's minimum width: the table can never be wider than it is without the text. `max-width` is what it asks for when the card
+	// has room to spare. «Заказы доставки» says nothing in text here (its bar and a lock icon speak for the row), so this is this
+	// table's own rule. (An icon-only action's reason is `screen-reader-text`, clipped to 1px: it keeps its own box.)
 	.woodev-records__col-actions .woodev-records__reason:not( .screen-reader-text ),
 	.woodev-records__col-actions .woodev-records__activity {
-		// Its own line under the buttons, and 12rem wide whatever the sentence: the column is sized by the widest cell, and a `1%`
-		// column takes the minimum width of its content, which for a wrapping sentence is its longest word.
 		flex: 0 0 100%;
 		max-width: 12rem;
-		min-width: 12rem;
 		overflow-wrap: anywhere;
 		white-space: normal;
+	}
+
+	// A table that shows such text lets the actions column take what it needs from the card's spare width, which a `1%` column never
+	// does (it stays as narrow as its buttons and the text would be four letters wide). A table without text keeps the `1%` above, so its
+	// layout does not change by a pixel. A browser without `:has()` keeps the narrow column: the text still fits the card.
+	.woocommerce-table__table:has(
+			.woodev-records__reason:not( .screen-reader-text ),
+			.woodev-records__activity
+		)
+		.woodev-records__col-actions {
+		width: auto;
 	}
 
 	// The checkbox column is as wide as its box with the same padding on the left and the right, like «Заказы доставки». The
