@@ -21,6 +21,21 @@ export function isRowBusy( row: Pick< AdminRecord, 'activity' > ): boolean {
 }
 
 /**
+ * What a busy row says about itself: the label of its first process in flight, with an ellipsis («Импортируется…»).
+ *
+ * The label is PHP's. A busy row always has such a process (that is what busy means), so the only empty answer is a process
+ * PHP gave no label.
+ *
+ * @param row The row.
+ */
+export function busyLabel( row: Pick< AdminRecord, 'activity' > ): string {
+	const running = ( row.activity?.processes ?? [] ).find( ( process ) => IN_FLIGHT.includes( process.state ) );
+	const label = running?.label.replace( /[.…\s]+$/, '' ) ?? '';
+
+	return label === '' ? '' : `${ label }…`;
+}
+
+/**
  * The ids a bulk action may take: a row that started a process after it was ticked is still ticked, but it is blocked now.
  *
  * @param ids  The ticked ids.

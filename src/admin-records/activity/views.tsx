@@ -4,7 +4,8 @@
  *
  * - The lock reason is visible text, not colour.
  * - A process is PHP's label and text, never a percentage computed from elapsed time. A row with a process in flight
- *   is marked busy by the table itself (`table-model`), not by this view (#1937).
+ *   is marked busy by the table itself (`table-model`), not by this view (#1937); the table draws its label over the row,
+ *   so this view keeps such a row's sentences for screen readers only.
  * - Several processes are listed side by side; one never hides another.
  *
  * @package woodev-plugin-framework
@@ -13,6 +14,7 @@
 import { Button } from '@wordpress/components';
 import { ProblemsLink } from '../../components/help-link';
 import type { TableHandle } from '../extensions';
+import { isRowBusy } from './busy';
 import { healthNotice } from './messages';
 import type { Ownership } from './ownership';
 import { accountBlockedReason, useActivityState, type ActivityState } from './state';
@@ -42,8 +44,16 @@ export function RowActivityView( { activity, reasonShown }: RowActivityViewProps
 		return null;
 	}
 
+	// A busy row says it in the veil over the row (`table-model`), so its cell stays as tall as an idle one; the sentences stay
+	// for screen readers.
+	const busy = isRowBusy( { activity } );
+
 	return (
-		<span className="woodev-records__activity" data-locked={ activity.locked } style={ ACTIVITY_STYLES.row }>
+		<span
+			className={ `woodev-records__activity${ busy ? ' screen-reader-text' : '' }` }
+			data-locked={ activity.locked }
+			style={ busy ? undefined : ACTIVITY_STYLES.row }
+		>
 			{ activity.reason !== '' && ! reasonShown && (
 				<span className="woodev-records__lock" style={ ACTIVITY_STYLES.lock }>
 					{ activity.reason }

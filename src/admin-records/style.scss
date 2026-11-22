@@ -14,6 +14,7 @@ $cell-padding: 8px;
 .woodev-records {
 	// A row with a process in flight: the bar along its bottom edge, the same mechanism as «Заказы доставки» (#1937).
 	@include row-busy.mark( '.woodev-records__row-busy' );
+	@include row-busy.veil( '.woodev-records__row-busy-veil' );
 
 	// The filter labels of «Заказы доставки» (WooCommerce's `.woocommerce-filters-label`: 13px, normal weight, #3c434a) and the
 	// settings: sentence case, never upper case. A labelled `SelectControl`
@@ -275,9 +276,9 @@ $cell-padding: 8px;
 	// its card and is clipped at the right edge (#1937). `anywhere` also lets an unbroken word shrink, so the text adds NOTHING to the
 	// column's minimum width: the table can never be wider than it is without the text. `max-width` is what it asks for when the card
 	// has room to spare. «Заказы доставки» says nothing in text here (its bar and a lock icon speak for the row), so this is this
-	// table's own rule. (An icon-only action's reason is `screen-reader-text`, clipped to 1px: it keeps its own box.)
+	// table's own rule. (An icon-only action's reason, and every sentence of a BUSY row — its label is the veil over the row — is `screen-reader-text`, clipped to 1px: it keeps its own box and no rule of this block applies to it.)
 	.woodev-records__col-actions .woodev-records__reason:not( .screen-reader-text ),
-	.woodev-records__col-actions .woodev-records__activity {
+	.woodev-records__col-actions .woodev-records__activity:not( .screen-reader-text ) {
 		flex: 0 0 100%;
 		max-width: 12rem;
 		overflow-wrap: anywhere;
@@ -289,7 +290,7 @@ $cell-padding: 8px;
 	// layout does not change by a pixel. A browser without `:has()` keeps the narrow column: the text still fits the card.
 	.woocommerce-table__table:has(
 			.woodev-records__reason:not( .screen-reader-text ),
-			.woodev-records__activity
+			.woodev-records__activity:not( .screen-reader-text )
 		)
 		.woodev-records__col-actions {
 		width: auto;

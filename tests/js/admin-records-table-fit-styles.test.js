@@ -116,6 +116,39 @@ describe( 'the busy-row bar (#1937)', () => {
 	} );
 } );
 
+describe( 'the busy-row veil (operator, 23.11.2026)', () => {
+	const shared = fs.readFileSync( path.join( __dirname, '../../src/components/_row-busy.scss' ), 'utf8' );
+	const veil = block( shared, '@mixin veil(' );
+
+	test( 'covers the whole row except the bar\'s 2px, above the pinned cells, centred both ways', () => {
+		expect( veil ).toMatch( /position:\s*absolute/ );
+		expect( veil ).toMatch( /inset:\s*0 0 2px/ );
+		expect( veil ).toMatch( /display:\s*flex/ );
+		expect( veil ).toMatch( /align-items:\s*center/ );
+		expect( veil ).toMatch( /justify-content:\s*center/ );
+		expect( Number( /^\s*z-index:\s*(\d+);/m.exec( veil )[ 1 ] ) ).toBeGreaterThan( 2 );
+	} );
+
+	test( 'adds nothing to the table\'s layout and leaves the row\'s links clickable', () => {
+		expect( veil ).toMatch( /pointer-events:\s*none/ );
+		expect( veil ).not.toMatch( /min-width|width:/ );
+	} );
+
+	test( 'the records table includes it, and «Заказы доставки» does not', () => {
+		const orders = fs.readFileSync( path.join( __dirname, '../../src/shipping-orders-page/style.scss' ), 'utf8' );
+
+		expect( scss ).toMatch( /row-busy\.veil\( '\.woodev-records__row-busy-veil' \)/ );
+		expect( orders ).not.toMatch( /veil/ );
+	} );
+
+	test( 'a busy row\'s screen-reader-only sentences do not free the 1% actions column', () => {
+		const selector = scss.slice( scss.indexOf( '.woocommerce-table__table:has(' ), scss.indexOf( '.woodev-records__col-actions {', scss.indexOf( '.woocommerce-table__table:has(' ) ) );
+
+		expect( selector ).toMatch( /\.woodev-records__activity:not\( \.screen-reader-text \)/ );
+		expect( block( scss, '.woodev-records__col-actions .woodev-records__reason' ) ).not.toMatch( /min-width/ );
+	} );
+} );
+
 describe( 'the text of a busy or locked row in the actions column (#1937)', () => {
 	const rule = block( scss, '.woodev-records__col-actions .woodev-records__reason' );
 
