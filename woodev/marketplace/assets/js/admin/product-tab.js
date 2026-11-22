@@ -247,13 +247,22 @@
 	);
 
 	/**
-	 * Picks the account the tab shows: its block is shown, the others are hidden (all of them stay in the form, so «Обновить» saves each).
+	 * Picks the account that «Product data» shows: its block in the tab is shown, the others are hidden (all of them stay in the form, so
+	 * «Обновить» saves each). The «Variations» tab follows the same pick: a variation's block and its slot in the collapsed header carry the
+	 * account and the marketplace they belong to, so the same select decides which of them is on screen, one slot per marketplace.
 	 *
-	 * @param {jQuery} $panel  The tab's panel.
-	 * @param {string} account Account id.
+	 * @param {jQuery} $panel      The tab's panel.
+	 * @param {string} marketplace Marketplace id of the select, so another marketplace's variations are left alone.
+	 * @param {string} account     Account id.
 	 */
-	function showAccount( $panel, account ) {
-		$panel.find( '.woodev-mp-block[data-account]' ).each(
+	function showAccount( $panel, marketplace, account ) {
+		var $variationParts = $( '#variable_product_options [data-account]' ).filter(
+			function () {
+				return this.getAttribute( 'data-marketplace' ) === marketplace;
+			}
+		);
+
+		$panel.find( '.woodev-mp-block[data-account]' ).add( $variationParts ).each(
 			function () {
 				$( this ).prop( 'hidden', String( $( this ).data( 'account' ) ) !== String( account ) );
 			}
@@ -261,23 +270,36 @@
 	}
 
 	/**
-	 * Sets up the account select, when the tab has one (two or more accounts): moves it into the header of «Product data», right of
-	 * Virtual / Downloadable, shows it only while this tab is open, and starts on the account the merchant used last in this browser
-	 * (else the first one).
+	 * Finds the tab link of the marketplace a select belongs to: the link that points at the select's own panel. A page with one marketplace tab
+	 * and a panel without an id (older markup) falls back to that one link.
+	 *
+	 * @param {jQuery} $panel The marketplace's panel of «Product data».
+	 * @return {jQuery} The tab's `<li>`; empty when none is found.
 	 */
-	function setUpAccountSwitch() {
-		var $switch = $( '.woodev-mp-account-switch' );
+	function tabLinkOf( $panel ) {
+		var $links  = $( '.woodev-mp-tab-link' );
+		var panelId = $panel.attr( 'id' );
+		var $own    = panelId ? $links.has( 'a[href="#' + panelId + '"]' ) : $();
 
-		if ( ! $switch.length ) {
-			return;
-		}
+		return $own.length ? $own : ( 1 === $links.length ? $links : $() );
+	}
 
-		var $panel  = $switch.closest( '.woodev-mp-tab' );
-		var $select = $switch.find( 'select' );
-		var key     = 'woodev_mp_' + $switch.data( 'remember' );
-		var $header = $( '#woocommerce-product-data .hndle' ).first();
-		var $link   = $( '.woodev-mp-tab-link' );
-		var last    = '';
+	/**
+	 * Sets up one account select (a marketplace with two or more accounts has one; each marketplace on the page has its own): moves it into the
+	 * header of «Product data», right of Virtual / Downloadable, shows it only while its tab or the «Variations» tab is open, and starts on the
+	 * account the merchant used last in this browser (else the first one). Variations that WooCommerce loads or adds later get the pick as they
+	 * arrive.
+	 *
+	 * @param {jQuery} $switch The `.woodev-mp-account-switch` of one marketplace.
+	 */
+	function setUpOneAccountSwitch( $switch ) {
+		var $panel      = $switch.closest( '.woodev-mp-tab' );
+		var $select     = $switch.find( 'select' );
+		var marketplace = $switch.attr( 'data-marketplace' ) || '';
+		var key         = 'woodev_mp_' + $switch.data( 'remember' );
+		var $header     = $( '#woocommerce-product-data .hndle' ).first();
+		var $link       = tabLinkOf( $panel );
+		var last        = '';
 
 		try {
 			last = window.localStorage.getItem( key ) || '';
@@ -289,12 +311,12 @@
 			$select.val( last );
 		}
 
-		showAccount( $panel, $select.val() );
+		showAccount( $panel, marketplace, $select.val() );
 
 		$select.on(
 			'change',
 			function () {
-				showAccount( $panel, $select.val() );
+				showAccount( $panel, marketplace, $select.val() );
 
 				try {
 					window.localStorage.setItem( key, $select.val() );
@@ -302,6 +324,15 @@
 					// Private window: the choice simply is not remembered.
 					return;
 				}
+			}
+		);
+
+		// The variations arrive after the tab is opened (loaded again after a save or a page; «Add manually» adds one without a load): they start
+		// on the account that is picked now.
+		$( document ).on(
+			'woocommerce_variations_loaded woocommerce_variations_added',
+			function () {
+				showAccount( $panel, marketplace, $select.val() );
 			}
 		);
 
@@ -315,8 +346,11 @@
 			return; // No tab link to follow: the select simply stays in the header.
 		}
 
+		// The select drives the tab of its marketplace and the «Variations» tab, so it is shown while either is open.
 		var sync = function () {
-			$switch.prop( 'hidden', ! $link.hasClass( 'active' ) );
+			var $variationsTab = $( '#woocommerce-product-data ul.wc-tabs li.variations_tab' );
+
+			$switch.prop( 'hidden', ! ( $link.hasClass( 'active' ) || $variationsTab.hasClass( 'active' ) ) );
 		};
 
 		sync();
@@ -326,6 +360,17 @@
 			function () {
 				// WooCommerce marks the clicked tab active in its own handler; read it after that.
 				window.setTimeout( sync, 0 );
+			}
+		);
+	}
+
+	/**
+	 * Sets up the account select of every marketplace on the page.
+	 */
+	function setUpAccountSwitch() {
+		$( '.woodev-mp-account-switch' ).each(
+			function () {
+				setUpOneAccountSwitch( $( this ) );
 			}
 		);
 	}

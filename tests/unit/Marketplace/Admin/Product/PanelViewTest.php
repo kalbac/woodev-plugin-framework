@@ -464,6 +464,78 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( '<span class="woodev-mp-badge__icon woodev-mp-badge__icon--problem" aria-hidden="true"></span></button><template', $two, 'the warning mark is to the right of the words' );
 	}
 
+	/**
+	 * Renders the collapsed header and the opened panel of a variation of a product with two accounts.
+	 *
+	 * @param array<string,mixed> $extra Keys to add to the screen (`default_account`).
+	 * @return array{header:string,panel:string}
+	 */
+	private function render_variation_of_two_accounts( array $extra = [] ): array {
+		$second            = $this->block();
+		$second['account'] = new Account( 5, 'fake', 'Два', true );
+		$screen            = $extra + [
+			'blocks'       => [ $this->block(), $second ],
+			'nonce'        => 'save-nonce',
+			'loop'         => 0,
+			'settings_url' => 'https://example.test/settings',
+			'mappings_url' => 'https://example.test/mappings',
+		];
+		$view              = new Panel_View( new Screen_Names( 'fake', 'Fake' ) );
+
+		ob_start();
+		$view->render_variation_header( $screen );
+		$header = (string) ob_get_clean();
+
+		ob_start();
+		$view->render_variation( $screen );
+		$panel = (string) ob_get_clean();
+
+		return [
+			'header' => $header,
+			'panel'  => $panel,
+		];
+	}
+
+	public function test_with_several_accounts_a_variation_shows_one_account_and_the_select_picks_it(): void {
+		$html = $this->render_variation_of_two_accounts();
+
+		$this->assertSame( 1, substr_count( $html['header'], '<span class="woodev-mp-header-state" data-marketplace="fake" data-account="3">' ), 'the first account is shown in the header at first' );
+		$this->assertSame( 1, substr_count( $html['header'], '<span class="woodev-mp-header-state" data-marketplace="fake" data-account="5" hidden>' ), 'the other account has its slot, hidden' );
+		$this->assertStringContainsString( ' woodev-mp-block--variation" data-marketplace="fake" data-account="3">', $html['panel'] );
+		$this->assertStringContainsString( ' woodev-mp-block--variation" data-marketplace="fake" data-account="5" hidden>', $html['panel'], 'the other account stays in the form, so it is saved, but is hidden' );
+	}
+
+	public function test_a_variation_starts_on_the_default_account_of_the_screen(): void {
+		$html = $this->render_variation_of_two_accounts( [ 'default_account' => 5 ] );
+
+		$this->assertStringContainsString( 'data-account="3" hidden><span class="woodev-mp-header-state__name">', $html['header'] );
+		$this->assertStringContainsString( 'data-account="5"><span class="woodev-mp-header-state__name">', $html['header'] );
+		$this->assertStringContainsString( 'data-account="3" hidden>', $html['panel'] );
+		$this->assertStringContainsString( 'data-account="5">', $html['panel'] );
+	}
+
+	public function test_the_account_select_names_its_marketplace_so_the_variations_of_another_one_are_left_alone(): void {
+		$second            = $this->block();
+		$second['account'] = new Account( 5, 'fake', 'Магазин два', true );
+
+		$this->assertStringContainsString( 'class="woodev-mp-account-switch" data-remember="woodev_fake_account" data-marketplace="fake"', $this->render_tab( [ $this->block(), $second ], [] ) );
+	}
+
+	public function test_with_one_account_a_variation_has_nothing_to_hide(): void {
+		ob_start();
+		( new Panel_View( new Screen_Names( 'fake', 'Fake' ) ) )->render_variation_header(
+			[
+				'blocks'       => [ $this->block() ],
+				'settings_url' => 'https://example.test/settings',
+				'mappings_url' => 'https://example.test/mappings',
+			]
+		);
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'data-account', $html );
+		$this->assertStringNotContainsString( ' hidden>', $html );
+	}
+
 	public function test_the_default_account_is_the_one_the_screen_names_and_the_variants_headings_are_short(): void {
 		$second            = $this->block();
 		$second['account'] = new Account( 5, 'fake', 'Магазин два', true );

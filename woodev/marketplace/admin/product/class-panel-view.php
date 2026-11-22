@@ -103,8 +103,7 @@ final class Panel_View {
 		$several = count( $screen['blocks'] ) > 1;
 
 		// The one shown at first: `default_account` (the first enabled account that is connected), else the first block.
-		$default = (int) ( $screen['default_account'] ?? 0 );
-		$default = $default > 0 ? $default : (int) reset( $screen['blocks'] )['account']->id();
+		$default = $this->shown_account( $screen );
 
 		if ( $several ) {
 			$this->account_switch( $screen['blocks'], $default );
@@ -125,6 +124,7 @@ final class Panel_View {
 		}
 
 		$several = count( $screen['blocks'] ) > 1;
+		$shown   = $several ? $this->shown_account( $screen ) : 0;
 
 		echo '<div class="woodev-mp-variation">';
 		printf( '<input type="hidden" name="%1$s" value="%2$s" />', esc_attr( $this->names->nonce_field() ), esc_attr( (string) $screen['nonce'] ) );
@@ -133,7 +133,8 @@ final class Panel_View {
 			$base = sprintf( '%s[%d][%d]', $this->names->variation_key(), (int) $screen['loop'], $block['account']->id() );
 			$id   = sprintf( '%s_v%d_a%d_', $this->names->tab_key(), (int) $screen['loop'], $block['account']->id() );
 
-			echo '<div class="' . esc_attr( self::WRAPPER_CLASS ) . ' woodev-mp-block--variation">';
+			// Every account's block stays in the form (so «Обновить» saves each); the account select of «Product data» shows one of them.
+			echo '<div class="' . esc_attr( self::WRAPPER_CLASS ) . ' woodev-mp-block--variation"' . $this->account_part_attributes( $block, $shown, $several ) . '>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in account_part_attributes().
 			printf( '<h4>%s %s</h4>', esc_html( ( $several ? $this->names->name() . ' · ' . $block['account']->name() : $this->names->name() ) . ':' ), $this->state_badge( $block['badge'], $this->problems( $block, $screen ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in state_badge().
 			$this->identifiers( $block, $base, $id );
 			$this->settings_fields( $block, $base, $id, false );
@@ -148,14 +149,17 @@ final class Panel_View {
 
 	public function render_variation_header( array $screen ): void {
 		$several = count( $screen['blocks'] ) > 1;
+		$shown   = $several ? $this->shown_account( $screen ) : 0;
 
 		// One slot per marketplace (a name and its badge on one baseline, with room to its right): another marketplace's plugin prints its own
-		// slot after this one, so the header holds as many as there are marketplaces.
+		// slot after this one, so the header holds as many as there are marketplaces. With several accounts every account has a slot and the
+		// account select of «Product data» leaves visible the one of the picked account, so the header shows one badge per marketplace.
 		foreach ( $screen['blocks'] as $block ) {
 			printf(
-				'<span class="woodev-mp-header-state"><span class="woodev-mp-header-state__name">%1$s</span>%2$s</span>',
+				'<span class="woodev-mp-header-state"%3$s><span class="woodev-mp-header-state__name">%1$s</span>%2$s</span>',
 				esc_html( $several ? $this->names->name() . ' · ' . $block['account']->name() : $this->names->name() ),
-				$this->state_badge( $block['badge'], $this->problems( $block, $screen ) ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in state_badge().
+				$this->state_badge( $block['badge'], $this->problems( $block, $screen ) ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in state_badge().
+				$this->account_part_attributes( $block, $shown, $several ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in account_part_attributes().
 			);
 		}
 	}
@@ -219,7 +223,7 @@ final class Panel_View {
 
 	/**
 	 * Prints the select of the account the tab shows. It is printed at the top of the tab; the script moves it into the header of «Product data»
-	 * (right of Virtual / Downloadable) and shows it only while this tab is open.
+	 * (right of Virtual / Downloadable) and shows it while this tab or the «Variations» tab is open. The same account is shown in both.
 	 *
 	 * @param array<int,array<string,mixed>> $blocks  Blocks, one per account.
 	 * @param int                            $default Account shown until the merchant picks another.
@@ -234,11 +238,45 @@ final class Panel_View {
 		}
 
 		printf(
-			'<div class="woodev-mp-account-switch" data-remember="%1$s"><label for="%1$s">%2$s</label><select id="%1$s" class="woodev-mp-account-select">%3$s</select></div>',
+			'<div class="woodev-mp-account-switch" data-remember="%1$s" data-marketplace="%4$s"><label for="%1$s">%2$s</label><select id="%1$s" class="woodev-mp-account-select">%3$s</select></div>',
 			esc_attr( $id ),
 			esc_html( sprintf( /* translators: %s: marketplace name. */ __( 'Аккаунт %s:', 'woodev-plugin-framework' ), $this->names->name() ) ),
-			$options // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
+			$options, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
+			esc_attr( $this->names->id() )
 		);
+	}
+
+	/**
+	 * Tells which account is shown at first: the screen's `default_account` (the first enabled account that is connected), else the first block.
+	 * The tab and the variations name it the same way, so the select and every account part agree before the script runs.
+	 *
+	 * @param array<string,mixed> $screen Screen with at least one block.
+	 * @return int Account id.
+	 */
+	private function shown_account( array $screen ): int {
+		$default = (int) ( $screen['default_account'] ?? 0 );
+
+		return $default > 0 ? $default : (int) reset( $screen['blocks'] )['account']->id();
+	}
+
+	/**
+	 * The attributes that tie a part of a variation (its block in the opened variation, its slot in the collapsed header) to one account, so that
+	 * the account select of «Product data» can show the picked account's part and hide the others, as it does for the blocks of the tab. A product
+	 * with one account has no select and nothing to hide.
+	 *
+	 * @param array<string,mixed> $block   Block of the account.
+	 * @param int                 $shown   Account shown at first.
+	 * @param bool                $several Whether the product has more than one account.
+	 * @return string Attributes with a leading space, escaped; empty with one account.
+	 */
+	private function account_part_attributes( array $block, int $shown, bool $several ): string {
+		if ( ! $several ) {
+			return '';
+		}
+
+		$account = (int) $block['account']->id();
+
+		return sprintf( ' data-marketplace="%s" data-account="%d"%s', esc_attr( $this->names->id() ), $account, $shown === $account ? '' : ' hidden' );
 	}
 
 	private function parent_fields( array $block, string $base, string $id, array $screen ): void {
