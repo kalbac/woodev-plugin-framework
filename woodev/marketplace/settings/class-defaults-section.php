@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
+use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Settings\Settings_Group;
 use Woodev\Framework\Settings\Settings_Section;
 
@@ -59,6 +60,14 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 	private $price_rules_changed_hook;
 
 	/**
+	 * Action fired with an account id when the account may now need its recurring poll of postings
+	 * (`Job_Names::hook( 'account_saved' )`).
+	 *
+	 * @var string
+	 */
+	private $account_saved_hook;
+
+	/**
 	 * The adapter's own default fields, when it implements {@see Settings_Extension}.
 	 *
 	 * @var Extension_Defaults|null
@@ -87,6 +96,7 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 		$this->adapter                  = $adapter;
 		$this->accounts                 = $accounts;
 		$this->price_rules_changed_hook = ( new Job_Names( $plugin_id ) )->hook( 'account_price_rules_changed' );
+		$this->account_saved_hook       = ( new Job_Names( $plugin_id ) )->hook( Posting_Jobs::ACCOUNT_SAVED );
 	}
 
 	/**
@@ -255,6 +265,23 @@ final class Defaults_Section implements Settings_Section_Provider, Table_Backed_
 
 		if ( ! $this->is_boolean( $field ) ) {
 			$this->queue_price_recompute();
+		}
+
+		if ( 'orders_enabled' === $field ) {
+			$this->announce_exchange_followers();
+		}
+	}
+
+	/**
+	 * Tells the plugin that every account that follows the shared exchange values may now need its recurring poll of postings.
+	 *
+	 * @return void
+	 */
+	private function announce_exchange_followers(): void {
+		foreach ( $this->accounts->all( $this->adapter->id(), true ) as $account ) {
+			if ( ! Effective_Settings::uses_own( $account->settings(), Effective_Settings::GROUP_EXCHANGE ) ) {
+				do_action( $this->account_saved_hook, $account->id() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names (`woodev_{plugin_id}_account_saved`).
+			}
 		}
 	}
 

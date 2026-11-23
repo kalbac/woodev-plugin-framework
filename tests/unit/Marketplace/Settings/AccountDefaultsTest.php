@@ -525,6 +525,54 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertFalse( Effective_Settings::uses_own( $created->settings(), Effective_Settings::GROUP_EXCHANGE ) );
 	}
 
+	public function test_an_account_created_or_its_stock_mode_changed_announces_that_it_was_saved(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$handler             = $this->handler( $adapter, $store );
+
+		// At least once for the new account (its switch is saved after it) and once for the changed stock mode.
+		Actions\expectDone( 'woodev_fake_mp_account_saved' )->atLeast()->times( 2 );
+
+		$handler->get_setting( 'account_new_name' )->set_value( 'Fresh' );
+		$handler->get_setting( 'account_new_merchant_uid' )->set_value( '555' );
+		$handler->get_setting( 'account_new_access_token' )->set_value( 'tok' );
+		$handler->save();
+
+		$id = $store->all( Sqlite_Tables::MARKETPLACE_ID, false )[0]->id();
+
+		$this->handler( $adapter, $store )->update_value( "account_{$id}_stock_mode", Wpdb_Account_Store::STOCK_OFF );
+	}
+
+	public function test_switching_the_exchange_group_to_the_defaults_announces_the_account(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Own', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ], null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] ) );
+		$store->update_fields( $id, [ 'orders_enabled' => false ] );
+		$store->update_settings(
+			$id,
+			static function ( array $current ): array {
+				$current[ Effective_Settings::OVERRIDES_KEY ][ Effective_Settings::GROUP_EXCHANGE ] = true;
+
+				return $current;
+			}
+		);
+
+		Actions\expectDone( 'woodev_fake_mp_account_saved' )->once()->with( $id );
+
+		$this->handler( $adapter, $store )->update_value( "account_{$id}_override_exchange", 'defaults' );
+
+		$this->assertTrue( Posting_Jobs::wants_postings( $store->get( $id ) ), 'the shared orders switch is on, so the account now needs its poll' );
+	}
+
+	public function test_saving_the_shared_orders_default_announces_the_accounts_that_follow_it(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$credentials         = [ 'merchant_uid' => '1', 'access_token' => 't1' ];
+		$following           = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Follows', true, $credentials, null, [ Effective_Settings::OVERRIDES_KEY => Effective_Settings::default_overrides() ] ) );
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Own', true, [ 'merchant_uid' => '2', 'access_token' => 't2' ], null, [ Effective_Settings::OVERRIDES_KEY => [ Effective_Settings::GROUP_EXCHANGE => true ] + Effective_Settings::default_overrides() ] ) );
+
+		Actions\expectDone( 'woodev_fake_mp_account_saved' )->once()->with( $following );
+
+		( new Defaults_Section( $adapter, $store, self::PLUGIN ) )->write( 'defaults_orders_enabled', true );
+	}
+
 	public function test_the_price_rule_is_validated_for_every_account_that_submits_one(): void {
 		[ $adapter, $store ] = $this->adapter_and_store();
 		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ] ) );
