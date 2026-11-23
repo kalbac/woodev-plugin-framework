@@ -1,13 +1,31 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.17] — 2026-11-23
+### Bug Fixes
+- **marketplace**: Stuck postings count from the marketplace's processing date, share per account (#1933)
+
+- **marketplace**: A stored label stays downloadable whatever the write gate says (ozon#129)
+
+- **marketplace**: The order-screen «Этикетка» button stays on for a stored label (ozon#129)
+
+- **marketplace**: One date format on every marketplace screen (#1931)
+
+
+### Features
+- **marketplace**: Offer «Отменить» and «Этикетки» only where the marketplace and the key allow them (ozon#129)
+
+- **marketplace**: Account filter, «Кабинет» column and buyer-data text in the WC orders list
+
+
+### Build
+- Bundles for the analytics share and stuck-postings date (#1933)
+
+
+
 ## [2.1.16] — 2026-11-23
 ### Bug Fixes
 - **settings**: Gate the connection test button on required fields only
-
-- **admin-records**: Fit «Товары сайта» in the 784px card with the expand column (#1945)
-
-- **admin-records**: The marketplace orders table fits the card and shows its scroll bar (#1930)
 
 - **marketplace**: Load the orders of a table page by post__in, not include
 
@@ -22,6 +40,10 @@ All notable changes to Woodev Plugin Framework are documented here.
 - **admin-records**: Drop an open filter-wide preview when a row goes busy (#1944)
 
 - **admin-records**: Say why a stale filter-wide confirmation was refused (#1944)
+
+- **admin-records**: Fit «Товары сайта» in the 784px card with the expand column (#1945)
+
+- **admin-records**: The marketplace orders table fits the card and shows its scroll bar (#1930)
 
 - **marketplace**: Make account credential fields required settings (#1926)
 
