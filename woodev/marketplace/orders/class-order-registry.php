@@ -229,6 +229,22 @@ final class Order_Registry {
 	}
 
 	/**
+	 * Lists the WooCommerce orders an account's postings were made into: what the orders list filters a cabinet by.
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param int $account_id Account id.
+	 * @return int[] WooCommerce order ids; empty when the account has no order.
+	 */
+	public function order_ids_of_account( int $account_id ): array {
+		$ids = $this->db->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The orders list filters by the current registry.
+			$this->db->prepare( 'SELECT DISTINCT wc_order_id FROM %i WHERE account_id = %d AND wc_order_id > 0', $this->table, $account_id )
+		);
+
+		return array_map( 'intval', (array) $ids );
+	}
+
+	/**
 	 * Registers the WooCommerce order of a group: succeeds only for the claim holder and only while no order is registered.
 	 *
 	 * @since 2.0.29
