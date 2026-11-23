@@ -167,7 +167,7 @@ final class OrdersAnalyticsControllerTest extends TestCase {
 		$this->assertFalse( $first->data['cached'] );
 		$this->assertSame( 'RUB', $first->data['currency'] );
 		$this->assertSame( '1', $first->data['account'] );
-		$this->assertSame( 'Отправления, которые ждут упаковки или отгрузки дольше 24 часов с момента, когда заказ пришёл в магазин.', $first->data['stuck']['hint'] );
+		$this->assertSame( 'Отправления, которые ждут упаковки или отгрузки дольше 24 часов с момента, когда они поступили в обработку.', $first->data['stuck']['hint'] );
 
 		$second = $controller->get_report( $this->request( [ 'account' => '1' ] ) );
 

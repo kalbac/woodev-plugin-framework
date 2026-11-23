@@ -315,7 +315,7 @@ final class Registry_Stock_Accounting {
 			];
 		}
 
-		if ( ! $this->registry->record( $account->id(), $order->group_key(), $token, $order->status_raw(), $terminal, $lines, null ) ) {
+		if ( ! $this->registry->record( $account->id(), $order->group_key(), $token, $order->status_raw(), $terminal, $lines, null, $order->processing_since() ) ) {
 			throw Order_Claim_Exception::lost( $order->group_key() ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 	}

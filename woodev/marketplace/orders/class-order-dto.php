@@ -80,7 +80,7 @@ final class Order_DTO {
 	private $buyer;
 
 	/**
-	 * Dates (`created_at`, `updated_at`, ...) as ISO 8601 strings with an explicit zone (`Z` or an offset).
+	 * Dates (`created_at`, `updated_at`, the optional `processing_since`, ...) as ISO 8601 strings with an explicit zone (`Z` or an offset).
 	 *
 	 * @var array<string,string>
 	 */
@@ -204,6 +204,23 @@ final class Order_DTO {
 	 */
 	public function updated_at_instant(): ?\DateTimeImmutable {
 		return isset( $this->dates['updated_at'] ) ? self::parse_instant( $this->dates['updated_at'] ) : null;
+	}
+
+	/**
+	 * Returns when the marketplace says the order entered processing (the optional date `processing_since`), as a GMT time ready for the
+	 * registry. An adapter that knows it puts it among the dates (Ozon: `in_process_at`); the analytics then counts a stuck posting from it
+	 * instead of from the moment the shop first saw the posting, which a history import moves to the import day.
+	 *
+	 * A date that is not a time with an explicit zone is treated as not sent: a marketplace's odd value must not stop an order import.
+	 *
+	 * @since 2.1.16
+	 *
+	 * @return string|null `Y-m-d H:i:s` in UTC, or null when the adapter did not say.
+	 */
+	public function processing_since(): ?string {
+		$instant = isset( $this->dates['processing_since'] ) ? self::parse_instant( $this->dates['processing_since'] ) : null;
+
+		return null === $instant ? null : $instant->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 	}
 
 	/**

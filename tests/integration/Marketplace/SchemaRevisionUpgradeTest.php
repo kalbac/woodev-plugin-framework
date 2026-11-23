@@ -214,6 +214,47 @@ class SchemaRevisionUpgradeTest extends TestCase {
 	}
 
 	/**
+	 * A site at revision 3 has the postings registry without `processing_since` (#1933): the first request adds the column, an existing
+	 * row keeps its data and reads NULL there (so the stuck postings fall back to `first_seen_at`), and the revision moves on.
+	 *
+	 * @return void
+	 */
+	public function test_the_first_request_adds_the_processing_date_to_the_postings_and_keeps_the_rows(): void {
+		foreach ( $this->schema->statements( $this->conn->prefix, $this->conn->get_charset_collate() ) as $name => $statement ) {
+			// Every table as the current release makes it, the postings as revision 3 made them.
+			$statement = $name === $this->table( 'postings' ) ? str_replace( "processing_since datetime NULL DEFAULT NULL,\n\t\t\t", '', $statement ) : $statement;
+
+			$this->assertNotFalse( $this->conn->query( $statement ) );
+		}
+
+		$this->assertNotContains( 'processing_since', (array) $this->conn->get_col( 'SHOW COLUMNS FROM ' . $this->table( 'postings' ), 0 ), 'The fixture is the old shape.' );
+
+		$this->conn->insert(
+			$this->table( 'postings' ),
+			[
+				'account_id'    => 1,
+				'external_key'  => 'P-1',
+				'wc_order_id'   => 700,
+				'status_raw'    => 'awaiting_packaging',
+				'first_seen_at' => '2026-11-20 10:00:00',
+			]
+		);
+		update_option( 'woodev_' . self::PLUGIN_ID . '_version', self::VERSION );
+		update_option( 'woodev_' . self::PLUGIN_ID . '_schema_revision', 3 );
+
+		( new Lifecycle( $this->plugin(), $this->schema ) )->bring_schema_up_to_date();
+
+		$this->assertContains( 'processing_since', (array) $this->conn->get_col( 'SHOW COLUMNS FROM ' . $this->table( 'postings' ), 0 ) );
+		$this->assertSame( (string) Schema::REVISION, (string) get_option( 'woodev_' . self::PLUGIN_ID . '_schema_revision' ) );
+
+		$row = $this->conn->get_row( 'SELECT status_raw, first_seen_at, processing_since FROM ' . $this->table( 'postings' ) . " WHERE external_key = 'P-1'", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The test's own table.
+
+		$this->assertSame( 'awaiting_packaging', $row['status_raw'], 'The row survives dbDelta.' );
+		$this->assertSame( '2026-11-20 10:00:00', $row['first_seen_at'] );
+		$this->assertNull( $row['processing_since'], 'An old row has no processing date: it counts from first_seen_at.' );
+	}
+
+	/**
 	 * Every current table exists and only `sync_state.pending_source` is missing, and the database refuses exactly the `ALTER` that
 	 * would add it: `dbDelta` returns normally and the table names are all there, yet no revision may be stored (#1829). Once the
 	 * `ALTER` is allowed, the retry adds the column, stores the revision and leaves the queued rows as they were.

@@ -293,7 +293,8 @@ final class Orders_Analytics_Report {
 		return [
 			'accounts' => $sums,
 			'days'     => $days,
-			'shop'     => $this->query->shop_revenue( $scope, $this->created_via ),
+			// One account selected: its own part of the shop's revenue; every account: the marketplace's.
+			'shop'     => $this->query->shop_revenue( $scope, $this->created_via, null === $request['account'] ? null : (int) $request['account'] ),
 		];
 	}
 
@@ -357,7 +358,8 @@ final class Orders_Analytics_Report {
 	}
 
 	/**
-	 * The stuck postings: how many and the oldest, with how long each has waited.
+	 * The stuck postings: how many and the oldest, with how long each has waited since the marketplace took it into processing (the
+	 * moment the shop first saw it when the adapter does not say).
 	 *
 	 * @param int[]    $accounts Account ids.
 	 * @param string[] $waiting  The adapter's waiting statuses.
@@ -371,7 +373,7 @@ final class Orders_Analytics_Report {
 		$items = [];
 
 		foreach ( $found['items'] as $item ) {
-			$seen    = strtotime( $item['first_seen_at'] . ' UTC' );
+			$seen    = strtotime( $item['waiting_since'] . ' UTC' );
 			$items[] = [
 				'order_id'  => $item['order_id'],
 				'order_url' => (string) call_user_func( $this->order_url, $item['order_id'] ),
@@ -444,7 +446,8 @@ final class Orders_Analytics_Report {
 	}
 
 	/**
-	 * The marketplace's share of the shop's revenue, with the previous period's.
+	 * The marketplace's share of the shop's revenue, with the previous period's. With one account selected the marketplace part is that
+	 * account's, so the share is the account's.
 	 *
 	 * @param array{shop:float,marketplace:float}      $current  Current period.
 	 * @param array{shop:float,marketplace:float}|null $previous Previous period.

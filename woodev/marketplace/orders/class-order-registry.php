@@ -263,27 +263,29 @@ final class Order_Registry {
 	 *
 	 * @since 2.0.29
 	 *
-	 * @param int                                                       $account_id  Account id.
-	 * @param string                                                    $key         Group key.
-	 * @param string                                                    $token       Claim token.
-	 * @param string                                                    $status_raw  Marketplace status.
-	 * @param bool                                                      $is_terminal Whether the order will not change any more.
-	 * @param array<int,array{offer_id:string,sku:string,qty_seen:int}> $lines    Lines as the marketplace sent them.
-	 * @param array<string,mixed>|null                                  $members     Member snapshots of a grouped order; null for one-member orders.
+	 * @param int                                                       $account_id       Account id.
+	 * @param string                                                    $key              Group key.
+	 * @param string                                                    $token            Claim token.
+	 * @param string                                                    $status_raw       Marketplace status.
+	 * @param bool                                                      $is_terminal      Whether the order will not change any more.
+	 * @param array<int,array{offer_id:string,sku:string,qty_seen:int}> $lines            Lines as the marketplace sent them.
+	 * @param array<string,mixed>|null                                  $members          Member snapshots of a grouped order; null for one-member orders.
+	 * @param string|null                                               $processing_since GMT `Y-m-d H:i:s` the marketplace says the order entered processing ({@see Order_DTO::processing_since()}); null leaves what the row already holds (since 2.1.16).
 	 * @return bool False when the claim was lost.
 	 * @throws \RuntimeException When the database refused the write (never read as «claim lost»).
 	 */
-	public function record( int $account_id, string $key, string $token, string $status_raw, bool $is_terminal, array $lines, ?array $members ): bool {
+	public function record( int $account_id, string $key, string $token, string $status_raw, bool $is_terminal, array $lines, ?array $members, ?string $processing_since = null ): bool {
 		$row    = $this->find( $account_id, $key );
 		$merged = self::merge_lines( null === $row ? [] : $row['lines'], $lines );
 		return $this->write_if_claimed(
 			$this->table,
 			self::key( $account_id, $key ),
 			$token,
-			'status_raw = %s, is_terminal = %d, `lines` = %s, members = ' . ( null === $members ? 'NULL' : '%s' ) . ', refreshed_at = %s',
+			'status_raw = %s, is_terminal = %d, `lines` = %s, members = ' . ( null === $members ? 'NULL' : '%s' ) . ( null === $processing_since ? '' : ', processing_since = %s' ) . ', refreshed_at = %s',
 			array_merge(
 				[ substr( $status_raw, 0, 32 ), $is_terminal ? 1 : 0, (string) json_encode( $merged ) ], // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The layer uses no WordPress function.
 				null === $members ? [] : [ (string) json_encode( $members ) ], // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The layer uses no WordPress function.
+				null === $processing_since ? [] : [ $processing_since ],
 				[ $this->claim_clock( 0 ) ]
 			)
 		);

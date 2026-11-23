@@ -13089,10 +13089,6 @@ msgstr ""
 msgid "выручка магазина: %s"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:182
-msgid "по всем аккаунтам маркетплейса"
-msgstr ""
-
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:183
 msgid "Заказы по аккаунтам"
 msgstr ""
@@ -13179,7 +13175,7 @@ msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:367
 #, php-format
-msgid "Отправления, которые ждут упаковки или отгрузки дольше %d часа с момента, когда заказ пришёл в магазин."
+msgid "Отправления, которые ждут упаковки или отгрузки дольше %d часа с момента, когда они поступили в обработку."
 msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:392

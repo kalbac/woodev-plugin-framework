@@ -216,7 +216,8 @@ final class Registry_Order_Writer implements Order_Writer {
 			$order->status_raw(),
 			(bool) call_user_func( $this->is_terminal, $order ),
 			self::registry_lines( $order ),
-			$snapshots
+			$snapshots,
+			$order->processing_since()
 		);
 
 		if ( ! $recorded ) {
@@ -358,6 +359,11 @@ final class Registry_Order_Writer implements Order_Writer {
 
 		$first = reset( $members );
 		$dates = $first instanceof Order_DTO && isset( $first->dates()['created_at'] ) ? [ 'created_at' => $first->dates()['created_at'] ] : [];
+
+		// The member being written says when its assembly order entered processing; the registry keeps the last date it was told.
+		if ( isset( $member->dates()['processing_since'] ) ) {
+			$dates['processing_since'] = $member->dates()['processing_since'];
+		}
 
 		return new Order_DTO(
 			$member->account_id(),

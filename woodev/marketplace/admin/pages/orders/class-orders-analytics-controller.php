@@ -50,7 +50,7 @@ final class Orders_Analytics_Controller {
 	/**
 	 * Version of the answer's shape and SQL: part of the cache key, raised when either changes.
 	 */
-	public const SCHEMA_VERSION = 1;
+	public const SCHEMA_VERSION = 2;
 
 	/**
 	 * Prefix of the kept answers.
@@ -179,7 +179,6 @@ final class Orders_Analytics_Controller {
 			'cancelledNote'   => __( 'отменено заказов: %s', 'woodev-plugin-framework' ),
 			/* translators: %s: the shop's revenue in the period. */
 			'shareNote'       => __( 'выручка магазина: %s', 'woodev-plugin-framework' ),
-			'shareAllNote'    => __( 'по всем аккаунтам маркетплейса', 'woodev-plugin-framework' ),
 			'chartOrders'     => __( 'Заказы по аккаунтам', 'woodev-plugin-framework' ),
 			'chartRevenue'    => __( 'Выручка по аккаунтам', 'woodev-plugin-framework' ),
 			'chartItems'      => __( 'Аккаунты', 'woodev-plugin-framework' ),
@@ -297,7 +296,7 @@ final class Orders_Analytics_Controller {
 		 *
 		 * @since 2.1.13
 		 *
-		 * @param int    $hours     Hours since the shop first saw the posting; 24 by default.
+		 * @param int    $hours     Hours since the marketplace took the posting into processing (the shop first saw it, when the adapter does not say); 24 by default.
 		 * @param string $plugin_id The marketplace plugin.
 		 */
 		$hours = apply_filters( 'woodev_marketplace_stuck_posting_hours', Orders_Analytics_Report::STUCK_HOURS, $this->owner );
@@ -365,8 +364,8 @@ final class Orders_Analytics_Controller {
 		return sprintf(
 			/* translators: %d: hours. */
 			_n(
-				'Отправления, которые ждут упаковки или отгрузки дольше %d часа с момента, когда заказ пришёл в магазин.',
-				'Отправления, которые ждут упаковки или отгрузки дольше %d часов с момента, когда заказ пришёл в магазин.',
+				'Отправления, которые ждут упаковки или отгрузки дольше %d часа с момента, когда они поступили в обработку.',
+				'Отправления, которые ждут упаковки или отгрузки дольше %d часов с момента, когда они поступили в обработку.',
 				$hours,
 				'woodev-plugin-framework'
 			),
