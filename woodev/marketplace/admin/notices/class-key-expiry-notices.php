@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Notices;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Account\Key_Expiry;
+use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 
@@ -191,7 +192,7 @@ final class Key_Expiry_Notices {
 			$label = (string) $account->id();
 		}
 
-		$date = wp_date( 'd.m.Y', $expires_at->getTimestamp() );
+		$date = Date_Text::date( $expires_at->getTimestamp() );
 		$days = Key_Expiry::days_left( $expires_at, $now );
 
 		$lead = sprintf(

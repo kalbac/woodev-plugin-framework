@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * The answer comes from what the plugin stored when it read the posting, so it never calls the marketplace.
  *
- * @since 2.1.16
+ * @since 2.1.17
  */
 interface Posting_Allowed_Actions {
 	/**
@@ -34,7 +34,7 @@ interface Posting_Allowed_Actions {
 	/**
 	 * Lists the framework actions the marketplace allows for the posting of an order.
 	 *
-	 * @since 2.1.16
+	 * @since 2.1.17
 	 *
 	 * @param \WC_Order $order The order of the posting.
 	 * @return string[]|null The allowed ones among {@see self::CANCEL} and {@see self::LABEL}; an empty list means none of them. Null when

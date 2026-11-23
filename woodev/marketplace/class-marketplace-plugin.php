@@ -142,7 +142,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			Deletion_Module::register( $this, $accounts, $wpdb );
 			Diagnostics_Module::register( $this, $accounts );
 			Site_Orders_Module::register( $this, $accounts, $wpdb, $write_gate );
-			Order_Source_Filter::register( $this->get_marketplace_adapter() );
+			Order_Source_Filter::register( $this->get_marketplace_adapter(), $accounts, $wpdb );
 		}
 
 		/**

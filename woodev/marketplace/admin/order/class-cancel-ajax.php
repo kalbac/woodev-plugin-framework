@@ -105,7 +105,7 @@ final class Cancel_Ajax {
 	 * @param Screen_Names             $names     Names.
 	 * @param License_Gate             $license   Licence: no licence in force, no remote call.
 	 * @param callable|null            $log_error `function ( string $line ): void`, for failures that are not a refusal.
-	 * @param Posting_Action_Gate|null $gate      Whether the account can write and the marketplace allows the cancellation (since 2.1.16); null asks nothing.
+	 * @param Posting_Action_Gate|null $gate      Whether the account can write and the marketplace allows the cancellation (since 2.1.17); null asks nothing.
 	 */
 	public function __construct( Admin_Guard $guard, Account_Store $accounts, Order_Meta_Contract $meta, Order_Canceller $canceller, Screen_Names $names, License_Gate $license, ?callable $log_error = null, ?Posting_Action_Gate $gate = null ) {
 		$this->guard     = $guard;

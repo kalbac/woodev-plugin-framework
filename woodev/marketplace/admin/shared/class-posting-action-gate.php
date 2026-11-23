@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * Everything is decided from what the plugin has stored, so no answer costs a call to the marketplace. The server asks again before it
  * acts on a request: an action that is off in the interface is off for a hand-made request too.
  *
- * @since 2.1.16
+ * @since 2.1.17
  */
 final class Posting_Action_Gate {
 	/**
@@ -47,7 +47,7 @@ final class Posting_Action_Gate {
 	/**
 	 * Creates the rule.
 	 *
-	 * @since 2.1.16
+	 * @since 2.1.17
 	 *
 	 * @param Label_Availability           $labels     The label rule.
 	 * @param Posting_Allowed_Actions|null $allowed    The adapter's allowed actions; null for an adapter that has none.
@@ -62,7 +62,7 @@ final class Posting_Action_Gate {
 	/**
 	 * Builds the rule from what an adapter implements: {@see Label_Readiness} and {@see Posting_Allowed_Actions}, each optional.
 	 *
-	 * @since 2.1.16
+	 * @since 2.1.17
 	 *
 	 * @param object        $adapter    The marketplace's adapter.
 	 * @param callable|null $write_gate `function ( Account $account ): bool`, the plugin's write gate; null lets every account write.
@@ -79,7 +79,7 @@ final class Posting_Action_Gate {
 	/**
 	 * Tells why the account cannot write to the marketplace.
 	 *
-	 * @since 2.1.16
+	 * @since 2.1.17
 	 *
 	 * @param Account $account The account of the posting.
 	 * @return string The sentence for the merchant; empty when the account can write.
@@ -95,7 +95,7 @@ final class Posting_Action_Gate {
 	/**
 	 * Tells why a posting cannot be cancelled, apart from being finished (that is the adapter's {@see \Woodev\Framework\Marketplace\Admin\Order\Order_Canceller::is_finished()}).
 	 *
-	 * @since 2.1.16
+	 * @since 2.1.17
 	 *
 	 * @param \WC_Order $order The order of the posting.
 	 * @return string The sentence for the merchant; empty when the marketplace allows it or says nothing.
@@ -112,7 +112,7 @@ final class Posting_Action_Gate {
 	 * Tells why a label cannot be asked for a posting: it is finished, the adapter says it is not ready, or the marketplace has not
 	 * allowed the labels.
 	 *
-	 * @since 2.1.16
+	 * @since 2.1.17
 	 *
 	 * @param \WC_Order $order       The order of the posting.
 	 * @param string    $status      The marketplace's status of the posting, as stored.

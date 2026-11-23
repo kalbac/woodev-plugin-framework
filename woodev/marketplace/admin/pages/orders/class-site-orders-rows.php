@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Plain_Price;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
@@ -79,7 +80,7 @@ final class Site_Orders_Rows {
 	 * @param callable                  $can_edit    `function ( int $order_id ): bool`, the object right to edit an order.
 	 * @param callable                  $is_finished `function ( \WC_Order $order ): bool`, whether the posting can no longer be cancelled.
 	 * @param Posting_Status_Names|null $status_names The adapter's own names of posting statuses, when it has them.
-	 * @param Posting_Action_Gate|null  $gate        Whether «Отменить» and «Этикетки» are on offer for a posting (since 2.1.16); null offers them to everyone who may edit the order.
+	 * @param Posting_Action_Gate|null  $gate        Whether «Отменить» and «Этикетки» are on offer for a posting (since 2.1.17); null offers them to everyone who may edit the order.
 	 */
 	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null, ?Posting_Action_Gate $gate = null ) {
 		$this->offered      = $offered;
@@ -129,8 +130,8 @@ final class Site_Orders_Rows {
 	 * @param array<string,mixed> $item       The registry item.
 	 * @param \WC_Order           $order      Its WooCommerce order.
 	 * @param array<string,mixed> $activity   Activity of the row.
-	 * @param string              $write_refusal Why the account cannot write to the marketplace (since 2.1.16); empty when it can.
-	 * @param bool                $label_stored  Whether a ready label document already covers the posting (since 2.1.16): its download is a read, so the label action stays on.
+	 * @param string              $write_refusal Why the account cannot write to the marketplace (since 2.1.17); empty when it can.
+	 * @param bool                $label_stored  Whether a ready label document already covers the posting (since 2.1.17): its download is a read, so the label action stays on.
 	 * @return array<string,mixed>
 	 */
 	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '', bool $label_stored = false ): array {
@@ -254,7 +255,7 @@ final class Site_Orders_Rows {
 	 * @return string
 	 */
 	private function total( \WC_Order $order ): string {
-		return html_entity_decode( wp_strip_all_tags( (string) wc_price( $order->get_total(), [ 'currency' => $order->get_currency() ] ) ), ENT_QUOTES, 'UTF-8' );
+		return Plain_Price::format( $order->get_total(), (string) $order->get_currency() );
 	}
 
 	/**

@@ -76,7 +76,7 @@ final class Cancel_Modal {
 	 * @param Order_Canceller $canceller   The marketplace's cancellation.
 	 * @param string          $assets_url  Folder URL of the module's assets, with a trailing slash.
 	 * @param string          $version     Plugin version.
-	 * @param callable|null   $unavailable `function ( \WC_Order $order ): string` (since 2.1.16): the sentence that says why the account cannot cancel the posting now — its key cannot write, or the marketplace does not allow it — or '' when it can; null asks nothing.
+	 * @param callable|null   $unavailable `function ( \WC_Order $order ): string` (since 2.1.17): the sentence that says why the account cannot cancel the posting now — its key cannot write, or the marketplace does not allow it — or '' when it can; null asks nothing.
 	 */
 	public function __construct( Screen_Names $names, Order_Canceller $canceller, string $assets_url, string $version, ?callable $unavailable = null ) {
 		$this->names       = $names;

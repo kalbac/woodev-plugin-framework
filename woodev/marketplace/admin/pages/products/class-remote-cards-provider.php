@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
+use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
@@ -44,6 +45,13 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @var Wpdb_Account_Store
 	 */
 	private $accounts;
+
+	/**
+	 * The cabinet currency by account id, read once per request.
+	 *
+	 * @var array<int,string>
+	 */
+	private $currencies = [];
 
 	/**
 	 * @var Wpdb_Card_Store
@@ -448,18 +456,20 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		];
 	}
 
-	/**
-	 * One row of a card.
-	 *
-	 * @param int                 $account_id Account id.
-	 * @param array<string,mixed> $card       Card of the stored list with `wc_product_id`.
-	 * @param array<string,mixed> $state      {@see self::import_state()}.
-	 * @return array<string,mixed>
-	 */
 	private function card_row( int $account_id, array $card, array $state ): array {
 		$offer_id = (string) $card['offer_id'];
+		$card     = $this->with_currency( $account_id, $card );
 
 		return $this->rows->row( $account_id, $card, $state['notes'][ $offer_id ] ?? null, in_array( $offer_id, $state['importing'], true ) );
+	}
+
+	private function with_currency( int $account_id, array $card ): array {
+		if ( ! isset( $this->currencies[ $account_id ] ) ) {
+			$health                          = $this->accounts->health( $account_id );
+			$this->currencies[ $account_id ] = null === $health ? '' : (string) ( $health->extra()['currency'] ?? '' );
+		}
+
+		return '' === $this->currencies[ $account_id ] ? $card : array_merge( $card, [ 'currency' => $this->currencies[ $account_id ] ] );
 	}
 
 	/**
@@ -512,12 +522,20 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 
 		if ( $loaded ) {
 			$count       = $this->cards->count( $account_id );
+			$archived    = $this->cards->archived_count( $account_id );
 			$refreshed   = $this->refreshed_message( $account_id );
-			$sentences[] = sprintf(
-				/* translators: %d: number of cards in the list. */
-				_n( 'В списке %d карточка.', 'В списке карточек: %d.', $count, 'woodev-plugin-framework' ),
-				$count
-			);
+			$sentences[] = $archived > 0
+				? sprintf(
+					/* translators: 1: number of cards in the list, 2: how many of them are in the marketplace's archive. */
+					_n( 'В списке %1$d карточка, из них в архиве — %2$d.', 'В списке карточек: %1$d, из них в архиве — %2$d.', $count, 'woodev-plugin-framework' ),
+					$count,
+					$archived
+				)
+				: sprintf(
+					/* translators: %d: number of cards in the list. */
+					_n( 'В списке %d карточка.', 'В списке карточек: %d.', $count, 'woodev-plugin-framework' ),
+					$count
+				);
 
 			if ( [] !== $refreshed ) {
 				array_unshift( $sentences, $refreshed['refreshed_at'] . '.' );
@@ -545,7 +563,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 
 		return [
 			/* translators: 1: date, 2: time the list was last refreshed. */
-			'refreshed_at' => sprintf( __( 'Список обновлён %1$s в %2$s', 'woodev-plugin-framework' ), wp_date( 'd.m.Y', $at ), wp_date( 'H:i', $at ) ),
+			'refreshed_at' => sprintf( __( 'Список обновлён %1$s в %2$s', 'woodev-plugin-framework' ), Date_Text::date( $at ), Date_Text::time( $at ) ),
 		];
 	}
 
@@ -565,6 +583,8 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		return [
 			'rows'             => array_map(
 				function ( array $entry ) use ( $account ): array {
+					$entry['card'] = $this->with_currency( $account->id(), (array) ( $entry['card'] ?? [] ) );
+
 					return $this->rows->near_row( $account->id(), $entry );
 				},
 				$found['entries']

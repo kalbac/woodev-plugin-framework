@@ -570,6 +570,44 @@ final class SettingsHandlerTest extends TestCase {
 		$this->assertFalse( $off_handler->get_value( "account_{$off_id}_enabled" ), 'an existing disabled account stays off' );
 	}
 
+	public function test_the_credential_fields_are_required_settings_for_a_saved_account_and_for_the_add_form(): void {
+		[ $handler, , $acc_id ] = $this->stock_mode_handler( [] );
+
+		$by_id = Field_Schema::from_handler( $handler );
+
+		foreach ( [ (string) $acc_id, 'new' ] as $key ) {
+			$this->assertTrue( $by_id[ "account_{$key}_merchant_uid" ]['required'], "the identifier of «{$key}» carries the required marker" );
+			$this->assertTrue( $by_id[ "account_{$key}_access_token" ]['required'], "the secret of «{$key}» carries the required marker" );
+			$this->assertFalse( $by_id[ "account_{$key}_name" ]['required'], 'the label is optional' );
+			$this->assertFalse( $by_id[ "account_{$key}_description" ]['required'], 'the description is optional' );
+		}
+
+		// A saved secret stays masked: the screen counts it as filled through `is_set`, so the gate needs no retyped value.
+		$this->assertTrue( $by_id[ "account_{$acc_id}_access_token" ]['is_set'] );
+		$this->assertSame( '', $by_id[ "account_{$acc_id}_access_token" ]['value'] );
+	}
+
+	public function test_clearing_a_credential_of_a_saved_account_is_refused_while_untouched_fields_are_not_submitted(): void {
+		[ $handler, , $acc_id ] = $this->stock_mode_handler( [] );
+
+		$errors = $handler->validate_values(
+			[
+				"account_{$acc_id}_merchant_uid" => '',
+				"account_{$acc_id}_access_token" => '',
+			]
+		);
+
+		$this->assertArrayHasKey( "account_{$acc_id}_merchant_uid", $errors );
+		$this->assertArrayHasKey( "account_{$acc_id}_access_token", $errors );
+
+		// A save posts only the edited fields, so editing another field never trips the required credentials.
+		$this->assertSame( [], $handler->validate_values( [ "account_{$acc_id}_name" => 'Renamed' ] ) );
+
+		// A half-filled add form keeps its own message for the missing credential (the block rule still runs).
+		$half = $handler->validate_values( [ 'account_new_merchant_uid' => '222' ] );
+		$this->assertSame( 'Заполните поле «Токен доступа» для нового аккаунта.', $half['account_new_access_token'] ?? null );
+	}
+
 	public function test_the_price_example_closes_the_price_card_and_no_longer_heads_the_tab(): void {
 		Functions\when( 'wc_price' )->alias(
 			static function ( $amount, array $args = [] ): string {

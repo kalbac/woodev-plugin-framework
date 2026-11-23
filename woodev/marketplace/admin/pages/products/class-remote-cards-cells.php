@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Row_Normalizer;
+use Woodev\Framework\Marketplace\Admin\Shared\Plain_Price;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -128,7 +129,8 @@ final class Remote_Cards_Cells {
 	}
 
 	/**
-	 * The card's price on the marketplace, «—» when it is not known.
+	 * The card's price on the marketplace as the shop writes a price («2 120,00 ₽»), «—» when it is not known. The currency is the card's
+	 * own `currency` (the provider sets the cabinet's); a card without one is shown in the shop's currency.
 	 *
 	 * @since 2.1.13
 	 *
@@ -138,7 +140,7 @@ final class Remote_Cards_Cells {
 	public function price( array $card ): string {
 		$price = $card['price'] ?? null;
 
-		return is_numeric( $price ) ? (string) (float) $price : '—';
+		return is_numeric( $price ) ? Plain_Price::format( $price, trim( (string) ( $card['currency'] ?? '' ) ) ) : '—';
 	}
 
 	/**

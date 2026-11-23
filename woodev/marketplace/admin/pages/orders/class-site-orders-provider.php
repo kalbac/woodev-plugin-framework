@@ -140,7 +140,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param callable|null                $log_error  `function ( string $line ): void`, for failures that are not a refusal.
 	 * @param Site_Orders_Data_Status|null $data_status The «Статус данных» block (since 2.1.13); null shows none.
 	 * @param Label_Availability|null      $availability Whether a label can be asked for a posting (since 2.1.13); null for an adapter that says nothing.
-	 * @param Posting_Action_Gate|null     $gate         Whether the write actions are on offer for a posting (since 2.1.16); when given it is used instead of `$availability`, and null offers every action to every account.
+	 * @param Posting_Action_Gate|null     $gate         Whether the write actions are on offer for a posting (since 2.1.17); when given it is used instead of `$availability`, and null offers every action to every account.
 	 */
 	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null ) {
 		$this->data_status = $data_status;

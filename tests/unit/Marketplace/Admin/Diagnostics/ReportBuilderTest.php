@@ -454,7 +454,7 @@ final class ReportBuilderTest extends TestCase {
 		$lines = $this->make_builder( $adapter, $store, false )->operational_sections()[1]->lines();
 
 		$this->assertArrayNotHasKey( 'Сообщение Acme Market', $lines, 'the frozen sentence repeats the key date and the currency below' );
-		$this->assertSame( gmdate( 'j F Y', self::NOW + 79 * 86400 + 3600 ) . ' (ещё 79 дней)', $lines['Ключ действует до'], 'counted now, from the stored date' );
+		$this->assertSame( gmdate( 'd.m.Y', self::NOW + 79 * 86400 + 3600 ) . ' (ещё 79 дней)', $lines['Ключ действует до'], 'counted now, from the stored date' );
 		$this->assertSame( 'RUB', $lines['Валюта кабинета'] );
 		$this->assertSame( 'Включён', $lines['Аккаунт'], 'values start with a capital' );
 		$this->assertSame( 'Подключено', $lines['Состояние подключения'] );

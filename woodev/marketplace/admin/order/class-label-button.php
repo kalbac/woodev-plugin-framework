@@ -91,7 +91,7 @@ final class Label_Button {
 	 * @param callable            $account_of       `function ( int $account_id ): ?Account`, the account of a posting; null for one that is gone.
 	 * @param string              $assets_url       Folder URL of the module's assets, with a trailing slash.
 	 * @param string              $version          Plugin version.
-	 * @param callable|null       $label_stored     `function ( int $account_id, string $external_key ): bool` (since 2.1.16): whether a ready label already covers the posting. Its download is a read, so the button stays on; null asks nothing.
+	 * @param callable|null       $label_stored     `function ( int $account_id, string $external_key ): bool` (since 2.1.17): whether a ready label already covers the posting. Its download is a read, so the button stays on; null asks nothing.
 	 */
 	public function __construct( string $table_url, callable $posting_of_order, Posting_Action_Gate $gate, callable $account_of, string $assets_url, string $version, ?callable $label_stored = null ) {
 		$this->table_url        = $table_url;

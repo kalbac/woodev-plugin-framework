@@ -32,7 +32,7 @@ final class SiteOrdersDataStatusTest extends TestCase {
 		);
 		Functions\when( 'wp_date' )->alias(
 			static function ( string $format, int $time ): string {
-				return gmdate( 'Y-m-d H:i', $time );
+				return gmdate( $format, $time );
 			}
 		);
 	}
@@ -53,7 +53,7 @@ final class SiteOrdersDataStatusTest extends TestCase {
 	}
 
 	public function test_an_account_never_polled_since_the_record_began_says_so_and_the_next_run_is_its_time(): void {
-		$this->assertSame( [ 'Ни разу', '2026-11-20 10:00' ], $this->values( 1795168800 ) );
+		$this->assertSame( [ 'Ни разу', '20.11.2026 10:00' ], $this->values( 1795168800 ) );
 	}
 
 	public function test_the_last_poll_is_the_accounts_own_and_a_poll_with_no_schedule_says_so(): void {
@@ -62,8 +62,8 @@ final class SiteOrdersDataStatusTest extends TestCase {
 			8 => 1795000000,
 		];
 
-		$this->assertSame( [ '2026-11-20 09:00', 'Не по расписанию' ], $this->values( false ) );
-		$this->assertSame( [ '2026-11-20 09:00', 'Сейчас' ], $this->values( true ), 'Action Scheduler answers true while the poll runs.' );
+		$this->assertSame( [ '20.11.2026 09:00', 'Не по расписанию' ], $this->values( false ) );
+		$this->assertSame( [ '20.11.2026 09:00', 'Сейчас' ], $this->values( true ), 'Action Scheduler answers true while the poll runs.' );
 	}
 
 	public function test_the_block_names_poll_attempts_and_never_promises_that_every_change_was_read(): void {

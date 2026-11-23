@@ -7,7 +7,10 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
+use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Data\Schema;
+use Woodev\Framework\Marketplace\Orders\Order_Registry;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -49,6 +52,11 @@ final class Order_Source_Filter {
 	private const ORDER_TYPE = 'shop_order';
 
 	/**
+	 * The «Кабинет» column's id.
+	 */
+	private const ACCOUNT_COLUMN = 'woodev_account';
+
+	/**
 	 * @var self|null
 	 */
 	private static $instance;
@@ -59,6 +67,20 @@ final class Order_Source_Filter {
 	 * @var array<string,string>
 	 */
 	private $sources = [];
+
+	/**
+	 * The accounts of each marketplace, by `created_via`: only those whose plugin handed them over.
+	 *
+	 * @var array<string,Order_Source_Accounts>
+	 */
+	private $accounts = [];
+
+	/**
+	 * The text that replaces the «–» WooCommerce prints in the cell being drawn, while that cell is buffered.
+	 *
+	 * @var string|null
+	 */
+	private $buyer_cell;
 
 	/**
 	 * @var bool
@@ -109,15 +131,24 @@ final class Order_Source_Filter {
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param Marketplace_Adapter $adapter The plugin's adapter.
+	 * @param Marketplace_Adapter $adapter  The plugin's adapter.
+	 * @param Account_Store|null  $accounts The plugin's accounts; with them (and the database) the list can be filtered by account and shows the «Кабинет» column (since 2.1.16).
+	 * @param \wpdb|null          $db       Database.
 	 * @return void
 	 */
-	public static function register( Marketplace_Adapter $adapter ): void {
+	public static function register( Marketplace_Adapter $adapter, ?Account_Store $accounts = null, ?\wpdb $db = null ): void {
 		if ( ! is_admin() ) {
 			return;
 		}
 
-		self::instance()->add_source( $adapter->order_meta()->created_via(), $adapter->settings_descriptor()->marketplace_name() );
+		$lookup = null;
+
+		if ( null !== $accounts && null !== $db ) {
+			$registry = new Order_Registry( $db, ( new Schema( $adapter->id() ) )->table_name( 'postings', $db->prefix ) );
+			$lookup   = new Order_Source_Accounts( $accounts, $registry, $adapter->id() );
+		}
+
+		self::instance()->add_source( $adapter->order_meta()->created_via(), $adapter->settings_descriptor()->marketplace_name(), $lookup );
 	}
 
 	/**
@@ -125,16 +156,22 @@ final class Order_Source_Filter {
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param string $created_via What the marketplace's orders are created via; a marketplace without one has no orders to tell apart.
-	 * @param string $name        The marketplace's name, as the dropdown shows it.
+	 * @param string                     $created_via What the marketplace's orders are created via; a marketplace without one has no orders to tell apart.
+	 * @param string                     $name        The marketplace's name, as the dropdown shows it.
+	 * @param Order_Source_Accounts|null $accounts   Its accounts, to tell its orders apart by account (since 2.1.16).
 	 * @return void
 	 */
-	public function add_source( string $created_via, string $name ): void {
+	public function add_source( string $created_via, string $name, ?Order_Source_Accounts $accounts = null ): void {
 		if ( '' === $created_via ) {
 			return;
 		}
 
 		$this->sources[ $created_via ] = $name;
+
+		if ( null !== $accounts ) {
+			$this->accounts[ $created_via ] = $accounts;
+		}
+
 		$this->choice                  = null;
 		$this->counts                  = null;
 		$this->status_counts           = [];
@@ -176,6 +213,13 @@ final class Order_Source_Filter {
 		$meta_query = $query->get( 'meta_query' );
 
 		$query->set( 'meta_query', $this->query()->for_posts( is_array( $meta_query ) ? $meta_query : [], $this->choice() ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- one key; the same filter the list's other meta queries use.
+
+		$post_in = $query->get( 'post__in' );
+		$ids     = $this->query()->post_ids( $this->choice(), is_array( $post_in ) ? $post_in : [] );
+
+		if ( null !== $ids ) {
+			$query->set( 'post__in', $ids );
+		}
 	}
 
 	/**
@@ -311,6 +355,136 @@ final class Order_Source_Filter {
 	}
 
 	/**
+	 * Adds the «Кабинет» column to the list, after the status.
+	 *
+	 * @internal
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param array<string,string>|mixed $columns The list's columns.
+	 * @return array<string,string>
+	 */
+	public function add_account_column( $columns ): array {
+		$columns = (array) $columns;
+
+		if ( [] === $this->accounts ) {
+			return $columns;
+		}
+
+		$label = __( 'Кабинет', 'woodev-plugin-framework' );
+		$after = array_search( 'order_status', array_keys( $columns ), true );
+
+		if ( false === $after ) {
+			$columns[ self::ACCOUNT_COLUMN ] = $label;
+
+			return $columns;
+		}
+
+		return array_merge( array_slice( $columns, 0, $after + 1, true ), [ self::ACCOUNT_COLUMN => $label ], array_slice( $columns, $after + 1, null, true ) );
+	}
+
+	/**
+	 * Prints the «Кабинет» cell: the name of the account a marketplace order came through, nothing for any other order.
+	 *
+	 * @internal
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param string        $column The column being drawn.
+	 * @param \WC_Order|int $order  The order (the HPOS list) or its id (the posts list).
+	 * @return void
+	 */
+	public function render_account_cell( $column, $order = 0 ): void {
+		if ( self::ACCOUNT_COLUMN !== $column ) {
+			return;
+		}
+
+		$order = $this->order_of( $order );
+		$via   = null === $order ? '' : $order->get_created_via();
+
+		if ( isset( $this->accounts[ $via ] ) ) {
+			echo esc_html( $this->accounts[ $via ]->name_of_order( $order->get_id() ) );
+		}
+	}
+
+	/**
+	 * Starts to hold back what WooCommerce prints in the Billing or Ship to cell of a marketplace order that has no address, so
+	 * {@see self::close_buyer_cell()} can say why, instead of «–».
+	 *
+	 * @internal
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param string        $column The column being drawn.
+	 * @param \WC_Order|int $order  The order (the HPOS list) or its id (the posts list).
+	 * @return void
+	 */
+	public function open_buyer_cell( $column, $order = 0 ): void {
+		$this->buyer_cell = null;
+		$order            = in_array( $column, [ 'billing_address', 'shipping_address' ], true ) ? $this->order_of( $order ) : null;
+
+		if ( null === $order || ! isset( $this->sources[ $order->get_created_via() ] ) ) {
+			return;
+		}
+
+		$address = 'billing_address' === $column ? $order->get_formatted_billing_address() : $order->get_formatted_shipping_address();
+
+		if ( '' !== (string) $address ) {
+			return;
+		}
+
+		$this->buyer_cell = $this->sources[ $order->get_created_via() ];
+
+		ob_start();
+	}
+
+	/**
+	 * Ends {@see self::open_buyer_cell()}: where WooCommerce printed its «–», the muted line «Ozon не передаёт данные покупателя»;
+	 * anything else it printed stays as it was.
+	 *
+	 * @internal
+	 *
+	 * @since 2.1.16
+	 *
+	 * @return void
+	 */
+	public function close_buyer_cell(): void {
+		if ( null === $this->buyer_cell ) {
+			return;
+		}
+
+		$name             = $this->buyer_cell;
+		$this->buyer_cell = null;
+		$printed          = ob_get_clean();
+
+		if ( false === $printed || '&ndash;' !== trim( $printed ) ) {
+			echo (string) $printed; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- WooCommerce's own output, passed through as it printed it.
+
+			return;
+		}
+
+		printf(
+			'<span class="description woodev-order-no-buyer">%s</span>',
+			esc_html( sprintf( /* translators: %s: marketplace name. */ __( '%s не передаёт данные покупателя', 'woodev-plugin-framework' ), $name ) )
+		);
+	}
+
+	/**
+	 * The orders of an account: what {@see Order_Source_Query} narrows the list to.
+	 *
+	 * @internal
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param string $created_via The marketplace's `created_via`.
+	 * @param int    $account_id  Account id.
+	 * @return int[]
+	 */
+	public function account_order_ids( string $created_via, int $account_id ): array {
+		return isset( $this->accounts[ $created_via ] ) ? $this->accounts[ $created_via ]->order_ids( $account_id ) : [];
+	}
+
+	/**
 	 * Forgets everything; for tests, which share one process.
 	 *
 	 * @internal
@@ -323,6 +497,8 @@ final class Order_Source_Filter {
 	 */
 	public function reset_for_tests( ?bool $hpos = null, ?string $wc_version = null ): void {
 		$this->sources       = [];
+		$this->accounts      = [];
+		$this->buyer_cell    = null;
 		$this->hooked        = false;
 		$this->choice        = null;
 		$this->counts        = null;
@@ -351,6 +527,11 @@ final class Order_Source_Filter {
 		add_filter( 'woocommerce_shop_order_list_table_prepare_items_query_args', [ $this, 'filter_orders_table_args' ] );
 		add_filter( 'views_' . self::HPOS_SCREEN, [ $this, 'add_views' ] );
 		add_action( 'woocommerce_order_list_table_restrict_manage_orders', [ $this, 'render_dropdown' ], 10, 2 );
+		add_filter( 'woocommerce_shop_order_list_table_columns', [ $this, 'add_account_column' ], 20 );
+		// WooCommerce draws the buyer cells itself on its own priority 10: the one before opens a buffer, the one after swaps the «–».
+		add_action( 'manage_' . self::HPOS_SCREEN . '_custom_column', [ $this, 'open_buyer_cell' ], 9, 2 );
+		add_action( 'manage_' . self::HPOS_SCREEN . '_custom_column', [ $this, 'render_account_cell' ], 10, 2 );
+		add_action( 'manage_' . self::HPOS_SCREEN . '_custom_column', [ $this, 'close_buyer_cell' ], 11 );
 
 		if ( Order_Source_Query::supports_orders_table_status_counts( $wc_version ) ) {
 			add_filter( 'woocommerce_shop_order_list_table_order_count', [ $this, 'filter_orders_table_count' ], 10, 2 );
@@ -362,6 +543,10 @@ final class Order_Source_Filter {
 		add_filter( 'views_' . self::LEGACY_SCREEN, [ $this, 'add_views' ] );
 		add_filter( 'wp_count_posts', [ $this, 'filter_posts_counts' ], 10, 3 );
 		add_action( 'restrict_manage_posts', [ $this, 'render_dropdown' ], 10, 2 );
+		add_filter( 'manage_' . self::ORDER_TYPE . '_posts_columns', [ $this, 'add_account_column' ], 20 );
+		add_action( 'manage_' . self::ORDER_TYPE . '_posts_custom_column', [ $this, 'open_buyer_cell' ], 9, 2 );
+		add_action( 'manage_' . self::ORDER_TYPE . '_posts_custom_column', [ $this, 'render_account_cell' ], 10, 2 );
+		add_action( 'manage_' . self::ORDER_TYPE . '_posts_custom_column', [ $this, 'close_buyer_cell' ], 11 );
 	}
 
 	/**
@@ -387,17 +572,54 @@ final class Order_Source_Filter {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- a list filter and the user's own display preference.
 			$requested = isset( $_GET[ Order_Source_Choice::QUERY_ARG ] ) ? sanitize_text_field( wp_unslash( $_GET[ Order_Source_Choice::QUERY_ARG ] ) ) : '';
 
-			$this->choice = ( new Order_Source_Choice( array_keys( $this->sources ) ) )->resolve( get_current_user_id(), $requested );
+			$this->choice = ( new Order_Source_Choice( array_keys( $this->sources ), array_keys( $this->account_choices() ) ) )->resolve( get_current_user_id(), $requested );
 		}
 
 		return $this->choice;
 	}
 
 	/**
+	 * Returns the order of a list row: the HPOS list hands over the order, the posts list its id.
+	 *
+	 * @param \WC_Order|int|mixed $order The row's order or its id.
+	 * @return \WC_Order|null
+	 */
+	private function order_of( $order ): ?\WC_Order {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( (int) $order );
+
+		return $order instanceof \WC_Order ? $order : null;
+	}
+
+	/**
 	 * @return Order_Source_Query
 	 */
 	private function query(): Order_Source_Query {
-		return new Order_Source_Query( array_keys( $this->sources ) );
+		return new Order_Source_Query( array_keys( $this->sources ), [ $this, 'account_order_ids' ] );
+	}
+
+	/**
+	 * The choices that pick one account: one per account, for each marketplace that has more than one.
+	 *
+	 * A marketplace with a single account offers none: its own entry already is that account's.
+	 *
+	 * @return array<string,string> Label by choice.
+	 */
+	private function account_choices(): array {
+		$choices = [];
+
+		foreach ( $this->accounts as $created_via => $accounts ) {
+			$names = $accounts->names();
+
+			if ( count( $names ) < 2 ) {
+				continue;
+			}
+
+			foreach ( $names as $account_id => $account_name ) {
+				$choices[ Order_Source_Choice::account( $created_via, $account_id ) ] = $this->sources[ $created_via ] . ': ' . $account_name;
+			}
+		}
+
+		return $choices;
 	}
 
 	/**
@@ -493,19 +715,33 @@ final class Order_Source_Filter {
 	}
 
 	/**
-	 * The dropdown's options: every source the views offer, then each marketplace by name.
+	 * The dropdown's options: every source the views offer, then each marketplace by name, followed by its accounts («Ozon: Магазин»)
+	 * when it has more than one.
 	 *
 	 * @return array<string,string> Label by choice.
 	 */
 	private function dropdown_options(): array {
-		return array_merge(
-			[
-				Order_Source_Choice::ALL          => __( 'Все источники', 'woodev-plugin-framework' ),
-				Order_Source_Choice::SHOP         => __( 'Только магазин', 'woodev-plugin-framework' ),
-				Order_Source_Choice::MARKETPLACES => __( 'Все маркетплейсы', 'woodev-plugin-framework' ),
-			],
-			$this->sources
-		);
+		$options = [
+			Order_Source_Choice::ALL          => __( 'Все источники', 'woodev-plugin-framework' ),
+			Order_Source_Choice::SHOP         => __( 'Только магазин', 'woodev-plugin-framework' ),
+			Order_Source_Choice::MARKETPLACES => __( 'Все маркетплейсы', 'woodev-plugin-framework' ),
+		];
+
+		$accounts = $this->account_choices();
+
+		foreach ( $this->sources as $created_via => $name ) {
+			$options[ $created_via ] = $name;
+
+			foreach ( $accounts as $choice => $label ) {
+				$parsed = Order_Source_Choice::parse_account( $choice );
+
+				if ( null !== $parsed && $created_via === $parsed[0] ) {
+					$options[ $choice ] = $label;
+				}
+			}
+		}
+
+		return $options;
 	}
 
 	/**

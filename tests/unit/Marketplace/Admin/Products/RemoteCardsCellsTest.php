@@ -64,7 +64,39 @@ class RemoteCardsCellsTest extends TestCase {
 
 		$this->assertSame( [ '—', '—' ], [ $cells->price( [] ), $cells->stock( [] ) ] );
 		$this->assertSame( [ '—', '—' ], [ $cells->price( [ 'price' => '' ] ), $cells->stock( [ 'stock' => null ] ) ] );
-		$this->assertSame( [ '1250.5', '0' ], [ $cells->price( [ 'price' => '1250.50' ] ), $cells->stock( [ 'stock' => 0 ] ) ], 'Zero stock is a number, not a missing value.' );
+		$this->assertSame( '0', $cells->stock( [ 'stock' => 0 ] ), 'Zero stock is a number, not a missing value.' );
+	}
+
+	public function test_a_price_is_money_in_the_currency_of_the_cabinet_like_the_orders_total(): void {
+		$seen = [];
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'wc_price' )->alias(
+			static function ( $amount, array $args = [] ) use ( &$seen ): string {
+				$seen = [ $amount, $args ];
+
+				return '<span class="amount"><bdi>' . number_format( (float) $amount, 2, ',', "\u{a0}" ) . '&nbsp;<span>&#8381;</span></bdi></span>';
+			}
+		);
+
+		$price = ( new Remote_Cards_Cells() )->price( [ 'price' => '154866.00', 'currency' => 'RUB' ] );
+
+		$this->assertSame( "154\u{a0}866,00\u{a0}₽", $price, 'Digits grouped, kopecks and the symbol: the way the orders table says an amount, not the bare «154866».' );
+		$this->assertSame( [ '154866.00', [ 'currency' => 'RUB' ] ], $seen );
+	}
+
+	public function test_a_card_without_a_currency_is_priced_in_the_currency_of_the_shop(): void {
+		$seen = null;
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'wc_price' )->alias(
+			static function ( $amount, array $args = [] ) use ( &$seen ): string {
+				$seen = $args;
+
+				return $amount . ' ₽';
+			}
+		);
+
+		$this->assertSame( '1250.50 ₽', ( new Remote_Cards_Cells() )->price( [ 'price' => '1250.50', 'currency' => '  ' ] ) );
+		$this->assertSame( [], $seen, 'No currency key at all: WooCommerce\'s own currency applies.' );
 	}
 
 	public function test_the_identifiers_have_the_merchants_names_and_an_unknown_one_keeps_its_own(): void {

@@ -1,6 +1,50 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.16] — 2026-11-23
+### Bug Fixes
+- **settings**: Gate the connection test button on required fields only
+
+- **admin-records**: Fit «Товары сайта» in the 784px card with the expand column (#1945)
+
+- **admin-records**: The marketplace orders table fits the card and shows its scroll bar (#1930)
+
+- **marketplace**: Load the orders of a table page by post__in, not include
+
+- **settings**: One snackbar per block, replaced on each save
+
+- **marketplace**: Schedule the recurring poll as soon as an account is saved (#1927)
+
+- **marketplace**: Announce a saved account when the exchange source or the shared orders default changes (#1927)
+
+- **admin-records**: No «all matching» selection while the page has a busy row (#1944)
+
+- **admin-records**: Drop an open filter-wide preview when a row goes busy (#1944)
+
+- **admin-records**: Say why a stale filter-wide confirmation was refused (#1944)
+
+- **marketplace**: Make account credential fields required settings (#1926)
+
+- **marketplace**: Show card prices as money and count archived cards apart (Refs ozon-seller#130)
+
+- **marketplace**: Keep the new @since tags under the release ceiling (Refs ozon-seller#130)
+
+
+### Documentation
+- Save session s242
+
+
+### Build
+- Bundles for the connection-button gate (#1926)
+
+- Bundles for the one-notice-per-block fix (#1932)
+
+- Bundles for the busy-row matching guard (#1944)
+
+- Bundles for the records-table fit at 1024 (#1945, #1930)
+
+
+
 ## [2.1.15] — 2026-11-23
 ### Bug Fixes
 - **admin-records**: Pager only when there is more than one page
