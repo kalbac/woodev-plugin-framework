@@ -209,11 +209,11 @@ final class Order_Registry {
 	 * @since 2.1.13
 	 *
 	 * @param int $order_id WooCommerce order id.
-	 * @return array{account_id:int,status_raw:string,is_terminal:bool}|null Null when no posting is registered for the order.
+	 * @return array{account_id:int,external_key:string,status_raw:string,is_terminal:bool}|null Null when no posting is registered for the order.
 	 */
 	public function posting_of_order( int $order_id ): ?array {
 		$row = $this->db->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The order screen shows the current posting.
-			$this->db->prepare( 'SELECT account_id, status_raw, is_terminal FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id ),
+			$this->db->prepare( 'SELECT account_id, external_key, status_raw, is_terminal FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id ),
 			'ARRAY_A'
 		);
 
@@ -222,10 +222,27 @@ final class Order_Registry {
 		}
 
 		return [
-			'account_id'  => (int) $row['account_id'],
-			'status_raw'  => (string) $row['status_raw'],
-			'is_terminal' => 1 === (int) $row['is_terminal'],
+			'account_id'   => (int) $row['account_id'],
+			'external_key' => (string) $row['external_key'],
+			'status_raw'   => (string) $row['status_raw'],
+			'is_terminal'  => 1 === (int) $row['is_terminal'],
 		];
+	}
+
+	/**
+	 * Lists the WooCommerce orders an account's postings were made into: what the orders list filters a cabinet by.
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param int $account_id Account id.
+	 * @return int[] WooCommerce order ids; empty when the account has no order.
+	 */
+	public function order_ids_of_account( int $account_id ): array {
+		$ids = $this->db->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The orders list filters by the current registry.
+			$this->db->prepare( 'SELECT DISTINCT wc_order_id FROM %i WHERE account_id = %d AND wc_order_id > 0', $this->table, $account_id )
+		);
+
+		return array_map( 'intval', (array) $ids );
 	}
 
 	/**
@@ -270,7 +287,7 @@ final class Order_Registry {
 	 * @param bool                                                      $is_terminal      Whether the order will not change any more.
 	 * @param array<int,array{offer_id:string,sku:string,qty_seen:int}> $lines            Lines as the marketplace sent them.
 	 * @param array<string,mixed>|null                                  $members          Member snapshots of a grouped order; null for one-member orders.
-	 * @param string|null                                               $processing_since GMT `Y-m-d H:i:s` the marketplace says the order entered processing ({@see Order_DTO::processing_since()}); null leaves what the row already holds (since 2.1.16).
+	 * @param string|null                                               $processing_since GMT `Y-m-d H:i:s` the marketplace says the order entered processing ({@see Order_DTO::processing_since()}); null leaves what the row already holds (since 2.1.17).
 	 * @return bool False when the claim was lost.
 	 * @throws \RuntimeException When the database refused the write (never read as «claim lost»).
 	 */

@@ -213,7 +213,7 @@ final class Order_DTO {
 	 *
 	 * A date that is not a time with an explicit zone is treated as not sent: a marketplace's odd value must not stop an order import.
 	 *
-	 * @since 2.1.16
+	 * @since 2.1.17
 	 *
 	 * @return string|null `Y-m-d H:i:s` in UTC, or null when the adapter did not say.
 	 */

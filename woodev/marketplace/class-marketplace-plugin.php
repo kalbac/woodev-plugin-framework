@@ -117,6 +117,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				return;
 			}
 
+			$write_gate = $this->account_write_gate();
+
 			( new Flow_Wiring(
 				$this->get_id(),
 				$this->get_marketplace_adapter(),
@@ -130,24 +132,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 				function ( string $line ): void {
 					$this->log_debug( $line );
 				},
-				$this->account_write_gate()
+				$write_gate
 			) )->register();
 
-			Embedded_Screens::register( $this, $accounts, $wpdb );
-			Order_Screen_Module::register( $this, $wpdb );
+			Embedded_Screens::register( $this, $accounts, $wpdb, $write_gate );
+			Order_Screen_Module::register( $this, $wpdb, $accounts, $write_gate );
 			Site_Products_Module::register( $this, $accounts, $wpdb );
 			Tools_Module::register( $this, $accounts );
 			Deletion_Module::register( $this, $accounts, $wpdb );
 			Diagnostics_Module::register( $this, $accounts );
-			Site_Orders_Module::register( $this, $accounts, $wpdb );
-			Order_Source_Filter::register( $this->get_marketplace_adapter() );
+			Site_Orders_Module::register( $this, $accounts, $wpdb, $write_gate );
+			Order_Source_Filter::register( $this->get_marketplace_adapter(), $accounts, $wpdb );
 		}
 
 		/**
 		 * The plugin's write gate: whether an account may write to the marketplace right now. The write runners (stock flush, price flush, export) ask it before they call out, after the licence and pause checks; reads and polls never do. An account it refuses is not claimed, and nothing is sent for it in that run. Return null, the default, to let every account write.
 		 *
 		 * It is read once, when {@see self::register_marketplace_flows()} wires the flows, so the callable itself must answer
-		 * without a remote call or a query.
+		 * without a remote call or a query. The «Заказы» table and the order screen ask it too: for an account it refuses, «Отменить» and
+		 * «Этикетки» are off, with a sentence that says the key cannot write, and the server refuses both before any remote call
+		 * ({@see \Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate}). An adapter whose key can be read-only (Ozon) answers
+		 * from the roles it stored when it checked the key.
 		 *
 		 * @since 2.1.1
 		 *

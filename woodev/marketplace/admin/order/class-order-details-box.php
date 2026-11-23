@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -280,12 +281,12 @@ final class Order_Details_Box {
 	}
 
 	/**
-	 * Formats a date the way WooCommerce does.
+	 * Formats a date like every marketplace screen does ({@see Date_Text}).
 	 *
 	 * @param \WC_DateTime|null $date Date.
 	 * @return string Empty for none.
 	 */
 	private function date( $date ): string {
-		return $date instanceof \WC_DateTime ? $date->date_i18n( wc_date_format() . ' ' . wc_time_format() ) : '';
+		return $date instanceof \WC_DateTime ? Date_Text::datetime( $date->getTimestamp() ) : '';
 	}
 }

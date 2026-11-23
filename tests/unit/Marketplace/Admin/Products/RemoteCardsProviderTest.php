@@ -17,6 +17,7 @@ use Woodev\Framework\Admin\Records\Activity_Normalizer;
 use Woodev\Framework\Admin\Records\Row_Normalizer;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Query;
+use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 
@@ -219,6 +220,39 @@ final class RemoteCardsProviderTest extends Remote_Cards_Test_Case {
 		$summary = $this->list_body()['messages']['summary'];
 		$this->assertStringContainsString( 'Маркетплейс не ответил', $summary );
 		$this->assertFalse( $this->list_body()['account_activity']['active'], 'A finished load, failed or not, ends the account line: that is what makes the screen read the list again.' );
+	}
+
+	public function test_the_summary_counts_the_archived_cards_apart_so_the_number_can_be_compared_with_the_cabinet_s(): void {
+		$this->put_cards( [ $this->card( 'A-1' ), $this->card( 'B-2', '', [ 'archived' => true ] ), $this->card( 'C-3', '', [ 'archived' => true ] ) ] );
+
+		$this->assertStringContainsString( 'В списке карточек: 3, из них в архиве — 2.', $this->list_body()['messages']['summary'] );
+
+		$this->put_cards( [ $this->card( 'A-1' ), $this->card( 'B-2', '', [ 'archived' => true ] ) ] );
+		$this->assertStringContainsString( 'В списке карточек: 2, из них в архиве — 1.', $this->list_body()['messages']['summary'], 'The count is _n()\'s plural, same for one archived card.' );
+
+		$this->put_cards( [ $this->card( 'A-1' ) ] );
+		$this->assertStringNotContainsString( 'в архиве', $this->list_body()['messages']['summary'], 'No archived card: the old sentence stands.' );
+	}
+
+	public function test_a_price_shows_in_the_currency_the_connection_check_read_and_in_the_shop_s_when_it_never_ran(): void {
+		$seen = [];
+		Functions\when( 'wc_price' )->alias(
+			static function ( $amount, array $args = [] ) use ( &$seen ): string {
+				$seen[] = $args['currency'] ?? '';
+
+				return $amount . ' ' . ( $args['currency'] ?? 'shop' );
+			}
+		);
+		$this->put_cards( [ $this->card( 'A-1', '', [ 'price' => '2120.00' ] ) ] );
+		$row = $this->rows_by_offer( $this->list_body() )[ $this->card_row_id( 'A-1' ) ];
+
+		$this->assertSame( '2120.00 shop', $row['cells']['price'], 'An account that was never checked has no currency of its own.' );
+
+		$this->accounts()->set_health( $this->account_id, new Health_Result( Health_Result::OK, 'ok', null, [ 'currency' => 'RUB' ] ) );
+		$row = $this->rows_by_offer( $this->list_body() )[ $this->card_row_id( 'A-1' ) ];
+
+		$this->assertSame( '2120.00 RUB', $row['cells']['price'] );
+		$this->assertSame( [ '', 'RUB' ], $seen );
 	}
 
 	public function test_reading_the_table_never_calls_the_marketplace_nor_queues_anything(): void {

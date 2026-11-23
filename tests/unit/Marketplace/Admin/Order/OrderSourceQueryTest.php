@@ -85,6 +85,64 @@ final class OrderSourceQueryTest extends TestCase {
 		$this->assertSame( $args, $this->query()->for_orders_table( $args, Order_Source_Choice::MARKETPLACES ) );
 	}
 
+	/**
+	 * A builder that knows the orders of two Ozon accounts.
+	 *
+	 * @return Order_Source_Query
+	 */
+	private function account_query(): Order_Source_Query {
+		return new Order_Source_Query(
+			[ 'ozon_api', 'wb_api' ],
+			static function ( string $created_via, int $account_id ): array {
+				return 'ozon_api' === $created_via ? [ 12 => [ 700, 701 ], 13 => [] ][ $account_id ] ?? [] : [];
+			}
+		);
+	}
+
+	public function test_one_account_on_the_orders_table_is_its_marketplace_narrowed_to_the_orders_of_the_account(): void {
+		$this->assertSame(
+			[
+				'limit'       => 20,
+				'created_via' => [ 'ozon_api' ],
+				'post__in'    => [ 700, 701 ],
+			],
+			$this->account_query()->for_orders_table( [ 'limit' => 20 ], 'ozon_api:12' )
+		);
+	}
+
+	public function test_an_account_without_orders_keeps_no_order_and_never_every_order(): void {
+		$this->assertSame( [ 0 ], $this->account_query()->for_orders_table( [], 'ozon_api:13' )['post__in'], 'An empty post__in would select every order.' );
+	}
+
+	public function test_an_account_choice_keeps_the_post_in_a_search_already_set(): void {
+		$args = $this->account_query()->for_orders_table( [ 'post__in' => [ 701, 999 ] ], 'ozon_api:12' );
+
+		$this->assertSame( [ 701 ], $args['post__in'] );
+		$this->assertSame( [ 0 ], $this->account_query()->post_ids( 'ozon_api:12', [ 999 ] ), 'No order of the account is among the found ones.' );
+	}
+
+	public function test_one_account_in_the_posts_table_is_a_meta_query_plus_post_in(): void {
+		$query = $this->account_query();
+
+		$this->assertSame( [ 'ozon_api' ], $query->for_posts( [], 'ozon_api:12' )[0]['value'] );
+		$this->assertSame( [ 700, 701 ], $query->post_ids( 'ozon_api:12', [] ) );
+		$this->assertSame(
+			[
+				'meta_query' => $query->for_posts( [], 'ozon_api:12' ),
+				'post__in'   => [ 700, 701 ],
+			],
+			$query->matching( false, 'ozon_api:12' ),
+			'The counts of the views narrow the same way.'
+		);
+	}
+
+	public function test_an_account_choice_of_an_unknown_marketplace_or_without_the_orders_lookup_selects_nothing_special(): void {
+		$this->assertNull( $this->account_query()->post_ids( 'yandex_api:12', [] ) );
+		$this->assertNull( $this->account_query()->post_ids( 'wb_api', [] ) );
+		$this->assertNull( $this->query()->post_ids( 'ozon_api:12', [] ) );
+		$this->assertSame( [], $this->query()->for_orders_table( [], 'ozon_api:12' ) );
+	}
+
 	public function test_marketplace_orders_in_the_posts_table_are_a_meta_query_in(): void {
 		// A list of clauses: WP_Meta_Query skips a clause given bare at the top level.
 		$this->assertSame(

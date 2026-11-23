@@ -88,6 +88,22 @@ final class OrderSourceChoiceTest extends TestCase {
 		$this->assertSame( Order_Source_Choice::SHOP, $this->choice()->resolve( self::USER, '' ) );
 	}
 
+	public function test_a_choice_of_one_account_is_known_only_when_it_is_on_offer_and_is_remembered(): void {
+		$choice  = new Order_Source_Choice( [ 'ozon_api' ], [ 'ozon_api:12' ] );
+		$account = Order_Source_Choice::account( 'ozon_api', 12 );
+
+		$this->assertSame( 'ozon_api:12', $account );
+		$this->assertSame( $account, $choice->resolve( self::USER, $account ) );
+		$this->assertSame( $account, $this->meta[ self::USER ] );
+		$this->assertSame( Order_Source_Choice::SHOP, ( new Order_Source_Choice( [ 'ozon_api' ] ) )->resolve( 0, 'ozon_api:12' ), 'A marketplace with one account offers no such choice.' );
+	}
+
+	public function test_a_choice_of_one_account_is_split_into_its_marketplace_and_account(): void {
+		$this->assertSame( [ 'ozon_api', 12 ], Order_Source_Choice::parse_account( 'ozon_api:12' ) );
+		$this->assertNull( Order_Source_Choice::parse_account( 'ozon_api' ) );
+		$this->assertNull( Order_Source_Choice::parse_account( 'ozon_api:abc' ) );
+	}
+
 	public function test_a_visitor_without_an_account_gets_the_default_and_nothing_is_stored(): void {
 		Functions\expect( 'update_user_meta' )->never();
 

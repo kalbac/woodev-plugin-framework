@@ -12399,7 +12399,15 @@ msgstr ""
 msgid "Не удалось обновить список: %s"
 msgstr ""
 
-#: marketplace/admin/pages/products/class-remote-cards-provider.php:518
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:524
+#, php-format
+msgid "В списке %1$d карточка, из них в архиве — %2$d."
+msgid_plural "В списке карточек: %1$d, из них в архиве — %2$d."
+msgstr[0] "В списке %1$d карточка, из них в архиве — %2$d."
+msgstr[1] "В списке %1$d карточки, из них в архиве — %2$d."
+msgstr[2] "В списке %1$d карточек, из них в архиве — %2$d."
+
+#: marketplace/admin/pages/products/class-remote-cards-provider.php:530
 #, php-format
 msgid "В списке %d карточка."
 msgstr ""
@@ -13042,6 +13050,18 @@ msgstr ""
 msgid "Отправление завершено — этикетка не нужна."
 msgstr ""
 
+#: marketplace/admin/shared/class-posting-action-gate.php:92
+msgid "Ключ этого аккаунта не позволяет менять данные на маркетплейсе (например, он выдан только для чтения), поэтому действие недоступно."
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-action-gate.php:108
+msgid "Маркетплейс сейчас не разрешает отменить это отправление — например, оно уже передано в доставку."
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-action-gate.php:129
+msgid "Маркетплейс ещё не выдал этикетку для этого отправления — она станет доступна, когда отправление будет собрано."
+msgstr ""
+
 #: marketplace/settings/class-accounts-sections.php:804
 msgid "Статус нового заказа"
 msgstr ""
@@ -13213,4 +13233,14 @@ msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:447
 msgid "Такого аккаунта нет."
+msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:374
+msgid "Кабинет"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/order/class-order-source-filter.php:468
+#, php-format
+msgid "%s не передаёт данные покупателя"
 msgstr ""

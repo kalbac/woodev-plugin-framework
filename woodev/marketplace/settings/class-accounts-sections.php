@@ -660,6 +660,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	/**
 	 * Registers the connection fields (`name`, adapter `identifier`, adapter `secrets`, `enabled`) for `$key`.
 	 *
+	 * The credentials (identifier and secrets) are required settings, for a saved account and for the add form alike: the screen
+	 * draws the required marker, gates «Проверить подключение» on them and names an empty one in the hint. A saved secret still
+	 * counts as filled (its masked input is empty), and a blank add form saves nothing because only edited fields are submitted.
+	 *
 	 * @param Settings_Handler $handler Handler.
 	 * @param string           $key     Account id or `new`.
 	 * @return void
@@ -705,8 +709,9 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			self::setting_id( $key, $id_field ),
 			\Woodev_Setting::TYPE_STRING,
 			[
-				'name'    => $id_spec->label(),
-				'default' => '',
+				'name'     => $id_spec->label(),
+				'default'  => '',
+				'required' => true,
 			],
 			\Woodev_Control::TYPE_TEXT,
 			array_filter(
@@ -728,6 +733,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 					'name'      => $secret_spec->label(),
 					'default'   => '',
 					'sensitive' => true,
+					'required'  => true,
 				],
 				\Woodev_Control::TYPE_PASSWORD,
 				array_filter(

@@ -10,6 +10,8 @@ import type { CSSProperties } from 'react';
 export const STYLES = {
 	toolbar: { display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' },
 	nowrap: { whiteSpace: 'nowrap' },
+	// A cell is `nowrap`; this lets the one line inside it break where the caller allows (the date from its time).
+	breakable: { whiteSpace: 'normal' },
 	stack: { display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' },
 	actions: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' },
 	// The buttons of one row: one group on one line — a row of buttons never wraps under itself. Their gap is in `./style.scss`: an

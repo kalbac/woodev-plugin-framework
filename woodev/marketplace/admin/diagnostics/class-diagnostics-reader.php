@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Diagnostics;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Age;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Schema;
@@ -275,7 +276,7 @@ final class Diagnostics_Reader {
 			return '—';
 		}
 
-		return (string) wp_date( 'd.m.Y H:i', $timestamp );
+		return Date_Text::datetime( $timestamp );
 	}
 
 	/**

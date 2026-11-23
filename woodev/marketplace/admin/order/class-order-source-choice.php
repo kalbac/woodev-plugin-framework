@@ -10,8 +10,9 @@ namespace Woodev\Framework\Marketplace\Admin\Order;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Which orders a manager's WooCommerce orders list shows: everything, the shop's own orders, every marketplace's, or one
- * marketplace's (the choice is then that marketplace's `created_via` value).
+ * Which orders a manager's WooCommerce orders list shows: everything, the shop's own orders, every marketplace's, one
+ * marketplace's (the choice is then that marketplace's `created_via` value) or one account's of a marketplace that has several
+ * (`{created_via}:{account id}`, see {@see self::account()}).
  *
  * The last choice a user made is kept in their user meta, so the list opens the way they left it; a user who never chose gets
  * {@see self::SHOP}, so marketplace orders do not mix with the shop's until they ask for them.
@@ -57,14 +58,48 @@ final class Order_Source_Choice {
 	private $created_vias;
 
 	/**
+	 * The choices that pick one account, of the marketplaces that offer it.
+	 *
+	 * @var string[]
+	 */
+	private $account_choices;
+
+	/**
 	 * Creates the choice.
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param string[] $created_vias The `created_via` values of the registered marketplaces.
+	 * @param string[] $created_vias    The `created_via` values of the registered marketplaces.
+	 * @param string[] $account_choices The {@see self::account()} choices on offer; since 2.1.16.
 	 */
-	public function __construct( array $created_vias ) {
-		$this->created_vias = array_values( $created_vias );
+	public function __construct( array $created_vias, array $account_choices = [] ) {
+		$this->created_vias    = array_values( $created_vias );
+		$this->account_choices = array_values( $account_choices );
+	}
+
+	/**
+	 * Builds the choice that picks one account of a marketplace.
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param string $created_via The marketplace's `created_via`.
+	 * @param int    $account_id  Account id.
+	 * @return string
+	 */
+	public static function account( string $created_via, int $account_id ): string {
+		return $created_via . ':' . $account_id;
+	}
+
+	/**
+	 * Splits a choice that picks one account.
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param string $choice A choice.
+	 * @return array{0:string,1:int}|null The marketplace's `created_via` and the account id; null for any other choice.
+	 */
+	public static function parse_account( string $choice ): ?array {
+		return 1 === preg_match( '/^(.+):(\d+)$/', $choice, $match ) ? [ $match[1], (int) $match[2] ] : null;
 	}
 
 	/**
@@ -102,7 +137,7 @@ final class Order_Source_Choice {
 	 * @return bool
 	 */
 	public function is_known( string $value ): bool {
-		return in_array( $value, [ self::ALL, self::SHOP, self::MARKETPLACES ], true ) || in_array( $value, $this->created_vias, true );
+		return in_array( $value, [ self::ALL, self::SHOP, self::MARKETPLACES ], true ) || in_array( $value, $this->created_vias, true ) || in_array( $value, $this->account_choices, true );
 	}
 
 	/**

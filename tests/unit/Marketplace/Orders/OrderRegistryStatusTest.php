@@ -56,9 +56,10 @@ final class OrderRegistryStatusTest extends TestCase {
 	public function test_the_posting_of_a_registered_order_is_read_with_its_account_status_and_finished_state(): void {
 		$this->assertSame(
 			[
-				'account_id'  => 1,
-				'status_raw'  => 'awaiting_deliver',
-				'is_terminal' => false,
+				'account_id'   => 1,
+				'external_key' => 'P-1',
+				'status_raw'   => 'awaiting_deliver',
+				'is_terminal'  => false,
 			],
 			$this->registry()->posting_of_order( 700 )
 		);
@@ -82,6 +83,29 @@ final class OrderRegistryStatusTest extends TestCase {
 
 	public function test_an_order_without_a_posting_has_none(): void {
 		$this->assertNull( $this->registry()->posting_of_order( 701 ) );
+	}
+
+	public function test_the_orders_of_an_account_are_listed_without_the_postings_that_have_none_and_without_other_accounts(): void {
+		foreach ( [
+			[ 1, 'P-3', 710 ],
+			[ 1, 'P-4', null ],
+			[ 2, 'P-5', 711 ],
+		] as [ $account, $key, $order ] ) {
+			$this->db->insert(
+				Sqlite_Tables::table( 'postings' ),
+				[
+					'account_id'    => $account,
+					'external_key'  => $key,
+					'wc_order_id'   => $order,
+					'status_raw'    => 'awaiting_deliver',
+					'first_seen_at' => '2026-11-20 10:00:00',
+				]
+			);
+		}
+
+		$this->assertSame( [ 700, 710 ], $this->registry()->order_ids_of_account( 1 ) );
+		$this->assertSame( [ 711 ], $this->registry()->order_ids_of_account( 2 ) );
+		$this->assertSame( [], $this->registry()->order_ids_of_account( 3 ) );
 	}
 
 	/**

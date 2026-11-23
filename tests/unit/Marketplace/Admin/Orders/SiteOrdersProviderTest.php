@@ -15,6 +15,7 @@ use Woodev\Framework\Admin\Records\Action_Response;
 use Woodev\Framework\Admin\Records\Action_State_Exception;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Row_Normalizer;
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Activity;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Cancel;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Data_Status;
@@ -24,6 +25,8 @@ use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Reader;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Rows;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
@@ -112,6 +115,13 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	 * @var Label_Readiness|null
 	 */
 	private $readiness;
+
+	/**
+	 * The actions the marketplace allows, by order id (`null` for an order it has not said for); null here means the adapter has no such contract.
+	 *
+	 * @var array<int,string[]|null>|null
+	 */
+	private $allowed;
 
 	/**
 	 * The options, by name.
@@ -276,6 +286,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$can    = function ( int $order_id ): bool {
 			return ! in_array( $order_id, $this->forbidden, true );
 		};
+		$gate   = new Posting_Action_Gate( new Label_Availability( $this->readiness ), $this->allowed_actions(), $this->write_gate );
 
 		return new Site_Orders_Provider(
 			$this->accounts(),
@@ -285,7 +296,9 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 				$can,
 				static function ( \WC_Order $order ) use ( $cancel ): bool {
 					return null !== $cancel && $cancel->is_finished( $order );
-				}
+				},
+				null,
+				$gate
 			),
 			new Site_Orders_Activity( $this->clock() ),
 			$labels,
@@ -297,8 +310,29 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 				$this->logged[] = $line;
 			},
 			$this->data_status,
-			new Label_Availability( $this->readiness )
+			null,
+			$gate
 		);
+	}
+
+	/**
+	 * The adapter's allowed actions over {@see self::$allowed}; none when the test gives no list.
+	 *
+	 * @return Posting_Allowed_Actions|null
+	 */
+	private function allowed_actions(): ?Posting_Allowed_Actions {
+		if ( null === $this->allowed ) {
+			return null;
+		}
+
+		$allowed = Mockery::mock( Posting_Allowed_Actions::class );
+		$allowed->shouldReceive( 'allowed_posting_actions' )->andReturnUsing(
+			function ( \WC_Order $order ): ?array {
+				return $this->allowed[ $order->get_id() ] ?? null;
+			}
+		);
+
+		return $allowed;
 	}
 
 	/**
@@ -623,7 +657,206 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( [ 'open', 'label', 'cancel' ], array_column( $rows[ $this->row_id( 104 ) ]['actions'], 'id' ) );
 		$this->assertSame( [ true, true, true ], array_column( $rows[ $this->row_id( 104 ) ]['actions'], 'enabled' ) );
 		$this->assertSame( [ 'open', 'label' ], array_column( $rows[ $this->row_id( 103 ) ]['actions'], 'id' ), 'No disabled button and no sentence: the action is simply not there.' );
-		$this->assertSame( [ true, true ], array_column( $rows[ $this->row_id( 103 ) ]['actions'], 'enabled' ) );
+		$this->assertSame( [ true, false ], array_column( $rows[ $this->row_id( 103 ) ]['actions'], 'enabled' ), 'A finished posting needs no label: the button is off, with the reason, like on the order screen.' );
+		$this->assertSame( 'Отправление завершено — этикетка не нужна.', $rows[ $this->row_id( 103 ) ]['actions'][1]['reason'] );
+	}
+
+	public function test_a_label_the_adapter_says_is_not_ready_is_off_in_the_row_with_its_reason(): void {
+		$this->stock( false );
+		$this->readiness = Mockery::mock( Label_Readiness::class );
+		$this->readiness->shouldReceive( 'label_readiness' )->andReturn( 'Этикетка появится, когда заказ будет собран.' );
+
+		$actions = $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'];
+
+		$this->assertSame( [ true, false, true ], array_column( $actions, 'enabled' ) );
+		$this->assertSame( 'Этикетка появится, когда заказ будет собран.', $actions[1]['reason'] );
+		$this->assertSame( '', $actions[2]['reason'], 'Cancelling is not a label question.' );
+	}
+
+	public function test_a_write_the_marketplace_does_not_allow_for_the_posting_is_off_in_its_row_with_the_reason(): void {
+		$this->stock( false );
+		$this->allowed = [
+			101 => [ 'cancel' ],
+			104 => [],
+		];
+
+		$rows = $this->by_id( $this->list_body() );
+
+		$this->assertSame( [ true, false, true ], array_column( $rows[ $this->row_id( 101 ) ]['actions'], 'enabled' ), 'Only the cancellation is allowed for 101.' );
+		$this->assertSame( 'Маркетплейс ещё не выдал этикетку для этого отправления — она станет доступна, когда отправление будет собрано.', $rows[ $this->row_id( 101 ) ]['actions'][1]['reason'] );
+		$this->assertSame( [ true, false, false ], array_column( $rows[ $this->row_id( 104 ) ]['actions'], 'enabled' ), 'An empty list allows nothing.' );
+		$this->assertSame( 'Маркетплейс сейчас не разрешает отменить это отправление — например, оно уже передано в доставку.', $rows[ $this->row_id( 104 ) ]['actions'][2]['reason'] );
+	}
+
+	public function test_a_posting_the_marketplace_has_not_said_for_keeps_both_actions_as_before(): void {
+		$this->stock( false );
+		$this->allowed = [ 101 => null ];
+
+		$this->assertSame( [ true, true, true ], array_column( $this->by_id( $this->list_body() )[ $this->row_id( 101 ) ]['actions'], 'enabled' ) );
+	}
+
+	public function test_an_adapter_without_the_allowed_actions_contract_offers_both_write_actions(): void {
+		$this->stock( false );
+
+		$this->assertNull( $this->allowed );
+		$this->assertSame( [ true, true, true ], array_column( $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'], 'enabled' ) );
+	}
+
+	public function test_a_cancellation_the_marketplace_does_not_allow_is_refused_by_the_plan_and_the_apply_without_a_remote_call(): void {
+		$this->stock( false );
+		$this->allowed = [ 104 => [ 'label' ] ];
+		$provider      = $this->provider();
+		$action        = $this->definition()->get_action( 'cancel' );
+
+		$plan = Action_Response::preview( $action, $provider->preview( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [] ) );
+		$body = Action_Response::apply( $this->definition(), $action, $provider->apply( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [ 'reason' => '1' ] ) );
+
+		$this->assertFalse( $plan['can_apply'] );
+		$this->assertSame( 'failed', $body['status'] );
+		$this->assertSame( 'Маркетплейс сейчас не разрешает отменить это отправление — например, оно уже передано в доставку.', $body['groups'][0]['reason'] );
+		$this->assertSame( [ 'P-104' ], $body['groups'][0]['examples'] );
+		$this->assertSame( [], $this->canceller->cancelled, 'A hand-made request cancels nothing either.' );
+	}
+
+	public function test_a_cancellation_the_marketplace_allows_goes_through(): void {
+		$this->stock( false );
+		$this->allowed = [ 104 => [ 'cancel' ] ];
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'cancel' ), $this->provider()->apply( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [ 'reason' => '1' ] ) );
+
+		$this->assertSame( 'done', $body['status'] );
+		$this->assertSame( [ [ $this->account_id, 'P-104', 1, '' ] ], $this->canceller->cancelled );
+	}
+
+	public function test_a_label_the_marketplace_has_not_released_is_never_asked_for_and_the_reason_is_a_sentence(): void {
+		$this->stock( false );
+		$this->allowed = [ 104 => [ 'cancel' ] ];
+		$provider      = $this->provider();
+
+		$plan = Action_Response::preview( $this->definition()->get_action( 'label' ), $provider->preview( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $provider->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertFalse( $plan['can_apply'] );
+		$this->assertSame( 'failed', $body['status'] );
+		$this->assertSame( 'Маркетплейс ещё не выдал этикетку для этого отправления — она станет доступна, когда отправление будет собрано.', $body['groups'][0]['reason'] );
+		$this->assertSame( [], $this->provider_calls(), 'No label request, so no HTTP 400 from the marketplace.' );
+	}
+
+	public function test_a_ready_label_is_still_handed_over_when_the_marketplace_no_longer_lists_the_action(): void {
+		$this->stock( false );
+		$this->allowed = [ 104 => [ 'cancel' ] ];
+		$document      = $this->document( [ 'P-104' ] );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertSame( $this->label_url( $document ), $body['download']['url'] );
+	}
+
+	public function test_a_stored_label_stays_downloadable_from_the_row_of_a_finished_posting_with_no_optional_contract(): void {
+		$this->stock( false );
+		$this->document( [ 'P-103' ] );
+
+		$rows = $this->by_id( $this->list_body() );
+
+		$this->assertSame( [ true, true ], array_column( $rows[ $this->row_id( 103 ) ]['actions'], 'enabled' ), 'Downloading what is already made is not asking for a label.' );
+		$this->assertSame( '', $rows[ $this->row_id( 103 ) ]['actions'][1]['reason'] );
+		$this->assertSame( [ true, false ], array_column( $rows[ $this->row_id( 102 ) ]['actions'], 'enabled' ), 'A finished posting with no stored label is still off.' );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 103 ) ], [] ) );
+
+		$this->assertArrayHasKey( 'download', $body, 'The server hands the stored PDF over, as the button says.' );
+	}
+
+	public function test_a_stored_label_stays_downloadable_when_the_marketplace_no_longer_lists_the_label_action(): void {
+		$this->stock( false );
+		$this->allowed = [ 104 => [ 'cancel' ] ];
+		$this->document( [ 'P-104' ] );
+
+		$actions = $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'];
+
+		$this->assertSame( [ true, true, true ], array_column( $actions, 'enabled' ) );
+		$this->assertSame( '', $actions[1]['reason'], 'No false «not released» sentence over a label that exists.' );
+	}
+
+	public function test_a_stored_label_stays_downloadable_for_a_key_that_cannot_write_but_cancel_and_new_requests_do_not(): void {
+		$this->stock( false );
+		$this->write_gate = static function (): bool {
+			return false;
+		};
+		$document         = $this->document( [ 'P-104' ] );
+		$provider         = $this->provider();
+
+		$actions = $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'];
+
+		$this->assertSame( [ true, true, false ], array_column( $actions, 'enabled' ) );
+		$this->assertSame( 1, $provider->preview( $this->context(), 'label', [ $this->row_id( 104 ) ], [] )['eligible'], 'The plan does not refuse a download.' );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $provider->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertSame( $this->label_url( $document ), $body['download']['url'] );
+
+		foreach ( [ 'preview', 'apply' ] as $method ) {
+			try {
+				$provider->$method( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [ 'reason' => '1' ] );
+				$this->fail( 'A read-only key cannot cancel.' );
+			} catch ( Action_State_Exception $e ) {
+				$this->assertStringContainsString( 'не позволяет менять данные на маркетплейсе', $e->getMessage() );
+			}
+		}
+	}
+
+	public function test_an_account_whose_key_cannot_write_has_both_write_actions_off_in_every_row_and_open_still_on(): void {
+		$this->stock( false );
+		$this->write_gate = static function (): bool {
+			return false;
+		};
+
+		$rows = $this->by_id( $this->list_body() );
+
+		foreach ( [ 101, 104 ] as $order ) {
+			$actions = $rows[ $this->row_id( $order ) ]['actions'];
+
+			$this->assertSame( [ true, false, false ], array_column( $actions, 'enabled' ) );
+			$this->assertStringContainsString( 'не позволяет менять данные на маркетплейсе', $actions[1]['reason'] );
+			$this->assertSame( $actions[1]['reason'], $actions[2]['reason'] );
+		}
+	}
+
+	public function test_an_account_whose_key_cannot_write_is_refused_both_actions_before_any_remote_call(): void {
+		$this->stock( false );
+		$this->write_gate = static function (): bool {
+			return false;
+		};
+		$provider         = $this->provider();
+
+		foreach ( [ 'label', 'cancel' ] as $action ) {
+			foreach ( [ 'preview', 'apply' ] as $method ) {
+				try {
+					$provider->$method( $this->context(), $action, [ $this->row_id( 104 ) ], [ 'reason' => '1' ] );
+					$this->fail( 'A read-only key cannot ' . $action . '.' );
+				} catch ( Action_State_Exception $e ) {
+					$this->assertStringContainsString( 'не позволяет менять данные на маркетплейсе', $e->getMessage() );
+				}
+			}
+		}
+
+		$this->assertSame( [], $this->canceller->cancelled );
+		$this->assertSame( [], $this->provider_calls() );
+	}
+
+	public function test_the_write_gate_is_asked_with_the_account_of_the_table_and_a_gate_that_lets_it_write_changes_nothing(): void {
+		$this->stock( false );
+		$asked            = [];
+		$this->write_gate = function ( Account $account ) use ( &$asked ): bool {
+			$asked[] = $account->id();
+
+			return true;
+		};
+
+		$actions = $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'];
+
+		$this->assertSame( [ true, true, true ], array_column( $actions, 'enabled' ) );
+		$this->assertSame( [ $this->account_id ], array_unique( $asked ) );
 	}
 
 	public function test_a_ready_label_document_is_handed_over_by_the_label_action(): void {
