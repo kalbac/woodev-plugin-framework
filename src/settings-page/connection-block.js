@@ -9,9 +9,10 @@
 
 import { useState } from '@wordpress/element';
 import { RawHTML } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
-import ControlField from '../components/control-field';
+import ControlField, { resolveControl } from '../components/control-field';
+import { isRequirable } from '../components/validate';
 import { testConnection } from './rest';
 
 /**
@@ -31,6 +32,37 @@ export function isFieldFilled( field, edited ) {
 		return true;
 	}
 	return !! ( field.sensitive && field.is_set );
+}
+
+/**
+ * Labels of the required fields that are still empty, in schema order. Only `required` fields that the
+ * server also enforces count (same rule as the required marker: `isRequirable` on the resolved control),
+ * so an optional field such as a description never gates the test button.
+ *
+ * @param {Object} fields schema fields of the section, keyed by setting id.
+ * @param {Object} values staged values of the section, keyed by setting id.
+ * @return {string[]} labels of the empty required fields.
+ */
+export function emptyRequiredLabels( fields, values ) {
+	return Object.keys( fields )
+		.filter( ( settingId ) => {
+			const field = fields[ settingId ];
+			return !! field.required && isRequirable( resolveControl( field ) ) && ! isFieldFilled( field, values[ settingId ] );
+		} )
+		.map( ( settingId ) => fields[ settingId ].name );
+}
+
+/**
+ * Hint under the disabled test button, naming the empty required field(s).
+ *
+ * @param {string[]} labels labels of the empty required fields, non-empty.
+ * @return {string} the hint text.
+ */
+export function emptyFieldsHint( labels ) {
+	if ( 1 === labels.length ) {
+		return sprintf( __( 'Заполните поле «%s».', 'woodev-plugin-framework' ), labels[ 0 ] );
+	}
+	return sprintf( __( 'Заполните поля: %s.', 'woodev-plugin-framework' ), labels.join( ', ' ) );
 }
 
 export default function ConnectionBlock( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert } ) {
@@ -65,9 +97,10 @@ export default function ConnectionBlock( { providerId, section, values, conditio
 		onFieldRevert( settingId );
 	};
 
-	// Gate the action button on every field being satisfied. A handshake block
+	// Gate the action button on every required field being satisfied. A handshake block
 	// (no fields) is vacuously satisfied → always enabled.
-	const allFieldsFilled = Object.keys( section.fields ).every( ( settingId ) => isFieldFilled( section.fields[ settingId ], values[ settingId ] ) );
+	const emptyLabels = emptyRequiredLabels( section.fields, values );
+	const allFieldsFilled = 0 === emptyLabels.length;
 
 	return (
 		<div className="woodev-connection">
@@ -95,6 +128,9 @@ export default function ConnectionBlock( { providerId, section, values, conditio
 					>
 						{ section.action_label || __( 'Проверить подключение', 'woodev-plugin-framework' ) }
 					</Button>
+				) }
+				{ section.supports_test && ! allFieldsFilled && (
+					<span className="woodev-connection__hint">{ emptyFieldsHint( emptyLabels ) }</span>
 				) }
 				{ result && (
 					<span

@@ -6960,6 +6960,18 @@ msgstr ""
 msgid "Заполните «%s»."
 msgstr ""
 
+#. translators: %s: label of the empty required connection field.
+#: assets/build/settings-page/index.js
+#, php-format,js-format
+msgid "Заполните поле «%s»."
+msgstr ""
+
+#. translators: %s: comma-separated labels of the empty required connection fields.
+#: assets/build/settings-page/index.js
+#, php-format,js-format
+msgid "Заполните поля: %s."
+msgstr ""
+
 #. translators: %s: column title.
 #: settings-page/class-records-table.php:177
 #: assets/build/settings-page/index.js:7
