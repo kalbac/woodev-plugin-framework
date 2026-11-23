@@ -167,7 +167,7 @@ final class Wpdb_Card_Store {
 	/**
 	 * How many of the account's cards the marketplace holds in its archive.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.16
 	 *
 	 * @param int $account_id Account id.
 	 * @return int

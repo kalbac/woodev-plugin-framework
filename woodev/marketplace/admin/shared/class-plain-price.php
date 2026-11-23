@@ -13,13 +13,13 @@ defined( 'ABSPATH' ) || exit;
  * «2 120,00 ₽»: `wc_price()` with its markup taken off, for a table cell that shows text. The orders table and the marketplace cards
  * table both say an amount through this class, so a price reads the same on every screen.
  *
- * @since 2.1.22
+ * @since 2.1.16
  */
 final class Plain_Price {
 	/**
 	 * The amount as the shop writes a price.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.16
 	 *
 	 * @param string|int|float $amount   The amount.
 	 * @param string           $currency ISO currency code; '' for the shop's own currency.
