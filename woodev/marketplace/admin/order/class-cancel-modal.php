@@ -18,7 +18,8 @@ defined( 'ABSPATH' ) || exit;
  * which reacts to a click on any `.woodev-mp-cancel` (so rows added to the page later work too).
  *
  * The button is empty when the order is not a marketplace order, its posting is already finished, or the user may not edit orders —
- * the server checks all of it again on every request in {@see Cancel_Ajax}, so hiding the button is a courtesy.
+ * the server checks all of it again on every request in {@see Cancel_Ajax}, so hiding the button is a courtesy. It is off, with the
+ * reason as its tooltip, when the account's key cannot write or the marketplace does not allow cancelling this posting now.
  *
  * The dialog is the native `<dialog>` element; the script (`assets/js/admin/order-cancel.js`) uses plain DOM calls (`textContent`,
  * never `innerHTML`). A successful cancellation reloads the page, which then shows the order as the marketplace reports it.
@@ -60,20 +61,29 @@ final class Cancel_Modal {
 	private $version;
 
 	/**
+	 * Tells why cancelling the posting of an order is off: `function ( \WC_Order $order ): string`, empty when it is on.
+	 *
+	 * @var callable|null
+	 */
+	private $unavailable;
+
+	/**
 	 * Creates the modal.
 	 *
 	 * @since 2.1.2
 	 *
-	 * @param Screen_Names    $names      Names.
-	 * @param Order_Canceller $canceller  The marketplace's cancellation.
-	 * @param string          $assets_url Folder URL of the module's assets, with a trailing slash.
-	 * @param string          $version    Plugin version.
+	 * @param Screen_Names    $names       Names.
+	 * @param Order_Canceller $canceller   The marketplace's cancellation.
+	 * @param string          $assets_url  Folder URL of the module's assets, with a trailing slash.
+	 * @param string          $version     Plugin version.
+	 * @param callable|null   $unavailable `function ( \WC_Order $order ): string` (since 2.1.16): the sentence that says why the account cannot cancel the posting now — its key cannot write, or the marketplace does not allow it — or '' when it can; null asks nothing.
 	 */
-	public function __construct( Screen_Names $names, Order_Canceller $canceller, string $assets_url, string $version ) {
-		$this->names      = $names;
-		$this->canceller  = $canceller;
-		$this->assets_url = $assets_url;
-		$this->version    = $version;
+	public function __construct( Screen_Names $names, Order_Canceller $canceller, string $assets_url, string $version, ?callable $unavailable = null ) {
+		$this->names       = $names;
+		$this->canceller   = $canceller;
+		$this->assets_url  = $assets_url;
+		$this->version     = $version;
+		$this->unavailable = $unavailable;
 	}
 
 	/**
@@ -91,6 +101,12 @@ final class Cancel_Modal {
 			return '';
 		}
 
+		$off_reason = null === $this->unavailable ? '' : (string) call_user_func( $this->unavailable, $order );
+
+		if ( '' !== $off_reason ) {
+			return $this->off_button( $off_reason );
+		}
+
 		$this->enqueue_assets();
 		add_action( 'admin_footer', [ $this, 'print_dialog' ] );
 
@@ -101,6 +117,21 @@ final class Cancel_Modal {
 			esc_attr( wp_create_nonce( $this->names->cancel_nonce( $order->get_id() ) ) ),
 			esc_attr( $this->names->cancel_reasons_action() ),
 			esc_attr( $this->names->cancel_action() ),
+			esc_html( sprintf( /* translators: %s: marketplace name. */ __( 'Отменить: %s', 'woodev-plugin-framework' ), $this->names->name() ) )
+		);
+	}
+
+	/**
+	 * The button of a posting that cannot be cancelled now: off, with the reason as its tooltip, like the label button. It carries no
+	 * script hook and the dialog is not queued, so no request is possible.
+	 *
+	 * @param string $reason The sentence for the merchant.
+	 * @return string HTML, escaped.
+	 */
+	private function off_button( string $reason ): string {
+		return sprintf(
+			'<span class="woodev-mp-cancel-off" title="%1$s"><button type="button" class="button" disabled aria-disabled="true">%2$s</button></span>',
+			esc_attr( $reason ),
 			esc_html( sprintf( /* translators: %s: marketplace name. */ __( 'Отменить: %s', 'woodev-plugin-framework' ), $this->names->name() ) )
 		);
 	}

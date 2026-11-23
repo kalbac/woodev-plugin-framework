@@ -10,8 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
-use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
-use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -56,13 +55,14 @@ final class Site_Orders_Module {
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
 	 * @param \wpdb              $db       Database.
+	 * @param callable|null      $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.16); null lets every account write.
 	 * @return void
 	 */
-	public static function register( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): void {
+	public static function register( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate = null ): void {
 		add_action(
 			'rest_api_init',
-			static function () use ( $plugin, $accounts, $db ): void {
-				self::register_provider( $plugin, $accounts, $db );
+			static function () use ( $plugin, $accounts, $db, $write_gate ): void {
+				self::register_provider( $plugin, $accounts, $db, $write_gate );
 
 				$analytics = Orders_Analytics_Controller::for_plugin( $plugin, $accounts, $db );
 
@@ -82,9 +82,10 @@ final class Site_Orders_Module {
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
 	 * @param \wpdb              $db       Database.
+	 * @param callable|null      $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.16); null lets every account write.
 	 * @return bool Whether a provider was registered.
 	 */
-	public static function register_provider( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): bool {
+	public static function register_provider( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate = null ): bool {
 		$menu = $plugin->get_marketplace_admin_menu();
 		$page = null === $menu ? null : $menu->get_page( self::PAGE );
 
@@ -94,7 +95,7 @@ final class Site_Orders_Module {
 
 		return Records_Registry::instance()->register(
 			$plugin->get_id(),
-			self::provider( $plugin, $accounts, $db ),
+			self::provider( $plugin, $accounts, $db, $write_gate ),
 			$page->get_capability( $menu->get_capability() )
 		);
 	}
@@ -107,9 +108,10 @@ final class Site_Orders_Module {
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
 	 * @param \wpdb              $db       Database.
+	 * @param callable|null      $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.16); null lets every account write.
 	 * @return Site_Orders_Provider
 	 */
-	public static function provider( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): Site_Orders_Provider {
+	public static function provider( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate = null ): Site_Orders_Provider {
 		$adapter  = $plugin->get_marketplace_adapter();
 		$schema   = new Schema( $adapter->id() );
 		$table    = static function ( string $name ) use ( $schema, $db ): string {
@@ -121,6 +123,7 @@ final class Site_Orders_Module {
 		$can_edit = static function ( int $order_id ): bool {
 			return current_user_can( 'edit_shop_order', $order_id );
 		};
+		$gate     = Posting_Action_Gate::for_adapter( $adapter, $write_gate );
 
 		return new Site_Orders_Provider(
 			$accounts,
@@ -131,7 +134,8 @@ final class Site_Orders_Module {
 				static function ( \WC_Order $order ) use ( $cancel ): bool {
 					return null !== $cancel && $cancel->is_finished( $order );
 				},
-				$adapter instanceof Posting_Status_Names ? $adapter : null
+				$adapter instanceof Posting_Status_Names ? $adapter : null,
+				$gate
 			),
 			new Site_Orders_Activity(),
 			$labels,
@@ -143,7 +147,8 @@ final class Site_Orders_Module {
 				$plugin->log_error( $line );
 			},
 			self::data_status( $plugin, $adapter ),
-			new Label_Availability( $adapter instanceof Label_Readiness ? $adapter : null )
+			null,
+			$gate
 		);
 	}
 

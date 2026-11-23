@@ -12,6 +12,9 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Order_Canceller;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Json_Answer;
@@ -76,6 +79,13 @@ final class CancelAjaxTest extends TestCase {
 	private $logged = [];
 
 	/**
+	 * The rule the handler is built with; none by default.
+	 *
+	 * @var Posting_Action_Gate|null
+	 */
+	private $gate;
+
+	/**
 	 * Boots the doubles: a licensed user, a valid nonce, one enabled account, one marketplace order.
 	 *
 	 * @return void
@@ -85,6 +95,7 @@ final class CancelAjaxTest extends TestCase {
 
 		$this->licensed = true;
 		$this->logged   = [];
+		$this->gate     = null;
 
 		Json_Answer::install();
 		Functions\when( 'admin_url' )->justReturn( 'https://example.test/wp-admin/admin.php?page=x' );
@@ -237,6 +248,38 @@ final class CancelAjaxTest extends TestCase {
 		$this->assertSame( [], $this->canceller->cancelled );
 	}
 
+	public function test_an_account_whose_key_cannot_write_is_refused_before_the_marketplace_is_asked(): void {
+		$this->gate         = new Posting_Action_Gate( new Label_Availability( null ), null, '__return_false' );
+		$_POST['reason_id'] = '1';
+
+		$reasons = $this->call( 'handle_reasons' );
+		$cancel  = $this->call( 'handle_cancel' );
+
+		$this->assertSame( [ 409, 409 ], [ $reasons->status, $cancel->status ] );
+		$this->assertStringContainsString( 'не позволяет менять данные на маркетплейсе', $cancel->data['message'] );
+		$this->assertSame( [], $this->canceller->cancelled );
+		$this->assertSame( 0, $this->canceller->reason_calls );
+	}
+
+	public function test_a_posting_the_marketplace_does_not_allow_to_cancel_is_refused_with_its_sentence(): void {
+		$this->gate         = new Posting_Action_Gate( new Label_Availability( null ), $this->allowed( [ 'label' ] ) );
+		$_POST['reason_id'] = '1';
+
+		$answer = $this->call( 'handle_cancel' );
+
+		$this->assertSame( 409, $answer->status );
+		$this->assertSame( 'Маркетплейс сейчас не разрешает отменить это отправление — например, оно уже передано в доставку.', $answer->data['message'] );
+		$this->assertSame( [], $this->canceller->cancelled );
+	}
+
+	public function test_a_posting_the_marketplace_allows_to_cancel_is_cancelled_as_before(): void {
+		$this->gate         = new Posting_Action_Gate( new Label_Availability( null ), $this->allowed( [ 'cancel' ] ), '__return_true' );
+		$_POST['reason_id'] = '1';
+
+		$this->assertTrue( $this->call( 'handle_cancel' )->success );
+		$this->assertCount( 1, $this->canceller->cancelled );
+	}
+
 	public function test_a_refusal_of_the_marketplace_is_passed_on_with_its_status(): void {
 		$_POST['reason_id'] = '77'; // The fake refuses an unknown reason with 422.
 
@@ -299,7 +342,8 @@ final class CancelAjaxTest extends TestCase {
 			),
 			function ( string $line ): void {
 				$this->logged[] = $line;
-			}
+			},
+			$this->gate
 		);
 
 		try {
@@ -309,6 +353,19 @@ final class CancelAjaxTest extends TestCase {
 		}
 
 		$this->fail( 'The handler sent no answer.' );
+	}
+
+	/**
+	 * An adapter's allowed actions that answer one list for every order.
+	 *
+	 * @param string[] $list Allowed actions.
+	 * @return Posting_Allowed_Actions
+	 */
+	private function allowed( array $list ): Posting_Allowed_Actions {
+		$allowed = \Mockery::mock( Posting_Allowed_Actions::class );
+		$allowed->shouldReceive( 'allowed_posting_actions' )->andReturn( $list );
+
+		return $allowed;
 	}
 
 	/**

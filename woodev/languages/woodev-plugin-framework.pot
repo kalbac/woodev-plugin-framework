@@ -13018,6 +13018,18 @@ msgstr ""
 msgid "Отправление завершено — этикетка не нужна."
 msgstr ""
 
+#: marketplace/admin/shared/class-posting-action-gate.php:92
+msgid "Ключ этого аккаунта не позволяет менять данные на маркетплейсе (например, он выдан только для чтения), поэтому действие недоступно."
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-action-gate.php:108
+msgid "Маркетплейс сейчас не разрешает отменить это отправление — например, оно уже передано в доставку."
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-action-gate.php:129
+msgid "Маркетплейс ещё не выдал этикетку для этого отправления — она станет доступна, когда отправление будет собрано."
+msgstr ""
+
 #: marketplace/settings/class-accounts-sections.php:804
 msgid "Статус нового заказа"
 msgstr ""

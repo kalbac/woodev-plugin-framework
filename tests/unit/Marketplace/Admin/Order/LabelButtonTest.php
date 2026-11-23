@@ -9,15 +9,19 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Order;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Order\Label_Button;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
 use Woodev\Tests\Unit\TestCase;
 
 /**
  * The button carries what the script needs to call the «Заказы» table's own routes — the table, the account, the row id and the REST nonce —
  * and is off, with the reason as its tooltip, for a user who may not edit the order, for a finished posting and for a posting the adapter
- * says is not ready. An adapter that says nothing keeps it on. An order without a posting has none.
+ * says is not ready, for a posting the marketplace does not allow a label for, and for an account whose key cannot write. An adapter that
+ * says nothing keeps it on. An order without a posting has none.
  */
 final class LabelButtonTest extends TestCase {
 	/**
@@ -104,6 +108,46 @@ final class LabelButtonTest extends TestCase {
 		$this->assertStringNotContainsString( 'title=', $html );
 	}
 
+	public function test_a_posting_the_marketplace_does_not_allow_a_label_for_has_the_button_off_with_a_sentence(): void {
+		$allowed = $this->allowed( [ 'cancel' ] );
+
+		$off = $this->button( $this->posting( 3 ), null, $allowed )->button( $this->order( 700 ) );
+
+		$this->assertStringContainsString( 'aria-disabled="true"', $off );
+		$this->assertStringContainsString( 'title="Маркетплейс ещё не выдал этикетку для этого отправления — она станет доступна, когда отправление будет собрано."', $off );
+	}
+
+	public function test_a_posting_the_marketplace_allows_a_label_for_or_has_not_said_for_keeps_the_button_on(): void {
+		$this->assertStringContainsString( 'aria-disabled="false"', $this->button( $this->posting( 3 ), null, $this->allowed( [ 'label', 'cancel' ] ) )->button( $this->order( 700 ) ) );
+		$this->assertStringContainsString( 'aria-disabled="false"', $this->button( $this->posting( 3 ), null, $this->allowed( null ) )->button( $this->order( 700 ) ) );
+	}
+
+	public function test_an_account_whose_key_cannot_write_has_the_button_off_with_the_sentence(): void {
+		$html = $this->button( $this->posting( 3 ), null, null, static function (): bool {
+			return false;
+		} )->button( $this->order( 700 ) );
+
+		$this->assertStringContainsString( 'aria-disabled="true"', $html );
+		$this->assertStringContainsString( 'title="Ключ этого аккаунта не позволяет менять данные на маркетплейсе', $html );
+	}
+
+	public function test_an_account_that_is_gone_is_not_judged_here_the_server_refuses_it_later(): void {
+		$button = new Label_Button(
+			'https://example.test/wp-json/woodev/v1/admin/records/fake/orders',
+			function (): array {
+				return $this->posting( 3 );
+			},
+			new Posting_Action_Gate( new Label_Availability( null ), null, '__return_false' ),
+			static function (): ?Account {
+				return null;
+			},
+			'https://example.test/assets/',
+			'1.0'
+		);
+
+		$this->assertStringContainsString( 'aria-disabled="false"', $button->button( $this->order( 700 ) ) );
+	}
+
 	public function test_an_order_without_a_posting_has_no_button_and_loads_no_script(): void {
 		$this->assertSame( '', $this->button( null )->button( $this->order( 700 ) ) );
 		$this->assertSame( [], $this->scripts );
@@ -112,20 +156,38 @@ final class LabelButtonTest extends TestCase {
 	/**
 	 * Builds the button over a registry that answers one posting for every order.
 	 *
-	 * @param array<string,mixed>|null $posting   The posting; null for an order with none.
-	 * @param Label_Readiness|null     $readiness The adapter's readiness.
+	 * @param array<string,mixed>|null     $posting    The posting; null for an order with none.
+	 * @param Label_Readiness|null         $readiness  The adapter's readiness.
+	 * @param Posting_Allowed_Actions|null $allowed    The adapter's allowed actions.
+	 * @param callable|null                $write_gate The plugin's write gate.
 	 * @return Label_Button
 	 */
-	private function button( ?array $posting, ?Label_Readiness $readiness = null ): Label_Button {
+	private function button( ?array $posting, ?Label_Readiness $readiness = null, ?Posting_Allowed_Actions $allowed = null, ?callable $write_gate = null ): Label_Button {
 		return new Label_Button(
 			'https://example.test/wp-json/woodev/v1/admin/records/fake/orders',
 			static function () use ( $posting ): ?array {
 				return $posting;
 			},
-			new Label_Availability( $readiness ),
+			new Posting_Action_Gate( new Label_Availability( $readiness ), $allowed, $write_gate ),
+			static function ( int $account_id ): Account {
+				return new Account( $account_id, 'fake', 'Магазин', true );
+			},
 			'https://example.test/assets/',
 			'1.0'
 		);
+	}
+
+	/**
+	 * An adapter's allowed actions that answer one list for every order.
+	 *
+	 * @param string[]|null $list Allowed actions; null for «not said».
+	 * @return Posting_Allowed_Actions
+	 */
+	private function allowed( ?array $list ): Posting_Allowed_Actions {
+		$allowed = Mockery::mock( Posting_Allowed_Actions::class );
+		$allowed->shouldReceive( 'allowed_posting_actions' )->andReturn( $list );
+
+		return $allowed;
 	}
 
 	/**

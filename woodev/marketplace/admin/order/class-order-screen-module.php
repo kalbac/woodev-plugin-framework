@@ -8,14 +8,15 @@
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
 use Woodev\Framework\Admin\Records\Records_Definition;
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
-use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
-use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
+use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 
 defined( 'ABSPATH' ) || exit;
@@ -54,20 +55,26 @@ final class Order_Screen_Module {
 	 *
 	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin Plugin.
 	 * @param \wpdb                                            $db     Database.
+	 * @param Wpdb_Account_Store|null                          $accounts   Accounts, to tell whether the account of a posting can write (since 2.1.16); null judges no account.
+	 * @param callable|null                                    $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.16); null lets every account write.
 	 * @return void
 	 */
-	public static function register( $plugin, \wpdb $db ): void {
+	public static function register( $plugin, \wpdb $db, ?Wpdb_Account_Store $accounts = null, ?callable $write_gate = null ): void {
 		if ( ! is_admin() || isset( self::$registered[ $plugin->get_id() ] ) ) {
 			return;
 		}
 
 		self::$registered[ $plugin->get_id() ] = true;
 
-		$adapter  = $plugin->get_marketplace_adapter();
-		$names    = new Screen_Names( $adapter->id(), $adapter->settings_descriptor()->marketplace_name() );
-		$registry = new Order_Registry( $db, ( new Schema( $adapter->id() ) )->table_name( 'postings', $db->prefix ) );
-		$assets   = self::assets_url( $plugin );
-		$box      = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets ), self::label_button( $plugin, $adapter, $registry, $assets ), $assets, $plugin->get_version() );
+		$adapter    = $plugin->get_marketplace_adapter();
+		$names      = new Screen_Names( $adapter->id(), $adapter->settings_descriptor()->marketplace_name() );
+		$registry   = new Order_Registry( $db, ( new Schema( $adapter->id() ) )->table_name( 'postings', $db->prefix ) );
+		$assets     = self::assets_url( $plugin );
+		$gate       = Posting_Action_Gate::for_adapter( $adapter, $write_gate );
+		$account_of = static function ( int $account_id ) use ( $accounts ): ?Account {
+			return null === $accounts ? null : $accounts->get( $account_id );
+		};
+		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of ), $assets, $plugin->get_version() );
 
 		( new Order_Screen( $adapter->order_meta(), $box ) )->register();
 	}
@@ -79,14 +86,34 @@ final class Order_Screen_Module {
 	 * @param Marketplace_Adapter                              $adapter Adapter.
 	 * @param Screen_Names                                     $names   Names.
 	 * @param string                                           $assets  Assets folder URL.
+	 * @param callable                                         $unavailable `function ( \WC_Order $order ): string`, why cancelling is off for an order; empty when it is on.
 	 * @return Cancel_Modal|null
 	 */
-	private static function cancel_modal( $plugin, Marketplace_Adapter $adapter, Screen_Names $names, string $assets ): ?Cancel_Modal {
+	private static function cancel_modal( $plugin, Marketplace_Adapter $adapter, Screen_Names $names, string $assets, callable $unavailable ): ?Cancel_Modal {
 		if ( ! $adapter instanceof Order_Canceller ) {
 			return null;
 		}
 
-		return new Cancel_Modal( $names, $adapter, $assets, $plugin->get_version() );
+		return new Cancel_Modal( $names, $adapter, $assets, $plugin->get_version(), $unavailable );
+	}
+
+	/**
+	 * Builds the answer to «why can this order not be cancelled now»: the account's key cannot write, or the marketplace does not allow
+	 * the cancellation of the posting.
+	 *
+	 * @param Order_Registry      $registry   The postings registry.
+	 * @param Posting_Action_Gate $gate       The rule.
+	 * @param callable            $account_of `function ( int $account_id ): ?Account`.
+	 * @return callable `function ( \WC_Order $order ): string`.
+	 */
+	private static function cancel_unavailable( Order_Registry $registry, Posting_Action_Gate $gate, callable $account_of ): callable {
+		return static function ( \WC_Order $order ) use ( $registry, $gate, $account_of ): string {
+			$posting = $registry->posting_of_order( $order->get_id() );
+			$account = null === $posting ? null : call_user_func( $account_of, $posting['account_id'] );
+			$refusal = $account instanceof Account ? $gate->write_refusal( $account ) : '';
+
+			return '' !== $refusal ? $refusal : $gate->cancel_reason( $order );
+		};
 	}
 
 	/**
@@ -106,9 +133,11 @@ final class Order_Screen_Module {
 	 * @param Marketplace_Adapter                              $adapter  Adapter.
 	 * @param Order_Registry                                   $registry The postings registry.
 	 * @param string                                           $assets   Assets folder URL.
+	 * @param Posting_Action_Gate                              $gate       Whether a label can be asked for a posting.
+	 * @param callable                                         $account_of `function ( int $account_id ): ?Account`.
 	 * @return Label_Button|null Null when the adapter has no label calls or the plugin has no table to ask them of.
 	 */
-	private static function label_button( $plugin, Marketplace_Adapter $adapter, Order_Registry $registry, string $assets ): ?Label_Button {
+	private static function label_button( $plugin, Marketplace_Adapter $adapter, Order_Registry $registry, string $assets, Posting_Action_Gate $gate, callable $account_of ): ?Label_Button {
 		if ( null === $adapter->label_provider() || ! $adapter->supports( Capability::GET_LABEL ) ) {
 			return null;
 		}
@@ -119,8 +148,6 @@ final class Order_Screen_Module {
 
 		$table_url = rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/admin/records/' . $plugin->get_id() . '/' . Site_Orders_Provider::TABLE );
 
-		$readiness = $adapter instanceof Label_Readiness ? $adapter : null;
-
-		return new Label_Button( $table_url, [ $registry, 'posting_of_order' ], new Label_Availability( $readiness ), $assets, $plugin->get_version() );
+		return new Label_Button( $table_url, [ $registry, 'posting_of_order' ], $gate, $account_of, $assets, $plugin->get_version() );
 	}
 }

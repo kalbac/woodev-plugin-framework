@@ -149,6 +149,82 @@ class SiteOrdersRestTest extends TestCase {
 	}
 
 	/**
+	 * The plugin's write gate reaches the real route: for an account it refuses, the label action of every row is off with the sentence
+	 * (the table's `open` action stays on), and for one it allows nothing changes.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_an_account_the_write_gate_refuses_gets_the_write_actions_off_in_its_rows( bool $hpos ): void {
+		global $wpdb;
+
+		$this->use_datastore( $hpos );
+
+		$accounts = $this->accounts();
+		$read     = $accounts->save( $this->account( 'cab-ro' ) );
+		$write    = $accounts->save( $this->account( 'cab-rw' ) );
+		$owner    = 'itest-gate-' . ( $hpos ? 'hpos' : 'cpt' );
+		$postings = $this->schema->table_name( 'postings', $wpdb->prefix );
+
+		$this->posting( $postings, $read, 'R-1', $this->order( 'processing' ) );
+		$this->posting( $postings, $write, 'W-1', $this->order( 'processing' ) );
+
+		$plugin = new Test_Marketplace_Plugin(
+			$owner,
+			[
+				'id'       => $owner,
+				'title'    => 'Тест',
+				'icon'     => 'https://example.test/icon.svg',
+				'position' => '55.64',
+			]
+		);
+
+		$this->assertTrue(
+			Site_Orders_Module::register_provider(
+				$plugin,
+				$accounts,
+				$wpdb,
+				static function ( Account $account ) use ( $read ): bool {
+					return $account->id() !== $read;
+				}
+			)
+		);
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$read_actions  = $this->row_actions( $owner, $read );
+		$write_actions = $this->row_actions( $owner, $write );
+
+		$this->assertSame( [ true, false ], array_column( $read_actions, 'enabled' ), 'Open stays on; the label is off for a key that cannot write.' );
+		$this->assertStringContainsString( 'не позволяет менять данные на маркетплейсе', $read_actions[1]['reason'] );
+		$this->assertSame( [ true, true ], array_column( $write_actions, 'enabled' ) );
+	}
+
+	/**
+	 * The actions of the one row of an account, read through the real route.
+	 *
+	 * @param string $owner   Plugin id.
+	 * @param int    $account Account id.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function row_actions( string $owner, int $account ): array {
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/admin/records/' . $owner . '/orders' );
+		$request->set_query_params( [ 'context' => [ 'account_id' => (string) $account ] ] );
+
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $data['rows'] );
+
+		return $data['rows'][0]['actions'];
+	}
+
+	/**
 	 * Selects the datastore.
 	 *
 	 * @param bool $hpos True for HPOS, false for the posts store.

@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
 
@@ -63,6 +64,13 @@ final class Site_Orders_Rows {
 	private $status_names;
 
 	/**
+	 * Whether the write actions are on offer for a posting; null when the table asks nothing beyond the user's right and the finished state.
+	 *
+	 * @var Posting_Action_Gate|null
+	 */
+	private $gate;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
@@ -71,12 +79,14 @@ final class Site_Orders_Rows {
 	 * @param callable                  $can_edit    `function ( int $order_id ): bool`, the object right to edit an order.
 	 * @param callable                  $is_finished `function ( \WC_Order $order ): bool`, whether the posting can no longer be cancelled.
 	 * @param Posting_Status_Names|null $status_names The adapter's own names of posting statuses, when it has them.
+	 * @param Posting_Action_Gate|null  $gate        Whether «Отменить» and «Этикетки» are on offer for a posting (since 2.1.16); null offers them to everyone who may edit the order.
 	 */
-	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null ) {
+	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null, ?Posting_Action_Gate $gate = null ) {
 		$this->offered      = $offered;
 		$this->can_edit     = $can_edit;
 		$this->is_finished  = $is_finished;
 		$this->status_names = $status_names;
+		$this->gate         = $gate;
 	}
 
 	/**
@@ -119,18 +129,20 @@ final class Site_Orders_Rows {
 	 * @param array<string,mixed> $item       The registry item.
 	 * @param \WC_Order           $order      Its WooCommerce order.
 	 * @param array<string,mixed> $activity   Activity of the row.
+	 * @param string              $write_refusal Why the account cannot write to the marketplace (since 2.1.16); empty when it can.
 	 * @return array<string,mixed>
 	 */
-	public function row( int $account_id, array $item, \WC_Order $order, array $activity ): array {
+	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '' ): array {
 		$editable = true === call_user_func( $this->can_edit, $item['order_id'] );
 		$url      = $editable ? (string) $order->get_edit_order_url() : '';
 		$cells    = $this->cells( $item, $order, $url );
+		$actions  = $this->actions( $item, $order, $editable, $url, $write_refusal );
 
 		return [
 			'id'           => Site_Orders_Ids::row_id( $account_id, $item['order_id'] ),
-			'revision'     => substr( md5( (string) wp_json_encode( [ $cells, $activity['processes'] ] ) ), 0, 16 ),
+			'revision'     => substr( md5( (string) wp_json_encode( [ $cells, $activity['processes'], $actions ] ) ), 0, 16 ), // The actions count: a posting the marketplace stops allowing a cancel for must redraw its row.
 			'cells'        => $cells,
-			'actions'      => $this->actions( $order, $editable, $url ),
+			'actions'      => $actions,
 			'selectable'   => false,
 			'has_children' => false,
 			'activity'     => $activity,
@@ -245,14 +257,18 @@ final class Site_Orders_Rows {
 	}
 
 	/**
-	 * The actions of a row, each with a reason when it is off. The cancel action is left out of a finished posting's row.
+	 * The actions of a row, each with a reason when it is off. The cancel action is left out of a finished posting's row; a write action
+	 * the account cannot make, or the marketplace does not allow for this posting, stays on the row but off, with the reason — the way
+	 * «Заказы доставки» shows an action it cannot run.
 	 *
-	 * @param \WC_Order $order    Order.
-	 * @param bool      $editable Whether the user may edit the order.
-	 * @param string    $url      Edit address; empty without the right.
+	 * @param array<string,mixed> $item          The registry item.
+	 * @param \WC_Order           $order         Order.
+	 * @param bool                $editable      Whether the user may edit the order.
+	 * @param string              $url           Edit address; empty without the right.
+	 * @param string              $write_refusal Why the account cannot write to the marketplace; empty when it can.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private function actions( \WC_Order $order, bool $editable, string $url ): array {
+	private function actions( array $item, \WC_Order $order, bool $editable, string $url, string $write_refusal ): array {
 		$actions = [];
 
 		foreach ( $this->offered as $id ) {
@@ -261,20 +277,22 @@ final class Site_Orders_Rows {
 				continue;
 			}
 
-			$actions[] = $this->action( $id, $order, $editable, $url );
+			$actions[] = $this->action( $id, $item, $order, $editable, $url, $write_refusal );
 		}
 
 		return $actions;
 	}
 
 	/**
-	 * @param string    $id       Action id.
-	 * @param \WC_Order $order    Order.
-	 * @param bool      $editable Whether the user may edit the order.
-	 * @param string    $url      Edit address.
+	 * @param string              $id            Action id.
+	 * @param array<string,mixed> $item          The registry item.
+	 * @param \WC_Order           $order         Order.
+	 * @param bool                $editable      Whether the user may edit the order.
+	 * @param string              $url           Edit address.
+	 * @param string              $write_refusal Why the account cannot write to the marketplace; empty when it can.
 	 * @return array<string,mixed>
 	 */
-	private function action( string $id, \WC_Order $order, bool $editable, string $url ): array {
+	private function action( string $id, array $item, \WC_Order $order, bool $editable, string $url, string $write_refusal ): array {
 		if ( Site_Orders_Definition::OPEN === $id ) {
 			return [
 				'id'      => $id,
@@ -291,10 +309,38 @@ final class Site_Orders_Rows {
 			];
 		}
 
+		$reason = $this->unavailable_reason( $id, $item, $order, $write_refusal );
+
 		return [
 			'id'      => $id,
-			'enabled' => true,
-			'reason'  => '',
+			'enabled' => '' === $reason,
+			'reason'  => $reason,
 		];
+	}
+
+	/**
+	 * Why a write action is off for this posting: the account cannot write, the marketplace does not allow the action now, or (for a
+	 * label) the posting is not ready for one.
+	 *
+	 * @param string              $id            Action id, `label` or `cancel`.
+	 * @param array<string,mixed> $item          The registry item.
+	 * @param \WC_Order           $order         Order.
+	 * @param string              $write_refusal Why the account cannot write to the marketplace; empty when it can.
+	 * @return string The sentence for the merchant; empty when the action is on.
+	 */
+	private function unavailable_reason( string $id, array $item, \WC_Order $order, string $write_refusal ): string {
+		if ( '' !== $write_refusal ) {
+			return $write_refusal;
+		}
+
+		if ( null === $this->gate ) {
+			return '';
+		}
+
+		if ( Site_Orders_Definition::CANCEL === $id ) {
+			return $this->gate->cancel_reason( $order );
+		}
+
+		return $this->gate->label_reason( $order, (string) $item['status_raw'], true === $item['is_terminal'] );
 	}
 }
