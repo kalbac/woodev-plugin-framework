@@ -714,15 +714,18 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	/**
 	 * The WooCommerce orders of a page, by id: one query on either storage.
 	 *
+	 * The ids go in `post__in`: `include` is not an argument of `wc_get_orders()` and HPOS ignores it silently, returning the newest
+	 * orders instead — an account whose orders are not the newest ones then got no rows while the reader (SQL) counted them.
+	 *
 	 * @param int[] $order_ids Order ids.
 	 * @return array<int,\WC_Order>
 	 */
 	private function orders( array $order_ids ): array {
 		$found  = wc_get_orders(
 			[
-				'type'    => 'shop_order',
-				'include' => $order_ids,
-				'limit'   => count( $order_ids ),
+				'type'     => 'shop_order',
+				'post__in' => $order_ids,
+				'limit'    => count( $order_ids ),
 			]
 		);
 		$orders = [];

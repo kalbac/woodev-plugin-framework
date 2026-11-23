@@ -45,6 +45,12 @@ final class Posting_Jobs {
 	public const DEFAULT_POLL_MINUTES = 10;
 
 	/**
+	 * Name of the action fired with the account id when an account was created or a setting that decides its poll was saved
+	 * (`Job_Names::hook( 'account_saved' )`, i.e. `woodev_{plugin id}_account_saved`).
+	 */
+	public const ACCOUNT_SAVED = 'account_saved';
+
+	/**
 	 * Transient that spaces the check of the recurring polls.
 	 */
 	private const CHECK_TRANSIENT = 'poll_check';
@@ -165,6 +171,7 @@ final class Posting_Jobs {
 		add_action( $this->refresh_hook(), [ $this, 'refresh' ], 10, 2 );
 		add_action( $this->poll_hook(), [ $this, 'poll' ] );
 		add_action( 'action_scheduler_init', [ $this, 'ensure_polls' ] );
+		add_action( $this->names->hook( self::ACCOUNT_SAVED ), [ $this, 'ensure_poll_for' ] );
 	}
 
 	/**
@@ -325,13 +332,45 @@ final class Posting_Jobs {
 
 		set_transient( $transient, '1', HOUR_IN_SECONDS );
 
+		foreach ( $this->accounts->all( $this->adapter_id, true ) as $account ) {
+			$this->schedule_poll( $account );
+		}
+	}
+
+	/**
+	 * Creates the recurring poll of one account right after it was saved, without waiting for the hourly check of
+	 * {@see self::ensure_polls()} (#1927). A switched-off account, one that wants no postings and one that already has its poll get nothing.
+	 *
+	 * Switching an account off or deleting it cancels nothing here: a poll of a switched-off account ends at once, and the deletion
+	 * takes the account's pending jobs off the queue.
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param int|string $account_id Account id (the `account_saved` action's argument).
+	 * @return void
+	 */
+	public function ensure_poll_for( $account_id ): void {
+		$account = $this->accounts->get( (int) $account_id );
+
+		if ( null !== $account && $account->is_enabled() && $account->adapter_id() === $this->adapter_id ) {
+			$this->schedule_poll( $account );
+		}
+	}
+
+	/**
+	 * Creates the recurring poll of an account that wants postings and has none.
+	 *
+	 * @param Account $account Account.
+	 * @return void
+	 */
+	private function schedule_poll( Account $account ): void {
+		if ( ! self::wants_postings( $account ) || as_has_scheduled_action( $this->poll_hook(), [ $account->id() ], $this->names->group() ) ) {
+			return;
+		}
+
 		$interval = max( 1, (int) get_option( $this->poll_option, self::DEFAULT_POLL_MINUTES ) ) * MINUTE_IN_SECONDS;
 
-		foreach ( $this->accounts->all( $this->adapter_id, true ) as $account ) {
-			if ( self::wants_postings( $account ) && ! as_has_scheduled_action( $this->poll_hook(), [ $account->id() ], $this->names->group() ) ) {
-				as_schedule_recurring_action( time() + MINUTE_IN_SECONDS, $interval, $this->poll_hook(), [ $account->id() ], $this->names->group() );
-			}
-		}
+		as_schedule_recurring_action( time() + MINUTE_IN_SECONDS, $interval, $this->poll_hook(), [ $account->id() ], $this->names->group() );
 	}
 
 	/**

@@ -541,6 +541,73 @@ final class PostingJobsTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * An account saved with orders on gets its recurring poll at once, with no hourly check in between (#1927).
+	 *
+	 * @return void
+	 */
+	public function test_an_account_saved_with_orders_on_gets_its_poll_at_once(): void {
+		$this->options['woodev_fake-seller_poll_postings_minutes'] = 7;
+
+		$intervals = [];
+		Functions\when( 'as_schedule_recurring_action' )->alias(
+			function ( int $when, int $interval, string $hook, array $args = [], string $group = '' ) use ( &$intervals ): int {
+				$intervals[] = $interval;
+
+				return $this->scheduler->add( $hook, $args, 'recurring', 0, $group );
+			}
+		);
+		$this->set_account( [ 'orders_enabled' => true ] );
+
+		$this->jobs()->ensure_poll_for( $this->account_id );
+
+		$polls = $this->scheduler->of( self::POLL );
+		$this->assertCount( 1, $polls );
+		$this->assertSame( [ $this->account_id ], $polls[0]['args'] );
+		$this->assertSame( 'recurring', $polls[0]['kind'] );
+		$this->assertSame( 'woodev-fake-seller', $polls[0]['group'] );
+		$this->assertSame( [ 420 ], $intervals, 'the same interval ensure_polls() uses' );
+		$this->assertArrayNotHasKey( 'woodev_fake_seller_poll_check', $this->transients, 'the hourly check of ensure_polls() is left alone' );
+	}
+
+	/**
+	 * An account saved with orders and the site's stock both off, or one that is switched off or unknown, gets no poll.
+	 *
+	 * @return void
+	 */
+	public function test_an_account_saved_with_orders_and_stock_off_gets_no_poll(): void {
+		$this->set_account(
+			[
+				'orders_enabled' => false,
+				'stock_mode'     => 'marketplace',
+			]
+		);
+		$this->jobs()->ensure_poll_for( $this->account_id );
+		$this->assertSame( [], $this->scheduler->of( self::POLL ) );
+
+		$this->set_account( [ 'orders_enabled' => true ] );
+		$this->accounts()->set_enabled( $this->account_id, false );
+		$this->jobs()->ensure_poll_for( (string) $this->account_id );
+		$this->jobs()->ensure_poll_for( 404 );
+		$this->assertSame( [], $this->scheduler->of( self::POLL ) );
+	}
+
+	/**
+	 * Saving an account again does not queue a second poll, and the hourly check does not duplicate the one the save made.
+	 *
+	 * @return void
+	 */
+	public function test_saving_an_account_with_a_poll_does_not_duplicate_it(): void {
+		$this->set_account( [ 'orders_enabled' => true ] );
+		$jobs = $this->jobs();
+
+		$jobs->ensure_poll_for( $this->account_id );
+		$jobs->ensure_poll_for( $this->account_id );
+		$jobs->ensure_polls();
+
+		$this->assertCount( 1, $this->scheduler->of( self::POLL ) );
+	}
+
+	/**
 	 * Registering hooks the refresh with its two arguments, the poll and the Action Scheduler init.
 	 *
 	 * @return void
@@ -552,6 +619,7 @@ final class PostingJobsTest extends Sync_Test_Case {
 		$this->assertNotFalse( has_action( self::REFRESH, [ $jobs, 'refresh' ] ) );
 		$this->assertNotFalse( has_action( self::POLL, [ $jobs, 'poll' ] ) );
 		$this->assertNotFalse( has_action( 'action_scheduler_init', [ $jobs, 'ensure_polls' ] ) );
+		$this->assertNotFalse( has_action( 'woodev_fake_seller_account_saved', [ $jobs, 'ensure_poll_for' ] ) );
 	}
 
 	/**

@@ -46,3 +46,12 @@ export function withoutBusyRows( ids: string[], rows: AdminRecord[] ): string[] 
 
 	return ids.filter( ( id ) => ! busy.has( id ) );
 }
+
+/**
+ * Whether any row on screen is busy: «every row under the filter» would take it along, so that mode is off meanwhile.
+ *
+ * @param rows Every row on screen, children included.
+ */
+export function hasBusyRow( rows: AdminRecord[] ): boolean {
+	return rows.some( isRowBusy );
+}
