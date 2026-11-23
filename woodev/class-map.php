@@ -322,6 +322,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Intake\\Push_Rate_Limiter' => 'woodev/marketplace/intake/class-push-rate-limiter.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Push_Registrar' => 'woodev/marketplace/intake/interface-push-registrar.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Registration_Refresher' => 'woodev/marketplace/intake/class-registration-refresher.php',
+	'Woodev\\Framework\\Marketplace\\Intake\\Rejects_Inbound_Events' => 'woodev/marketplace/intake/interface-rejects-inbound-events.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Sender_Network' => 'woodev/marketplace/intake/class-sender-network.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Tokenless_Seen' => 'woodev/marketplace/intake/class-tokenless-seen.php',
 	'Woodev\\Framework\\Marketplace\\Intake\\Webhook_Switches' => 'woodev/marketplace/intake/class-webhook-switches.php',

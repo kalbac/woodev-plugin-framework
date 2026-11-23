@@ -490,6 +490,20 @@ What the code settled, where the text above left it open:
   decoder's event type, label, purpose, cabinet location, default). The framework registers one toggle per type
   (`woodev_{plugin id}_webhook_{type id}`), explains them in the first card, and `Notification_Intake` stores a switched-off type
   as `ignored` and answers 200 (a 4xx would count against the URL in the marketplace's health check).
+- **A marketplace that probes the URL with wrong pushes (2.1.18, ozon#35).** Ozon checks a URL by sending a push of a type that
+  does not exist (`{"message_type":"TYPE_WRONG_PUSH"}`) and a body that is not JSON, and expects an ERROR status; answering 200 to
+  everything reads as «the endpoint accepts anything» (`WRONG_RESULT_FIELD`). The adapter's `Push_Protocol` can also implement the
+  optional `Intake\Rejects_Inbound_Events::rejection( Inbound_Event ): ?array{status:int,reason:string}` (detected with `instanceof`, like
+  `Names_Event_Types`). `Notification_Intake::ingest()` asks it for every event the decoder returned, **records the event anyway** (an
+  event the decoder did not already mark gets the reason as its `ignore_reason`, so it is never worked and no drain is queued — the
+  diagnostics keep the row), and then answers `status` with `Push_Protocol::error_body( reason, message )` instead of the success
+  body. `Intake_Response::REASON_INVALID_JSON` («body is not valid JSON») and `REASON_UNKNOWN_TYPE` («unknown notification type») are
+  the reasons the framework has text for; any other reason gets a generic text. A status outside 4xx–5xx becomes 400. It applies to
+  BOTH routes, because both end in `ingest()`: the REST token route — including `Notifications_Controller::pre_dispatch()`, which
+  hands a malformed body to the intake before core's `400 rest_invalid_json` — and `handle_tokenless()` (after its sender check).
+  A failed store still answers 500 (the marketplace retries). **Without the contract nothing changes: every decoded event is 200.**
+  Reject only what the marketplace documents as wrong — a 4xx counts against the URL's availability, so a documented type the plugin
+  does not handle, or one whose switch is off, stays 200. An event the decoder dropped (`null`, a ping) is not asked about.
 - **One seam per kind of answer.** `Settings_Descriptor` holds copy and field specs only. Remote push actions are
   `Marketplace_Adapter::push_admin( $account_id ): ?Push_Admin` (the `price_pusher()` pattern), so F11 and F15 reach them
   without a UI-copy object in between.

@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Intake;
 require_once dirname( __DIR__, 2 ) . '/Shipping/Rest_Api/wp-rest-controller-stub.php';
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Marketplace\Intake\Intake_Response;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Intake;
 use Woodev\Framework\Marketplace\Intake\Notification_Url;
@@ -21,6 +22,7 @@ use Woodev\Framework\Marketplace\Jobs\Drain_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Push_Protocol;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Rejecting_Push_Protocol;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Inbound_Decoder;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
 
@@ -183,6 +185,46 @@ final class NotificationsControllerTest extends Sync_Test_Case {
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( [ 'ignored' ], array_column( $this->events(), 'status' ) );
+		$this->assertSame( [ 'invalid json' ], array_column( $this->events(), 'result' ) );
+	}
+
+	/**
+	 * With an adapter that rejects an unreadable body, the early answer carries the error status and body — not core's 400
+	 * `rest_invalid_json` — and the row is stored.
+	 *
+	 * @return void
+	 */
+	public function test_a_rejected_malformed_json_notification_is_answered_with_the_protocols_error_before_core_validation(): void {
+		$controller = new Notifications_Controller(
+			Sqlite_Tables::MARKETPLACE_ID,
+			new Notification_Intake(
+				new Scripted_Inbound_Decoder(),
+				new Fake_Rejecting_Push_Protocol(),
+				new Sender_Network( Sqlite_Tables::MARKETPLACE_ID, new Fake_Push_Protocol() ),
+				new Webhook_Switches( [], 'woodev_fake_mp_' ),
+				new Wpdb_Event_Ledger( $this->db, Sqlite_Tables::table( 'events' ), $this->clock() ),
+				new Notification_Account_Reader( $this->db, Sqlite_Tables::table( 'accounts' ) ),
+				new Drain_Scheduler( $this->names() ),
+				new class() extends Push_Rate_Limiter {
+					/**
+					 * Never limits.
+					 *
+					 * @param string $key Key.
+					 * @param int    $ttl TTL.
+					 * @return int
+					 */
+					protected function increment_rate_limit_counter( string $key, int $ttl ): int {
+						return 1;
+					}
+				}
+			)
+		);
+
+		$response = $controller->pre_dispatch( null, null, $this->request( 'POST', self::ROUTE . $this->account_id . '/' . $this->token(), 'asdasdasd' ) );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( Intake_Response::REASON_INVALID_JSON, $response->get_data()['fault'] );
 		$this->assertSame( [ 'invalid json' ], array_column( $this->events(), 'result' ) );
 	}
 
