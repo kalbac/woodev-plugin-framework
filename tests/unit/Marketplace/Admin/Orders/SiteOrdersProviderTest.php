@@ -184,9 +184,19 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 				return $this->wc_orders[ (int) $id ] ?? false;
 			}
 		);
+		// Like WooCommerce on HPOS: only `post__in` narrows the query. Any other key (`include` is not one) is ignored, and the newest
+		// `limit` orders of the store come back — which is what hid the rows of an account whose orders are not the newest ones (#1928).
 		Functions\when( 'wc_get_orders' )->alias(
 			function ( array $args ) {
-				return array_values( array_intersect_key( $this->wc_orders, array_flip( $args['include'] ) ) );
+				$orders = $this->wc_orders;
+
+				krsort( $orders );
+
+				if ( isset( $args['post__in'] ) ) {
+					$orders = array_intersect_key( $orders, array_flip( $args['post__in'] ) );
+				}
+
+				return array_slice( array_values( $orders ), 0, $args['limit'] ?? -1 );
 			}
 		);
 	}
@@ -455,6 +465,24 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( [ 'label' => 'Отменено', 'tone' => 'danger' ], $rows[ $this->row_id( 103 ) ]['cells']['status'][0]['value'] );
 		$this->assertSame( [ 'label' => 'Доставлено', 'tone' => 'success' ], $rows[ $this->row_id( 102 ) ]['cells']['status'][0]['value'] );
 		$this->assertFalse( $rows[ $this->row_id( 104 ) ]['selectable'] );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
+	public function test_an_account_whose_orders_are_not_the_newest_of_the_store_still_gets_its_rows( bool $hpos ): void {
+		$this->stock( $hpos );
+
+		// Four newer orders of the store that no posting of the account points at: other plugins' orders, a later sync's orders.
+		foreach ( [ 201, 202, 203, 204 ] as $id ) {
+			$this->add_order( $id, 'completed', '2026-11-20 10:00:00', '10', 'Чужой заказ', 'X-' . $id, false );
+		}
+
+		$body = $this->list_body();
+
+		$this->assertSame( 4, $body['total'] );
+		$this->assertCount( $body['total'], $body['rows'], 'The count and the rows are one set: no order is counted and then left out.' );
+		$this->assertSame( [ $this->row_id( 104 ), $this->row_id( 103 ), $this->row_id( 102 ), $this->row_id( 101 ) ], array_column( $body['rows'], 'id' ) );
 	}
 
 	/**

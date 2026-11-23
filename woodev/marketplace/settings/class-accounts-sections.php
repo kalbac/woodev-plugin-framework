@@ -16,6 +16,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Controller;
 use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Progress;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
+use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Price\Money;
 use Woodev\Framework\Marketplace\Price\Price_Calculator;
 use Woodev\Framework\Marketplace\Price\Price_Rule;
@@ -121,6 +122,14 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	private $account_connected_hook;
 
 	/**
+	 * Action fired with the account id when an account was created, or switched on, or its orders or stock mode were saved
+	 * (`Job_Names::hook( 'account_saved' )`); the recurring poll of postings is created from it.
+	 *
+	 * @var string
+	 */
+	private $account_saved_hook;
+
+	/**
 	 * Plugin id, the owner in the deletion route.
 	 *
 	 * @var string
@@ -186,6 +195,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$this->price_rules_changed_hook = ( new Job_Names( $plugin_id ) )->hook( 'account_price_rules_changed' );
 		$this->on_connected             = $on_connected;
 		$this->account_connected_hook   = ( new Job_Names( $plugin_id ) )->hook( 'account_connected' );
+		$this->account_saved_hook       = ( new Job_Names( $plugin_id ) )->hook( Posting_Jobs::ACCOUNT_SAVED );
 	}
 
 	/**
@@ -1182,6 +1192,17 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		$this->created_id = $this->store->save( new Account( 0, $this->adapter->id(), $name, $enabled, $credentials, null, $settings ) );
 		$this->refresh( $this->created_id );
+		$this->announce_saved( $this->created_id );
+	}
+
+	/**
+	 * Tells the plugin that an account was created or changed in a way that decides whether it needs its recurring poll.
+	 *
+	 * @param int $id Account id.
+	 * @return void
+	 */
+	private function announce_saved( int $id ): void {
+		do_action( $this->account_saved_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names (`woodev_{plugin_id}_account_saved`).
 	}
 
 	/**
@@ -1283,6 +1304,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				// An account whose data is being deleted stays off: switching it on would put work back on a half-deleted account.
 				if ( ! self::to_bool( $value ) || ! $this->is_being_deleted( $id ) ) {
 					$this->store->set_enabled( $id, self::to_bool( $value ) );
+					$this->announce_saved( $id );
 				}
 				return;
 			case 'warehouse_id':
@@ -1295,6 +1317,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			case 'stock_mode':
 				if ( $this->accepts_stock_mode( $text ) ) {
 					$this->store->update_fields( $id, [ 'stock_mode' => $text ] );
+					$this->announce_saved( $id );
 				}
 				return;
 			case 'price_direction':
@@ -1307,6 +1330,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				return;
 			case 'orders_enabled':
 				$this->store->update_fields( $id, [ 'orders_enabled' => self::to_bool( $value ) ] );
+				$this->announce_saved( $id );
 				return;
 			case 'import_enabled':
 				$this->store->update_fields( $id, [ 'import_enabled' => self::to_bool( $value ) ] );
@@ -1355,6 +1379,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		if ( $updated && Effective_Settings::GROUP_PRICES === $group ) {
 			do_action( $this->price_rules_changed_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names.
+		}
+
+		// The exchange group decides whether the orders in force are the account's own or the shared ones.
+		if ( $updated && Effective_Settings::GROUP_EXCHANGE === $group ) {
+			$this->announce_saved( $id );
 		}
 	}
 

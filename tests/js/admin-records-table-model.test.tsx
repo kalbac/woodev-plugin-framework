@@ -87,6 +87,7 @@ describe( 'a row with a process in flight (#1937)', () => {
 		limitReached: false,
 		matching: false,
 		matchingQuery: null,
+		matchingBlocked: false,
 		set,
 		selectMatching: () => undefined,
 		clear: () => undefined,
