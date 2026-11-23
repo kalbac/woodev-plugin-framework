@@ -456,15 +456,19 @@ describe( 'the polish of s237', () => {
 		expect( declared.every( ( header ) => ( header.cellClassName ?? '' ).includes( `woodev-records__col-${ header.key }` ) ) ).toBe( true );
 	} );
 
-	test( 'a date is «д.м.г ч:м» on one line, whatever format the site picked for its posts', async () => {
+	test( 'a date is «д.м.г ч:м», whatever format the site picked for its posts; only the time may drop under the date', async () => {
 		serve( () => fixtureList( [ mug ] ) );
 		render( <Page /> );
 		await screen.findByRole( 'table', { name: 'Товары' } );
 
 		const date = document.querySelector( 'time' ) as HTMLElement;
+		const [ day, time ] = Array.from( date.querySelectorAll( 'span' ) ) as HTMLElement[];
 
 		expect( date.textContent ).toMatch( /^\d{2}\.\d{2}\.2026 \d{2}:\d{2}$/ );
-		expect( date ).toHaveStyle( { whiteSpace: 'nowrap' } );
+		// The cell is nowrap; the line inside it breaks only between the halves, each of which never breaks.
+		expect( date ).toHaveStyle( { whiteSpace: 'normal' } );
+		expect( day ).toHaveStyle( { whiteSpace: 'nowrap' } );
+		expect( time ).toHaveStyle( { whiteSpace: 'nowrap' } );
 	} );
 
 	test( 'a long summary keeps its first sentence and folds the rest', async () => {

@@ -150,13 +150,14 @@ $cell-padding: 8px;
 	}
 
 	// A wide table scrolls inside its card. WooCommerce fades the edge and draws no bar (macOS hides overlay scrollbars
-	// altogether), so a merchant with a clipped column never learns it is there: the bar is always drawn.
+	// altogether), so a merchant with a clipped column never learns it is there: the bar is always drawn. In Chrome and Safari
+	// that is the `::-webkit-scrollbar` bar below — and ONLY that one: `scrollbar-color` (the standard property) switches those
+	// pseudo-elements off, and on macOS a standard-styled bar is the overlay one, hidden until the table is scrolled (#1930: the
+	// orders table was 1057px in a 784px card and nothing said so). Firefox has no such pseudo-element, so the standard
+	// properties are its bar.
 	.woocommerce-table__table {
-		scrollbar-color: #8c8f94 #f0f0f1;
-		scrollbar-width: auto;
-
 		// WooCommerce's edge fade (a 60px white gradient over the right and left edge) washes out the button of the last
-		// column, which looks disabled; the always-drawn bar above already says the table scrolls.
+		// column, which looks disabled; the always-drawn bar already says the table scrolls.
 		&::before,
 		&::after {
 			display: none;
@@ -175,6 +176,11 @@ $cell-padding: 8px;
 			border: 2px solid #f0f0f1;
 			border-radius: 6px;
 		}
+
+		@supports not selector( ::-webkit-scrollbar ) {
+			scrollbar-color: #8c8f94 #f0f0f1;
+			scrollbar-width: auto;
+		}
 	}
 
 	// Columns. A class per column id is on its header and every cell (`TableCard`'s `cellClassName`). Widths follow
@@ -185,7 +191,6 @@ $cell-padding: 8px;
 	// sum across lines: a cell that wraps mid-number is unreadable and makes every row three lines tall.
 	.woodev-records__col-order,
 	.woodev-records__col-posting,
-	.woodev-records__col-date,
 	.woodev-records__col-total,
 	.woodev-records__col-status,
 	.woodev-records__col-state,
@@ -203,8 +208,16 @@ $cell-padding: 8px;
 		width: 18ch;
 	}
 
+	// The date and the time of «10.11.2026 08:30» are one line while the column has room and two when it has not (each half is `nowrap`,
+	// see `DateValue`): 10ch is the date's own width, so the column asks no more than that of a squeezed table (#1930).
 	.woodev-records__col-date {
-		width: 12ch;
+		width: 10ch;
+	}
+
+	// The buyer is a text column like «Заказы доставки»' `.woodev-orders-col-text`: no width, and an unbroken word lowers its
+	// minimum to one character instead of widening the table past the card.
+	.woodev-records__col-customer {
+		overflow-wrap: anywhere;
 	}
 
 	.woodev-records__col-status,
@@ -256,6 +269,15 @@ $cell-padding: 8px;
 			padding-left: 0;
 			padding-right: 0;
 		}
+	}
+
+	// A right-aligned sortable heading (a sum) has the same dead width on BOTH sides: WooCommerce pads its button 24px a side
+	// (`.woocommerce-table__header:not( .is-left-aligned ) button`), 48px the cell's 8px padding already says. The label ends where the
+	// values end, and the sort arrow (laid out before the label, invisible until the column is sorted) is the only thing left of it
+	// (#1930: the sum column of «Заказы маркетплейсов» was 139px for 12 characters).
+	.woocommerce-table__header.is-sortable:not( .is-left-aligned ) .components-button {
+		padding-left: 0;
+		padding-right: 0;
 	}
 
 	// The first column is inset like the card's title above it (24px, WooCommerce's own inset), as the first column of «Заказы доставки» is
