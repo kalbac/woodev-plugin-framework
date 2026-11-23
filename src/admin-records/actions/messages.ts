@@ -40,6 +40,8 @@ export const ACTION_MESSAGE_KEYS = {
 	warnings: 'action_warnings',
 	/** Shown when no answer came back: the action may or may not have run; the table was read again. */
 	recovery: 'action_recovery',
+	/** A confirmation over «every row under the filter» was refused: a row on the page went busy after the plan was drawn. */
+	matchingBusy: 'action_matching_busy',
 	/** A request failed and the server sent no sentence of its own. */
 	error: 'action_error',
 	/** Link to the file of a download action. */

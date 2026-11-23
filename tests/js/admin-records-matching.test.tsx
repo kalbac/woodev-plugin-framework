@@ -43,6 +43,8 @@ const COPY = {
 	action_close: 'Закрыть',
 	action_planning: 'Считаем…',
 	action_applying: 'Выполняем…',
+	action_matching_busy:
+		'Действие не применено: на странице есть строка, которая сейчас обрабатывается. Выберите строки заново.',
 	action_status_done: 'Готово.',
 	action_status_queued: 'Поставлено в очередь.',
 };
@@ -692,7 +694,7 @@ describe( 'a page with a busy row takes no «every row under the filter» (#1944
 		expect( posts( 'preview' )[ 0 ].data ).not.toHaveProperty( 'matching' );
 	} );
 
-	test( 'a preview already open when a row goes busy is dropped: confirming sends nothing', async () => {
+	test( 'a preview already open when a row goes busy is refused: confirming sends nothing and says why', async () => {
 		served.refreshMs = 30;
 		await renderPage();
 		await takeEveryRow();
@@ -709,8 +711,9 @@ describe( 'a page with a busy row takes no «every row under the filter» (#1944
 		await waitFor( () => expect( bar() ).toBeNull() );
 		fireEvent.click( confirmButton );
 
+		expect( await within( dialog ).findByText( /Действие не применено: на странице есть строка, которая сейчас обрабатывается/ ) ).toBeInTheDocument();
 		expect( posts( 'apply' ) ).toHaveLength( 0 );
-		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).toBeNull() );
-		expect( posts( 'apply' ) ).toHaveLength( 0 );
+		// Nothing is offered again: the merchant closes the dialog and chooses the rows anew.
+		expect( within( dialog ).queryByRole( 'button', { name: 'Отправить остатки' } ) ).toBeNull();
 	} );
 } );

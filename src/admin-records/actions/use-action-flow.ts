@@ -24,6 +24,7 @@ import { hasBusyRow } from '../activity/busy';
 import type { TableHandle } from '../extensions';
 import type { ActionDescriptor, MatchingQuery } from '../types';
 import { createActionsApi } from './api';
+import { ACTION_MESSAGE_KEYS, actionMessage } from './messages';
 import { describeFailure, mayHaveChangedRows, type Failure } from './failure';
 import type { ActionTarget, ApplyResponse, FieldValue, Payload, PreviewResponse } from './types';
 
@@ -249,13 +250,19 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 				return;
 			}
 
-			// «Every row under the filter» reaches a row that went busy after the preview was drawn: the plan on screen is void,
-			// and the merchant starts again from the ticked rows (see `selection.ts`).
+			// «Every row under the filter» reaches a row that went busy after the preview was drawn: the plan on screen is void.
+			// Nothing is sent; the dialog says so, and the merchant starts again from the ticked rows (see `selection.ts`).
 			if ( flow.matching && hasBusyRow( [ ...table.rows, ...table.children ] ) ) {
-				ticket.current++;
-				abort.current?.abort();
-				afterApply.current = undefined;
-				update( null );
+				patch( {
+					stage: 'failed',
+					failure: {
+						kind: 'conflict',
+						status: 409,
+						message: actionMessage( table.messages, ACTION_MESSAGE_KEYS.matchingBusy ),
+						fieldErrors: {},
+					},
+					failedAt: 'apply',
+				} );
 
 				return;
 			}
@@ -290,7 +297,7 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 				}
 			}
 		},
-		[ fail, ownership, patch, showResult, update ]
+		[ fail, ownership, patch, showResult ]
 	);
 
 	const begin = useCallback(

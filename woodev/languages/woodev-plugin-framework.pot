@@ -11365,6 +11365,10 @@ msgstr ""
 msgid "Снять выбор"
 msgstr ""
 
+#: admin/records/class-standard-messages.php:54
+msgid "Действие не применено: на странице есть строка, которая сейчас обрабатывается. Выберите строки заново."
+msgstr ""
+
 #: admin/records/class-standard-messages.php:48
 #, php-format
 msgid "Выбраны все %s на этой странице: {count}."
