@@ -8,7 +8,7 @@
  * @package woodev-plugin-framework
  */
 
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { dispatch, useSelect } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
@@ -171,6 +171,22 @@ export default function App( { bootstrap = null } ) {
 		( select ) => select( noticesStore ).getNotices().filter( ( n ) => 'snackbar' === n.type ),
 		[]
 	);
+
+	// One snackbar per block (`tab:section`). Every save used to create a notice with a fresh generated id, so each one
+	// stacked under the last. Now a save removes the snackbar its block's previous save left, then adds its own. The new
+	// notice has a new id, so the snackbar remounts and its dismiss timer starts again; the close button and the timer
+	// still remove it as before.
+	const blockSnackbarIds = useRef( {} ); // { blockKey: id of the snackbar that block's last save left }
+	const snackbarSeq = useRef( 0 );
+	const showBlockSnackbar = ( blockKey, status, message ) => {
+		const notices = dispatch( noticesStore );
+		if ( blockSnackbarIds.current[ blockKey ] ) {
+			notices.removeNotice( blockSnackbarIds.current[ blockKey ] );
+		}
+		const id = `woodev-settings-notice-${ ++snackbarSeq.current }`;
+		blockSnackbarIds.current[ blockKey ] = id;
+		notices[ 'error' === status ? 'createErrorNotice' : 'createSuccessNotice' ]( message, { type: 'snackbar', id } );
+	};
 
 	useEffect( () => {
 		// The REST client reads its root, nonce and placement from one place; register the embedding page's before the
@@ -337,9 +353,10 @@ export default function App( { bootstrap = null } ) {
 				setShowErrors( ( p ) => ( { ...p, [ providerId ]: false } ) );
 
 				// Also surface a native WP (snackbar) notice, not just the inline one.
-				dispatch( noticesStore ).createSuccessNotice(
-					__( 'Настройки сохранены.', 'woodev-plugin-framework' ),
-					{ type: 'snackbar' }
+				showBlockSnackbar(
+					`${ providerId }:${ section.id }`,
+					'success',
+					__( 'Настройки сохранены.', 'woodev-plugin-framework' )
 				);
 
 				// Best-effort re-fetch so the UI reflects persisted (coerced) values.
@@ -377,7 +394,7 @@ export default function App( { bootstrap = null } ) {
 				const message = ( err && err.message ) ||
 					__( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' );
 				setSaveError( message );
-				dispatch( noticesStore ).createErrorNotice( message, { type: 'snackbar' } );
+				showBlockSnackbar( `${ providerId }:${ section.id }`, 'error', message );
 			} );
 	};
 
@@ -401,11 +418,12 @@ export default function App( { bootstrap = null } ) {
 
 		return saveTab( tab.id, { [ field ]: enabled } )
 			.then( () => {
-				dispatch( noticesStore ).createSuccessNotice(
+				showBlockSnackbar(
+					`${ tab.id }:${ section.id }`,
+					'success',
 					enabled
 						? __( 'Аккаунт включён.', 'woodev-plugin-framework' )
-						: __( 'Аккаунт выключен.', 'woodev-plugin-framework' ),
-					{ type: 'snackbar' }
+						: __( 'Аккаунт выключен.', 'woodev-plugin-framework' )
 				);
 				return fetchSchema();
 			} )
@@ -415,9 +433,10 @@ export default function App( { bootstrap = null } ) {
 				}
 			} )
 			.catch( ( err ) => {
-				dispatch( noticesStore ).createErrorNotice(
-					( err && err.message ) || __( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' ),
-					{ type: 'snackbar' }
+				showBlockSnackbar(
+					`${ tab.id }:${ section.id }`,
+					'error',
+					( err && err.message ) || __( 'Не удалось сохранить настройки.', 'woodev-plugin-framework' )
 				);
 				throw err;
 			} );
