@@ -23,7 +23,7 @@ import {
 	fixtureRow,
 } from '../../src/admin-records/testing/fixture';
 import type { ActionDescriptor, ActionField, Definition } from '../../src/admin-records/types';
-import type { AccountActivity } from '../../src/admin-records/activity/types';
+import type { AccountActivity, ActivityProcess, RowActivity } from '../../src/admin-records/activity/types';
 import type { ApplyResponse, PreviewResponse } from '../../src/admin-records/actions/types';
 import type { TableCardProps } from '../../src/admin-records/wc-runtime';
 
@@ -105,6 +105,35 @@ function definition( overrides: Partial< Definition > = {} ): Definition {
 
 const ROWS = [ fixtureRow( 'p1', 'Кружка' ), fixtureRow( 'p2', 'Футболка' ) ];
 
+/** A row with a process in flight: busy, so no bulk action may take it (#1944). */
+function busyRow( id: string, name: string ) {
+	const process: ActivityProcess = {
+		id: 'obs-1',
+		state: 'running',
+		label: 'Отправка остатков',
+		completed: null,
+		total: null,
+		percent: null,
+		text: '',
+	};
+	const activity: RowActivity = {
+		locked: true,
+		reason: 'Товар уже отправляется на маркетплейс.',
+		blocked_actions: [],
+		processes: [ process ],
+		observed_at: '2026-11-16T10:00:00Z',
+	};
+
+	return fixtureRow( id, name, { activity } );
+}
+
+/** The rows the next list read and the next activity read answer; a test swaps them to make a row busy mid-way. */
+const served: { list: ReturnType< typeof fixtureRow >[]; activity: ReturnType< typeof fixtureRow >[]; refreshMs: number } = {
+	list: ROWS,
+	activity: [],
+	refreshMs: 600000,
+};
+
 function account( overrides: Partial< AccountActivity > = {} ): AccountActivity {
 	return { active: false, text: '', blocked_actions: [], observed_at: '2026-11-16T10:00:00Z', ...overrides };
 }
@@ -154,11 +183,17 @@ function serve( list: { total?: number; account?: AccountActivity } = {} ): void
 		const [ route ] = path.split( '?' );
 
 		if ( route.endsWith( '/definition' ) ) {
-			return Promise.resolve( fixtureDefinitionEnvelope( definition() ) );
+			return Promise.resolve(
+				fixtureDefinitionEnvelope(
+					definition( {
+						activity: { refresh_ms: served.refreshMs, max_refresh_ms: served.refreshMs, stale_after_ms: 600000, id_limit: 50 },
+					} )
+				)
+			);
 		}
 		if ( options.method === 'POST' && route.endsWith( '/activity' ) ) {
 			return Promise.resolve( {
-				rows: [],
+				rows: served.activity,
 				removed_ids: [],
 				account_activity: list.account ?? account(),
 				observed_at: '2026-11-16T10:00:00Z',
@@ -183,7 +218,7 @@ function serve( list: { total?: number; account?: AccountActivity } = {} ): void
 		}
 
 		return Promise.resolve(
-			fixtureList( ROWS, { total: list.total ?? 340, account_activity: list.account ?? account() } )
+			fixtureList( served.list, { total: list.total ?? 340, account_activity: list.account ?? account() } )
 		);
 	} );
 }
@@ -274,6 +309,9 @@ async function takeEveryRow() {
 }
 
 beforeEach( () => {
+	served.list = ROWS;
+	served.activity = [];
+	served.refreshMs = 600000;
 	fetchMock.mockReset();
 	( window as unknown as { wc: unknown } ).wc = { components: { TableCard: FakeTableCard } };
 	serve();
@@ -608,5 +646,49 @@ describe( 'the account line with buttons', () => {
 		] );
 		expect( screen.getAllByRole( 'button', { name: 'Остановить' } ) ).toHaveLength( 1 );
 		expect( lineButton( 'Остановить' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'a page with a busy row takes no «every row under the filter» (#1944)', () => {
+	const BUSY_ROWS = [ fixtureRow( 'p1', 'Кружка' ), busyRow( 'p2', 'Футболка' ) ];
+
+	test( 'does not offer the mode once the page is ticked', async () => {
+		served.list = BUSY_ROWS;
+		await renderPage();
+
+		fireEvent.click( headerBox() );
+
+		expect( rowBox( 'Кружка' ) ).toBeChecked();
+		expect( rowBox( 'Футболка' ) ).toBeDisabled();
+		expect( bar() ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: /Выбрать все записи под текущим отбором/ } ) ).toBeNull();
+	} );
+
+	test( 'a row that goes busy under the mode ends it: the bulk action goes by the ticked ids, without the busy one', async () => {
+		served.refreshMs = 30;
+		await renderPage();
+		await takeEveryRow();
+		expect( bar() ).toHaveTextContent( /Выбраны все записи под текущим отбором: 340/ );
+
+		// The next activity read says that the second row has started a process.
+		served.activity = [ busyRow( 'p2', 'Футболка' ) ];
+		await waitFor( () => expect( bar() ).toBeNull() );
+
+		expect( rowBox( 'Кружка' ) ).toBeChecked();
+		expect( rowBox( 'Футболка' ) ).toBeDisabled();
+
+		fireEvent.change( screen.getByRole( 'combobox', { name: 'Массовые действия' } ), {
+			target: { value: 'send_stock' },
+		} );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить' } ) );
+		await screen.findByRole( 'dialog' );
+		await waitFor( () => expect( posts( 'preview' ) ).toHaveLength( 1 ) );
+
+		expect( posts( 'preview' )[ 0 ].data ).toEqual( {
+			context: { account_id: 'a1' },
+			ids: [ 'p1' ],
+			payload: {},
+		} );
+		expect( posts( 'preview' )[ 0 ].data ).not.toHaveProperty( 'matching' );
 	} );
 } );

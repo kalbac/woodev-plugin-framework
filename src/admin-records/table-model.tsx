@@ -527,7 +527,8 @@ function describeFilters( input: SelectionBarInput ): string {
  * The Gmail pattern: once the header box has selected the whole page and the table holds more than the page shows, offer
  * every row under the filter; once taken, say so, name the filters, and offer the way back.
  *
- * Shown only when some bulk action declared `all_matching` and PHP sent the sentence for the state. Unticking a row,
+ * Shown only when some bulk action declared `all_matching`, PHP sent the sentence for the state and the page holds no busy
+ * row (`selection.matchingBlocked`). Unticking a row,
  * a new filter, search, page or account all end the mode (see `selection.ts`).
  *
  * @param input The table as it is on screen.
@@ -557,7 +558,8 @@ export function SelectionBar( input: SelectionBarInput ) {
 	const pageSelected = all.length > 0 && all.every( ( id ) => selection.selectedIds.includes( id ) );
 	const offer = fillMessage( message( messages, MESSAGE_KEYS.selectAllMatching ), { count: formatCount( total ) } );
 
-	if ( ! pageSelected || total <= rows.length || offer === '' ) {
+	// A busy row on the page would be taken by the filter-wide mode, and no bulk action may touch it.
+	if ( ! pageSelected || selection.matchingBlocked || total <= rows.length || offer === '' ) {
 		return null;
 	}
 
