@@ -7,6 +7,10 @@
  * it — because the ids belong to rows that may no longer be there, and the filter the mode froze is not the one on
  * screen any more. Unticking any row, or the page's header box, leaves the mode as well.
  *
+ * A page with a busy row (a process of its own in flight) cannot take the mode: the filter would reach that row, which
+ * no bulk action may touch. The mode is not offered while the page has one, and a row that goes busy under a mode that
+ * is already on ends it — the ticked rows stay as an ordinary selection.
+ *
  * @package woodev-plugin-framework
  */
 
@@ -21,6 +25,8 @@ export interface Selection {
 	matching: boolean;
 	/** The filter and search as they were at the click that turned the mode on; `null` while it is off. */
 	matchingQuery: MatchingQuery | null;
+	/** The page has a busy row: the mode cannot be turned on, and is off. */
+	matchingBlocked: boolean;
 	/** Selects or deselects several rows at once (a parent with its children, or the whole page). */
 	set: ( ids: string[], selected: boolean ) => void;
 	/** Turns the mode on for the query on screen now; the ticked rows stay ticked. */
@@ -56,13 +62,21 @@ function remove( known: SelectionState, ids: string[] ): SelectionState {
 }
 
 /**
- * @param limit The table's `max_selection`.
- * @param epoch Changes with every list read that replaces the rows; a silent reload keeps the selection.
+ * @param limit           The table's `max_selection`.
+ * @param epoch           Changes with every list read that replaces the rows; a silent reload keeps the selection.
+ * @param matchingBlocked Whether the page holds a busy row, which the filter-wide mode would take along.
  */
-export function useSelection( limit: number, epoch: number ): Selection {
+export function useSelection( limit: number, epoch: number, matchingBlocked = false ): Selection {
 	const [ state, setState ] = useState< SelectionState >( NOTHING );
 
 	useEffect( () => setState( NOTHING ), [ epoch ] );
+
+	// The mode ends in the same render that finds a busy row (below); the state follows, so it does not come back when the row frees up.
+	useEffect( () => {
+		if ( matchingBlocked ) {
+			setState( ( known ) => ( known.matching === null ? known : { ...known, matching: null } ) );
+		}
+	}, [ matchingBlocked ] );
 
 	const set = useCallback(
 		( ids: string[], selected: boolean ) =>
@@ -78,15 +92,21 @@ export function useSelection( limit: number, epoch: number ): Selection {
 	);
 
 	const selectMatching = useCallback(
-		( query: MatchingQuery ) => setState( ( known ) => ( { ...known, limitReached: false, matching: query } ) ),
-		[]
+		( query: MatchingQuery ) => {
+			if ( ! matchingBlocked ) {
+				setState( ( known ) => ( { ...known, limitReached: false, matching: query } ) );
+			}
+		},
+		[ matchingBlocked ]
 	);
+	const matching = matchingBlocked ? null : state.matching;
 
 	return {
 		selectedIds: state.ids,
 		limitReached: state.limitReached,
-		matching: state.matching !== null,
-		matchingQuery: state.matching,
+		matching: matching !== null,
+		matchingQuery: matching,
+		matchingBlocked,
 		set,
 		selectMatching,
 		clear: useCallback( () => setState( NOTHING ), [] ),

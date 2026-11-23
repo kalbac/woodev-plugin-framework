@@ -46,7 +46,7 @@ final class StandardMessagesTest extends TestCase {
 	public function test_the_matching_bar_has_every_key_the_shell_reads_and_the_placeholders_it_fills(): void {
 		$messages = Standard_Messages::matching();
 
-		$this->assertSame( [ 'selected_page', 'select_all_matching', 'selected_all_matching', 'clear_selection' ], array_keys( $messages ) );
+		$this->assertSame( [ 'selected_page', 'select_all_matching', 'selected_all_matching', 'clear_selection', 'action_matching_busy' ], array_keys( $messages ) );
 		$this->assertStringContainsString( '{count}', $messages['select_all_matching'] );
 		$this->assertStringContainsString( '{count}', $messages['selected_all_matching'] );
 		$this->assertStringContainsString( '{filters}', $messages['selected_all_matching'] );

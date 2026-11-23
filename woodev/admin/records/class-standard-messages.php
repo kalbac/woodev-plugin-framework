@@ -51,6 +51,8 @@ final class Standard_Messages {
 			'select_all_matching'   => sprintf( __( 'Выбрать все %s под текущим отбором: {count}', 'woodev-plugin-framework' ), $records ),
 			'selected_all_matching' => sprintf( __( 'Выбраны все %s под текущим отбором: {count}. {filters}', 'woodev-plugin-framework' ), $records ),
 			'clear_selection'       => __( 'Снять выбор', 'woodev-plugin-framework' ),
+			// Shown in the action dialog when a row went busy after the plan of an «every row» action was drawn.
+			'action_matching_busy'  => __( 'Действие не применено: на странице есть строка, которая сейчас обрабатывается. Выберите строки заново.', 'woodev-plugin-framework' ),
 		];
 	}
 

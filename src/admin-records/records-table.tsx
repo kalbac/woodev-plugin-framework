@@ -20,7 +20,7 @@ import { FiltersBar, SearchBox, ViewsRow, isNarrowed } from './filters';
 import { MESSAGE_KEYS, firstMessage, message } from './messages';
 import { changeQuery, searchFilter, writeQuery } from './query';
 import { Pager, fitsOnePage, useFooterSlot } from './pager';
-import { withoutBusyRows } from './activity/busy';
+import { hasBusyRow, withoutBusyRows } from './activity/busy';
 import { RowActions } from './row-actions';
 import { useSelection, type Selection } from './selection';
 import { EmptyCard, ErrorState, LoadingState } from './states';
@@ -440,7 +440,9 @@ export function RecordsTable( {
 	const definition = envelope?.definition ?? null;
 	const hasBulk =
 		definition !== null && definition.bulk_actions.length > 0 && extensions.renderBulkActions !== undefined;
-	const selection = useSelection( definition?.pagination.max_selection ?? 0, records.selectionEpoch );
+	const pageRows = records.list.data?.rows ?? [];
+	const pageBusy = hasBusyRow( [ ...pageRows, ...pageRows.flatMap( ( row ) => records.children[ row.id ]?.rows ?? [] ) ] );
+	const selection = useSelection( definition?.pagination.max_selection ?? 0, records.selectionEpoch, pageBusy );
 	useLastPageClamp( records, definition, go );
 	// The table and its empty card are two elements with a header each, so the search box is made again when a search
 	// finds nothing — and the merchant who is still typing must keep the keyboard. Read before the swap reaches the DOM.
@@ -472,7 +474,7 @@ export function RecordsTable( {
 		...definition.messages,
 		...( records.list.data?.messages ?? {} ),
 	};
-	const rows = records.list.data?.rows ?? [];
+	const rows = pageRows;
 	const change = ( next: RecordsQuery ) => go( writeQuery( definition, next ) );
 	const handle: TableHandle = {
 		api,

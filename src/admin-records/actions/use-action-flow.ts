@@ -20,9 +20,11 @@
 import { useCallback, useRef, useState } from '@wordpress/element';
 import { isAbort } from '../api';
 import type { Ownership } from '../activity';
+import { hasBusyRow } from '../activity/busy';
 import type { TableHandle } from '../extensions';
 import type { ActionDescriptor, MatchingQuery } from '../types';
 import { createActionsApi } from './api';
+import { ACTION_MESSAGE_KEYS, actionMessage } from './messages';
 import { describeFailure, mayHaveChangedRows, type Failure } from './failure';
 import type { ActionTarget, ApplyResponse, FieldValue, Payload, PreviewResponse } from './types';
 
@@ -245,6 +247,23 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 			const planned = flow?.stage === 'previewed' && flow.plan?.can_apply === true;
 			const direct = flow?.stage === 'input' && ! needsPreview( flow.action ) && ! flow.previewOnly;
 			if ( ! flow || busy.current || flow.previewOnly || ! ( planned || direct ) ) {
+				return;
+			}
+
+			// «Every row under the filter» reaches a row that went busy after the preview was drawn: the plan on screen is void.
+			// Nothing is sent; the dialog says so, and the merchant starts again from the ticked rows (see `selection.ts`).
+			if ( flow.matching && hasBusyRow( [ ...table.rows, ...table.children ] ) ) {
+				patch( {
+					stage: 'failed',
+					failure: {
+						kind: 'conflict',
+						status: 409,
+						message: actionMessage( table.messages, ACTION_MESSAGE_KEYS.matchingBusy ),
+						fieldErrors: {},
+					},
+					failedAt: 'apply',
+				} );
+
 				return;
 			}
 
