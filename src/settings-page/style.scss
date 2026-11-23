@@ -185,6 +185,11 @@ $marketplace-label-col: 280px;
 		margin-top: wd.$gap;
 	}
 
+	&__hint {
+		font-size: 13px;
+		color: wd.$muted;
+	}
+
 	// Text, not a signal dot — so the darker text tokens, not $ok/$error. On white
 	// those two are 3.35:1 and 4.73:1; the first fails AA outright (#514 m4).
 	&__result {
