@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
+use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 
 defined( 'ABSPATH' ) || exit;
@@ -31,7 +32,7 @@ final class Remote_Cards_Summary {
 			return '';
 		}
 
-		$time = wp_date( 'd.m.Y H:i', (int) ( $run['finished_at'] ?? 0 ) );
+		$time = Date_Text::datetime( (int) ( $run['finished_at'] ?? 0 ) );
 
 		if ( (int) ( $run['category_id'] ?? 0 ) > 0 ) {
 			/* translators: 1: time of the run, 2: the category the run was limited to. */

@@ -24,7 +24,7 @@ use Woodev\Tests\Unit\TestCase;
  * marketplace's own actions as buttons: the cancellation of an adapter that can cancel and the label button of one that has labels. The
  * marketplace's status is a badge beside the posting number in the heading.
  *
- * Each test runs in its own process: the box formats dates with `wc_date_format()`, and a Brain Monkey stub of it would stay defined
+ * Each test runs in its own process: the box formats dates with `wp_date()`, and a Brain Monkey stub of it would stay defined
  * for every later test — `LicensePureOperationsTest` asserts the path where that function is ABSENT, so a leaked stub fails it
  * depending on the run order (same as `BuyerTrackingTest`).
  *
@@ -67,8 +67,11 @@ final class OrderDetailsBoxTest extends TestCase {
 		Functions\when( 'wp_enqueue_script' )->justReturn( null );
 		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( 'wc_get_order_status_name' )->justReturn( 'В обработке' );
-		Functions\when( 'wc_date_format' )->justReturn( 'd.m.Y' );
-		Functions\when( 'wc_time_format' )->justReturn( 'H:i' );
+		Functions\when( 'wp_date' )->alias(
+			static function ( string $format, int $time ): string {
+				return gmdate( $format, $time );
+			}
+		);
 		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
 		Functions\when( 'wc_price' )->alias(
 			static function ( $amount, $args ) {
@@ -295,7 +298,7 @@ final class OrderDetailsBoxTest extends TestCase {
 	 */
 	private function order( int $id, string $customer_note = '' ): \WC_Order {
 		$created = Mockery::mock( '\WC_DateTime' );
-		$created->shouldReceive( 'date_i18n' )->andReturn( '20.11.2026 10:30' );
+		$created->shouldReceive( 'getTimestamp' )->andReturn( 1795170600 );
 
 		$order = Mockery::mock( '\WC_Order' );
 		$order->shouldReceive( 'get_id' )->andReturn( $id );
