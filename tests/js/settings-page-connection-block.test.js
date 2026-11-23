@@ -86,6 +86,30 @@ describe( 'ConnectionBlock test-button gate', () => {
 		expect( button() ).toBeEnabled();
 	} );
 
+	// The marketplace account form (#1926b): the credentials of a saved account are required settings.
+	describe( 'a saved marketplace account', () => {
+		const account = () => ( {
+			name: field( 'Название' ),
+			client_id: field( 'Client-Id', { required: true, value: '12345' } ),
+			api_key: field( 'API-ключ', { required: true, sensitive: true, is_set: true } ),
+			description: field( 'Описание' ),
+		} );
+
+		test( 'with the stored credentials untouched (the secret is masked, not retyped) the button is enabled', () => {
+			renderBlock( account() );
+
+			expect( button() ).toBeEnabled();
+			expect( screen.queryByText( /Заполните/ ) ).not.toBeInTheDocument();
+		} );
+
+		test( 'clearing Client-Id disables the button and the hint names the field', () => {
+			renderBlock( account(), { client_id: '' } );
+
+			expect( button() ).toBeDisabled();
+			expect( screen.getByText( 'Заполните поле «Client-Id».' ) ).toBeInTheDocument();
+		} );
+	} );
+
 	test( 'a handshake block with no fields stays enabled', () => {
 		renderBlock( {} );
 
