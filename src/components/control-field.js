@@ -278,7 +278,7 @@ function normalizeOptions( options ) {
  * @param {Object} schema field schema slice.
  * @return {string} resolved control kind.
  */
-function resolveControl( schema ) {
+export function resolveControl( schema ) {
 	if ( schema.controlType ) {
 		return schema.controlType;
 	}
