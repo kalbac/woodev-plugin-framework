@@ -1,6 +1,82 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.15] — 2026-11-23
+### Bug Fixes
+- **admin-records**: Pager only when there is more than one page
+
+- **admin-records**: Pager visibility follows the last ready result (critic)
+
+- **admin-records**: Busy row on every table, above pinned cells, out of selections (#1937)
+
+- **admin-records**: Lock and process text wraps in the actions column (#1937)
+
+- **admin-records**: Actions-column text never widens the table (#1937)
+
+- **settings**: One white wrapper for the account tabs of Parameters and Notifications
+
+- **marketplace**: Import mapping — profile before fill, later cards complete links, dictionary links need a lookup (#1940)
+
+- **product**: Account select divider after the select; variations follow the selected account (#1935, #1936)
+
+- **product**: Added variations follow the picked account; one account select set up per marketplace (#1936)
+
+- **product**: Variable product offers the export only while a variation has no card (#1939)
+
+- **marketplace**: The history import sends no WooCommerce e-mails (#1925)
+
+- **marketplace**: Derive the history import from the account's cutoff, hold back deferred and stock e-mails (#1925)
+
+- **marketplace**: One atomic option per account for the history cutoff (#1925)
+
+- **marketplace**: Delete the history cutoff with its account (#1925)
+
+- **marketplace**: Forget a deleted account's recorded polls with its history cutoff (#1925)
+
+- **marketplace**: Variations read the model's characteristics from the parent; slug collisions and global attributes (#1949)
+
+
+### Documentation
+- Save session s241
+
+- S241 handoff — #1939
+
+- S241 handoff — #1940
+
+
+### Features
+- **admin-records**: Busy row = the «Заказы доставки» mechanism (#1937)
+
+- **settings**: Account tabs in marketplace parameters and notifications, no Client-Id in cards
+
+- **marketplace**: Card import maps the category it chose, with its attribute links (#1940)
+
+- **admin-records**: Busy row shows a centred veil with the process label instead of text in the actions cell
+
+- **marketplace**: The card import writes every characteristic into product attributes and links them (#1949)
+
+
+### Tests
+- **marketplace**: Repair the mailer before the no-mail integration test (#1925)
+
+
+### Build
+- Bundles for #1924
+
+- Bundles for #1934
+
+- Bundles for #1937
+
+- Bundles for the busy-row overlay
+
+
+### I18n
+- Catalogue entries for the variable-product help split (#1939)
+
+- Catalogue entries for the import mapping strings (#1940)
+
+
+
 ## [2.1.14] — 2026-11-22
 ### Bug Fixes
 - **admin-records**: Fit the products and mappings tables at 1024px (#1918)
