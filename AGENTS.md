@@ -242,7 +242,7 @@ without it (Codex) says so once and proceeds with git/shell inspection — stall
 | Screenshots for docs and publications | **Collapse the WordPress admin sidebar** (Collapse menu) before every shot, so the page gets the width (operator, 16.11.2026). Exception: the shot is meant to show a menu item. Mask personal data (a fake phone on the rig customer) in every frame. Applies to every plugin. |
 | Git | Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) |
 | Version | Stored in `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) |
-| `@since` | Planned release is `composer.json` → `extra.woodev.planned-release`, currently `2.1.17` (released `VERSION` is `2.1.16`); semver rule in `AGENT-RULES.md` Rule 5, gated by `SinceTagCeilingTest`. Raising `VERSION` on `main` publishes a release (#285). |
+| `@since` | Planned release is `composer.json` → `extra.woodev.planned-release`, currently `2.1.18` (released `VERSION` is `2.1.17`); semver rule in `AGENT-RULES.md` Rule 5, gated by `SinceTagCeilingTest`. Raising `VERSION` on `main` publishes a release (#285). |
 
 ---
 
