@@ -130,13 +130,14 @@ final class Site_Orders_Rows {
 	 * @param \WC_Order           $order      Its WooCommerce order.
 	 * @param array<string,mixed> $activity   Activity of the row.
 	 * @param string              $write_refusal Why the account cannot write to the marketplace (since 2.1.16); empty when it can.
+	 * @param bool                $label_stored  Whether a ready label document already covers the posting (since 2.1.16): its download is a read, so the label action stays on.
 	 * @return array<string,mixed>
 	 */
-	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '' ): array {
+	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '', bool $label_stored = false ): array {
 		$editable = true === call_user_func( $this->can_edit, $item['order_id'] );
 		$url      = $editable ? (string) $order->get_edit_order_url() : '';
 		$cells    = $this->cells( $item, $order, $url );
-		$actions  = $this->actions( $item, $order, $editable, $url, $write_refusal );
+		$actions  = $this->actions( $item, $order, $editable, $url, $write_refusal, $label_stored );
 
 		return [
 			'id'           => Site_Orders_Ids::row_id( $account_id, $item['order_id'] ),
@@ -266,9 +267,10 @@ final class Site_Orders_Rows {
 	 * @param bool                $editable      Whether the user may edit the order.
 	 * @param string              $url           Edit address; empty without the right.
 	 * @param string              $write_refusal Why the account cannot write to the marketplace; empty when it can.
+	 * @param bool                $label_stored  Whether a ready label document already covers the posting.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private function actions( array $item, \WC_Order $order, bool $editable, string $url, string $write_refusal ): array {
+	private function actions( array $item, \WC_Order $order, bool $editable, string $url, string $write_refusal, bool $label_stored ): array {
 		$actions = [];
 
 		foreach ( $this->offered as $id ) {
@@ -277,7 +279,7 @@ final class Site_Orders_Rows {
 				continue;
 			}
 
-			$actions[] = $this->action( $id, $item, $order, $editable, $url, $write_refusal );
+			$actions[] = $this->action( $id, $item, $order, $editable, $url, $write_refusal, $label_stored );
 		}
 
 		return $actions;
@@ -290,9 +292,10 @@ final class Site_Orders_Rows {
 	 * @param bool                $editable      Whether the user may edit the order.
 	 * @param string              $url           Edit address.
 	 * @param string              $write_refusal Why the account cannot write to the marketplace; empty when it can.
+	 * @param bool                $label_stored  Whether a ready label document already covers the posting.
 	 * @return array<string,mixed>
 	 */
-	private function action( string $id, array $item, \WC_Order $order, bool $editable, string $url, string $write_refusal ): array {
+	private function action( string $id, array $item, \WC_Order $order, bool $editable, string $url, string $write_refusal, bool $label_stored ): array {
 		if ( Site_Orders_Definition::OPEN === $id ) {
 			return [
 				'id'      => $id,
@@ -309,7 +312,7 @@ final class Site_Orders_Rows {
 			];
 		}
 
-		$reason = $this->unavailable_reason( $id, $item, $order, $write_refusal );
+		$reason = $this->unavailable_reason( $id, $item, $order, $write_refusal, $label_stored );
 
 		return [
 			'id'      => $id,
@@ -326,9 +329,14 @@ final class Site_Orders_Rows {
 	 * @param array<string,mixed> $item          The registry item.
 	 * @param \WC_Order           $order         Order.
 	 * @param string              $write_refusal Why the account cannot write to the marketplace; empty when it can.
+	 * @param bool                $label_stored  Whether a ready label document already covers the posting.
 	 * @return string The sentence for the merchant; empty when the action is on.
 	 */
-	private function unavailable_reason( string $id, array $item, \WC_Order $order, string $write_refusal ): string {
+	private function unavailable_reason( string $id, array $item, \WC_Order $order, string $write_refusal, bool $label_stored ): string {
+		if ( $label_stored && Site_Orders_Definition::LABEL === $id ) {
+			return ''; // A label that is already made is downloaded, not asked for: that is a read, whatever the marketplace allows now.
+		}
+
 		if ( '' !== $write_refusal ) {
 			return $write_refusal;
 		}

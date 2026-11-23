@@ -752,6 +752,59 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( $this->label_url( $document ), $body['download']['url'] );
 	}
 
+	public function test_a_stored_label_stays_downloadable_from_the_row_of_a_finished_posting_with_no_optional_contract(): void {
+		$this->stock( false );
+		$this->document( [ 'P-103' ] );
+
+		$rows = $this->by_id( $this->list_body() );
+
+		$this->assertSame( [ true, true ], array_column( $rows[ $this->row_id( 103 ) ]['actions'], 'enabled' ), 'Downloading what is already made is not asking for a label.' );
+		$this->assertSame( '', $rows[ $this->row_id( 103 ) ]['actions'][1]['reason'] );
+		$this->assertSame( [ true, false ], array_column( $rows[ $this->row_id( 102 ) ]['actions'], 'enabled' ), 'A finished posting with no stored label is still off.' );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 103 ) ], [] ) );
+
+		$this->assertArrayHasKey( 'download', $body, 'The server hands the stored PDF over, as the button says.' );
+	}
+
+	public function test_a_stored_label_stays_downloadable_when_the_marketplace_no_longer_lists_the_label_action(): void {
+		$this->stock( false );
+		$this->allowed = [ 104 => [ 'cancel' ] ];
+		$this->document( [ 'P-104' ] );
+
+		$actions = $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'];
+
+		$this->assertSame( [ true, true, true ], array_column( $actions, 'enabled' ) );
+		$this->assertSame( '', $actions[1]['reason'], 'No false «not released» sentence over a label that exists.' );
+	}
+
+	public function test_a_stored_label_stays_downloadable_for_a_key_that_cannot_write_but_cancel_and_new_requests_do_not(): void {
+		$this->stock( false );
+		$this->write_gate = static function (): bool {
+			return false;
+		};
+		$document         = $this->document( [ 'P-104' ] );
+		$provider         = $this->provider();
+
+		$actions = $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'];
+
+		$this->assertSame( [ true, true, false ], array_column( $actions, 'enabled' ) );
+		$this->assertSame( 1, $provider->preview( $this->context(), 'label', [ $this->row_id( 104 ) ], [] )['eligible'], 'The plan does not refuse a download.' );
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $provider->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertSame( $this->label_url( $document ), $body['download']['url'] );
+
+		foreach ( [ 'preview', 'apply' ] as $method ) {
+			try {
+				$provider->$method( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [ 'reason' => '1' ] );
+				$this->fail( 'A read-only key cannot cancel.' );
+			} catch ( Action_State_Exception $e ) {
+				$this->assertStringContainsString( 'не позволяет менять данные на маркетплейсе', $e->getMessage() );
+			}
+		}
+	}
+
 	public function test_an_account_whose_key_cannot_write_has_both_write_actions_off_in_every_row_and_open_still_on(): void {
 		$this->stock( false );
 		$this->write_gate = static function (): bool {

@@ -453,10 +453,8 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			throw new Action_State_Exception( __( 'Заказ не найден. Обновите страницу.', 'woodev-plugin-framework' ) );
 		}
 
-		$write_refusal = $this->gate->write_refusal( $account ); // A write the account cannot make is refused here, whatever the row showed.
-
-		if ( '' !== $write_refusal ) {
-			throw new Action_State_Exception( $write_refusal );
+		if ( Site_Orders_Definition::CANCEL === $action ) {
+			$this->require_write( $account ); // A write the account cannot make is refused here, whatever the row showed. A label is checked only when it is asked for.
 		}
 
 		return [
@@ -578,6 +576,21 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	}
 
 	/**
+	 * Refuses a write the account cannot make.
+	 *
+	 * @param Account $account Account.
+	 * @return void
+	 * @throws Action_State_Exception When the plugin's write gate refuses the account.
+	 */
+	private function require_write( Account $account ): void {
+		$refusal = $this->gate->write_refusal( $account );
+
+		if ( '' !== $refusal ) {
+			throw new Action_State_Exception( $refusal );
+		}
+	}
+
+	/**
 	 * Why a label cannot be asked for the one asked posting: it is finished, not ready, or the marketplace has not allowed it.
 	 *
 	 * @param array{account:Account,targets:array<int,array<string,mixed>>} $call Resolved call.
@@ -601,10 +614,14 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			return $this->refused_plan( __( 'Этикетки для этого заказа уже готовятся — дождитесь результата.', 'woodev-plugin-framework' ), $key );
 		}
 
-		$unavailable = $this->label_unavailable( $call );
+		if ( $this->labels->covering( $call['account']->id(), [ $key ] ) < 1 ) { // A stored label is only downloaded, which no gate stops.
+			$this->require_write( $call['account'] );
 
-		if ( '' !== $unavailable && $this->labels->covering( $call['account']->id(), [ $key ] ) < 1 ) {
-			return $this->refused_plan( $unavailable, $key );
+			$unavailable = $this->label_unavailable( $call );
+
+			if ( '' !== $unavailable ) {
+				return $this->refused_plan( $unavailable, $key );
+			}
 		}
 
 		return [
@@ -644,6 +661,8 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 				],
 			];
 		}
+
+		$this->require_write( $account );
 
 		$unavailable = $this->label_unavailable( $call );
 
@@ -754,7 +773,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 
 		foreach ( $items as $item ) {
 			if ( isset( $orders[ $item['order_id'] ] ) ) {
-				$rows[] = $this->rows->row( $account->id(), $item, $orders[ $item['order_id'] ], $activity[ $item['order_id'] ], $refusal );
+				$rows[] = $this->rows->row( $account->id(), $item, $orders[ $item['order_id'] ], $activity[ $item['order_id'] ], $refusal, ( $states[ $item['external_key'] ]['document_id'] ?? 0 ) > 0 );
 			}
 		}
 
