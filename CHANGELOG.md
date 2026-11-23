@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.18] — 2026-11-23
+### Documentation
+- Save session s243
+
+- Record the operator decision on merchant-saved mappings (#1940)
+
+
+### Features
+- **marketplace**: Let an adapter reject a decoded push with an error answer
+
+
+
 ## [2.1.17] — 2026-11-23
 ### Bug Fixes
 - **marketplace**: Stuck postings count from the marketplace's processing date, share per account (#1933)
