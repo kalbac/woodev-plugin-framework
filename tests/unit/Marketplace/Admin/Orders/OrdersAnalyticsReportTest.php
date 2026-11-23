@@ -77,10 +77,11 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	 * @param bool                       $classify Whether the adapter classifies its codes ({@see self::groups()}); the defaults otherwise.
 	 * @param array<int,string>          $accounts Account labels.
 	 * @param Posting_Status_Groups|null $explicit Another classification than {@see self::groups()}, when classified.
+	 * @param Analytics_Shop|null        $shop     The shop with the test's own rows added; the plain catalogue otherwise.
 	 * @return Orders_Analytics_Report
 	 */
-	private function report( bool $hpos, ?Posting_Status_Names $names = null, bool $classify = true, array $accounts = [ 1 => 'Основной', 2 => 'Второй' ], ?Posting_Status_Groups $explicit = null ): Orders_Analytics_Report {
-		$shop   = new Analytics_Shop( $hpos );
+	private function report( bool $hpos, ?Posting_Status_Names $names = null, bool $classify = true, array $accounts = [ 1 => 'Основной', 2 => 'Второй' ], ?Posting_Status_Groups $explicit = null, ?Analytics_Shop $shop = null ): Orders_Analytics_Report {
+		$shop   = $shop ?? new Analytics_Shop( $hpos );
 		$groups = $classify ? ( $explicit ?? self::groups() ) : null;
 
 		return new Orders_Analytics_Report(
@@ -252,6 +253,44 @@ final class OrdersAnalyticsReportTest extends TestCase {
 	/**
 	 * @dataProvider storages
 	 */
+	public function test_with_one_account_the_share_is_that_account_s_part_of_the_shop_revenue( bool $hpos ): void {
+		$first  = $this->report( $hpos )->build( $this->request( [ 'account' => 1 ] ) );
+		$second = $this->report( $hpos )->build( $this->request( [ 'account' => 2 ] ) );
+
+		$this->assertSame( 3570.0, $first['share']['shop_revenue'], 'The denominator is the whole shop whichever account is chosen.' );
+		$this->assertSame( 1770.0, $first['share']['marketplace_revenue'], 'Account 1: orders 101, 102, 105 and the pending 107; not the other account\'s 300.' );
+		$this->assertSame( $first['totals']['current']['revenue'], $first['share']['marketplace_revenue'], 'The same sum as the revenue tile of the account.' );
+		$this->assertSame( 0.4958, $first['share']['share'], '1770 of 3570, not the marketplace\'s 0.5798.' );
+		$this->assertSame( 0.8, $first['share']['previous'], 'The previous period is the account\'s too: 800 of 1000.' );
+
+		$this->assertSame( 3570.0, $second['share']['shop_revenue'] );
+		$this->assertSame( 300.0, $second['share']['marketplace_revenue'] );
+		$this->assertSame( 0.084, $second['share']['share'] );
+		$this->assertSame( 0.0, $second['share']['previous'], 'The account sold nothing in the previous period; the shop did.' );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
+	public function test_with_every_account_the_share_stays_the_marketplace_s_by_created_via( bool $hpos ): void {
+		$shop = new Analytics_Shop( $hpos );
+		$shop->order( 120, 'wc-completed', '2026-11-03 10:00:00', 100, [] );
+		// An order of the marketplace whose posting is of an account the tab does not list (a disabled one): still the marketplace's.
+		$shop->posting( 9, 'P-120', 120, 'delivered', true );
+
+		$share = $this->report( $hpos, null, true, [ 1 => 'Основной', 2 => 'Второй' ], null, $shop )->build( $this->request() )['share'];
+
+		$this->assertSame( 3670.0, $share['shop_revenue'] );
+		$this->assertSame( 2170.0, $share['marketplace_revenue'], 'Every account of the marketplace, the unlisted one included.' );
+
+		$one = $this->report( $hpos, null, true, [ 1 => 'Основной', 2 => 'Второй' ], null, $shop )->build( $this->request( [ 'account' => 1 ] ) )['share'];
+
+		$this->assertSame( 1770.0, $one['marketplace_revenue'], 'One account counts its own orders only.' );
+	}
+
+	/**
+	 * @dataProvider storages
+	 */
 	public function test_the_statuses_now_are_every_posting_of_a_live_order_finished_ones_included( bool $hpos ): void {
 		$statuses = $this->report( $hpos )->build( $this->request() )['statuses'];
 
@@ -310,6 +349,30 @@ final class OrdersAnalyticsReportTest extends TestCase {
 		$this->assertSame( 2, $shorter['count'] );
 		$this->assertSame( [ 'P-101', 'P-104' ], array_column( $shorter['items'], 'posting' ), 'The oldest first.' );
 		$this->assertSame( 6, $shorter['items'][1]['hours'] );
+	}
+
+	/**
+	 * A history import makes `first_seen_at` the import day; the date the marketplace gives for the posting is what counts.
+	 *
+	 * @dataProvider storages
+	 */
+	public function test_a_posting_is_stuck_from_the_date_the_marketplace_took_it_into_processing_not_from_the_import( bool $hpos ): void {
+		$shop = new Analytics_Shop( $hpos );
+		// Imported today (07.11 11:00 UTC) but in processing since 05.11 08:00 UTC: 52 hours.
+		$shop->order( 110, 'wc-processing', '2026-11-05 08:00:00', 100, [] );
+		$shop->posting( 1, 'P-110', 110, 'awaiting_packaging', false, '2026-11-07 11:00:00', '2026-11-05 08:00:00' );
+		// Seen on the 1st but in processing only two hours ago, by the marketplace's own word: not stuck.
+		$shop->order( 111, 'wc-processing', '2026-11-07 10:00:00', 100, [] );
+		$shop->posting( 1, 'P-111', 111, 'awaiting_packaging', false, '2026-11-01 00:00:00', '2026-11-07 10:00:00' );
+		// The adapter said nothing: counted from the first sight, as before. Imported today, so not stuck.
+		$shop->order( 112, 'wc-processing', '2026-11-05 08:00:00', 100, [] );
+		$shop->posting( 1, 'P-112', 112, 'awaiting_packaging', false, '2026-11-07 11:00:00' );
+
+		$stuck = $this->report( $hpos, null, true, [ 1 => 'Основной', 2 => 'Второй' ], null, $shop )->build( $this->request() )['stuck'];
+
+		$this->assertSame( 2, $stuck['count'], 'P-101 (first seen the 1st, no date) and P-110; not P-111 (taken in two hours ago) or P-112 (first seen an hour ago).' );
+		$this->assertSame( [ 'P-101', 'P-110' ], array_column( $stuck['items'], 'posting' ), 'The oldest wait first.' );
+		$this->assertSame( 52, $stuck['items'][1]['hours'], 'Hours since 05.11 08:00, not since the import.' );
 	}
 
 	/**

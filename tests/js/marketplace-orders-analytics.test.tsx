@@ -45,7 +45,6 @@ const MESSAGES: Record< string, string > = {
 	share: 'Доля в выручке магазина',
 	cancelledNote: 'отменено заказов: %s',
 	shareNote: 'выручка магазина: %s',
-	shareAllNote: 'по всем аккаунтам маркетплейса',
 	chartOrders: 'Заказы по аккаунтам',
 	chartRevenue: 'Выручка по аккаунтам',
 	chartItems: 'Аккаунты',
@@ -333,6 +332,16 @@ describe( 'the tab', () => {
 		fetchMock.mockClear();
 		renderTab( { account: '2' } );
 		await waitFor( () => expect( requestedPaths()[ 0 ] ).toContain( '&account=2' ) );
+	} );
+
+	test( 'one account: the share tile is the account\'s share of the shop and names the shop revenue like for all accounts', async () => {
+		fetchMock.mockResolvedValue( response( { account: '2', share: { shop_revenue: 3500, marketplace_revenue: 300, share: 0.0857, previous: null, delta: null } } ) );
+		renderTab( { account: '2' } );
+
+		const tile = await screen.findByTestId( 'tile-Доля в выручке магазина' );
+
+		expect( tile ).toHaveTextContent( /8,6\s%/ );
+		expect( tile ).toHaveTextContent( /выручка магазина: 3\s500\s₽/ );
 	} );
 
 	test( 'one account: no account select, the status table has one column of counts', async () => {

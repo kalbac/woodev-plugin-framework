@@ -51,6 +51,11 @@ final class Orders_Analytics_Query {
 	public const STUCK_LIMIT = 20;
 
 	/**
+	 * The moment a posting started waiting: the marketplace's own date when the adapter supplies it, else when the shop first saw it.
+	 */
+	private const WAITING_SINCE = 'COALESCE(pg.processing_since, pg.first_seen_at)';
+
+	/**
 	 * @var \wpdb
 	 */
 	private $db;
@@ -201,17 +206,22 @@ final class Orders_Analytics_Query {
 	 *
 	 * @since 2.1.13
 	 *
+	 * With an account, the marketplace part is that account's alone (its orders are the ones with a posting of the account in the
+	 * registry), so the share it gives is the account's share of the shop, not the marketplace's; the shop's total stays the whole shop.
+	 *
 	 * @param array<string,mixed> $scope       The period scope (its accounts are not used).
 	 * @param string              $created_via The marketplace's `created_via`; empty gives a zero marketplace part.
+	 * @param int|null            $account     One account id, or null for the marketplace's orders of every account.
 	 * @return array{shop:float,marketplace:float}
 	 */
-	public function shop_revenue( array $scope, string $created_via ): array {
+	public function shop_revenue( array $scope, string $created_via, ?int $account = null ): array {
 		$total  = $this->storage->total_expression( $this->db );
 		$date   = $this->storage->date_column();
 		$status = $this->storage->status_column();
 		$unpaid = $status . ' NOT IN (' . $this->list_sql( self::UNPAID_STATUSES ) . ')';
 		$ours   = '' === $created_via ? '' : $this->db->prepare( $this->storage->created_via_expression( $this->db ) . ' = %s', $created_via ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- A prepared fragment.
-		$part   = '' === $ours ? '0' : 'SUM(CASE WHEN ' . $ours . ' THEN ' . $total . ' ELSE 0 END)';
+		$mine   = '' === $ours || null === $account ? $ours : $ours . $this->db->prepare( ' AND EXISTS (SELECT 1 FROM %i AS ac WHERE ac.wc_order_id = ', $this->postings ) . $this->storage->id_column() . $this->db->prepare( ' AND ac.account_id = %d)', $account ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared fragments.
+		$part   = '' === $mine ? '0' : 'SUM(CASE WHEN ' . $mine . ' THEN ' . $total . ' ELSE 0 END)';
 		$rows   = $this->run(
 			'SELECT SUM(' . $total . ') AS shop, ' . $part . ' AS marketplace'
 			. ' FROM ' . $this->storage->orders_from( $this->db ) . ' WHERE ' . $this->storage->live_condition()
@@ -262,12 +272,15 @@ final class Orders_Analytics_Query {
 	/**
 	 * The open postings that have been waiting on the shop since before a moment: how many, and the oldest ones.
 	 *
+	 * A posting waits since the moment the marketplace says it entered processing (`processing_since`); when the adapter did not say, since the
+	 * shop first saw it (`first_seen_at`), which a history import moves to the import day.
+	 *
 	 * @since 2.1.13
 	 *
 	 * @param int[]    $accounts Account ids.
 	 * @param string[] $statuses The marketplace statuses that wait on the shop (packing, shipping).
-	 * @param string   $before   GMT `Y-m-d H:i:s`: a posting first seen before it is stuck.
-	 * @return array{count:int,items:array<int,array{account:int,posting:string,order_id:int,status:string,first_seen_at:string}>}
+	 * @param string   $before   GMT `Y-m-d H:i:s`: a posting that has waited since before it is stuck.
+	 * @return array{count:int,items:array<int,array{account:int,posting:string,order_id:int,status:string,waiting_since:string}>}
 	 */
 	public function stuck( array $accounts, array $statuses, string $before ): array {
 		if ( [] === $accounts || [] === $statuses ) {
@@ -278,7 +291,7 @@ final class Orders_Analytics_Query {
 		}
 
 		$where = $this->open_where( $accounts ) . ' AND pg.status_raw IN (' . $this->list_sql( $statuses ) . ')'
-			. $this->db->prepare( ' AND pg.first_seen_at < %s', $before );
+			. $this->db->prepare( ' AND ' . self::WAITING_SINCE . ' < %s', $before ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- A fixed expression.
 		$count = (int) $this->db->get_var( 'SELECT COUNT(*) FROM ' . $this->from_sql() . ' WHERE ' . $where ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Every fragment is prepared or fixed.
 
 		if ( 0 === $count ) {
@@ -289,8 +302,8 @@ final class Orders_Analytics_Query {
 		}
 
 		$rows = $this->run(
-			'SELECT pg.account_id AS account, pg.external_key AS posting, pg.wc_order_id AS order_id, pg.status_raw AS status, pg.first_seen_at'
-			. ' FROM ' . $this->from_sql() . ' WHERE ' . $where . ' ORDER BY pg.first_seen_at ASC, pg.external_key ASC'
+			'SELECT pg.account_id AS account, pg.external_key AS posting, pg.wc_order_id AS order_id, pg.status_raw AS status, ' . self::WAITING_SINCE . ' AS waiting_since'
+			. ' FROM ' . $this->from_sql() . ' WHERE ' . $where . ' ORDER BY waiting_since ASC, pg.external_key ASC'
 			. $this->db->prepare( ' LIMIT %d', self::STUCK_LIMIT )
 		);
 
@@ -303,7 +316,7 @@ final class Orders_Analytics_Query {
 						'posting'       => (string) $row['posting'],
 						'order_id'      => (int) $row['order_id'],
 						'status'        => (string) $row['status'],
-						'first_seen_at' => (string) $row['first_seen_at'],
+						'waiting_since' => (string) $row['waiting_since'],
 					];
 				},
 				$rows

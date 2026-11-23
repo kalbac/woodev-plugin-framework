@@ -105,7 +105,8 @@ export function Summary( { data, messages: m, metric, path, query }: SummaryProp
 
 	const { current, previous, delta } = data.totals;
 	const share = data.share;
-	const shareNote = data.account === ALL_ACCOUNTS ? ( m.shareNote ?? '' ).replace( '%s', formatMoney( share.shop_revenue, data.currency ) ) : m.shareAllNote;
+	// The shop's revenue is the same whichever account is chosen; the share above it is the chosen account's, or the marketplace's for all.
+	const shareNote = ( m.shareNote ?? '' ).replace( '%s', formatMoney( share.shop_revenue, data.currency ) );
 
 	return (
 		<SummaryList>

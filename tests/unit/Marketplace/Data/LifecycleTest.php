@@ -299,7 +299,7 @@ final class LifecycleTest extends TestCase {
 	public function test_a_site_at_an_earlier_revision_is_brought_up_to_the_current_one(): void {
 		$this->use_transient_store();
 
-		foreach ( [ 0, 1, 2 ] as $stored ) {
+		foreach ( [ 0, 1, 2, 3 ] as $stored ) {
 			$this->delta_batches = [];
 			$this->use_option_store(
 				[
@@ -313,6 +313,7 @@ final class LifecycleTest extends TestCase {
 			$this->assertCount( 1, $this->delta_batches, "revision {$stored} is synchronised" );
 			$this->assertSame( Schema::REVISION, $this->options['woodev_fake-seller_schema_revision'] );
 			$this->assertStringContainsString( 'rename_confirmed', implode( "\n", $this->delta_batches[0] ) );
+			$this->assertStringContainsString( 'processing_since', implode( "\n", $this->delta_batches[0] ), 'The posting\'s processing date (#1933) comes with it.' );
 		}
 	}
 

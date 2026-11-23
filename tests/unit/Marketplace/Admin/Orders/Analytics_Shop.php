@@ -157,9 +157,10 @@ final class Analytics_Shop {
 	 * @param string $raw        The marketplace's status.
 	 * @param bool   $terminal   Whether the marketplace has finished with it.
 	 * @param string $first_seen When the shop first saw it, UTC.
+	 * @param string $processing_since When the marketplace says it entered processing, UTC; empty when the adapter does not say.
 	 * @return void
 	 */
-	public function posting( int $account, string $key, int $order_id, string $raw, bool $terminal, string $first_seen = '2026-11-01 00:00:00' ): void {
+	public function posting( int $account, string $key, int $order_id, string $raw, bool $terminal, string $first_seen = '2026-11-01 00:00:00', string $processing_since = '' ): void {
 		$this->db->insert(
 			Sqlite_Tables::table( 'postings' ),
 			[
@@ -169,7 +170,7 @@ final class Analytics_Shop {
 				'status_raw'    => $raw,
 				'is_terminal'   => $terminal ? 1 : 0,
 				'first_seen_at' => $first_seen,
-			]
+			] + ( '' === $processing_since ? [] : [ 'processing_since' => $processing_since ] )
 		);
 	}
 

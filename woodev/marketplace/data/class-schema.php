@@ -50,12 +50,13 @@ final class Schema {
 	 * 1: `bulk_runs` and `sync_state.pending_source` (2.1.8–2.1.10).
 	 * 2: `cards`, the stored list of the marketplace's cards (#1863).
 	 * 3: `links.pending_offer_id`, `links.rename_error` and `links.rename_confirmed` (the article changed after export, #1860).
+	 * 4: `postings.processing_since`, when the marketplace says the posting entered processing (the stuck postings of the analytics, #1933).
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var int
 	 */
-	public const REVISION = 3;
+	public const REVISION = 4;
 
 	/**
 	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
@@ -65,6 +66,7 @@ final class Schema {
 	 *
 	 * 1: `sync_state.pending_source`.
 	 * 3: `links.pending_offer_id`, `links.rename_error`, `links.rename_confirmed`.
+	 * 4: `postings.processing_since`.
 	 *
 	 * @since 2.1.10
 	 *
@@ -73,6 +75,7 @@ final class Schema {
 	private const REQUIRED_COLUMNS = [
 		'sync_state' => [ 'pending_source' ],
 		'links'      => [ 'pending_offer_id', 'rename_error', 'rename_confirmed' ],
+		'postings'   => [ 'processing_since' ],
 	];
 
 	/**
@@ -453,6 +456,7 @@ final class Schema {
 			`lines` longtext NULL,
 			baseline tinyint(1) NOT NULL DEFAULT 0,
 			first_seen_at datetime NOT NULL,
+			processing_since datetime NULL DEFAULT NULL,
 			refreshed_at datetime NULL DEFAULT NULL,
 			PRIMARY KEY  (account_id,external_key),
 			KEY wc_order (wc_order_id),
