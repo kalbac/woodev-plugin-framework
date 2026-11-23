@@ -7,8 +7,9 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Ids;
-use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -18,10 +19,10 @@ defined( 'ABSPATH' ) || exit;
  * action, and the activity read that says whether the label is being made — with the REST nonce, so the capability, the object check,
  * the licence gate and the one-task-per-posting rule are the table's ({@see \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider}).
  *
- * The button is empty for an order without a posting. It is off, with the reason as its tooltip, for a user who may not edit the order
- * and for a posting that cannot have a label ({@see Label_Availability}: finished, or not ready by the adapter's own word), so no
- * request is possible. While the marketplace is making the label the script turns it off with the table's own sentence, and downloads
- * the PDF once it is ready.
+ * The button is empty for an order without a posting. It is off, with the reason as its tooltip, for a user who may not edit the order,
+ * for an account whose key cannot write, and for a posting that cannot have a label ({@see Posting_Action_Gate}: finished, not ready by
+ * the adapter's own word, or not allowed by the marketplace), so no request is possible. While the marketplace is making the label the
+ * script turns it off with the table's own sentence, and downloads the PDF once it is ready.
  *
  * @since 2.1.13
  */
@@ -45,11 +46,25 @@ final class Label_Button {
 	private $posting_of_order;
 
 	/**
-	 * Whether a label can be asked for a posting.
+	 * Whether a label can be asked for a posting: the account's write right, what the marketplace allows and the posting's readiness.
 	 *
-	 * @var Label_Availability
+	 * @var Posting_Action_Gate
 	 */
-	private $availability;
+	private $gate;
+
+	/**
+	 * Returns the account of a posting: `function ( int $account_id ): ?Account`.
+	 *
+	 * @var callable
+	 */
+	private $account_of;
+
+	/**
+	 * Tells whether a ready label document already covers a posting: `function ( int $account_id, string $external_key ): bool`; null asks nothing.
+	 *
+	 * @var callable|null
+	 */
+	private $label_stored;
 
 	/**
 	 * Folder URL of the module's assets, with a trailing slash.
@@ -70,18 +85,22 @@ final class Label_Button {
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param string             $table_url        URL of the «Заказы» records table, without a trailing slash.
-	 * @param callable           $posting_of_order `function ( int $order_id ): ?array{account_id:int,status_raw:string,is_terminal:bool}`; null for an order with no posting.
-	 * @param Label_Availability $availability     Whether a label can be asked for a posting.
-	 * @param string             $assets_url       Folder URL of the module's assets, with a trailing slash.
-	 * @param string             $version          Plugin version.
+	 * @param string              $table_url        URL of the «Заказы» records table, without a trailing slash.
+	 * @param callable            $posting_of_order `function ( int $order_id ): ?array{account_id:int,status_raw:string,is_terminal:bool}`; null for an order with no posting.
+	 * @param Posting_Action_Gate $gate            Whether a label can be asked for a posting.
+	 * @param callable            $account_of       `function ( int $account_id ): ?Account`, the account of a posting; null for one that is gone.
+	 * @param string              $assets_url       Folder URL of the module's assets, with a trailing slash.
+	 * @param string              $version          Plugin version.
+	 * @param callable|null       $label_stored     `function ( int $account_id, string $external_key ): bool` (since 2.1.17): whether a ready label already covers the posting. Its download is a read, so the button stays on; null asks nothing.
 	 */
-	public function __construct( string $table_url, callable $posting_of_order, Label_Availability $availability, string $assets_url, string $version ) {
+	public function __construct( string $table_url, callable $posting_of_order, Posting_Action_Gate $gate, callable $account_of, string $assets_url, string $version, ?callable $label_stored = null ) {
 		$this->table_url        = $table_url;
 		$this->posting_of_order = $posting_of_order;
-		$this->availability     = $availability;
+		$this->gate             = $gate;
+		$this->account_of       = $account_of;
 		$this->assets_url       = $assets_url;
 		$this->version          = $version;
+		$this->label_stored     = $label_stored;
 	}
 
 	/**
@@ -121,7 +140,8 @@ final class Label_Button {
 	}
 
 	/**
-	 * Tells why the button is off: the user may not edit the order, or the posting cannot have a label.
+	 * Tells why the button is off: the user may not edit the order, the account cannot write to the marketplace, or the posting cannot
+	 * have a label.
 	 *
 	 * @param \WC_Order                                                $order   Order.
 	 * @param array{account_id:int,status_raw:string,is_terminal:bool} $posting Its posting.
@@ -132,6 +152,25 @@ final class Label_Button {
 			return __( 'Нет права изменять этот заказ.', 'woodev-plugin-framework' );
 		}
 
-		return $this->availability->reason( $posting['status_raw'], $posting['is_terminal'] );
+		if ( $this->is_stored( $posting ) ) {
+			return ''; // A label that is already made is downloaded, not asked for: only a new request is gated.
+		}
+
+		$account = call_user_func( $this->account_of, $posting['account_id'] );
+		$refusal = $account instanceof Account ? $this->gate->write_refusal( $account ) : '';
+
+		return '' !== $refusal ? $refusal : $this->gate->label_reason( $order, $posting['status_raw'], $posting['is_terminal'] );
+	}
+
+	/**
+	 * Whether a ready label document already covers the posting.
+	 *
+	 * @param array<string,mixed> $posting Its posting.
+	 * @return bool
+	 */
+	private function is_stored( array $posting ): bool {
+		$key = (string) ( $posting['external_key'] ?? '' );
+
+		return null !== $this->label_stored && '' !== $key && true === call_user_func( $this->label_stored, $posting['account_id'], $key );
 	}
 }

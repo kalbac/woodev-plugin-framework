@@ -56,9 +56,10 @@ final class OrderRegistryStatusTest extends TestCase {
 	public function test_the_posting_of_a_registered_order_is_read_with_its_account_status_and_finished_state(): void {
 		$this->assertSame(
 			[
-				'account_id'  => 1,
-				'status_raw'  => 'awaiting_deliver',
-				'is_terminal' => false,
+				'account_id'   => 1,
+				'external_key' => 'P-1',
+				'status_raw'   => 'awaiting_deliver',
+				'is_terminal'  => false,
 			],
 			$this->registry()->posting_of_order( 700 )
 		);

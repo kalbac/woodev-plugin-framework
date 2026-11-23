@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
@@ -96,9 +97,10 @@ final class Embedded_Screens {
 	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin   Plugin.
 	 * @param Wpdb_Account_Store                               $accounts Account store.
 	 * @param \wpdb                                            $db       Database.
+	 * @param callable|null                                    $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.17); null lets every account write.
 	 * @return void
 	 */
-	public static function register( $plugin, Wpdb_Account_Store $accounts, \wpdb $db ): void {
+	public static function register( $plugin, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate = null ): void {
 		$adapter      = $plugin->get_marketplace_adapter();
 		$capabilities = self::capabilities_of( $adapter );
 
@@ -124,7 +126,7 @@ final class Embedded_Screens {
 		}
 
 		if ( $capabilities['order_cancel'] ) {
-			self::order_cancel( $plugin, $adapter, $accounts, $guard, $names );
+			self::order_cancel( $plugin, $adapter, $accounts, $guard, $names, $write_gate );
 		}
 	}
 
@@ -136,9 +138,10 @@ final class Embedded_Screens {
 	 * @param Account_Store                                    $accounts   Account store.
 	 * @param Admin_Guard                                      $guard      Guard.
 	 * @param Screen_Names                                     $names      Names.
+	 * @param callable|null                                    $write_gate The plugin's write gate; null lets every account write.
 	 * @return void
 	 */
-	private static function order_cancel( $plugin, Marketplace_Adapter $adapter, Account_Store $accounts, Admin_Guard $guard, Screen_Names $names ): void {
+	private static function order_cancel( $plugin, Marketplace_Adapter $adapter, Account_Store $accounts, Admin_Guard $guard, Screen_Names $names, ?callable $write_gate ): void {
 		( new Cancel_Ajax(
 			$guard,
 			$accounts,
@@ -148,7 +151,8 @@ final class Embedded_Screens {
 			License_Gate::for_plugin( $plugin ),
 			function ( string $line ) use ( $plugin ): void {
 				$plugin->log_error( $line );
-			}
+			},
+			Posting_Action_Gate::for_adapter( $adapter, $write_gate )
 		) )->register();
 	}
 

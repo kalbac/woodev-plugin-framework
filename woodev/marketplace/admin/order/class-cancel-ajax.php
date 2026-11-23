@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
@@ -86,19 +87,27 @@ final class Cancel_Ajax {
 	private $log_error;
 
 	/**
+	 * Whether the account can write and the marketplace lets this posting be cancelled; null asks nothing.
+	 *
+	 * @var Posting_Action_Gate|null
+	 */
+	private $gate;
+
+	/**
 	 * Creates the handler.
 	 *
 	 * @since 2.1.2
 	 *
-	 * @param Admin_Guard         $guard     Authorisation.
-	 * @param Account_Store       $accounts  Accounts.
-	 * @param Order_Meta_Contract $meta      The marketplace's order meta contract.
-	 * @param Order_Canceller     $canceller The marketplace's cancellation.
-	 * @param Screen_Names        $names     Names.
-	 * @param License_Gate        $license   Licence: no licence in force, no remote call.
-	 * @param callable|null       $log_error `function ( string $line ): void`, for failures that are not a refusal.
+	 * @param Admin_Guard              $guard     Authorisation.
+	 * @param Account_Store            $accounts  Accounts.
+	 * @param Order_Meta_Contract      $meta      The marketplace's order meta contract.
+	 * @param Order_Canceller          $canceller The marketplace's cancellation.
+	 * @param Screen_Names             $names     Names.
+	 * @param License_Gate             $license   Licence: no licence in force, no remote call.
+	 * @param callable|null            $log_error `function ( string $line ): void`, for failures that are not a refusal.
+	 * @param Posting_Action_Gate|null $gate      Whether the account can write and the marketplace allows the cancellation (since 2.1.17); null asks nothing.
 	 */
-	public function __construct( Admin_Guard $guard, Account_Store $accounts, Order_Meta_Contract $meta, Order_Canceller $canceller, Screen_Names $names, License_Gate $license, ?callable $log_error = null ) {
+	public function __construct( Admin_Guard $guard, Account_Store $accounts, Order_Meta_Contract $meta, Order_Canceller $canceller, Screen_Names $names, License_Gate $license, ?callable $log_error = null, ?Posting_Action_Gate $gate = null ) {
 		$this->guard     = $guard;
 		$this->accounts  = $accounts;
 		$this->meta      = $meta;
@@ -106,6 +115,7 @@ final class Cancel_Ajax {
 		$this->names     = $names;
 		$this->license   = $license;
 		$this->log_error = $log_error;
+		$this->gate      = $gate;
 	}
 
 	/**
@@ -211,8 +221,34 @@ final class Cancel_Ajax {
 
 		$this->require_usable( $account );
 		$this->require_licence();
+		$this->require_on_offer( $order, $account );
 
 		return [ $order, $account, $posting_number ];
+	}
+
+	/**
+	 * Refuses a cancellation the account cannot make (its key cannot write) or the marketplace does not allow for this posting, before
+	 * either remote call.
+	 *
+	 * @param \WC_Order $order   The order.
+	 * @param Account   $account Its account.
+	 * @return void
+	 * @throws Cancel_Refused When the cancellation is not on offer.
+	 */
+	private function require_on_offer( \WC_Order $order, Account $account ): void {
+		if ( null === $this->gate ) {
+			return;
+		}
+
+		$refusal = $this->gate->write_refusal( $account );
+
+		if ( '' === $refusal ) {
+			$refusal = $this->gate->cancel_reason( $order );
+		}
+
+		if ( '' !== $refusal ) {
+			throw new Cancel_Refused( $refusal, 409 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
 	}
 
 	/**

@@ -15,6 +15,7 @@ use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Refused;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flows\Label_Exception;
@@ -115,11 +116,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	private $data_status;
 
 	/**
-	 * Whether a label can be asked for a posting: no remote call is made for one that cannot have it.
+	 * Whether «Отменить» and «Этикетки» are on offer for a posting: the account's write right, what the marketplace allows and, for a
+	 * label, whether the posting is ready for one. No remote call is made for a posting that cannot take the action.
 	 *
-	 * @var Label_Availability
+	 * @var Posting_Action_Gate
 	 */
-	private $availability;
+	private $gate;
 
 	/**
 	 * Creates the provider.
@@ -138,10 +140,11 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param callable|null                $log_error  `function ( string $line ): void`, for failures that are not a refusal.
 	 * @param Site_Orders_Data_Status|null $data_status The «Статус данных» block (since 2.1.13); null shows none.
 	 * @param Label_Availability|null      $availability Whether a label can be asked for a posting (since 2.1.13); null for an adapter that says nothing.
+	 * @param Posting_Action_Gate|null     $gate         Whether the write actions are on offer for a posting (since 2.1.17); when given it is used instead of `$availability`, and null offers every action to every account.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null ) {
 		$this->data_status = $data_status;
-		$this->availability = $availability ?? new Label_Availability( null );
+		$this->gate        = $gate ?? new Posting_Action_Gate( $availability ?? new Label_Availability( null ) );
 		$this->accounts   = $accounts;
 		$this->reader     = $reader;
 		$this->rows       = $rows;
@@ -450,6 +453,10 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			throw new Action_State_Exception( __( 'Заказ не найден. Обновите страницу.', 'woodev-plugin-framework' ) );
 		}
 
+		if ( Site_Orders_Definition::CANCEL === $action ) {
+			$this->require_write( $account ); // A write the account cannot make is refused here, whatever the row showed. A label is checked only when it is asked for.
+		}
+
 		return [
 			'account' => $account,
 			'targets' => $targets,
@@ -468,6 +475,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 
 		if ( $this->cancel->is_finished( $order ) ) {
 			return $this->refused_plan( __( 'Это отправление уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), $call['targets'][0]['external_key'] );
+		}
+
+		$not_allowed = $this->gate->cancel_reason( $order );
+
+		if ( '' !== $not_allowed ) {
+			return $this->refused_plan( $not_allowed, $call['targets'][0]['external_key'] );
 		}
 
 		return [
@@ -491,6 +504,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 
 		if ( $this->cancel->is_finished( $order ) ) {
 			return $this->refused_result( __( 'Это отправление уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), $call['targets'][0]['external_key'] );
+		}
+
+		$not_allowed = $this->gate->cancel_reason( $order );
+
+		if ( '' !== $not_allowed ) {
+			return $this->refused_result( $not_allowed, $call['targets'][0]['external_key'] ); // No remote call for a posting the marketplace does not let cancel.
 		}
 
 		$reason_id = (int) ( $payload['reason'] ?? 0 );
@@ -536,6 +555,17 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			throw new Action_State_Exception( $refusal );
 		}
 
+		return $this->order_of_call( $call );
+	}
+
+	/**
+	 * The WooCommerce order of the one asked posting.
+	 *
+	 * @param array{account:Account,targets:array<int,array<string,mixed>>} $call Resolved call.
+	 * @return \WC_Order
+	 * @throws Action_State_Exception When the order cannot be loaded.
+	 */
+	private function order_of_call( array $call ): \WC_Order {
 		$order = $this->order( $call['targets'][0]['order_id'] );
 
 		if ( null === $order ) {
@@ -543,6 +573,32 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		}
 
 		return $order;
+	}
+
+	/**
+	 * Refuses a write the account cannot make.
+	 *
+	 * @param Account $account Account.
+	 * @return void
+	 * @throws Action_State_Exception When the plugin's write gate refuses the account.
+	 */
+	private function require_write( Account $account ): void {
+		$refusal = $this->gate->write_refusal( $account );
+
+		if ( '' !== $refusal ) {
+			throw new Action_State_Exception( $refusal );
+		}
+	}
+
+	/**
+	 * Why a label cannot be asked for the one asked posting: it is finished, not ready, or the marketplace has not allowed it.
+	 *
+	 * @param array{account:Account,targets:array<int,array<string,mixed>>} $call Resolved call.
+	 * @return string The sentence for the merchant; empty when the label can be asked for.
+	 * @throws Action_State_Exception When the order cannot be loaded.
+	 */
+	private function label_unavailable( array $call ): string {
+		return $this->gate->label_reason( $this->order_of_call( $call ), $call['targets'][0]['status_raw'], $call['targets'][0]['is_terminal'] );
 	}
 
 	/**
@@ -556,6 +612,16 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 
 		if ( $this->labels->states( $call['account']->id(), [ $key ] )[ $key ]['open_task'] > 0 ) {
 			return $this->refused_plan( __( 'Этикетки для этого заказа уже готовятся — дождитесь результата.', 'woodev-plugin-framework' ), $key );
+		}
+
+		if ( $this->labels->covering( $call['account']->id(), [ $key ] ) < 1 ) { // A stored label is only downloaded, which no gate stops.
+			$this->require_write( $call['account'] );
+
+			$unavailable = $this->label_unavailable( $call );
+
+			if ( '' !== $unavailable ) {
+				return $this->refused_plan( $unavailable, $key );
+			}
 		}
 
 		return [
@@ -596,7 +662,9 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			];
 		}
 
-		$unavailable = $this->availability->reason( $call['targets'][0]['status_raw'], $call['targets'][0]['is_terminal'] );
+		$this->require_write( $account );
+
+		$unavailable = $this->label_unavailable( $call );
 
 		if ( '' !== $unavailable ) {
 			return $this->refused_result( $unavailable, $key ); // No remote call for a posting that cannot have a label.
@@ -700,11 +768,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		$orders   = $this->orders( array_column( $items, 'order_id' ) );
 		$states   = null === $this->labels ? [] : $this->labels->states( $account->id(), array_column( $items, 'external_key' ) );
 		$activity = $this->activity->for_items( $items, $states );
+		$refusal  = $this->gate->write_refusal( $account );
 		$rows     = [];
 
 		foreach ( $items as $item ) {
 			if ( isset( $orders[ $item['order_id'] ] ) ) {
-				$rows[] = $this->rows->row( $account->id(), $item, $orders[ $item['order_id'] ], $activity[ $item['order_id'] ] );
+				$rows[] = $this->rows->row( $account->id(), $item, $orders[ $item['order_id'] ], $activity[ $item['order_id'] ], $refusal, ( $states[ $item['external_key'] ]['document_id'] ?? 0 ) > 0 );
 			}
 		}
 

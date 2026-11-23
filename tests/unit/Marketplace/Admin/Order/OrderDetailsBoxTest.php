@@ -10,12 +10,14 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Order;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Modal;
 use Woodev\Framework\Marketplace\Admin\Order\Label_Button;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Details_Box;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Tests\Unit\TestCase;
 
@@ -182,6 +184,38 @@ final class OrderDetailsBoxTest extends TestCase {
 		$this->assertStringNotContainsString( '<button', $html );
 	}
 
+	public function test_a_cancellation_the_account_or_the_marketplace_does_not_allow_is_a_button_that_is_off_and_says_why(): void {
+		$adapter = $this->adapter();
+		$modal   = $this->modal(
+			$adapter,
+			static function (): string {
+				return 'Маркетплейс сейчас не разрешает отменить это отправление.';
+			}
+		);
+
+		$html = $this->render( $this->box( $adapter, $modal ), $this->order( 700 ) );
+
+		$this->assertStringContainsString( 'title="Маркетплейс сейчас не разрешает отменить это отправление."', $html );
+		$this->assertStringContainsString( '<button type="button" class="button" disabled aria-disabled="true">Отменить: Fake</button>', $html );
+		$this->assertStringNotContainsString( 'data-order-id', $html, 'No hook for the script: no request is possible.' );
+		$this->assertStringNotContainsString( 'data-nonce', $html );
+	}
+
+	public function test_a_cancellation_that_is_on_keeps_its_live_button_when_the_rule_says_nothing(): void {
+		$adapter = $this->adapter();
+		$modal   = $this->modal(
+			$adapter,
+			static function (): string {
+				return '';
+			}
+		);
+
+		$html = $this->render( $this->box( $adapter, $modal ), $this->order( 700 ) );
+
+		$this->assertStringContainsString( 'data-order-id="700"', $html );
+		$this->assertStringNotContainsString( 'disabled', $html );
+	}
+
 	public function test_the_label_button_is_in_the_box_only_when_the_adapter_has_labels(): void {
 		$with    = $this->render( $this->box( $this->adapter(), null, $this->label_button( 5 ) ), $this->order( 700 ) );
 		$without = $this->render( $this->box( $this->adapter() ), $this->order( 700 ) );
@@ -258,7 +292,10 @@ final class OrderDetailsBoxTest extends TestCase {
 					'is_terminal' => false,
 				];
 			},
-			new Label_Availability( null ),
+			new Posting_Action_Gate( new Label_Availability( null ) ),
+			static function ( int $id ): Account {
+				return new Account( $id, 'fake', 'Магазин', true );
+			},
 			'https://example.test/assets/',
 			'1.0'
 		);
@@ -267,11 +304,12 @@ final class OrderDetailsBoxTest extends TestCase {
 	/**
 	 * Builds the cancel button over a canceller.
 	 *
-	 * @param Order_Canceller $canceller The marketplace's cancellation.
+	 * @param Order_Canceller $canceller   The marketplace's cancellation.
+	 * @param callable|null   $unavailable `function ( \WC_Order $order ): string`, why cancelling is off.
 	 * @return Cancel_Modal
 	 */
-	private function modal( Order_Canceller $canceller ): Cancel_Modal {
-		return new Cancel_Modal( new Screen_Names( 'fake', 'Fake' ), $canceller, 'https://example.test/assets/', '1.0' );
+	private function modal( Order_Canceller $canceller, ?callable $unavailable = null ): Cancel_Modal {
+		return new Cancel_Modal( new Screen_Names( 'fake', 'Fake' ), $canceller, 'https://example.test/assets/', '1.0', $unavailable );
 	}
 
 	/**
