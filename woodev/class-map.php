@@ -176,6 +176,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Label_Availability' => 'woodev/marketplace/admin/shared/class-label-availability.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Label_Readiness' => 'woodev/marketplace/admin/shared/interface-label-readiness.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Notification_State_Text' => 'woodev/marketplace/admin/shared/class-notification-state-text.php',
+	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Plain_Price' => 'woodev/marketplace/admin/shared/class-plain-price.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Posting_Status_Groups' => 'woodev/marketplace/admin/shared/interface-posting-status-groups.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Posting_Status_Names' => 'woodev/marketplace/admin/shared/interface-posting-status-names.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Posting_Status_Sets' => 'woodev/marketplace/admin/shared/class-posting-status-sets.php',

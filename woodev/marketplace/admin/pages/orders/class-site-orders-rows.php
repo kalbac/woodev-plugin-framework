@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Plain_Price;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
 
@@ -241,7 +242,7 @@ final class Site_Orders_Rows {
 	 * @return string
 	 */
 	private function total( \WC_Order $order ): string {
-		return html_entity_decode( wp_strip_all_tags( (string) wc_price( $order->get_total(), [ 'currency' => $order->get_currency() ] ) ), ENT_QUOTES, 'UTF-8' );
+		return Plain_Price::format( $order->get_total(), (string) $order->get_currency() );
 	}
 
 	/**

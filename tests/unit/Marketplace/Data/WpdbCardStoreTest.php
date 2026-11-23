@@ -245,6 +245,21 @@ final class WpdbCardStoreTest extends TestCase {
 		$this->assertSame( [], $this->store()->page( self::ACCOUNT, null, '', 3, 3 )['cards'], 'a page past the end is empty' );
 	}
 
+	public function test_the_archived_cards_are_counted_apart_for_their_own_account(): void {
+		$this->refresh(
+			[
+				$this->row( 'A-1' ),
+				$this->row( 'A-2', '', [ 'archived' => true ] ),
+				$this->row( 'A-3', '', [ 'archived' => true ] ),
+			]
+		);
+		$this->refresh( [ $this->row( 'B-1', '', [ 'archived' => true ] ) ], self::OTHER );
+
+		$this->assertSame( 3, $this->store()->count( self::ACCOUNT ) );
+		$this->assertSame( 2, $this->store()->archived_count( self::ACCOUNT ), 'The archive is a part of the list, which counts it.' );
+		$this->assertSame( 0, $this->store()->archived_count( 99 ) );
+	}
+
 	public function test_the_on_site_counts_follow_the_search(): void {
 		$this->four();
 		$this->link( 'A-1', 40 );
