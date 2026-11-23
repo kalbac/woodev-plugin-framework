@@ -1380,6 +1380,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		if ( $updated && Effective_Settings::GROUP_PRICES === $group ) {
 			do_action( $this->price_rules_changed_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names.
 		}
+
+		// The exchange group decides whether the orders in force are the account's own or the shared ones.
+		if ( $updated && Effective_Settings::GROUP_EXCHANGE === $group ) {
+			$this->announce_saved( $id );
+		}
 	}
 
 	/**
