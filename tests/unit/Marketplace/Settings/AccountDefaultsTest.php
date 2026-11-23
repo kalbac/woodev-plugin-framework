@@ -525,6 +525,23 @@ final class AccountDefaultsTest extends TestCase {
 		$this->assertFalse( Effective_Settings::uses_own( $created->settings(), Effective_Settings::GROUP_EXCHANGE ) );
 	}
 
+	public function test_an_account_created_or_its_stock_mode_changed_announces_that_it_was_saved(): void {
+		[ $adapter, $store ] = $this->adapter_and_store();
+		$handler             = $this->handler( $adapter, $store );
+
+		// At least once for the new account (its switch is saved after it) and once for the changed stock mode.
+		Actions\expectDone( 'woodev_fake_mp_account_saved' )->atLeast()->times( 2 );
+
+		$handler->get_setting( 'account_new_name' )->set_value( 'Fresh' );
+		$handler->get_setting( 'account_new_merchant_uid' )->set_value( '555' );
+		$handler->get_setting( 'account_new_access_token' )->set_value( 'tok' );
+		$handler->save();
+
+		$id = $store->all( Sqlite_Tables::MARKETPLACE_ID, false )[0]->id();
+
+		$this->handler( $adapter, $store )->update_value( "account_{$id}_stock_mode", Wpdb_Account_Store::STOCK_OFF );
+	}
+
 	public function test_the_price_rule_is_validated_for_every_account_that_submits_one(): void {
 		[ $adapter, $store ] = $this->adapter_and_store();
 		$id                  = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'A', true, [ 'merchant_uid' => '1', 'access_token' => 't1' ] ) );
