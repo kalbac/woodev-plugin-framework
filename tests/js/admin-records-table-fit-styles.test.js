@@ -10,7 +10,16 @@
  *  2. a sortable left-aligned heading's button pads nothing on EITHER side: its 12px right padding sat after the sort arrow of every
  *     sortable column;
  *  3. the article column is 14ch everywhere (the products table's own 19ch rule is gone), a price and a stock are 12ch, the name's
- *     floor is 12ch.
+ *     floor is 10ch (#1945: 12ch, plus the variations' 28px expand column, made «Товары сайта» 813px in the 784px card).
+ *  4. what makes a column rigid is allowed to wrap (#1945, #1930): a badge breaks at its spaces, a date breaks from its time, the buyer
+ *     breaks anywhere, and a right-aligned sortable heading pads nothing around its button.
+ *  5. a table that still scrolls draws its bar: the standard `scrollbar-color` switches `::-webkit-scrollbar` off, and on macOS the
+ *     standard bar is the overlay one, hidden until the table is touched (#1930).
+ *
+ * Measured on the rig (Playwright against :8973, the page's marketplace stylesheet and bundle replaced by the compiled worktree ones,
+ * 1024px, the WP menu expanded; the table's own scrollWidth, then its minimum content width in a 200px card): «Товары сайта» 813 → 784
+ * (minimum 754), «Заказы маркетплейсов» of the second account 855 → 784 (minimum 740), «Карточки Ozon» 784/784 (minimum 699–741),
+ * «Сопоставление» 750/750 (unchanged).
  *
  * @see src/admin-records/style.scss
  */
@@ -78,11 +87,53 @@ describe( 'the columns of the products and mappings tables', () => {
 		expect( numbers ).toMatch( /width: 12ch;/ );
 	} );
 
-	test( 'the name column has a 12ch floor and no width', () => {
+	test( 'the name column has a 10ch floor and no width', () => {
 		const name = block( scss, '.woodev-records__col-name {\n\t\tmin-width' );
 
-		expect( name ).toMatch( /min-width: 12ch;/ );
+		expect( name ).toMatch( /min-width: 10ch;/ );
 		expect( name ).not.toMatch( /(^|[^-])width: / );
+	} );
+} );
+
+describe( 'what makes a column rigid may wrap (#1945, #1930)', () => {
+	test( 'a badge breaks at its spaces instead of fixing its column at the full label', () => {
+		const badge = block( scss, '.woodev-records__badge {' );
+
+		expect( badge ).toMatch( /white-space: normal;/ );
+		expect( badge ).not.toMatch( /white-space: nowrap/ );
+		// The delivery page's 2.5em badge stays 2.5em tall on one line.
+		expect( badge ).toMatch( /min-height: 2\.5em;/ );
+	} );
+
+	test( 'the date column is 10ch and not nowrap (the date and its time are the nowrap halves)', () => {
+		const nowrap = block( scss, '.woodev-records__col-order,' );
+
+		expect( nowrap ).toMatch( /white-space: nowrap/ );
+		expect( scss.slice( 0, scss.indexOf( '.woodev-records__col-order {' ) ) ).not.toContain( 'woodev-records__col-date' );
+		expect( block( scss, '.woodev-records__col-date {' ) ).toMatch( /width: 10ch;/ );
+	} );
+
+	test( 'the buyer breaks anywhere, like the delivery page\'s text columns', () => {
+		expect( block( scss, '.woodev-records__col-customer {' ) ).toMatch( /overflow-wrap: anywhere;/ );
+	} );
+
+	test( 'a right-aligned sortable heading pads nothing around its button (WooCommerce pads 24px a side)', () => {
+		const numeric = block( scss, '.woocommerce-table__header.is-sortable:not( .is-left-aligned ) .components-button {' );
+
+		expect( numeric ).toMatch( /padding-left: 0;/ );
+		expect( numeric ).toMatch( /padding-right: 0;/ );
+	} );
+} );
+
+describe( 'the scroll bar of a table wider than its card (#1930)', () => {
+	test( 'the always-drawn bar is the webkit one, and the standard properties are only for browsers without it', () => {
+		const table = block( scss, '.woocommerce-table__table {\n\t\t// WooCommerce\'s edge fade' );
+		const fallback = block( table, '@supports not selector( ::-webkit-scrollbar )' );
+
+		expect( table ).toContain( '&::-webkit-scrollbar {' );
+		expect( fallback ).toMatch( /scrollbar-color:/ );
+		// Anywhere outside the fallback `scrollbar-color` turns the webkit bar off (macOS then shows the overlay one, hidden).
+		expect( table.replace( fallback, '' ) ).not.toMatch( /scrollbar-(color|width)/ );
 	} );
 } );
 

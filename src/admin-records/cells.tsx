@@ -18,7 +18,7 @@ type CellRenderer = ( value: unknown ) => ReactNode;
 
 const DATE_ONLY_LENGTH = 'YYYY-MM-DD'.length;
 const DATE_FORMAT = 'd.m.Y';
-const DATETIME_FORMAT = 'd.m.Y H:i';
+const TIME_FORMAT = 'H:i';
 
 function TextValue( { value, title }: { value: string | number; title?: string } ) {
 	return (
@@ -84,15 +84,22 @@ function LinkValue( { value }: { value: LinkCell } ) {
 }
 
 /**
- * A date as «15.11.2026 23:24» (a value without a time as «15.11.2026»), in the site's timezone and on one line — the
- * format a site picks for its blog posts is a sentence («November 15, 2026 11:24 pm») that a table cell cannot hold.
+ * A date as «15.11.2026 23:24» (a value without a time as «15.11.2026»), in the site's timezone — the format a site picks for its blog
+ * posts is a sentence («November 15, 2026 11:24 pm») that a table cell cannot hold. It is one line while the column has room; in a
+ * squeezed table the time goes under the date (each half never breaks), instead of the whole date fixing the column's width.
  */
 function DateValue( { value }: { value: string } ) {
-	const format = value.length === DATE_ONLY_LENGTH ? DATE_FORMAT : DATETIME_FORMAT;
+	const dateOnly = value.length === DATE_ONLY_LENGTH;
 
 	return (
-		<time dateTime={ value } style={ STYLES.nowrap }>
-			{ dateI18n( format, value, undefined ) }
+		<time dateTime={ value } style={ STYLES.breakable }>
+			<span style={ STYLES.nowrap }>{ dateI18n( DATE_FORMAT, value, undefined ) }</span>
+			{ ! dateOnly && (
+				<>
+					{ ' ' }
+					<span style={ STYLES.nowrap }>{ dateI18n( TIME_FORMAT, value, undefined ) }</span>
+				</>
+			) }
 		</time>
 	);
 }
