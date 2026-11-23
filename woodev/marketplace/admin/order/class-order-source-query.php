@@ -48,14 +48,23 @@ final class Order_Source_Query {
 	private $created_vias;
 
 	/**
+	 * Returns the orders of an account: `function ( string $created_via, int $account_id ): int[]`.
+	 *
+	 * @var callable|null
+	 */
+	private $account_orders;
+
+	/**
 	 * Creates the query builder.
 	 *
 	 * @since 2.1.13
 	 *
-	 * @param string[] $created_vias The `created_via` values of the registered marketplaces.
+	 * @param string[]      $created_vias   The `created_via` values of the registered marketplaces.
+	 * @param callable|null $account_orders `function ( string $created_via, int $account_id ): int[]`, the WooCommerce orders of an account; without it a choice of one account keeps nothing apart (since 2.1.16).
 	 */
-	public function __construct( array $created_vias ) {
-		$this->created_vias = array_values( $created_vias );
+	public function __construct( array $created_vias, ?callable $account_orders = null ) {
+		$this->created_vias   = array_values( $created_vias );
+		$this->account_orders = $account_orders;
 	}
 
 	/**
@@ -79,6 +88,11 @@ final class Order_Source_Query {
 
 		if ( null !== $only ) {
 			$args['created_via'] = $only;
+			$ids                 = $this->post_ids( $choice, isset( $args['post__in'] ) ? (array) $args['post__in'] : [] );
+
+			if ( null !== $ids ) {
+				$args['post__in'] = $ids;
+			}
 
 			return $args;
 		}
@@ -139,8 +153,40 @@ final class Order_Source_Query {
 		}
 
 		$meta_query = $this->for_posts( [], $choice );
+		$args       = [] === $meta_query ? [] : [ 'meta_query' => $meta_query ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- one key, a count for a screen.
+		$ids        = $this->post_ids( $choice, [] );
 
-		return [] === $meta_query ? [] : [ 'meta_query' => $meta_query ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- one key, a count for a screen.
+		if ( null !== $ids ) {
+			$args['post__in'] = $ids;
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Returns the orders a choice of one account keeps, as the `post__in` of a list query: WooCommerce's own `post__in` of both
+	 * storages, so the posts list and the HPOS list are narrowed the same way.
+	 *
+	 * @since 2.1.16
+	 *
+	 * @param string           $choice   An {@see Order_Source_Choice} value.
+	 * @param array<int,mixed> $existing The `post__in` the query already carries (the posts list sets one for a search).
+	 * @return int[]|null Null when the choice is not one account's; `[ 0 ]` when it keeps no order, because an empty `post__in` selects every order.
+	 */
+	public function post_ids( string $choice, array $existing ): ?array {
+		$account = $this->account_of( $choice );
+
+		if ( null === $account ) {
+			return null;
+		}
+
+		$ids = array_map( 'intval', (array) call_user_func( $this->account_orders, $account[0], $account[1] ) );
+
+		if ( [] !== $existing ) {
+			$ids = array_intersect( $ids, array_map( 'intval', $existing ) );
+		}
+
+		return [] === $ids ? [ 0 ] : array_values( array_unique( $ids ) );
 	}
 
 	/**
@@ -186,7 +232,21 @@ final class Order_Source_Query {
 			return [ $choice ];
 		}
 
-		return null;
+		$account = $this->account_of( $choice );
+
+		return null === $account ? null : [ $account[0] ];
+	}
+
+	/**
+	 * Splits a choice of one account of a registered marketplace.
+	 *
+	 * @param string $choice An {@see Order_Source_Choice} value.
+	 * @return array{0:string,1:int}|null The `created_via` and the account id; null for any other choice, or without the orders lookup.
+	 */
+	private function account_of( string $choice ): ?array {
+		$account = Order_Source_Choice::parse_account( $choice );
+
+		return null !== $account && null !== $this->account_orders && in_array( $account[0], $this->created_vias, true ) ? $account : null;
 	}
 
 	/**

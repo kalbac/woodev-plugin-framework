@@ -13214,3 +13214,13 @@ msgstr ""
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:447
 msgid "Такого аккаунта нет."
 msgstr ""
+
+#: marketplace/admin/order/class-order-source-filter.php:374
+msgid "Кабинет"
+msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/admin/order/class-order-source-filter.php:468
+#, php-format
+msgid "%s не передаёт данные покупателя"
+msgstr ""

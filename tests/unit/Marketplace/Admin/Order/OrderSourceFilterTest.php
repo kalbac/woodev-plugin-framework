@@ -9,7 +9,13 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Order;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Account\Account_Store;
+use Woodev\Framework\Marketplace\Admin\Order\Order_Source_Accounts;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Source_Filter;
+use Woodev\Framework\Marketplace\Orders\Order_Registry;
+use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 use Woodev\Tests\Unit\TestCase;
 
@@ -196,6 +202,7 @@ final class OrderSourceFilterTest extends TestCase {
 		$query->shouldReceive( 'is_main_query' )->andReturn( true );
 		$query->shouldReceive( 'get' )->with( 'post_type' )->andReturn( 'shop_order' );
 		$query->shouldReceive( 'get' )->with( 'meta_query' )->andReturn( '' );
+		$query->shouldReceive( 'get' )->with( 'post__in' )->andReturn( [] );
 		$query->shouldReceive( 'set' )->once()->with(
 			'meta_query',
 			Mockery::on(
@@ -257,6 +264,264 @@ final class OrderSourceFilterTest extends TestCase {
 		$this->assertStringContainsString( '<option value="shop">Только магазин</option>', $html );
 		$this->assertStringContainsString( '<option value="fake-seller">Fake Market</option>', $html );
 		$this->assertStringContainsString( '<option value="other_api" selected="selected">Other Market</option>', $html );
+	}
+
+	/**
+	 * A filter whose «Fake Market» has the given accounts (name by id): account 1 has the orders 700 and 701, account 2 the order 702.
+	 *
+	 * @param array<int,string> $names Account names by id.
+	 * @return Order_Source_Filter
+	 */
+	private function filter_with_accounts( array $names ): Order_Source_Filter {
+		$db = new Sqlite_Wpdb();
+		Sqlite_Tables::install( $db );
+
+		foreach ( [
+			[ 1, 'P-1', 700 ],
+			[ 1, 'P-2', 701 ],
+			[ 2, 'P-3', 702 ],
+		] as [ $account, $key, $order ] ) {
+			$db->insert(
+				Sqlite_Tables::table( 'postings' ),
+				[
+					'account_id'    => $account,
+					'external_key'  => $key,
+					'wc_order_id'   => $order,
+					'status_raw'    => 'awaiting_deliver',
+					'first_seen_at' => '2026-11-20 10:00:00',
+				]
+			);
+		}
+
+		$store = Mockery::mock( Account_Store::class );
+		$store->shouldReceive( 'all' )->andReturn(
+			array_map(
+				static function ( int $id, string $name ): Account {
+					return new Account( $id, 'fake-seller', $name, true );
+				},
+				array_keys( $names ),
+				$names
+			)
+		);
+
+		$filter = Order_Source_Filter::instance();
+		$filter->add_source( 'fake-seller', 'Fake Market', new Order_Source_Accounts( $store, new Order_Registry( $db, Sqlite_Tables::table( 'postings' ) ), 'fake-seller' ) );
+		$filter->add_source( 'other_api', 'Other Market' );
+
+		return $filter;
+	}
+
+	/**
+	 * An order of a list row.
+	 *
+	 * @param int    $id          Order id.
+	 * @param string $created_via Channel.
+	 * @param string $billing     Formatted billing address.
+	 * @param string $shipping    Formatted shipping address.
+	 * @return \WC_Order
+	 */
+	private function row_order( int $id, string $created_via, string $billing = '', string $shipping = '' ): \WC_Order {
+		$order = Mockery::mock( '\WC_Order' );
+		$order->shouldReceive( 'get_id' )->andReturn( $id );
+		$order->shouldReceive( 'get_created_via' )->andReturn( $created_via );
+		$order->shouldReceive( 'get_formatted_billing_address' )->andReturn( $billing );
+		$order->shouldReceive( 'get_formatted_shipping_address' )->andReturn( $shipping );
+
+		return $order;
+	}
+
+	public function test_the_dropdown_adds_each_account_under_its_marketplace_when_it_has_several(): void {
+		ob_start();
+		$this->filter_with_accounts(
+			[
+				1 => 'Основной',
+				2 => 'Запасной',
+			]
+		)->render_dropdown( 'shop_order', 'top' );
+		$html = (string) ob_get_clean();
+
+		$market = strpos( $html, '<option value="fake-seller">Fake Market</option>' );
+		$first  = strpos( $html, '<option value="fake-seller:1">Fake Market: Основной</option>' );
+		$second = strpos( $html, '<option value="fake-seller:2">Fake Market: Запасной</option>' );
+		$other  = strpos( $html, '<option value="other_api">Other Market</option>' );
+
+		$this->assertNotFalse( $market, 'The marketplace-wide entry stays.' );
+		$this->assertTrue( $market < $first && $first < $second && $second < $other, 'The accounts follow their marketplace.' );
+	}
+
+	public function test_a_marketplace_with_one_account_gets_the_dropdown_as_before(): void {
+		ob_start();
+		$this->filter_with_accounts( [ 1 => 'Основной' ] )->render_dropdown( 'shop_order', 'top' );
+
+		$this->assertStringNotContainsString( 'fake-seller:', (string) ob_get_clean() );
+	}
+
+	public function test_the_orders_table_list_of_one_account_is_narrowed_to_its_orders(): void {
+		$_GET['woodev_order_source'] = 'fake-seller:2';
+
+		$args = $this->filter_with_accounts(
+			[
+				1 => 'Основной',
+				2 => 'Запасной',
+			]
+		)->filter_orders_table_args( [] );
+
+		$this->assertSame( [ 'fake-seller' ], $args['created_via'] );
+		$this->assertSame( [ 702 ], $args['post__in'] );
+	}
+
+	public function test_an_account_choice_is_ignored_while_its_marketplace_has_a_single_account(): void {
+		$_GET['woodev_order_source'] = 'fake-seller:2';
+
+		$args = $this->filter_with_accounts( [ 1 => 'Основной' ] )->filter_orders_table_args( [] );
+
+		$this->assertArrayNotHasKey( 'post__in', $args, 'Unknown choice: the default, the shop, applies.' );
+	}
+
+	public function test_the_posts_list_of_one_account_is_narrowed_through_post_in(): void {
+		$_GET['woodev_order_source'] = 'fake-seller:1';
+		$GLOBALS['pagenow']          = 'edit.php';
+		$query                       = Mockery::mock( 'WP_Query' );
+		$query->shouldReceive( 'is_main_query' )->andReturn( true );
+		$query->shouldReceive( 'get' )->with( 'post_type' )->andReturn( 'shop_order' );
+		$query->shouldReceive( 'get' )->with( 'meta_query' )->andReturn( '' );
+		$query->shouldReceive( 'get' )->with( 'post__in' )->andReturn( '' );
+		$query->shouldReceive( 'set' )->once()->with( 'meta_query', Mockery::type( 'array' ) );
+		$query->shouldReceive( 'set' )->once()->with( 'post__in', [ 700, 701 ] );
+
+		$this->filter_with_accounts(
+			[
+				1 => 'Основной',
+				2 => 'Запасной',
+			]
+		)->filter_posts_query( $query );
+	}
+
+	public function test_both_lists_get_the_account_column_and_the_buyer_cells_hooks(): void {
+		$filter = $this->filter_with_accounts( [ 1 => 'Основной' ] );
+
+		$this->assertSame( 20, has_filter( 'woocommerce_shop_order_list_table_columns', [ $filter, 'add_account_column' ] ) );
+		$this->assertSame( 20, has_filter( 'manage_shop_order_posts_columns', [ $filter, 'add_account_column' ] ) );
+
+		foreach ( [ 'manage_woocommerce_page_wc-orders_custom_column', 'manage_shop_order_posts_custom_column' ] as $hook ) {
+			$this->assertSame( 9, has_action( $hook, [ $filter, 'open_buyer_cell' ] ), 'Before WooCommerce draws the cell.' );
+			$this->assertSame( 10, has_action( $hook, [ $filter, 'render_account_cell' ] ) );
+			$this->assertSame( 11, has_action( $hook, [ $filter, 'close_buyer_cell' ] ), 'After WooCommerce draws the cell.' );
+		}
+	}
+
+	public function test_the_account_column_follows_the_status_column(): void {
+		$columns = $this->filter_with_accounts( [ 1 => 'Основной' ] )->add_account_column(
+			[
+				'order_number'    => 'Order',
+				'order_status'    => 'Status',
+				'billing_address' => 'Billing',
+			]
+		);
+
+		$this->assertSame( [ 'order_number', 'order_status', 'woodev_account', 'billing_address' ], array_keys( $columns ) );
+		$this->assertSame( 'Кабинет', $columns['woodev_account'] );
+	}
+
+	public function test_the_account_column_is_not_added_without_a_marketplace_that_knows_its_accounts(): void {
+		$columns = [ 'order_status' => 'Status' ];
+
+		$this->assertSame( $columns, $this->filter()->add_account_column( $columns ) );
+	}
+
+	public function test_the_account_cell_names_the_account_of_a_marketplace_order_on_both_lists(): void {
+		$filter = $this->filter_with_accounts(
+			[
+				1 => 'Основной',
+				2 => 'Запасной',
+			]
+		);
+
+		ob_start();
+		$filter->render_account_cell( 'woodev_account', $this->row_order( 702, 'fake-seller' ) );
+		Functions\when( 'wc_get_order' )->alias(
+			function ( int $id ) {
+				return $this->row_order( $id, 'fake-seller' );
+			}
+		);
+		$filter->render_account_cell( 'woodev_account', 700 );
+
+		$this->assertSame( 'ЗапаснойОсновной', (string) ob_get_clean() );
+	}
+
+	public function test_the_account_cell_is_empty_for_the_shops_own_orders_and_other_columns(): void {
+		$filter = $this->filter_with_accounts( [ 1 => 'Основной' ] );
+
+		ob_start();
+		$filter->render_account_cell( 'woodev_account', $this->row_order( 700, 'checkout' ) );
+		$filter->render_account_cell( 'woodev_account', $this->row_order( 700, 'other_api' ) );
+		$filter->render_account_cell( 'order_status', $this->row_order( 700, 'fake-seller' ) );
+
+		$this->assertSame( '', (string) ob_get_clean() );
+	}
+
+	/**
+	 * Draws a buyer cell the way WooCommerce does around the filter's two hooks.
+	 *
+	 * @param Order_Source_Filter $filter  Filter.
+	 * @param string              $column  Column.
+	 * @param \WC_Order           $order   Order.
+	 * @param string              $printed What WooCommerce prints in the cell.
+	 * @return string
+	 */
+	private function draw_buyer_cell( Order_Source_Filter $filter, string $column, \WC_Order $order, string $printed ): string {
+		ob_start();
+		$filter->open_buyer_cell( $column, $order );
+		echo $printed; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- A test.
+		$filter->close_buyer_cell();
+
+		return (string) ob_get_clean();
+	}
+
+	public function test_a_marketplace_order_without_buyer_data_says_why_instead_of_the_dash_in_both_cells(): void {
+		$filter = $this->filter_with_accounts( [ 1 => 'Основной' ] );
+		$order  = $this->row_order( 700, 'fake-seller' );
+
+		foreach ( [ 'billing_address', 'shipping_address' ] as $column ) {
+			$this->assertSame(
+				'<span class="description woodev-order-no-buyer">Fake Market не передаёт данные покупателя</span>',
+				$this->draw_buyer_cell( $filter, $column, $order, '&ndash;' )
+			);
+		}
+	}
+
+	public function test_the_other_marketplace_is_named_by_its_own_adapter_name(): void {
+		$filter = $this->filter_with_accounts( [ 1 => 'Основной' ] );
+
+		$this->assertStringContainsString( 'Other Market не передаёт', $this->draw_buyer_cell( $filter, 'billing_address', $this->row_order( 5, 'other_api' ), '&ndash;' ) );
+	}
+
+	public function test_a_buyer_cell_that_has_an_address_or_belongs_to_the_shop_is_left_exactly_as_woocommerce_drew_it(): void {
+		$filter = $this->filter_with_accounts( [ 1 => 'Основной' ] );
+
+		$this->assertSame( 'Москва', $this->draw_buyer_cell( $filter, 'billing_address', $this->row_order( 700, 'fake-seller', 'Москва' ), 'Москва' ) );
+		$this->assertSame( '&ndash;', $this->draw_buyer_cell( $filter, 'billing_address', $this->row_order( 701, 'checkout' ), '&ndash;' ) );
+		$this->assertSame( '&ndash;', $this->draw_buyer_cell( $filter, 'order_status', $this->row_order( 701, 'fake-seller' ), '&ndash;' ), 'Only the two buyer columns are touched.' );
+		$this->assertSame(
+			'<span class="description">x</span>',
+			$this->draw_buyer_cell( $filter, 'billing_address', $this->row_order( 700, 'fake-seller' ), '<span class="description">x</span>' ),
+			'Anything but the dash stays, even for an order without an address.'
+		);
+	}
+
+	public function test_a_cell_with_a_shipping_address_but_no_billing_one_is_judged_per_cell(): void {
+		$filter = $this->filter_with_accounts( [ 1 => 'Основной' ] );
+		$order  = $this->row_order( 700, 'fake-seller', '', 'Москва' );
+
+		$this->assertStringContainsString( 'не передаёт данные покупателя', $this->draw_buyer_cell( $filter, 'billing_address', $order, '&ndash;' ) );
+		$this->assertSame( 'Москва', $this->draw_buyer_cell( $filter, 'shipping_address', $order, 'Москва' ) );
+	}
+
+	public function test_closing_a_cell_that_was_never_opened_prints_nothing(): void {
+		ob_start();
+		$this->filter()->close_buyer_cell();
+
+		$this->assertSame( '', (string) ob_get_clean() );
 	}
 
 	public function test_the_dropdown_is_not_printed_for_another_list_or_the_bottom_bar(): void {

@@ -85,6 +85,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Details_Box' => 'woodev/marketplace/admin/order/class-order-details-box.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Screen' => 'woodev/marketplace/admin/order/class-order-screen.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Screen_Module' => 'woodev/marketplace/admin/order/class-order-screen-module.php',
+	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Source_Accounts' => 'woodev/marketplace/admin/order/class-order-source-accounts.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Source_Choice' => 'woodev/marketplace/admin/order/class-order-source-choice.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Source_Filter' => 'woodev/marketplace/admin/order/class-order-source-filter.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Order\\Order_Source_Query' => 'woodev/marketplace/admin/order/class-order-source-query.php',
