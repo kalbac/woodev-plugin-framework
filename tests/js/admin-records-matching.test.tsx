@@ -691,4 +691,26 @@ describe( 'a page with a busy row takes no «every row under the filter» (#1944
 		} );
 		expect( posts( 'preview' )[ 0 ].data ).not.toHaveProperty( 'matching' );
 	} );
+
+	test( 'a preview already open when a row goes busy is dropped: confirming sends nothing', async () => {
+		served.refreshMs = 30;
+		await renderPage();
+		await takeEveryRow();
+		fireEvent.change( screen.getByRole( 'combobox', { name: 'Массовые действия' } ), {
+			target: { value: 'send_stock' },
+		} );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить' } ) );
+		const dialog = await screen.findByRole( 'dialog' );
+		await within( dialog ).findByText( 'Будет затронуто 340 товаров по фильтру.' );
+		const confirmButton = within( dialog ).getByRole( 'button', { name: 'Отправить остатки' } );
+
+		// The activity read that arrives while the plan is on screen: the second row has started a process.
+		served.activity = [ busyRow( 'p2', 'Футболка' ) ];
+		await waitFor( () => expect( bar() ).toBeNull() );
+		fireEvent.click( confirmButton );
+
+		expect( posts( 'apply' ) ).toHaveLength( 0 );
+		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).toBeNull() );
+		expect( posts( 'apply' ) ).toHaveLength( 0 );
+	} );
 } );

@@ -20,6 +20,7 @@
 import { useCallback, useRef, useState } from '@wordpress/element';
 import { isAbort } from '../api';
 import type { Ownership } from '../activity';
+import { hasBusyRow } from '../activity/busy';
 import type { TableHandle } from '../extensions';
 import type { ActionDescriptor, MatchingQuery } from '../types';
 import { createActionsApi } from './api';
@@ -248,6 +249,17 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 				return;
 			}
 
+			// «Every row under the filter» reaches a row that went busy after the preview was drawn: the plan on screen is void,
+			// and the merchant starts again from the ticked rows (see `selection.ts`).
+			if ( flow.matching && hasBusyRow( [ ...table.rows, ...table.children ] ) ) {
+				ticket.current++;
+				abort.current?.abort();
+				afterApply.current = undefined;
+				update( null );
+
+				return;
+			}
+
 			busy.current = true;
 			const mine = ++ticket.current;
 			const claim = ownership?.claim( flow.ids );
@@ -278,7 +290,7 @@ export function useActionFlow( ownership?: Ownership ): ActionFlow {
 				}
 			}
 		},
-		[ fail, ownership, patch, showResult ]
+		[ fail, ownership, patch, showResult, update ]
 	);
 
 	const begin = useCallback(
