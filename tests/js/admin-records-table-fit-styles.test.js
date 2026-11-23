@@ -10,7 +10,12 @@
  *  2. a sortable left-aligned heading's button pads nothing on EITHER side: its 12px right padding sat after the sort arrow of every
  *     sortable column;
  *  3. the article column is 14ch everywhere (the products table's own 19ch rule is gone), a price and a stock are 12ch, the name's
- *     floor is 12ch.
+ *     floor is 10ch (#1945: 12ch, plus the variations' 28px expand column, made «Товары сайта» 813px in the 784px card).
+ *  4. a badge, which fixed its column at its whole label, breaks at its spaces (#1945).
+ *
+ * Measured on the rig (Playwright against :8973, the page's marketplace stylesheet replaced by the compiled worktree one, 1024px, the WP
+ * menu expanded; the table's own scrollWidth, then its minimum content width in a 200px card): «Товары сайта» 813 → 784 (minimum 754),
+ * «Карточки Ozon» 784/784 (minimum 699–741), «Сопоставление» 750/750 (unchanged).
  *
  * @see src/admin-records/style.scss
  */
@@ -78,11 +83,22 @@ describe( 'the columns of the products and mappings tables', () => {
 		expect( numbers ).toMatch( /width: 12ch;/ );
 	} );
 
-	test( 'the name column has a 12ch floor and no width', () => {
+	test( 'the name column has a 10ch floor and no width', () => {
 		const name = block( scss, '.woodev-records__col-name {\n\t\tmin-width' );
 
-		expect( name ).toMatch( /min-width: 12ch;/ );
+		expect( name ).toMatch( /min-width: 10ch;/ );
 		expect( name ).not.toMatch( /(^|[^-])width: / );
+	} );
+} );
+
+describe( 'a badge may wrap (#1945)', () => {
+	test( 'a badge breaks at its spaces instead of fixing its column at the full label', () => {
+		const badge = block( scss, '.woodev-records__badge {' );
+
+		expect( badge ).toMatch( /white-space: normal;/ );
+		expect( badge ).not.toMatch( /white-space: nowrap/ );
+		// The delivery page's 2.5em badge stays 2.5em tall on one line.
+		expect( badge ).toMatch( /min-height: 2\.5em;/ );
 	} );
 } );
 

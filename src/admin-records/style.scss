@@ -346,10 +346,11 @@ $cell-padding: 8px;
 	}
 
 	// The name column is a text column: no width, it takes what is left. Only a floor, so a name never wraps in a column too narrow
-	// for one of its words (12ch: the products table must fit a 784px card). It stays at the left edge while the table scrolls sideways
-	// (the pinned columns' `left` offsets below add up what stands before it).
+	// for one of its words (10ch, two lines at most: «Товары сайта» with the variations' expand column (28px) must fit a 784px card,
+	// #1945). It stays at the left edge while the table scrolls sideways (the pinned columns' `left` offsets below add up what stands
+	// before it).
 	.woodev-records__col-name {
-		min-width: 12ch;
+		min-width: 10ch;
 	}
 
 	// A pinned cell is opaque, so what scrolls under it does not show through. WooCommerce paints the sorted column grey
@@ -521,7 +522,9 @@ $cell-padding: 8px;
 	}
 
 	// The status badge of «Заказы доставки» (`.woodev-orders-status`, itself WooCommerce's `.order-status`): 2.5em tall, 13px of
-	// padding a side, 4px corners, the same colour pairs per tone.
+	// padding a side, 4px corners, the same colour pairs per tone. A label is one line while its column has room; in a squeezed
+	// table it breaks at its spaces («Не связан × 3» into two lines) instead of fixing the column at its full width, which is what
+	// pushed «Товары сайта» past a 784px card (#1945) — the same wrapping a long label already has below.
 	.woodev-records__badge {
 		align-items: center;
 		border-bottom: 1px solid rgba( 0, 0, 0, 0.05 );
@@ -529,21 +532,19 @@ $cell-padding: 8px;
 		box-sizing: border-box;
 		display: inline-flex;
 		font-weight: 500;
-		line-height: 2.5em;
+		line-height: 1.5;
 		max-width: 100%;
-		padding: 0 13px;
-		white-space: nowrap;
+		min-height: 2.5em;
+		padding: 4px 13px;
+		white-space: normal;
 
 		&.has-tooltip {
 			cursor: help;
 		}
 
 		&.is-long {
-			line-height: 1.5;
 			max-width: 240px;
 			overflow-wrap: anywhere;
-			padding: 4px 13px;
-			white-space: normal;
 		}
 
 		&.is-neutral {
