@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 
 defined( 'ABSPATH' ) || exit;
@@ -21,11 +22,6 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.1.13
  */
 final class Site_Orders_Data_Status {
-	/**
-	 * Date format of both values: the one the delivery block shows in full.
-	 */
-	private const DATE_FORMAT = 'j M Y H:i';
-
 	/**
 	 * @var Posting_Poll_Times
 	 */
@@ -115,6 +111,6 @@ final class Site_Orders_Data_Status {
 	 * @return string The site's local time.
 	 */
 	private static function date( int $time ): string {
-		return (string) wp_date( self::DATE_FORMAT, $time );
+		return Date_Text::datetime( $time );
 	}
 }

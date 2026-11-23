@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Account\Key_Expiry;
+use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Report_Redactor;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -193,7 +194,7 @@ final class Account_Status {
 			return null;
 		}
 
-		$date   = (string) wp_date( 'd.m.Y', $expires_at->getTimestamp() );
+		$date   = Date_Text::date( $expires_at->getTimestamp() );
 		$advice = trim( $this->adapter->settings_descriptor()->key_renewal_advice() );
 		$tail   = '' !== $advice ? ' ' . $advice : '';
 
@@ -275,7 +276,7 @@ final class Account_Status {
 		}
 
 		if ( null !== $expires_at ) {
-			$date    = (string) wp_date( 'd.m.Y', $expires_at->getTimestamp() );
+			$date    = Date_Text::date( $expires_at->getTimestamp() );
 			$days    = Key_Expiry::days_left( $expires_at, $now );
 			$parts[] = sprintf(
 				/* translators: 1: expiry date in d.m.Y format, 2: the days left, like «ещё 77 дней». */

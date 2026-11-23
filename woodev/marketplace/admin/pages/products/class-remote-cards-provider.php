@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
+use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
@@ -562,7 +563,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 
 		return [
 			/* translators: 1: date, 2: time the list was last refreshed. */
-			'refreshed_at' => sprintf( __( 'Список обновлён %1$s в %2$s', 'woodev-plugin-framework' ), wp_date( 'd.m.Y', $at ), wp_date( 'H:i', $at ) ),
+			'refreshed_at' => sprintf( __( 'Список обновлён %1$s в %2$s', 'woodev-plugin-framework' ), Date_Text::date( $at ), Date_Text::time( $at ) ),
 		];
 	}
 
