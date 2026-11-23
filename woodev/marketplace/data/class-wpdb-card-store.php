@@ -165,6 +165,18 @@ final class Wpdb_Card_Store {
 	}
 
 	/**
+	 * How many of the account's cards the marketplace holds in its archive.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param int $account_id Account id.
+	 * @return int
+	 */
+	public function archived_count( int $account_id ): int {
+		return (int) $this->db->get_var( $this->db->prepare( 'SELECT COUNT(*) FROM %i WHERE account_id = %d AND archived = 1', $this->table, $account_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- A count of our own table, prepared.
+	}
+
+	/**
 	 * Marks a refresh as queued, and forgets the last failure: the button that queues one calls it first, so two clicks queue one read.
 	 *
 	 * @since 2.1.13
