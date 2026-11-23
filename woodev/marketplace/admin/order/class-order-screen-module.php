@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Order;
 
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
@@ -74,7 +75,7 @@ final class Order_Screen_Module {
 		$account_of = static function ( int $account_id ) use ( $accounts ): ?Account {
 			return null === $accounts ? null : $accounts->get( $account_id );
 		};
-		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of ), $assets, $plugin->get_version() );
+		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of, $db ), $assets, $plugin->get_version() );
 
 		( new Order_Screen( $adapter->order_meta(), $box ) )->register();
 	}
@@ -135,9 +136,10 @@ final class Order_Screen_Module {
 	 * @param string                                           $assets   Assets folder URL.
 	 * @param Posting_Action_Gate                              $gate       Whether a label can be asked for a posting.
 	 * @param callable                                         $account_of `function ( int $account_id ): ?Account`.
+	 * @param \wpdb                                            $db         Database.
 	 * @return Label_Button|null Null when the adapter has no label calls or the plugin has no table to ask them of.
 	 */
-	private static function label_button( $plugin, Marketplace_Adapter $adapter, Order_Registry $registry, string $assets, Posting_Action_Gate $gate, callable $account_of ): ?Label_Button {
+	private static function label_button( $plugin, Marketplace_Adapter $adapter, Order_Registry $registry, string $assets, Posting_Action_Gate $gate, callable $account_of, \wpdb $db ): ?Label_Button {
 		if ( null === $adapter->label_provider() || ! $adapter->supports( Capability::GET_LABEL ) ) {
 			return null;
 		}
@@ -148,6 +150,24 @@ final class Order_Screen_Module {
 
 		$table_url = rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/admin/records/' . $plugin->get_id() . '/' . Site_Orders_Provider::TABLE );
 
-		return new Label_Button( $table_url, [ $registry, 'posting_of_order' ], $gate, $account_of, $assets, $plugin->get_version() );
+		$schema = new Schema( $adapter->id() );
+		// Only `covering()` is used: the labels part is the table's own reader of stored documents, so the button and the table agree.
+		$labels = new Site_Orders_Labels(
+			$db,
+			$schema->table_name( 'tasks', $db->prefix ),
+			$schema->table_name( 'documents', $db->prefix ),
+			static function (): string {
+				return '';
+			},
+			static function (): int {
+				return 0;
+			}
+		);
+
+		$label_stored = static function ( int $account_id, string $external_key ) use ( $labels ): bool {
+			return $labels->covering( $account_id, [ $external_key ] ) > 0;
+		};
+
+		return new Label_Button( $table_url, [ $registry, 'posting_of_order' ], $gate, $account_of, $assets, $plugin->get_version(), $label_stored );
 	}
 }

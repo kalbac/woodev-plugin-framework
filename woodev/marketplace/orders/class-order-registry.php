@@ -209,11 +209,11 @@ final class Order_Registry {
 	 * @since 2.1.13
 	 *
 	 * @param int $order_id WooCommerce order id.
-	 * @return array{account_id:int,status_raw:string,is_terminal:bool}|null Null when no posting is registered for the order.
+	 * @return array{account_id:int,external_key:string,status_raw:string,is_terminal:bool}|null Null when no posting is registered for the order.
 	 */
 	public function posting_of_order( int $order_id ): ?array {
 		$row = $this->db->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The order screen shows the current posting.
-			$this->db->prepare( 'SELECT account_id, status_raw, is_terminal FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id ),
+			$this->db->prepare( 'SELECT account_id, external_key, status_raw, is_terminal FROM %i WHERE wc_order_id = %d LIMIT 1', $this->table, $order_id ),
 			'ARRAY_A'
 		);
 
@@ -222,9 +222,10 @@ final class Order_Registry {
 		}
 
 		return [
-			'account_id'  => (int) $row['account_id'],
-			'status_raw'  => (string) $row['status_raw'],
-			'is_terminal' => 1 === (int) $row['is_terminal'],
+			'account_id'   => (int) $row['account_id'],
+			'external_key' => (string) $row['external_key'],
+			'status_raw'   => (string) $row['status_raw'],
+			'is_terminal'  => 1 === (int) $row['is_terminal'],
 		];
 	}
 

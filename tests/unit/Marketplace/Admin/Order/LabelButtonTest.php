@@ -148,6 +148,49 @@ final class LabelButtonTest extends TestCase {
 		$this->assertStringContainsString( 'aria-disabled="false"', $button->button( $this->order( 700 ) ) );
 	}
 
+	public function test_a_stored_label_keeps_the_button_on_for_a_finished_posting_a_key_that_cannot_write_and_an_unlisted_label(): void {
+		$stored = static function ( int $account_id, string $key ): bool {
+			return 3 === $account_id && 'P-1' === $key;
+		};
+		$cannot = static function (): bool {
+			return false;
+		};
+
+		$finished = $this->button( $this->posting( 3, 'delivered', true ), null, null, null, $stored )->button( $this->order( 700 ) );
+		$read     = $this->button( $this->posting( 3 ), null, null, $cannot, $stored )->button( $this->order( 700 ) );
+		$unlisted = $this->button( $this->posting( 3 ), null, $this->allowed( [ 'cancel' ] ), null, $stored )->button( $this->order( 700 ) );
+
+		foreach ( [ $finished, $read, $unlisted ] as $html ) {
+			$this->assertStringContainsString( 'aria-disabled="false"', $html );
+			$this->assertStringNotContainsString( 'title=', $html );
+		}
+	}
+
+	public function test_a_label_that_is_not_stored_is_gated_as_before_and_the_edit_right_still_comes_first(): void {
+		$none   = static function (): bool {
+			return false;
+		};
+		$cannot = static function (): bool {
+			return false;
+		};
+
+		$this->assertStringContainsString( 'aria-disabled="true"', $this->button( $this->posting( 3, 'delivered', true ), null, null, null, $none )->button( $this->order( 700 ) ) );
+		$this->assertStringContainsString( 'aria-disabled="true"', $this->button( $this->posting( 3 ), null, null, $cannot, $none )->button( $this->order( 700 ) ) );
+
+		$this->can = false;
+		$stored    = static function (): bool {
+			return true;
+		};
+
+		$this->assertStringContainsString( 'title="Нет права изменять этот заказ."', $this->button( $this->posting( 3 ), null, null, null, $stored )->button( $this->order( 700 ) ) );
+	}
+
+	public function test_an_adapter_with_no_label_state_gates_every_posting_as_before(): void {
+		$html = $this->button( $this->posting( 3, 'delivered', true ) )->button( $this->order( 700 ) );
+
+		$this->assertStringContainsString( 'aria-disabled="true"', $html );
+	}
+
 	public function test_an_order_without_a_posting_has_no_button_and_loads_no_script(): void {
 		$this->assertSame( '', $this->button( null )->button( $this->order( 700 ) ) );
 		$this->assertSame( [], $this->scripts );
@@ -160,9 +203,10 @@ final class LabelButtonTest extends TestCase {
 	 * @param Label_Readiness|null         $readiness  The adapter's readiness.
 	 * @param Posting_Allowed_Actions|null $allowed    The adapter's allowed actions.
 	 * @param callable|null                $write_gate The plugin's write gate.
+	 * @param callable|null                $label_stored `function ( int $account_id, string $key ): bool`, whether a label is stored.
 	 * @return Label_Button
 	 */
-	private function button( ?array $posting, ?Label_Readiness $readiness = null, ?Posting_Allowed_Actions $allowed = null, ?callable $write_gate = null ): Label_Button {
+	private function button( ?array $posting, ?Label_Readiness $readiness = null, ?Posting_Allowed_Actions $allowed = null, ?callable $write_gate = null, ?callable $label_stored = null ): Label_Button {
 		return new Label_Button(
 			'https://example.test/wp-json/woodev/v1/admin/records/fake/orders',
 			static function () use ( $posting ): ?array {
@@ -173,7 +217,8 @@ final class LabelButtonTest extends TestCase {
 				return new Account( $account_id, 'fake', 'Магазин', true );
 			},
 			'https://example.test/assets/',
-			'1.0'
+			'1.0',
+			$label_stored
 		);
 	}
 
@@ -198,9 +243,10 @@ final class LabelButtonTest extends TestCase {
 	 */
 	private function posting( int $account_id, string $status = 'awaiting_deliver', bool $is_terminal = false ): array {
 		return [
-			'account_id'  => $account_id,
-			'status_raw'  => $status,
-			'is_terminal' => $is_terminal,
+			'account_id'   => $account_id,
+			'external_key' => 'P-1',
+			'status_raw'   => $status,
+			'is_terminal'  => $is_terminal,
 		];
 	}
 

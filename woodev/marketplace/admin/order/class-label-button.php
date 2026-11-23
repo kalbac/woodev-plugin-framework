@@ -60,6 +60,13 @@ final class Label_Button {
 	private $account_of;
 
 	/**
+	 * Tells whether a ready label document already covers a posting: `function ( int $account_id, string $external_key ): bool`; null asks nothing.
+	 *
+	 * @var callable|null
+	 */
+	private $label_stored;
+
+	/**
 	 * Folder URL of the module's assets, with a trailing slash.
 	 *
 	 * @var string
@@ -84,14 +91,16 @@ final class Label_Button {
 	 * @param callable            $account_of       `function ( int $account_id ): ?Account`, the account of a posting; null for one that is gone.
 	 * @param string              $assets_url       Folder URL of the module's assets, with a trailing slash.
 	 * @param string              $version          Plugin version.
+	 * @param callable|null       $label_stored     `function ( int $account_id, string $external_key ): bool` (since 2.1.16): whether a ready label already covers the posting. Its download is a read, so the button stays on; null asks nothing.
 	 */
-	public function __construct( string $table_url, callable $posting_of_order, Posting_Action_Gate $gate, callable $account_of, string $assets_url, string $version ) {
+	public function __construct( string $table_url, callable $posting_of_order, Posting_Action_Gate $gate, callable $account_of, string $assets_url, string $version, ?callable $label_stored = null ) {
 		$this->table_url        = $table_url;
 		$this->posting_of_order = $posting_of_order;
 		$this->gate             = $gate;
 		$this->account_of       = $account_of;
 		$this->assets_url       = $assets_url;
 		$this->version          = $version;
+		$this->label_stored     = $label_stored;
 	}
 
 	/**
@@ -143,9 +152,25 @@ final class Label_Button {
 			return __( 'Нет права изменять этот заказ.', 'woodev-plugin-framework' );
 		}
 
+		if ( $this->is_stored( $posting ) ) {
+			return ''; // A label that is already made is downloaded, not asked for: only a new request is gated.
+		}
+
 		$account = call_user_func( $this->account_of, $posting['account_id'] );
 		$refusal = $account instanceof Account ? $this->gate->write_refusal( $account ) : '';
 
 		return '' !== $refusal ? $refusal : $this->gate->label_reason( $order, $posting['status_raw'], $posting['is_terminal'] );
+	}
+
+	/**
+	 * Whether a ready label document already covers the posting.
+	 *
+	 * @param array<string,mixed> $posting Its posting.
+	 * @return bool
+	 */
+	private function is_stored( array $posting ): bool {
+		$key = (string) ( $posting['external_key'] ?? '' );
+
+		return null !== $this->label_stored && '' !== $key && true === call_user_func( $this->label_stored, $posting['account_id'], $key );
 	}
 }
