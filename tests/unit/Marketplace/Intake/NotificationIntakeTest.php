@@ -23,7 +23,9 @@ use Woodev\Framework\Marketplace\Jobs\Event_Handler_Registry;
 use Woodev\Framework\Marketplace\Ledger\Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Framework\Marketplace\Intake\Push_Protocol;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Push_Protocol;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Rejecting_Push_Protocol;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Inbound_Decoder;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
 
@@ -176,6 +178,138 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 		$this->assertSame( [ 'ignored', 'ignored' ], array_column( $this->events(), 'status' ) );
 		$this->assertSame( [ 'invalid json', 'unsupported type' ], array_column( $this->events(), 'result' ) );
 		$this->assertSame( [], $this->scheduler->actions );
+	}
+
+	/**
+	 * Without the optional contract nothing is refused: an unreadable body and an unknown type are answered 200, as before.
+	 *
+	 * @return void
+	 */
+	public function test_a_protocol_without_the_rejection_contract_refuses_nothing(): void {
+		$this->assertSame( 200, $this->push( '{broken' )->status() );
+		$this->assertSame( 200, $this->push( [ 'kind' => 'chat_message', 'id' => 'x' ] )->status() );
+	}
+
+	/**
+	 * An unreadable body the adapter rejects is stored as ignored and answered with the protocol's error body, on the token URL.
+	 *
+	 * @return void
+	 */
+	public function test_a_rejected_unreadable_body_is_stored_and_answered_with_the_error_body(): void {
+		$this->intake = $this->build_intake( $this->ledger(), new Fake_Rejecting_Push_Protocol() );
+
+		$answer = $this->push( '{broken' );
+
+		$this->assertSame( 400, $answer->status() );
+		$this->assertSame(
+			[
+				'fault' => Intake_Response::REASON_INVALID_JSON,
+				'text'  => 'The request body is not valid JSON',
+			],
+			$answer->body()
+		);
+		$this->assertSame( [ 'ignored' ], array_column( $this->events(), 'status' ) );
+		$this->assertSame( [ 'invalid json' ], array_column( $this->events(), 'result' ), 'the row stays for the diagnostics' );
+		$this->assertSame( [], $this->scheduler->actions );
+	}
+
+	/**
+	 * An unknown type the adapter rejects is answered with the «unknown notification type» error and stored.
+	 *
+	 * @return void
+	 */
+	public function test_a_rejected_unknown_type_is_stored_and_answered_with_the_error_body(): void {
+		$this->intake = $this->build_intake( $this->ledger(), new Fake_Rejecting_Push_Protocol() );
+
+		$answer = $this->push( [ 'kind' => 'chat_message', 'id' => 'x' ] );
+
+		$this->assertSame( 400, $answer->status() );
+		$this->assertSame(
+			[
+				'fault' => Intake_Response::REASON_UNKNOWN_TYPE,
+				'text'  => 'Unknown notification type',
+			],
+			$answer->body()
+		);
+		$this->assertSame( [ 'unsupported type' ], array_column( $this->events(), 'result' ) );
+		$this->assertSame( [], $this->scheduler->actions );
+	}
+
+	/**
+	 * The same rejection is answered on the URL without a token, after the sender check.
+	 *
+	 * @return void
+	 */
+	public function test_a_rejection_applies_to_the_tokenless_url_too(): void {
+		$this->intake = $this->build_intake( $this->ledger(), new Fake_Rejecting_Push_Protocol() );
+
+		$answer  = $this->intake->handle_tokenless( 'cabinet-4417', '{broken', $this->from( Fake_Push_Protocol::TRUSTED_IP ) );
+		$foreign = $this->intake->handle_tokenless( 'cabinet-4417', '{broken', $this->from( Fake_Push_Protocol::FOREIGN_IP ) );
+
+		$this->assertSame( 400, $answer->status() );
+		$this->assertSame( Intake_Response::REASON_INVALID_JSON, $answer->body()['fault'] );
+		$this->assertSame( 403, $foreign->status(), 'the address is checked first' );
+		$this->assertSame( [ 'invalid json' ], array_column( $this->events(), 'result' ) );
+	}
+
+	/**
+	 * What the adapter does not reject keeps its answer: a real notification is 200 and worked, a ping is 200 with no row.
+	 *
+	 * @return void
+	 */
+	public function test_what_the_adapter_accepts_is_answered_as_before(): void {
+		$this->intake = $this->build_intake( $this->ledger(), new Fake_Rejecting_Push_Protocol() );
+
+		$answer = $this->push( $this->order_created() );
+		$ping   = $this->push( [ 'kind' => 'ping' ] );
+
+		$this->assertSame( [ 200, 200 ], [ $answer->status(), $ping->status() ] );
+		$this->assertSame( Scripted_Inbound_Decoder::SUCCESS, $answer->body() );
+		$this->assertSame( [ 'new' ], array_column( $this->events(), 'status' ) );
+	}
+
+	/**
+	 * A rejection of an event the decoder accepted marks it ignored (so it is never worked), keeps a reason that has no text of
+	 * its own, and turns a status outside 4xx and 5xx into 400.
+	 *
+	 * @return void
+	 */
+	public function test_a_rejection_of_an_accepted_event_is_never_worked_and_its_status_is_an_error(): void {
+		$protocol                = new Fake_Rejecting_Push_Protocol();
+		$protocol->order_changed = [
+			'status' => 200,
+			'reason' => 'custom_reason',
+		];
+		$this->intake            = $this->build_intake( $this->ledger(), $protocol );
+
+		$answer = $this->push( [ 'kind' => 'order_changed', 'id' => '2-1' ] );
+
+		$this->assertSame( 400, $answer->status() );
+		$this->assertSame( 'custom_reason', $answer->body()['fault'] );
+		$this->assertSame( 'The notification was rejected', $answer->body()['text'] );
+		$this->assertSame( [ 'ignored' ], array_column( $this->events(), 'status' ) );
+		$this->assertSame( [ 'custom_reason' ], array_column( $this->events(), 'result' ) );
+		$this->assertSame( [], $this->scheduler->actions );
+
+		$protocol->order_changed = [
+			'status' => 422,
+			'reason' => Intake_Response::REASON_UNKNOWN_TYPE,
+		];
+
+		$this->assertSame( 422, $this->push( [ 'kind' => 'order_changed', 'id' => '2-2' ] )->status() );
+	}
+
+	/**
+	 * A storage failure beats the rejection: the marketplace is asked to send the notification again.
+	 *
+	 * @return void
+	 */
+	public function test_a_storage_failure_beats_the_rejection(): void {
+		$broken = $this->build_intake( new Wpdb_Event_Ledger( $this->db, 'wp_no_such_table', $this->clock() ), new Fake_Rejecting_Push_Protocol() );
+		$answer = $broken->handle_token( $this->a, $this->token( $this->a ), '{broken', $this->from( Fake_Push_Protocol::TRUSTED_IP ) );
+
+		$this->assertSame( 500, $answer->status() );
+		$this->assertSame( Intake_Response::REASON_NOT_STORED, $answer->body()['fault'] );
 	}
 
 	/**
@@ -658,10 +792,11 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 	/**
 	 * Builds the intake over a ledger, with a rate limiter that counts in memory on the test clock.
 	 *
-	 * @param Event_Ledger $ledger Ledger.
+	 * @param Event_Ledger  $ledger   Ledger.
+	 * @param Push_Protocol $protocol The marketplace's endpoint rules; the plain fake when null.
 	 * @return Notification_Intake
 	 */
-	private function build_intake( Event_Ledger $ledger ): Notification_Intake {
+	private function build_intake( Event_Ledger $ledger, ?Push_Protocol $protocol = null ): Notification_Intake {
 		$limiter = new class( $this->clock() ) extends Push_Rate_Limiter {
 			/**
 			 * Clock.
@@ -709,7 +844,7 @@ final class NotificationIntakeTest extends Sync_Test_Case {
 			}
 		};
 
-		$protocol = new Fake_Push_Protocol();
+		$protocol = $protocol ?? new Fake_Push_Protocol();
 		$network  = new Sender_Network( Sqlite_Tables::MARKETPLACE_ID, $protocol );
 		$switches = new Webhook_Switches(
 			$protocol->webhook_types(),

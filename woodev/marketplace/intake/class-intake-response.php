@@ -31,6 +31,20 @@ final class Intake_Response {
 	 */
 	public const REASON_NOT_STORED = 'not_stored';
 
+	/**
+	 * The body is not valid JSON ({@see Rejects_Inbound_Events}).
+	 *
+	 * @since 2.1.18
+	 */
+	public const REASON_INVALID_JSON = 'invalid_json';
+
+	/**
+	 * The notification type is not one the marketplace documents ({@see Rejects_Inbound_Events}).
+	 *
+	 * @since 2.1.18
+	 */
+	public const REASON_UNKNOWN_TYPE = 'unknown_type';
+
 	public const RETRY_AFTER_SECOND = 60;
 
 	/**

@@ -22,7 +22,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * The class knows nothing about HTTP: the REST route and a plugin's legacy route hand it the body and the server variables and
  * print the {@see Intake_Response} it returns. What the body means ({@see Inbound_Decoder}) and what an error answer looks like
- * ({@see Push_Protocol}) are the marketplace's.
+ * ({@see Push_Protocol}) are the marketplace's. A marketplace that checks a URL with deliberately wrong pushes can have those answered
+ * with an error too ({@see Rejects_Inbound_Events}); the event is still stored.
  *
  * @since 2.1.0
  */
@@ -33,6 +34,15 @@ final class Notification_Intake {
 	private const SCHEDULE_FAIL = 'Could not queue the notification drain: ';
 	private const ASYNC_MISSED  = 'The immediate drain was not queued; the five-minute sweep will pick the event up.';
 	private const SWITCHED_OFF  = 'notification type switched off';
+	private const REJECTED      = 'The notification was rejected';
+
+	/**
+	 * Short English text of each reason an adapter can reject a notification with ({@see Rejects_Inbound_Events}).
+	 */
+	private const REJECTION_MESSAGES = [
+		Intake_Response::REASON_INVALID_JSON => 'The request body is not valid JSON',
+		Intake_Response::REASON_UNKNOWN_TYPE => 'Unknown notification type',
+	];
 
 	/**
 	 * Decoder.
@@ -215,6 +225,13 @@ final class Notification_Intake {
 		// Whether the address is the marketplace's is the framework's call, not the decoder's.
 		$event = $event->with_ip_trusted( $this->network->is_allowed( $ip ) );
 
+		$rejection = $this->rejection( $event );
+
+		// A rejected event is stored like any ignored one (the merchant's diagnostics keep the row) and never worked.
+		if ( null !== $rejection && '' === $event->ignore_reason() ) {
+			$event = $event->with_ignore_reason( $rejection['reason'] );
+		}
+
 		// A switched-off type is stored and never worked, and answered 200: a 4xx would count against the URL in the marketplace's health check.
 		if ( '' === $event->ignore_reason() && ! $this->accepts( $event, $account ) ) {
 			$event = $event->with_ignore_reason( self::SWITCHED_OFF );
@@ -226,12 +243,42 @@ final class Notification_Intake {
 			return $this->retryable( $e );
 		}
 
+		if ( null !== $rejection ) {
+			return $this->refusal( $rejection['status'], $rejection['reason'], self::REJECTION_MESSAGES[ $rejection['reason'] ] ?? self::REJECTED );
+		}
+
 		// A duplicate schedules too: the marketplace's retry after a 500 from a failed enqueue lands here, and is the second chance.
 		if ( null !== $account && '' === $event->ignore_reason() && ! $this->schedule_drain( $account->id() ) ) {
 			return $this->retryable( null );
 		}
 
 		return Intake_Response::ok( $this->decoder->success_body() );
+	}
+
+	/**
+	 * Asks the adapter whether it refuses this decoded notification ({@see Rejects_Inbound_Events}); a protocol without that
+	 * contract refuses nothing.
+	 *
+	 * @param Inbound_Event $event Decoded event.
+	 * @return array{status:int,reason:string}|null The error status (a value outside 4xx and 5xx becomes 400) and the reason, or null.
+	 */
+	private function rejection( Inbound_Event $event ): ?array {
+		if ( ! $this->protocol instanceof Rejects_Inbound_Events ) {
+			return null;
+		}
+
+		$rejection = $this->protocol->rejection( $event );
+
+		if ( null === $rejection ) {
+			return null;
+		}
+
+		$status = (int) $rejection['status'];
+
+		return [
+			'status' => $status >= 400 && $status <= 599 ? $status : 400,
+			'reason' => (string) $rejection['reason'],
+		];
 	}
 
 	/**
