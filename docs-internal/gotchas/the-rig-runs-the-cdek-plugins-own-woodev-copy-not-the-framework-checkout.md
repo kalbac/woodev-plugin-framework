@@ -37,6 +37,12 @@ checkout and re-check. If it shows the new code (the s184 state on the Mac, wher
 `./woodev`), no sync is needed — but the PRIMARY checkout must serve the branch under test. Put the marker check, not an unconditional
 sync, in every acceptance brief.
 
+## s243 addition (24.11.2026)
+
+Same for Ozon Seller: its pages loaded the framework from `woocommerce-ozon-seller/woodev/` (2.1.15) while the framework checkout already had the
+#1928 fix — the operator still saw the empty orders table. Sync the copy from the released tag (`git archive vX.Y.Z woodev | tar -x -C <tmp>`,
+`WOODEV_FRAMEWORK_DIR=<tmp> bash scripts/sync-framework.sh`) before a rig look, or route the bundle in a Playwright probe.
+
 ## Related
 
 - [a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev](a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev.md) — the same sync script, for worktrees
