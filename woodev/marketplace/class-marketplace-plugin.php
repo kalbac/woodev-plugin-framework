@@ -150,13 +150,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 *
 		 * It is read once, when {@see self::register_marketplace_flows()} wires the flows, so the callable itself must answer
 		 * without a remote call or a query. The «Заказы» table and the order screen ask it too: for an account it refuses, «Отменить» and
-		 * «Этикетки» are off, with a sentence that says the key cannot write, and the server refuses both before any remote call
+		 * «Этикетки» are off, with a sentence that says the key cannot write (or the plugin's own reason, see below), and the server refuses both before any remote call
 		 * ({@see \Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate}). An adapter whose key can be read-only (Ozon) answers
 		 * from the roles it stored when it checked the key.
 		 *
 		 * @since 2.1.1
 		 *
-		 * @return callable|null `function ( Account $account ): bool`; true lets the account write, null lets every account write.
+		 * @return callable|null `function ( Account $account ): bool|string`; true lets the account write, null lets every account write. `false` refuses with the generic «key cannot write» sentence; a non-empty string refuses too and is the sentence shown to the merchant instead (since 2.1.19), for a plugin that closes writes for another reason. The job gate treats every answer but `true` as a refusal.
 		 */
 		protected function account_write_gate(): ?callable {
 			return null;

@@ -38,7 +38,7 @@ final class Posting_Action_Gate {
 	private $allowed;
 
 	/**
-	 * The plugin's write gate: `function ( Account $account ): bool`; null lets every account write.
+	 * The plugin's write gate: `function ( Account $account ): bool|string`; null lets every account write.
 	 *
 	 * @var callable|null
 	 */
@@ -51,7 +51,7 @@ final class Posting_Action_Gate {
 	 *
 	 * @param Label_Availability           $labels     The label rule.
 	 * @param Posting_Allowed_Actions|null $allowed    The adapter's allowed actions; null for an adapter that has none.
-	 * @param callable|null                $write_gate `function ( Account $account ): bool`, the plugin's write gate; null for none.
+	 * @param callable|null                $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (`true` allows, `false` refuses with the generic sentence, a string refuses with that sentence); null for none.
 	 */
 	public function __construct( Label_Availability $labels, ?Posting_Allowed_Actions $allowed = null, ?callable $write_gate = null ) {
 		$this->labels     = $labels;
@@ -65,7 +65,7 @@ final class Posting_Action_Gate {
 	 * @since 2.1.17
 	 *
 	 * @param object        $adapter    The marketplace's adapter.
-	 * @param callable|null $write_gate `function ( Account $account ): bool`, the plugin's write gate; null lets every account write.
+	 * @param callable|null $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (see {@see self::write_refusal()}); null lets every account write.
 	 * @return self
 	 */
 	public static function for_adapter( $adapter, ?callable $write_gate = null ): self {
@@ -79,14 +79,29 @@ final class Posting_Action_Gate {
 	/**
 	 * Tells why the account cannot write to the marketplace.
 	 *
+	 * The plugin's write gate answers `true` (the account may write), `false` (it may not, no reason given: the generic sentence below
+	 * is shown) or a non-empty string (it may not, and the string is the sentence for the merchant — a plugin that closes writes for a
+	 * reason other than a read-only key says so itself). Anything else counts as a refusal with the generic sentence.
+	 *
 	 * @since 2.1.17
+	 * @since 2.1.19 A write gate may answer with the reason.
 	 *
 	 * @param Account $account The account of the posting.
 	 * @return string The sentence for the merchant; empty when the account can write.
 	 */
 	public function write_refusal( Account $account ): string {
-		if ( null === $this->write_gate || true === call_user_func( $this->write_gate, $account ) ) {
+		if ( null === $this->write_gate ) {
 			return '';
+		}
+
+		$answer = call_user_func( $this->write_gate, $account );
+
+		if ( true === $answer ) {
+			return '';
+		}
+
+		if ( is_string( $answer ) && '' !== $answer ) {
+			return $answer;
 		}
 
 		return __( 'Ключ этого аккаунта не позволяет менять данные на маркетплейсе (например, он выдан только для чтения), поэтому действие недоступно.', 'woodev-plugin-framework' );

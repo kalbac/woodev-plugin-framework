@@ -85,6 +85,39 @@ final class PostingActionGateTest extends TestCase {
 		$this->assertSame( [ 3, 7 ], $asked );
 	}
 
+	public function test_a_gate_that_answers_false_gets_the_generic_sentence(): void {
+		$gate = new Posting_Action_Gate( new Label_Availability( null ), null, '__return_false' );
+
+		$this->assertStringContainsString( 'выдан только для чтения', $gate->write_refusal( $this->account() ) );
+	}
+
+	public function test_a_gate_that_answers_with_a_string_shows_the_plugins_own_reason(): void {
+		$reason = 'Аккаунт ещё не прошёл проверку после переноса.';
+		$gate   = new Posting_Action_Gate(
+			new Label_Availability( null ),
+			null,
+			static function () use ( $reason ): string {
+				return $reason;
+			}
+		);
+
+		$this->assertSame( $reason, $gate->write_refusal( $this->account() ) );
+	}
+
+	public function test_an_empty_string_answer_falls_back_to_the_generic_sentence(): void {
+		$gate = new Posting_Action_Gate( new Label_Availability( null ), null, static function (): string {
+			return '';
+		} );
+
+		$this->assertStringContainsString( 'выдан только для чтения', $gate->write_refusal( $this->account() ) );
+	}
+
+	public function test_a_gate_that_answers_true_allows_the_write(): void {
+		$gate = new Posting_Action_Gate( new Label_Availability( null ), null, '__return_true' );
+
+		$this->assertSame( '', $gate->write_refusal( $this->account() ) );
+	}
+
 	public function test_only_a_gate_that_answers_true_lets_the_account_write(): void {
 		$gate = new Posting_Action_Gate(
 			new Label_Availability( null ),

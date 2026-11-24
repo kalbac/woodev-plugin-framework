@@ -55,7 +55,7 @@ final class Site_Orders_Module {
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
 	 * @param \wpdb              $db       Database.
-	 * @param callable|null      $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.17); null lets every account write.
+	 * @param callable|null      $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (since 2.1.17; a string refuses and is the reason shown, since 2.1.19); null lets every account write.
 	 * @return void
 	 */
 	public static function register( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate = null ): void {
@@ -82,7 +82,7 @@ final class Site_Orders_Module {
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
 	 * @param \wpdb              $db       Database.
-	 * @param callable|null      $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.17); null lets every account write.
+	 * @param callable|null      $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (since 2.1.17; a string refuses and is the reason shown, since 2.1.19); null lets every account write.
 	 * @return bool Whether a provider was registered.
 	 */
 	public static function register_provider( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate = null ): bool {
@@ -108,7 +108,7 @@ final class Site_Orders_Module {
 	 * @param Marketplace_Plugin $plugin   The marketplace plugin.
 	 * @param Wpdb_Account_Store $accounts Account store.
 	 * @param \wpdb              $db       Database.
-	 * @param callable|null      $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.17); null lets every account write.
+	 * @param callable|null      $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (since 2.1.17; a string refuses and is the reason shown, since 2.1.19); null lets every account write.
 	 * @return Site_Orders_Provider
 	 */
 	public static function provider( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate = null ): Site_Orders_Provider {
