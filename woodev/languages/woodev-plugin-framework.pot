@@ -4242,7 +4242,7 @@ msgstr ""
 
 #. translators: %s: marketplace name.
 #: marketplace/settings/class-accounts-sections.php:672
-msgid "In the other direction, add products manually on the Products screen."
+msgid "В обратную сторону товары попадают на маркетплейс, только когда вы добавляете их вручную на экране «Товары»."
 msgstr ""
 
 #: marketplace/settings/class-accounts-sections.php:689

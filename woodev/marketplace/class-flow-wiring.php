@@ -184,7 +184,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		private $license;
 
 		/**
-		 * Write gate of the plugin: `function ( Account $account ): bool`, or null when every account may write.
+		 * Write gate of the plugin: `function ( Account $account ): bool|string` (only `true` allows), or null when every account may write.
 		 *
 		 * @var callable|null
 		 */
@@ -273,7 +273,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 * @param License_Gate        $license   Licence gate of the plugin.
 		 * @param callable            $log_error `function ( string $line ): void`.
 		 * @param callable            $log_debug `function ( string $line ): void`, for a success; recorded only while logging is on.
-		 * @param callable|null       $write_gate `function ( Account $account ): bool`, the plugin's write gate; null lets every account write.
+		 * @param callable|null       $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (only `true` allows); null lets every account write.
 		 */
 		public function __construct( string $plugin_id, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, string $prefix, License_Gate $license, callable $log_error, callable $log_debug, ?callable $write_gate = null ) {
 			$this->plugin_id = $plugin_id;

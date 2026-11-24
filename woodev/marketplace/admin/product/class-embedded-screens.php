@@ -97,7 +97,7 @@ final class Embedded_Screens {
 	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin   Plugin.
 	 * @param Wpdb_Account_Store                               $accounts Account store.
 	 * @param \wpdb                                            $db       Database.
-	 * @param callable|null                                    $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.17); null lets every account write.
+	 * @param callable|null                                    $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (since 2.1.17; a string refuses and is the reason shown, since 2.1.19); null lets every account write.
 	 * @return void
 	 */
 	public static function register( $plugin, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate = null ): void {

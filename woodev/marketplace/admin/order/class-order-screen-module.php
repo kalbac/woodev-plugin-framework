@@ -57,7 +57,7 @@ final class Order_Screen_Module {
 	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin Plugin.
 	 * @param \wpdb                                            $db     Database.
 	 * @param Wpdb_Account_Store|null                          $accounts   Accounts, to tell whether the account of a posting can write (since 2.1.17); null judges no account.
-	 * @param callable|null                                    $write_gate `function ( Account $account ): bool`, the plugin's write gate (since 2.1.17); null lets every account write.
+	 * @param callable|null                                    $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (since 2.1.17; a string refuses and is the reason shown, since 2.1.19); null lets every account write.
 	 * @return void
 	 */
 	public static function register( $plugin, \wpdb $db, ?Wpdb_Account_Store $accounts = null, ?callable $write_gate = null ): void {

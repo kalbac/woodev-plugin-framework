@@ -58,7 +58,7 @@ final class Job_Gate {
 	private $pause;
 
 	/**
-	 * The plugin's write gate: `function ( Account $account ): bool`, or null when the plugin holds nothing back.
+	 * The plugin's write gate: `function ( Account $account ): bool|string` (only `true` allows; a string is a refusal with a reason the job gate does not use), or null when the plugin holds nothing back.
 	 *
 	 * @var callable|null
 	 */
@@ -72,7 +72,7 @@ final class Job_Gate {
 	 * @param Wpdb_Account_Store $accounts   Accounts.
 	 * @param License_Gate       $license    Licence gate.
 	 * @param Account_Pause      $pause      Account pause.
-	 * @param callable|null      $write_gate `function ( Account $account ): bool`: whether the account may write to the
+	 * @param callable|null      $write_gate `function ( Account $account ): bool|string`: whether the account may write to the
 	 *                                       marketplace now; null lets every account write.
 	 */
 	public function __construct( Wpdb_Account_Store $accounts, License_Gate $license, Account_Pause $pause, ?callable $write_gate = null ) {

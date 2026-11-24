@@ -205,7 +205,7 @@ final class Shared_Fields {
 				__( 'Импортировать новые карточки автоматически', 'woodev-plugin-framework' ),
 				false,
 				/* translators: %s: marketplace name. */
-				sprintf( __( 'Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено.', 'woodev-plugin-framework' ), $marketplace ) . ' ' . __( 'In the other direction, add products manually on the Products screen.', 'woodev-plugin-framework' ),
+				sprintf( __( 'Когда в кабинете %s появляется новая карточка, плагин создаёт для неё товар на сайте. По умолчанию выключено.', 'woodev-plugin-framework' ), $marketplace ) . ' ' . __( 'В обратную сторону товары попадают на маркетплейс, только когда вы добавляете их вручную на экране «Товары».', 'woodev-plugin-framework' ),
 				$setting_extra
 			);
 		}
