@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.19] — 2026-11-24
+### Bug Fixes
+- **marketplace**: Russian import help text; plugin-supplied write-refusal reason
+
+
+### Documentation
+- Save session s243 (release prep, live push check, 2.1.18)
+
+
+### Build
+- **deps**: Bump taiki-e/install-action from 2.90.3 to 2.90.6 (#1972)
+
+
+
 ## [2.1.18] — 2026-11-23
 ### Documentation
 - Save session s243
