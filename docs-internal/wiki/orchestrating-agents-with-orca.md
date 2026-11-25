@@ -302,7 +302,7 @@ restored on 10.11.2026 (s224): Codex is a critic only — `CLAUDE.md` → Orca c
 passes into #395 and still did not close it. The third REJECT is the signal to stop and hand the
 operator the fork, not to brief a fourth round.
 
-**Cap the wave at three agents — on the Windows desktop.** (The MacBook has 64 GB and no RAM cap; there the wave is sized by the 5-hour rate limit only — operator, 27.09.2026.) With six live, free RAM hit 0.4 GB of 15.3 GB and a starting
+**Cap the wave at three agents — on the Windows desktop.** (The MacBook has 64 GB and no RAM cap; there the wave is sized by the shared Claude limit — [Sizing a wave](sizing-agent-waves.md).) With six live, free RAM hit 0.4 GB of 15.3 GB and a starting
 Codex died on `VirtualAlloc`. Even at three, `composer phpcs` OOM'd for one agent and blamed five
 innocent files for another (failed `shell_exec()` syntax checks read as PHPCS internal exceptions),
 and jest died with `Fatal process out of memory`. A Codex terminal starts about eleven MCP servers
@@ -376,7 +376,7 @@ about the CRLF churn left the seven dirty files unstaged.
    verify a `find_symbol` result reports a path under it.
 2. No install step. `vendor` and `node_modules` are already there.
 3. Never `git add -A` — stage by name. (Worktrees were born dirty with seven CRLF-only files until s135 renormalized the blobs.)
-4. On the Windows desktop, memory is limited; on the Mac, size the wave by rate limits. If a gate OOMs, say so and retry once — never report a
+4. On the Windows desktop, memory is limited (wave size: [Sizing a wave](sizing-agent-waves.md)). If a gate OOMs, say so and retry once — never report a
    gate green whose aggregate result you never saw, and never substitute `npx jest`.
 5. **The WORK and the durable report file are the deliverables.** Every brief gives an absolute
    REPORT FILE path and requires the canary as its first word. If the CLI is unavailable, write

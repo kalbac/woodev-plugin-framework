@@ -60,7 +60,7 @@ Where any report disagrees, that file wins.
 
 **Operator rules that bind every section** (project and memory rules): the storefront is fool-proof and the admin trusts the
 merchant; merchant diagnostics only behind «Логирование»; no automatic external call without backoff, a cap and a stated worst
-case (§13); settings on `woodev-settings`, never a WooCommerce Integrations tab; no licence in force → no storefront offer and
+case (§13); settings on `woodev-settings`, not a WooCommerce Integrations tab; no licence in force → no storefront offer and
 no new remote action, exceptions stated (§5.4); KISS — every protective mechanism names the real case it prevents; merchant
 and buyer texts never say «чекаут» or «фреймворк».
 
