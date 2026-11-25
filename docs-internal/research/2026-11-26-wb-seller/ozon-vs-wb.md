@@ -9,8 +9,8 @@ Ozon's API was not re-read for this research.
 |---|---|---|---|
 | Connection | Client ID + API key | One token, 180 days, chosen type and categories | Paste one field; wrong type or a missing category must be explained; renew twice a year |
 | Card model | One card per sellable variant; article per variation | `nmID` per colour/variant; sizes (`chrtID`) inside; article per `nmID`; groups (`imtID`) ≤ 30 | A colour × size product becomes several cards; "the article of a variation" does not exist |
-| Identity of a unit | Article | Barcode, or article + size | Matching existing cards should use barcodes |
-| Barcodes | Secondary | Every size has one; WB generates them if absent | The shop needs a place for them (WooCommerce GTIN) |
+| Identity of a unit | Article | Barcode, or article + size | Matching existing cards should compare WB barcodes as they are, not only through the GTIN field |
+| Barcodes | Secondary | Every size has at least one, several are possible, any string; WB generates them if absent; not necessarily a GTIN | The plugin keeps the full list; only a real GTIN goes into WooCommerce GTIN |
 | Categories | Category tree + type, many dictionaries | Parent → subcategory; few dictionaries, required and limited-count characteristics | Mapping is shorter to pick, more free values to fill |
 | Card limits | — | Title ≤ 60; description limit by category; dimensions in cm, weight in kg; photos ≥ 700×900; creation quota | Long shop titles need a rule; photos may be refused wholesale |
 | Documents | — | Certificates validated up to 3 days; marking confirmation | A card may exist but wait for or fail document checks |
@@ -28,7 +28,7 @@ Ozon's API was not re-read for this research.
 | Cancel | With a reason | No reason; per unit; only before hand-over | Simpler, but one shop order may be cancelled in part |
 | Returns | Ozon's own flow | Buyer claims to approve or reject within days; goods return to a pickup point with an expiry | A deadline-driven inbox we do not have |
 | Schemes | FBS (as built) | FBS, DBS, DBW, pickup, FBW — each with its own warehouse and flow | The plugin must say which it supports |
-| Testing | No test orders; self-purchase forbidden (operator, 24.11.2026) | A sandbox with test tokens and emulated buyer actions (hosts for content, prices, marketplace, feedbacks) | Better acceptance before a real shop — if the sandbox proves faithful (UNVERIFIED) |
+| Testing | No test orders; self-purchase forbidden (operator, 24.11.2026) | A sandbox with test tokens and emulated buyer actions (hosts for content, prices, marketplace, feedbacks); **marking codes are optional there** | Better acceptance before a real shop — if the sandbox proves faithful (UNVERIFIED); it cannot show that a missing code blocks a supply |
 | Rate limits | Per method group | Per category and account; 4xx costs ten; Base token unusable | Large catalogues export slowly: 10 create requests a minute, up to 100 groups each |
 
 ## The FBS day, as the merchant would live it

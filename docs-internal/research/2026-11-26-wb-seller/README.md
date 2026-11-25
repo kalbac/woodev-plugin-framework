@@ -25,15 +25,19 @@ the FBS hand-over (supplies) is a new screen.
 
 1. **Asynchronous price results are declared but never read.** WB applies prices later; the module logs a pending
    receipt and counts it as unanswered, and nothing calls `Price_Pusher::settle()` (G 18).
-2. **Card export assumes a task number.** WB card creation returns none; today that is a failure and a retry. Photos
-   also need a step after the card exists (G 11, G 12).
+2. **Card export assumes a task number.** WB card creation returns none; today that is a failure and a retry (G 11).
+   Photos, sent after the card exists, are plugin work on the existing `card_created` hook (G 12).
 3. **The unit of sale differs.** The module links one product to one card with a unique article; WB sells a size
    (`chrtID`) inside a colour card (`nmID`) whose article and usually price are shared by all sizes (G 7–10, G 19).
 4. **FBS needs supplies.** Stickers (PNG/SVG/ZPL, not PDF) exist only after an order is in a supply; delivery needs a
    shipping point, date and any required marking codes. Nothing in the module covers it; cancel also assumes reasons,
    which WB does not have (G 24–28).
 5. **Access terms shape the product.** One 180-day token, no client id, no webhooks in the official specs; a Base
-   token is unusably slow, so a Personal (or catalogue Service) token is required. Unlike Ozon, WB has a sandbox.
+   token is unusably slow, so a Personal (or catalogue Service) token is required. Unlike Ozon, WB has a sandbox —
+   where marking codes are optional, so it cannot prove that a missing code blocks a supply.
+
+Import caution: a WB barcode is any string and a size may have several; writing it into WooCommerce's GTIN field would
+silently change it (G 8–9).
 
 Also: the mapping page says «категориям Ozon» to every marketplace (gap map, A1).
 
@@ -59,6 +63,8 @@ Also: the mapping page says «категориям Ozon» to every marketplace (
   requirements (documents, marking); sandbox fidelity.
 - Assembly deadlines and penalties (not in the specs).
 - Adapter-only workarounds in the gap map rows 9 and 22 were not tried.
+- Marking: the production refusal for a missing code and code validation (a sandbox run cannot show them); whether the
+  identifiers the plugin will not support can be entered in the cabinet for an order handled from the shop.
 - Demand: not researched here (the operator decided to build; #1670).
 
 ## Related

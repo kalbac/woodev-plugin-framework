@@ -89,13 +89,29 @@ exist for items, FBS, DBS and pickup; Content methods are limited to 1 request/s
 price quarantine clears itself after 3 days. The FBS, DBS, pickup and item specs name the sandbox; DBW, FBW,
 analytics, statistics and finance list no sandbox host.
 
+**Marking exemption (SOURCED):** «Specifying label identifiers for the assembly order in the sandbox is optional»
+(label-identifier overview in `03-orders-fbs`, `05-dbs`, `06-in-store-pickup`). Production delivers a supply only when
+every required identifier is filled and has passed validation. A sandbox supply delivered without a code therefore
+proves nothing about the production refusal, and a sandbox run cannot validate marking blocking.
+
 **UNVERIFIED:** the sandbox guide (HTML, not read); whether a Test token needs a registered seller account; how close
 sandbox behaviour is to production.
 
 ## 4. Product cards (`02-items`, Content category)
 
 Model: an **`nmID`** card (one colour / variant) with a seller article `vendorCode`, holding **sizes** (`chrtID`),
-each with one or more barcodes (`skus`). Up to 30 `nmID` merge into one group `imtID` (same subcategory only).
+each with one or more `skus` — WB's barcodes. Up to 30 `nmID` merge into one group `imtID` (same subcategory only).
+
+**A size `sku` is not necessarily a GTIN.** `skus` is an array of free strings; the cards-list schema's own example is
+`12345Ejf5` (`02-items`, `POST /content/v2/get/cards/list`), while `POST /content/v2/barcodes` shows a 13-digit one
+(`5032781145187`). A card or variant also has a separate `gtin` field («Additional GTIN», Russian sellers): used when
+the same GTIN already sits in another `skus`; one GTIN cannot be put in `skus` of two cards or sizes.
+**UNVERIFIED:** whether the barcodes WB generates are registered GTINs.
+
+WooCommerce's GTIN field cannot hold an arbitrary string: `set_global_unique_id()` removes every character except
+digits, `-` and `X` and refuses a value another product has
+([WooCommerce 11.2.1, `abstract-wc-product.php` lines 891–916](https://github.com/woocommerce/woocommerce/blob/11.2.1/plugins/woocommerce/includes/abstracts/abstract-wc-product.php#L891),
+read 26.11.2026). `12345Ejf5` would be stored as `123455`.
 
 | Operation | Facts |
 |---|---|
@@ -164,6 +180,8 @@ specs; one web search found nothing). It decides the stock formula and must be m
 - Two status axes: `supplierStatus` (moved by the seller) and `wbStatus` (moved by WB), read separately by ids
   (≤ 1000). No status in the order list.
 - Label identifiers (Chestny ZNAK code, UIN, IMEI, GTIN, expiration date, customs declaration) are written per order.
+  For goods under mandatory marking, every needed identifier must be filled whether it arrives in `requiredMeta` **or**
+  `optionalMeta` (`03-orders-fbs`, `GET /api/v3/orders/new`).
 - The buyer may cancel within the first hour while the order is not in `confirm` (`declined_by_client`).
 
 ### FBS (`03-orders-fbs`)
@@ -176,9 +194,9 @@ specs; one web search found nothing). It decides the stock formula and must be m
 | Buyer | `POST /api/v3/orders/client` only for cross-border orders from Turkey; **no buyer data for a Russian seller**. |
 | Supply | `POST /api/v3/supplies` (`WB-GI-…`); `PATCH /api/marketplace/v3/supplies/{id}/orders` (≤ 100) **moves them to `confirm`**; one supply holds one `cargoType` / B2B / cross-border combination. |
 | Shipping | `GET …/supplies/{id}/shipping-points` (city, point type, date); `PATCH …/fbs/supplies/shipping-method` (date, point, self or transport company) — Russian sellers only, **required before delivery** (409 otherwise). |
-| Boxes | `…/supplies/{id}/trbx` — only for supplies shipped to a pickup point; stickers per box. |
-| Deliver | `PATCH /api/v3/supplies/{id}/deliver` — closes the supply, orders → `complete`; needs all required identifiers filled and validated. Scanning at acceptance closes it too. |
-| Documents | `POST /api/v3/orders/stickers` — ≤ 100, **only in `confirm` / `complete`**, SVG / ZPLV / ZPLH / PNG, 58×40 or 40×30, base64, one per order. Supply QR (`…/barcode`) only after delivery. Cross-border stickers are PDF and may be delayed. |
+| Boxes | `…/supplies/{id}/trbx` — the section says to add them only to supplies shipped to a pickup point; the delivery operation also documents a refusal for a "fulfilment" supply without a box (409 `FulfillmentSupplyBoxesRequired`). Stickers per box. |
+| Deliver | `PATCH /api/v3/supplies/{id}/deliver` — closes the supply, orders → `complete`; needs all required identifiers filled and validated (409 `MetaValidationFail` with per-order details; also `SupplyShippingRequired`, `SupplyHasZeroOrders`). Required UIN also needs a delivery contract specification uploaded beforehand. Scanning at acceptance closes the supply too. |
+| Documents | `POST /api/v3/orders/stickers` — ≤ 100, **only in `confirm` / `complete`**, SVG / ZPLV / ZPLH / PNG, 58×40 or 40×30, base64, one per order. **A required customs declaration number must be entered first** (409 `CustomsDeclarationIsRequired`). Supply QR (`…/barcode`) only after delivery. Cross-border stickers are PDF and may be delayed. |
 | Re-shipment | `GET /api/v3/supplies/orders/reshipment`. |
 | Passes | `…/passes` — car passes, valid 48 h. |
 | Auto-returns | `…/fbs/settings/autoreturns` (account and item level). |
