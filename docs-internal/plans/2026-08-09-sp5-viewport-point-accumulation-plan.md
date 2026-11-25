@@ -1293,3 +1293,7 @@ public docs as part of #234.
 1. **Rig verification (mine, not a worker's).** On this branch, live Russian Post, `:8973`: draw a frame, zoom in, zoom out — the earlier points must be back. Then pan away and back. Then change the type filter and confirm the pool resets. Then trigger a checkout update and confirm it resets.
 2. **Codex critic** on the full diff, inline bundle, ≤~12 KB per bundle.
 3. PR, every CI job verified pass + CLEAN **separately**, then `gh pr merge --squash --delete-branch`. Never `--auto`.
+
+## Related
+
+- [2026-08-09-sp5-viewport-point-accumulation-design.md](../specs/2026-08-09-sp5-viewport-point-accumulation-design.md) — viewport point accumulation design (#234)

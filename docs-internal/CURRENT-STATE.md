@@ -5,6 +5,7 @@
 > Lessons learned → a gotcha (`gotchas/{slug}.md`) if it is about code or a mechanism, the session
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
+> This file is the shared truth of the direct and the bot mode (`wiki/bot-mode.md`).
 
 **As of 2026-11-25 (s244, MacBook):** framework **2.1.19 released** (PR #1976: Russian import-toggle help #1975; the marketplace write gate may return a reason string, `true` allows, `false` = generic read-only text; release PR #1977; planned release 2.1.20). **Ozon Seller 2.0.0 RELEASED** to EDD 9765 (tag `v2.0.0` on `4b346b6`, framework 2.1.19 bundled; prices 8 000 / 14 000 / 30 000, promo OZON20 inactive); docs BetterDocs 147041–147049 + FAQ group 62 + blog https://woodev.ru/ozon-seller-woocommerce-2.html published; old v1 article 126191 reduced to a pointer note. v1→2.0 migration verified live on a throwaway site (SHIP). Carrier plugins in EDD stay on framework 2.1.9. ⚠ GitHub Actions for PRIVATE repos blocked until 01.12: private-repo merge evidence = local-ci + critic. Rig: Ozon Seller `main` `4b346b6`, `woodev/` = 2.1.19; account 2 «Пилотный магазин» = the client's REAL shop on a read-only key — keep until the operator says, never write to Ozon for it. Detail: `sessions/s244.md`.
 **Next:** Ozon post-release tails ozon#134 (needs the GlitchTip event from the operator), ozon#144, ozon#145; #98 wizard after 2.0. ⚠ Unit suite at the 512 MB edge on PHP 7.4 → #1842. Support tails: edostavka#178 waits for the shop's log line; #1818 on the board.
@@ -23,8 +24,8 @@ unwrapped part** — gotcha `a-relation-key-does-not-tell-the-and-wrapper-from-a
 build that committed no bundles, a row rebuilt after an action (legacy CPT only), a probe whose
 selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topic indexes.
 
-✅ **Base minimum is complete; SP-11 (#1078) is closed.** The current carrier work and
-release checks are in `next-session-prompt.md`; priorities live on the board. The «new» orders
+✅ **Base minimum is complete; SP-11 (#1078) is closed.** The current queue is in
+`next-session-prompt.md`; priorities live on the board. The «new» orders
 scope and badge mean unexported ∩ `EXPORTABLE_STATUSES` (#1024). Codex model rules live in
 `CLAUDE.md`; launch and durable report-file fallback live in
 `wiki/orchestrating-agents-with-orca.md`.
@@ -47,16 +48,18 @@ browser catches a client defect** (s128). ⛔ **And no screenshots for him** —
 ⚠ The rig runs **`WPLANG=en_US`** — English chrome is the LOCALE, not a defect.
 ⚠ The rig theme is **Storefront** (s147, his choice). **We do not restyle WP/WC defaults** — gotcha `short-select2-fields-on-storefront-are-woocommerce-s-not-ours`.
 
-⛔ **The old migration pilot (#762) remains frozen.** It does not describe the current
-CDEK v2 plugin work; use the active handoff and the board for that work. The new plugin ships as `2.3.0.0` — above
-the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches every site; spec `specs/2026-10-06-cdek-v2-plugin-design.md`.
+⛔ **The old migration pilot (#762, closed 05.09.2026) does not describe the CDEK v2 plugin.** CDEK v2 ships as
+the `2.3.x` line — above the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches every site;
+spec `specs/2026-10-06-cdek-v2-plugin-design.md`.
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit **11235** (1 skipped, both orders) / jest **4491** / integration **624** on `main` after #1915 (s240, 21.11.2026, primary checkout); older: framework unit **8227** (1 skipped, normal order only) / jest **3790** on `main` @ 24b0bff2 at 2.0.25 (s220, 06.11.2026, measured in a worktree); Yandex unit **1163** (2.0.4); CDEK unit **1586** (normal, reverse and random order green after edostavka#126); full e2e (measured earlier, at 2.0.x — re-run before quoting) on minified assets **45 passed / 6 failed (#1306, pre-existing) / 1 flake / 3 skipped**; Yandex unit **1159** (yandex#122) / **1160** (#123); CDEK unit **1565** (edostavka#120) / **1576** (#121); CDEK acceptance **98–99 / 1 / 11–12 / 4 BLOCKED** — a different block-checkout pickup case fails each run (#1357), measured 19.10.2026 (s188; was 105/0/12 on 15.10). After #1311 the unit suite skips **1** (was 6) — the Yandex/CDEK contract tests now run on
-committed fixtures (s183).
+**Test measurements:** framework unit **11431** (1 skipped, normal order) / jest **4559** (145 suites), measured
+25.11.2026 (s245, in a worktree at `ff46bfb9`); integration **632** (25.11.2026, s244). The one unit skip is the
+baseline since #1311 — the Yandex/CDEK contract tests run on committed fixtures (s183). Plugin, e2e and acceptance
+figures are in the session files and the plugin repos.
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
@@ -87,7 +90,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open issues — 63 in this repo, measured 06.11.2026 (s220, after the audit filed #1638–#1640); 52 on 03.11.2026 (s211).** The board split (Бэклог / Инбокс) is on the board, not here.
+**Open issues — 81 in this repo, measured 25.11.2026 (s245, including #1980).** The board split (Бэклог / Инбокс) is on the board, not here.
 ⚠ Count with
 `gh issue list --repo kalbac/woodev-plugin-framework --state open --limit 500 --json number` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
@@ -177,7 +180,7 @@ do not backfill existing ones (#868), so a new column needs representative rows 
   PKCE was rejected.
 
 - Default plugin settings live on `Woodev → Настройки`; WooCommerce «Интеграции» remains
-  available when needed (#777; `AGENT-RULES.md` Rule 8).
+  available when needed (#777). Marketplace plugins and payment gateways differ (`AGENT-RULES.md` Rule 8).
 
 - *We offer narrowing, we never force it; the merchant's only switch is the region field itself*
   (#437).
@@ -246,7 +249,8 @@ Gotchas: count in the `GOTCHAS.md` header.
 | S3 Licensing | ✅ DONE | need-license (PR #25) → React UI (PR #31) → webhooks + Ed25519 signing (PR #35) |
 | Remote-deactivation UX | ✅ DONE | command cycle proven live (push prod + pull rig); B-13/14/15 resolved |
 | Checkout field layer (§8) | ✅ DONE | PR #132 → `957c039` |
-| Shipping SP-track | ✅ DONE | SP-1…SP-11 complete; current release work is carrier verification. Map = `specs/2026-06-25-shipping-module-decisions.md` |
+| Shipping SP-track | ✅ DONE | SP-1…SP-11 complete; the carrier plugins are released on v2. Map = `specs/2026-06-25-shipping-module-decisions.md` |
+| Marketplace module | ✅ SHIPPED | `woodev/marketplace/` since 2.0.29, completed over 2.1.x; first consumer Ozon Seller 2.0.0 (25.11.2026). ADR-013, `wiki/marketplace-admin.md` |
 | Location provider layer | ✅ DONE | 16/16 tasks; record-level defects closed: #334, #330, #336, #328, and in s78 #352 (mixed-provider chain), #350 (settlement typed without picking), #346 + #333 (stale record reads as absent) |
 | S5 React admin | ✅ DONE | React settings, wizard, licenses, plugins and shipping orders shipped |
 | S4 EDD / S6 ecosystem | ⚪ deferred | post-v2.0 |
@@ -268,9 +272,9 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 **Merchant docs on woodev.ru (Russian, BetterDocs) — separate from this developer site:** plan and decisions on #1342.
 
 ✅ **Published (s183):** Astro Starlight site in `website/` → <https://kalbac.github.io/woodev-plugin-framework/> (GitHub
-Pages, source Actions; `docs.yml` builds every PR touching `website/**` and deploys on `main`). All 33 pages written
+Pages, source Actions; `docs.yml` builds every PR touching `website/**` and deploys on `main`). Written
 against 2.0.x and critic-checked; the framework version is read from `Woodev_Plugin::VERSION` at build time. Rules:
-`DOCS-SCHEMA.md` → "Public docs". Code/docblock discrepancies found while writing: #1316.
+`DOCS-SCHEMA.md` → "Public docs". Code/docblock discrepancies found while writing: #1316 (closed).
 
 ## Next Actions
 

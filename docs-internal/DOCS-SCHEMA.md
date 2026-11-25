@@ -83,7 +83,7 @@ All expected files in `docs-internal/`:
 | `reviews/*.md` | Review reports | Agent after review passes |
 | `migration/*.md` | Per-plugin v2 migration docs (incl. data-preservation checklists and `signature-probe.md`) | Agent at plugin-rewrite time |
 | `platform-v2-*.md`, `audit-2026-06-01.md` | Historical Platform v2 program docs (frozen; see the DOCS-INDEX historical table) | Not maintained |
-| `next-session-prompt.md.prev` | The previous handoff, kept by the save protocol (`AGENTS.md`) | Agent at session end |
+| `next-session-prompt.md.prev` | Gitignored snapshot of the handoff, used by the drop check | `npm run lint:docs` (on a clean run) |
 | `archive/*.md` | Superseded documents | Agent when archiving |
 
 ---
@@ -406,7 +406,7 @@ saying the same thing.
 
 Required:
 - An H1 title and at least one `## Related` section at the bottom. **That is the whole mandate**, and
-  the corpus satisfies it 8 of 8.
+  every article satisfies it.
 
 Not required, decided s119 after measuring the corpus against the older wording:
 
@@ -488,7 +488,7 @@ Before every commit touching docs:
 Moved here from `AGENTS.md` in s115: it is reference material, not a session-start rule, and
 `AGENTS.md` is read at the start of every session against a 28 KB gate.
 
-The public site is an Astro Starlight project in `website/` (own `package.json`; the root toolchain is not involved), English only, published to GitHub Pages at <https://kalbac.github.io/woodev-plugin-framework/>. It is published (33 pages written against 2.0.x); the framework version is substituted at build time. They must describe **only public capabilities a plugin author uses**, with a working example for each capability. Keep every explanation clear to a reader a year later. Never describe internal mechanics or disclose information a third party should not know; examples include how the licence check works and the remote plugin-deactivation hook.
+The public site is an Astro Starlight project in `website/` (own `package.json`; the root toolchain is not involved), English only, published to GitHub Pages at <https://kalbac.github.io/woodev-plugin-framework/>. It is published (written against 2.0.x); the framework version is substituted at build time. They must describe **only public capabilities a plugin author uses**, with a working example for each capability. Keep every explanation clear to a reader a year later. Never describe internal mechanics or disclose information a third party should not know; examples include how the licence check works and the remote plugin-deactivation hook.
 
 **How to edit**
 

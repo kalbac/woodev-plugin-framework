@@ -1,7 +1,7 @@
 # ADR-013: Marketplace layer and PHP-driven React admin in the framework
 
-**Status:** accepted direction (operator decisions 2026-11-10, s224); API design round 2 proposed
-for review, implementation pending
+**Status:** accepted (operator decisions 2026-11-10, s224) and implemented — the module first shipped in framework 2.0.29
+(10.11.2026) and was completed over 2.1.x. The «proposed» wording below is the record as decided.
 
 **Date:** 2026-11-10
 

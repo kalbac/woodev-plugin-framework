@@ -1,6 +1,6 @@
 # «Доставка в пределах города» (range shipping 2.0.0) — design
 
-**Date:** 2026-11-05. **Status:** draft r7.1 (06.11.2026) — history in the [revision log](#revision-log). **r7** applies the operator's decision of
+**Date:** 2026-11-05. **Status:** IMPLEMENTED — framework part released in 2.0.26 and plugin 2.0.0 released 07.11.2026 (s221); plugin card range#40 (fixtures, rig check, documentation) was still open on 25.11.2026. Text: r7.1 (06.11.2026), history in the [revision log](#revision-log). **r7** applies the operator's decision of
 06.11.2026 (K15, #1642): every listed place belongs to a **country**, the admin picks the country first, and the checkout applies city mode **per the
 customer's country** — a country with no listed place keeps the ordinary field. **r7.1** folds in the r7 critic's seven findings (the data wires,
 hook registration, billing-only fallback, pickup guard, the §3.2 row; the checkout-view country, finding 5, was dropped by the coordinator — §4.2) and records the operator's confirmation of every
@@ -18,7 +18,7 @@ places are a plain dropdown, the State row is hidden in both. Nothing in this re
 choices that were provisional (all confirmed 06.11.2026).
 **Target:** the same release `2.0.0` of «Расчёт стоимости доставки за расстояние» (plugin id `range_rate`) as
 [2026-11-05-range-shipping-v2-design.md](2026-11-05-range-shipping-v2-design.md) (called **v2 spec** below; its D1–D16 are binding). Two repos change:
-this framework (small, **in framework 2.0.26 itself — still unreleased, draft release PR #1606**) and `kalbac/woocommerce-range-shipping` (settings
+this framework (small, **in framework 2.0.26 itself** — release PR #1606) and `kalbac/woocommerce-range-shipping` (settings
 and publication).
 
 **Evidence labels:** **READ** (code or document read), **UNVERIFIED** (reason given — a rig or fixture step proves it). `fw:` = this repo's

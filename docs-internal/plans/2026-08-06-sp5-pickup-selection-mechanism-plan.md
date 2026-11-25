@@ -2322,3 +2322,7 @@ automated test — jsdom does not run WooCommerce. That is stated rather than pa
 
 **Task 5 is severable** (the nonce fragment). Dropping it leaves the stale-page message doing
 all the work; the feature still functions.
+
+## Related
+
+- [2026-08-06-sp5-pickup-selection-mechanism-design.md](../specs/2026-08-06-sp5-pickup-selection-mechanism-design.md) — SP-5 selection-mechanism design

@@ -1,7 +1,12 @@
 # Marketplace module and PHP-driven React admin
 
-> Design for framework #1675, round 2 (2026-11-10). Decisions: [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md).
-> Proposed APIs below do not exist yet. Implementation is separate, after design review.
+> Design for framework #1675, round 2 (2026-11-10), kept with what the implementation added. Decisions:
+> [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md).
+> **State (25.11.2026):** the module is implemented (first shipped in framework 2.0.29, completed over 2.1.x); Ozon Seller
+> 2.0.0 is released on it.
+> Where a design section says «proposed» or «will», the «as built» sections and the code win. Where the text allows a
+> change **because Ozon Seller v2 is unreleased**, that no longer holds: table, column and option names and stored enum
+> values are installed-site data contracts ([ADR-005](../adr/005-platform-v2-clean-break-policy.md)).
 
 ## Scope and reference baseline
 

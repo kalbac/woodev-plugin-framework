@@ -1,6 +1,6 @@
 # Marketplace admin UI — the pages look like the delivery plugins (#1776)
 
-**Status:** decided — operator approved every item of #1776 on 15.11.2026; this spec is the design, cards C1–C3 implement it.
+**Status:** IMPLEMENTED — cards C1–C3 merged, #1776 closed 15.11.2026 (s231). Operator approved every item of #1776 on 15.11.2026; this spec is the design.
 r2 folds in the r1 critic of PR #1777: the empty state without `emptyMessage`, the merge order and owners of the shared
 files, C2's strings and stylesheet, the held store categories, and three smaller edits.
 **Date:** 2026-11-15. **Target:** framework 2.1.x (next release after #1767), first consumer Ozon Seller 2.0.0.

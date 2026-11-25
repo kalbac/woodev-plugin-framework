@@ -2,6 +2,7 @@
 > For ALL AI agents (Claude, Gemini, Cursor, GPT, etc.). Keep updated.
 > **Claude Code agents:** read `CLAUDE.md` too — it adds the Claude-specific MCP tooling (Serena, Context7). It does not replace this file, and it restates nothing from it.
 > **Architecture reference** (subsystems, base classes, seams): `docs-internal/wiki/architecture.md` — not loaded at session start, open it when the task needs it.
+> **Two modes:** this file describes the direct mode (the owner talks to an agent in this folder). Bot mode (`bot:Framework` / `bot:Plugins` in Orca) runs beside it: [bot mode](docs-internal/wiki/bot-mode.md).
 
 ---
 
@@ -39,6 +40,9 @@
 9. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
 10. **Push every branch that carries work** — git is how the other machine gets it; a local-only
     branch simply does not travel.
+11. **Mail the owning bot the session's open work**, so it opens items (the bridge to bot mode; this
+    repo → `bot:Framework`, a plugin repo → `bot:Plugins`): `orca orchestration send --to bot:<name>
+    --type status`. Command and body: [bot mode](docs-internal/wiki/bot-mode.md#the-bridge-direct-mode-save--bot-items).
 
 ---
 
@@ -125,7 +129,7 @@ composer test:integration   # integration tests (requires wp-env)
 # JS tests + build
 npm run test:js                                   # jest — CI gate (test-js job); jest-unit.config.js scopes roots, agent worktrees excluded
 npm run test:e2e                                  # Playwright vs the LIVE RIG (:8973), not CI — #723
-npm run build                                     # build the 8 React bundles (CI: assets-parity job)
+npm run build                                     # build the 9 React bundles (CI: assets-parity job)
 npm run lint:ts-baseline                          # TypeScript-by-default gate for src/ — CI (test-js)
 npm run lint:i18n-sources                         # every source msgid must be in the catalogue — CI (lint job, #791).
                                                   # Needs wp-cli 2.12.0; with the rig up it copies one out of the

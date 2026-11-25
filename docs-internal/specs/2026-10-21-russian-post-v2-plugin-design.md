@@ -1,7 +1,7 @@
 # Russian Post v2 Plugin Design
 
 **Date:** 2026-10-21 (s191)  
-**Status:** shipped — Russian Post v2 line released on EDD download 8772 (2.0.3 and 2.0.4 published in s194; releases up to 2.0.9 recorded in `SESSION-LOG.md`).  
+**Status:** shipped — Russian Post v2 line released on EDD download 8772 (2.0.3 and 2.0.4 published in s194; later releases are in the plugin repo).  
 **Target:** the next line (`2.0.0`) of the existing plugin `woodev-russian-post` (plugin id `wc_russian_post`, EDD download 8772, text domain `woocommerce-russian-post`), written from scratch on Framework v2. The third carrier plugin on the v2 framework, after CDEK (`2.3.0.4`) and Yandex (`2.0.5`).  
 **Release rule:** speed. Decision 13: the EDD folder is `woodev-russian-post`, so CDEK v2 and Yandex v2 load first and Russian Post v1 is quarantined on merchants' sites; every day without a v2 leaves those merchants without Russian Post. Nothing here is allowed to delay the release for a nice-to-have.  
 **Evidence:** code claims cite repository-relative file paths. Framework paths are relative to the framework repo root; `v1:` means `plugins-reference/woodev-russian-post` (1.2.6.0, read-only); `cdek:` means `/Users/maksimmartirosov/Projects/woocommerce-edostavka`, branch `v2`; `yandex:` means `/Users/maksimmartirosov/Projects/woocommerce-yandex-delivery`, branch `main` (both read-only). Measurements cite the fact base in `docs-internal/research/2026-10-21-russian-post-v2/` (letters A–L, V). Anything not read in code or measured is marked **UNVERIFIED**; anything the author inferred is marked **interpretation**.
