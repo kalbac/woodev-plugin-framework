@@ -136,7 +136,7 @@ only for genuinely-unresolvable stub gaps.
 
 ## Root cause
 
-`is_credit_card_gateway()`, `is_echeck_gateway()`, and `get_payment_type()` are **not** optional helper methods — they are part of the core gateway API called 32+ times across the codebase. In s2 legacy cleanup, these methods were accidentally deleted from `Woodev_Payment_Gateway` along with other deprecated code because they appeared unused at first glance.
+`is_credit_card_gateway()`, `is_echeck_gateway()`, and `get_payment_type()` were **not** optional helper methods — at the time they were part of the core gateway API, called 32+ times across the codebase. In s2 legacy cleanup, these methods were accidentally deleted from `Woodev_Payment_Gateway` along with other deprecated code because they appeared unused at first glance.
 
 The methods were never found by grep because they use standard naming patterns that overlap with simple usage searches. When methods are called via `$this->is_credit_card_gateway()` at call sites and also defined as `public function is_credit_card_gateway()` in the class, a grep for `function is_credit_card` should find both. If it doesn't, the definition is missing.
 
@@ -165,13 +165,16 @@ abstract class Woodev_Payment_Gateway extends WC_Payment_Gateway {
     public function is_credit_card_gateway() {
         return self::PAYMENT_TYPE_CREDIT_CARD === $this->get_payment_type();
     }
-
-    /** @deprecated v2.0.0 eCheck payment type removed */
-    public function is_echeck_gateway() {
-        return false;
-    }
 }
+
+// A method that goes away goes together with every `$this->is_echeck_gateway()`
+// call site, in the same change. No stub stays behind.
 ```
+
+> **Pre-ADR-005 history:** the repair made at the time also restored `is_echeck_gateway()` as a
+> `@deprecated` method returning `false`. ADR-005 forbids such a stub, so it is not part of the
+> correct example. The code still holds it (and `Payment_Token::is_echeck()`) until
+> [#1638](https://github.com/kalbac/woodev-plugin-framework/issues/1638) removes both.
 
 ## Detection rule
 
