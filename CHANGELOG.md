@@ -1,6 +1,11 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [Unreleased]
+### Bug Fixes
+- **shipping**: The rate cache no longer misses on every typing pause and gateway click (#1974). A pickup method's key drops postcode, address, address_1 and address_2; the payment gateway id became a cash-on-delivery flag. A carrier whose pickup quote reads one of those address fields adds it in its own `get_rate_cache_context()`; one whose price depends on the specific gateway declares the new `Shipping_Method::FEATURE_GATEWAY_DEPENDENT_PRICE`.
+
+
 ## [2.1.19] — 2026-11-24
 ### Bug Fixes
 - **marketplace**: Russian import help text; plugin-supplied write-refusal reason

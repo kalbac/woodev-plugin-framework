@@ -230,6 +230,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var array opted in by default: the cache is OFF for a method that does not declare the feature. */
 		public array $supports = [ Shipping_Method::FEATURE_RATE_CACHE ];
 
+		/** @var string courier unless a test makes the probe a pickup method. */
+		public string $delivery_type = Shipping_Method::TYPE_COURIER;
+
 		/** @var array */
 		public $instance_form_fields = [];
 
@@ -294,7 +297,7 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @return string */
 		public function get_delivery_type(): string {
-			return self::TYPE_COURIER;
+			return $this->delivery_type;
 		}
 
 		/** @return array */
@@ -1620,6 +1623,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @return array<string, array{0: array}> */
 		public function street_changes(): array {
 			return [
+				'postcode'  => [ [ 'postcode' => '101001' ] ],
 				'address'   => [ [ 'address' => 'Tverskaya 1' ] ],
 				'address_1' => [ [ 'address_1' => 'Tverskaya 1' ] ],
 				'address_2' => [ [ 'address_2' => 'flat 5' ] ],
@@ -1631,7 +1635,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		 * @param array $street street fields.
 		 * @return void
 		 */
-		public function test_the_street_address_is_part_of_the_key( array $street ): void {
+		public function test_the_street_address_is_part_of_a_courier_key( array $street ): void {
 			$method = $this->method();
 			$base   = $this->package()['destination'];
 
@@ -1639,6 +1643,121 @@ namespace Woodev\Tests\Unit\Shipping {
 				$this->key( $method, $this->package() ),
 				$this->key( $method, $this->package( [ 'destination' => array_merge( $base, $street ) ] ) )
 			);
+		}
+
+		/**
+		 * @dataProvider street_changes
+		 * @param array $street street fields.
+		 * @return void
+		 */
+		public function test_typing_the_street_or_postcode_is_not_a_new_quote_for_a_pickup_method( array $street ): void {
+			$method                = $this->method();
+			$method->delivery_type = Shipping_Method::TYPE_PICKUP;
+			$method->next_rate     = $this->rate();
+			$base                  = $this->package()['destination'];
+			$typed                 = $this->package( [ 'destination' => array_merge( $base, $street ) ] );
+
+			$this->assertSame( $this->key( $method, $this->package() ), $this->key( $method, $typed ) );
+
+			$method->calculate_shipping( $this->package() );
+			$method->calculate_shipping( $typed );
+
+			$this->assertSame( 1, $method->carrier_calls );
+		}
+
+		/** @return array<string, array{0: array}> */
+		public function settlement_changes(): array {
+			return [
+				'country' => [ [ 'country' => 'BY' ] ],
+				'state'   => [ [ 'state' => 'SPE' ] ],
+				'city'    => [ [ 'city' => 'Tver' ] ],
+			];
+		}
+
+		/**
+		 * @dataProvider settlement_changes
+		 * @param array $change destination fields.
+		 * @return void
+		 */
+		public function test_a_pickup_key_still_follows_the_settlement( array $change ): void {
+			$method                = $this->method();
+			$method->delivery_type = Shipping_Method::TYPE_PICKUP;
+			$base                  = $this->package()['destination'];
+
+			$this->assertNotSame(
+				$this->key( $method, $this->package() ),
+				$this->key( $method, $this->package( [ 'destination' => array_merge( $base, $change ) ] ) )
+			);
+		}
+
+		/** @return void */
+		public function test_prepaid_gateways_share_one_key_and_cash_on_delivery_has_its_own(): void {
+			$method          = $this->method();
+			$method->payment = 'bacs';
+			$prepaid         = $this->key( $method, $this->package() );
+
+			$method->payment = 'yookassa';
+			$this->assertSame( $prepaid, $this->key( $method, $this->package() ), 'another prepaid gateway' );
+
+			$method->payment = '';
+			$this->assertSame( $prepaid, $this->key( $method, $this->package() ), 'nothing chosen yet' );
+
+			$method->payment = 'cod';
+			$this->assertNotSame( $prepaid, $this->key( $method, $this->package() ) );
+		}
+
+		/** @return void */
+		public function test_a_gateway_added_to_the_cod_list_shares_the_cash_on_delivery_key(): void {
+			$this->filters['woodev_shipping_insurance_cod_gateways'] = static fn( array $gateways ): array => array_merge( $gateways, [ 'card_on_receipt' ] );
+
+			$method          = $this->method();
+			$method->payment = 'cod';
+			$cod             = $this->key( $method, $this->package() );
+
+			$method->payment = 'card_on_receipt';
+			$this->assertSame( $cod, $this->key( $method, $this->package() ) );
+		}
+
+		/** @return void */
+		public function test_the_payment_on_the_package_wins_over_the_session_one(): void {
+			$method          = $this->method();
+			$method->payment = 'bacs';
+
+			$this->assertNotSame(
+				$this->key( $method, $this->package() ),
+				$this->key( $method, $this->package( [ \Woodev\Framework\Shipping\Fee_Payments::PACKAGE_KEY => 'cod' ] ) )
+			);
+		}
+
+		/** @return void */
+		public function test_a_gateway_dependent_method_is_keyed_by_the_gateway_id(): void {
+			$method = $this->method();
+			$this->assertFalse( $method->supports_gateway_dependent_price() );
+
+			$method->add_support( Shipping_Method::FEATURE_GATEWAY_DEPENDENT_PRICE );
+			$this->assertTrue( $method->supports_gateway_dependent_price() );
+
+			$method->payment = 'bacs';
+			$bacs            = $this->key( $method, $this->package() );
+
+			$method->payment = 'yookassa';
+			$this->assertNotSame( $bacs, $this->key( $method, $this->package() ) );
+		}
+
+		/** @return void */
+		public function test_a_markup_limited_to_some_gateways_splits_the_prepaid_key_by_its_answer(): void {
+			$method = $this->method();
+			$method->add_support( Shipping_Method::FEATURE_FEE_PAYMENTS );
+			$method->option_values[ \Woodev\Framework\Shipping\Fee_Payments::OPTION_KEY ] = [ 'yookassa' ];
+
+			$method->payment = 'bacs';
+			$without_fee     = $this->key( $method, $this->package() );
+
+			$method->payment = 'cheque';
+			$this->assertSame( $without_fee, $this->key( $method, $this->package() ), 'both outside the list' );
+
+			$method->payment = 'yookassa';
+			$this->assertNotSame( $without_fee, $this->key( $method, $this->package() ), 'the fee applies' );
 		}
 
 		/** @return void */

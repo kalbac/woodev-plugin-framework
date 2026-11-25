@@ -96,6 +96,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const FEATURE_RATE_CACHE = 'rate-cache';
 
 		/**
+		 * Gateway-dependent price feature: the carrier's price depends on WHICH payment gateway is chosen, not
+		 * only on cash on delivery against prepayment.
+		 *
+		 * Without it the rate-cache key holds a cash-on-delivery flag, so all prepaid gateways share one cached
+		 * rate; with it the key holds the gateway id ({@see self::get_rate_cache_context()}). It shapes the cache
+		 * key only: the recalculation on a change of payment method is switched on by
+		 * {@see self::declares_payment_dependent_price()}, so such a method declares both. A markup limited to
+		 * some gateways ({@see self::FEATURE_FEE_PAYMENTS}) is keyed on its own (`fee_applies`) and does not need it.
+		 *
+		 * @since 2.1.20
+		 */
+		const FEATURE_GATEWAY_DEPENDENT_PRICE = 'gateway-dependent-price';
+
+		/**
 		 * Fee-by-payment-method feature: the instance gets a `fee_payments` control, and the carrier asks
 		 * {@see self::fee_applies_for_package()} (or calls {@see self::apply_fee_for_package()}) before it
 		 * adds its fee. OFF unless declared (#1144).
@@ -2363,6 +2377,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
+		 * Determines whether this method's price depends on the specific payment gateway.
+		 *
+		 * Named predicate over {@see self::FEATURE_GATEWAY_DEPENDENT_PRICE}.
+		 *
+		 * @since 2.1.20
+		 *
+		 * @return bool
+		 */
+		public function supports_gateway_dependent_price(): bool {
+			return $this->supports( self::FEATURE_GATEWAY_DEPENDENT_PRICE );
+		}
+
+		/**
 		 * Determines whether this method restricts its fee to chosen payment methods (#1144).
 		 *
 		 * Named predicate over {@see self::FEATURE_FEE_PAYMENTS}.
@@ -3169,9 +3196,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * The default is what the framework itself can see: the method and instance, the instance
 		 * settings, the effective packing mode, the package lines (product, variation, quantity,
 		 * dimensions, weight, shipping class, virtual flag) with the store's dimension/weight units
-		 * and currency, the contents cost, the destination down to the street, the chosen payment
-		 * method (when a WooCommerce session exists) and — for a method with a pickup type — the point
-		 * selected for THIS method.
+		 * and currency, the contents cost, the destination, the payment and — for a method with a
+		 * pickup type — the point selected for THIS method, with the locality it was selected in.
+		 *
+		 * THE DESTINATION goes down to the street, except for a pickup method
+		 * ({@see self::is_pickup_shipping()}): its price follows the settlement and the point, so only
+		 * country, state and city are keyed — a postcode or a flat number being typed is not a new quote.
+		 *
+		 * THE PAYMENT is `cod`: whether the chosen method is payment on receipt (the gateways of the
+		 * `woodev_shipping_insurance_cod_gateways` filter). A method that declared
+		 * {@see self::FEATURE_GATEWAY_DEPENDENT_PRICE} gets `payment`, the gateway id, instead; one that
+		 * declared {@see self::FEATURE_FEE_PAYMENTS} also gets `fee_applies`.
+		 *
+		 * A carrier whose price reads what the default leaves out — a pickup quote that sends the
+		 * postcode, say — adds it in its own override.
 		 *
 		 * A carrier overrides it, calls the parent and adds what only it knows: credentials, the
 		 * account or origin read from global plugin settings (those are NOT instance settings, so a
@@ -3184,6 +3222,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @since 2.0.2
 		 * @since 2.0.19 A method that declared {@see self::FEATURE_MARKUP} or {@see self::FEATURE_FREE_SHIPPING}
 		 *               adds the applied coupons and the order amount those features measure.
+		 * @since 2.1.20 A pickup method is no longer keyed by postcode and street, and the gateway id is replaced
+		 *               by the `cod` flag unless the method declared {@see self::FEATURE_GATEWAY_DEPENDENT_PRICE}.
 		 *
 		 * @param array $package WooCommerce shipping package.
 		 *
@@ -3192,6 +3232,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		public function get_rate_cache_context( array $package ): array {
 
 			$context = Shipping_Rate_Cache::package_context( $package );
+
+			// The classic checkout re-quotes after every typing pause: keyed by these, each digit is a new carrier request (#1974).
+			if ( $this->is_pickup_shipping() ) {
+				unset(
+					$context['destination']['postcode'],
+					$context['destination']['address'],
+					$context['destination']['address_1'],
+					$context['destination']['address_2']
+				);
+			}
 
 			$context['method']   = (string) $this->get_id();
 			$context['instance'] = property_exists( $this, 'instance_id' ) ? (int) $this->instance_id : 0;
@@ -3208,7 +3258,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$context['packing']['leftovers'] = $this->get_unpacked_algorithm();
 				$context['packing']['values'] = Packaging::get_value_context( (array) ( $package['contents'] ?? [] ) );
 			}
-			$context['payment'] = $this->payment_method_for_package( $package );
+
+			if ( $this->supports_gateway_dependent_price() ) {
+				$context['payment'] = $this->payment_method_for_package( $package );
+			} else {
+				$context['cod'] = $this->is_cod_gateway( $this->payment_method_for_package( $package ) );
+			}
+
+			// the merchant's «only these payment methods» list tells prepaid gateways apart: its answer prices the rate
+			if ( $this->supports_fee_payments() ) {
+				$context['fee_applies'] = $this->fee_applies_for_package( $package );
+			}
 
 			// the free-shipping coupon and the order amount the threshold and a percentage markup are measured on
 			// (after the coupon discounts) price the rate too; a method that declared neither feature adds
@@ -3445,17 +3505,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$mode = $this->get_insurance_mode();
 				$enabled = self::INSURANCE_ALWAYS === $mode;
 
-				if ( self::INSURANCE_DELIVERY_PAYMENT === $mode && '' !== $payment ) {
-					/**
-					 * Payment gateway ids treated as payment on receipt for shipment insurance.
-					 *
-					 * @since 2.0.2
-					 *
-					 * @param string[]        $gateways COD gateway ids (default: cod).
-					 * @param Shipping_Method $method   Shipping method instance.
-					 */
-					$gateways = apply_filters( 'woodev_shipping_insurance_cod_gateways', [ 'cod' ], $this );
-					$enabled = in_array( $payment, Fee_Payments::normalize( $gateways ), true );
+				if ( self::INSURANCE_DELIVERY_PAYMENT === $mode ) {
+					$enabled = $this->is_cod_gateway( $payment );
 				}
 			}
 
@@ -3463,6 +3514,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				'enabled' => $enabled,
 				'declared_value' => $enabled ? $declared_value : 0.0,
 			];
+		}
+
+		/**
+		 * Whether a gateway is payment on receipt. The existing COD convention is `cod`; stores may add gateways.
+		 *
+		 * @since 2.1.20
+		 *
+		 * @param string $payment Payment gateway id, or empty when not chosen.
+		 * @return bool
+		 */
+		private function is_cod_gateway( string $payment ): bool {
+
+			if ( '' === $payment ) {
+				return false;
+			}
+
+			/**
+			 * Payment gateway ids treated as payment on receipt, for shipment insurance and the rate-cache key.
+			 *
+			 * @since 2.0.2
+			 * @since 2.1.20 Also decides the `cod` flag of the rate-cache key.
+			 *
+			 * @param string[]        $gateways COD gateway ids (default: cod).
+			 * @param Shipping_Method $method   Shipping method instance.
+			 */
+			$gateways = apply_filters( 'woodev_shipping_insurance_cod_gateways', [ 'cod' ], $this );
+
+			return in_array( $payment, Fee_Payments::normalize( $gateways ), true );
 		}
 
 		/**
