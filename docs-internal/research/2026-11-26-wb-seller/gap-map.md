@@ -6,7 +6,7 @@ stated. READ means the code was read or grepped; nothing was executed. API facts
 [the API map](api-map.md).
 
 **Verdict column:** `fits` — the module provides it, the plugin only implements contracts; `extend` — a framework
-change is needed; `plugin` — Wildberries-only domain code; `blocker` — a v1 flow cannot work without the change.
+change is needed; `plugin` — Wildberries-only domain code; `blocker` — a 1.0 flow cannot work without the change.
 
 ## 1. Capability map
 
@@ -36,14 +36,14 @@ change is needed; `plugin` — Wildberries-only domain code; `blocker` — a v1 
 | 22 | Order grouping | `orders/class-order-dto.php:17`, `orders/class-order-group.php:29`, `orders/class-registry-order-writer.php:133` (`upsert_member`), `flows/class-wc-order-store.php:34` — designed for WB carts | `refresh()` gets only the group key; the adapter must find the member ids itself (UNVERIFIED path). Group key should be cart + warehouse | fits (verify) |
 | 23 | Statuses | Adapter maps to `orders/class-status-map.php:22`; optional names and groups (`admin/shared/interface-posting-status-names.php`, `interface-posting-status-groups.php`) | Two axes must be composed into `status_raw` ≤ 32 characters (`data/class-schema.php:452`); `confirm/canceled_by_missed_call` is 31. Default status words are Ozon's (`admin/shared/class-posting-status-text.php:34`, `:69`) | fits |
 | 24 | Cancel | `admin/order/interface-order-canceller.php:31`, `:53`, `:62`; `admin/order/class-cancel-ajax.php:151` refuses an empty reason list with 502 | WB has **no reasons**; one WooCommerce order holds several cancellable units | extend (M) |
-| 25 | Seller-side status actions | Only cancel and label exist | DBS (confirm, deliver, receive with code, reject), pickup, DBW need actions; per-unit actions inside a group | extend (L), only if those schemes are in |
+| 25 | Seller-side status actions | Only cancel and label exist | DBS (confirm, deliver, receive with code, reject), pickup, DBW need actions; per-unit actions inside a group | extend (L) — DBS is in 1.0 ([decision D1](decisions.md)) |
 | 26 | Supplies (shipment) | `capabilities/class-capability.php:42` `CONFIRM_SHIPMENT` — declared, nothing consumes it | The whole FBS hand-over: supply, add orders, shipping point and date, boxes, deliver, QR. **Stickers exist only after an order is in a supply** — and a required customs declaration number must be entered before them | blocker for FBS (plugin page + generic order actions) |
 | 27 | Labels | `flows/interface-label-provider.php:32-56`; one stored document per task; `flows/class-label-download.php:305` names anything but PDF/JSON `.bin` | Synchronous call fits (synthetic task id). One PNG/SVG/ZPL **per order**, ≤ 100: needs a printable sheet or multi-file packaging | extend (M) |
 | 28 | Marking codes and other identifiers | none | `requiredMeta` — and for marked goods `optionalMeta` too — must be filled before a supply can be delivered: input on the order, validation errors. The sandbox does not enforce it, so the refusal path is tested with fixtures | plugin (+ order-screen seam) |
 | 29 | Push intake | Nullable decoder and protocol; section hidden without the capability (`settings/class-notifications-section.php:139`; `deletion/class-deletion-module.php:133`) | Not used. New cabinet cards are not announced, so auto-import has no trigger | fits |
 | 30 | Order screen, source filter, orders page, analytics | `admin/order/**`, `admin/pages/orders/**` | Works per WooCommerce order; label text and "posting" wording are Ozon's (see §2) | fits after §2 |
-| 31 | FBW | none | Reports-based order and stock view | plugin (out of v1) |
-| 32 | Returns, claims, finance, reviews, ads | no folders for them | New domain | plugin (out of v1) |
+| 31 | FBW | none | Reports-based order and stock view | plugin (out of 1.0) |
+| 32 | Returns, claims, finance, reviews, ads | no folders for them | New domain | plugin (out of 1.0) |
 | 33 | Licence gate, diagnostics, deletion, bulk runs, tools | `jobs/class-license-gate.php`, `diagnostics/`, `deletion/` | none found | fits |
 
 ## 2. Ozon-specific assumptions baked into the module
@@ -77,7 +77,7 @@ settlement, the 4xx cost, shipment confirmation. **A declared contract is not a 
 ## 4. Data contracts
 
 Ozon Seller 2.0.0 is released on these tables, so every schema change is additive with a `Schema::REVISION` step and
-every contract change ships with the Ozon adapter update. Wildberries is a new product: no v1 plugin of ours exists
+every contract change ships with the Ozon adapter update. Wildberries is a new product whose first release is 1.0.0: no earlier plugin of ours exists
 (UNVERIFIED against EDD), so its ids are free. A marketplace id of `wildberries` (11 characters) is within
 `Schema::MAX_ID_LENGTH` 16 (`data/class-schema.php:42`).
 

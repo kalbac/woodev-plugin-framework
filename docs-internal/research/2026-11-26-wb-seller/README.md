@@ -13,12 +13,19 @@ Research only: no code changed, no request sent to any Wildberries API host.
 | [gap-map.md](gap-map.md) | Each capability against `woodev/marketplace/` with file:line; Ozon assumptions in the module |
 | [ozon-vs-wb.md](ozon-vs-wb.md) | Differences that change the merchant flow |
 | [owner-questions.ru.md](owner-questions.ru.md) | 11 questions for the owner, Russian, each with a recommendation |
-| [card-plan.md](card-plan.md) | Estimated framework and plugin cards |
+| [card-plan.md](card-plan.md) | Estimated framework and plugin cards (superseded by the design spec) |
+| [decisions.md](decisions.md) | The owner's answers of 26.11.2026 (D1–D11) — final; they win over every recommendation here |
+
+## Outcome
+
+The owner answered the questions on 26.11.2026: [decisions](decisions.md). The plugin is new and its first release is
+**1.0.0**; FBS and DBS are both in it. Design:
+[Wildberries Seller 1.0 plugin design](../../specs/2026-11-26-wildberries-seller-plugin-design.md).
 
 ## Verdict
 
 Feasible on the existing module; **not** "write an adapter and ship". Accounts, jobs, mappings, links, stock sync,
-grouped orders, pages, diagnostics and licensing carry over. Four v1 paths cannot work without framework changes, and
+grouped orders, pages, diagnostics and licensing carry over. Four first-release paths cannot work without framework changes, and
 the FBS hand-over (supplies) is a new screen.
 
 ## Top findings
@@ -69,6 +76,8 @@ Also: the mapping page says «категориям Ozon» to every marketplace (
 
 ## Related
 
+- [Owner decisions](decisions.md)
+- [Wildberries Seller 1.0 plugin design](../../specs/2026-11-26-wildberries-seller-plugin-design.md)
 - [Marketplace module design](../../wiki/marketplace-admin.md)
 - [ADR-013](../../adr/013-marketplace-layer-and-react-admin-in-the-framework.md)
 - [Ozon Delivery gap refresh, 30.10.2026](../2026-10-30-ozon-gap-refresh/report.md) — the research shape followed here

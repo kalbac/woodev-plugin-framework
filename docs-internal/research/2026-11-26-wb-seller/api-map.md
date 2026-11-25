@@ -248,7 +248,7 @@ only through the order feed and reports.
 ## 10. Promotion and communications
 
 Advertising campaigns, the promo calendar, questions, reviews and buyer chat have full API sections (`08-promotion`,
-`09-communications`). Out of scope for a v1 of a stock / price / order integration.
+`09-communications`). Out of scope for the first release of a stock / price / order integration.
 
 ## 11. Webhooks or polling
 
