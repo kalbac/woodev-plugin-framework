@@ -260,7 +260,7 @@ final class FeePaymentsTest extends TestCase {
 	// ---- the cache key ---------------------------------------------------------------------------------------
 
 	/** @return void */
-	public function test_the_cache_context_names_the_payment_method_on_the_package_and_falls_back_to_the_session(): void {
+	public function test_the_cache_context_reads_the_payment_method_on_the_package_and_falls_back_to_the_session(): void {
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( 'wp_unslash' )->returnArg( 1 );
 		Functions\when( 'apply_filters' )->alias( fn( $tag, $value = null ) => $value );
@@ -272,8 +272,13 @@ final class FeePaymentsTest extends TestCase {
 		$method          = $this->method( [ 'cod' ] );
 		$method->payment = 'bacs';
 
-		$this->assertSame( 'cod', $method->get_rate_cache_context( $this->package( 'cod' ) )['payment'], 'the package, which is what the fee gate reads' );
-		$this->assertSame( 'bacs', $method->get_rate_cache_context( $this->package() )['payment'], 'no package value: the session' );
+		$from_package = $method->get_rate_cache_context( $this->package( 'cod' ) );
+		$from_session = $method->get_rate_cache_context( $this->package() );
+
+		$this->assertTrue( $from_package['cod'], 'the package, which is what the fee gate reads' );
+		$this->assertTrue( $from_package['fee_applies'] );
+		$this->assertFalse( $from_session['cod'], 'no package value: the session' );
+		$this->assertFalse( $from_session['fee_applies'] );
 	}
 
 	// ---- the registry ---------------------------------------------------------------------------------------

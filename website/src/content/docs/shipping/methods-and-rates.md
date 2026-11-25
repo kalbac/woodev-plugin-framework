@@ -166,7 +166,7 @@ The manager sees the hint on the classic checkout and on the block checkout. It 
 
 Asking a carrier's API on every cart change is slow. A method can opt in to a short-lived rate cache by declaring `FEATURE_RATE_CACHE`. A rate is then kept for 10 minutes. Only a successful rate is stored: a failure and a `null` answer never are.
 
-Declaring the feature is a promise: **`get_rate_cache_context()` names every input that your price depends on.** Two calculations with an equal context get the same cached rate. The framework's default context already covers the package contents and destination, the instance settings, the packing mode, the payment method and the selected pickup point. Anything else that `rate_package()` reads, such as credentials or a plugin-wide setting, you add yourself:
+Declaring the feature is a promise: **`get_rate_cache_context()` names every input that your price depends on.** Two calculations with an equal context get the same cached rate. The framework's default context already covers the package contents and destination, the saved instance settings, the packing mode, the payment and the selected pickup point. Anything else that `rate_package()` reads, such as credentials or a plugin-wide setting, you add yourself:
 
 ```php
 <?php
@@ -190,6 +190,32 @@ final class My_Carrier_Courier_Method extends Shipping_Method_Courier {
 ```
 
 Keep the method public. The values must be scalars, `null` or arrays of them. Anything else turns the cache off for that call. A plugin-wide setting is not an instance setting, so without this line a change to it would keep serving the old price.
+
+### What the default key leaves out
+
+The classic checkout recalculates after every pause in typing and every change of payment method, so the default key holds only what usually changes a price. Since 2.1.20:
+
+| Input | In the default key |
+|---|---|
+| Destination of a courier or postal method | Country, state, city, postcode and the street lines. |
+| Destination of a pickup method | Country, state and city. The selected pickup point and the settlement it was selected in are keyed too. |
+| Destination of a pickup method while the buyer has no settlement picked | Also the key of the buyer's location record or, when no record names a settlement or an address, the postcode. |
+| Payment method | `cod`: whether it is payment on receipt, by the gateways of the filter `woodev_shipping_insurance_cod_gateways`. All other gateways share one rate. |
+| [Fee by payment method](../method-features/#fee-by-payment-method) | `fee_applies`: whether the fee applies to the chosen gateway. |
+
+The instance settings in the key are the ones saved in the database. WooCommerce fills defaults into the loaded settings while it reads them, so the key does not use that copy.
+
+If your price reads something the default key leaves out, put it back:
+
+- **A pickup quote that uses the postcode or the street.** Add the value in your `get_rate_cache_context()`.
+- **A setting your code changes in memory** before pricing. Add the value in your `get_rate_cache_context()`.
+- **A price that differs between two prepaid gateways.** Declare `FEATURE_GATEWAY_DEPENDENT_PRICE`. The key then holds the gateway id as `payment` instead of `cod`. The declaration shapes the key only, so also return `true` from `declares_payment_dependent_price()`; that makes the checkout recalculate when the payment method changes.
+
+```php
+<?php
+// In the constructor of your method, before parent::__construct():
+$this->supports = [ self::FEATURE_RATE_CACHE, self::FEATURE_GATEWAY_DEPENDENT_PRICE ];
+```
 
 A site can change the cache with three filters:
 

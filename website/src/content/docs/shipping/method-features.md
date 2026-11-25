@@ -192,7 +192,7 @@ $insurance = $this->resolve_insurance_for_order( $order, $items );
 
 The declared value is the value of the goods after discounts, without tax, shipping and fees, in the store currency. The carrier's API owns any conversion to its own currency. `$items` is optional: pass the shipment's product lines for a split order, or leave it out for the whole order.
 
-"Payment on receipt" means the gateways returned by the filter `woodev_shipping_insurance_cod_gateways`, which defaults to `[ 'cod' ]`. Add the id of another cash-on-delivery gateway there:
+"Payment on receipt" means the gateways returned by the filter `woodev_shipping_insurance_cod_gateways`, which defaults to `[ 'cod' ]`. The same list decides the `cod` flag of the [rate cache](../methods-and-rates/#cache-rates) key. Add the id of another cash-on-delivery gateway there:
 
 ```php
 <?php
@@ -470,7 +470,7 @@ A `.wc-enhanced-select` or `.wc-product-search` field works in that window with 
 |---|---|---|---|
 | `woodev_shipping_method_{method_id}_form_fields` | filter | `$fields`, `$method` | Add, remove or change instance fields. |
 | `woodev_shipping_method_{method_id}_supports_{feature}` | action | `$method`, `$feature` | React when a feature is declared. Dashes in the feature name become underscores. |
-| `woodev_shipping_insurance_cod_gateways` | filter | `$gateways`, `$method` | Say which gateways count as payment on receipt. |
+| `woodev_shipping_insurance_cod_gateways` | filter | `$gateways`, `$method` | Say which gateways count as payment on receipt, for insurance and the rate cache key. |
 | `woodev_shipping_resolved_services` | filter | `$services`, `$method`, `$subject` | Change the resolved additional services. |
 | `woodev_shipping_available_payment_gateways` | filter | `$gateways`, `$chosen_method`, `$pickup_point` | Offer only some payment gateways. |
 

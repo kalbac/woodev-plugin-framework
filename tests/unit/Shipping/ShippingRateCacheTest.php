@@ -67,6 +67,8 @@ namespace Woodev\Tests\Unit\Shipping {
 
 	use Brain\Monkey\Functions;
 	use Mockery;
+	use Woodev\Framework\Shipping\Location\Location_Record;
+	use Woodev\Framework\Shipping\Location\Location_Service;
 	use Woodev\Framework\Shipping\Order_Amount;
 	use Woodev\Framework\Shipping\Shipping_Method;
 	use Woodev\Framework\Shipping\Shipping_Plugin;
@@ -113,6 +115,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null */
 		public $pickup_handler = null;
 
+		/** @var Location_Service|null the location layer of the plugin; null = reading it fails */
+		public $location_service_double = null;
+
 		/** @var int the store product id the licence gate (#1270) sees; 0 = no store product, never gated */
 		public int $download_id = 0;
 
@@ -150,6 +155,20 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @return \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null */
 		public function get_pickup_handler(): ?\Woodev\Framework\Shipping\Pickup\Pickup_Handler {
 			return $this->pickup_handler;
+		}
+
+		/**
+		 * The injected location layer.
+		 *
+		 * @return Location_Service
+		 * @throws \RuntimeException When the test gave the plugin none.
+		 */
+		public function get_location_service(): Location_Service {
+			if ( null === $this->location_service_double ) {
+				throw new \RuntimeException( 'no location layer' );
+			}
+
+			return $this->location_service_double;
 		}
 
 		/** @return array */
@@ -230,6 +249,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var array opted in by default: the cache is OFF for a method that does not declare the feature. */
 		public array $supports = [ Shipping_Method::FEATURE_RATE_CACHE ];
 
+		/** @var string courier unless a test makes the probe a pickup method. */
+		public string $delivery_type = Shipping_Method::TYPE_COURIER;
+
 		/** @var array */
 		public $instance_form_fields = [];
 
@@ -239,8 +261,14 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var string payment method the probe pretends is chosen. */
 		public string $payment = '';
 
+		/** @var array<string, mixed> what the calculation writes into `instance_settings`, as `WC_Shipping_Method::get_instance_option()` does on a first read. */
+		public array $settings_writes = [];
+
 		/** @var \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null */
 		public $pickup_handler = null;
+
+		/** @var Location_Service|null the location layer of that plugin */
+		public $location_service = null;
 
 		/** @var int store product id of the plugin this probe sits in (#1270); 0 = never gated */
 		public int $download_id = 0;
@@ -287,6 +315,11 @@ namespace Woodev\Tests\Unit\Shipping {
 			return $this->instance_title;
 		}
 
+		/** @return string the option the instance settings are saved under, as WooCommerce names it. */
+		public function get_instance_option_key() {
+			return 'woocommerce_' . $this->id . '_' . $this->instance_id . '_settings';
+		}
+
 		/** @return string */
 		public static function get_method_id(): string {
 			return 'rate-cache-method';
@@ -294,7 +327,7 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @return string */
 		public function get_delivery_type(): string {
-			return self::TYPE_COURIER;
+			return $this->delivery_type;
 		}
 
 		/** @return array */
@@ -320,6 +353,8 @@ namespace Woodev\Tests\Unit\Shipping {
 		protected function get_plugin(): Shipping_Plugin {
 			$plugin                 = new Woodev_Test_Shipping_Plugin_For_Rate_Cache();
 			$plugin->pickup_handler = $this->pickup_handler;
+
+			$plugin->location_service_double = $this->location_service;
 			$plugin->download_id    = $this->download_id;
 			$plugin->license        = $this->license;
 			$plugin->plugin_id      = $this->plugin_id;
@@ -334,6 +369,8 @@ namespace Woodev\Tests\Unit\Shipping {
 		 */
 		protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
 			++$this->carrier_calls;
+			$this->instance_settings = array_merge( $this->instance_settings, $this->settings_writes );
+
 			if ( $this->report_hidden ) {
 				$this->report_hidden( 'no_service', $this->reason_text, [ 'diagnostic' => 'request only' ] );
 			}
@@ -526,6 +563,59 @@ namespace Woodev\Tests\Unit\Shipping {
 			$method->next_rate = $this->rate();
 
 			return $method;
+		}
+
+		/**
+		 * A pickup method with nothing chosen on the map yet.
+		 *
+		 * @param string $locality the settlement locality its pickup handler names, '' for none.
+		 * @return Woodev_Test_Shipping_Method_For_Rate_Cache
+		 */
+		private function pickup_method( string $locality ): Woodev_Test_Shipping_Method_For_Rate_Cache {
+			$handler = Mockery::mock( \Woodev\Framework\Shipping\Pickup\Pickup_Handler::class );
+			$handler->shouldReceive( 'get_selected_point_for_method' )->andReturn(
+				[
+					'locality' => $locality,
+					'type'     => 'pvz',
+					'point_id' => '',
+				]
+			);
+
+			$method                 = $this->method();
+			$method->delivery_type  = Shipping_Method::TYPE_PICKUP;
+			$method->pickup_handler = $handler;
+
+			return $method;
+		}
+
+		/**
+		 * @param Location_Record|null $settlement the settlement-level record.
+		 * @param Location_Record|null $current    the current record.
+		 * @return Location_Service
+		 */
+		private function location( ?Location_Record $settlement, ?Location_Record $current ): Location_Service {
+			$service = Mockery::mock( Location_Service::class );
+			$service->shouldReceive( 'get_customer_record_at' )->with( Location_Record::LEVEL_SETTLEMENT, 'RU' )->andReturn( $settlement );
+			$service->shouldReceive( 'get_customer_record' )->with( 'RU' )->andReturn( null === $current ? null : [ 'record' => $current ] );
+
+			return $service;
+		}
+
+		/**
+		 * @param string $key   record key.
+		 * @param string $level record level.
+		 * @return Location_Record
+		 */
+		private function record( string $key, string $level ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $key,
+					'provider_id' => 'test',
+					'level'       => $level,
+					'country'     => 'RU',
+					'label'       => 'Ivanovka',
+				]
+			);
 		}
 
 		/**
@@ -1388,21 +1478,57 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @return void */
 		public function test_changed_method_settings_invalidate_the_cache(): void {
-			$method                    = $this->method();
-			$method->instance_settings = [ 'markup' => '10', 'title' => 'Courier' ];
+			$method = $this->method();
+			$option = $method->get_instance_option_key();
+
+			$this->options[ $option ] = [ 'markup' => '10', 'title' => 'Courier' ];
 
 			$method->calculate_shipping( $this->package() );
 			$method->calculate_shipping( $this->package() );
 			$this->assertSame( 1, $method->carrier_calls );
 
-			$method->instance_settings = [ 'markup' => '20', 'title' => 'Courier' ];
+			$this->options[ $option ] = [ 'markup' => '20', 'title' => 'Courier' ];
 			$method->calculate_shipping( $this->package() );
 			$this->assertSame( 2, $method->carrier_calls, 'new settings, new key' );
 
 			// Key order inside the settings does not matter.
-			$method->instance_settings = [ 'title' => 'Courier', 'markup' => '20' ];
+			$this->options[ $option ] = [ 'title' => 'Courier', 'markup' => '20' ];
 			$method->calculate_shipping( $this->package() );
 			$this->assertSame( 2, $method->carrier_calls );
+		}
+
+		/** @return void */
+		public function test_woocommerce_writing_into_the_settings_it_read_does_not_move_the_key(): void {
+			$method = $this->method();
+			$saved  = [ 'cost' => '' ];
+
+			$this->options[ $method->get_instance_option_key() ] = $saved;
+			$method->instance_settings                           = $saved;
+			// a stored '' read with a fallback, and the default of a field the saved row never had
+			$method->settings_writes = [ 'cost' => '0', 'free_before_discount' => 'no' ];
+
+			$before = $this->key( $method, $this->package() );
+
+			$method->calculate_shipping( $this->package() );
+
+			$this->assertSame( $method->settings_writes, $method->instance_settings, 'the array was written into' );
+			$this->assertSame( $before, $this->key( $method, $this->package() ), 'get() and put() name the same entry' );
+
+			$method->calculate_shipping( $this->package() );
+			$this->assertSame( 1, $method->carrier_calls );
+		}
+
+		/** @return void */
+		public function test_a_method_with_no_instance_reads_no_settings_option(): void {
+			$method            = new class() extends Woodev_Test_Shipping_Method_For_Rate_Cache {
+				/** @return string what WooCommerce answers without an instance id. */
+				public function get_instance_option_key() {
+					return '';
+				}
+			};
+			$this->options[''] = [ 'markup' => '10' ];
+
+			$this->assertSame( [], $method->get_rate_cache_context( $this->package() )['settings'] );
 		}
 
 		/** @return void */
@@ -1620,6 +1746,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @return array<string, array{0: array}> */
 		public function street_changes(): array {
 			return [
+				'postcode'  => [ [ 'postcode' => '101001' ] ],
 				'address'   => [ [ 'address' => 'Tverskaya 1' ] ],
 				'address_1' => [ [ 'address_1' => 'Tverskaya 1' ] ],
 				'address_2' => [ [ 'address_2' => 'flat 5' ] ],
@@ -1631,7 +1758,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		 * @param array $street street fields.
 		 * @return void
 		 */
-		public function test_the_street_address_is_part_of_the_key( array $street ): void {
+		public function test_the_street_address_is_part_of_a_courier_key( array $street ): void {
 			$method = $this->method();
 			$base   = $this->package()['destination'];
 
@@ -1639,6 +1766,195 @@ namespace Woodev\Tests\Unit\Shipping {
 				$this->key( $method, $this->package() ),
 				$this->key( $method, $this->package( [ 'destination' => array_merge( $base, $street ) ] ) )
 			);
+		}
+
+		/**
+		 * @dataProvider street_changes
+		 * @param array $street street fields.
+		 * @return void
+		 */
+		public function test_typing_the_street_or_postcode_is_not_a_new_quote_for_a_pickup_method( array $street ): void {
+			$method            = $this->pickup_method( 'test:moscow' );
+			$method->next_rate = $this->rate();
+			$base              = $this->package()['destination'];
+			$typed                 = $this->package( [ 'destination' => array_merge( $base, $street ) ] );
+
+			$this->assertSame( $this->key( $method, $this->package() ), $this->key( $method, $typed ) );
+
+			$method->calculate_shipping( $this->package() );
+			$method->calculate_shipping( $typed );
+
+			$this->assertSame( 1, $method->carrier_calls );
+		}
+
+		/** @return array<string, array{0: array}> */
+		public function settlement_changes(): array {
+			return [
+				'country' => [ [ 'country' => 'BY' ] ],
+				'state'   => [ [ 'state' => 'SPE' ] ],
+				'city'    => [ [ 'city' => 'Tver' ] ],
+			];
+		}
+
+		/**
+		 * @dataProvider settlement_changes
+		 * @param array $change destination fields.
+		 * @return void
+		 */
+		public function test_a_pickup_key_still_follows_the_settlement( array $change ): void {
+			$method = $this->pickup_method( 'test:moscow' );
+			$base   = $this->package()['destination'];
+
+			$this->assertNotSame(
+				$this->key( $method, $this->package() ),
+				$this->key( $method, $this->package( [ 'destination' => array_merge( $base, $change ) ] ) )
+			);
+		}
+
+		/** @return void */
+		public function test_without_a_settlement_locality_two_same_named_settlements_do_not_share_a_pickup_rate(): void {
+			$method                   = $this->pickup_method( '' );
+			$method->next_rate        = $this->rate();
+			$method->location_service = $this->location( null, $this->record( 'test:address-1', 'address' ) );
+			$first                    = $this->package( [ 'destination' => [ 'country' => 'ru', 'state' => 'MOS', 'city' => 'Ivanovka', 'postcode' => '140001' ] ] );
+			$second                   = $this->package( [ 'destination' => [ 'country' => 'ru', 'state' => 'MOS', 'city' => 'Ivanovka', 'postcode' => '142002' ] ] );
+
+			$method->calculate_shipping( $first );
+			$key = $this->key( $method, $first );
+
+			$method->location_service = $this->location( null, $this->record( 'test:address-2', 'address' ) );
+			$method->calculate_shipping( $second );
+
+			$this->assertNotSame( $key, $this->key( $method, $second ) );
+			$this->assertSame( 2, $method->carrier_calls );
+		}
+
+		/** @return void */
+		public function test_without_a_settlement_locality_the_record_stands_for_the_postcode_and_street(): void {
+			$method                   = $this->pickup_method( '' );
+			$method->location_service = $this->location( null, $this->record( 'test:address-1', 'address' ) );
+			$base                     = $this->package()['destination'];
+			$typed                    = $this->package( [ 'destination' => array_merge( $base, [ 'postcode' => '101999', 'address_1' => 'Tverskaya 1' ] ) ] );
+
+			$this->assertSame( $this->key( $method, $this->package() ), $this->key( $method, $typed ) );
+			$this->assertSame( 'test:address-1', $method->get_rate_cache_context( $typed )['destination']['record'] );
+		}
+
+		/** @return void */
+		public function test_a_settlement_record_is_preferred_when_the_pickup_part_names_no_locality(): void {
+			$method                   = $this->method();
+			$method->delivery_type    = Shipping_Method::TYPE_PICKUP;
+			$method->location_service = $this->location( $this->record( 'test:settlement', 'settlement' ), $this->record( 'test:address-1', 'address' ) );
+
+			$destination = $method->get_rate_cache_context( $this->package() )['destination'];
+
+			$this->assertSame( 'test:settlement', $destination['record'] );
+			$this->assertArrayNotHasKey( 'postcode', $destination );
+		}
+
+		/** @return array<string, array{0: string}> */
+		public function records_that_name_no_settlement(): array {
+			return [
+				'no record'         => [ 'none' ],
+				'a region only'     => [ 'region' ],
+				'the lookup throws' => [ 'throws' ],
+			];
+		}
+
+		/**
+		 * @dataProvider records_that_name_no_settlement
+		 * @param string $case what the location layer answers.
+		 * @return void
+		 */
+		public function test_without_a_locality_or_a_record_the_postcode_stays_in_the_pickup_key( string $case ): void {
+			$method = $this->pickup_method( '' );
+
+			if ( 'none' === $case ) {
+				$method->location_service = $this->location( null, null );
+			} elseif ( 'region' === $case ) {
+				$method->location_service = $this->location( null, $this->record( 'test:region', 'region' ) );
+			}
+
+			$base = $this->package()['destination'];
+
+			$this->assertNotSame(
+				$this->key( $method, $this->package() ),
+				$this->key( $method, $this->package( [ 'destination' => array_merge( $base, [ 'postcode' => '101001' ] ) ] ) )
+			);
+			$this->assertSame(
+				$this->key( $method, $this->package() ),
+				$this->key( $method, $this->package( [ 'destination' => array_merge( $base, [ 'address_1' => 'Tverskaya 1' ] ) ] ) )
+			);
+		}
+
+		/** @return void */
+		public function test_prepaid_gateways_share_one_key_and_cash_on_delivery_has_its_own(): void {
+			$method          = $this->method();
+			$method->payment = 'bacs';
+			$prepaid         = $this->key( $method, $this->package() );
+
+			$method->payment = 'yookassa';
+			$this->assertSame( $prepaid, $this->key( $method, $this->package() ), 'another prepaid gateway' );
+
+			$method->payment = '';
+			$this->assertSame( $prepaid, $this->key( $method, $this->package() ), 'nothing chosen yet' );
+
+			$method->payment = 'cod';
+			$this->assertNotSame( $prepaid, $this->key( $method, $this->package() ) );
+		}
+
+		/** @return void */
+		public function test_a_gateway_added_to_the_cod_list_shares_the_cash_on_delivery_key(): void {
+			$this->filters['woodev_shipping_insurance_cod_gateways'] = static fn( array $gateways ): array => array_merge( $gateways, [ 'card_on_receipt' ] );
+
+			$method          = $this->method();
+			$method->payment = 'cod';
+			$cod             = $this->key( $method, $this->package() );
+
+			$method->payment = 'card_on_receipt';
+			$this->assertSame( $cod, $this->key( $method, $this->package() ) );
+		}
+
+		/** @return void */
+		public function test_the_payment_on_the_package_wins_over_the_session_one(): void {
+			$method          = $this->method();
+			$method->payment = 'bacs';
+
+			$this->assertNotSame(
+				$this->key( $method, $this->package() ),
+				$this->key( $method, $this->package( [ \Woodev\Framework\Shipping\Fee_Payments::PACKAGE_KEY => 'cod' ] ) )
+			);
+		}
+
+		/** @return void */
+		public function test_a_gateway_dependent_method_is_keyed_by_the_gateway_id(): void {
+			$method = $this->method();
+			$this->assertFalse( $method->supports_gateway_dependent_price() );
+
+			$method->add_support( Shipping_Method::FEATURE_GATEWAY_DEPENDENT_PRICE );
+			$this->assertTrue( $method->supports_gateway_dependent_price() );
+
+			$method->payment = 'bacs';
+			$bacs            = $this->key( $method, $this->package() );
+
+			$method->payment = 'yookassa';
+			$this->assertNotSame( $bacs, $this->key( $method, $this->package() ) );
+		}
+
+		/** @return void */
+		public function test_a_markup_limited_to_some_gateways_splits_the_prepaid_key_by_its_answer(): void {
+			$method = $this->method();
+			$method->add_support( Shipping_Method::FEATURE_FEE_PAYMENTS );
+			$method->option_values[ \Woodev\Framework\Shipping\Fee_Payments::OPTION_KEY ] = [ 'yookassa' ];
+
+			$method->payment = 'bacs';
+			$without_fee     = $this->key( $method, $this->package() );
+
+			$method->payment = 'cheque';
+			$this->assertSame( $without_fee, $this->key( $method, $this->package() ), 'both outside the list' );
+
+			$method->payment = 'yookassa';
+			$this->assertNotSame( $without_fee, $this->key( $method, $this->package() ), 'the fee applies' );
 		}
 
 		/** @return void */

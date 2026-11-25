@@ -17,6 +17,7 @@ class Packaging_Test_Method extends \ShippingMethodBoxPackingTest_Method {
 	public function get_id(): string { return 'packaging_test'; }
 	public function supports_box_packing(): bool { return true; }
 	protected function chosen_payment_method(): string { return ''; }
+	public function get_instance_option_key(): string { return 'woocommerce_packaging_test_1_settings'; }
 	protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
 		$this->received_packed = $packed;
 		return $this->quote;

@@ -7,6 +7,7 @@ Source: constants in `woodev/shipping-method/class-shipping-method.php` (`FEATUR
 | Feature / seam | What the carrier does | Rules that cost time |
 |---|---|---|
 | `FEATURE_RATE_CACHE` | override `get_rate_cache_context()` | opt in only when the context names EVERY quote input — see [model, rates, location, pickup](model-rates-location-pickup.md#rate-cache-and-packing) |
+| `FEATURE_GATEWAY_DEPENDENT_PRICE` (#1974) | nothing — the cache key holds the gateway id | only for a price that differs between prepaid gateways; cash on delivery and a restricted markup are keyed without it. Declare `declares_payment_dependent_price()` too, or nothing recalculates |
 | `FEATURE_MARKUP`, `FEATURE_FREE_SHIPPING`, `FEATURE_ROUNDING` (#1417) | nothing — return the carrier's own price | [price options](#the-merchant-price-options-every-calculated-rate-method-offers) |
 | `FEATURE_DELIVERY_TIME` (#1417) | report the period with `Shipping_Rate::with_delivery_days()` | [price options](#the-merchant-price-options-every-calculated-rate-method-offers) |
 | `FEATURE_COST_LIMITS` (#1159) | nothing — the framework clamps | below |
@@ -35,7 +36,8 @@ default with `get_default_insurance_mode()` (CDEK: `always`, because the carrier
 reads **one decision on both ends**: `resolve_insurance_for_package( $package )` for the quote and
 `resolve_insurance_for_order( $order, $items )` for the export. Goods are valued after discounts, excluding tax, shipping and
 fees; the amount is in the store currency and the carrier owns any API currency conversion. «Only on payment on receipt»
-uses the shared gateway registry (filter `woodev_shipping_insurance_cod_gateways`, default `[ 'cod' ]`). The outcome is part
+uses the shared gateway registry (filter `woodev_shipping_insurance_cod_gateways`, default `[ 'cod' ]`; since 2.1.20 the same
+list decides the `cod` flag of every method's rate-cache key). The outcome is part
 of the rate-cache context. Check the carrier itself: CDEK prices `INSURANCE` from the declared value on `/calculator/tariff`
 and adds it at order creation whether or not the quote carried it — a quote that omits it is a wrong price (s159, s160).
 Two traps for a plugin moving off a v1 plugin (#1163): the declared value is measured AFTER discounts and ex-tax, so it can

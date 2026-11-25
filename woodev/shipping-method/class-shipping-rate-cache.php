@@ -253,6 +253,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		 * lines (cart-order independent), contents cost, destination down to the street, the store
 		 * currency and the dimension/weight units the packer converts with.
 		 *
+		 * This is the whole destination; the method narrows it for a pickup type.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param array $package WooCommerce shipping package.
