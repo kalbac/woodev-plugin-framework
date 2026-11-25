@@ -51,8 +51,8 @@ $ORCA agent list --environment Homelab --state working    # Homelab
 ```
 
 - Count the `claude` rows only; Codex and Qwen draw other limits. Check `--state waiting` and `--state blocked` too:
-  those resume. `done` means idle at its prompt — it spends nothing until woken, and a coordinator waiting for workers
-  may read that way, so count your own coordinator.
+  those resume. `done` means idle at its prompt — it spends nothing until woken. Your own coordinator is covered by
+  the margin (step 3), not counted here.
 - `$ORCA worktree ps` (add `--environment Homelab`) shows which project and bot each agent belongs to.
   `$ORCA orchestration worker-list --include-remote --terminal-state active` lists supervised workers only; there is no
   top-level `orca worker-list`.
@@ -68,15 +68,16 @@ free     = 100 − used_5h − margin − (agents already working × cost of eac
 workers  = floor(free ÷ cost of one new worker)
 ```
 
-- **Cost** is percentage points of the 5-hour window per worker per task, from the table below, matched by model and
-  task size. Count a running agent at its full cost even if it is half done.
+- **Cost** is percentage points of the 5-hour window per worker per task, from a table row marked usable below, matched
+  by model and task size. It is never zero. Count a running agent at its full cost even if it is half done.
 - **Margin: 10 points** — the coordinator's own work, the reports it still has to read, and the ±1 of a whole-number
   reading. A starting value proposed in s245, not an operator decision; correct it from the table.
 - **Weekly check.** The week does not bind while `100 − used_week` ≥ days to the weekly reset × 15 (an intensive day
   costs under 20 points, about 15 on average — operator, s176). When it binds, run the same formula on weekly figures
   and take the smaller count.
-- **No figure for this model yet:** launch, read again 15 minutes later, use `delta ÷ workers` as the provisional burn,
-  add workers only while it fits, and record the row when the wave settles.
+- **No finished-task figure for this model yet** (in the window you are computing): launch **one** calibration worker of
+  that model first and size the wave after it reports. The same applies while an agent already working has no figure —
+  the formula cannot count it.
 - **Result 0** is not the wall: launch at most one worker whose work is pushed in small steps (accepted near the cap in
   s226), or wait if the reset is close.
 
@@ -84,20 +85,25 @@ workers  = floor(free ÷ cost of one new worker)
 
 1. Before the launch: read the limit, note the time, the reset time and the agents already working.
 2. After the last worker of the wave settles: read again.
-3. **Add a row.** Per worker = delta ÷ workers; a mixed-model wave stays one mixed row. A reset inside the interval
+3. **A delta of 0 is below the reading's resolution, not a cost — never divide by it.** Keep sampling until the reading
+   moves or the task ends. Still unchanged when it ends: keep the same «before» reading through the next worker of that
+   model, and divide once it moves by all the workers finished since.
+4. **Add a row.** Per worker = delta ÷ workers; a mixed-model wave stays one mixed row. A reset inside the interval
    voids that window's delta. Write down every other consumer — it inflates the figure.
+5. **Mark whether the row is usable as a cost.** An unfinished task, a lower bound or a zero delta is recorded and
+   marked **no**: it never goes into the formula.
 
 Figures belong to the current subscription plan and to effort `high` or lower (one Ultracode run once spent a whole
 5-hour window in five minutes). A plan or model-generation change voids them.
 
-| Date | Model | Wave (workers × task) | Δ 5 h | Δ weekly | Per worker | Also spending | Source |
-|---|---|---|---|---|---|---|---|
-| — | Haiku 5.5 | — | | | | | not measured |
-| 25.11.2026 | Sonnet 5.5 | 1 × S docs + research (first 7 min only, before commit and CI) | 2 pp (12 → 14 %) | < 1 pp (5 → 5 %) | ≥ 2 pp (5 h) — lower bound | no other Claude agent `working` at the 4 checks; idle coordinator not excluded | measured s245, this page's own task |
-| — | Opus 5.5 | — | | | | | not measured |
-| 10.11.2026 | Fable 5.2, then a Sonnet fix round | 1 × L (F5, ~17 files, 114 tests) | not recorded | ≈ 3 pp (93 → 96 %); Fable weekly ≈ 4 pp | ≈ 3 pp weekly | not recorded | [s226](../sessions/s226.md) |
-| 26.10.2026 | 2 × Fable | — | limit hit early, no figure | not recorded | — | not recorded | s199, coordinator memory |
-| 13.10.2026 | whole day, all agents | an intensive day | — | < 20 pp, ~15 average | per day, not per worker | — | operator, s176, coordinator memory |
+| Date | Model | Wave (workers × task) | Δ 5 h | Δ weekly | Per worker | Usable as cost? | Also spending | Source |
+|---|---|---|---|---|---|---|---|---|
+| — | Haiku 5.5 | — | | | | — | | not measured |
+| 25.11.2026 | Sonnet 5.5 | 1 × S docs + research (first 7 min only, before commit and CI) | 2 pp (12 → 14 %) | 0, below resolution (5 → 5 %) | ≥ 2 pp (5 h), lower bound | **no** — unfinished | no other Claude agent `working` at the 4 checks; idle coordinator not excluded | measured s245, this page's own task |
+| — | Opus 5.5 | — | | | | — | | not measured |
+| 10.11.2026 | Fable 5.2, then a Sonnet fix round | 1 × L (F5, ~17 files, 114 tests) | not recorded | ≈ 3 pp (93 → 96 %); Fable weekly ≈ 4 pp | ≈ 3 pp weekly | yes, weekly only (includes the fix round) | not recorded | [s226](../sessions/s226.md) |
+| 26.10.2026 | 2 × Fable | — | limit hit early, no figure | not recorded | — | **no** — no figure | not recorded | s199, coordinator memory |
+| 13.10.2026 | whole day, all agents | an intensive day | — | < 20 pp, ~15 average | per day, not per worker | **no** — not per worker | — | operator, s176, coordinator memory |
 
 ## Related
 
