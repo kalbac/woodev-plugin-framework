@@ -3202,6 +3202,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * THE DESTINATION goes down to the street, except for a pickup method
 		 * ({@see self::is_pickup_shipping()}): its price follows the settlement and the point, so only
 		 * country, state and city are keyed — a postcode or a flat number being typed is not a new quote.
+		 * While the pickup part names no settlement locality, `destination` also holds the location
+		 * `record`'s key, or the postcode when no record names the settlement: two same-named
+		 * settlements of a region must not share a rate.
 		 *
 		 * THE PAYMENT is `cod`: whether the chosen method is payment on receipt (the gateways of the
 		 * `woodev_shipping_insurance_cod_gateways` filter). A method that declared
@@ -3233,16 +3236,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		public function get_rate_cache_context( array $package ): array {
 
 			$context = Shipping_Rate_Cache::package_context( $package );
-
-			// The classic checkout re-quotes after every typing pause: keyed by these, each digit is a new carrier request (#1974).
-			if ( $this->is_pickup_shipping() ) {
-				unset(
-					$context['destination']['postcode'],
-					$context['destination']['address'],
-					$context['destination']['address_1'],
-					$context['destination']['address_2']
-				);
-			}
 
 			$context['method']   = (string) $this->get_id();
 			$context['instance'] = property_exists( $this, 'instance_id' ) ? (int) $this->instance_id : 0;
@@ -3313,7 +3306,74 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			// `null` for a method that carries no pickup type; `point_id` is '' while nothing is chosen.
 			$context['pickup'] = null === $handler ? null : $handler->get_selected_point_for_method( (string) $this->get_id() );
 
+			// The classic checkout re-quotes after every typing pause: keyed by these, each digit is a new carrier request (#1974).
+			if ( $this->is_pickup_shipping() ) {
+				$context['destination'] = $this->pickup_destination( $context['destination'], (string) ( $context['pickup']['locality'] ?? '' ) );
+			}
+
 			return $context;
+		}
+
+		/**
+		 * The destination of a pickup method's rate-cache key: country, state and city, without the street.
+		 *
+		 * While no settlement locality names the place, those three do not tell two same-named settlements of
+		 * one region apart, so the key also holds `record` (the customer's location record) or, when there is
+		 * no record of a settlement or deeper, the `postcode`.
+		 *
+		 * @since 2.1.20
+		 *
+		 * @param array<string, string> $destination The destination of {@see Shipping_Rate_Cache::package_context()}.
+		 * @param string                $locality    The settlement locality of the pickup part, `''` when none.
+		 * @return array<string, string>
+		 */
+		private function pickup_destination( array $destination, string $locality ): array {
+
+			$narrowed = array_diff_key( $destination, array_flip( [ 'postcode', 'address', 'address_1', 'address_2' ] ) );
+
+			if ( '' !== $locality ) {
+				return $narrowed;
+			}
+
+			$record = $this->destination_record_key( strtoupper( $destination['country'] ) );
+
+			if ( '' === $record ) {
+				$narrowed['postcode'] = $destination['postcode'];
+			} else {
+				$narrowed['record'] = $record;
+			}
+
+			return $narrowed;
+		}
+
+		/**
+		 * The key of the location record a carrier prices this customer by — the settlement-level one, else the
+		 * current one — or `''` when it names no single place.
+		 *
+		 * @since 2.1.20
+		 *
+		 * @param string $country ISO country code of the destination, `''` when the package has none.
+		 * @return string
+		 */
+		private function destination_record_key( string $country ): string {
+
+			$country = '' === $country ? null : $country;
+
+			try {
+				$service = $this->get_plugin()->get_location_service();
+				$record  = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT, $country );
+
+				if ( null === $record ) {
+					$current = $service->get_customer_record( $country );
+					$record  = null === $current ? null : $current['record'];
+				}
+			} catch ( \Throwable $exception ) {
+				// an unreadable record is no identity: the postcode stands in for it
+				return '';
+			}
+
+			// a region holds many settlements, so its key tells none of them apart
+			return null === $record || Location_Record::LEVEL_REGION === $record->level() ? '' : $record->key();
 		}
 
 		/**

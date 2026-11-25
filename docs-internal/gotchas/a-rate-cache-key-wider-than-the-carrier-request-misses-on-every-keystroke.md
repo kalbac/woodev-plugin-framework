@@ -31,13 +31,18 @@ $context['payment'] = $this->payment_method_for_package( $package );
 
 ```php
 if ( $this->is_pickup_shipping() ) {
-	unset( $context['destination']['postcode'] /* and the street lines */ );
+	// drops the street; without a settlement locality keeps the record key, else the postcode
+	$context['destination'] = $this->pickup_destination( $context['destination'], $locality );
 }
 $context['cod'] = $this->is_cod_gateway( $this->payment_method_for_package( $package ) );
 if ( $this->supports_fee_payments() ) {
 	$context['fee_applies'] = $this->fee_applies_for_package( $package );
 }
 ```
+
+Dropping the postcode with NO settlement locality made two same-named settlements of a region share
+a quote (critic review of PR #1985): the pickup part names a locality only after a settlement pick,
+while carriers fall back to the current record.
 
 A carrier that needs the raw input puts it back: its own override, or
 `FEATURE_GATEWAY_DEPENDENT_PRICE`.
