@@ -13,15 +13,16 @@ Using `new Woodev_Plugin_Bootstrap()` causes a **PHP fatal error** — the const
 ```php
 // PHP Fatal error: Call to private Woodev_Plugin_Bootstrap::__construct()
 $bootstrap = new Woodev_Plugin_Bootstrap();
-$bootstrap->register_plugin( '1.4.1', 'My Plugin', __FILE__, $callback );
 ```
 
 ✅ **Correct:**
 ```php
-// Singleton accessor — safe to call from every plugin
-$bootstrap = Woodev_Plugin_Bootstrap::instance();
-$bootstrap->register_plugin( '1.4.1', 'My Plugin', __FILE__, $callback );
+// A v2 plugin entry file registers through the loader, which reaches the singleton.
+require_once __DIR__ . '/woodev/loader.php';
+Woodev_Loader::register( __FILE__, $definition );
 ```
+
+`register_plugin()` is a v1 tombstone in v2: it only quarantines a legacy plugin.
 
 ## Related
 - [bootstrap.php](../../woodev/bootstrap.php) — Bootstrap source (`__construct()`, `instance()`)

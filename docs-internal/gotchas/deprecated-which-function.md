@@ -1,6 +1,11 @@
 # Gotcha: [deprecation/deprecated-which-function] — wc_deprecated_function vs _deprecated_function
 > Tags: deprecation, backward-compatibility, woocommerce, wordpress | Session: s2
 
+> **Superseded (ADR-005, recorded 25.11.2026):** v2 adds no deprecation wrappers for moved or removed
+> internal API — delete the method and update its callers. The only legitimate `_deprecated_function()`
+> calls are misuse markers and clone/wakeup guards ([AGENT-RULES](../AGENT-RULES.md) → Rule 0). The text
+> below is the s2 record; its line numbers are gone and `class-plugin.php` calls neither function now.
+
 ## What happens
 Using the wrong deprecation function causes the deprecation notice to either not fire (if WooCommerce's shim isn't loaded), or fires with unexpected behavior. More critically, as the framework moves toward **decoupling from WooCommerce** (v2.0.0 plan), `wc_deprecated_function()` calls will break because they require WooCommerce to be active.
 

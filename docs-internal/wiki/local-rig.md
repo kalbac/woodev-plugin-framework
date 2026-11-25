@@ -99,8 +99,9 @@ Hiding the company field can still hide the demo; it no longer implies that old 
 
 ## Two live location providers
 
-- **Two live location providers on the rig now (s76).** DaData is active by default; the CDEK test
-  contour is registered as `test-cdek` (fixture
+- **Two location providers on the rig (s76).** Which one is active is an option: the standard table
+  below holds `test-cdek`, the older default was `dadata`. The CDEK test contour is registered as
+  `test-cdek` (fixture
   `tests/_fixtures/woodev-test-shipping-method/class-test-cdek-location-provider.php`) and its
   credentials are the integration’s `cdek_client_id` / `cdek_client_secret` values in
   `woocommerce_woodev_test_shipping_method_settings` (read via `get_option()`, not a cached handler;
@@ -148,6 +149,10 @@ by design:
   "loses" its locality, check the active provider before suspecting a bug.
 
 ## Which field the live cascade is actually on — measured, s104
+
+> **Since s181 the rig runs `woocommerce_ship_to_destination = billing_only`** (operator decision,
+> #1306): the live column is `billing_*` and there are no shipping rows. The measurement below is s104,
+> taken with a shipping column; the e2e specs switch the mode themselves and restore it.
 
 **As measured in s104**, this rig used the shipping column. The live cascade follows
 the current “ship to a different address” checkbox (Rule 7c), rather than the destination
@@ -322,6 +327,7 @@ that is the whole reason this warning outlives the table it introduces.
 | `woodev_location_default_locality_record` | the WHOLE `Location_Record` as JSON, key `test-cdek:44` — **not the key itself**, gotcha `the-default-locality-option-stores-a-whole-record-not-a-key` |
 | `woodev_location_allow_custom_settlement` | `no` |
 | checkout fields | `address_field` and `postcode_field` = `hide_for_pickup`, `region_field` = `show` |
+| `woocommerce_ship_to_destination` | `billing_only` (since s181, #1306) |
 
 `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and
 Санкт-Петербург (`r82`), all with `last_verified_at = NULL` so D5's lazy check really runs, plus 5

@@ -5,7 +5,7 @@
 ## The trap
 
 `wp-env` identifies "its" Docker environment by hashing the config found from the **current
-working directory**. Running any `npx wp-env run …` from a subdirectory of the repo computes a
+working directory**. Running any `npx @wordpress/env run …` from a subdirectory of the repo computes a
 different install hash and fails with:
 
 ```
@@ -31,7 +31,7 @@ different install hash and fails with:
 2. **Windows Git Bash only:** combine with `MSYS_NO_PATHCONV=1` for any command carrying container paths (not needed on macOS) — see
    [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md).
 3. Related fact observed s60: constants written with `wp config set` live in the container's
-   `wp-config.php` and **survive `npx wp-env start` restarts** — the rig can carry state that no
+   `wp-config.php` and **survive `npx @wordpress/env start` restarts** — the rig can carry state that no
    `.wp-env*.json` file declares. When auditing rig state, trust `wp config list` (from the root),
    not the config files.
 

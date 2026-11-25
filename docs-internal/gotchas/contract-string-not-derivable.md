@@ -33,7 +33,7 @@ map). Apply it for every installed-site string a framework class touches.
 
 ## Why it matters / who else is at risk
 
-These are all release-blocking "never break" contracts (CLAUDE.md). The pattern has already bitten
+These are all release-blocking "never break" contracts (`AGENTS.md` → Backward Compatibility; ADR-005). The pattern has already bitten
 three S1 tasks (order-handler, ajax-base, admin-bootstrap). Pending tasks that derive the same
 kinds of strings should be audited for it BEFORE the worker runs: `s1-p4-rest-pickup`,
 `s1-p4-rest-warehouses`, `s1-p4-admin-order` (REST namespace / admin slug derivation), and any

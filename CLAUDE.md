@@ -70,7 +70,7 @@ faster than Claude's). This replaces the 24.08.2026 lift that made it a full wor
 |---|---|
 | bounded work with a DETAILED brief — acceptance/test runs, research tables, small scoped fixes, docs | **Haiku 5.5** (`claude-haiku-5-5`) — operator 08.10.2026: cheap, between luna and Sonnet. Never a critic of Claude-written work (same lineage) |
 | routine, well-bounded work against a plan | a **Sonnet 5.5** subagent (`claude-sonnet-5-5`, not the bare `sonnet` alias) |
-| criticism of Claude-written work | **Codex** |
+| criticism of Claude-written work; images (the standing exception, operator 18.10.2026) | **Codex** (images: `gpt-6.1-sol`) |
 | spare capacity (operator, 25.11.2026) | local **qwen3.8** 27b / 180b via `kilo`/`omp` — worker only, one model at a time (RAM); **Qwen Code** (`qwen-code`, qwen4-max, paid to 12.12.2026) — worker or critic, a critic brief says read-only |
 | a genuinely hard problem that wants the best head | **Fable 5.2**, one at a time — propose it yourself; do not default to Opus for everything hard (operator, 29.08.2026) |
 | coordination, gates, git, synthesis | **Opus 5.5** (this session) |

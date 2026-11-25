@@ -42,7 +42,7 @@ edits are still done directly, with no worker at all.
 
 ## 6. Review — two layers
 ⚠ **Partly superseded (s135 audit).** The external layer no longer goes through the operator by hand:
-Codex runs as a critic (or a second worker) inside Orca — `CLAUDE.md` → Orca, `wiki/orchestrating-agents-with-orca.md`.
+Codex runs as a critic inside Orca (critic only since s224, 10.11.2026) — `CLAUDE.md` → Orca, `wiki/orchestrating-agents-with-orca.md`.
 The «nobody accepts their own work» rule is what survives; the packet mechanics below are history.
 
 - **Internal (Claude):** subagent-driven two-stage review per task; at phase gates run profile reviewers (`code-reviewer`, `silent-failure-hunter`, `type-design-analyzer`) on the gate's diff.

@@ -806,6 +806,9 @@ Invariants for every card in this plan:
 
 ## Ozon Seller migration
 
+> **Historical (recorded 25.11.2026): the plan as written before the work.** Ozon Seller v2.0.0 has been
+> released (s244); the future tense below is the plan, not the current state — see `CURRENT-STATE.md`.
+
 Ozon v2 has not been released (only `v1.1.7` is tagged), so intermediate states on its `main`
 are fine. **No Ozon Seller release ships between O1 and O4**: v2.0.0 ships only after O4 (and
 O5's acceptance), so merchants never see O1's interim classic pages under the new root — that
@@ -1400,6 +1403,9 @@ Open questions Q1–Q3 of round 1 are settled: Q1 and Q2 by the operator (B4), Q
 ruled (the version gate sits in F2/F5).
 
 ## Implementation card plan
+
+> **Historical (recorded 25.11.2026):** the filing briefs of the design round. The framework module
+> shipped from 2.0.29 and the later «as built» sections above describe it; model names here are of that date.
 
 Filing briefs for the coordinator, not filed cards. S/M/L are relative size. Model tiers follow
 the project rule (Haiku 5.5 for bounded work with a detailed brief, Sonnet 5.5 for routine

@@ -80,7 +80,7 @@ at which point the bootstrap dies before a single test runs, and every test in t
 with a message naming `class-plugin.php`, which reads as a broken `vendor` or a broken framework.
 Three correctly mapped fixtures next to it do not save you.
 
-**A mapping change needs `npx wp-env start`** — mappings are bind mounts, so editing the JSON
+**A mapping change needs `npx @wordpress/env start`** — mappings are bind mounts, so editing the JSON
 alone changes nothing and the same fatal persists, which is easy to misread as the fix not
 working. Measured s124: the restart left rig state byte-identical (options, 11 popular-settlement
 rows, five zone-method instances, active plugins, the `zz-rig-yandex-key` mu-plugin) and the

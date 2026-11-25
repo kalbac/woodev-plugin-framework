@@ -1,5 +1,6 @@
 # Ticket → fix → reply: the development half of the support loop — Woodev Framework Wiki
-> Compiled reference. Last compiled: 2026-11-03 (s213: GlitchTip triage; s200: the coordinator closes plugin issues after EDD; s196, card #780; Support AI reply s46).
+> Compiled reference. Last compiled: 2026-11-25 (s245: the release letter needs a version, Support AI s72;
+> s213: GlitchTip triage; s200: the coordinator closes plugin issues after EDD; s196, card #780; Support AI reply s46).
 
 ## Overview
 
@@ -7,7 +8,7 @@ The support loop has two halves in two projects (operator decision s184, 16.10.2
 
 | Half | Project | Owner of |
 |---|---|---|
-| Support | `woodev-support-ai-agent` (Homelab), ADR-004 + ADR-013 there | triage in FreeScout, filing the issue, linking ticket ↔ issue with its own FreeScout module `WoodevGithub` (signed webhooks, no GitHub token), sending the customer notice when the issue is CLOSED |
+| Support | `woodev-support-ai-agent` (Homelab), ADR-004 + ADR-013 there | triage in FreeScout, filing the issue, linking ticket ↔ issue with its own FreeScout module `WoodevGithub` (signed webhooks, no GitHub token), sending the customer notice for a CLOSED issue that carries a version |
 | Development | this repo + the plugin repos | verifying the issue, the fix, the PR, the release, the customer-reply draft text |
 
 The two halves meet at **one GitHub issue in the plugin's repo** (every released v2 plugin — e.g. `woocommerce-edostavka`,
@@ -19,6 +20,11 @@ closing the issue is what sends the customer notice. **The coordinator closes th
 the `fixed_in` version** (public SL `get_version` checked) — operator, s200, 27.10.2026: cards of s197 and s200 sat open for a
 day because this page said Support AI would close them, so no customer got a notice. s196 closed yandex#131 with `Closes` and
 had to reopen it.
+
+**The release letter goes out only when the issue carries a version** (Support AI brief s72, 08.11.2026): a version
+milestone, or the owner's comment with a line of its own `fixed_in: X`. Free text («Исправлено в X») and `Closes #N`
+in a release commit are not read, and an issue closed more than 30 days ago is never sent. Verify X first (the first
+release tag that contains the fix) and post the line only once EDD serves it: the letter follows within about ten minutes.
 
 ## Where the issue lives
 
@@ -42,13 +48,14 @@ had to reopen it.
    - **Areas for human testing** — what only a person on the rig or a real shop can confirm;
    - **Docs to update** — merchant docs (woodev.ru) or public framework docs, or «none».
 5. **Release** (framework tag → plugin bundle bump → plugin release → EDD), then **close every plugin issue of the wave** with a
-   Russian comment «Исправлено в версии X, опубликовано в EDD» — closing is the trigger for the customer notice.
+   Russian comment «Исправлено в версии X, опубликовано в EDD» plus its own line `fixed_in: X` — without a version no
+   letter goes out.
 6. **Customer-reply draft**: a comment on the plugin issue headed `Черновик ответа клиенту`, in Russian, for a WordPress
    novice (merchant-docs tone): what was wrong in plain words, the version that fixes it, what to do (update; any setting to
-   re-check). Two shapes only: «исправлено в версии X» and «это не ошибка — вот как настроить». Add ONE line
-   `fixed_in: <plugin version>` — the first plugin version that carries the fix. Support AI writes the letter from these facts
-   and its module sends it automatically once EDD serves `fixed_in` (operator: «Полный автомат сразу», s46). The development
-   side never writes to FreeScout.
+   re-check). Two shapes only: «исправлено в версии X» and «это не ошибка — вот как настроить». The ONE line
+   `fixed_in: <plugin version>` (the first plugin version that carries the fix) is added when EDD serves that version, not
+   before. Support AI writes the letter from these facts and its module sends it automatically (operator: «Полный автомат
+   сразу», s46). The development side never writes to FreeScout.
 
 ## The error-reporter half: GlitchTip triage (s213)
 

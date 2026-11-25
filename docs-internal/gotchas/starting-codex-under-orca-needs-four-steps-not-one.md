@@ -410,6 +410,9 @@ Serena, and `CLAUDE.md` makes Serena mandatory for PHP. The brief's "authorize y
 bounded fix (s171), not for a feature wave in a repo whose rules say Serena. So: Codex = **critic** (and a docs/test-only writer
 with an explicit file-tools authorisation); PHP feature work goes to a Sonnet 5.5 / Haiku 5.5 worker. W2 was re-dispatched to Sonnet.
 
+> **Superseded (s224, 10.11.2026):** Codex is a critic only — it writes no docs or tests either; images
+> are the one exception (`CLAUDE.md` → Orca).
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the s83 half of this: the receipt lies about delivery

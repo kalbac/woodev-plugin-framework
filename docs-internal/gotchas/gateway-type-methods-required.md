@@ -179,8 +179,8 @@ When removing deprecated code, **always verify** that methods being deleted have
 
 Before deleting any method:
 1. `grep "method_name" woodev/` — find ALL references (both definition and call sites)
-2. If references remain → do NOT delete, mark `@deprecated` instead
-3. If references remain but method is obsolete → replace body with `return false/true/null` + `@deprecated`
+2. If references remain → remove or rewrite the call sites in the same change, or keep the method
+3. Leave no `@deprecated` stub behind: v2 adds no shims ([ADR-005](../adr/005-platform-v2-clean-break-policy.md))
 
 ## Related
 - [deprecation/deprecated-which-function](deprecated-which-function.md) — when to use `_deprecated_function()` vs WC helpers

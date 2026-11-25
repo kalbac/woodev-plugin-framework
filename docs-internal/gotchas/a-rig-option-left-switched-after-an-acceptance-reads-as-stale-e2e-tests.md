@@ -19,8 +19,11 @@ plausible contract citation for each.
 
 The tests were right. The rig was wrong: `woocommerce_ship_to_destination` was `billing_only`,
 switched during the #1107 acceptance (that card is about `billing_only` mode) and never restored.
-The rig's documented baseline is `shipping` (`wiki/local-rig.md`, "Which field the live cascade is
+The rig's baseline at the time was `shipping` (`wiki/local-rig.md`, "Which field the live cascade is
 actually on"). Restoring it gave 7/7 on the untouched specs, on `main` and on the wave branch.
+
+> **State now (25.11.2026):** this is the s155 incident. Since s181 the rig's baseline IS `billing_only`
+> (operator decision, #1306) and the e2e specs switch the mode they need themselves. The lesson stands.
 
 ## Why it is non-obvious
 
@@ -42,7 +45,7 @@ e2e red after a contract change → brief a worker "update the stale expectation
 Before treating an e2e failure as stale tests, diff the rig against its documented baseline:
 
 ```bash
-npx @wordpress/env run cli wp option get woocommerce_ship_to_destination   # baseline: shipping
+npx @wordpress/env run cli wp option get woocommerce_ship_to_destination   # baseline since s181: billing_only (#1306)
 ```
 
 …and any other option the previous session's cards were about. A session that switches a rig option

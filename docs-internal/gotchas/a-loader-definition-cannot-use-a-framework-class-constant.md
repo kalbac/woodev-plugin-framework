@@ -76,4 +76,4 @@ array — the entry file may only use literals and its own constants.
 
 - [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md) — the autoloader whose absence this exposes
 - [plugins-reference-predates-every-v2-api](plugins-reference-predates-every-v2-api.md) — the other trap when reading old plugins for v2 guidance
-- `docs-internal/AGENT-RULES.md` → Rule 3 — the registration contract; note the definition field is `framework_version`, while the rule's prose calls it `version` (that is the name it is mapped to internally)
+- `docs-internal/AGENT-RULES.md` → Rule 3 — the registration contract; the definition field is `framework_version` (mapped to `version` internally)

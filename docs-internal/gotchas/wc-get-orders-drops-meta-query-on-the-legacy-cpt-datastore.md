@@ -36,7 +36,7 @@ wp option get woocommerce_custom_orders_table_enabled
 #   tests environment    -> no    (legacy CPT)
 ```
 
-So a probe run through `npx wp-env run cli` proves the HPOS behaviour and says **nothing** about the
+So a probe run through `npx @wordpress/env run cli` proves the HPOS behaviour and says **nothing** about the
 integration suite, and vice versa. In s125 a rig probe verified that `relation => OR` across two
 marker keys returns exactly the right ids on HPOS — a true result that licensed a design which was
 broken on the other half of the world. The integration suite is what caught it.
