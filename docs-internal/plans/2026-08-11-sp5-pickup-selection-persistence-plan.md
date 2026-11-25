@@ -152,3 +152,7 @@ Rig verification is a separate step and stays with the session owner, not the im
 Map state persistence (filter, viewport) — separate cards. The pre-existing behaviour where a
 stale id is posted after switching to a courier method without reloading is noted in the spec
 and is not this card's to fix.
+
+## Related
+
+- [2026-08-11-sp5-pickup-selection-persistence-design.md](../specs/2026-08-11-sp5-pickup-selection-persistence-design.md) — selection persistence design (#176)

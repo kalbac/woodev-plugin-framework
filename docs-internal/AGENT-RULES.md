@@ -85,9 +85,9 @@ When a task has **3+ independent workstreams each taking > 2 minutes**, use suba
 execution. Do NOT parallelize simple single-file edits or inherently sequential tasks.
 
 **The shape (operator decision, s83): worker = Sonnet 5.5, critic = Codex, and nobody accepts their
-own work.** ⚠ That is the DEFAULT pairing, not a cap on Codex: the critic-only restriction was
-lifted 24.08.2026 and Codex is a full worker again — see `CLAUDE.md` → Orca for which model gets
-which task. The invariant that survives both is the last clause: nobody accepts their own work.
+own work.** Codex is a critic only, spent sparingly (operator, 10.11.2026, s224 — this replaced the
+24.08.2026 lift that made it a full worker); the rest of the fleet and which model gets which task:
+`CLAUDE.md` → Orca. The invariant under all of it is the last clause: nobody accepts their own work.
 Run it through Orca orchestration, not in-process subagents — the worker keeps its own
 context in its own terminal and the orchestrator reads only the `worker_done` report. Full recipe,
 placement rules and traps: `wiki/orchestrating-agents-with-orca.md`. Never recall an `orca` flag
@@ -332,6 +332,11 @@ the records and the customer gets filled fields plus a re-locked address field: 
 
 ### Rule 8 — A plugin's settings live on `Woodev → Настройки` by default; the WooCommerce «Интеграции» tab stays available for the cases that need it
 
+**Two plugin types have their own home** (the rest of this rule is about the others): a **marketplace** plugin keeps its
+settings under its own top-level menu (operator, s224; [ADR-013](adr/013-marketplace-layer-and-react-admin-in-the-framework.md),
+placement is automatic for a `Marketplace_Plugin`); a **payment gateway's** settings stay on the WooCommerce gateway
+screen, with `woodev-settings` only for extra non-gateway options (`sessions/s198.md`).
+
 **Settled by the operator, 05.09.2026 (#777), in his own words:**
 
 > По умолчанию настройки карьера (и не только карьера) мы строим в `Woodev → Настройки`, но при
@@ -401,6 +406,10 @@ inherently needs substantial DOM/event-handling code no matter how PHP-driven it
 React, not a separate ReactJS" note — the only place that archived plan already touched this
 principle, and only its admin-UI half; it never mentioned the PHP-driven-reusable-JS half, which is
 why this rule exists.
+
+**Marketplace admin pages are React AND under this principle** (operator, s224;
+[ADR-013](adr/013-marketplace-layer-and-react-admin-in-the-framework.md)): PHP owns the definitions, permissions and
+every string, TypeScript renders them. The exemption above covers the fixed framework-owned screens only.
 
 **The seam this principle actually asks for:** a script meant to be reused across plugins gets its
 configuration, markup strings and domain wording from PHP — via `wp_localize_script()` plus a

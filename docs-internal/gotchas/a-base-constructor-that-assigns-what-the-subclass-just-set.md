@@ -61,7 +61,7 @@ was fixed by the merge below; the middle row was fixed separately, and the table
 |---|---|---|
 | `$this->supports = [ … ]` before `parent::__construct()` | true | **yes** (s123, #811) |
 | `add_support()` after construction | true | **yes** (s124, #813) |
-| `add_support()` before `parent::__construct()` | true | yes — but the feature action fires under an **empty method id**, and WooCommerce's `'settings'` default survives into `supports`. Card **#815** |
+| `add_support()` before `parent::__construct()` | true | yes — but the feature action fires under an **empty method id**, and WooCommerce's `'settings'` default survives into `supports`. Card **#815** (closed 17.09.2026) |
 
 Re-measured on the rig for all four orderings, WooCommerce 11.1.0, before and after each fix.
 

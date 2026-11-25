@@ -19,4 +19,5 @@ the path, delete the branch, and start again.
 
 ## Related
 
+- [worker-start-new-child-branches-the-coordinators-repo](worker-start-new-child-branches-the-coordinators-repo.md) — the first record of this trap (s204), with the `orca worktree create` route
 - [orca-removes-a-worker-worktree-when-its-branch-is-deleted-on-merge](orca-removes-a-worker-worktree-when-its-branch-is-deleted-on-merge.md)

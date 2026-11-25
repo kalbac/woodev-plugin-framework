@@ -1,6 +1,6 @@
 # «Стоимость доставки за расстояние» 2.0.0 on Framework v2 — design
 
-**Date:** 2026-11-05 (s217). **Status:** draft, Revision 1 — critic round 1 (14 findings) and operator decisions
+**Date:** 2026-11-05 (s217). **Status:** IMPLEMENTED — plugin 2.0.0 released 07.11.2026 (s221; written as draft Revision 1) — critic round 1 (14 findings) and operator decisions
 D14–D15 applied (changelog §11.1); the grid scheme was answered by the operator in D14–D15.
 **Target:** release `2.0.0` of the existing plugin «Расчёт стоимости доставки за расстояние» (plugin id / method id
 `range_rate`, EDD download `7698`, v1 1.2.0), rewritten in place on Framework v2 (2.0.25+). Price **4 000 ₽** (one site,

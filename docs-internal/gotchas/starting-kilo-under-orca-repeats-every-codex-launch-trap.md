@@ -1,6 +1,10 @@
 # Gotcha: [tooling/orca] — Launching kilo under Orca repeats every Codex launch trap, plus one of its own
 > Namespace: `tooling/orca` — added s97 (2026-08-27)
 
+> **Superseded in part (recorded 25.11.2026):** no pay-per-token models for cards (operator, s227), so
+> the gateway-model advice below is history; kilo now drives the local qwen models (`CLAUDE.md` → Orca).
+> The launch traps still apply.
+
 ## What happens
 
 `orca orchestration worker-start --agent kilocode` is rejected outright, and once you get the name

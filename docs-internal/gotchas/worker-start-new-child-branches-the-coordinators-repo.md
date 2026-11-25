@@ -34,5 +34,6 @@ the LOCAL ref — see the related gotcha — so pass `origin/main` after a fetch
 
 ## Related
 
+- [an-orca-worker-for-another-repo-needs-new-top-level-and-repo-id](an-orca-worker-for-another-repo-needs-new-top-level-and-repo-id.md) — the same trap hit again in s231; its cure (`--worktree new-top-level --repo id:<id>`) also works
 - [orca-worktree-create-base-branch-takes-the-local-ref](orca-worktree-create-base-branch-takes-the-local-ref.md) — why `origin/main`, not `main`
 - [serena-activate-path-must-be-the-worker-s-worktree](serena-activate-path-must-be-the-worker-s-worktree.md) — the same «wrong tree» failure on the Serena side

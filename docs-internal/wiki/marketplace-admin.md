@@ -1,7 +1,12 @@
 # Marketplace module and PHP-driven React admin
 
-> Design for framework #1675, round 2 (2026-11-10). Decisions: [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md).
-> Proposed APIs below do not exist yet. Implementation is separate, after design review.
+> Design for framework #1675, round 2 (2026-11-10), kept with what the implementation added. Decisions:
+> [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md).
+> **State (25.11.2026):** the module is implemented (first shipped in framework 2.0.29, completed over 2.1.x); Ozon Seller
+> 2.0.0 is released on it.
+> Where a design section says «proposed» or «will», the «as built» sections and the code win. Where the text allows a
+> change **because Ozon Seller v2 is unreleased**, that no longer holds: table, column and option names and stored enum
+> values are installed-site data contracts ([ADR-005](../adr/005-platform-v2-clean-break-policy.md)).
 
 ## Scope and reference baseline
 
@@ -801,6 +806,9 @@ Invariants for every card in this plan:
 
 ## Ozon Seller migration
 
+> **Historical (recorded 25.11.2026): the plan as written before the work.** Ozon Seller v2.0.0 has been
+> released (s244); the future tense below is the plan, not the current state — see `CURRENT-STATE.md`.
+
 Ozon v2 has not been released (only `v1.1.7` is tagged), so intermediate states on its `main`
 are fine. **No Ozon Seller release ships between O1 and O4**: v2.0.0 ships only after O4 (and
 O5's acceptance), so merchants never see O1's interim classic pages under the new root — that
@@ -1395,6 +1403,9 @@ Open questions Q1–Q3 of round 1 are settled: Q1 and Q2 by the operator (B4), Q
 ruled (the version gate sits in F2/F5).
 
 ## Implementation card plan
+
+> **Historical (recorded 25.11.2026):** the filing briefs of the design round. The framework module
+> shipped from 2.0.29 and the later «as built» sections above describe it; model names here are of that date.
 
 Filing briefs for the coordinator, not filed cards. S/M/L are relative size. Model tiers follow
 the project rule (Haiku 5.5 for bounded work with a detailed brief, Sonnet 5.5 for routine

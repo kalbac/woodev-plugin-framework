@@ -54,7 +54,7 @@ curl -s -b cookies "http://localhost:8973/wp-admin/admin.php?page=woodev-setting
 ## ✅ Correct — assert the rendered box, not the presence of the string
 
 ```js
-// in the browser, via chrome-devtools MCP
+// in the browser (a Playwright probe, or the DevTools console)
 const el = document.querySelector('[data-message-id="location-default-locality-stale"]');
 getComputedStyle(el).display;   // must not be "none"
 el.offsetHeight;                // must be > 0

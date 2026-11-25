@@ -1,6 +1,6 @@
 # Marketplace card importer (marketplace card → WooCommerce product) — design
 
-**Date:** 2026-11-14. **Status:** draft r6 — written for `kalbac/woocommerce-ozon-seller#75`; r2 folded in the eight findings of the
+**Date:** 2026-11-14. **Status:** IMPLEMENTED — cards I1–I7 merged (framework 2.1.6, s231) and O6 in Ozon Seller. Text: r6, written for `kalbac/woocommerce-ozon-seller#75`; r2 folded in the eight findings of the
 r1 critic (Claude Opus, PR #1763); r3 records the operator's answers to the three questions of §6 (15.11.2026); r4 records the
 group design as card I7 built it (§2.6.1); r5 folds in the five findings of the I7 critic (Codex, PR #1781), see the
 [revision log](#revision-log). No question is open.

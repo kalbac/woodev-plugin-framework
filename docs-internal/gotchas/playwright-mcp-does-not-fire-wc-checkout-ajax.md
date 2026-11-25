@@ -2,6 +2,11 @@
 
 **Namespace:** `[rig/browser]` · **Discovered:** s44 (2026-07-30), classic-checkout e2e on the rig
 
+> **State now (25.11.2026):** the chrome-devtools MCP route recommended below is no longer the path —
+> rig verification is a Playwright **script** that logs in by itself (`npm run test:e2e` or a probe; see
+> [orchestrating-agents-with-orca](../wiki/orchestrating-agents-with-orca.md)). The s44 measurement was
+> about the Playwright **MCP** server; the lesson (check a second driver before blaming the product) stands.
+
 ## The trap
 
 In s42 the whole §8 checkout field layer was browser-verified through **Playwright MCP** —

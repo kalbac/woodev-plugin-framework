@@ -1,5 +1,9 @@
 # class_alias() and PHPStan
 
+> **Superseded in part (ADR-005, recorded 25.11.2026):** v2 adds no `class_alias()` compatibility
+> aliases, and the alias file named below no longer exists. The PHPStan behaviour is still true; the
+> advice to give a new class a global alias is history.
+
 PHPStan does not follow `class_alias()` calls when the alias is declared inside
 a conditional `if ( ! class_exists( ..., false ) )` block in a file that lives
 outside the classmap. Code that references the alias by short name

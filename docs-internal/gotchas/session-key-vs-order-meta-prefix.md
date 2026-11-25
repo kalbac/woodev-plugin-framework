@@ -65,7 +65,7 @@ Three consequences worth carrying forward, all of them contract-level:
 
 ## Why it matters
 
-Both keys are release-blocking installed-site data contracts (CLAUDE.md "never break" list).
+Both keys are release-blocking installed-site data contracts (`AGENTS.md` / ADR-005 "never break" list).
 Conflating them orphans live checkout session selections and/or live order meta on every
 installed site at plugin-migration time.
 

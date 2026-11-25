@@ -4,8 +4,11 @@
 > A failed start can leave residual resources: inspect the receipt before retrying. Timeouts and quiet
 > terminals are not proof of failure. Settle the dispatch before release or reuse, and follow the
 > receipt’s recovery path for uncertain cleanup; historical sections below do not override it.
-> Local Qwen/Kilo recipes are historical fallbacks; the current model roster is `CLAUDE.md` (Sonnet 5.5, Haiku 5.5, Codex
-> `gpt-6-luna` / `gpt-6.1-sol`, Fable 5 for hard tasks).
+> The current model roster is `CLAUDE.md` → Orca (Sonnet 5.5, Haiku 5.5, Fable 5.2 for hard tasks; Codex
+> `gpt-6-luna` / `gpt-6.1-sol` as critic only; local qwen and Qwen Code as spare capacity). The dated recipes below are
+> history where they disagree with it.
+> **This article covers direct sessions and the workers of both modes.** Bot mode itself — who owns what, how a save is
+> forwarded, the bridge — is in [bot mode](bot-mode.md).
 > Compiled reference. Last compiled: 2026-09-06 (s121: closed #779, the last two Orca candidates left
 > over from #381's capability sweep — `worktree set --comment`/`--workspace-status`, live-verified and
 > adopted; `orca-per-workspace-env`, measured against `orca.yaml` and this project's actual pains, and
@@ -17,7 +20,7 @@ article records **what we adopted and why**, not how the CLI works.
 
 ## The authority rule — never recall a flag
 
-**The `orchestration`, `orca-cli` and `computer-use` skills are installed globally** (s83, via
+**The `orchestration`, `orca-cli` and `orca-computer-use` skills are installed globally** (s83, via
 `orca skills install --skill <name> --agent claude-code`), so they surface in every session on
 their own and are the native way in. Invoke the skill; do not recall a flag.
 
@@ -242,7 +245,7 @@ installs** — against **411 seconds** for a `composer install` there.
 | Surface | Why not |
 |---|---|
 | `orca artifacts` (public HTML/MD links) | Publishing is gated behind a device setting a human must grant, and we have no audience for a public link. Deliverables stay in `docs-internal/`. |
-| `orca automations` (scheduled prompts) | Nothing here is recurring. Sessions are operator-initiated. |
+| `orca automations` (scheduled prompts) | Direct sessions are operator-initiated and need none. [Bot mode](bot-mode.md) is where recurring work lives (each bot's weekday-morning Look around); a weekly disk sweep is only proposed (#1980). |
 | `orca linear` | The backlog is GitHub Issues + board №6. Two trackers is worse than one. |
 | `orca emulator` (iOS/Android) | No mobile surface in this project. |
 | `orca-per-workspace-env` (`environmentRecipes` in `orca.yaml`) | Solves a different problem than the one it was checked against — see below. |
@@ -293,7 +296,7 @@ did not say.
 
 *(History.)* **Codex was initially critic-only** (operator decision, 21.08.2026) after s84
 burned 45% of the weekly Codex allowance in one night; the restriction was lifted on 24.08.2026 and
-Codex is a full worker again — `CLAUDE.md` → Orca carries the live rule.
+restored on 10.11.2026 (s224): Codex is a critic only — `CLAUDE.md` → Orca carries the live rule.
 
 **Cap rounds per card at two, three at the outside.** s84 put six worker rounds and six critic
 passes into #395 and still did not close it. The third REJECT is the signal to stop and hand the
@@ -501,9 +504,12 @@ that was handy.
 
 ## Local qwen through Oh My Pi (`omp`) — a WORKER, never a critic (s142)
 
-> **Historical — superseded 08.10.2026 by Haiku 5.5** (operator: cheap bounded work with a detailed brief goes to
-> Haiku 5.5; the local qwen is "not worth it"). The recipe is kept for the day a local model is needed again; the current
-> roster is `CLAUDE.md` → Orca.
+> **Status.** On 08.10.2026 the operator moved cheap bounded work to Haiku 5.5 and called the local qwen "not worth it";
+> on 25.11.2026 he put it back into the fleet: two local models (qwen3.8 27b dense and 180b MoE) reachable from `kilo`
+> and `omp`, **one at a time** (two exhaust the Mac's memory), still a worker only. The s142 measurements below are of the
+> 27b model through `omp`. The separate **Qwen Code** subscription (agent id `qwen-code`, qwen4-max, paid until
+> 12.12.2026) is a worker or a critic; its interactive default approves everything, so a critic brief says read-only
+> (smoke-tested through `worker-start` on 25.11.2026, as reported by the coordinator). The roster is `CLAUDE.md` → Orca.
 
 Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is launched through the
 `omp` agent (Oh My Pi), not kilocode. Measured in s142:
@@ -689,6 +695,7 @@ Once a worker's dispatch has settled, any follow-up instruction sent with `termi
 
 ## Related
 
+- [Bot mode](bot-mode.md) — the second way of working, beside direct sessions
 - [two-agents-one-file-is-the-orchestrator-s-bug](../gotchas/two-agents-one-file-is-the-orchestrator-s-bug.md) — the loss this placement rule exists to prevent
 - [codex-shell-sandbox-broken-windows](../gotchas/codex-shell-sandbox-broken-windows.md) — why Codex must be launched in an Orca terminal, not via `codex exec`
 - [jest-scans-agent-worktrees-inside-the-repo](../gotchas/jest-scans-agent-worktrees-inside-the-repo.md) — the gotcha Orca worktrees sidestep

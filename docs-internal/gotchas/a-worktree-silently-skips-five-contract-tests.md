@@ -3,6 +3,11 @@
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s84 (2026-08-21)
 
+> **State now (25.11.2026):** since #1311 (s183) these contract tests read the committed fixtures in
+> `tests/_fixtures/legacy-v1/`, so a worktree skips the same single test as the primary checkout
+> ([the skipped-count gotcha](the-skipped-count-is-dominated-by-whether-sodium-is-enabled.md)). The
+> lesson — compare the SKIPPED count — stands.
+
 ## What happened
 
 Two independent workers reported their unit gate as green and quoted numbers that did not match

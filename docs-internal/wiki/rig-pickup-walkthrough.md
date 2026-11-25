@@ -2,6 +2,9 @@
 
 > Classic-checkout procedure, originally measured in s75; the block adapter has since shipped.
 > Check the served branch, provider and checkout address state before treating these as live values.
+> Since s217 the fixture plugins are deactivated on the rig (activate them first, deactivate after) and
+> since s181 it runs `billing_only`, so step 3 describes the shipping-column mode — see
+> [local-rig](local-rig.md).
 
 1. Add an item: `http://localhost:8973/?add-to-cart=12`, then open `/classic-checkout/`.
 2. Select **Woodev Test Shipping**; the pickup container is hidden for `free_shipping`.

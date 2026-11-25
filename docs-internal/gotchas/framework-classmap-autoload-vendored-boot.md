@@ -25,7 +25,7 @@ In **tests**, Composer's classmap autoloader is present, so any framework class 
 
 Removing `capabilities` (s27) evolved the loader protocol, but this does **not** create a mixed-fleet hazard, because framework **classes always load from the highest registered copy** for the whole fleet (the resolver registers the autoloader against the winning/highest path), regardless of which copy wins the bootstrap class rendezvous. So a newer plugin never breaks against an older rendezvous winner; the at-risk party is an *older* plugin running against a newer framework, which the existing `backwards_compatible` min-version guard (`resolver:148-153`) deactivates-with-notice — same as v1. The removed `capabilities` protocol was never released, so it cannot break any deployed plugin.
 
-Two standing rules keep this true (see `AGENT-RULES.md` Rule 3): (1) every loader definition MUST set `version` + `backwards_compatible`; (2) the registration contract is additive-only from v2.0.0 (older rendezvous-winner resolver must always read a newer plugin's registration).
+Two standing rules keep this true (see `AGENT-RULES.md` Rule 3): (1) every loader definition MUST set `framework_version` + `backwards_compatible`; (2) the registration contract is additive-only from v2.0.0 (older rendezvous-winner resolver must always read a newer plugin's registration).
 
 ## Related
 

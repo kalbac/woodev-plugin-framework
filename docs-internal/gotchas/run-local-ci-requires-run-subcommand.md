@@ -15,6 +15,9 @@ npx run-local-ci --all --commit-status
 npx run-local-ci run --all --commit-status
 ```
 
+⚠ **`--all` can silently skip a workflow** (0.18.1, measured 15.10.2026: it selects by `git diff HEAD~1`).
+For merge evidence run each workflow with `-w <file>` and report each exit code.
+
 ## s184 additions (16.10.2026)
 
 - **`npx` without `-y` hangs an unattended run** on «Ok to proceed?». The unattended form is

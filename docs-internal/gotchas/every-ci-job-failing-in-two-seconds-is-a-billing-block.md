@@ -89,7 +89,7 @@ Both touch the merge gate, so both are an operator decision, not an agent's.
 Do NOT merge on "the tests passed locally" with the host PHP — s98 found a defect on the same night
 that only CI could see (the local PHP is 8.5, the CI floor is 7.4).
 
-**Superseded for PRIVATE repos (operator decision 13.10.2026, s175; global rule `~/.claude/CLAUDE.md`
+**Superseded for PRIVATE repos (operator decision 13.10.2026, s175; global rule `~/.agents/AGENTS.md`
 «CI: local-ci + GitHub Actions"):** the merge evidence there is a green `local-ci` run of the REAL
 workflow (the PHP 7.4/8.3 matrix inside the official runner, not the host PHP) + a critic; GitHub CI runs
 only on `pull_request`. Measured on the Yandex plugin: local-ci counted 441 tests on PR #36, the same as a

@@ -58,22 +58,22 @@ Package: `@upstash/context7-mcp`.
 
 Sessions run inside the Orca app, so Orca owns worktrees, agent terminals and multi-agent
 coordination. **Substantial work goes through Orca orchestration: worker = Sonnet 5.5, critic =
-Codex, nobody accepts their own work.**
+Codex, nobody accepts their own work.** The same fleet serves
+[bot mode](docs-internal/wiki/bot-mode.md), which runs beside direct sessions.
 
-**The critic-only restriction on Codex is LIFTED (operator, 24.08.2026), and the subscription was
-renewed 29.08.2026** — Codex is a full worker again, smoke-tested through Orca rather than assumed.
-The operator's instruction is explicit: *use it, to balance token spend between it and the Claude
-agents.* A paid resource left idle is a loss, not a saving.
+**Codex is a critic only, spent sparingly** (operator, 10.11.2026, s224: its limit drains about 5×
+faster than Claude's). This replaces the 24.08.2026 lift that made it a full worker.
 
 **Which model, and it is a two-step choice.** First who gets the task, then what it runs on:
 
 | | |
 |---|---|
-| bounded work with a DETAILED brief — acceptance/test runs, research tables, small scoped fixes, docs | **Haiku 5.5** (`claude-haiku-5-5`) — operator 08.10.2026: cheap, between luna and Sonnet; replaces the local qwen. Never a critic of Claude-written work (same lineage) |
+| bounded work with a DETAILED brief — acceptance/test runs, research tables, small scoped fixes, docs | **Haiku 5.5** (`claude-haiku-5-5`) — operator 08.10.2026: cheap, between luna and Sonnet. Never a critic of Claude-written work (same lineage) |
 | routine, well-bounded work against a plan | a **Sonnet 5.5** subagent (`claude-sonnet-5-5`, not the bare `sonnet` alias) |
-| a second pair of hands, independent implementation, criticism | **Codex** |
-| a genuinely hard problem that wants the best head | **Fable 5** — propose it yourself; do not default to Opus for everything hard (operator, 29.08.2026) |
-| coordination, gates, git, synthesis | **Opus 5** (this session) |
+| criticism of Claude-written work; images (the standing exception, operator 18.10.2026) | **Codex** (images: `gpt-6.1-sol`) |
+| spare capacity (operator, 25.11.2026) | local **qwen3.8** 27b / 180b via `kilo`/`omp` — worker only, one model at a time (RAM); **Qwen Code** (`qwen-code`, qwen4-max, paid to 12.12.2026) — worker or critic, a critic brief says read-only |
+| a genuinely hard problem that wants the best head | **Fable 5.2**, one at a time — propose it yourself; do not default to Opus for everything hard (operator, 29.08.2026) |
+| coordination, gates, git, synthesis | **Opus 5.5** (this session) |
 
 Inside Codex the model is a third choice. **Operator, 01.10.2026: default `gpt-6-luna`** (set in
 `~/.codex/config.toml`, so a launch naming no model is right); **hard tasks — an architectural fork, a
@@ -109,7 +109,7 @@ caught up minutes later. Codex's own rollout carries the authoritative value in 
 Gotcha
 `orca-account-list-serves-a-cached-rate-limit`.
 
-**Two caps from that same decision STAY, because they were never about the budget:**
+**Two caps that are not about budget:**
 
 - **Concurrent agents — by MACHINE** (operator, 27.09.2026). **Windows desktop: 2–3, a RAM limit**
   (gotcha `three-agents-is-the-concurrency-cap-on-this-machine`). **Mac (64 GB): no RAM cap** — the
@@ -159,6 +159,7 @@ Codex is launched through Orca (fact 3), never through `codex exec` — gotcha
 |---|---|
 | What did the last session leave me? | `docs-internal/next-session-prompt.md` |
 | What state is the project in? | `docs-internal/CURRENT-STATE.md` |
+| How does bot mode work beside this one? | `docs-internal/wiki/bot-mode.md` |
 | Has this trap been hit before? | `docs-internal/GOTCHAS.md` (topic map) → `gotcha-index/{topic}.md` → `gotchas/{slug}.md` |
 | Where does this responsibility live? | `docs-internal/wiki/architecture.md` |
 | Why was it built this way? | `docs-internal/adr/` |

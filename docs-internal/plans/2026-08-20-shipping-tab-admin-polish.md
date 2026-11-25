@@ -195,3 +195,7 @@ serves the WORKING TREE, so the branch must be named out loud when the operator 
 
 Codex is the critic for each block, driven through an Orca terminal (`orca terminal create --command codex`),
 where its shell genuinely works — see the rewritten `codex-shell-sandbox-broken-windows` gotcha.
+
+## Related
+
+- [2026-08-18-shipping-settings-v2-design.md](../specs/2026-08-18-shipping-settings-v2-design.md) — the tab this plan polishes

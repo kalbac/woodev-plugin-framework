@@ -87,7 +87,7 @@ the same question first: what is this rig actually running?
 
 ```bash
 git branch --show-current
-MSYS_NO_PATHCONV=1 npx wp-env run cli wp config list --fields=name,value | grep WOODEV_TEST
+MSYS_NO_PATHCONV=1 npx @wordpress/env run cli wp config list --fields=name,value | grep WOODEV_TEST
 ```
 
 `MSYS_NO_PATHCONV=1` is required under Git-Bash — MSYS otherwise mangles the container paths, see

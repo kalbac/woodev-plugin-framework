@@ -68,6 +68,7 @@ woodev_framework/
 │   ├── handlers/                    # Blocks + script handlers
 │   ├── http/, languages/            # HTTP helpers, translation catalogues
 │   ├── licensing/                   # License key + EDD store integration (incl. updater/ — plugin update mechanism)
+│   ├── marketplace/, help/          # Marketplace module (ADR-013); help-links checker
 │   ├── payment-gateway/             # Payment gateway base classes (~13.9k lines; main file ~3.6k)
 │   ├── rest-api/                    # REST API routes
 │   ├── settings-api/                # Typed settings framework
@@ -151,9 +152,11 @@ CI workflows: `ci.yml` (jobs: `version`, `lint`, `compat`, `unit-tests`, `test-j
 | `specs/2026-11-03-711-roi-analytics.md` | #711 — delivery analytics («Аналитика» tab): data research and implementation spec (PR #1565, merged 03.11.2026) | ✅ |
 | `specs/2026-11-04-tracking-v2-plugin-design.md` | «Отслеживание доставки» 2.0.0 on Framework v2 (`woocommerce-order-tracking-number`) — released 04.11.2026 | ✅ |
 | `specs/2026-11-04-1575-buyer-tracking-display-design.md` | #1575 — buyer-facing tracking display for v2 carriers (framework 2.0.25) | ✅ |
-| `specs/2026-11-05-range-shipping-v2-design.md` | «Стоимость доставки за расстояние» 2.0.0 (`woocommerce-range-shipping`, private) on Framework v2 | draft — plugin release pending |
-| `specs/2026-11-14-marketplace-card-importer.md` | Marketplace card importer (card → WooCommerce product): adapter contract, job, cards-tab action, field mapping through profiles; cards I1–I7 and O6 (ozon-seller#75, framework 2.1.6) | draft — not implemented |
-| `specs/2026-11-05-range-shipping-city-mode.md` | «Доставка в городе» — the list of places as the granularity of the checkout's settlement choice (framework part in 2.0.26) | draft — release pending |
+| `specs/2026-11-05-range-shipping-v2-design.md` | «Стоимость доставки за расстояние» 2.0.0 (`woocommerce-range-shipping`, private) on Framework v2 | ✅ |
+| `specs/2026-11-14-marketplace-card-importer.md` | Marketplace card importer (card → WooCommerce product): adapter contract, job, cards-tab action, field mapping through profiles; cards I1–I7 and O6 (ozon-seller#75, framework 2.1.6) | ✅ |
+| `specs/2026-11-05-range-shipping-city-mode.md` | «Доставка в городе» — the list of places as the granularity of the checkout's settlement choice (framework part in 2.0.26) | ✅ |
+| `specs/2026-11-15-marketplace-admin-ui.md` | #1776 — marketplace admin pages look like the delivery plugins (cards C1–C3) | ✅ |
+| `specs/2026-11-16-marketplace-bulk-operations.md` | #1786 — bulk operations for large catalogues: «все по фильтру», sync on link, link by category, price actions | ✅ |
 
 | Plan | Implements |
 |------|------------|
@@ -178,8 +181,9 @@ Only the pre-s60 SP-5 map specs/plans were moved to `archive/specs/` and `archiv
 both are live directories an agent writes to, and `archive/` holds only the pre-s60 ones. No file count
 here: the last two counts written into this line went stale. **The earlier docs audits live in
 `reviews/`** — `2026-08-29-docs-and-board-audit.md` (s104), `2026-09-05-644-part1-contradiction-map.md`
-(s119), `2026-10-12-docs-audit-s171.md`, `2026-10-15-docs-audit-s183.md`, `2026-11-02-docs-audit-s210.md` and `2026-11-06-docs-audit-s220.md`;
-read them before starting another (next due: s230), so a fixed contradiction is not re-litigated.
+(s119), `2026-10-12-docs-audit-s171.md`, `2026-10-15-docs-audit-s183.md`, `2026-11-02-docs-audit-s210.md`,
+`2026-11-06-docs-audit-s220.md` and `2026-11-25-docs-audit-s245.md`;
+read them before starting another (next due: s250), so a fixed contradiction is not re-litigated.
 
 ## Architecture Decision Records
 
@@ -220,6 +224,7 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 - `wiki/architecture.md` — subsystems, base classes, seams (opened on demand, not at session start)
 - `wiki/rig-pickup-walkthrough.md` — the rig walkthrough for the pickup layer, in the order that actually works (s75); moved here from `CURRENT-STATE.md` in s87
 - `wiki/orchestrating-agents-with-orca.md` — how multi-agent work is run here: worker Sonnet / critic Codex, worktree placement, what we did not adopt
+- `wiki/bot-mode.md` — the bot mode beside direct sessions: ownership, forwarded saves, the bridge step
 - `wiki/local-rig.md` — why the rig's fixtures and options are set the way they are (the pickup mu-plugin, the company field, the two location providers, the live-Yandex switch); moved here from `CURRENT-STATE.md` in s91
 - `AGENTS.md` — shared project rules (session start/end, coding principles)
 - `wiki/pickup-trigger-placement-and-text.md` — who decides where the checkout pickup button is drawn (the framework) and what it says (the carrier)

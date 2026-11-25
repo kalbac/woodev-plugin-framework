@@ -1,6 +1,7 @@
 # Marketplace bulk operations for large catalogues (#1786)
 
-**Status:** decided — items A, B and C are operator decisions of 16.11.2026 (#1786, s231); item D was decided by the operator the
+**Status:** IMPLEMENTED — #1786 closed 16.11.2026 (cards #1795–#1797, s232–s234); the body describes the state before the work.
+Items A, B and C are operator decisions of 16.11.2026 (#1786, s231); item D was decided by the operator the
 same day «по рекомендациям» (comment on #1786). Every remaining choice of this spec that is in neither is marked **(proposal)**.
 r2 folds in the r1 critic of PR #1787 (two Must, six Should); r3 the r2 critic (two Must, three Should): tick ownership is a
 MySQL named lock, the price pull settles the queued price send, the import freeze keeps what the import job needs, stop names its

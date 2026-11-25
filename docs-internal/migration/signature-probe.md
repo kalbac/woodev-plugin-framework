@@ -189,3 +189,8 @@ So the working figure is **11 / 8**, not 13 / 8. If a re-measurement does find a
 is not among the 22 name-overlaps enumerated above (18 for the main class, 4 for integration) —
 every one of those was checked by hand against the chain's actual declared modifiers and types,
 twice, by two different people.
+
+## Related
+
+- [CDEK data-preservation checklist](edostavka-data-preservation-checklist.md) — the other per-rewrite migration check
+- [ADR-005](../adr/005-platform-v2-clean-break-policy.md) — why internal signatures may break at all

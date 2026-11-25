@@ -29,8 +29,9 @@ The rule names a source (the msgid) and a channel (the catalogue). A change that
 without filling the channel is not half-done, it is a regression — because the previous code was, by
 accident, the channel.
 
-The deferred `.pot`/`.mo` regeneration (#567's remainder, operator 29.08.2026) is about **strings
-that were already English**. It is not a licence to add new untranslated ones on the storefront path.
+The regeneration deferred at the time (#567's remainder, operator 29.08.2026; the pre-release pass ran
+in s182) was about **strings that were already English**. It was never a licence to add new
+untranslated ones on the storefront path.
 
 ## Fix
 

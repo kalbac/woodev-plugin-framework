@@ -89,6 +89,7 @@ gateway's `dist/` Parcel bundles are already minified and are referenced by thei
 
 - **`Woodev_Payment_Gateway_Plugin`** (`woodev/payment-gateway/class-payment-gateway-plugin.php`) — a payment-gateway plugin declares its type by extending this class. Manages one or more `Woodev_Payment_Gateway` instances. Order/user/token admin UI lives in `woodev/payment-gateway/admin/`; gateway-specific REST endpoints in `woodev/payment-gateway/api/`.
 - **`Woodev\Framework\Shipping\Shipping_Plugin`** (`woodev/shipping-method/class-shipping-plugin.php`) — a shipping plugin declares its type by extending this class. PSR-4 namespaced (`Woodev\Framework\Shipping\`).
+- **`Woodev\Framework\Marketplace\Marketplace_Plugin`** (`woodev/marketplace/class-marketplace-plugin.php`) — a marketplace plugin extends this class and supplies a `Marketplace_Adapter`, an API client and marketplace-only rules. The module owns everything marketplace-neutral (accounts, persistence, jobs, sync, links, orders, PHP-driven React pages under the plugin's own menu). Design and as-built notes: [marketplace-admin](marketplace-admin.md), [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md).
 
 ## API layer (`woodev/api/`)
 
@@ -746,6 +747,7 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
 | Framework Core | ✅ | ✅ | Bootstrap, Plugin base, Lifecycle — stable |
 | Payment Gateway | ✅ | ✅ | `class-payment-gateway.php`: ~3,744 lines on 02.11.2026 (whole tree ~13.9k at the P6 gate); trait-extraction candidate (#117, held behind #639) |
 | Shipping Method | ✅ | ✅ | PSR-4 namespaced |
+| Marketplace | ✅ | ✅ | PSR-4 namespaced; ships since 2.0.29, rig-checked with Ozon Seller 2.0.0 (s237–s244) |
 | Licensing | ✅ | ✅ | EDD store integration; React license page on core `woodev/v1` REST |
 | Settings API | ✅ | ✅ | Typed settings framework |
 | Settings React page (SP-1) | ✅ | ✅ | `Woodev > Настройки`: registry + `woodev/v1/settings` REST + React surface on the UI-kit |
