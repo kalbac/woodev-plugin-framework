@@ -456,7 +456,7 @@ the button and nothing would change. D3 is therefore a separate mode:
 Tier: Sonnet 5.5 for every card (`claude-sonnet-5-5`); none needs Fable — each has a reference pattern in this tree (the import
 and link jobs, the claim fence of the accounts table, `Link_Progress_Store`, the existing provider/definition pair). Critic: Codex.
 Every brief carries the worker's own worktree path for Serena and says that `tests/**` is Serena-ignored. Settings live on the
-marketplace settings page, never WC Integrations.
+marketplace settings page, not WC Integrations.
 
 **File ownership rule.** `woodev/class-map.php` and the development classmap in `composer.json` change only in a card that adds a PHP
 file, and only one such card runs per wave. B and C add no file.

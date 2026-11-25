@@ -36,7 +36,7 @@ Serena). Shape reference: [2026-11-04-tracking-v2-plugin-design.md](2026-11-04-t
 
 Standing operator rules that bind every section: licence gate is the default; no invented safeguards (KISS); merchant
 diagnostics only behind «Логирование»; copy for non-IT merchants; keys never printed or logged (keys-leak rule); every
-automatic outbound call has backoff + cap; settings live on `woodev-settings`, never WC Integrations.
+automatic outbound call has backoff + cap; settings live on `woodev-settings`, not WC Integrations.
 
 ## 1. Goal, scope, non-goals
 

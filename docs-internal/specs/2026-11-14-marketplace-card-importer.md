@@ -497,7 +497,7 @@ framework text domain with the Russian catalogue, PHP 7.4, a critic of another l
 | Release 2.1.6 | coordinator | I1–I7 | — | — |
 | O6 — Ozon adapter (repo `woocommerce-ozon-seller`) | M · Sonnet 5.5 | released 2.1.6 | `includes/ozon/catalog/class-ozon-card-reader.php`, `includes/ozon/adapter/class-ozon-adapter.php`, `includes/migration/**` (the two settings; one report line per dropped v1 option a shop had switched on: `external` type, attributes from the card, replace existing), fixtures, `docs/spec` §5.6 and `docs/wiki` | `Card_Importer` on the adapter; `Card_Content` from recorded fixtures of the three requests, **with `group()` filled** (`key` = the model id, `size` = `model_info.count`, `aspects` = the card's aspect attributes by name) and the same `group` (`key`, `size`) on its snapshot cards, or the preview counts every card as a product; migration carries `product_status` and `create_new_category`. Accept on the rig: bulk import of several cards, auto-import by a real notification, a re-click duplicates nothing, a card with an existing SKU is linked, a card whose SKU is a variable parent's is refused with the note, an archived card is skipped, an image failure leaves a product |
 
-Waves (at most three workers, disjoint files): **I1 ∥ I2 ∥ I4** → **I3** → **I5 ∥ I6** → **I7** → release 2.1.6 → **O6**. I3 may start as
+Waves (disjoint files): **I1 ∥ I2 ∥ I4** → **I3** → **I5 ∥ I6** → **I7** → release 2.1.6 → **O6**. I3 may start as
 soon as I1 is merged, beside I2 and I4.
 
 ## 6. Operator decisions (15.11.2026)

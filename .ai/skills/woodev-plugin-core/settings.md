@@ -11,13 +11,15 @@ Worked example for every control type: `tests/_fixtures/woodev-test-plugin/woode
 
 ## Where settings live
 
-**On `Woodev → Настройки`** — the neutral admin page `Settings_Page_Registry::PAGE_SLUG`
-(`woodev-settings`), served over REST (`woodev/v1/settings…`) and rendered by a React surface. Never on
-WooCommerce → Settings → Integrations by default, and never on a self-built top-level page. The
-Integrations tab remains available as a deliberate EXCEPTION with its own seam
-(`Shipping_Plugin::get_integration_handler()`, storage `woocommerce_{plugin_id}_settings`); the boundary
-between default and exception is the operator's call, so bring the concrete case to him instead of
-deciding it (Rule 8). Which sections a SHIPPING plugin must have is in
+**By default on `Woodev → Настройки`** (in practice mostly delivery plugins) — the neutral admin page
+`Settings_Page_Registry::PAGE_SLUG` (`woodev-settings`), served over REST (`woodev/v1/settings…`) and
+rendered by a React surface. A **payment** gateway's settings stay in the payment method itself
+(`woodev-settings` only for extra non-gateway options); a **marketplace** plugin has its own page (its
+top-level menu, placed by `Marketplace_Plugin`). Nobody else builds a top-level settings page.
+WooCommerce → Settings → Integrations is allowed in exceptional cases (none exist yet) through its own seam
+(`Shipping_Plugin::get_integration_handler()`, storage `woocommerce_{plugin_id}_settings`); what counts as
+exceptional is the operator's call, so bring the concrete case to him instead of deciding it (Rule 8).
+Name the location explicitly in every worker brief. Which sections a SHIPPING plugin must have is in
 [../woodev-shipping-plugin/SKILL.md](../woodev-shipping-plugin/SKILL.md) — a carrier does not override
 `get_settings_providers()` the way a plain plugin does.
 

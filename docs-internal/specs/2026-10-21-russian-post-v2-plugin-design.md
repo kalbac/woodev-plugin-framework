@@ -81,7 +81,7 @@ Source: `docs-internal/research/2026-10-21-russian-post-v2/decisions.md`, walked
 | D15 | Old orders: **full migration, as D8 says** — shipping-line method ids and order meta are rewritten for every old order. **No read-only legacy path** (operator, 21.10.2026). | §14 |
 | D16 | No fallback point source: **the risk of the unofficial widget backend is accepted** by the operator. The protections of §5.7 are the whole defence (operator, 21.10.2026). | §5.1, §5.7 |
 
-**Operator rules that bind every section** (memory and project rules): the checkout is fool-proof and the admin trusts the merchant; merchant diagnostics appear only behind debug logging; no plugin may spam an external server — every automatic call needs backoff, a cap and a stated worst case; plugin settings live on `woodev-settings`, never on a WooCommerce Integrations tab; UI strings follow the render-path i18n rules of `AGENTS.md`.
+**Operator rules that bind every section** (memory and project rules): the checkout is fool-proof and the admin trusts the merchant; merchant diagnostics appear only behind debug logging; no plugin may spam an external server — every automatic call needs backoff, a cap and a stated worst case; plugin settings live on `woodev-settings`, not on a WooCommerce Integrations tab; UI strings follow the render-path i18n rules of `AGENTS.md`.
 
 ## 2. v1 (1.2.6.0) feature inventory
 
@@ -464,7 +464,7 @@ The framework resolves a link from a template and the tracking number (`get_trac
 
 ### 11.1 Fields
 
-On `woodev-settings` (never a WooCommerce Integrations tab), one group «Подключение»:
+On `woodev-settings` (not a WooCommerce Integrations tab), one group «Подключение»:
 
 | Field | Type | Notes |
 |---|---|---|

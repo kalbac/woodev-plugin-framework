@@ -225,6 +225,7 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 - `wiki/rig-pickup-walkthrough.md` — the rig walkthrough for the pickup layer, in the order that actually works (s75); moved here from `CURRENT-STATE.md` in s87
 - `wiki/orchestrating-agents-with-orca.md` — how multi-agent work is run here: worker Sonnet / critic Codex, worktree placement, what we did not adopt
 - `wiki/bot-mode.md` — the bot mode beside direct sessions: ownership, forwarded saves, the bridge step
+- `wiki/sizing-agent-waves.md` — how many Claude workers to launch: live limit reading, agents already running, formula, measured costs
 - `wiki/local-rig.md` — why the rig's fixtures and options are set the way they are (the pickup mu-plugin, the company field, the two location providers, the live-Yandex switch); moved here from `CURRENT-STATE.md` in s91
 - `AGENTS.md` — shared project rules (session start/end, coding principles)
 - `wiki/pickup-trigger-placement-and-text.md` — who decides where the checkout pickup button is drawn (the framework) and what it says (the carrier)

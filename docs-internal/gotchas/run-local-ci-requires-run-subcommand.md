@@ -9,14 +9,19 @@ Calling `npx run-local-ci --all …` omits the CLI's `run` subcommand, prints us
 npx run-local-ci --all --commit-status
 ```
 
-✅ **Correct:**
+✅ **Correct** — the merge-evidence form (operator decision, 25.11.2026): one explicit run per workflow, each exit
+code reported:
 
 ```sh
-npx run-local-ci run --all --commit-status
+npx -y run-local-ci run -w .github/workflows/<file>.yml --commit-status
 ```
 
-⚠ **`--all` can silently skip a workflow** (0.18.1, measured 15.10.2026: it selects by `git diff HEAD~1`).
-For merge evidence run each workflow with `-w <file>` and report each exit code.
+⚠ **Do not use `--all` for merge evidence: it can silently skip a workflow** (0.18.1, measured 15.10.2026: it selects
+by `git diff HEAD~1`).
+
+⚠ **Every run overwrites the same `local-ci` commit status** (read in 0.18.1 `dist/commit-status.js`, 25.11.2026: the
+context is the constant `local-ci`). After several `-w` runs the PR check shows the LAST run only, so a red workflow
+followed by a green one looks green. The merge evidence is the list of exit codes, not the check.
 
 ## s184 additions (16.10.2026)
 

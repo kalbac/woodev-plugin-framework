@@ -73,8 +73,8 @@ WooCommerce — logging through the WC logger, HPOS declaration, Blocks handler 
    `get_file()` and `get_plugin_name()`. See [plugin-class.md](plugin-class.md).
 4. A `Woodev_Lifecycle` subclass for install/upgrade, wired by overriding `init_lifecycle_handler()`.
    See [lifecycle.md](lifecycle.md).
-5. Settings through `get_settings_providers()` — on `Woodev → Настройки`, never on WooCommerce →
-   Integrations by default. See [settings.md](settings.md).
+5. Settings through `get_settings_providers()` — on `Woodev → Настройки` by default (payment and
+   marketplace plugins differ). See [settings.md](settings.md).
 6. Tests: unit with Brain Monkey/Mockery, one integration test that boots the REAL entry path.
    See [layout-and-testing.md](layout-and-testing.md).
 
@@ -106,10 +106,12 @@ For the rest of the settings API, read [settings.md](settings.md).
   the constructor. The loader definition is authoritative; a conflicting constructor value only raises
   `_doing_it_wrong()`. Never touch order data with `get_post_meta()` — use
   `Woodev_Order_Compatibility` or the `WC_Order` object.
-- **Settings live on `woodev-settings`** (`Woodev → Настройки`), reached through
-  `Woodev_Plugin::get_settings_providers()`. The WooCommerce → Integrations tab is an exception with its
-  own seam (`Shipping_Plugin::get_integration_handler()`), used only where an installed site's data
-  contract requires it. Never build your own top-level admin settings page.
+- **Settings live on `woodev-settings`** (`Woodev → Настройки`) by default, reached through
+  `Woodev_Plugin::get_settings_providers()`. A payment gateway's settings stay in the payment method
+  itself (`woodev-settings` only for extra non-gateway options); a marketplace plugin keeps them on its
+  own page. The WooCommerce → Integrations tab is allowed in exceptional cases (none yet; bring the case
+  to the operator) through `Shipping_Plugin::get_integration_handler()`. Outside the marketplace layer,
+  do not build your own top-level settings page. Name the location in every worker brief.
 - **Three subsystems are enforced:** the admin-notice handler, the license and the lifecycle handler. A
   subclass that overrides their `init_*` method without building the object gets `_doing_it_wrong()`
   under `WP_DEBUG` and a default instead — do not return `null`.

@@ -35,7 +35,7 @@ entirely. Follow that list, not a second copy. What this protocol adds, once you
 ## 5. Sub-agent strategy
 ⚠ **Superseded.** This section named in-process sub-agent skills; the standing rule is now **Orca
 orchestration** — the worker holds its own context in its own terminal and the orchestrator reads
-only the `worker_done` report. Caps: **2–3 agents on the Windows desktop** (a hardware limit there; the Mac is capped by the 5-hour rate limit only, operator 27.09.2026)
+only the `worker_done` report. Wave size: [wiki/sizing-agent-waves.md](wiki/sizing-agent-waves.md) (Mac: the shared Claude limit only; Windows desktop: 2–3, RAM)
 and **2–3 rounds per card**. Authority: `AGENT-RULES.md` → "Subagent-Driven Execution for
 Parallelism"; recipe and traps: `wiki/orchestrating-agents-with-orca.md`. Docs-only, fully-specified
 edits are still done directly, with no worker at all.

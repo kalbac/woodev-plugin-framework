@@ -332,10 +332,17 @@ the records and the customer gets filled fields plus a re-locked address field: 
 
 ### Rule 8 — A plugin's settings live on `Woodev → Настройки` by default; the WooCommerce «Интеграции» tab stays available for the cases that need it
 
-**Two plugin types have their own home** (the rest of this rule is about the others): a **marketplace** plugin keeps its
-settings under its own top-level menu (operator, s224; [ADR-013](adr/013-marketplace-layer-and-react-admin-in-the-framework.md),
-placement is automatic for a `Marketplace_Plugin`); a **payment gateway's** settings stay on the WooCommerce gateway
-screen, with `woodev-settings` only for extra non-gateway options (`sessions/s198.md`).
+**Where settings go** (operator, 25.11.2026):
+
+| Plugin | Settings live |
+|---|---|
+| default — in practice mostly delivery plugins | `Woodev → Настройки` (`woodev-settings`) |
+| payment | in the payment method itself (the WooCommerce gateway screen); `woodev-settings` only for extra non-gateway options (`sessions/s198.md`) |
+| marketplace | on its own page: its own top-level menu (operator, s224; [ADR-013](adr/013-marketplace-layer-and-react-admin-in-the-framework.md), placement is automatic for a `Marketplace_Plugin`) |
+| an exceptional case | WooCommerce → «Интеграции» is allowed; no such case exists yet |
+
+**Every worker brief that adds a setting names its location explicitly** — a brief that says «find where the settings
+live» is how a worker put a new one on the v1 tab (s145). The rest of this rule is about the default and the exception.
 
 **Settled by the operator, 05.09.2026 (#777), in his own words:**
 
@@ -364,9 +371,9 @@ which is an installed-site data contract — see Rule 0 before moving an existin
 that tab.
 
 ⚠ **«При необходимости» is deliberately left to judgement — do NOT invent a hard criterion here and
-present it as his rule.** Bring the concrete case to him instead. What is settled is the DEFAULT and
-the fact that the tab is not deprecated; the boundary between them is not settled and was not asked
-for.
+present it as his rule.** Bring the concrete case to him instead. What is settled is the DEFAULT, that
+the tab is neither deprecated nor forbidden, and that exceptions are rare (25.11.2026: none yet); the
+boundary between them is not settled.
 
 ⚠ **The rig fixture on that tab is CORRECT and must not be "fixed" away.**
 `tests/_fixtures/woodev-test-shipping-method/class-test-cdek-integration.php`

@@ -179,8 +179,8 @@ do not backfill existing ones (#868), so a new column needs representative rows 
   bound to `state` + `user_id`; the long-lived `access_token_secret` travels by POST.
   PKCE was rejected.
 
-- Default plugin settings live on `Woodev → Настройки`; WooCommerce «Интеграции» remains
-  available when needed (#777). Marketplace plugins and payment gateways differ (`AGENT-RULES.md` Rule 8).
+- Default plugin settings live on `Woodev → Настройки`; WooCommerce «Интеграции» is allowed in exceptional
+  cases, none yet (#777; 25.11.2026). Marketplace plugins and payment gateways differ (`AGENT-RULES.md` Rule 8).
 
 - *We offer narrowing, we never force it; the merchant's only switch is the region field itself*
   (#437).
