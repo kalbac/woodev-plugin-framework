@@ -1,10 +1,20 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
-## [2.1.20] — 2026-11-26
+## [2.1.20] — 2026-11-25
 ### Bug Fixes
-- **shipping**: The rate cache no longer misses on every typing pause and gateway click (#1974). A pickup method's key drops postcode, address, address_1 and address_2 (while no settlement locality is known, it holds the location record's key, or else the postcode); the payment gateway id became a cash-on-delivery flag. A carrier whose pickup quote reads one of those address fields adds it in its own `get_rate_cache_context()`; one whose price depends on the specific gateway declares the new `Shipping_Method::FEATURE_GATEWAY_DEPENDENT_PRICE`.
-- **shipping**: The rate cache could never hit for an instance not re-saved since a field was added: the key copied `instance_settings`, which WooCommerce writes into on first read. It now holds the saved settings row (#1974).
+- **shipping**: Key the rate cache by what prices a quote, not by every keystroke (#1985)
+
+
+### Documentation
+- Save session s244 (Ozon Seller 2.0.0 released, framework 2.1.19)
+
+- S245 docs audit and bot mode beside the direct mode (#1981)
+
+- Apply the three s245 audit decisions (wave size, settings placement, local-ci gate) (#1982)
+
+- Save session s245 (bot mode beside the direct mode, T-Bank 2.0.1)
+
 
 
 ## [2.1.19] — 2026-11-24
