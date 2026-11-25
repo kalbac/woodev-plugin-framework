@@ -166,7 +166,7 @@ The manager sees the hint on the classic checkout and on the block checkout. It 
 
 Asking a carrier's API on every cart change is slow. A method can opt in to a short-lived rate cache by declaring `FEATURE_RATE_CACHE`. A rate is then kept for 10 minutes. Only a successful rate is stored: a failure and a `null` answer never are.
 
-Declaring the feature is a promise: **`get_rate_cache_context()` names every input that your price depends on.** Two calculations with an equal context get the same cached rate. The framework's default context already covers the package contents and destination, the instance settings, the packing mode, the payment and the selected pickup point. Anything else that `rate_package()` reads, such as credentials or a plugin-wide setting, you add yourself:
+Declaring the feature is a promise: **`get_rate_cache_context()` names every input that your price depends on.** Two calculations with an equal context get the same cached rate. The framework's default context already covers the package contents and destination, the saved instance settings, the packing mode, the payment and the selected pickup point. Anything else that `rate_package()` reads, such as credentials or a plugin-wide setting, you add yourself:
 
 ```php
 <?php
@@ -202,10 +202,13 @@ The classic checkout recalculates after every pause in typing and every change o
 | Payment method | `cod`: whether it is payment on receipt, by the gateways of the filter `woodev_shipping_insurance_cod_gateways`. All other gateways share one rate. |
 | [Fee by payment method](../method-features/#fee-by-payment-method) | `fee_applies`: whether the fee applies to the chosen gateway. |
 
-If your price reads something this table leaves out, put it back:
+The instance settings in the key are the ones saved in the database. WooCommerce fills defaults into the loaded settings while it reads them, so the key does not use that copy.
+
+If your price reads something the default key leaves out, put it back:
 
 - **A pickup quote that uses the postcode or the street.** Add the value in your `get_rate_cache_context()`.
 - **A pickup quote that finds its destination from the buyer's location record**, such as a carrier city code. Add the resolved value too: when the buyer has not picked a settlement, the pickup entry names none, and two places with the same city name would share a rate.
+- **A setting your code changes in memory** before pricing. Add the value in your `get_rate_cache_context()`.
 - **A price that differs between two prepaid gateways.** Declare `FEATURE_GATEWAY_DEPENDENT_PRICE`. The key then holds the gateway id as `payment` instead of `cod`. The declaration shapes the key only, so also return `true` from `declares_payment_dependent_price()`; that makes the checkout recalculate when the payment method changes.
 
 ```php

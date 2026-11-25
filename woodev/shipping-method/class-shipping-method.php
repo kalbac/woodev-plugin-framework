@@ -3193,7 +3193,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * the first one's answer for the second. **Opting in to {@see self::FEATURE_RATE_CACHE} is
 		 * declaring that this array is complete** for the carrier.
 		 *
-		 * The default is what the framework itself can see: the method and instance, the instance
+		 * The default is what the framework itself can see: the method and instance, the saved instance
 		 * settings, the effective packing mode, the package lines (product, variation, quantity,
 		 * dimensions, weight, shipping class, virtual flag) with the store's dimension/weight units
 		 * and currency, the contents cost, the destination, the payment and — for a method with a
@@ -3224,6 +3224,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 *               adds the applied coupons and the order amount those features measure.
 		 * @since 2.1.20 A pickup method is no longer keyed by postcode and street, and the gateway id is replaced
 		 *               by the `cod` flag unless the method declared {@see self::FEATURE_GATEWAY_DEPENDENT_PRICE}.
+		 *               The instance settings are the saved row, not the array WooCommerce writes into on read.
 		 *
 		 * @param array $package WooCommerce shipping package.
 		 *
@@ -3245,7 +3246,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$context['method']   = (string) $this->get_id();
 			$context['instance'] = property_exists( $this, 'instance_id' ) ? (int) $this->instance_id : 0;
-			$context['settings'] = property_exists( $this, 'instance_settings' ) && is_array( $this->instance_settings ) ? $this->instance_settings : [];
+			$context['settings'] = $this->saved_instance_settings();
 			$context['packing']  = [
 				'enabled'   => $this->supports_box_packing(),
 				'algorithm' => $this->supports_box_packing() ? $this->get_packing_algorithm() : '',
@@ -3313,6 +3314,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			$context['pickup'] = null === $handler ? null : $handler->get_selected_point_for_method( (string) $this->get_id() );
 
 			return $context;
+		}
+
+		/**
+		 * This instance's settings as SAVED in the database, for the rate-cache key.
+		 *
+		 * Never `$this->instance_settings`: `WC_Shipping_Method::get_instance_option()` writes into that array
+		 * on first read (the default of a never-saved field, the fallback in place of a stored `''`), so the
+		 * key built before a calculation differed from the one built after it and the cache never hit (#1974).
+		 *
+		 * @since 2.1.20
+		 *
+		 * @return array<string, mixed> Empty with no instance, or one never saved.
+		 */
+		private function saved_instance_settings(): array {
+
+			$option = (string) $this->get_instance_option_key();
+			$saved  = '' === $option ? [] : get_option( $option, [] );
+
+			return is_array( $saved ) ? $saved : [];
 		}
 
 		/**

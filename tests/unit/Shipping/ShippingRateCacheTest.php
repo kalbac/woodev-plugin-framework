@@ -242,6 +242,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var string payment method the probe pretends is chosen. */
 		public string $payment = '';
 
+		/** @var array<string, mixed> what the calculation writes into `instance_settings`, as `WC_Shipping_Method::get_instance_option()` does on a first read. */
+		public array $settings_writes = [];
+
 		/** @var \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null */
 		public $pickup_handler = null;
 
@@ -288,6 +291,11 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @return string */
 		public function get_title() {
 			return $this->instance_title;
+		}
+
+		/** @return string the option the instance settings are saved under, as WooCommerce names it. */
+		public function get_instance_option_key() {
+			return 'woocommerce_' . $this->id . '_' . $this->instance_id . '_settings';
 		}
 
 		/** @return string */
@@ -337,6 +345,8 @@ namespace Woodev\Tests\Unit\Shipping {
 		 */
 		protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
 			++$this->carrier_calls;
+			$this->instance_settings = array_merge( $this->instance_settings, $this->settings_writes );
+
 			if ( $this->report_hidden ) {
 				$this->report_hidden( 'no_service', $this->reason_text, [ 'diagnostic' => 'request only' ] );
 			}
@@ -1391,21 +1401,57 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @return void */
 		public function test_changed_method_settings_invalidate_the_cache(): void {
-			$method                    = $this->method();
-			$method->instance_settings = [ 'markup' => '10', 'title' => 'Courier' ];
+			$method = $this->method();
+			$option = $method->get_instance_option_key();
+
+			$this->options[ $option ] = [ 'markup' => '10', 'title' => 'Courier' ];
 
 			$method->calculate_shipping( $this->package() );
 			$method->calculate_shipping( $this->package() );
 			$this->assertSame( 1, $method->carrier_calls );
 
-			$method->instance_settings = [ 'markup' => '20', 'title' => 'Courier' ];
+			$this->options[ $option ] = [ 'markup' => '20', 'title' => 'Courier' ];
 			$method->calculate_shipping( $this->package() );
 			$this->assertSame( 2, $method->carrier_calls, 'new settings, new key' );
 
 			// Key order inside the settings does not matter.
-			$method->instance_settings = [ 'title' => 'Courier', 'markup' => '20' ];
+			$this->options[ $option ] = [ 'title' => 'Courier', 'markup' => '20' ];
 			$method->calculate_shipping( $this->package() );
 			$this->assertSame( 2, $method->carrier_calls );
+		}
+
+		/** @return void */
+		public function test_woocommerce_writing_into_the_settings_it_read_does_not_move_the_key(): void {
+			$method = $this->method();
+			$saved  = [ 'cost' => '' ];
+
+			$this->options[ $method->get_instance_option_key() ] = $saved;
+			$method->instance_settings                           = $saved;
+			// a stored '' read with a fallback, and the default of a field the saved row never had
+			$method->settings_writes = [ 'cost' => '0', 'free_before_discount' => 'no' ];
+
+			$before = $this->key( $method, $this->package() );
+
+			$method->calculate_shipping( $this->package() );
+
+			$this->assertSame( $method->settings_writes, $method->instance_settings, 'the array was written into' );
+			$this->assertSame( $before, $this->key( $method, $this->package() ), 'get() and put() name the same entry' );
+
+			$method->calculate_shipping( $this->package() );
+			$this->assertSame( 1, $method->carrier_calls );
+		}
+
+		/** @return void */
+		public function test_a_method_with_no_instance_reads_no_settings_option(): void {
+			$method            = new class() extends Woodev_Test_Shipping_Method_For_Rate_Cache {
+				/** @return string what WooCommerce answers without an instance id. */
+				public function get_instance_option_key() {
+					return '';
+				}
+			};
+			$this->options[''] = [ 'markup' => '10' ];
+
+			$this->assertSame( [], $method->get_rate_cache_context( $this->package() )['settings'] );
 		}
 
 		/** @return void */
