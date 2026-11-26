@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.23] — 2026-11-26
+### Documentation
+- **specs**: Wildberries Seller S0 — fold the phase-0 measurements into the design (#2018)
+
+
+### Features
+- **marketplace**: A size inside a card as the sellable unit (WF3) (#2024)
+
+- **marketplace**: The plugin's own words and a catalogue capability (WF11) (#2026)
+
+
+
 ## [2.1.22] — 2026-11-26
 ### Bug Fixes
 - **settings**: Show the server's field errors in a connection block on Save (#2020)
