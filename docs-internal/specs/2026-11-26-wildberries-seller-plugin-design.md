@@ -286,8 +286,9 @@ character but digits, `-` and `X` and refuses duplicates, so `12345Ejf5` would b
   of length 8, 12, 13 or 14, with a valid GS1 check digit, **and not a restricted-circulation number**, and only the
   first such value of the size. A restricted-circulation number identifies nothing outside one company or region and is
   not a GTIN: a 12-, 13- or 14-digit value whose 13-digit form (a 12-digit value gets a leading `0`, a 14-digit value
-  loses its first digit) starts with `02`, `04` or `2`, or an 8-digit value starting with `0` or `2`
-  ([GS1 prefixes](https://www.gs1.org/prefixes)). This is not an edge case: every barcode of the existing cards was 13
+  loses its first digit) starts with `0000000`, `02`, `04` or `2`, or an 8-digit value starting with `0` or `2`
+  ([GS1 prefixes](https://www.gs1.org/prefixes)). Such a value is still kept whole in `link_barcodes`. This is not an
+  edge case: every barcode of the existing cards was 13
   digits starting `20`, generated ones start `206`, and both have a valid check digit (MEASURED).
 - **Export:** the profile's existing barcode source (none, GTIN, SKU, custom field — G 6) gives at most one barcode per
   size; with «none» Wildberries generates one, and the poll stores what it generated. Sent `skus` are kept as sent
@@ -358,8 +359,37 @@ MEASURED on the live cabinet: the card list showed a change, four seconds later 
 older `updatedAt`, and an update built from that read put the old description back. Both requests answered 200, and old
 versions were still served 45 seconds after the second write
 ([gotcha](../gotchas/wb-cards-list-serves-an-older-version-after-a-write.md)). The adapter therefore keeps one **write
-record per `nmID`** (§11) — the newest `updatedAt` any read has returned, and what was last sent and when — and follows
-these rules (**interpretation**, §13.2 I13):
+record per card** (§11): the newest `updatedAt` any read has returned, the newest error-list entry read, and what was
+last sent and when (**interpretation**, §13.2 I13).
+
+**The record exists before the card has an `nmID`.** A card to be created gets an `nmID` only when Wildberries lists it,
+and a refused one never does: the measured refusal was HTTP 200 with empty `data`, followed by an error-list entry that
+names the `vendorCode` and a batch id and no `nmID` (`w02-card-upload-invalid`, `w02-error-list`). So:
+
+- the record is created **before the first request**, keyed by the account and the `vendorCode` as sent, `nmID` empty;
+- before every request it stores the send time — of the latest request, and of the first one still answered by neither a
+  card nor a refusal — and keeps the newest error-list entry already read for that article (empty when none was read);
+- when the card list shows this create's card, its `nmID` is attached to the same record. From then on the record is
+  found by account and `nmID`, and a cabinet rename (§5.1) changes its `vendorCode`;
+- a card listed under that article is **this create's** only when its `createdAt` is not older than that first send,
+  less the clock margin below (measured: 1–7 seconds after the request). An older card means the article was already
+  taken in the cabinet: it is never attached, by the poll or by `find_cards()`, and the product says that its article
+  belongs to another card (**interpretation**);
+- a lookup goes by `nmID` when the shop knows it — from the link, or, for a new size of an existing card, from the link
+  of a sibling size — and otherwise by `vendorCode` among the records without `nmID`. There is at most one such record
+  per account and article, so a corrected re-send reuses it.
+
+The module needs no change for this (READ `flows/class-export-service.php`, `jobs/class-export-batch-runner.php`,
+`jobs/class-poll-task-runner.php`). Before the first request each size already has its link — the unit key from
+`Export_Facts::offer_id_for()`, no remote identifier — and the task lists link id → unit key; an empty answer of
+`submit()` marks the task accepted, to be read by those keys (#1999). `read_import_by_articles()` gets the account, the
+unit keys and a context only: for each key the adapter finds the record by the lookup above (the article is decoded from
+the key) and matches Wildberries' cards and error entries on the record's `vendorCode`. A final answer for a listed card
+carries `nmID`, `imtID` and `chrtID`, which the poll writes onto the link; the card is then followed by `chrtID`
+(`card_id_name()`, one per size). A refusal fails the link with Wildberries' text, and the record of a refused create
+stays without `nmID`.
+
+The rules of an update:
 
 - writes to one card are serialised;
 - an update is never built from a read older than the newest `updatedAt` seen for the card;
@@ -376,11 +406,12 @@ residual risk R7.
 refusal appears in the error list within seconds, with the request's time as `updatedAt` — and **stays there after a
 corrected request succeeded** (MEASURED, against the OpenAPI text). So:
 
-- a create is imported when the card is listed, whatever older entries say;
+- a create is imported when its own card is listed (above), whatever older entries say;
 - an update is imported only when a read shows what was sent — the card existing proves nothing;
 - an error-list entry refuses an article only when it belongs to this send: newer than the newest entry already read for
-  that article and not older than the recorded send time. `read_import_by_articles()` receives no send time (READ
-  `flows/interface-article-keyed-lifecycle.php`), so the adapter takes it from its own write record.
+  that article, and not older than the latest send less a margin of a few minutes for the difference between the site's
+  clock and Wildberries'. Both come from the write record: `read_import_by_articles()` receives no send time (READ
+  `flows/interface-article-keyed-lifecycle.php`).
 
 A card is found by its full article: a `textSearch` for a prefix returned nothing (MEASURED).
 
@@ -792,9 +823,11 @@ marketplace (they arrive with the framework cards and reach Ozon Seller as empty
 | tables `shipments`, `shipment_units` | WF8 | supply id, state, pickup point and date, cargo places; unit → supply; the «what is missing» snapshot |
 | order registry: scheme | WF9 | `fbs` / `dbs` per order |
 
-**Plugin-owned storage** (not the module's tables): the card write record of §5.6, one row per `nmID` — the newest
-`updatedAt` seen, the newest error-list entry read, what was last sent and when, and the current verdict — in the table
-`woodev_wildberries_card_writes` (**interpretation**; removed with its account, WP4).
+**Plugin-owned storage** (not the module's tables): the card write record of §5.6, one row per card, in the table
+`woodev_wildberries_card_writes` — the account, the `vendorCode` as last sent, the `nmID` (empty until the card is
+listed), the two send times of §5.6, the newest error-list entry read, what was last sent, the newest `updatedAt` seen and the
+current verdict. An `nmID` is unique per account; the adapter keeps at most one row without an `nmID` per account and
+article (**interpretation**; removed with its account, WP4).
 
 Link `remote_ids`: `nmID`, `imtID`, `chrtID`. Order meta (through the adapter's `Order_Meta_Contract`): the group key,
 the unit ids per line, per unit `rid`, statuses and label-identifier states; for DBS the delivery date and time,
@@ -873,7 +906,7 @@ read-merge-write (a cabinet-only field survives), unit key and escaping, barcode
 GTIN left empty), match keys with conflicts, percent rounding table, status composition for every documented pair,
 grouping in every arrival order, marking code normalisation and every documented `sgtin*` state, the documented 409
 refusals **from fixtures**, DBS address and phone mapping, the freshness gate against an older read, an old error-list
-entry ignored, restricted-circulation barcodes kept out of GTIN, a renamed card and a reused article, the two price
+entry ignored, a refused create that has no `nmID`, restricted-circulation barcodes kept out of GTIN, a renamed card and a reused article, the two price
 refusals, a refusal inside a 200. The phase-0 pairs in `fixtures/m0a/` and `fixtures/m0b/` are the samples; where the
 sandbox differs from the documented shape (measurement.md, fidelity gaps), the documented shape wins. Jest for the React changes; phpcs, phpstan, `lint:i18n`,
 `lint:docs`.
@@ -948,7 +981,7 @@ evidence is in [measurement.md](../research/2026-11-26-wb-seller/measurement.md)
 | I10 | Sticker format and size are an account setting | §6.3 |
 | I11 | `techSize: "0"` with an empty `wbSize` is the unnamed size | §5.1 |
 | I12 | The article follows the cabinet (resolve by `chrtID`, third key component on a reused article); 1.0 does not change it from the shop | §5.1 |
-| I13 | The freshness gate and the plugin-owned write record; a waiting update rides the export job's retry ladder | §5.6, §11 |
+| I13 | The freshness gate and the plugin-owned write record, keyed by the article until an `nmID` exists; a waiting update rides the export job's retry ladder | §5.6, §11 |
 | I14 | A unit counts as marked goods when its card has `needKiz` and the order lists `sgtin`; for those an optional code warns without blocking | §6.4 |
 | I15 | A refused or quarantined price is final until the shop price changes: sending it again cannot succeed by itself | §8 WF1, §9.5 |
 
@@ -1038,7 +1071,7 @@ for client cards, `src/marketplace-admin/**` with its built bundle.
 |---|---|---|---|---|
 | WF1 — Asynchronous price settlement | M · Sonnet 5.5 | — | `jobs/**` (price), `price/**`, `ledger/**`, `diagnostics/**` | §8. Accept: fake adapter pending → accepted / refused / quarantined / expired; refused and quarantined carry their own reason codes and are not re-sent until the price changes; Ozon's immediate path unchanged |
 | WF2 — Export of grouped cards without a task number (**done**, #2012) | L · Fable 5.2 | M0a 4 | `jobs/class-export-*`, `jobs/class-poll-task-runner.php`, `flows/**` | §8. Accept: a group never split; «accepted, no task id» polled by article; a retried accepted create never doubles; adapter deadlines; Ozon tests green |
-| WF3 — Size as the unit | L · Sonnet 5.5 | M0a 3 | `flows/class-card-{matcher,linker,import}.php`, `flows/class-product-writer.php`, `flows/class-group-assembler.php`, `data/**`, `admin/product/**`, `admin/pages/products/**` | §5.1–5.4. Accept: `12345Ejf5` and a two-barcode size survive link and import byte for byte with GTIN empty; a 13-digit code starting `20` with a valid check digit leaves GTIN empty; an ambiguous key is a reported conflict; the cards list groups sizes under their card |
+| WF3 — Size as the unit | L · Sonnet 5.5 | M0a 3 | `flows/class-card-{matcher,linker,import}.php`, `flows/class-product-writer.php`, `flows/class-group-assembler.php`, `data/**`, `admin/product/**`, `admin/pages/products/**` | §5.1–5.4. Accept: `12345Ejf5` and a two-barcode size survive link and import byte for byte with GTIN empty; a 13-digit code starting `20` with a valid check digit leaves GTIN empty, and so do `0000000123457` and its 12-digit form `000000123457`, both kept in `link_barcodes`; an ambiguous key is a reported conflict; the cards list groups sizes under their card |
 | WF4 — Price groups | M · Sonnet 5.5 | WF1 | `price/**`, `sync/**`, `diagnostics/**`, `admin/shared/**` | §8, D7. Accept: a whole group reaches the pusher; differing prices in a single-price group are not sent and each member shows the reason |
 | WF5 — Token-only account, 4xx surcharge (**done**, #2011) | S · Haiku 5.5 | — | `account/**`, `settings/class-accounts-sections.php`, `governor/**` | §8. Accept: an account with one secret saves and is «configured»; a reported 4xx draws `cost_4xx` |
 | WF6a — Order actions | L · Sonnet 5.5 | — | `admin/order/**` (actions, cancel, gate), `admin/pages/orders/**` (actions), `admin/shared/**` | §8. Accept: an adapter-declared action appears in the table, the details box and bulk, and is refused server-side when its status does not allow it; a batch with one refused unit shows that unit's text and applies the others; an input schema is validated before any remote call; cancel without reasons; Ozon cancel with reasons unchanged. No file of `orders/**` or `flows/class-wc-order-store.php` changes |
@@ -1058,7 +1091,7 @@ for client cards, `src/marketplace-admin/**` with its built bundle.
 | WP1 — Skeleton and connection | M · Sonnet 5.5 | WF5 | §9.1. Accept: a Base token, a read-only token and each missing category explained in plain words; the token never in a log or the diagnostics report |
 | WP2 — Catalogue, mappings, validation | M · Sonnet 5.5 | WP1 | §9.2. Accept: subject search, required and limited characteristics, every rule with its merchant reason |
 | WP3 — Cabinet cards: list, link, import | L · Sonnet 5.5 | WP1, WF3 | §5.1, §5.3–5.4, §9.3. Accept on the live cabinet (read-only): the dormant catalogue lists, links and imports; a colour × size group → one variable product. On fixtures: a sizeless card → a simple product; a renamed card stays linked; a freed article on a new card gets its own key |
-| WP4 — Create and update cards, media | L · Fable 5.2 | WP2, WP3, WF2, WF12 | §5.5–5.6, §9.3. Two pull requests: create and media, then update. Accept: create on the test cards; photos confirmed by read-back, a lost job retried; an update keeps every cabinet-only field (read-back diff empty); an update from an older read waits and gives up at the cap (replayed from the M0a pairs); an old error entry does not refuse a new send; an update is imported only when a read shows it; the verdict shows at the product; no delete call exists in the client |
+| WP4 — Create and update cards, media | L · Fable 5.2 | WP2, WP3, WF2, WF12 | §5.5–5.6, §9.3. Two pull requests: create and media, then update. Accept: create on the test cards; photos confirmed by read-back, a lost job retried; an update keeps every cabinet-only field (read-back diff empty); an update from an older read waits and gives up at the cap (replayed from the M0a pairs); an old error entry does not refuse a new send; a refused create that never gets an `nmID` (replayed `w02-card-upload-invalid` and `w02-error-list`) has its record before the request and fails with Wildberries' text; a listed card attaches its `nmID` to that same record, and a card older than the first send is not attached; an update is imported only when a read shows it; the verdict shows at the product; no delete call exists in the client |
 | WP5 — Stock and warehouses | M · Sonnet 5.5 | WP3 | §9.4. Accept: the payload contract test; both formulas covered by unit tests, `wc_only` in force; absent is not read as 0; a not-ready refusal waits; on the live cabinet a push of 0 and its read-back; on the sandbox a non-zero push, an emulated order and the stock after ingest |
 | WP6 — Prices | M · Sonnet 5.5 | WP3, WF1, WF4 | §9.5. Accept: price and discount on a test card settle through WF1; the rounding table in kopecks; quarantine and the plain refusal shown with their own sentences; a not-yet-listed card waits; size prices on fixtures (no live card allows them) |
 | WP7 — FBS orders | L · Sonnet 5.5 | WP3, WF6a, WF6b; M0b for its fixtures | §6.1. Accept: grouping in every arrival order, both status axes, unit cancel with the stock check of WF6b, both order storages; fixtures from M0b 12–13 and an end-to-end run on the sandbox; no live-cabinet order |
@@ -1129,6 +1162,7 @@ No card is conditional: DBS stays in 1.0 (owner, 26.11.2026).
 | 26.11.2026 | The owner's answers. **T1:** no real order is possible; DBS stays in 1.0; the DBS checks and all FBS order flows are done from documentation, fixtures and the sandbox, with the unproven facts as stated residual risk (§13.4); the two real-order measurement cards became one sandbox card M0b; the stock formula is settled as `wc_only` without an order measurement (§9.4), which is how critic finding 3 is closed now; refused live writes are measured (M0a 11a). **T2:** approved — WD1 changes the shipping module as an owner's exception to «delivery code is not touched» |
 | 26.11.2026 | WF2 built (#1999): `read_import()` keeps its signature; article reads, grouping and deadlines are optional interfaces, so Ozon needs no change — §8. The same rule binds the other framework cards that add to an adapter contract |
 | 26.11.2026 | **S0 (#1997): phase 0 folded in** (§3.4). No owner decision changed; `wc_only` confirmed. New §5.6 (freshness gate, result matching); unit key follows a cabinet rename (§5.1); GTIN excludes restricted-circulation codes (§5.2); stock re-sent after a cancellation (§9.4); price rounding and two refusal outcomes (§9.5); `+7` relay form and per-unit DBS results (§7); two marking levels (§6.4); §13.1 carries a result for every item, with U14–U17 new; interpretations I11–I15, tensions T6–T7, risks R7–R8 (not yet put to the owner), R6 closed; new card WF12; re-estimate (§14) |
+| 26.11.2026 | After the critic review of PR #2018 (no owner decision, T6–T7 or R7–R8 changed): the card write record exists before an `nmID` does, keyed by account and article, so a refused create is matched to its send — §5.6, §11, WP4; the error-entry rule allows a clock margin — §5.6; the GTIN exclusion adds the GS1 prefix `0000000` — §5.2, WF3 |
 
 ## Related
 
