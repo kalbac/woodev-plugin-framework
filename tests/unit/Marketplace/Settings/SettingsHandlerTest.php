@@ -712,21 +712,21 @@ final class SettingsHandlerTest extends TestCase {
 			}
 		);
 		$acc_a      = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop A', true, [ 'sid' => 'seller-token', 'access_token' => 'token-abcdef' ] ) );
-		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop B', true, [ 'sid' => 'seller-bravo', 'access_token' => 'bravo-123456' ] ) );
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop B', true, [ 'sid' => 'seller-bravo', 'access_token' => 'bravo-bbbbbb' ] ) );
 		$handler    = $this->build_handler( $adapter, $store );
 		$token_a    = "account_{$acc_a}_access_token";
 
-		$this->assertArrayHasKey( $token_a, $handler->validate_values( [ $token_a => 'bravo-999999' ] ), 'another account already holds this identifier' );
-		$this->assertArrayHasKey( $token_a, $handler->validate_values( [ $token_a => 'bad-999999' ] ), 'a token that derives nothing is refused on an edit' );
-		$this->assertSame( [], $handler->validate_values( [ $token_a => 'other-999999' ] ) );
+		$this->assertArrayHasKey( $token_a, $handler->validate_values( [ $token_a => 'bravo-cccccc' ] ), 'another account already holds this identifier' );
+		$this->assertArrayHasKey( $token_a, $handler->validate_values( [ $token_a => 'bad-xxxxxx' ] ), 'a token that derives nothing is refused on an edit' );
+		$this->assertSame( [], $handler->validate_values( [ $token_a => 'other-oooooo' ] ) );
 
-		$handler->get_setting( $token_a )->set_value( 'other-999999' );
+		$handler->get_setting( $token_a )->set_value( 'other-oooooo' );
 		$handler->save();
 
 		$this->assertSame( 'seller-other', $store->get( $acc_a )->credentials()['sid'], 'the identifier follows the new token' );
 		$this->assertNull( $store->find_by_identifier( 'seller-token' ), 'the old identifier is gone' );
 
-		$new = $handler->validate_values( [ 'account_new_name' => 'Shop C', 'account_new_access_token' => 'bad-123456' ] );
+		$new = $handler->validate_values( [ 'account_new_name' => 'Shop C', 'account_new_access_token' => 'bad-yyyyyy' ] );
 		$this->assertArrayHasKey( 'account_new_access_token', $new, 'a new block whose token derives nothing is refused, not saved as nothing' );
 	}
 
