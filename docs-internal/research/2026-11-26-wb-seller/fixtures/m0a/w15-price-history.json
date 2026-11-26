@@ -1,0 +1,34 @@
+{
+  "label": "w15-price-history",
+  "recorded_at": "2026-11-26T01:51:47Z",
+  "request": {
+    "method": "GET",
+    "url": "https://discounts-prices-api.wildberries.ru/api/v2/history/tasks",
+    "query": {
+      "uploadID": 130000003
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "3"
+    },
+    "body": {
+      "data": {
+        "uploadID": 130000003,
+        "status": 6,
+        "uploadDate": "2026-11-26T01:51:42.094241Z",
+        "activationDate": "2026-11-26T01:51:42.094241Z",
+        "overAllGoodsNumber": 1,
+        "successGoodsNumber": 0
+      },
+      "error": false,
+      "errorText": ""
+    }
+  }
+}

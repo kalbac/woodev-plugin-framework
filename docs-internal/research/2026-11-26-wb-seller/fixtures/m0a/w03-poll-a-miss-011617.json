@@ -1,0 +1,36 @@
+{
+  "label": "w03-poll-a-miss-011617",
+  "recorded_at": "2026-11-26T01:16:17Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/get/cards/list",
+    "query": {
+      "locale": "ru"
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "settings": {
+        "cursor": {
+          "limit": 100
+        },
+        "filter": {
+          "textSearch": "WOODEV-TEST-A",
+          "withPhoto": -1
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "4"
+    },
+    "body": {
+      "cards": [],
+      "cursor": "<omitted>"
+    }
+  }
+}

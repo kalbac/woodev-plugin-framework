@@ -1,0 +1,57 @@
+{
+  "label": "final-stocks-warehouse-1",
+  "recorded_at": "2026-11-26T01:53:02Z",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api.wildberries.ru/api/v3/stocks/700001",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "chrtIds": [
+        120000001,
+        120000002,
+        120000003,
+        120000004,
+        120000005
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "20",
+      "X-Ratelimit-Remaining": "19"
+    },
+    "body": {
+      "stocks": [
+        {
+          "sku": "2060000000057",
+          "chrtId": 120000001,
+          "amount": 0
+        },
+        {
+          "sku": "2060000000019",
+          "chrtId": 120000002,
+          "amount": 0
+        },
+        {
+          "sku": "2060000000026",
+          "chrtId": 120000003,
+          "amount": 0
+        },
+        {
+          "sku": "2060000000033",
+          "chrtId": 120000004,
+          "amount": 0
+        },
+        {
+          "sku": "2060000000040",
+          "chrtId": 120000005,
+          "amount": 0
+        }
+      ]
+    }
+  }
+}

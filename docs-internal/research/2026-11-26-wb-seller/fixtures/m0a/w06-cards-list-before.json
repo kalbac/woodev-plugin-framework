@@ -1,0 +1,244 @@
+{
+  "label": "w06-cards-list-before",
+  "recorded_at": "2026-11-26T01:19:14Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/get/cards/list",
+    "query": {
+      "locale": "ru"
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "settings": {
+        "cursor": {
+          "limit": 100
+        },
+        "filter": {
+          "withPhoto": -1
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "4"
+    },
+    "body": {
+      "cards": [
+        {
+          "nmID": 100000001,
+          "imtID": 110000001,
+          "nmUUID": "00000000-0000-0000-0000-000000000001",
+          "subjectID": 297,
+          "subjectName": "Брелоки",
+          "vendorCode": "WOODEV-TEST-A",
+          "brand": "",
+          "title": "ТЕСТ Woodev не продавать брелок",
+          "description": "Тестовая карточка для проверки интеграции. Не для продажи.",
+          "needKiz": false,
+          "kizMarked": false,
+          "photos": [
+            {
+              "big": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/big/1.webp",
+              "c246x328": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/c246x328/1.webp",
+              "c516x688": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/c516x688/1.webp",
+              "hq": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/hq/1.webp",
+              "square": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/square/1.webp",
+              "tm": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/tm/1.webp"
+            },
+            {
+              "big": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/big/2.webp",
+              "c246x328": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/c246x328/2.webp",
+              "c516x688": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/c516x688/2.webp",
+              "hq": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/hq/2.webp",
+              "square": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/square/2.webp",
+              "tm": "https://basket-00.wbbasket.ru/vol0/part0/100000001/images/tm/2.webp"
+            }
+          ],
+          "dimensions": {
+            "width": 5,
+            "height": 2,
+            "length": 10,
+            "weightBrutto": 0.1,
+            "isValid": true
+          },
+          "characteristics": [
+            {
+              "id": 14177449,
+              "name": "Цвет",
+              "value": [
+                "черный"
+              ]
+            }
+          ],
+          "sizes": [
+            {
+              "chrtID": 120000001,
+              "techSize": "0",
+              "wbSize": "",
+              "skus": [
+                "2060000000057"
+              ]
+            }
+          ],
+          "createdAt": "2026-11-26T01:16:16.240268Z",
+          "updatedAt": "2026-11-26T01:17:46.779472Z",
+          "documents": {
+            "overallVerdict": {
+              "isFullyChecked": true,
+              "status": 2,
+              "reason": "documents_missing",
+              "createdAt": "2026-11-26T04:16:27.218423+03:00"
+            },
+            "issues": [
+              {
+                "code": "document_missing",
+                "documentTypes": [
+                  1
+                ]
+              }
+            ],
+            "excludeDocuments": false
+          }
+        },
+        {
+          "nmID": 100000003,
+          "imtID": 110000002,
+          "nmUUID": "00000000-0000-0000-0000-000000000003",
+          "subjectID": 256,
+          "subjectName": "Повязки на голову",
+          "vendorCode": "WOODEV-TEST-B-WHITE",
+          "brand": "",
+          "title": "ТЕСТ Woodev не продавать повязка",
+          "description": "Тестовая карточка для проверки интеграции. Не для продажи.",
+          "needKiz": true,
+          "kizMarked": false,
+          "dimensions": {
+            "width": 15,
+            "height": 3,
+            "length": 20,
+            "weightBrutto": 0.1,
+            "isValid": true
+          },
+          "characteristics": [
+            {
+              "id": 14177449,
+              "name": "Цвет",
+              "value": [
+                "белый"
+              ]
+            }
+          ],
+          "sizes": [
+            {
+              "chrtID": 120000004,
+              "techSize": "S",
+              "wbSize": "54",
+              "skus": [
+                "2060000000033"
+              ]
+            },
+            {
+              "chrtID": 120000005,
+              "techSize": "M",
+              "wbSize": "56",
+              "skus": [
+                "2060000000040"
+              ]
+            }
+          ],
+          "createdAt": "2026-11-26T01:16:17.479783Z",
+          "updatedAt": "2026-11-26T01:16:18.479781Z",
+          "documents": {
+            "overallVerdict": {
+              "isFullyChecked": true,
+              "status": 2,
+              "reason": "documents_missing",
+              "createdAt": "2026-11-26T04:16:23.818386+03:00"
+            },
+            "issues": [
+              {
+                "code": "document_missing",
+                "documentTypes": [
+                  1
+                ]
+              }
+            ],
+            "excludeDocuments": false
+          }
+        },
+        {
+          "nmID": 100000002,
+          "imtID": 110000002,
+          "nmUUID": "00000000-0000-0000-0000-000000000002",
+          "subjectID": 256,
+          "subjectName": "Повязки на голову",
+          "vendorCode": "WOODEV-TEST-B-BLACK",
+          "brand": "",
+          "title": "ТЕСТ Woodev не продавать повязка",
+          "description": "Тестовая карточка для проверки интеграции. Не для продажи.",
+          "needKiz": true,
+          "kizMarked": false,
+          "dimensions": {
+            "width": 15,
+            "height": 3,
+            "length": 20,
+            "weightBrutto": 0.1,
+            "isValid": true
+          },
+          "characteristics": [
+            {
+              "id": 14177449,
+              "name": "Цвет",
+              "value": [
+                "черный"
+              ]
+            }
+          ],
+          "sizes": [
+            {
+              "chrtID": 120000002,
+              "techSize": "S",
+              "wbSize": "54",
+              "skus": [
+                "2060000000019"
+              ]
+            },
+            {
+              "chrtID": 120000003,
+              "techSize": "M",
+              "wbSize": "56",
+              "skus": [
+                "2060000000026"
+              ]
+            }
+          ],
+          "createdAt": "2026-11-26T01:16:17.479781Z",
+          "updatedAt": "2026-11-26T01:16:18.479781Z",
+          "documents": {
+            "overallVerdict": {
+              "isFullyChecked": true,
+              "status": 2,
+              "reason": "documents_missing",
+              "createdAt": "2026-11-26T04:16:23.713881+03:00"
+            },
+            "issues": [
+              {
+                "code": "document_missing",
+                "documentTypes": [
+                  1
+                ]
+              }
+            ],
+            "excludeDocuments": false
+          }
+        }
+      ],
+      "cursor": "<omitted>"
+    }
+  }
+}
