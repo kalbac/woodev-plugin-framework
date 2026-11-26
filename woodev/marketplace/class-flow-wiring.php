@@ -26,6 +26,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
@@ -482,14 +483,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$scheduler  = new Export_Scheduler( $this->names );
 			$seeder     = new Card_Created_Seeder( $store, $this->contexts, $adapter->stock_policy() );
 			$names      = $this->names;
+			$lifecycle  = $adapter->card_lifecycle();
+			$by_article = $lifecycle instanceof Article_Keyed_Lifecycle ? $lifecycle : null;
 
-			( new Export_Batch_Runner( $this->gate, $this->links, $ledger, $this->contexts, new Export_Validator( $adapter->export_rules() ), $adapter->export_gateway(), $scheduler, $classifier, $this->ring, $this->log_error ) )->register();
+			( new Export_Batch_Runner( $this->gate, $this->links, $ledger, $this->contexts, new Export_Validator( $adapter->export_rules() ), $adapter->export_gateway(), $scheduler, $classifier, $this->ring, $this->log_error, $by_article ) )->register();
 			( new Poll_Task_Runner(
 				$this->gate,
 				$this->links,
 				$ledger,
 				$scheduler,
-				$adapter->card_lifecycle(),
+				$lifecycle,
 				$classifier,
 				static function ( Account $account, Link_Record $link ) use ( $seeder ): void {
 					$seeder->seed( $account, $link );

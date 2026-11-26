@@ -11,8 +11,9 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Action Scheduler calls for `woodev_{plugin id}_export_batch` (args `[ account_id, link_ids, attempt ]`, at most
- * {@see self::BATCH_SIZE} links) and `woodev_{plugin id}_poll_task` (args `[ task_id, attempt ]`), plus the recurring recovery sweep
- * `poll_task( 0, 0 )`. Action Scheduler's own retry is not used: the runners reschedule themselves with an attempt counter.
+ * {@see self::BATCH_SIZE} links unless one group is larger) and `woodev_{plugin id}_poll_task` (args `[ task_id, attempt ]`), plus
+ * the recurring recovery sweep `poll_task( 0, 0 )`. Action Scheduler's own retry is not used: the runners reschedule themselves with
+ * an attempt counter.
  *
  * @since 2.1.0
  */
@@ -21,7 +22,7 @@ final class Export_Scheduler {
 	public const POLL_JOB   = 'poll_task';
 
 	/**
-	 * Most links in one `export_batch` (one import request).
+	 * Most links in one `export_batch` (one import request); only a single group larger than this goes over it.
 	 */
 	public const BATCH_SIZE = 100;
 
@@ -91,18 +92,22 @@ final class Export_Scheduler {
 	}
 
 	/**
-	 * Queues the export of links, in batches of {@see self::BATCH_SIZE}. Every batch is tried even when an earlier one was refused,
-	 * so one bad moment of Action Scheduler strands as few links as possible.
+	 * Queues the export of links, in batches of {@see self::BATCH_SIZE}. Links of one group go into one batch, which is larger than
+	 * that only when the group alone is. Every batch is tried even when an earlier one was refused, so one bad moment of Action
+	 * Scheduler strands as few links as possible.
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param int   $account_id Account id.
-	 * @param int[] $link_ids   Link ids.
+	 * @since 2.1.21 `$groups`.
+	 *
+	 * @param int               $account_id Account id.
+	 * @param int[]             $link_ids   Link ids.
+	 * @param array<int,string> $groups     Link id => the group it is sent with; a link that is absent, or has '', stands alone.
 	 * @return int Batches queued.
 	 * @throws Export_Not_Scheduled When Action Scheduler refused or threw on a batch; it names the links of those batches.
 	 */
-	public function queue_export( int $account_id, array $link_ids ): int {
-		$batches     = array_chunk( array_values( array_unique( array_map( 'intval', $link_ids ) ) ), self::BATCH_SIZE );
+	public function queue_export( int $account_id, array $link_ids, array $groups = [] ): int {
+		$batches     = $this->batches( array_values( array_unique( array_map( 'intval', $link_ids ) ) ), $groups );
 		$unscheduled = [];
 
 		foreach ( $batches as $batch ) {
@@ -116,6 +121,41 @@ final class Export_Scheduler {
 		}
 
 		return count( $batches );
+	}
+
+	/**
+	 * Packs links into batches in their order, never cutting a group. A group takes the place of its first link.
+	 *
+	 * @param int[]             $link_ids Link ids.
+	 * @param array<int,string> $groups   Link id => group.
+	 * @return array<int,int[]>
+	 */
+	private function batches( array $link_ids, array $groups ): array {
+		$units = [];
+
+		foreach ( $link_ids as $link_id ) {
+			$group = (string) ( $groups[ $link_id ] ?? '' );
+
+			$units[ '' === $group ? 'link ' . $link_id : 'group ' . $group ][] = $link_id;
+		}
+
+		$batches = [];
+		$batch   = [];
+
+		foreach ( $units as $unit ) {
+			if ( [] !== $batch && count( $batch ) + count( $unit ) > self::BATCH_SIZE ) {
+				$batches[] = $batch;
+				$batch     = [];
+			}
+
+			$batch = array_merge( $batch, $unit );
+		}
+
+		if ( [] !== $batch ) {
+			$batches[] = $batch;
+		}
+
+		return $batches;
 	}
 
 	/**

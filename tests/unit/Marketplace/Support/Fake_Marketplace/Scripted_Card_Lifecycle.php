@@ -16,7 +16,7 @@ use Woodev\Framework\Marketplace\Flows\Import_Outcome;
  * Names cards by `card_ref`; `model_ref` reaches a card after it exists. What the marketplace reports is whatever the test put in
  * {@see self::$import} and {@see self::$cards}; a `\Throwable` in {@see self::$failure} is thrown by the next read.
  */
-final class Scripted_Card_Lifecycle implements Card_Lifecycle {
+class Scripted_Card_Lifecycle implements Card_Lifecycle {
 	/**
 	 * Import items the marketplace reports, by article.
 	 *
@@ -108,7 +108,7 @@ final class Scripted_Card_Lifecycle implements Card_Lifecycle {
 	 * @return void
 	 * @throws \Throwable The scripted failure.
 	 */
-	private function before_answer(): void {
+	protected function before_answer(): void {
 		if ( null !== $this->on_read ) {
 			call_user_func( $this->on_read );
 		}

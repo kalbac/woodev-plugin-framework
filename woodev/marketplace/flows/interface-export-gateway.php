@@ -39,14 +39,16 @@ interface Export_Gateway {
 	public function build_item( Link_Record $link, \WC_Product $product, Mapping $mapping, array $overrides, Profile $profile, Validation_Context $context ): array;
 
 	/**
-	 * Sends a batch of built cards in one request.
+	 * Sends a batch of built cards in one request. A group of offers ({@see Export_Grouping}) arrives whole, so a batch may be larger
+	 * than {@see \Woodev\Framework\Marketplace\Jobs\Export_Scheduler::BATCH_SIZE} for a marketplace that groups.
 	 *
 	 * @since 2.1.0
 	 *
 	 * @param Account                        $account Account.
 	 * @param array<int,array<string,mixed>> $items   Link id => card, as {@see self::build_item()} returned them.
 	 * @param string                         $context Name of the calling job, for the governor and the error ring.
-	 * @return string The marketplace's number of the import task; '' when it accepted the request and gave none.
+	 * @return string The marketplace's number of the import task; '' when it gave none. '' means «accepted» when the adapter's
+	 *                lifecycle is an {@see Article_Keyed_Lifecycle}, and a failed request otherwise.
 	 * @throws \Throwable When the request fails; the adapter's error classifier decides what that means.
 	 */
 	public function submit( Account $account, array $items, string $context ): string;

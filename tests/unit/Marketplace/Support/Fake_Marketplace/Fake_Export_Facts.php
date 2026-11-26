@@ -16,7 +16,7 @@ use Woodev\Framework\Marketplace\Flows\Export_Facts;
  * A marketplace that sells goods that ship: a virtual or downloadable product is no card. The article is the SKU unless one was
  * frozen. Tests put extra validator facts into {@see self::$facts}.
  */
-final class Fake_Export_Facts implements Export_Facts {
+class Fake_Export_Facts implements Export_Facts {
 	/**
 	 * Facts for the validator.
 	 *

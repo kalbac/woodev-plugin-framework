@@ -30,6 +30,16 @@ final class Async_Task {
 	public const STATUS_EXPIRED          = 'expired';
 
 	/**
+	 * Key of the result payload that marks a task accepted without a marketplace task id.
+	 */
+	public const RESULT_BY_ARTICLES = 'by_articles';
+
+	/**
+	 * Key of the result payload that holds the refusal of a re-send whose cards are still awaited.
+	 */
+	public const RESULT_REFUSAL = 'refusal';
+
+	/**
 	 * Local id, null before the task is stored.
 	 *
 	 * @var int|null
@@ -205,6 +215,40 @@ final class Async_Task {
 	 */
 	public function remote_task_id(): ?string {
 		return $this->remote_task_id;
+	}
+
+	/**
+	 * Tells whether the marketplace accepted the task without giving it an id, so that it is read by the articles of its items.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @return bool
+	 */
+	public function is_accepted_by_articles(): bool {
+		return ! empty( $this->result[ self::RESULT_BY_ARTICLES ] );
+	}
+
+	/**
+	 * Returns the marketplace's words when it refused the request because the cards may exist already, and the task waits for them in
+	 * the card list; '' for any other task.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @return string
+	 */
+	public function refusal(): string {
+		return (string) ( $this->result[ self::RESULT_REFUSAL ] ?? '' );
+	}
+
+	/**
+	 * Tells whether the marketplace has the task, so that it is polled: it gave an id, or the task is read by articles.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @return bool
+	 */
+	public function is_accepted(): bool {
+		return null !== $this->remote_task_id || $this->is_accepted_by_articles();
 	}
 
 	/**
