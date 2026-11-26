@@ -30,11 +30,13 @@ final class Mapping_List_Definition {
 	 * Builds the definition.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.23 Takes the marketplace name.
 	 *
+	 * @param string $marketplace Merchant-facing marketplace name.
 	 * @return array<string,mixed>
 	 */
-	public static function build(): array {
-		return List_Definition::build( self::columns(), self::SORT_KEYS, self::messages() );
+	public static function build( string $marketplace ): array {
+		return List_Definition::build( self::columns(), self::SORT_KEYS, self::messages( $marketplace ) );
 	}
 
 	/**
@@ -57,11 +59,13 @@ final class Mapping_List_Definition {
 	}
 
 	/**
+	 * @param string $marketplace Marketplace name.
 	 * @return array<string,string>
 	 */
-	private static function messages(): array {
+	private static function messages( string $marketplace ): array {
 		return [
-			'description' => __( 'На этой странице настраивается соответствие категорий вашего магазина категориям Ozon и указывается, откуда брать значения характеристик товаров.', 'woodev-plugin-framework' ),
+			/* translators: %s: marketplace name. */
+			'description' => sprintf( __( 'На этой странице настраивается соответствие категорий вашего магазина категориям %s и указывается, откуда брать значения характеристик товаров.', 'woodev-plugin-framework' ), $marketplace ),
 			'empty'       => __( 'Сопоставлений пока нет. Сопоставление связывает категории вашего магазина с категориями маркетплейса: так товары попадают в нужный раздел и получают нужные характеристики.', 'woodev-plugin-framework' ),
 			'error'       => __( 'Не удалось загрузить сопоставления. Повторите чуть позже.', 'woodev-plugin-framework' ),
 			'per_page'    => __( 'Сопоставлений на странице', 'woodev-plugin-framework' ),

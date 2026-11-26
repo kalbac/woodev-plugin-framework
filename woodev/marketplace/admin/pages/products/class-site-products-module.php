@@ -64,7 +64,7 @@ defined( 'ABSPATH' ) || exit;
  * here names a marketplace: every marketplace fact comes from the {@see Marketplace_Adapter}.
  *
  * The providers are built when the REST API starts, not on every request, and only when the plugin still has the `products` page.
- * A plugin whose adapter cannot import cards (no {@see Capability::IMPORT_PRODUCTS}) gets the table without «Экспортировать» and
+ * A plugin whose adapter has no catalogue ({@see Capability::has_catalog()}) gets the table without «Экспортировать» and
  * «Связать по артикулу», and no «Карточки на маркетплейсе» table: the page declares that one only for an adapter that can list the cards.
  *
  * @since 2.1.4
@@ -294,7 +294,7 @@ final class Site_Products_Module {
 	 * The bulk actions an adapter cannot serve: the table withholds them from its toolbar, and the variation panel's group of the
 	 * product edit screen leaves them out of its select.
 	 *
-	 * An adapter that cannot import cards has no export and no linking; one that reads no prices has nothing to pull; one that sends
+	 * An adapter without a catalogue has no export and no linking; one that reads no prices has nothing to pull; one that sends
 	 * none keeps no own prices to reset.
 	 *
 	 * @since 2.1.13
@@ -303,7 +303,7 @@ final class Site_Products_Module {
 	 * @return string[] Action ids.
 	 */
 	public static function withheld_actions( Marketplace_Adapter $adapter ): array {
-		$withheld = $adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE ];
+		$withheld = Capability::has_catalog( $adapter ) ? [] : [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE ];
 		$withheld = null === $adapter->price_reader() ? array_merge( $withheld, [ Site_Products_Bulk::PULL_PRICES ] ) : $withheld;
 
 		return null === $adapter->price_pusher() ? array_merge( $withheld, [ Site_Products_Bulk::RESET_PRICE ] ) : $withheld;

@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Sets;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 use Woodev\Framework\Shipping\Admin\Orders\Analytics_Aggregator;
 
 defined( 'ABSPATH' ) || exit;
@@ -82,20 +83,30 @@ final class Orders_Analytics_Controller {
 	private $accounts;
 
 	/**
+	 * The marketplace's word for a posting.
+	 *
+	 * @var Posting_Noun
+	 */
+	private $noun;
+
+	/**
 	 * Creates the controller.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.23 Takes the posting noun.
 	 *
-	 * @param string   $owner      Plugin id.
-	 * @param string   $capability Capability of the plugin's «Заказы» page.
-	 * @param callable $accounts   `function (): array<int,string>`, the enabled accounts' labels by id.
-	 * @param callable $report     `function ( array<int,string> $accounts ): Orders_Analytics_Report`.
+	 * @param string            $owner      Plugin id.
+	 * @param string            $capability Capability of the plugin's «Заказы» page.
+	 * @param callable          $accounts   `function (): array<int,string>`, the enabled accounts' labels by id.
+	 * @param callable          $report     `function ( array<int,string> $accounts ): Orders_Analytics_Report`.
+	 * @param Posting_Noun|null $noun       The marketplace's word for a posting; null for «отправление».
 	 */
-	public function __construct( string $owner, string $capability, callable $accounts, callable $report ) {
+	public function __construct( string $owner, string $capability, callable $accounts, callable $report, ?Posting_Noun $noun = null ) {
 		$this->owner      = $owner;
 		$this->capability = $capability;
 		$this->accounts   = $accounts;
 		$this->report     = $report;
+		$this->noun       = $noun ?? Posting_Noun::shipment();
 	}
 
 	/**
@@ -147,7 +158,8 @@ final class Orders_Analytics_Controller {
 					},
 					$groups
 				);
-			}
+			},
+			Posting_Noun::for_descriptor( $adapter->settings_descriptor() )
 		);
 	}
 
@@ -155,12 +167,17 @@ final class Orders_Analytics_Controller {
 	 * The words of the tab. PHP owns the copy; the tab only places it.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.23 Takes the posting noun.
 	 *
+	 * @param Posting_Noun|null $noun The marketplace's word for a posting; null for «отправление».
 	 * @return array<string,string>
 	 */
-	public static function messages(): array {
+	public static function messages( ?Posting_Noun $noun = null ): array {
+		$noun = $noun ?? Posting_Noun::shipment();
+
 		return [
-			'intro'           => __( 'На этой странице отображаются заказы маркетплейса за выбранный период: выручка и отмены по аккаунтам, проданные товары, статусы отправлений и отправления, которые ждут упаковки или отгрузки.', 'woodev-plugin-framework' ),
+			/* translators: 1: the marketplace's word for a posting in the genitive plural, «отправлений», 2: the plural, «отправления». */
+			'intro'           => sprintf( __( 'На этой странице отображаются заказы маркетплейса за выбранный период: выручка и отмены по аккаунтам, проданные товары, статусы %1$s и %2$s, которые ждут упаковки или отгрузки.', 'woodev-plugin-framework' ), $noun->of_many(), $noun->many() ),
 			'account'         => __( 'Аккаунт', 'woodev-plugin-framework' ),
 			'allAccounts'     => __( 'Все аккаунты', 'woodev-plugin-framework' ),
 			'refresh'         => __( 'Обновить', 'woodev-plugin-framework' ),
@@ -185,16 +202,21 @@ final class Orders_Analytics_Controller {
 			'chartEmpty'      => __( 'За этот период данных нет.', 'woodev-plugin-framework' ),
 			'byAccount'       => __( 'По аккаунтам', 'woodev-plugin-framework' ),
 			'cancelled'       => __( 'Отменено', 'woodev-plugin-framework' ),
-			'statuses'        => __( 'Отправления по статусам', 'woodev-plugin-framework' ),
-			'statusesHint'    => __( 'Все отправления по их статусу на маркетплейсе сейчас, завершённые тоже. Число открывает список заказов с этим статусом.', 'woodev-plugin-framework' ),
+			/* translators: %s: the marketplace's word for several postings, capitalised: «Отправления». */
+			'statuses'        => sprintf( __( '%s по статусам', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $noun->many() ) ),
+			/* translators: %s: the marketplace's word for several postings, «отправления». */
+			'statusesHint'    => sprintf( __( 'Все %s по их статусу на маркетплейсе сейчас, завершённые тоже. Число открывает список заказов с этим статусом.', 'woodev-plugin-framework' ), $noun->many() ),
 			'status'          => __( 'Статус на маркетплейсе', 'woodev-plugin-framework' ),
-			'count'           => __( 'Отправлений', 'woodev-plugin-framework' ),
+			'count'           => Posting_Noun::capitalised( $noun->of_many() ),
 			'total'           => __( 'Всего', 'woodev-plugin-framework' ),
-			'statusesEmpty'   => __( 'Отправлений пока нет.', 'woodev-plugin-framework' ),
-			'stuck'           => __( 'Зависшие отправления', 'woodev-plugin-framework' ),
-			'stuckEmpty'      => __( 'Зависших отправлений нет.', 'woodev-plugin-framework' ),
+			/* translators: %s: the marketplace's word for a posting in the genitive plural, capitalised: «Отправлений». */
+			'statusesEmpty'   => sprintf( __( '%s пока нет.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $noun->of_many() ) ),
+			/* translators: %s: the marketplace's word for several postings, «отправления». */
+			'stuck'           => sprintf( __( 'Зависшие %s', 'woodev-plugin-framework' ), $noun->many() ),
+			/* translators: %s: the marketplace's word for a posting in the genitive plural, «отправлений». */
+			'stuckEmpty'      => sprintf( __( 'Зависших %s нет.', 'woodev-plugin-framework' ), $noun->of_many() ),
 			'order'           => __( 'Заказ', 'woodev-plugin-framework' ),
-			'posting'         => __( 'Отправление', 'woodev-plugin-framework' ),
+			'posting'         => Posting_Noun::capitalised( $noun->one() ),
 			'waiting'         => __( 'Ждёт, ч', 'woodev-plugin-framework' ),
 			'products'        => __( 'Топ товаров', 'woodev-plugin-framework' ),
 			'product'         => __( 'Товар', 'woodev-plugin-framework' ),
@@ -204,7 +226,8 @@ final class Orders_Analytics_Controller {
 			'unlinkedHint'    => __( 'Позиции заказов маркетплейса, для которых не нашёлся товар магазина. Свяжите их на странице «Товары», чтобы остатки и цены синхронизировались.', 'woodev-plugin-framework' ),
 			'unlinkedName'    => __( 'Название на маркетплейсе', 'woodev-plugin-framework' ),
 			'unlinkedEmpty'   => __( 'Все проданные позиции связаны с товарами магазина.', 'woodev-plugin-framework' ),
-			'footnote'        => __( 'Отменённые — отменённые заказы и отправления, которые маркетплейс отменил или не принял; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же.', 'woodev-plugin-framework' ),
+			/* translators: %s: the marketplace's word for several postings, «отправления». */
+			'footnote'        => sprintf( __( 'Отменённые — отменённые заказы и %s, которые маркетплейс отменил или не принял; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же.', 'woodev-plugin-framework' ), $noun->many() ),
 			'footnoteOrders'  => __( 'Отменённые — заказы со статусом «Отменён»; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же.', 'woodev-plugin-framework' ),
 		];
 	}
@@ -343,7 +366,7 @@ final class Orders_Analytics_Controller {
 		}
 
 		if ( is_array( $answer['stuck'] ) ) {
-			$answer['stuck']['hint'] = self::stuck_hint( $params['stuck_hours'] );
+			$answer['stuck']['hint'] = self::stuck_hint( $params['stuck_hours'], $this->noun );
 			$answer['stuck']['more'] = self::stuck_more( count( $answer['stuck']['items'] ), $answer['stuck']['count'] );
 		}
 
@@ -356,19 +379,24 @@ final class Orders_Analytics_Controller {
 	 * The sentence under «Зависшие отправления».
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.23 Takes the posting noun.
 	 *
-	 * @param int $hours The threshold.
+	 * @param int               $hours The threshold.
+	 * @param Posting_Noun|null $noun  The marketplace's word for a posting; null for «отправление».
 	 * @return string
 	 */
-	public static function stuck_hint( int $hours ): string {
+	public static function stuck_hint( int $hours, ?Posting_Noun $noun = null ): string {
+		$noun = $noun ?? Posting_Noun::shipment();
+
 		return sprintf(
-			/* translators: %d: hours. */
+			/* translators: 1: the marketplace's word for several postings, capitalised: «Отправления», 2: hours. */
 			_n(
-				'Отправления, которые ждут упаковки или отгрузки дольше %d часа с момента, когда они поступили в обработку.',
-				'Отправления, которые ждут упаковки или отгрузки дольше %d часов с момента, когда они поступили в обработку.',
+				'%1$s, которые ждут упаковки или отгрузки дольше %2$d часа с момента, когда они поступили в обработку.',
+				'%1$s, которые ждут упаковки или отгрузки дольше %2$d часов с момента, когда они поступили в обработку.',
 				$hours,
 				'woodev-plugin-framework'
 			),
+			Posting_Noun::capitalised( $noun->many() ),
 			$hours
 		);
 	}

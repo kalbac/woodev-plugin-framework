@@ -35,6 +35,7 @@ use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 use Woodev\Framework\Marketplace\Settings\Settings_Extension;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
@@ -114,7 +115,8 @@ final class Embedded_Screens {
 
 		self::$registered[ $plugin->get_id() ] = true;
 
-		$names      = new Screen_Names( $adapter->id(), $adapter->settings_descriptor()->marketplace_name() );
+		$descriptor = $adapter->settings_descriptor();
+		$names      = new Screen_Names( $adapter->id(), $descriptor->marketplace_name(), Posting_Noun::for_descriptor( $descriptor ) );
 		$assets_url = (string) preg_replace( '#/assets/?$#', '/marketplace/assets/', $plugin->get_framework_assets_url() );
 		$guard      = Admin_Guard::for_store( $accounts, $adapter->id() );
 
@@ -278,7 +280,7 @@ final class Embedded_Screens {
 				'assets'   => $assets_url,
 			],
 			$plugin->get_version(),
-			$adapter->supports( Capability::IMPORT_PRODUCTS ) ? [] : [ 'export', 'link' ],
+			Capability::has_catalog( $adapter ) ? [] : [ 'export', 'link' ],
 			$adapter instanceof Settings_Extension ? new Product_Extension( $adapter, $names ) : null,
 			$variation_actions
 		);

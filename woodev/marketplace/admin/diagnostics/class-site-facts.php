@@ -113,7 +113,7 @@ final class Site_Facts {
 				: __( 'нет', 'woodev-plugin-framework' ),
 		];
 
-		if ( $this->adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+		if ( Capability::has_catalog( $this->adapter ) ) {
 			/* translators: %s: marketplace name. */
 			$tree_label           = sprintf( __( 'Дерево категорий %s', 'woodev-plugin-framework' ), $this->adapter->settings_descriptor()->marketplace_name() );
 			$lines[ $tree_label ] = $this->tree_age_text();

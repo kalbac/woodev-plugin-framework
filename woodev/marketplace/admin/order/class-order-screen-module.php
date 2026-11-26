@@ -19,6 +19,7 @@ use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -68,7 +69,8 @@ final class Order_Screen_Module {
 		self::$registered[ $plugin->get_id() ] = true;
 
 		$adapter    = $plugin->get_marketplace_adapter();
-		$names      = new Screen_Names( $adapter->id(), $adapter->settings_descriptor()->marketplace_name() );
+		$descriptor = $adapter->settings_descriptor();
+		$names      = new Screen_Names( $adapter->id(), $descriptor->marketplace_name(), Posting_Noun::for_descriptor( $descriptor ) );
 		$registry   = new Order_Registry( $db, ( new Schema( $adapter->id() ) )->table_name( 'postings', $db->prefix ) );
 		$assets     = self::assets_url( $plugin );
 		$gate       = Posting_Action_Gate::for_adapter( $adapter, $write_gate );

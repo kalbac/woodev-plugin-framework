@@ -26,7 +26,8 @@ defined( 'ABSPATH' ) || exit;
  */
 interface Card_Importer {
 	/**
-	 * Names the event types that announce a created or changed card, in the decoder's names.
+	 * Names the event types that announce a created or changed card, in the decoder's names. Empty for a marketplace that announces
+	 * no cards: the account settings then offer no «import new cards automatically» switch (since 2.1.23).
 	 *
 	 * @since 2.1.6
 	 *

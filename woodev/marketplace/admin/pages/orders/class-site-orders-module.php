@@ -28,6 +28,7 @@ use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -119,7 +120,8 @@ final class Site_Orders_Module {
 		};
 		$license  = License_Gate::for_plugin( $plugin );
 		$labels   = self::labels( $plugin, $adapter, $accounts, $db, $table, $license );
-		$cancel   = $adapter instanceof Order_Canceller ? new Site_Orders_Cancel( $adapter, $license, $adapter->settings_descriptor()->marketplace_name() ) : null;
+		$noun     = Posting_Noun::for_descriptor( $adapter->settings_descriptor() );
+		$cancel   = $adapter instanceof Order_Canceller ? new Site_Orders_Cancel( $adapter, $license, $adapter->settings_descriptor()->marketplace_name(), $noun ) : null;
 		$can_edit = static function ( int $order_id ): bool {
 			return current_user_can( 'edit_shop_order', $order_id );
 		};
@@ -148,7 +150,8 @@ final class Site_Orders_Module {
 			},
 			self::data_status( $plugin, $adapter ),
 			null,
-			$gate
+			$gate,
+			$noun
 		);
 	}
 

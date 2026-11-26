@@ -473,7 +473,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 * @return void
 		 */
 		private function export( Sync_State_Store $store ): void {
-			if ( ! $this->adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+			if ( ! Capability::has_catalog( $this->adapter ) ) {
 				return;
 			}
 
@@ -529,7 +529,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 * @return void
 		 */
 		private function links_and_catalog(): void {
-			if ( ! $this->adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+			if ( ! Capability::has_catalog( $this->adapter ) ) {
 				return;
 			}
 
@@ -590,7 +590,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		 * @return void
 		 */
 		private function register_card_list_handler( Event_Handler_Registry $handlers ): void {
-			if ( ! $this->adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+			if ( ! Capability::has_catalog( $this->adapter ) ) {
 				return;
 			}
 

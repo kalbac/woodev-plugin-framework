@@ -33,19 +33,29 @@ final class Mapping_List_Provider extends List_Provider {
 	private $profiles;
 
 	/**
+	 * Merchant-facing marketplace name.
+	 *
+	 * @var string
+	 */
+	private $marketplace;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.23 Takes the marketplace name.
 	 *
-	 * @param string         $page_url Address of the page.
-	 * @param Mapping_Editor $mappings Mappings.
-	 * @param Profile_Editor $profiles Profiles.
+	 * @param string         $page_url    Address of the page.
+	 * @param Mapping_Editor $mappings    Mappings.
+	 * @param Profile_Editor $profiles    Profiles.
+	 * @param string         $marketplace Merchant-facing marketplace name.
 	 */
-	public function __construct( string $page_url, Mapping_Editor $mappings, Profile_Editor $profiles ) {
+	public function __construct( string $page_url, Mapping_Editor $mappings, Profile_Editor $profiles, string $marketplace ) {
 		parent::__construct( $page_url );
 
-		$this->mappings = $mappings;
-		$this->profiles = $profiles;
+		$this->mappings    = $mappings;
+		$this->profiles    = $profiles;
+		$this->marketplace = $marketplace;
 	}
 
 	/**
@@ -64,7 +74,7 @@ final class Mapping_List_Provider extends List_Provider {
 	 * @return array<string,mixed>
 	 */
 	public function get_definition( array $context ): array {
-		return Mapping_List_Definition::build();
+		return Mapping_List_Definition::build( $this->marketplace );
 	}
 
 	/**

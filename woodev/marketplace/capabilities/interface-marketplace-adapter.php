@@ -102,6 +102,8 @@ interface Marketplace_Adapter {
 	 * Returns the order source.
 	 *
 	 * @since 2.0.29
+	 * @deprecated 2.1.23 The framework never calls it. It stays in the contract because released adapters implement it; a new adapter
+	 *             may throw a `\LogicException`.
 	 *
 	 * @return Order_Source
 	 */
@@ -120,6 +122,8 @@ interface Marketplace_Adapter {
 	 * Returns the card exporter.
 	 *
 	 * @since 2.0.29
+	 * @deprecated 2.1.23 The framework never calls it: cards go out through {@see self::export_gateway()}. It stays in the contract
+	 *             because released adapters implement it; a new adapter may throw a `\LogicException`.
 	 *
 	 * @return Card_Exporter
 	 */

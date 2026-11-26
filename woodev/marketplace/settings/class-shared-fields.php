@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Settings;
 
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Price\Price_Rule;
 
 defined( 'ABSPATH' ) || exit;
@@ -66,13 +67,28 @@ final class Shared_Fields {
 			$names[] = 'orders_enabled';
 		}
 
-		if ( $adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+		if ( self::announces_new_cards( $adapter ) ) {
 			$names[] = 'import_enabled';
 		}
 
 		$names[] = Effective_Settings::KEY_SYNC_ON_LINK;
 
 		return $names;
+	}
+
+	/**
+	 * Tells whether a new card of the marketplace can reach the shop by itself: the adapter imports cards and, when it is a
+	 * {@see Card_Importer}, names the events that announce one. Wildberries announces none.
+	 *
+	 * @param Marketplace_Adapter $adapter Adapter.
+	 * @return bool
+	 */
+	private static function announces_new_cards( Marketplace_Adapter $adapter ): bool {
+		if ( ! $adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+			return false;
+		}
+
+		return ! $adapter instanceof Card_Importer || [] !== $adapter->import_event_types();
 	}
 
 	/**

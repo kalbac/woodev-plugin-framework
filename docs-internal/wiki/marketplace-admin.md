@@ -135,7 +135,8 @@ donor `main` it starts from and accounts for every added symbol.
 
 The existing `Marketplace_Adapter` (`id`, `supports`, `credential_health`, `stock_pusher`,
 `price_pusher`, `order_source`, `catalog_schema`, `card_exporter`, `inbound_decoder`,
-`bucket_specs`) stays the single object a plugin hands the framework. Moved flows need more
+`bucket_specs`) stays the single object a plugin hands the framework. `order_source` and `card_exporter` are
+deprecated: nothing calls them and a new adapter may throw ([#2009](#wording-and-the-catalogue-of-a-second-marketplace-2009)). Moved flows need more
 answers; each is added in the card that moves its consumer, nullable where a capability may
 be absent (the pattern `price_pusher(): ?Price_Pusher` already uses):
 
@@ -1115,7 +1116,8 @@ is [the importer spec](../specs/2026-11-14-marketplace-card-importer.md); this s
 the pieces live and what is easy to get wrong. The adapter implements the optional
 `Flows\Card_Importer` and reports `Capability::IMPORT_PRODUCTS`; with either missing,
 `Flow_Wiring::import()` registers no job, no handler and no hook, and the cards tab shows no
-«Импортировать».
+«Импортировать». An importer whose `import_event_types()` is empty (the marketplace announces no
+cards) also gets no «Импортировать новые карточки автоматически» switch (#2009).
 
 | Piece | Class | Does |
 |---|---|---|
@@ -1331,6 +1333,29 @@ marketplace's words. The other links of the refused request are queued again; a 
 adapter that classifies the refusal as plain `FAIL` loses this: WP4 must map it.
 
 `Card_Lifecycle::card_id_name()` must differ between links: for sizes sharing a card it is the size's identifier.
+
+## Wording and the catalogue of a second marketplace (#2009)
+
+Card WF11 of the Wildberries design (`2.1.23`). Ozon Seller 2.0.0 needs no change: everything is optional and the defaults are what
+it saw before.
+
+| Seam | Who answers | Without it |
+|---|---|---|
+| `Settings\Posting_Wording::posting_noun()` | the adapter's settings descriptor | «отправление» (`Posting_Noun::shipment()`) |
+| `Capability::CATALOG` | `supports()` | `IMPORT_PRODUCTS` means a catalogue too |
+
+**The noun.** `Posting_Noun` carries seven forms; two include the preposition (`with_one`: «с» / «со», `about_many`: «о» / «об»).
+It must be **neuter and inanimate** («отправление», «сборочное задание»): the sentences say «это», «оно», «отменено» and use `one()`
+as the accusative. Read it with `Posting_Noun::for_descriptor()`; a class built without an adapter takes it as an optional last
+constructor argument. A new sentence about a posting uses the noun — `WordingNeutralityTest` fails on a literal «отправлени…» or a
+marketplace name in any string of `woodev/marketplace/`. The words of the shared «Аналитика» tab travel with each marketplace entry
+of the `ordersPage` manifest.
+
+**The catalogue.** Export, linking, the cabinet's cards and the catalogue refresh ask `Capability::has_catalog()`. Import
+(`Flow_Wiring::import()`, the import settings, «Импортировать») still asks `IMPORT_PRODUCTS`.
+
+**`order_source()` and `card_exporter()`** are `@deprecated`, not removed: released adapters implement them. A new adapter may throw
+a `\LogicException` from both.
 
 ## Changing the article after the export (framework 2.1.13, #1860)
 

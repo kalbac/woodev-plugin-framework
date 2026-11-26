@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Shared;
 
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -25,14 +27,24 @@ final class Label_Availability {
 	private $readiness;
 
 	/**
+	 * The marketplace's word for a posting.
+	 *
+	 * @var Posting_Noun
+	 */
+	private $noun;
+
+	/**
 	 * Creates the rule.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.23 Takes the posting noun.
 	 *
 	 * @param Label_Readiness|null $readiness The adapter's readiness; null for an adapter that has none.
+	 * @param Posting_Noun|null    $noun      The marketplace's word for a posting; null for «отправление».
 	 */
-	public function __construct( ?Label_Readiness $readiness ) {
+	public function __construct( ?Label_Readiness $readiness, ?Posting_Noun $noun = null ) {
 		$this->readiness = $readiness;
+		$this->noun      = $noun ?? Posting_Noun::shipment();
 	}
 
 	/**
@@ -46,7 +58,8 @@ final class Label_Availability {
 	 */
 	public function reason( string $status, bool $is_terminal ): string {
 		if ( $is_terminal ) {
-			return __( 'Отправление завершено — этикетка не нужна.', 'woodev-plugin-framework' );
+			/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
+			return sprintf( __( '%s завершено — этикетка не нужна.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $this->noun->one() ) );
 		}
 
 		return null === $this->readiness ? '' : trim( (string) $this->readiness->label_readiness( $status ) );

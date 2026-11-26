@@ -233,7 +233,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		}
 
 		/**
-		 * The tables of the «Товары» page: the shop's products and, when the marketplace can list its cards (it can import products),
+		 * The tables of the «Товары» page: the shop's products and, when the marketplace has a catalogue of cards,
 		 * the cards of the marketplace's cabinet. A page with two tables lets the merchant switch between them, so each carries its label.
 		 *
 		 * @since 2.1.5
@@ -243,7 +243,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		private function get_product_tables(): array {
 			$tables = [ 'products' => __( 'Товары сайта', 'woodev-plugin-framework' ) ];
 
-			if ( $this->get_marketplace_adapter()->supports( Capabilities\Capability::IMPORT_PRODUCTS ) ) {
+			if ( Capabilities\Capability::has_catalog( $this->get_marketplace_adapter() ) ) {
 				$name = trim( $this->get_marketplace_adapter()->settings_descriptor()->marketplace_name() );
 
 				/* translators: %s: marketplace name, for example «Ozon». */

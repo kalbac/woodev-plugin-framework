@@ -64,7 +64,7 @@ final class Settings_Module {
 		$names      = new Job_Names( $plugin_id );
 
 		$on_connected = null;
-		if ( $adapter->supports( Capability::IMPORT_PRODUCTS ) ) {
+		if ( Capability::has_catalog( $adapter ) ) {
 			$scheduler    = new Refresh_Catalog_Scheduler( $names );
 			$on_connected = [ $scheduler, 'queue_now' ];
 		}

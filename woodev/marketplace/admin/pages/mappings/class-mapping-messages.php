@@ -265,7 +265,7 @@ final class Mapping_Messages {
 	 * @return string
 	 */
 	public static function no_dictionary(): string {
-		return __( 'У этой характеристики нет словаря маркетплейса.', 'woodev-plugin-framework' );
+		return __( 'У этой характеристики нет справочника маркетплейса.', 'woodev-plugin-framework' );
 	}
 
 	/**

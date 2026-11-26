@@ -42,7 +42,17 @@ final class Capability {
 	public const CONFIRM_SHIPMENT = 'confirm_shipment';
 
 	/**
-	 * Cards can be imported into WooCommerce (Ozon yes; Wildberries: decide later).
+	 * The marketplace has a catalogue of cards: shop products are exported to it and linked with its cards, the cabinet's cards are
+	 * listed, and the catalogue cache is refreshed. An adapter that reports it answers `export_gateway()`, `card_lifecycle()` and
+	 * `link_resolver()`. {@see self::has_catalog()} is the question the framework asks.
+	 *
+	 * @since 2.1.23
+	 */
+	public const CATALOG = 'catalog';
+
+	/**
+	 * Cards can be imported into WooCommerce, by a {@see \Woodev\Framework\Marketplace\Flows\Card_Importer}. An adapter that
+	 * reports it has a catalogue too, with or without {@see self::CATALOG}: released adapters report only this one.
 	 */
 	public const IMPORT_PRODUCTS = 'import_products';
 
@@ -59,6 +69,18 @@ final class Capability {
 	public const OVERSIZE_WAREHOUSE = 'oversize_warehouse';
 
 	/**
+	 * Tells whether a marketplace has a catalogue of cards.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @param Marketplace_Adapter $adapter The marketplace's adapter.
+	 * @return bool
+	 */
+	public static function has_catalog( Marketplace_Adapter $adapter ): bool {
+		return $adapter->supports( self::CATALOG ) || $adapter->supports( self::IMPORT_PRODUCTS );
+	}
+
+	/**
 	 * Lists every capability name.
 	 *
 	 * @since 2.0.29
@@ -72,6 +94,7 @@ final class Capability {
 			self::CANCEL_ORDER,
 			self::GET_LABEL,
 			self::CONFIRM_SHIPMENT,
+			self::CATALOG,
 			self::IMPORT_PRODUCTS,
 			self::RENAME_SKU,
 			self::OVERSIZE_WAREHOUSE,
