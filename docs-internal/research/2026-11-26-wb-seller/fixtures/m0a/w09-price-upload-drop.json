@@ -1,0 +1,36 @@
+{
+  "label": "w09-price-upload-drop",
+  "recorded_at": "2026-11-26T01:51:18Z",
+  "request": {
+    "method": "POST",
+    "url": "https://discounts-prices-api.wildberries.ru/api/v2/upload/task",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "data": [
+        {
+          "nmID": 100000003,
+          "price": 100,
+          "discount": 0
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "3"
+    },
+    "body": {
+      "data": {
+        "id": 130000002,
+        "alreadyExists": false
+      },
+      "error": false,
+      "errorText": ""
+    }
+  }
+}

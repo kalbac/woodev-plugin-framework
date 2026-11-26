@@ -1,0 +1,70 @@
+{
+  "label": "cards-list-kiz-readback",
+  "recorded_at": "2026-11-26T01:20:37+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api-sandbox.wildberries.ru/content/v2/get/cards/list",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "settings": {
+        "cursor": {
+          "limit": 10
+        },
+        "filter": {
+          "textSearch": "M0B-TEST-KIZ",
+          "withPhoto": -1
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "cards": [
+        {
+          "nmID": 440890,
+          "imtID": 440888,
+          "nmUUID": "36d0a1da-2dbd-42ea-b552-81399bdfa13c",
+          "subjectID": 105,
+          "subjectName": "Кроссовки",
+          "vendorCode": "M0B-TEST-KIZ",
+          "brand": "M0B",
+          "title": "M0b test marked sneakers",
+          "description": "Sandbox test card for card 1996 marking measurement. Not a real product.",
+          "needKiz": false,
+          "dimensions": {
+            "length": 30,
+            "width": 20,
+            "height": 12,
+            "weightBrutto": 0.8,
+            "isValid": true
+          },
+          "sizes": [
+            {
+              "chrtID": 440889,
+              "techSize": "42",
+              "wbSize": "42",
+              "skus": [
+                "5032779493634"
+              ]
+            }
+          ],
+          "createdAt": "2026-11-26T01:20:31.35Z",
+          "updatedAt": "2026-11-26T01:20:31.35Z"
+        }
+      ],
+      "cursor": {
+        "updatedAt": "2026-11-26T01:20:31Z",
+        "nmID": 440890,
+        "total": 1
+      }
+    }
+  }
+}

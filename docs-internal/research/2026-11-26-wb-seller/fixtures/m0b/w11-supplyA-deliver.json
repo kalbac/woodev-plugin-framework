@@ -1,0 +1,21 @@
+{
+  "label": "w11-supplyA-deliver",
+  "recorded_at": "2026-11-26T01:22:37+00:00",
+  "request": {
+    "method": "PATCH",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/supplies/WB-GI-SAND-192394/deliver",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": null
+  }
+}

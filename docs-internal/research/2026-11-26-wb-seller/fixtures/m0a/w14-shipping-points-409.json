@@ -1,0 +1,28 @@
+{
+  "label": "w14-shipping-points-409",
+  "recorded_at": "2026-11-26T01:21:04Z",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api.wildberries.ru/api/marketplace/v3/fbs/supplies/WB-GI-000000001/shipping-points",
+    "query": {
+      "city": "Москва",
+      "officeType": "sc,pp",
+      "shippingDt": "2026-11-27"
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "X-Ratelimit-Limit": "20",
+      "X-Ratelimit-Remaining": "9"
+    },
+    "body": {
+      "code": "SupplyHasZeroOrders",
+      "message": "Failed to process the supply. Make sure it has at least one assembly task assigned to it."
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "label": "w22-dbs-make-cart",
+  "recorded_at": "2026-11-26T01:24:27+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/test/dbs/orders/make",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        {
+          "sku": "2000000285011",
+          "amount": 6
+        }
+      ],
+      "deliveryType": "dbs",
+      "address": {
+        "region": "Москва",
+        "locality": "Москва",
+        "street": "Сумская улица",
+        "houseNumber": "6 к 5",
+        "apartment": "5545"
+      }
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "data": {
+        "region": "Москва",
+        "locality": "Москва",
+        "street": "Сумская улица",
+        "houseNumber": "6 к 5",
+        "apartment": "5545"
+      },
+      "code": "IncorrectAddress",
+      "message": "Incorrect address"
+    }
+  }
+}

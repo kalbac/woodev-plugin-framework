@@ -1,0 +1,42 @@
+{
+  "label": "w15-quarantine-list",
+  "recorded_at": "2026-11-26T01:51:51Z",
+  "request": {
+    "method": "GET",
+    "url": "https://discounts-prices-api.wildberries.ru/api/v2/quarantine/goods",
+    "query": {
+      "limit": 100,
+      "offset": 0
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "3"
+    },
+    "body": {
+      "data": {
+        "quarantineGoods": [
+          {
+            "nmID": 100000003,
+            "sizeID": null,
+            "techSizeName": "",
+            "currencyIsoCode4217": "RUB",
+            "newPrice": 600,
+            "oldPrice": 1000,
+            "newDiscount": 0,
+            "oldDiscount": 0,
+            "priceDiff": -400
+          }
+        ]
+      },
+      "error": false,
+      "errorText": ""
+    }
+  }
+}

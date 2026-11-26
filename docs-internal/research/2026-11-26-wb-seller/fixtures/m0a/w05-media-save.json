@@ -1,0 +1,34 @@
+{
+  "label": "w05-media-save",
+  "recorded_at": "2026-11-26T01:17:42Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v3/media/save",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "nmId": 100000001,
+      "data": [
+        "https://dummyimage.com/900x1200/cccccc/000000.png",
+        "https://dummyimage.com/900x1200/ffffff/000000.png"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "3"
+    },
+    "body": {
+      "data": {
+        "taskId": "00000000-0000-0000-0000-0000000000aa"
+      },
+      "error": false,
+      "errorText": "",
+      "additionalErrors": null
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "label": "w12-stocks-before",
+  "recorded_at": "2026-11-26T01:52:08Z",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api.wildberries.ru/api/v3/stocks/700001",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "chrtIds": [
+        120000001,
+        120000002,
+        120000003,
+        120000004,
+        120000005
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "20",
+      "X-Ratelimit-Remaining": "19"
+    },
+    "body": {
+      "stocks": []
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "label": "w27-dbs-receive-code",
+  "recorded_at": "2026-11-26T01:25:24+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/dbs/orders/status/receive",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        {
+          "orderId": 192401,
+          "code": "1234"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "requestId": "11b8a61b-9cca-4ff9-b805-8ffd6b7f56fe",
+      "results": [
+        {
+          "orderId": 192401,
+          "isError": false
+        }
+      ]
+    }
+  }
+}

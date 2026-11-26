@@ -1,0 +1,59 @@
+{
+  "label": "prices-416212",
+  "recorded_at": "2026-11-26T01:18:11+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://discounts-prices-api-sandbox.wildberries.ru/api/v2/list/goods/filter?filterNmID=416212&limit=10",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "data": {
+        "listGoods": [
+          {
+            "nmID": 416212,
+            "vendorCode": "OWS-TEE-MS",
+            "sizes": [
+              {
+                "sizeID": 416213,
+                "price": 1500,
+                "discountedPrice": 1500,
+                "clubDiscountedPrice": 1500,
+                "techSizeName": "0"
+              },
+              {
+                "sizeID": 416214,
+                "price": 1500,
+                "discountedPrice": 1500,
+                "clubDiscountedPrice": 1500,
+                "techSizeName": "0"
+              },
+              {
+                "sizeID": 416217,
+                "price": 1500,
+                "discountedPrice": 1500,
+                "clubDiscountedPrice": 1500,
+                "techSizeName": "0"
+              }
+            ],
+            "currencyIsoCode4217": "RUB",
+            "discount": 0,
+            "clubDiscount": 0,
+            "editableSizePrice": false
+          }
+        ]
+      },
+      "error": false,
+      "errorText": ""
+    }
+  }
+}

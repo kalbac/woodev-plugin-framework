@@ -1,0 +1,97 @@
+{
+  "label": "dbs-client-phones",
+  "recorded_at": "2026-11-26T01:24:54+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/dbs/orders/client",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        192400,
+        192401,
+        192402,
+        192403,
+        192404,
+        192405,
+        192406
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "replacementPhone": "+79992222222",
+          "firstName": "empty",
+          "fullName": "empty empty empty",
+          "orderID": 192400,
+          "phone": "+79991111111",
+          "phoneCode": 0,
+          "additionalPhoneCodes": []
+        },
+        {
+          "replacementPhone": "+79992222222",
+          "firstName": "empty",
+          "fullName": "empty empty empty",
+          "orderID": 192401,
+          "phone": "+79991111111",
+          "phoneCode": 0,
+          "additionalPhoneCodes": []
+        },
+        {
+          "replacementPhone": "+79992222222",
+          "firstName": "empty",
+          "fullName": "empty empty empty",
+          "orderID": 192402,
+          "phone": "+79991111111",
+          "phoneCode": 0,
+          "additionalPhoneCodes": []
+        },
+        {
+          "replacementPhone": "+79992222222",
+          "firstName": "empty",
+          "fullName": "empty empty empty",
+          "orderID": 192403,
+          "phone": "+79991111111",
+          "phoneCode": 0,
+          "additionalPhoneCodes": []
+        },
+        {
+          "replacementPhone": "+79992222222",
+          "firstName": "empty",
+          "fullName": "empty empty empty",
+          "orderID": 192404,
+          "phone": "+79991111111",
+          "phoneCode": 0,
+          "additionalPhoneCodes": []
+        },
+        {
+          "replacementPhone": "+79992222222",
+          "firstName": "empty",
+          "fullName": "empty empty empty",
+          "orderID": 192405,
+          "phone": "+79991111111",
+          "phoneCode": 0,
+          "additionalPhoneCodes": []
+        },
+        {
+          "replacementPhone": "+79992222222",
+          "firstName": "empty",
+          "fullName": "empty empty empty",
+          "orderID": 192406,
+          "phone": "+79991111111",
+          "phoneCode": 0,
+          "additionalPhoneCodes": []
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "label": "dbs-orders-new",
+  "recorded_at": "2026-11-26T01:24:29+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/dbs/orders/new",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": []
+    }
+  }
+}

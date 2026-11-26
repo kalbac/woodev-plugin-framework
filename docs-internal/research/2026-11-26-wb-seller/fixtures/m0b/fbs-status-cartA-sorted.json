@@ -1,0 +1,39 @@
+{
+  "label": "fbs-status-cartA-sorted",
+  "recorded_at": "2026-11-26T01:22:52+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/orders/status",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        192392,
+        192393
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "id": 192392,
+          "supplierStatus": "complete",
+          "wbStatus": "sorted"
+        },
+        {
+          "id": 192393,
+          "supplierStatus": "complete",
+          "wbStatus": "waiting"
+        }
+      ]
+    }
+  }
+}

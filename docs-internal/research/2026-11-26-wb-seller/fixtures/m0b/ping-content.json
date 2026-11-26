@@ -1,0 +1,24 @@
+{
+  "label": "ping-content",
+  "recorded_at": "2026-11-26T01:15:53+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://content-api-sandbox.wildberries.ru/ping",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "99",
+      "X-Ratelimit-Remaining": "98"
+    },
+    "body": {
+      "TS": "2026-11-26T01:15:53Z",
+      "Status": "OK"
+    }
+  }
+}

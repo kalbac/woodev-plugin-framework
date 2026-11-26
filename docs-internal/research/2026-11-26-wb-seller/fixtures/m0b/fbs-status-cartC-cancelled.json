@@ -1,0 +1,39 @@
+{
+  "label": "fbs-status-cartC-cancelled",
+  "recorded_at": "2026-11-26T01:24:16+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/orders/status",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        192398,
+        192399
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "id": 192398,
+          "supplierStatus": "new",
+          "wbStatus": "declined_by_client"
+        },
+        {
+          "id": 192399,
+          "supplierStatus": "cancel",
+          "wbStatus": "canceled"
+        }
+      ]
+    }
+  }
+}

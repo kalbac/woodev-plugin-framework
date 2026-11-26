@@ -1,0 +1,60 @@
+{
+  "label": "w06-card-update",
+  "recorded_at": "2026-11-26T01:19:14Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/cards/update",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": [
+      {
+        "nmID": 100000001,
+        "vendorCode": "WOODEV-TEST-A",
+        "kizMarked": false,
+        "brand": "",
+        "title": "ТЕСТ Woodev не продавать брелок",
+        "description": "Тестовая карточка для проверки интеграции. Не для продажи. Описание обновлено.",
+        "dimensions": {
+          "width": 5,
+          "height": 2,
+          "length": 10,
+          "weightBrutto": 0.1
+        },
+        "characteristics": [
+          {
+            "id": 14177449,
+            "value": [
+              "черный"
+            ]
+          }
+        ],
+        "sizes": [
+          {
+            "chrtID": 120000001,
+            "skus": [
+              "2060000000057"
+            ]
+          }
+        ],
+        "documents": {
+          "excludeDocuments": false
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "4"
+    },
+    "body": {
+      "data": {},
+      "error": false,
+      "errorText": "",
+      "additionalErrors": {}
+    }
+  }
+}

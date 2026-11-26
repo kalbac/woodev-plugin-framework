@@ -1,0 +1,33 @@
+{
+  "label": "w01-barcodes",
+  "recorded_at": "2026-11-26T01:15:44Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/barcodes",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "count": 4
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "3"
+    },
+    "body": {
+      "data": [
+        "2060000000019",
+        "2060000000026",
+        "2060000000033",
+        "2060000000040"
+      ],
+      "error": false,
+      "errorText": "",
+      "additionalErrors": null
+    }
+  }
+}

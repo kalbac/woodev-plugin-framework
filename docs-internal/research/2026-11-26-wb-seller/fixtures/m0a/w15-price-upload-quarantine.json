@@ -1,0 +1,36 @@
+{
+  "label": "w15-price-upload-quarantine",
+  "recorded_at": "2026-11-26T01:51:41Z",
+  "request": {
+    "method": "POST",
+    "url": "https://discounts-prices-api.wildberries.ru/api/v2/upload/task",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "data": [
+        {
+          "nmID": 100000003,
+          "price": 600,
+          "discount": 0
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "3"
+    },
+    "body": {
+      "data": {
+        "id": 130000003,
+        "alreadyExists": false
+      },
+      "error": false,
+      "errorText": ""
+    }
+  }
+}

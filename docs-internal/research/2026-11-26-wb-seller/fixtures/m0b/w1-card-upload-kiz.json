@@ -1,0 +1,53 @@
+{
+  "label": "w1-card-upload-kiz",
+  "recorded_at": "2026-11-26T01:20:31+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api-sandbox.wildberries.ru/content/v2/cards/upload",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": [
+      {
+        "subjectID": 105,
+        "variants": [
+          {
+            "vendorCode": "M0B-TEST-KIZ",
+            "title": "M0b test marked sneakers",
+            "description": "Sandbox test card for card 1996 marking measurement. Not a real product.",
+            "brand": "M0B",
+            "dimensions": {
+              "length": 30,
+              "width": 20,
+              "height": 12,
+              "weightBrutto": 0.8
+            },
+            "characteristics": [],
+            "sizes": [
+              {
+                "techSize": "42",
+                "wbSize": "42",
+                "price": 2500,
+                "skus": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "data": {},
+      "error": false,
+      "errorText": "",
+      "additionalErrors": {}
+    }
+  }
+}

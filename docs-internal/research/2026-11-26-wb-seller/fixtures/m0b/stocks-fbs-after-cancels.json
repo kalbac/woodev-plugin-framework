@@ -1,0 +1,32 @@
+{
+  "label": "stocks-fbs-after-cancels",
+  "recorded_at": "2026-11-26T01:24:17+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/stocks/179667",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "chrtIds": [
+        416209
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "stocks": [
+        {
+          "chrtId": 416209,
+          "amount": 4
+        }
+      ]
+    }
+  }
+}
