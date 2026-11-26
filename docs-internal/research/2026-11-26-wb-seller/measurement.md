@@ -647,6 +647,10 @@ DBS values are open on the live cabinet.
 
 ### For S0 (spec amendment)
 
+Folded into the design on 26.11.2026 (#1997):
+[spec §3.4](../../specs/2026-11-26-wildberries-seller-plugin-design.md#34-what-phase-0-changed-in-this-design) lists
+each change and §13.1 the status of every unverified item. The list below is the record of what was asked.
+
 1. WP4: protect read-merge-write against stale reads (item 5) — the highest risk found.
 2. WF1 / WP6: «more than twice lower» is an item error, not quarantine; `data: null` is an empty quarantine.
 3. `vendorCode` is changeable: revisit `RENAME_SKU` and I2 (the unit key is frozen at linking).
