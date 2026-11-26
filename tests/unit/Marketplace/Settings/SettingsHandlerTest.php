@@ -608,6 +608,65 @@ final class SettingsHandlerTest extends TestCase {
 		$this->assertSame( 'Заполните поле «Токен доступа» для нового аккаунта.', $half['account_new_access_token'] ?? null );
 	}
 
+	/**
+	 * WF5: an identifier derived from the token is not asked for; one secret is enough, and the saved account carries the
+	 * derived identifier.
+	 *
+	 * @return void
+	 */
+	public function test_an_identifier_derived_from_the_token_is_not_asked_and_one_secret_saves(): void {
+		$fields     = new Credential_Fields(
+			'sid',
+			[ 'access_token' ],
+			static function ( array $secrets ): string {
+				return 'seller-' . substr( $secrets['access_token'], 0, 5 );
+			}
+		);
+		$descriptor = new Fake_Settings_Descriptor(
+			$fields,
+			'Acme',
+			[
+				'sid'          => new Credential_Field_Spec( 'Код продавца', '' ),
+				'access_token' => new Credential_Field_Spec( 'Токен доступа', 'Основной токен' ),
+			]
+		);
+		$adapter    = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => [],
+				'credential_fields'   => $fields,
+				'settings_descriptor' => $descriptor,
+			]
+		);
+		$store      = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-1' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$handler    = $this->build_handler( $adapter, $store );
+
+		$schema = Field_Schema::from_handler( $handler );
+		$this->assertArrayNotHasKey( 'account_new_sid', $schema, 'the form does not ask for the identifier' );
+		$this->assertArrayHasKey( 'account_new_access_token', $schema );
+		$this->assertSame( [], $handler->validate_values( [ 'account_new_access_token' => 'token-abcdef' ] ), 'one secret is enough' );
+
+		$handler->get_setting( 'account_new_name' )->set_value( 'Shop' );
+		$handler->get_setting( 'account_new_access_token' )->set_value( 'token-abcdef' );
+		$handler->save();
+
+		$saved = $store->find_by_identifier( 'seller-token' );
+		$this->assertNotNull( $saved, 'the account saved under the identifier derived from its token' );
+		$this->assertSame( 'token-abcdef', $saved->credentials()['access_token'] );
+
+		$duplicate = $handler->validate_values( [ 'account_new_access_token' => 'token-abcdef' ] );
+		$this->assertArrayHasKey( 'account_new_access_token', $duplicate, 'the same token again is a duplicate of the derived identifier' );
+	}
+
 	public function test_the_price_example_closes_the_price_card_and_no_longer_heads_the_tab(): void {
 		Functions\when( 'wc_price' )->alias(
 			static function ( $amount, array $args = [] ): string {

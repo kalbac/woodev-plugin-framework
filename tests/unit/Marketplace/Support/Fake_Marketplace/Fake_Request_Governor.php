@@ -96,6 +96,23 @@ final class Fake_Request_Governor implements Request_Governor {
 	}
 
 	/**
+	 * Charges a 4xx answer: `cost_4xx` tokens, one of which acquire() already took.
+	 *
+	 * @param string $account_key Account.
+	 * @param string $bucket      Bucket.
+	 * @return bool Always true: the fake never loses a write.
+	 */
+	public function report_client_error( string $account_key, string $bucket ): bool {
+		$spec  = $this->specs[ $bucket ];
+		$state = $this->state_of( $account_key, $bucket, $spec );
+
+		$state['tokens'] -= $spec->cost_4xx() - 1;
+		$this->state[ $account_key . '|' . $bucket ] = $state;
+
+		return true;
+	}
+
+	/**
 	 * Switches a bucket's method off.
 	 *
 	 * @param string $account_key Account.

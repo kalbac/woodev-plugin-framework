@@ -501,18 +501,18 @@ final class FakeMarketplaceAdapterTest extends TestCase {
 	}
 
 	/**
-	 * A 4xx answer costs ten requests: charged by acquiring `cost_4xx` after the fact.
+	 * A 4xx answer costs ten requests: the request takes one token, `report_client_error()` draws the other nine.
 	 *
 	 * @return void
 	 */
 	public function test_a_4xx_answer_is_charged_ten_requests(): void {
 		$specs    = $this->adapter->bucket_specs();
 		$governor = new Fake_Request_Governor( $this->adapter->clock(), $specs );
-		$cost     = $specs[0]->cost_4xx();
 
-		$this->assertSame( 10, $cost );
-		$this->assertSame( 0, $governor->acquire( 'a1', 'marketplace', $cost ) );
-		$this->assertSame( 0, $governor->acquire( 'a1', 'marketplace', $cost ), 'two failures spend the 20-token burst' );
+		$this->assertSame( 10, $specs[0]->cost_4xx() );
+		$this->assertSame( 0, $governor->acquire( 'a1', 'marketplace' ) );
+		$this->assertTrue( $governor->report_client_error( 'a1', 'marketplace' ) );
+		$this->assertSame( 0, $governor->acquire( 'a1', 'marketplace', 10 ), 'ten tokens are left after one refused request' );
 		$this->assertGreaterThan( 0, $governor->acquire( 'a1', 'marketplace' ) );
 	}
 

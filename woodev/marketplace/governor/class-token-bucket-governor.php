@@ -153,6 +153,38 @@ final class Token_Bucket_Governor implements Request_Governor {
 	}
 
 	/**
+	 * Charges a request the marketplace answered with a 4xx: `cost_4xx` tokens, one of which {@see acquire()} already took.
+	 *
+	 * The rest is drawn from the bucket after the fact, so the next request waits for it. The bucket may go below zero; the
+	 * wait is then computed from the deficit.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @param string $account_key Account.
+	 * @param string $bucket      Bucket key.
+	 * @return bool False when the charge was lost (contention, or the database refused the write).
+	 * @throws \InvalidArgumentException When the bucket has no description.
+	 */
+	public function report_client_error( string $account_key, string $bucket ): bool {
+		$spec  = $this->spec( $bucket );
+		$extra = $spec->cost_4xx() - 1;
+		if ( $extra < 1 ) {
+			return true;
+		}
+
+		return $this->update(
+			$account_key,
+			$bucket,
+			static function ( Throttle_Row $row, float $now ) use ( $spec, $extra ): array {
+				$state                 = self::refilled( $row->state(), $spec, $now );
+				$state[ self::TOKENS ] -= $extra;
+
+				return [ $state, $row->disabled_until(), $row->disabled_reason() ];
+			}
+		);
+	}
+
+	/**
 	 * Switches a bucket (or a single method's key) off for 24 hours.
 	 *
 	 * @since 2.0.29

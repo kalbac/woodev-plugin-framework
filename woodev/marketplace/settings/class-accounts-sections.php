@@ -295,12 +295,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 */
 	public function connection_description(): string {
 		$descriptor = $this->adapter->settings_descriptor();
-		$fields     = $this->adapter->credential_fields();
 		$labels     = array_map(
 			static function ( string $field ) use ( $descriptor ): string {
 				return $descriptor->field_spec( $field )->label();
 			},
-			array_merge( [ $fields->identifier() ], $fields->secrets() )
+			$this->credential_field_names()
 		);
 		$url        = $this->cabinet_url();
 		/* translators: %s: marketplace name, for example «Ozon». */
@@ -525,6 +524,10 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			return \Woodev_Connection_Result::failure( $descriptor->unreadable_secrets_message() );
 		}
 
+		if ( $fields->derives_identifier() ) {
+			$external_id = $fields->derive_identifier( $secrets );
+		}
+
 		if ( '' === $external_id || in_array( '', $secrets, true ) ) {
 			return \Woodev_Connection_Result::failure( __( 'Заполните все учётные данные аккаунта.', 'woodev-plugin-framework' ) );
 		}
@@ -704,24 +707,27 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			]
 		);
 
-		Field_Kit::add(
-			$handler,
-			self::setting_id( $key, $id_field ),
-			\Woodev_Setting::TYPE_STRING,
-			[
-				'name'     => $id_spec->label(),
-				'default'  => '',
-				'required' => true,
-			],
-			\Woodev_Control::TYPE_TEXT,
-			array_filter(
+		// A derived identifier (WF5) is not asked for: the form shows the secrets only.
+		if ( ! $fields->derives_identifier() ) {
+			Field_Kit::add(
+				$handler,
+				self::setting_id( $key, $id_field ),
+				\Woodev_Setting::TYPE_STRING,
 				[
-					'tooltip'     => $id_spec->tooltip(),
-					'placeholder' => $id_spec->placeholder(),
+					'name'     => $id_spec->label(),
+					'default'  => '',
+					'required' => true,
 				],
-				'strlen'
-			)
-		);
+				\Woodev_Control::TYPE_TEXT,
+				array_filter(
+					[
+						'tooltip'     => $id_spec->tooltip(),
+						'placeholder' => $id_spec->placeholder(),
+					],
+					'strlen'
+				)
+			);
+		}
 
 		foreach ( $fields->secrets() as $secret_field ) {
 			$secret_spec = $descriptor->field_spec( $secret_field );
@@ -1186,6 +1192,14 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			$credentials[ $cred_field ] = $val;
 		}
 
+		$fields = $this->adapter->credential_fields();
+		if ( $fields->derives_identifier() ) {
+			$credentials[ $fields->identifier() ] = $fields->derive_identifier( $credentials );
+			if ( '' === $credentials[ $fields->identifier() ] ) {
+				return;
+			}
+		}
+
 		$name    = trim( (string) ( $this->pending['name'] ?? '' ) );
 		$enabled = array_key_exists( 'enabled', $this->pending ) ? self::to_bool( $this->pending['enabled'] ) : true;
 
@@ -1600,7 +1614,8 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	 * @return array<string,string>
 	 */
 	private function validate_unique_identifiers( array $values ): array {
-		$id_field = $this->adapter->credential_fields()->identifier();
+		$fields   = $this->adapter->credential_fields();
+		$id_field = $fields->identifier();
 		$label    = $this->adapter->settings_descriptor()->field_spec( $id_field )->label();
 		$seen     = [];
 		$errors   = [];
@@ -1634,6 +1649,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		$new_id  = self::setting_id( self::NEW_KEY, $id_field );
 		$new_val = trim( (string) ( $values[ $new_id ] ?? '' ) );
+		if ( $fields->derives_identifier() ) {
+			// The form has no identifier field: the duplicate is the one the new block's secrets would derive.
+			$new_id  = self::setting_id( self::NEW_KEY, $fields->secrets()[0] );
+			$new_val = $fields->derive_identifier( $this->new_block_credentials( $values ) );
+		}
 		if ( '' !== $new_val && isset( $seen[ $new_val ] ) ) {
 			$errors[ $new_id ] = sprintf(
 				/* translators: %s: identifier field label. */
@@ -1830,7 +1850,23 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	private function credential_field_names(): array {
 		$fields = $this->adapter->credential_fields();
 
-		return array_merge( [ $fields->identifier() ], $fields->secrets() );
+		return $fields->derives_identifier() ? $fields->secrets() : array_merge( [ $fields->identifier() ], $fields->secrets() );
+	}
+
+	/**
+	 * Builds the credentials of the `new` block from its submitted values: the secrets, keyed by field name.
+	 *
+	 * @param array<string,mixed> $values Submitted map.
+	 * @return array<string,string>
+	 */
+	private function new_block_credentials( array $values ): array {
+		$credentials = [];
+
+		foreach ( $this->adapter->credential_fields()->secrets() as $secret ) {
+			$credentials[ $secret ] = trim( (string) ( $values[ self::setting_id( self::NEW_KEY, $secret ) ] ?? '' ) );
+		}
+
+		return $credentials;
 	}
 
 	/**

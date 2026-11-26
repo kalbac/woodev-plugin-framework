@@ -236,6 +236,49 @@ final class TokenBucketGovernorTest extends TestCase {
 	}
 
 	/**
+	 * A 4xx answer costs `cost_4xx` tokens: acquire() takes one, the rest is drawn after the fact and the next request waits.
+	 *
+	 * @return void
+	 */
+	public function test_a_client_error_draws_the_rest_of_its_cost(): void {
+		$governor = new Token_Bucket_Governor(
+			$this->store,
+			array( new Bucket_Spec( 'marketplace', 300, 60, 20, Bucket_Spec::COST_REQUEST, 10 ) ),
+			function (): float {
+				return $this->now;
+			}
+		);
+
+		$this->assertSame( 0, $governor->acquire( '7', 'marketplace' ) );
+		$this->assertTrue( $governor->report_client_error( '7', 'marketplace' ), 'burst 20 - 1 - 9 = 10 left' );
+		$this->assertSame( 0, $governor->acquire( '7', 'marketplace', 10 ), 'exactly ten tokens are left' );
+		$this->assertGreaterThan( 0, $governor->acquire( '7', 'marketplace' ), 'the bucket is empty now' );
+	}
+
+	/**
+	 * A bucket whose 4xx costs one token draws nothing more.
+	 *
+	 * @return void
+	 */
+	public function test_a_client_error_with_cost_one_draws_nothing(): void {
+		$governor = $this->governor();
+
+		$this->assertTrue( $governor->report_client_error( '7', 'default' ) );
+		$this->assertSame( 0, $governor->acquire( '7', 'default', 50 ), 'the whole burst is still there' );
+	}
+
+	/**
+	 * A client error on a key without a description is refused, as acquire() refuses it.
+	 *
+	 * @return void
+	 */
+	public function test_a_client_error_on_an_unknown_bucket_is_refused(): void {
+		$this->expectException( \InvalidArgumentException::class );
+
+		$this->governor()->report_client_error( '7', 'nope' );
+	}
+
+	/**
 	 * Accounts do not share buckets.
 	 *
 	 * @return void

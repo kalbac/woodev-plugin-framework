@@ -35,15 +35,24 @@ final class Credential_Fields {
 	private $secrets;
 
 	/**
+	 * Derives the identifier from the secrets, null when the form asks for it.
+	 *
+	 * @var callable|null
+	 */
+	private $derive;
+
+	/**
 	 * Creates the declaration.
 	 *
 	 * @since 2.0.29
 	 *
-	 * @param string   $identifier Name of the non-secret, unique account identifier.
-	 * @param string[] $secrets    Names of the secret fields; at least one.
+	 * @param string        $identifier Name of the non-secret, unique account identifier.
+	 * @param string[]      $secrets    Names of the secret fields; at least one.
+	 * @param callable|null $derive_identifier Receives the secrets by name and returns the identifier, '' when it cannot be
+	 *                                         derived. Null when the settings form asks for the identifier.
 	 * @throws \InvalidArgumentException When a name is empty or repeated, or there is no secret.
 	 */
-	public function __construct( string $identifier, array $secrets ) {
+	public function __construct( string $identifier, array $secrets, ?callable $derive_identifier = null ) {
 		$secrets = array_values( array_map( 'strval', $secrets ) );
 		$names   = array_merge( [ $identifier ], $secrets );
 
@@ -53,6 +62,39 @@ final class Credential_Fields {
 
 		$this->identifier = $identifier;
 		$this->secrets    = $secrets;
+		$this->derive     = $derive_identifier;
+	}
+
+	/**
+	 * Tells whether the identifier is derived from the secrets, so the settings form does not ask for it.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @return bool
+	 */
+	public function derives_identifier(): bool {
+		return null !== $this->derive;
+	}
+
+	/**
+	 * Derives the identifier from the secrets.
+	 *
+	 * Returns '' when the identifier is not derivable here, or when a secret is missing: the caller then has no identifier and
+	 * reports the account as incomplete.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @param array<string,mixed> $credentials Credentials by field name; only the secrets are read.
+	 * @return string
+	 */
+	public function derive_identifier( array $credentials ): string {
+		$secrets = $this->secrets_of( $credentials );
+
+		if ( null === $this->derive || in_array( '', $secrets, true ) ) {
+			return '';
+		}
+
+		return trim( (string) call_user_func( $this->derive, $secrets ) );
 	}
 
 	/**
