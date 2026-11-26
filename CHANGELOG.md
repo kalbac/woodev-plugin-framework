@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.26] — 2026-11-26
+### Bug Fixes
+- **marketplace**: Send what changed while a warehouse was switched off (#2042) (#2043)
+
+- **marketplace**: Let a reset card be exported while its old task is open (#2041)
+
+
+### Features
+- **marketplace**: One price for several links — price groups (WF4) (#2031)
+
+
+
 ## [2.1.25] — 2026-11-26
 ### Bug Fixes
 - **marketplace**: Zero the left warehouse when a product changes warehouse (#2034) (#2037)
