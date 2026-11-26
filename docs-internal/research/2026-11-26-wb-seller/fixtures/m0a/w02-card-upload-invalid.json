@@ -1,0 +1,56 @@
+{
+  "label": "w02-card-upload-invalid",
+  "recorded_at": "2026-11-26T01:15:51Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/cards/upload",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": [
+      {
+        "subjectID": 297,
+        "variants": [
+          {
+            "vendorCode": "WOODEV-TEST-A",
+            "title": "ТЕСТ Woodev не продавать брелок",
+            "description": "Тестовая карточка для проверки интеграции. Не для продажи.",
+            "dimensions": {
+              "length": 10,
+              "width": 5,
+              "height": 2,
+              "weightBrutto": 0.1
+            },
+            "characteristics": [
+              {
+                "id": 14177449,
+                "value": [
+                  "черный",
+                  "белый",
+                  "красный",
+                  "зеленый",
+                  "синий",
+                  "желтый"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "4"
+    },
+    "body": {
+      "data": {},
+      "error": false,
+      "errorText": "",
+      "additionalErrors": {}
+    }
+  }
+}

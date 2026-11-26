@@ -1,0 +1,25 @@
+{
+  "label": "w14-supply-create",
+  "recorded_at": "2026-11-26T01:20:52Z",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api.wildberries.ru/api/v3/supplies",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "name": "WOODEV TEST — empty, do not use"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "X-Ratelimit-Limit": "20",
+      "X-Ratelimit-Remaining": "19"
+    },
+    "body": {
+      "id": "WB-GI-000000001"
+    }
+  }
+}

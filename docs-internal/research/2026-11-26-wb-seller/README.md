@@ -4,7 +4,8 @@
 Decision researched (operator, 26.11.2026, [#1670](https://github.com/kalbac/woodev-plugin-framework/issues/1670)):
 build a Wildberries plugin for WooCommerce sellers, the same kind as Ozon Seller 2.0 on `woodev/marketplace/`.
 The research itself changed no code and sent no request to any Wildberries API host; the follow-up
-measurement cards did — the sandbox results (M0b, #1996) are in [measurement.md](measurement.md).
+measurement cards did — the sandbox (M0b, #1996) and live-cabinet (M0a, #1995) results are in
+[measurement.md](measurement.md).
 
 ## Files
 
@@ -16,7 +17,8 @@ measurement cards did — the sandbox results (M0b, #1996) are in [measurement.m
 | [owner-questions.ru.md](owner-questions.ru.md) | 11 questions for the owner, Russian, each with a recommendation |
 | [card-plan.md](card-plan.md) | Estimated framework and plugin cards (superseded by the design spec) |
 | [decisions.md](decisions.md) | The owner's answers of 26.11.2026 (D1–D11) — final; they win over every recommendation here |
-| [measurement.md](measurement.md) | Phase-0 measurement log: M0b sandbox (#1996, done 26.11.2026) — flows, checks, fidelity gaps, write ledger; M0a live cabinet (#1995) appends here |
+| [measurement.md](measurement.md) | Phase-0 measurement log: M0b sandbox (#1996, done 26.11.2026) — flows, checks, fidelity gaps, write ledger; M0a live cabinet (#1995, done 26.11.2026) |
+| [fixtures/m0a/](fixtures/m0a/) | Live-cabinet request/response pairs of our own test objects (ids masked, token redacted) and the request log |
 | [fixtures/m0b/](fixtures/m0b/) | 93 sandbox request/response pairs (test data only, token redacted) — samples for the plugin's tests |
 | [sandbox-environment-2026-11-26.json](sandbox-environment-2026-11-26.json) | The official sandbox OpenAPI spec, extracted from the portal page (no yaml download exists); sha256 in measurement.md |
 
@@ -66,17 +68,17 @@ Also: the mapping page says «категориям Ozon» to every marketplace (
 ## Not verified
 
 - By execution: the research itself sent no WB request; **M0b (#1996) since ran the sandbox flows** —
-  [measurement.md](measurement.md) holds the results and fixtures. No live-cabinet request yet (M0a, #1995),
-  no framework test, no rig. Every "fits" in the gap map is still a reading of the contract.
+  and **M0a (#1995) the live-cabinet checks that need no order** — [measurement.md](measurement.md) holds the results
+  and fixtures. No framework test and no rig ran. Every "fits" in the gap map is still a reading of the contract.
 - WB's HTML pages: the portal answers HTTP 498 to curl and embedded browsers, but a fresh headed full Chrome
   passes — the sandbox spec, the DBS knowledge-base article and the FBS-marking instruction were read that way
-  ([gotcha](../../gotchas/wb-portal-498-passes-in-a-fresh-headed-chrome.md)). Release notes, the business-solutions
-  catalogue and the agreements were not read.
+  ([gotcha](../../gotchas/wb-portal-498-passes-in-a-fresh-headed-chrome.md)). M0a also read the release notes
+  (02.10–25.11.2026) and further articles. The business-solutions catalogue and the agreements were not read.
 - Whether a self-hosted paid plugin may use a Personal token; whether a Test token needs a seller account.
 - Whether WB lowers seller-warehouse stock on an order **in production** (the sandbox does, and does not restore it
-  on cancel — measurement.md); whether `vendorCode` can be changed; real subcategory requirements (the sandbox
-  returns zero required characteristics — a fidelity gap, not the production answer).
-- Assembly deadlines and penalties (not in the specs).
+  on cancel — measurement.md); real subcategory requirements beyond the two subjects M0a read (the sandbox returns
+  zero required characteristics — a fidelity gap). `vendorCode` **can** be changed (M0a item 5).
+- Assembly deadlines for FBS (not in the specs or the articles read).
 - Adapter-only workarounds in the gap map rows 9 and 22 were not tried.
 - Marking: the production refusal for a missing code and code validation (the sandbox validates nothing and never
   requires a code — measured); the exact cabinet steps for entering codes (the official article's accordion body

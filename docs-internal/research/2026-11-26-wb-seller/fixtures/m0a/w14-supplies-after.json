@@ -1,0 +1,48 @@
+{
+  "label": "w14-supplies-after",
+  "recorded_at": "2026-11-26T01:20:54Z",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api.wildberries.ru/api/v3/supplies",
+    "query": {
+      "limit": 1000,
+      "next": 0
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "20",
+      "X-Ratelimit-Remaining": "18"
+    },
+    "body": {
+      "supplies": [
+        {
+          "closedAt": null,
+          "scanDt": null,
+          "rejectDt": null,
+          "destinationOfficeId": null,
+          "crossBorderType": null,
+          "isB2b": null,
+          "shippingPointId": null,
+          "waybillUuid": null,
+          "shippingDt": null,
+          "shippingType": null,
+          "id": "WB-GI-000000001",
+          "name": "WOODEV TEST — empty, do not use",
+          "createdAt": "2026-11-26T01:20:52Z",
+          "recommendedWhId": 0,
+          "cargoType": 0,
+          "done": false,
+          "isPickupPointShipmentAllowed": false,
+          "spotAvailable": false
+        }
+      ],
+      "next": 140000001
+    }
+  }
+}

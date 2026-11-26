@@ -1,0 +1,62 @@
+{
+  "label": "final-error-list",
+  "recorded_at": "2026-11-26T01:53:01Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/cards/error/list",
+    "query": {
+      "locale": "ru"
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "cursor": {
+        "limit": 100
+      },
+      "order": {
+        "ascending": false
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "4"
+    },
+    "body": {
+      "data": {
+        "items": [
+          {
+            "batchUUID": "00000000-0000-0000-0000-0000000000bb",
+            "subjects": {
+              "WOODEV-TEST-A": {
+                "id": 297,
+                "name": "Брелоки"
+              }
+            },
+            "brands": {},
+            "vendorCodes": [
+              "WOODEV-TEST-A"
+            ],
+            "errors": {
+              "WOODEV-TEST-A": [
+                "Поле Цвет имеет слишком много значений. Разрешено не более 5"
+              ]
+            },
+            "updatedAt": "2026-11-26T01:15:51Z"
+          }
+        ],
+        "cursor": {
+          "next": false,
+          "updatedAt": "0001-01-01T00:00:00Z",
+          "batchUUID": "00000000-0000-0000-0000-000000000000"
+        }
+      },
+      "error": false,
+      "errorText": "",
+      "additionalErrors": null
+    }
+  }
+}

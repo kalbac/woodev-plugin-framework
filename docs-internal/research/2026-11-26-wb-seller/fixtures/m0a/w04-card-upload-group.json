@@ -1,0 +1,102 @@
+{
+  "label": "w04-card-upload-group",
+  "recorded_at": "2026-11-26T01:16:16Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/cards/upload",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": [
+      {
+        "subjectID": 256,
+        "variants": [
+          {
+            "vendorCode": "WOODEV-TEST-B-BLACK",
+            "title": "ТЕСТ Woodev не продавать повязка",
+            "description": "Тестовая карточка для проверки интеграции. Не для продажи.",
+            "dimensions": {
+              "length": 20,
+              "width": 15,
+              "height": 3,
+              "weightBrutto": 0.1
+            },
+            "characteristics": [
+              {
+                "id": 14177449,
+                "value": [
+                  "черный"
+                ]
+              }
+            ],
+            "sizes": [
+              {
+                "techSize": "S",
+                "wbSize": "54",
+                "skus": [
+                  "2060000000019"
+                ]
+              },
+              {
+                "techSize": "M",
+                "wbSize": "56",
+                "skus": [
+                  "2060000000026"
+                ]
+              }
+            ]
+          },
+          {
+            "vendorCode": "WOODEV-TEST-B-WHITE",
+            "title": "ТЕСТ Woodev не продавать повязка",
+            "description": "Тестовая карточка для проверки интеграции. Не для продажи.",
+            "dimensions": {
+              "length": 20,
+              "width": 15,
+              "height": 3,
+              "weightBrutto": 0.1
+            },
+            "characteristics": [
+              {
+                "id": 14177449,
+                "value": [
+                  "белый"
+                ]
+              }
+            ],
+            "sizes": [
+              {
+                "techSize": "S",
+                "wbSize": "54",
+                "skus": [
+                  "2060000000033"
+                ]
+              },
+              {
+                "techSize": "M",
+                "wbSize": "56",
+                "skus": [
+                  "2060000000040"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "4"
+    },
+    "body": {
+      "data": {},
+      "error": false,
+      "errorText": "",
+      "additionalErrors": {}
+    }
+  }
+}

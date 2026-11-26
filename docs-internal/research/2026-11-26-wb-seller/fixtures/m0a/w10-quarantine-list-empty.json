@@ -1,0 +1,28 @@
+{
+  "label": "w10-quarantine-list-empty",
+  "recorded_at": "2026-11-26T01:52:06Z",
+  "request": {
+    "method": "GET",
+    "url": "https://discounts-prices-api.wildberries.ru/api/v2/quarantine/goods",
+    "query": {
+      "limit": 100,
+      "offset": 0
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "3"
+    },
+    "body": {
+      "data": null,
+      "error": false,
+      "errorText": ""
+    }
+  }
+}

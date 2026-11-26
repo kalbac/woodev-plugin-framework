@@ -1,0 +1,103 @@
+{
+  "label": "w04-poll-b-white-first-seen-011720",
+  "recorded_at": "2026-11-26T01:17:20Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/get/cards/list",
+    "query": {
+      "locale": "ru"
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "settings": {
+        "cursor": {
+          "limit": 100
+        },
+        "filter": {
+          "textSearch": "WOODEV-TEST-B-WHITE",
+          "withPhoto": -1
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "4"
+    },
+    "body": {
+      "cards": [
+        {
+          "nmID": 100000003,
+          "imtID": 110000002,
+          "nmUUID": "00000000-0000-0000-0000-000000000003",
+          "subjectID": 256,
+          "subjectName": "Повязки на голову",
+          "vendorCode": "WOODEV-TEST-B-WHITE",
+          "brand": "",
+          "title": "ТЕСТ Woodev не продавать повязка",
+          "description": "Тестовая карточка для проверки интеграции. Не для продажи.",
+          "needKiz": true,
+          "kizMarked": false,
+          "dimensions": {
+            "width": 15,
+            "height": 3,
+            "length": 20,
+            "weightBrutto": 0.1,
+            "isValid": true
+          },
+          "characteristics": [
+            {
+              "id": 14177449,
+              "name": "Цвет",
+              "value": [
+                "белый"
+              ]
+            }
+          ],
+          "sizes": [
+            {
+              "chrtID": 120000004,
+              "techSize": "S",
+              "wbSize": "54",
+              "skus": [
+                "2060000000033"
+              ]
+            },
+            {
+              "chrtID": 120000005,
+              "techSize": "M",
+              "wbSize": "56",
+              "skus": [
+                "2060000000040"
+              ]
+            }
+          ],
+          "createdAt": "2026-11-26T01:16:17.479783Z",
+          "updatedAt": "2026-11-26T01:16:18.479781Z",
+          "documents": {
+            "overallVerdict": {
+              "isFullyChecked": true,
+              "status": 2,
+              "reason": "documents_missing",
+              "createdAt": "2026-11-26T04:16:23.818386+03:00"
+            },
+            "issues": [
+              {
+                "code": "document_missing",
+                "documentTypes": [
+                  1
+                ]
+              }
+            ],
+            "excludeDocuments": false
+          }
+        }
+      ],
+      "cursor": "<omitted>"
+    }
+  }
+}

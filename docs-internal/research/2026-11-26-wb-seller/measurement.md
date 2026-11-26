@@ -7,8 +7,9 @@ card [#1995](https://github.com/kalbac/woodev-plugin-framework/issues/1995)). S0
 
 Evidence labels as in the [API map](api-map.md): **SOURCED** (official WB OpenAPI or portal page),
 **MEASURED** (observed in a call, fixture cited), **SECONDARY**, **UNVERIFIED**.
-Fixtures are request/response pairs under [fixtures/m0b/](fixtures/m0b/) — sandbox test data only,
-`Authorization` redacted in every file. No token value, seller name or real buyer data appears here.
+Fixtures are request/response pairs with `Authorization` redacted in every file: [fixtures/m0b/](fixtures/m0b/)
+(sandbox test data) and [fixtures/m0a/](fixtures/m0a/) (live cabinet, our own test objects only, cabinet ids
+replaced by placeholders). No token value, seller name or real buyer data appears here.
 
 ---
 
@@ -404,8 +405,257 @@ with address/group), `dbs-client-phones.json`, `w9-stickers-png-cartA.json`, `su
 
 ---
 
-## M0a — live cabinet (card #1995)
+## M0a — live cabinet (card #1995, 26.11.2026)
 
-Not yet written — owned by [#1995](https://github.com/kalbac/woodev-plugin-framework/issues/1995)
-(reads, ≤3 test cards at stock 0, one empty supply, refusals recorded once). This section is a placeholder
-so the two phase-0 PRs do not collide; M0a appends its results here.
+Items 1–11a of [spec §3.1](../../specs/2026-11-26-wildberries-seller-plugin-design.md), on a live seller cabinet,
+with no orders. Status of each claim: **proven**, **refuted** (the spec or the research expected otherwise) or
+**open**. Times are UTC. Fixtures are named below without their `.json` ending. No order
+exists on this cabinet, so what M0b leaves open about production orders (phone formats, the confirmation code, the
+marking refusal) is not observed here either.
+
+### Method
+
+- Token: `WB_LIVE_TOKEN` from the plugin folder's `.env`, loaded into the probe process only; never printed, logged
+  or committed. Redirects were not followed.
+- The probe refused by itself: any `DELETE`, any delete or trash path, a stock `amount` other than 0, a fourth test
+  card, a second supply, a card or price write naming a card that is not a test card, and sending the same write twice.
+- 116 requests: 48 `GET`, 65 `POST`, 3 `PUT`; answers 111 × 200, 3 × 204, 1 × 201, 1 × 409, no 429. Every request is
+  one line of [request-log.tsv](fixtures/m0a/request-log.tsv).
+- Placeholders in the fixtures: cards `100000001…`, groups `110000001…`, sizes `120000001…`, uploads `130000001…`,
+  warehouses `700001…`, their offices `800001…` and stores `900001…`, supply `WB-GI-000000001`, barcodes
+  `20600000000…`, the media task id `…0000000000aa`, the error batch id `…0000000000bb`, the supplies cursor
+  `140000001`.
+- Two groups of answers have no fixture because they describe the cabinet itself: the token payload with
+  `seller-info`, and the reads of existing cards, prices and offices. Their requests are in the log.
+- The pre-send list below was committed before the first write; W15 and W16 were added and committed before each was
+  sent (separate commits of this pull request).
+
+### Writes: listed before sending, and what happened
+
+The table is grouped by topic. Send order: W1–W7, W14, W8, W9, W15, W10, W12, W13, W16
+([request-log.tsv](fixtures/m0a/request-log.tsv) is chronological).
+
+| # | Request | What it was expected to leave | Result |
+|---|---|---|---|
+| W1 | `POST /content/v2/barcodes` `{count: 4}` | four reserved barcodes | 200; all four used on cards B |
+| W2 | `POST /content/v2/cards/upload` — card A (`WOODEV-TEST-A`), six colour values where five are allowed | an error-list entry, or card A | 200 `error: false`; **no card**, an error-list entry |
+| W3 | the same call, card A corrected | test card A | 200; card created |
+| W4 | the same call, group B: `WOODEV-TEST-B-BLACK`, `WOODEV-TEST-B-WHITE`, two sizes each | two cards in one group | 200; both created, one `imtID` |
+| W5 | `POST /content/v3/media/save` — card A, two 900×1200 placeholder pictures (`dummyimage.com`) | photos | 200 with a `taskId`; both photos appeared |
+| W6 | `POST /content/v2/cards/update` — card A, description only | a changed description | 200; applied — **then undone by W7** |
+| W7 | the same call — `vendorCode` → `WOODEV-TEST-A2` | a renamed card | 200; **renamed** |
+| W8 | `POST /api/v2/upload/task` — prices and discounts of the three cards | prices | 200; 3 of 3 applied |
+| W9 | the same call — B-WHITE 1000 → 100 | quarantine or the low price | 200, then **refused per item**; price unchanged, no quarantine |
+| W15 | the same call — B-WHITE 1000 → 600 (added after W9) | quarantine | 200, then item moved to **price quarantine** |
+| W10 | the same call — B-WHITE 950 | normal price, quarantine released | 200; applied, quarantine empty |
+| W11 | `POST /api/v2/upload/task/size` | per-size prices | **not sent**: no card has `editableSizePrice: true` |
+| W12 | `PUT /api/v3/stocks/{warehouseId}` — five test sizes, `amount: 0`, warehouse 1 | records with 0 | 204; read back as 0 |
+| W13 | the same call — `chrtID` instead of `chrtId`, one size | nothing beyond W12 | 204; proves nothing by itself (the record already held 0) |
+| W16 | the same call on warehouse 2, which had no record (added after W13) | a record with 0, if the name is accepted | 204; **a record with 0 appeared** |
+| W14 | `POST /api/v3/supplies` — «WOODEV TEST — empty, do not use» | one empty supply | 201; still empty and open |
+
+**Left in the cabinet for good:** three test cards (stock 0; A holds two photos; prices 999 −33 %, 1001 −15 %,
+950), five stock records of 0 in warehouse 1 and one in warehouse 2, four price uploads in the history, one empty
+supply, one error-list entry (it did not disappear — item 4). **Later cards reuse these cards**: `WOODEV-TEST-A2`,
+`WOODEV-TEST-B-BLACK`, `WOODEV-TEST-B-WHITE`. Find them by listing cards, or by `textSearch` with the full article —
+a search for the prefix `WOODEV-TEST` returned nothing
+(`textsearch-article-prefix`).
+
+### Refused writes (item 11a)
+
+**No write was refused because of the cabinet's standing**: all 15 write requests were answered 2xx, and card
+creation, card update, media, prices, zero stock and supply creation all took effect. So the live acceptance steps
+of WP4, WP5 (push of 0) and WP6 (except size prices) are possible on this cabinet.
+
+| What was refused | How | Text | Retried |
+|---|---|---|---|
+| W2 (invalid on purpose) | 200, then an error-list entry | «Поле Цвет имеет слишком много значений. Разрешено не более 5» | the corrected card was sent (W3) |
+| W9 (price more than twice lower) | 200; upload status 6, item status 3 | `Changes weren't saved: New prices are more than twice lower than the current ones. Please lower them gradually` | no |
+| W15 (quarantine, the aim of the write) | 200; upload status 6, item status 3 | `New price is several times lower than the current price. Item has been moved to Price Quarantine` | no (W10 released it) |
+| A **read**: shipping points of the empty supply | 409 `SupplyHasZeroOrders` | `Failed to process the supply. Make sure it has at least one assembly task assigned to it.` | no |
+
+### 1. Token and connectivity — proven
+
+Observed; fixtures withheld (they identify the seller).
+
+| Claim | Status | Answer |
+|---|---|---|
+| The stored token is a personal one | proven | payload `acc: 3`, `for: "self"`, `t: false` |
+| It can write Content, Prices and Marketplace | proven | bitmask `s` has bits 1, 3, 4 only; bit 30 (read-only) not set; writes took effect |
+| Lifetime 180 days | refuted as an exact figure | `exp` was 182 days ahead — read `exp`, never compute it |
+| `GET /ping` per host | proven | 200 `{TS, Status: "OK"}` on common, content, discounts-prices, marketplace; `X-Ratelimit-Limit: 99` |
+| `sid` of the token is the seller's id | proven | `GET /api/v1/seller-info` returns `name, sid, tin, tradeMark, country`; its `sid` equals the token's |
+
+The payload also carries `c, ent, id, iid, oid, uid`.
+
+### 2. Portal pages read in a browser
+
+Orca's embedded browser stayed on the anti-bot page; the public pages were read in desktop Chrome through the
+Claude in Chrome extension (the M0b note on portal access describes a second route, a fresh temporary profile).
+Read: release notes (entries of
+02.10–25.11.2026, as far as the page had loaded), the sandbox page, knowledge-base articles on webhooks, items,
+orders, FBS, DBS, labelling, rate limits and error codes, and the help-centre article on price quarantine. All
+**SOURCED** unless marked.
+
+| Claim | Status | What the pages say |
+|---|---|---|
+| U2: webhooks do not exist | **refuted** | `webhooks-api.wildberries.ru` (article of 16.09.2026): `card_creation_error`, `card_changed`, `report_generation_complete`, `feedback_updated` |
+| …and a plugin could use them | refuted | only a **Service or Base** token with a service secret; no order events. A personal-token plugin keeps polling |
+| Methods being replaced (U2) | proven for the read window | old FBS shipping-points route announced off on 20.11 (the spec uses the new one); Statistics, FBW and Promotion sandboxes off from 05.11. Additions: DBS client `additionalPhones` (06.10), DBS sandbox `deliveryType` (08.10), moving an order between supplies with `isTransferable` (14.10), `gtin` on cards (02.10) |
+| Sandbox limits | proven | Content, Prices, FBS, DBS, pickup and feedback hosts; 1 request/s; label identifiers optional |
+| U13: FBS assembly deadline | **open** | not stated in the articles read; oversize FBS cargo has a per-order `sellerDate`. SECONDARY (web-search summary): 120 hours under the offer, clause 4.3.1 |
+| DBS terms | proven | delivery 5 hours to 35 days (express: 4 hours); an unanswered return request for a defective item is approved after 5 days |
+| Seller cancellation | proven | penalised, except for an order with `isZeroOrder: true` (FBS and DBS articles) |
+| Marking | partly | identifiers are attached in `confirm`; a supply or DBS order lacking a **required** one cannot move on; with an **optional** one missing an FBS supply can be handed over, but a returned item is refused at the warehouse and sent back. The API text says marked goods need both — S0 should word WP9 to cover this |
+| Marking: entering codes in the cabinet (D4) | open here | see M0b |
+| 4xx cost | refines §12.2 | a 409 counts as **5 or 10** requests depending on the method group |
+| Waiting after create or edit | proven (text) | stock and price cannot be set for up to 30 minutes after a create, or after an edit of the card |
+| Price quarantine | proven (text) | default threshold: a drop of 33.3 % (1.5 times), configurable in the cabinet; goods with size prices and drops caused by promotions are exempt |
+| Card documents | new | from 01.10.2026 moderation **may block** a card that fails validation; checks are rolled out in stages |
+| `cards/update` with a retired characteristic | new | may be dropped silently: 200 and no error-list entry |
+
+### 3. The existing catalogue — proven
+
+Read with `POST /content/v2/get/cards/list` (existing cards only, aggregates). Observed; fixtures withheld: none of
+their data is kept here.
+
+| Claim | Observation |
+|---|---|
+| How many cards are single-size | **none**: every existing card had three or more sizes |
+| `vendorCode` | unique; short; Cyrillic and other non-ASCII articles occur; no `/`, `\|` or outer spaces |
+| `skus` | one per size, unique, all 13 digits, prefix `20`, valid EAN-13 check digit (a GS1 restricted-circulation range, so presumably not registered GTINs — interpretation) |
+| `imtID` | both single cards and groups of four occur |
+| `needKiz` | present on every card; `true` occurs |
+| `editableSizePrice` (from `list/goods/filter`) | `false` on every card |
+| Other | `dimensions.isValid` was `false` on every existing card; every card has a `documents` object; the cursor ends when `cursor.total < limit` |
+
+### 4. Test cards — proven (U3, creation)
+
+| Claim | Status | Observation (fixtures `w02-*` … `cards-list-after-create`) |
+|---|---|---|
+| Time to `nmID` / `chrtID` | proven | `createdAt` 1–7 s after the request; first seen in the cards list 25–64 s after it (polls 15–20 s apart: `w03-poll-*`, `w04-poll-*`). Two cards of one request were first seen 39 s apart |
+| Up to 30 minutes | not observed | about a minute here |
+| Error list | proven | the entry carries `updatedAt` of the request and was there at the first poll (10 s): `{batchUUID, subjects, brands, vendorCodes, errors: {article: [text]}, updatedAt}` |
+| A corrected request removes the entry | **refuted** (within 37 min) | the entry stayed after W3 created the card, and after two updates |
+| Sizeless card | proven | omit `sizes`: one size `techSize: "0"`, `wbSize: ""`, a generated barcode |
+| Barcodes | proven | `POST /content/v2/barcodes` and auto-generation give 13 digits, prefix `206`, valid EAN-13 check digit; sent `skus` are kept |
+| Required characteristics | proven for two subjects | subjects 297 and 256 require none; colour allows 5 values (`charcs-297`, `charcs-256`) |
+| Documents | new | within 6–11 s all three cards got `overallVerdict {status: 2, reason: "documents_missing"}`, `issues: [{code: "document_missing", documentTypes: [1]}]`. Cards, prices and stock were still accepted |
+| `needKiz` | proven | set by Wildberries from the subject: `true` for 256, `false` for 297; `kizMarked: false` |
+| A card in a size-price subject | open | the catalogue has none (item 3), so none was created |
+
+### 5. Card update — own field only (D2)
+
+| Claim | Status | Observation |
+|---|---|---|
+| Read-merge-write keeps every other field | proven for what the card held | after W6 only `description` and `updatedAt` differed: brand, title, dimensions, characteristics, sizes, documents and **photos** (not part of the request) survived (`w06-cards-list-before`, `w06-cards-list-new-version`) |
+| Tags, video, attached documents, hand-set cabinet fields survive | open | the test card had none |
+| `vendorCode` can be changed (`RENAME_SKU`) | **refuted as fixed**: it changes | W7: new article, same `nmID`, `imtID`, `chrtID`, barcodes |
+| Time to visibility | proven | 15 s (W6), 61 s (W7) |
+| The cards list shows the latest version after a write | **refuted** | see below |
+
+⚠ **A read after a write can return an older version, even after a newer one was already seen.**
+
+| Time | Event | `updatedAt` returned | Description returned |
+|---|---|---|---|
+| 01:19:14 | W6 changes the description | — | — |
+| 01:19:29 | read | 01:19:17 | new |
+| 01:19:33 | read, four seconds later | 01:17:46 | **old** |
+| 01:19:33 | W7 built from that read, changing only the article | — | sends the old one |
+| 01:20:34 | read | 01:19:39 | old — **W6 is lost** |
+
+Two reads in one second at 01:17:42 also returned two different `updatedAt` values (`cards-list-after-create`,
+`cards-list-same-second-older`). The old version was still returned at 01:19:48, 01:20:04 and 01:20:19
+(`w07-cards-list-still-old-*`). A plugin that reads, merges and
+writes can silently undo its own (or the merchant's) recent edit. For WP4: serialise writes per `nmID`; remember
+what was last sent and its time; refuse to build an update from a read whose `updatedAt` is older than that write;
+one read that shows the change does not prove the next one will. Fixtures `w06-cards-list-new-version`,
+`w07-cards-list-stale-before-rename`, `w07-card-update-rename`. Gotcha:
+[wb-cards-list-serves-an-older-version-after-a-write](../../gotchas/wb-cards-list-serves-an-older-version-after-a-write.md).
+Card A's `updatedAt` also carries times at which we wrote nothing: 01:17:09 (`cards-list-after-create`) and
+01:32:41 (first seen in the next read of the card, at 01:51:02: `drift-cards-list-015102`).
+
+### 6. Media — proven
+
+`media/save` answered 200 with `data.taskId` (the OpenAPI example shows an empty `data`); the card showed no photo
+62 s later (`w05-cards-list-no-photo-011844`) and both at 77 s (`w05-cards-list-with-photos`), converted to `.webp`, each in six sizes under `photos[]`. Order of the two pictures was
+not compared by content. The refusal of a whole set for one bad file was not tried (open).
+
+### 7. Prices — proven (U4, in part)
+
+| Claim | Status | Observation |
+|---|---|---|
+| New cards reach the prices service | proven | listed with price 0 at the first poll, about 5 min after creation |
+| Time to «done» | proven | every upload final by the first poll, 5–6 s after it was sent (`w08-`, `w09-`, `w15-`, `w10-price-history`); `activationDate` equal to `uploadDate`. Sent 31 min or more after the last card edit, so an earlier send is untested |
+| Rounding of `discountedPrice` | proven | **not rounded to roubles**: 999 −33 % → `669.33`, 1001 −15 % → `850.85`; existing goods also carry kopecks. `price` is an integer (`w08-goods-prices-after`; existing goods: observed, fixture withheld) |
+| A sharp drop goes to quarantine | **refined** | 1000 → 600: quarantine. 1000 → 100: **not** quarantine but an item error «more than twice lower». WF1 must handle both |
+| Exact boundaries | open | one value on each side: 1.67 times (quarantine), 10 times (refused) |
+| Quarantine shape | proven | `quarantineGoods[{nmID, sizeID: null, newPrice, oldPrice, newDiscount, oldDiscount, priceDiff}]`; **`data: null` when empty**; the old price stays in force |
+| Release by a new price | proven | item status 2 (`w10-price-items`), list empty (`w10-quarantine-list-empty`), price 950 in force (`w10-goods-prices-after`) |
+| A refused or quarantined item | proven | HTTP 200 on upload; upload `status: 6` (`w09-price-history`, `w15-price-history`), item `status: 3` with `errorText` (success: 3 and 2) |
+| Size prices where allowed | open | no card with `editableSizePrice: true` |
+
+### 8. Zero stock — proven, one claim open
+
+| Claim | Status | Observation |
+|---|---|---|
+| `PUT` of `amount: 0` and read-back | proven | 204; read returns `{sku, chrtId, amount: 0}` (`sku` is marked «Not used» in the OpenAPI text, and is filled) |
+| A size never set | proven | not listed at all: `{"stocks": []}` — absent, not 0 |
+| Field names are matched exactly | refuted for letter case | `chrtID` was accepted and created the record (W16) |
+| An unknown field name answers 204 and does nothing | **open** | proving it needs a non-zero stock, which is forbidden here. The documented warning stands; keep the read-back and the payload contract test |
+| Wait after creation | partly | accepted 36 min after creation; earlier untested |
+
+No request ever carried an amount other than 0, and every read returned 0 or nothing.
+
+### 9. Warehouses and offices — proven
+
+The cabinet's seller warehouses are all `deliveryType: 1` (FBS), `cargoType: 1`, not processing and not being
+deleted; each row also carries `storeId`. `GET /api/v3/offices` returned only `deliveryType: 1` offices, of cargo
+types 1 and 3 (observed; fixture withheld: the answer marks the cabinet's own offices). No DBS warehouse exists, so
+DBS values are open on the live cabinet.
+
+### 10. The empty supply — proven, lifetime open
+
+| Claim | Status | Observation |
+|---|---|---|
+| A supply can be created | proven | 201 `{id}`; `cargoType: 0`, `done: false`, all shipping fields `null`; listed by `GET /api/v3/supplies` (`w14-supplies-after`) |
+| Its shipping points can be read while empty | **refuted** | 409 `SupplyHasZeroOrders` (M0b: the sandbox has no such route at all, so the shape of a successful answer stays unmeasured) |
+| U5: an empty supply expires | **open** | unchanged 32 minutes after creation (`final-supply`); the cabinet had no earlier supply to judge by (`w14-supplies-before`). Look again in a later card |
+
+### 11. Rate-limit headers and 4xx accounting
+
+| Claim | Status | Observation |
+|---|---|---|
+| Headers on ordinary calls | proven | `X-Ratelimit-Limit` and `X-Ratelimit-Remaining` on every answer, the 409 included; `Limit` is the burst. No `-Retry` or `-Reset` seen (documented for 429) |
+| Bursts | proven | ping 99, seller-info 10, content 5, prices 5, marketplace 20 |
+| What a Marketplace 4xx costs | **open** (ambiguous) | one sample: the 409 reported **9** of 20. Against the last call of the FBS supplies group (`order-ids`, 10 s earlier: 17) that reads as 17 → 9, a cost of 8; against the warehouses call just before it (19) as 19 → 9, a cost of 10. Which bucket it drew from is unknown, and either bucket may have refilled in between. It is a surcharge of some size; the documented 5 or 10 is not confirmed by this sample (`w14-control-warehouses-*`, `w14-shipping-points-409`) |
+| Buckets are per method group | **open** | the warehouses call right after the 409 reported 18, which fits both readings |
+| 4xx cost for Content and Prices | open | none occurred, none was provoked |
+| 429 | open | not provoked |
+
+### Registers touched (spec §13.1)
+
+| Id | Status after M0a |
+|---|---|
+| U1 token | proven |
+| U2 webhooks, replaced methods | webhooks exist but not for a personal token; replacements listed (item 2); sandbox fidelity — M0b |
+| U3 creation, error list, barcodes, rename | proven; the error entry is not removed by a corrected request |
+| U4 prices | timing, rounding and both refusals proven; threshold from the help centre; size-price categories open |
+| U5 empty supply lifetime | open |
+| U10 refused writes | proven: none refused for the cabinet's standing |
+| U13 assembly deadlines | open (secondary figure only) |
+
+### For S0 (spec amendment)
+
+1. WP4: protect read-merge-write against stale reads (item 5) — the highest risk found.
+2. WF1 / WP6: «more than twice lower» is an item error, not quarantine; `data: null` is an empty quarantine.
+3. `vendorCode` is changeable: revisit `RENAME_SKU` and I2 (the unit key is frozen at linking).
+4. WF2: an error-list entry outlives the corrected request — match it by `updatedAt` after the submit, not by article alone.
+5. WP2 / WP4: `documents_missing` arrives within seconds; show the verdict at the product.
+6. WF5: the 4xx surcharge differs by method group (5 or 10).
+
+## Related
+
+- [Wildberries Seller 1.0 plugin design](../../specs/2026-11-26-wildberries-seller-plugin-design.md) — §3 the two phase-0 cards, §13 the registers
+- [API map](api-map.md)
+- [Owner decisions](decisions.md)

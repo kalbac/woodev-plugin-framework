@@ -1,0 +1,36 @@
+{
+  "label": "w04-poll-b-white-miss-011643",
+  "recorded_at": "2026-11-26T01:16:43Z",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api.wildberries.ru/content/v2/get/cards/list",
+    "query": {
+      "locale": "ru"
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "settings": {
+        "cursor": {
+          "limit": 100
+        },
+        "filter": {
+          "textSearch": "WOODEV-TEST-B-WHITE",
+          "withPhoto": -1
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "4"
+    },
+    "body": {
+      "cards": [],
+      "cursor": "<omitted>"
+    }
+  }
+}

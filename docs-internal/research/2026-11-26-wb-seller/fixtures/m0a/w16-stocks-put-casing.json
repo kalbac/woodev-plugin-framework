@@ -1,0 +1,28 @@
+{
+  "label": "w16-stocks-put-casing",
+  "recorded_at": "2026-11-26T01:52:39Z",
+  "request": {
+    "method": "PUT",
+    "url": "https://marketplace-api.wildberries.ru/api/v3/stocks/700002",
+    "query": null,
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": {
+      "stocks": [
+        {
+          "chrtID": 120000001,
+          "amount": 0
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "X-Ratelimit-Limit": "20",
+      "X-Ratelimit-Remaining": "18"
+    },
+    "body": null
+  }
+}

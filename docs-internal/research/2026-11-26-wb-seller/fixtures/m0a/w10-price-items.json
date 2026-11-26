@@ -1,0 +1,45 @@
+{
+  "label": "w10-price-items",
+  "recorded_at": "2026-11-26T01:52:04Z",
+  "request": {
+    "method": "GET",
+    "url": "https://discounts-prices-api.wildberries.ru/api/v2/history/goods/task",
+    "query": {
+      "limit": 10,
+      "offset": 0,
+      "uploadID": 130000004
+    },
+    "headers": {
+      "Authorization": "<redacted>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Ratelimit-Limit": "5",
+      "X-Ratelimit-Remaining": "3"
+    },
+    "body": {
+      "data": {
+        "uploadID": 130000004,
+        "historyGoods": [
+          {
+            "nmID": 100000003,
+            "vendorCode": "WOODEV-TEST-B-WHITE",
+            "sizeID": null,
+            "techSizeName": "",
+            "price": 950,
+            "currencyIsoCode4217": "RUB",
+            "discount": 0,
+            "clubDiscount": null,
+            "status": 2,
+            "errorText": null
+          }
+        ]
+      },
+      "error": false,
+      "errorText": ""
+    }
+  }
+}
