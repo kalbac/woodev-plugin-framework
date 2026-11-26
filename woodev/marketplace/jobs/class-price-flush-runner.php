@@ -12,11 +12,13 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Ledger\Item_Result;
 use Woodev\Framework\Marketplace\Price\Flush_Result;
+use Woodev\Framework\Marketplace\Price\Price_Grouping;
 use Woodev\Framework\Marketplace\Price\Price_Intent;
 use Woodev\Framework\Marketplace\Price\Price_Line;
 use Woodev\Framework\Marketplace\Price\Price_Pusher;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
 use Woodev\Framework\Marketplace\Price\Push_Receipt;
+use Woodev\Framework\Marketplace\Sync\Price_Groups;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Sync_Limits;
 
@@ -36,6 +38,8 @@ defined( 'ABSPATH' ) || exit;
  *   `in_flight_*`, checks the claim again right before the request and sends. Every queue write carries the claim token in its
  *   SQL, so a sender whose claim was taken over changes nothing; a settlement that was refused for that reason is not counted
  *   as sent and ends the run.
+ * - For a pusher with {@see Price_Grouping} a round takes whole price groups, and some groups are held, put off or turned down
+ *   instead of sent ({@see Price_Groups}).
  * - An accepted item makes the snapshot the sent payload; a newer pending revision is sent later. A refused item keeps the
  *   marketplace's text verbatim and backs the pair off by the ladder of {@see Backoff}; the attempt cap of the price cadence
  *   stops the retries of one revision until the payload changes.
@@ -124,6 +128,13 @@ final class Price_Flush_Runner {
 	private $refusals;
 
 	/**
+	 * Price groups; null for a marketplace that keeps one price per link.
+	 *
+	 * @var Price_Groups|null
+	 */
+	private $groups;
+
+	/**
 	 * Creates the runner.
 	 *
 	 * @since 2.1.0
@@ -152,6 +163,7 @@ final class Price_Flush_Runner {
 		$this->log_error  = $log_error;
 		$this->tasks      = $tasks;
 		$this->refusals   = $refusals;
+		$this->groups     = $pusher instanceof Price_Grouping ? new Price_Groups( $pusher, $queue, $links, Price_Poll_Runner::interval_of( $pusher ) ) : null;
 	}
 
 	/**
@@ -193,6 +205,10 @@ final class Price_Flush_Runner {
 
 		$this->queue->forget_orphans( $account_id, $token );
 
+		if ( null !== $this->groups ) {
+			$this->groups->release_resolved( $account, $token, $result );
+		}
+
 		$used = 0;
 
 		while ( $used < $remaining_budget ) {
@@ -206,7 +222,7 @@ final class Price_Flush_Runner {
 				return $used;
 			}
 
-			$batch = $this->begin_batch( $account, $token );
+			$batch = $this->begin_batch( $account, $token, $result );
 
 			if ( [] === $batch ) {
 				return $used;
@@ -224,22 +240,55 @@ final class Price_Flush_Runner {
 	}
 
 	/**
-	 * Takes the due pairs and snapshots them as in flight.
+	 * Takes the due pairs, whole price groups for a marketplace that has them, and snapshots them as in flight.
 	 *
-	 * @param Account $account Account.
-	 * @param string  $token   Claim token.
+	 * @param Account      $account Account.
+	 * @param string       $token   Claim token.
+	 * @param Flush_Result $result  Tally.
 	 * @return array<int,array{0:Price_Intent,1:Price_Line|null}> Intent and its line (null when the link vanished).
 	 */
-	private function begin_batch( Account $account, string $token ): array {
+	private function begin_batch( Account $account, string $token, Flush_Result $result ): array {
+		if ( null === $this->groups ) {
+			$groups = array_map(
+				static function ( Price_Intent $intent ): array {
+					return [ $intent ];
+				},
+				$this->queue->due( $account->id(), $this->limits->price_batch() )
+			);
+		} else {
+			$groups = $this->groups->next_batch( $account, $this->limits->price_batch(), $token, $result );
+		}
+
 		$batch = [];
 
-		foreach ( $this->queue->due( $account->id(), $this->limits->price_batch() ) as $intent ) {
-			if ( $this->queue->begin( $account->id(), $intent, $token ) ) {
-				$batch[] = [ $intent, $this->line_of( $intent ) ];
-			}
+		foreach ( $groups as $group ) {
+			$batch = array_merge( $batch, $this->begin_group( $account, $token, $group ) );
 		}
 
 		return $batch;
+	}
+
+	/**
+	 * Snapshots the pairs of one group as in flight. A group is sent whole or not at all: when one of its pairs changed
+	 * meanwhile, none of it goes out now and the next run reads the group again.
+	 *
+	 * @param Account        $account Account.
+	 * @param string         $token   Claim token.
+	 * @param Price_Intent[] $group   Pairs of one group.
+	 * @return array<int,array{0:Price_Intent,1:Price_Line|null}> Intent and its line; empty when the group cannot go.
+	 */
+	private function begin_group( Account $account, string $token, array $group ): array {
+		$begun = [];
+
+		foreach ( $group as $intent ) {
+			if ( ! $this->queue->begin( $account->id(), $intent, $token ) ) {
+				return [];
+			}
+
+			$begun[] = [ $intent, $this->line_of( $intent ) ];
+		}
+
+		return $begun;
 	}
 
 	/**

@@ -53,6 +53,12 @@ final class Sync_Reason {
 	public const PRICE_EXPIRED = Price_Refusal::EXPIRED;
 
 	/**
+	 * The links of one price group want different prices and the marketplace keeps one price for the group, so none is sent
+	 * (2.1.26). The price queue stores this code beside each of them ({@see \Woodev\Framework\Marketplace\Price\Price_Sync_Queue}).
+	 */
+	public const PRICE_GROUP_DIFFERS = 'price_group_differs';
+
+	/**
 	 * Reason code.
 	 *
 	 * @var string

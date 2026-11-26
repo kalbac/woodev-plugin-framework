@@ -783,6 +783,7 @@ final class Panel_Reader {
 				'stock'    => null !== $stock && null !== $stock['present'] ? (string) ( (int) $stock['present'] - (int) ( $stock['reserved'] ?? 0 ) ) : '',
 				'price'    => is_array( $sent ) && isset( $sent['price'] ) ? (string) $sent['price'] : '',
 				'currency' => is_array( $sent ) && isset( $sent['currency_code'] ) ? (string) $sent['currency_code'] : '',
+				'price_issue' => self::price_issue( $facts ),
 			];
 		}
 

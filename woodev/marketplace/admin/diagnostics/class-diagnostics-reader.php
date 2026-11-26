@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Age;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Schema;
+use Woodev\Framework\Marketplace\Diagnostics\Sync_Reason;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 
 defined( 'ABSPATH' ) || exit;
@@ -141,7 +142,8 @@ final class Diagnostics_Reader {
 	 * @since 2.1.2
 	 *
 	 * @param int $account_id Account id.
-	 * @return array{stock_pending:int,stock_errors:int,price_pending:int,price_errors:int,open_tasks:int,failed_items:int,throttled_until:?int}
+	 * @return array{stock_pending:int,stock_errors:int,price_pending:int,price_errors:int,price_held:int,open_tasks:int,failed_items:int,throttled_until:?int}
+	 *         `price_held` counts the prices of `price_errors` that are held because the sizes of one price group differ.
 	 */
 	public function sync_backlog( int $account_id ): array {
 		$sync_table  = $this->schema->table_name( 'sync_state', $this->db->prefix );
@@ -154,7 +156,7 @@ final class Diagnostics_Reader {
 
 		$sync_rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			$this->db->prepare(
-				'SELECT kind, pending_rev, sent_rev, last_error FROM %i WHERE account_id = %d',
+				'SELECT kind, pending_rev, sent_rev, last_error, error_code FROM %i WHERE account_id = %d',
 				$sync_table,
 				$account_id
 			),
@@ -196,6 +198,7 @@ final class Diagnostics_Reader {
 		$stock_errors  = 0;
 		$price_pending = 0;
 		$price_errors  = 0;
+		$price_held    = 0;
 
 		foreach ( is_array( $sync_rows ) ? $sync_rows : [] as $row ) {
 			$kind    = (string) ( $row['kind'] ?? '' );
@@ -208,6 +211,7 @@ final class Diagnostics_Reader {
 			} elseif ( 'price' === $kind ) {
 				$price_pending += $dirty ? 1 : 0;
 				$price_errors  += $errored ? 1 : 0;
+				$price_held    += Sync_Reason::PRICE_GROUP_DIFFERS === ( $row['error_code'] ?? '' ) ? 1 : 0;
 			}
 		}
 
@@ -216,6 +220,7 @@ final class Diagnostics_Reader {
 			'stock_errors'    => $stock_errors,
 			'price_pending'   => $price_pending,
 			'price_errors'    => $price_errors,
+			'price_held'      => $price_held,
 			'open_tasks'      => max( 0, $open_tasks ),
 			'failed_items'    => max( 0, $failed_items ),
 			'throttled_until' => is_string( $disabled_until ) ? self::utc_to_timestamp( $disabled_until ) : null,

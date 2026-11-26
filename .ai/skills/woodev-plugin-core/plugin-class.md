@@ -161,6 +161,20 @@ public function posting_noun(): Posting_Noun {
   implement the marker `Flows\Releases_Reset_Imports` (`woodev/marketplace/flows/interface-releases-reset-imports.php`): the
   reset then closes the card's open import items. Do not declare it if a second send could collide with the first.
 
+## A marketplace adapter: one price for several links
+
+For a marketplace whose price belongs to a card and not to a size; the full design is `docs-internal/wiki/marketplace-admin.md`,
+«One price for several links: price groups» (#2001).
+
+- Implement `Price\Price_Grouping` **on your `Price_Pusher`** (`woodev/marketplace/price/interface-price-grouping.php`):
+  `price_group_id_name()` names the identifier in the links' `remote_ids` that ties a group, `allows_member_prices()` says from
+  stored facts whether the group may carry different prices.
+- `submit()` then gets whole groups: also sizes the marketplace already holds, possibly more lines than your price batch (split
+  them yourself if your endpoint needs it). Answer every line, even when the marketplace answers once per card.
+- Do not pick or average differing prices. The framework holds such a group and tells the merchant why.
+- A refused or quarantined price is not sent again until it changes: with one price per group the framework also turns down the
+  same price of the group's other links; with size prices it leaves the refused link out of the call. Do not expect it back.
+
 ## Subclassing traps that fatal at declaration time
 
 - A base constructor that ASSIGNS a property the subclass set BEFORE calling `parent::__construct()`

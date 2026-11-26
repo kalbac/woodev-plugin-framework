@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Price;
 
+use Woodev\Framework\Marketplace\Diagnostics\Sync_Reason;
 use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 
 defined( 'ABSPATH' ) || exit;
@@ -30,6 +31,10 @@ defined( 'ABSPATH' ) || exit;
  * - **refused** (2.1.25): a price a task refused for good ({@see self::refuse()}) is kept beside the pair and not sent again; a
  *   different pending price is due, also one equal to the sent payload — it is what releases a quarantined price. A pair whose
  *   task expired is due whatever it was changed to: what the marketplace holds is unknown.
+ * - **held** (2.1.26): the pairs of a price group the marketplace cannot take ({@see Price_Grouping}) carry the reason code
+ *   {@see Sync_Reason::PRICE_GROUP_DIFFERS} ({@see self::hold()}) and are not due while they do. The sender looks at the held
+ *   pairs again on every run and frees them ({@see self::unhold()}) once their group may be sent. A pair whose task expired keeps
+ *   its in-flight snapshot while held — the only held pair that has one — and is an expired pair again once freed.
  * - **fenced**: every write names the account claim token and changes nothing unless that claim is still held (spec 3.5 rule 1), so
  *   a sender whose claim expired and was taken over cannot settle, back off or disturb the current sender's rows. A write that
  *   was refused for that reason returns false.
@@ -133,6 +138,7 @@ final class Price_Sync_Queue {
 				. ' WHERE s.account_id = %d AND s.kind = %s AND s.warehouse_id = 0 AND s.pending_payload IS NOT NULL AND s.task_id IS NULL'
 				. ' AND ( s.sent_payload IS NULL OR s.sent_payload <> s.pending_payload OR s.refused_payload IS NOT NULL OR s.error_code IS NOT NULL )'
 				. ' AND ( s.refused_payload IS NULL OR s.refused_payload <> s.pending_payload )'
+				. ' AND ( s.error_code IS NULL OR s.error_code <> %s )'
 				. ' AND ( s.next_attempt_at IS NULL OR s.next_attempt_at <= %s )'
 				. ' AND ( s.attempts < %d OR s.pending_rev > COALESCE( s.in_flight_rev, 0 ) )'
 				. ' AND ( s.sent_at IS NULL OR s.sent_at <= %s )'
@@ -142,6 +148,7 @@ final class Price_Sync_Queue {
 				$this->links_table,
 				$account_id,
 				self::KIND,
+				Sync_Reason::PRICE_GROUP_DIFFERS,
 				$this->format( $now ),
 				$this->cadence->max_attempts(),
 				$this->format( $now - $this->cadence->min_interval() ),
@@ -268,11 +275,12 @@ final class Price_Sync_Queue {
 		// previous attempt before `in_flight_rev` moves, and the text of a price reason is cleared before its code.
 		$changed = $this->write(
 			'UPDATE %i SET attempts = CASE WHEN in_flight_rev IS NOT NULL AND in_flight_rev = pending_rev THEN attempts ELSE 0 END,'
-			. ' last_error = CASE WHEN error_code IS NOT NULL AND ( in_flight_rev IS NULL OR in_flight_rev <> pending_rev ) THEN NULL ELSE last_error END,'
-			. ' error_code = CASE WHEN in_flight_rev IS NOT NULL AND in_flight_rev = pending_rev THEN error_code ELSE NULL END,'
+			. ' last_error = CASE WHEN error_code IS NOT NULL AND ( error_code = %s OR in_flight_rev IS NULL OR in_flight_rev <> pending_rev ) THEN NULL ELSE last_error END,'
+			// A held pair taken into a request stops being held; the snapshot it kept says its upload had expired.
+			. ' error_code = CASE WHEN in_flight_rev IS NULL OR in_flight_rev <> pending_rev THEN NULL WHEN error_code = %s THEN %s ELSE error_code END,'
 			. ' in_flight_rev = pending_rev, in_flight_payload = pending_payload'
 			. ' WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND pending_rev = %d',
-			[ $this->table, $account_id, $intent->link_id(), self::KIND, $intent->revision() ],
+			[ $this->table, Sync_Reason::PRICE_GROUP_DIFFERS, Sync_Reason::PRICE_GROUP_DIFFERS, Price_Refusal::EXPIRED, $account_id, $intent->link_id(), self::KIND, $intent->revision() ],
 			$token
 		);
 
@@ -509,6 +517,202 @@ final class Price_Sync_Queue {
 	}
 
 	/**
+	 * Reads the price rows of several links, whatever their send state: the links of a price group, due or not.
+	 *
+	 * `awaiting` says the price waits for a price task. `refused` says the pending price is the one a task refused for good
+	 * ({@see self::refuse()}); `code` and `message` are what the row says about it. `exhausted` says the sends of the pending
+	 * revision failed as often as the cadence allows. `wait` is the seconds until the pair's deadline and the least time since
+	 * its last accepted send have both passed, 0 when they have.
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param int   $account_id Account id.
+	 * @param int[] $link_ids   Link ids.
+	 * @return array<int,array{intent:Price_Intent,awaiting:bool,refused:bool,exhausted:bool,code:string,message:string,wait:int}>
+	 *         By link id; a link with no readable pending payload is absent.
+	 * @throws \RuntimeException When the read fails.
+	 */
+	public function states( int $account_id, array $link_ids ): array {
+		if ( [] === $link_ids ) {
+			return [];
+		}
+
+		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table, read fresh.
+			$this->db->prepare(
+				'SELECT s.link_id, s.pending_rev, s.pending_payload, CASE WHEN s.pending_rev > COALESCE( s.in_flight_rev, 0 ) THEN 0 ELSE s.attempts END AS attempts,'
+				. ' s.task_id, s.refused_payload, s.error_code, s.last_error, s.next_attempt_at, s.sent_at FROM %i s'
+				. ' WHERE s.account_id = %d AND s.kind = %s AND s.warehouse_id = 0 AND s.pending_payload IS NOT NULL AND s.link_id IN (' . self::placeholders( $link_ids ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge( [ $this->table, $account_id, self::KIND ], $link_ids )
+			),
+			'ARRAY_A'
+		);
+
+		// A failed read is not «the group has no other prices»: the due price alone would be sent over a card that differs.
+		if ( ! is_array( $rows ) || '' !== (string) $this->db->last_error ) {
+			throw new \RuntimeException( 'The prices of a price group could not be read: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		$now    = $this->now();
+		$states = [];
+
+		foreach ( $rows as $row ) {
+			$payload = json_decode( (string) $row['pending_payload'], true );
+
+			if ( ! is_array( $payload ) ) {
+				continue;
+			}
+
+			$deadline = null === $row['next_attempt_at'] ? $now : (int) strtotime( $row['next_attempt_at'] . ' UTC' );
+			$spacing  = null === $row['sent_at'] ? $now : (int) strtotime( $row['sent_at'] . ' UTC' ) + $this->cadence->min_interval();
+
+			$states[ (int) $row['link_id'] ] = [
+				'intent'    => new Price_Intent( (int) $row['link_id'], (int) $row['pending_rev'], $payload, (int) $row['attempts'] ),
+				'awaiting'  => null !== $row['task_id'],
+				'refused'   => $row['refused_payload'] === $row['pending_payload'],
+				'exhausted' => (int) $row['attempts'] >= $this->cadence->max_attempts(),
+				'code'      => (string) $row['error_code'],
+				'message'   => (string) $row['last_error'],
+				'wait'      => max( 0, $deadline - $now, $spacing - $now ),
+			];
+		}
+
+		return $states;
+	}
+
+	/**
+	 * Moves the deadline of a pair that was not sent, because another link of its price group has to wait.
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param int          $account_id Account id.
+	 * @param Price_Intent $intent     The pair as read by {@see self::due()}.
+	 * @param int          $delay      Seconds to wait.
+	 * @param string       $token      Account claim token.
+	 * @return bool False when the pair changed meanwhile or the claim is no longer held.
+	 * @throws \RuntimeException When the database refuses the statement.
+	 */
+	public function put_off( int $account_id, Price_Intent $intent, int $delay, string $token ): bool {
+		return 1 === $this->write(
+			'UPDATE %i SET next_attempt_at = %s WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND pending_rev = %d',
+			[ $this->table, $this->format( $this->now() + $delay ), $account_id, $intent->link_id(), self::KIND, $intent->revision() ],
+			$token
+		);
+	}
+
+	/**
+	 * Refuses a pair that was not sent, because the marketplace already turned down this price for another link of its price
+	 * group: it ends as {@see self::refuse()} ends a pair that was sent.
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param int          $account_id Account id.
+	 * @param Price_Intent $intent     The pair as read by {@see self::due()}.
+	 * @param string       $code       A {@see Price_Refusal} code.
+	 * @param string       $message    The sentence or the marketplace's text the merchant reads.
+	 * @param string       $token      Account claim token.
+	 * @return bool False when the pair changed meanwhile or the claim is no longer held.
+	 * @throws \RuntimeException When the database refuses the statement.
+	 */
+	public function refuse_unsent( int $account_id, Price_Intent $intent, string $code, string $message, string $token ): bool {
+		return 1 === $this->write(
+			'UPDATE %i SET refused_payload = pending_payload, error_code = %s, last_error = %s, in_flight_rev = NULL, in_flight_payload = NULL,'
+			. ' attempts = 0, next_attempt_at = NULL'
+			. ' WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND task_id IS NULL AND pending_rev = %d',
+			[ $this->table, $code, $message, $account_id, $intent->link_id(), self::KIND, $intent->revision() ],
+			$token
+		);
+	}
+
+	/**
+	 * Lists the held links of an account: those whose price group cannot be sent.
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param int $account_id Account id.
+	 * @return int[]
+	 */
+	public function held( int $account_id ): array {
+		$found = $this->db->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+			$this->db->prepare(
+				'SELECT link_id FROM %i WHERE account_id = %d AND kind = %s AND warehouse_id = 0 AND error_code = %s ORDER BY link_id ASC',
+				$this->table,
+				$account_id,
+				self::KIND,
+				Sync_Reason::PRICE_GROUP_DIFFERS
+			)
+		);
+
+		return array_map( 'intval', (array) $found );
+	}
+
+	/**
+	 * Holds the pairs of a price group that cannot be sent: each carries the reason and is not due until it is freed. An earlier
+	 * failed or put-off send of such a pair is forgotten; its deadline stays. An upload that expired undecided is not
+	 * forgotten: its snapshot stays, so that {@see self::unhold()} can tell.
+	 *
+	 * Two kinds of pair are left as they are, because what they say is still true: one that waits for a price task, and one
+	 * whose pending price is turned down already (it keeps the marketplace's reason and is not sent anyway).
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param int    $account_id Account id.
+	 * @param int[]  $link_ids   Links of the group.
+	 * @param string $message    The sentence the merchant reads.
+	 * @param string $token      Account claim token.
+	 * @return int Rows changed; 0 also when the claim is not held.
+	 * @throws \RuntimeException When the database refuses the statement.
+	 */
+	public function hold( int $account_id, array $link_ids, string $message, string $token ): int {
+		if ( [] === $link_ids ) {
+			return 0;
+		}
+
+		// The order of the assignments matters (MySQL reads the values already assigned): the CASEs read the code of an expired
+		// or already held pair before the group's reason replaces it.
+		return $this->write(
+			'UPDATE %i SET in_flight_payload = CASE WHEN error_code IN ( %s, %s ) THEN in_flight_payload ELSE NULL END,'
+			. ' in_flight_rev = CASE WHEN error_code IN ( %s, %s ) THEN in_flight_rev ELSE NULL END,'
+			. ' attempts = 0, error_code = %s, last_error = %s'
+			. ' WHERE account_id = %d AND kind = %s AND warehouse_id = 0 AND pending_payload IS NOT NULL AND task_id IS NULL'
+			. ' AND ( refused_payload IS NULL OR refused_payload <> pending_payload )'
+			. ' AND ( attempts < %d OR pending_rev > COALESCE( in_flight_rev, 0 ) )'
+			. ' AND link_id IN (' . self::placeholders( $link_ids ) . ')',
+			array_merge( [ $this->table, Price_Refusal::EXPIRED, Sync_Reason::PRICE_GROUP_DIFFERS, Price_Refusal::EXPIRED, Sync_Reason::PRICE_GROUP_DIFFERS, Sync_Reason::PRICE_GROUP_DIFFERS, $message, $account_id, self::KIND, $this->cadence->max_attempts() ], $link_ids ),
+			$token
+		);
+	}
+
+	/**
+	 * Frees held pairs: the group reason is removed and a pair with something left to send is due again. A pair whose pending
+	 * price is the one a task refused earlier stays refused and says so. A pair whose upload had expired undecided is expired
+	 * again: it is due whatever it was changed to, and a second expiry of the same revision still stops it. A pair that is not
+	 * held is left alone.
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param int    $account_id Account id.
+	 * @param int[]  $link_ids   Links to free.
+	 * @param string $refused    The sentence of a pair that stays refused.
+	 * @param string $expired    The sentence of a pair whose upload expired.
+	 * @param string $token      Account claim token.
+	 * @return int Rows changed; 0 also when the claim is not held.
+	 * @throws \RuntimeException When the database refuses the statement.
+	 */
+	public function unhold( int $account_id, array $link_ids, string $refused, string $expired, string $token ): int {
+		if ( [] === $link_ids ) {
+			return 0;
+		}
+
+		return $this->write(
+			'UPDATE %i SET error_code = CASE WHEN refused_payload = pending_payload THEN %s WHEN in_flight_rev IS NOT NULL THEN %s ELSE NULL END,'
+			. ' last_error = CASE WHEN refused_payload = pending_payload THEN %s WHEN in_flight_rev IS NOT NULL THEN %s ELSE NULL END'
+			. ' WHERE account_id = %d AND kind = %s AND warehouse_id = 0 AND error_code = %s AND link_id IN (' . self::placeholders( $link_ids ) . ')',
+			array_merge( [ $this->table, Price_Refusal::REFUSED, Price_Refusal::EXPIRED, $refused, $expired, $account_id, self::KIND, Sync_Reason::PRICE_GROUP_DIFFERS ], $link_ids ),
+			$token
+		);
+	}
+
+	/**
 	 * Runs a claim-fenced write and returns the number of rows it changed.
 	 *
 	 * The statement's `WHERE` is extended with the proof that `$token` still owns the account row (spec 3.5 rule 1), so a sender whose
@@ -601,6 +805,16 @@ final class Price_Sync_Queue {
 		);
 
 		return null !== $found && false !== $found;
+	}
+
+	/**
+	 * Builds the placeholders of a list of link ids.
+	 *
+	 * @param int[] $link_ids Link ids.
+	 * @return string
+	 */
+	private static function placeholders( array $link_ids ): string {
+		return implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) );
 	}
 
 	/**

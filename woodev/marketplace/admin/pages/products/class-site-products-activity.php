@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 use Woodev\Framework\Admin\Records\Activity_Normalizer;
 use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Diagnostics\Sync_Reason;
 use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 
@@ -398,9 +399,10 @@ final class Site_Products_Activity {
 
 		$found = $this->db->get_results(
 			$this->db->prepare(
-				'SELECT link_id, kind, warehouse_id, in_flight_rev, last_error FROM %i WHERE account_id = %d AND pending_payload IS NOT NULL AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND (pending_payload <> %s OR last_error IS NOT NULL) AND link_id IN (' . implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) ) . ') ORDER BY link_id ASC, kind ASC, warehouse_id ASC', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				// A held price keeps the snapshot of an expired upload; nothing of it is being sent.
+				'SELECT link_id, kind, warehouse_id, CASE WHEN error_code = %s THEN NULL ELSE in_flight_rev END AS in_flight_rev, last_error FROM %i WHERE account_id = %d AND pending_payload IS NOT NULL AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND (pending_payload <> %s OR last_error IS NOT NULL) AND link_id IN (' . implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) ) . ') ORDER BY link_id ASC, kind ASC, warehouse_id ASC', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 				// A left warehouse's zero that has failed nothing is housekeeping, also while it waits for a switched-off warehouse.
-				array_merge( [ $this->sync_table, $account_id, (string) wp_json_encode( Sync_State_Store::VACATE_PAYLOAD ) ], $link_ids )
+				array_merge( [ Sync_Reason::PRICE_GROUP_DIFFERS, $this->sync_table, $account_id, (string) wp_json_encode( Sync_State_Store::VACATE_PAYLOAD ) ], $link_ids )
 			),
 			'ARRAY_A'
 		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.

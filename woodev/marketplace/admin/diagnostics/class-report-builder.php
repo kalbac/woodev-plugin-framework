@@ -686,6 +686,10 @@ final class Report_Builder {
 			),
 		];
 
+		if ( $backlog['price_held'] > 0 ) {
+			$lines[ __( 'Цены не отправляются: у размеров разные цены', 'woodev-plugin-framework' ) ] = (string) $backlog['price_held'];
+		}
+
 		if ( null !== $backlog['throttled_until'] ) {
 			$lines[ __( 'Ограничение частоты до', 'woodev-plugin-framework' ) ] = Diagnostics_Reader::date_text( $backlog['throttled_until'] );
 		}
