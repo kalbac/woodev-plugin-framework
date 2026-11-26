@@ -72,6 +72,13 @@ abstract class Products_Test_Case extends Export_Test_Case {
 	protected $withheld = [];
 
 	/**
+	 * What the provider's adapter says about links; null for an adapter that keeps no notes.
+	 *
+	 * @var \Woodev\Framework\Marketplace\Admin\Shared\Link_Notes|null
+	 */
+	protected $link_notes;
+
+	/**
 	 * The articles each queued price pull was asked for (#1797).
 	 *
 	 * @var array<int,string[]>
@@ -92,6 +99,7 @@ abstract class Products_Test_Case extends Export_Test_Case {
 		$this->candidates       = 7;
 		$this->candidates_asked = [];
 		$this->withheld         = [];
+		$this->link_notes       = null;
 		$this->pulled           = [];
 		$this->pull_refused     = false;
 		$this->shop       = new Products_Shop( $this->db, $this->account_id );
@@ -229,6 +237,7 @@ abstract class Products_Test_Case extends Export_Test_Case {
 				'adapter_id'  => Sqlite_Tables::MARKETPLACE_ID,
 				'marketplace' => 'Тестмаркет',
 				'withheld'    => $this->withheld,
+				'notes'       => $this->link_notes,
 			]
 		);
 	}
