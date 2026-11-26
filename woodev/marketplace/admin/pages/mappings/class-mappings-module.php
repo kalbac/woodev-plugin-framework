@@ -10,12 +10,17 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Catalog\Article_Preview;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Mapping;
 use Woodev\Framework\Marketplace\Catalog\Profile;
+use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
 use Woodev\Framework\Marketplace\Data\Schema;
+use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
+use Woodev\Framework\Marketplace\Flows\Sellable_Units;
+use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 
 defined( 'ABSPATH' ) || exit;
@@ -44,14 +49,16 @@ final class Mappings_Module {
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Marketplace_Plugin $plugin The marketplace plugin.
+	 * @param Marketplace_Plugin $plugin        The marketplace plugin.
+	 * @param callable|null      $account_store Gives the plugin's account store: `function (): Account_Store`. Without it the
+	 *                                          form has no article preview, which must know the accounts.
 	 * @return void
 	 */
-	public static function register( Marketplace_Plugin $plugin ): void {
+	public static function register( Marketplace_Plugin $plugin, ?callable $account_store = null ): void {
 		add_action(
 			'rest_api_init',
-			static function () use ( $plugin ): void {
-				$controller = self::controller( $plugin );
+			static function () use ( $plugin, $account_store ): void {
+				$controller = self::controller( $plugin, $account_store );
 
 				if ( null !== $controller ) {
 					$controller->register_routes();
@@ -97,10 +104,11 @@ final class Mappings_Module {
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Marketplace_Plugin $plugin The marketplace plugin.
+	 * @param Marketplace_Plugin $plugin        The marketplace plugin.
+	 * @param callable|null      $account_store Gives the plugin's account store: `function (): Account_Store`.
 	 * @return Mappings_Controller|null Null when the plugin has no mappings page or its id cannot be a route segment.
 	 */
-	public static function controller( Marketplace_Plugin $plugin ): ?Mappings_Controller {
+	public static function controller( Marketplace_Plugin $plugin, ?callable $account_store = null ): ?Mappings_Controller {
 		$parts = self::parts( $plugin );
 
 		if ( null === $parts || 1 !== preg_match( Mappings_Controller::OWNER_PATTERN, $plugin->get_id() ) ) {
@@ -118,7 +126,8 @@ final class Mappings_Module {
 			$parts['categories'],
 			$parts['choices'],
 			$adapter->price_source(),
-			$parts['fields']
+			$parts['fields'],
+			null === $account_store ? null : self::article_preview( $adapter, $account_store )
 		);
 	}
 
@@ -172,6 +181,43 @@ final class Mappings_Module {
 			'choices'    => $choices,
 			'fields'     => $fields,
 		];
+	}
+
+	/**
+	 * Builds the article preview of the mapping form, which resolves a product the way the export does.
+	 *
+	 * @param Marketplace_Adapter $adapter       The adapter.
+	 * @param callable            $account_store Gives the plugin's account store: `function (): Account_Store`.
+	 * @return Mapping_Article_Preview|null Null for an adapter that does not implement {@see Article_Preview}.
+	 */
+	private static function article_preview( Marketplace_Adapter $adapter, callable $account_store ): ?Mapping_Article_Preview {
+		global $wpdb;
+
+		if ( ! $adapter instanceof Article_Preview ) {
+			return null;
+		}
+
+		$schema = new Schema( $adapter->id() );
+		$table  = static function ( string $name ) use ( $schema, $wpdb ): string {
+			return $schema->table_name( $name, $wpdb->prefix );
+		};
+
+		$mappings = new Wpdb_Mapping_Store( $wpdb, $table( 'mappings' ), $table( 'mapping_terms' ) );
+
+		return new Mapping_Article_Preview(
+			$adapter,
+			$adapter->export_facts(),
+			$mappings,
+			new Wpdb_Profile_Store( $wpdb, $table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
+			new Mapping_Products( [ $mappings, 'terms_by_mapping' ] ),
+			new Wpdb_Link_Store( $wpdb, $table( 'links' ), $table( 'link_ids' ) ),
+			new Wpdb_Task_Ledger( $wpdb, $table( 'tasks' ), $table( 'task_items' ) ),
+			new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() ),
+			static function () use ( $account_store, $adapter ): array {
+				return $account_store()->all( $adapter->id(), true );
+			},
+			$adapter instanceof Sellable_Units ? $adapter : null
+		);
 	}
 
 	/**

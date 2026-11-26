@@ -179,6 +179,22 @@
 	}
 }
 
+// The articles of new cards under a saved mapping. An article is one long word as often as not, so it may break anywhere.
+.woodev-mapping-articles {
+	table {
+		table-layout: fixed;
+	}
+
+	td {
+		overflow-wrap: anywhere;
+		vertical-align: top;
+	}
+
+	.components-button.is-secondary {
+		margin-top: wd.$gap;
+	}
+}
+
 // The product check under a saved mapping.
 .woodev-mapping-check {
 	&__report {

@@ -294,6 +294,58 @@ final class Mapping_Messages {
 	}
 
 	/**
+	 * The article preview: which accounts a line is about, when the accounts of a product disagree.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param string[] $names Account names.
+	 * @return string
+	 */
+	public static function article_accounts( array $names ): string {
+		/* translators: %s: account names, each in quotes. */
+		return sprintf( __( 'Для: %s', 'woodev-plugin-framework' ), '«' . implode( '», «', $names ) . '»' );
+	}
+
+	/**
+	 * The article preview: the product is sent by another mapping than the one on the screen.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param string $name Name of that mapping, '' for one without a name.
+	 * @return string
+	 */
+	public static function article_other_mapping( string $name ): string {
+		if ( '' === $name ) {
+			return __( 'У товара своё сопоставление', 'woodev-plugin-framework' );
+		}
+
+		/* translators: %s: mapping name. */
+		return sprintf( __( 'Товар выгружается по другому сопоставлению: «%s»', 'woodev-plugin-framework' ), $name );
+	}
+
+	/**
+	 * The article preview: the mapping chosen at the product does not exist.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @return string
+	 */
+	public static function article_mapping_gone(): string {
+		return __( 'Сопоставление, выбранное в товаре, не найдено', 'woodev-plugin-framework' );
+	}
+
+	/**
+	 * The article preview: the merchant typed the article at the product.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @return string
+	 */
+	public static function article_typed(): string {
+		return __( 'Артикул вписан в самом товаре', 'woodev-plugin-framework' );
+	}
+
+	/**
 	 * The progress line while a long check runs.
 	 *
 	 * @since 2.1.0

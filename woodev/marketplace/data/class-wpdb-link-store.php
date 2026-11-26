@@ -767,6 +767,33 @@ final class Wpdb_Link_Store implements Link_Store {
 	}
 
 	/**
+	 * Returns every row of some products and variations, of every account and kind, in two reads however many there are.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param int[] $product_ids Product and variation ids.
+	 * @return Link_Record[]
+	 */
+	public function rows_of_products( array $product_ids ): array {
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $product_ids ) ) ) );
+
+		if ( [] === $ids ) {
+			return [];
+		}
+
+		$in   = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+		$rows = $this->db->get_results(
+			$this->db->prepare(
+				'SELECT * FROM %i WHERE wc_product_id IN (' . $in . ') ORDER BY link_id ASC', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge( [ $this->table ], $ids )
+			),
+			'ARRAY_A'
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+
+		return $this->with_ids( is_array( $rows ) ? $rows : [] );
+	}
+
+	/**
 	 * Records what the marketplace answered for a link's stock: the quantity it accepted (`last_pushed_stock`, for diagnostics and
 	 * reconcile) and its last per-item error verbatim, or clears the error. Fenced by the account claim of the sender.
 	 *

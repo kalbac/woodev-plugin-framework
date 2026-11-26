@@ -71,13 +71,68 @@ final class Link_Context_Resolver {
 	public function effective_mapping( int $account_id, int $wc_product_id, array $term_ids, int $wc_parent_id = 0 ): ?Mapping {
 		list( $own, $parent_row ) = $this->rows( $account_id, $wc_product_id, $wc_parent_id );
 
-		$mapping_id = $this->mapping_id( $own, $parent_row, $term_ids );
+		return $this->mapping_of_rows( $own, $parent_row, $term_ids );
+	}
+
+	/**
+	 * Builds the effective mapping from rows the caller has already read, for a screen that resolves many products at once. Of the
+	 * rows only {@see Link_Record::mapping_id()} and {@see Link_Record::attribute_overrides()} take part: the first two choose the
+	 * mapping ({@see self::mapping_id_of_rows()}), the others are laid over it ({@see self::with_overrides()}).
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param Link_Record|null $own        The product's row.
+	 * @param Link_Record|null $parent_row Its parent row.
+	 * @param int[]            $term_ids   The product's category term ids, closest first.
+	 * @return Mapping|null Null when no layer names a mapping.
+	 */
+	public function mapping_of_rows( ?Link_Record $own, ?Link_Record $parent_row, array $term_ids ): ?Mapping {
+		$mapping_id = $this->mapping_id_of_rows( $own, $parent_row, $term_ids );
 		$base       = null === $mapping_id ? null : $this->mappings->get( $mapping_id );
 
-		if ( null === $base ) {
-			return null;
+		return null === $base ? null : $this->with_overrides( $base, $own, $parent_row );
+	}
+
+	/**
+	 * Picks the mapping id: the row's own, the parent's, then the one the product's categories point at.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param Link_Record|null $own        The product's row.
+	 * @param Link_Record|null $parent_row Its parent row.
+	 * @param int[]            $term_ids   The product's category term ids, closest first.
+	 * @return int|null Null when no layer names a mapping.
+	 */
+	public function mapping_id_of_rows( ?Link_Record $own, ?Link_Record $parent_row, array $term_ids ): ?int {
+		$explicit = null !== $own ? $own->mapping_id() : null;
+		$explicit = $explicit ?? ( null !== $parent_row ? $parent_row->mapping_id() : null );
+
+		if ( null !== $explicit ) {
+			return $explicit;
 		}
 
+		foreach ( $term_ids as $term_id ) {
+			$found = $this->mappings->mapping_id_for_term( (int) $term_id );
+
+			if ( null !== $found ) {
+				return $found;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Lays the values set at the product and its parent over a mapping, as fixed sources.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param Mapping          $base       The chosen mapping.
+	 * @param Link_Record|null $own        The product's row.
+	 * @param Link_Record|null $parent_row Its parent row.
+	 * @return Mapping
+	 */
+	public function with_overrides( Mapping $base, ?Link_Record $own, ?Link_Record $parent_row ): Mapping {
 		$sources = $base->sources();
 
 		foreach ( $this->override_layers( $own, $parent_row ) as $attribute_id => $entries ) {
@@ -116,7 +171,7 @@ final class Link_Context_Resolver {
 	public function mapping_id_for( int $account_id, int $wc_product_id, array $term_ids ): ?int {
 		list( $own, $parent_row ) = $this->rows( $account_id, $wc_product_id );
 
-		return $this->mapping_id( $own, $parent_row, $term_ids );
+		return $this->mapping_id_of_rows( $own, $parent_row, $term_ids );
 	}
 
 	/**
@@ -134,33 +189,6 @@ final class Link_Context_Resolver {
 		$parent_row = $parent_id > 0 ? $this->links->find( $account_id, $parent_id ) : null;
 
 		return [ $own, $parent_row ];
-	}
-
-	/**
-	 * Picks the mapping id: the row's own, the parent's, then the one the product's categories point at.
-	 *
-	 * @param Link_Record|null $own      The product's row.
-	 * @param Link_Record|null $parent_row   The parent row.
-	 * @param int[]            $term_ids Category term ids.
-	 * @return int|null
-	 */
-	private function mapping_id( ?Link_Record $own, ?Link_Record $parent_row, array $term_ids ): ?int {
-		$explicit = null !== $own ? $own->mapping_id() : null;
-		$explicit = $explicit ?? ( null !== $parent_row ? $parent_row->mapping_id() : null );
-
-		if ( null !== $explicit ) {
-			return $explicit;
-		}
-
-		foreach ( $term_ids as $term_id ) {
-			$found = $this->mappings->mapping_id_for_term( (int) $term_id );
-
-			if ( null !== $found ) {
-				return $found;
-			}
-		}
-
-		return null;
 	}
 
 	/**

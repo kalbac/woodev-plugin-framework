@@ -100,6 +100,16 @@ const MESSAGES: Record< string, string > = {
 	check: 'Проверить товары',
 	checking: 'Проверяем…',
 	checkHelp: 'Проверка сохранённого',
+	articlesHeading: 'Артикулы новых карточек',
+	articlesHelp: 'Какой артикул получит товар',
+	articlesMissing: 'Прочерк — артикул не получается',
+	articlesLoading: 'Считаем артикулы…',
+	articlesEmpty: 'Новые карточки не нужны',
+	articlesMore: 'Показать ещё',
+	articlesNoneYet: 'Среди проверенных новые карточки не нужны',
+	columnProduct: 'Товар',
+	columnVariations: 'Вариации',
+	columnArticle: 'Артикул',
 	savedMapping: 'Сопоставление сохранено.',
 	copiedMapping: 'Копия создана.',
 	savedProfile: 'Профиль сохранён.',
@@ -1041,6 +1051,145 @@ describe( 'mapping editor', () => {
 		expect( await screen.findByText( 'Проверено товаров: 250, без замечаний: 247.' ) ).toBeInTheDocument();
 		expect( screen.getByText( '3 товара: нет веса' ) ).toBeInTheDocument();
 		expect( batch ).toBe( 2 );
+	} );
+} );
+
+describe( 'article preview', () => {
+	const SAVED = { id: 1, name: 'Платья', terms: [ 5 ], profile_id: null, category: null, attributes: [] };
+	const WITH_PREVIEW = { ...STATE, article_preview: true };
+	const SHIRT = {
+		id: 10,
+		name: 'Футболка',
+		url: 'http://localhost/edit/10',
+		articles: [
+			{ article: 'tee-red', note: '', variations: 'Красный, S; Красный, M' },
+			{ article: '', note: '', variations: 'Синий, S' },
+		],
+	};
+	const CAP = { id: 20, name: 'Кепка', url: '', articles: [ { article: 'cap', note: '', variations: '' } ] };
+
+	const openSaved = async () => {
+		openView();
+		await userEvent.click( await screen.findByRole( 'link', { name: 'Платья' } ) );
+		await screen.findByRole( 'heading', { name: '«Платья»' } );
+	};
+
+	test( 'an adapter without a preview shows no card and is asked nothing', async () => {
+		const calls = serve( { 'GET ': STATE, 'GET /mappings/1': SAVED } );
+		await openSaved();
+
+		expect( screen.queryByRole( 'heading', { name: 'Артикулы новых карточек' } ) ).not.toBeInTheDocument();
+		expect( calls.some( ( call ) => call.path.includes( '/articles' ) ) ).toBe( false );
+	} );
+
+	const FIRST = 'GET /mappings/1/articles?offset=0&skip=0';
+	const reads = ( calls: Call[] ) => calls.filter( ( call ) => call.path.includes( '/articles' ) );
+
+	test( 'opening a mapping makes one read, even when it finds nothing; the rest of the shop is read on demand', async () => {
+		const calls = serve( {
+			'GET ': WITH_PREVIEW,
+			'GET /mappings/1': SAVED,
+			[ FIRST ]: { products: [], next: { offset: 100, skip: 0 } },
+			'GET /mappings/1/articles?offset=100&skip=0': { products: [ SHIRT ], next: { offset: 100, skip: 2 } },
+		} );
+		await openSaved();
+
+		expect( await screen.findByText( 'Среди проверенных новые карточки не нужны' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Новые карточки не нужны' ) ).not.toBeInTheDocument();
+		expect( reads( calls ) ).toHaveLength( 1 );
+
+		await userEvent.click( screen.getByRole( 'button', { name: 'Показать ещё' } ) );
+
+		const table = await screen.findByRole( 'table' );
+		expect( within( table ).getByRole( 'link', { name: 'Футболка' } ) ).toHaveAttribute( 'href', 'http://localhost/edit/10' );
+		expect( within( table ).getByText( 'tee-red' ).closest( 'tr' ) ).toHaveTextContent( 'Красный, S; Красный, M' );
+		expect( within( table ).getByText( '—' ).closest( 'tr' ) ).toHaveTextContent( 'Синий, S' );
+		expect( screen.getByText( 'Прочерк — артикул не получается' ) ).toBeInTheDocument();
+		expect( reads( calls ) ).toHaveLength( 2 );
+	} );
+
+	test( 'a product that continues in the next read stays one row group, its variations added to their lines', async () => {
+		serve( {
+			'GET ': WITH_PREVIEW,
+			'GET /mappings/1': SAVED,
+			[ FIRST ]: { products: [ SHIRT ], next: { offset: 0, skip: 100 } },
+			'GET /mappings/1/articles?offset=0&skip=100': {
+				products: [
+					{
+						...SHIRT,
+						articles: [
+							{ article: 'tee-red', note: '', variations: 'Красный, L' },
+							{ article: 'tee-green', note: '', variations: 'Зелёный, S' },
+						],
+					},
+					CAP,
+				],
+				next: null,
+			},
+		} );
+		await openSaved();
+
+		await userEvent.click( await screen.findByRole( 'button', { name: 'Показать ещё' } ) );
+
+		expect( await screen.findByText( 'cap' ) ).toBeInTheDocument();
+		expect( screen.getAllByRole( 'link', { name: 'Футболка' } ) ).toHaveLength( 1 );
+		expect( screen.getAllByText( 'tee-red' ) ).toHaveLength( 1 );
+		expect( screen.getByText( 'tee-red' ).closest( 'tr' ) ).toHaveTextContent( 'Красный, S; Красный, M; Красный, L' );
+		expect( screen.getByText( 'tee-green' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Показать ещё' } ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'the reason of a line stands under its article, one article may have two lines, and an explained dash needs no hint', async () => {
+		const own = {
+			...CAP,
+			articles: [
+				{ article: 'cap', note: 'Для: «Основной»', variations: '' },
+				{ article: 'cap', note: 'Для: «Второй». Артикул вписан в самом товаре', variations: '' },
+				{ article: '', note: 'Сопоставление не найдено', variations: '' },
+			],
+		};
+		serve( { 'GET ': WITH_PREVIEW, 'GET /mappings/1': SAVED, 'GET /mappings/1/articles?offset=0&skip=0': { products: [ own ], next: null } } );
+		await openSaved();
+
+		const table = await screen.findByRole( 'table' );
+		expect( within( table ).getAllByText( 'cap' ) ).toHaveLength( 2 );
+		expect( within( table ).getByText( 'Для: «Второй». Артикул вписан в самом товаре' ).closest( 'td' ) ).toHaveTextContent( 'cap' );
+		expect( within( table ).getByText( 'Сопоставление не найдено' ).closest( 'td' ) ).toHaveTextContent( '—' );
+		expect( screen.queryByText( 'Прочерк — артикул не получается' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a mapping with nothing to create says so', async () => {
+		serve( { 'GET ': WITH_PREVIEW, 'GET /mappings/1': SAVED, 'GET /mappings/1/articles?offset=0&skip=0': { products: [], next: null } } );
+		await openSaved();
+
+		expect( await screen.findByText( 'Новые карточки не нужны' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'table' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a failed read shows the server sentence and can be repeated; a save reads again', async () => {
+		let answer: () => unknown = () => {
+			throw new Error( 'Каталог не загружен.' );
+		};
+		serve( {
+			'GET ': WITH_PREVIEW,
+			'GET /mappings/1': SAVED,
+			'GET /mappings/1/articles?offset=0&skip=0': () => answer(),
+			'POST /mappings/1': { id: 1, notices: [] },
+		} );
+		await openSaved();
+
+		expect( await screen.findAllByText( 'Каталог не загружен.' ) ).not.toHaveLength( 0 );
+		expect( screen.queryByText( 'Новые карточки не нужны' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Среди проверенных новые карточки не нужны' ) ).not.toBeInTheDocument();
+
+		answer = () => ( { products: [ CAP ], next: null } );
+		await userEvent.click( screen.getByRole( 'button', { name: 'Повторить' } ) );
+		expect( await screen.findByText( 'cap' ) ).toBeInTheDocument();
+
+		answer = () => ( { products: [ { ...CAP, articles: [ { article: 'hat', note: '', variations: '' } ] } ], next: null } );
+		await userEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+		expect( await screen.findByText( 'hat' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'cap' ) ).not.toBeInTheDocument();
 	} );
 } );
 

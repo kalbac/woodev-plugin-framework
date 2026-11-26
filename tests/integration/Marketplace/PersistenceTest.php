@@ -31,6 +31,7 @@ use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Tests\Integration\TestCase;
@@ -79,7 +80,7 @@ class PersistenceTest extends TestCase {
 		$this->lifecycle()->create_tables();
 
 		$tables = $this->schema->table_names( $wpdb->prefix );
-		$this->assertCount( 18, $tables );
+		$this->assertCount( 19, $tables );
 
 		foreach ( $tables as $table ) {
 			$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
@@ -89,7 +90,7 @@ class PersistenceTest extends TestCase {
 	}
 
 	/**
-	 * A second install is a no-op: `dbDelta` finds nothing to change in any of the 17 statements, and the rows survive.
+	 * A second install is a no-op: `dbDelta` finds nothing to change in any of the statements, and the rows survive.
 	 */
 	public function test_a_second_install_changes_nothing_and_loses_no_rows(): void {
 		global $wpdb;
@@ -409,6 +410,52 @@ class PersistenceTest extends TestCase {
 		$this->assertSame( '1', (string) $wpdb->get_var( "SELECT COUNT(*) FROM {$documents}" ), 'the late document was rolled back' );
 		$this->assertNull( $labels->document_of_task( $lost ) );
 		$this->assertSame( Async_Task::STATUS_EXPIRED, $labels->task( $lost )['status'] );
+	}
+
+	/**
+	 * A seller action is taken by one request only: `INSERT IGNORE` on the primary key and the compare-and-set `UPDATE` report
+	 * their changed rows on MySQL the way the store reads them (#2003).
+	 */
+	public function test_a_seller_action_is_taken_by_one_request_only_on_mysql(): void {
+		global $wpdb;
+
+		$now    = 1795000000;
+		$store  = new Wpdb_Seller_Action_Store(
+			$wpdb,
+			$this->schema->table_name( 'seller_actions', $wpdb->prefix ),
+			static function () use ( &$now ): int {
+				return $now;
+			}
+		);
+		$first  = str_repeat( 'a', 32 );
+		$second = str_repeat( 'b', 32 );
+		$token  = $store->claim( 1, 10, 'u-1', 'confirm', $first );
+
+		$this->assertNotNull( $token );
+		$this->assertNull( $store->claim( 1, 10, 'u-1', 'confirm', $first ) );
+		$this->assertNull( $store->claim( 1, 10, 'u-1', 'confirm', $second ), 'In flight, any input waits.' );
+
+		$store->keep( (string) $token, Wpdb_Seller_Action_Store::SENT );
+
+		$this->assertSame( Wpdb_Seller_Action_Store::SENT, $store->blocking_state( 1, 10, 'u-1', 'confirm', $first ) );
+		$this->assertNull( $store->claim( 1, 10, 'u-1', 'confirm', $first ) );
+
+		$next = $store->claim( 1, 10, 'u-1', 'confirm', $second );
+
+		$this->assertNotNull( $next, 'Another input is another action.' );
+
+		$now += Wpdb_Seller_Action_Store::SENDING_TTL;
+
+		$this->assertNotNull( $store->claim( 1, 10, 'u-1', 'confirm', $second ), 'A request that died is taken over.' );
+
+		$store->release( (string) $next ); // The dead request's token owns nothing any more.
+
+		$this->assertSame( Wpdb_Seller_Action_Store::SENDING, $store->blocking_state( 1, 10, 'u-1', 'confirm', $second ) );
+
+		$now += Wpdb_Seller_Action_Store::SENDING_TTL;
+		$store->forget_expired( 1 );
+
+		$this->assertSame( 0, $store->delete_account( 1, 10 ) );
 	}
 
 	/**
