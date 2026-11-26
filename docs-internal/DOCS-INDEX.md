@@ -157,6 +157,7 @@ CI workflows: `ci.yml` (jobs: `version`, `lint`, `compat`, `unit-tests`, `test-j
 | `specs/2026-11-05-range-shipping-city-mode.md` | «Доставка в городе» — the list of places as the granularity of the checkout's settlement choice (framework part in 2.0.26) | ✅ |
 | `specs/2026-11-15-marketplace-admin-ui.md` | #1776 — marketplace admin pages look like the delivery plugins (cards C1–C3) | ✅ |
 | `specs/2026-11-16-marketplace-bulk-operations.md` | #1786 — bulk operations for large catalogues: «все по фильтру», sync on link, link by category, price actions | ✅ |
+| `specs/2026-11-26-wildberries-seller-plugin-design.md` | Wildberries Seller 1.0 (new plugin on `woodev/marketplace/`, #1670) — FBS and DBS, supplies, marking, framework extensions, card list; owner decisions in `research/2026-11-26-wb-seller/decisions.md` | draft |
 
 | Plan | Implements |
 |------|------------|

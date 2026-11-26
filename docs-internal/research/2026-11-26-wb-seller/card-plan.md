@@ -1,6 +1,11 @@
 
 # WB Seller: implementation card plan (estimate)
 
+> **Superseded 26.11.2026** by the card list in
+> [the plugin design](../../specs/2026-11-26-wildberries-seller-plugin-design.md) (§14), written after
+> [the owner decisions](decisions.md): DBS is in 1.0, the supplies page is a framework card, and the live cabinet replaces
+> the sandbox for the catalogue, price and stock measurement, while order flows stay on the sandbox. Kept as the research estimate.
+
 Filing briefs for the coordinator, **not filed cards**. Written against the recommendations of
 [the owner questions](owner-questions.ru.md) (FBS only; link, import and create cards; supplies page; Chestny ZNAK
 input). Different answers change the list. S/M/L are relative size. Model tiers follow the project rule (Haiku 5.5
@@ -46,7 +51,7 @@ the Ozon adapter change it forces.
 | WP9 — Marking codes | M · Sonnet 5.5 | WP7, WP8 | Chestny ZNAK input, `requiredMeta` and `optionalMeta`, validation errors; other identifiers (customs declaration, UIN, …) stay required and are named as work still to do. Accept: documented refusals (`MetaValidationFail`, `CustomsDeclarationIsRequired`) exercised with fixtures; a sandbox delivery is not evidence; any production observation only with separately authorised access. |
 | WP10 — Acceptance and release materials | M · Haiku 5.5 | all | Sandbox and rig acceptance, wiki, merchant docs, the release materials package. The acceptance report lists marking blocking as unproven unless a real cabinet showed it. |
 
-## After 2.0 (not estimated in detail)
+## After 1.0 (not estimated in detail)
 
 DBS actions and plugin flow (L + L) · return claims inbox (M) · DBW and in-store pickup (L) · FBW view from the
 order feed and stock reports (M) · promo calendar, reviews, finance (not planned).
@@ -70,4 +75,5 @@ Ozon module round was 17 framework and 5 plugin cards; most of that foundation i
 
 - [Research index](README.md)
 - [Gap map](gap-map.md)
+- [Owner decisions](decisions.md)
 - [Marketplace module design](../../wiki/marketplace-admin.md)
