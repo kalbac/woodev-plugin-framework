@@ -36,6 +36,7 @@ use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
+use Woodev\Framework\Marketplace\Flows\Releases_Reset_Imports;
 use Woodev\Framework\Marketplace\Flows\Unit_Products;
 use Woodev\Framework\Marketplace\Flows\Unit_Product_Source;
 use Woodev\Framework\Marketplace\Flows\Sellable_Units;
@@ -463,8 +464,10 @@ final class Site_Products_Module {
 		$linker    = self::linker( $plugin, $adapter, $accounts, $db, $links, $ledger, $table );
 		$mappings_url = $plugin->get_marketplace_page_url( 'mappings' );
 
+		$released = Capability::has_catalog( $adapter ) && $adapter->card_lifecycle() instanceof Releases_Reset_Imports ? $ledger : null;
+
 		return new Site_Products_Bulk(
-			new Export_Service( $links, $contexts, new Export_Scheduler( $job_names ), $adapter->export_facts(), new Export_Validator( $adapter->export_rules() ) ),
+			new Export_Service( $links, $contexts, new Export_Scheduler( $job_names ), $adapter->export_facts(), new Export_Validator( $adapter->export_rules() ), $released ),
 			$links,
 			new Stock_Intents( [ $accounts, 'get' ], $links, $store, $queue, $adapter->stock_policy() ),
 			new Price_Intents( $accounts, $adapter->id(), $links, $contexts, $store, $log ),

@@ -156,6 +156,10 @@ public function posting_noun(): Posting_Noun {
 - **A marketplace that announces no cards** returns `[]` from `Card_Importer::import_event_types()`; the account settings then
   offer no «Импортировать новые карточки автоматически» switch.
 - `order_source()` and `card_exporter()` are deprecated and never called: throw a `\LogicException`.
+- **«Экспортировать» right after «Сбросить состояние».** While an export task is open the products table refuses its cards,
+  a reset one too. If your `submit()` itself forgets what you still waited for of a reset card, let your `Card_Lifecycle` also
+  implement the marker `Flows\Releases_Reset_Imports` (`woodev/marketplace/flows/interface-releases-reset-imports.php`): the
+  reset then closes the card's open import items. Do not declare it if a second send could collide with the first.
 
 ## A marketplace adapter: one price for several links
 
