@@ -1,0 +1,88 @@
+{
+ "date": "2026-11-26",
+ "cod_point": true,
+ "request": {
+  "type": 1,
+  "number": "R1475-c2-1795651563",
+  "tariff_code": 136,
+  "shipment_point": "MSK2615",
+  "delivery_point": "SPB1223",
+  "recipient": {
+   "name": "Тест Проверка",
+   "phones": [
+    {
+     "number": "+79000000000"
+    }
+   ]
+  },
+  "delivery_recipient_cost": {
+   "value": 0
+  },
+  "packages": [
+   {
+    "number": "1",
+    "weight": 1000,
+    "length": 20,
+    "width": 15,
+    "height": 10,
+    "items": [
+     {
+      "name": "Измерительный товар",
+      "ware_key": "r1475",
+      "amount": 1,
+      "weight": 1000,
+      "cost": 1000,
+      "payment": {
+       "value": 0
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "post_status": 202,
+ "post": {
+  "requests": [
+   {
+    "type": "CREATE",
+    "state": "ACCEPTED"
+   }
+  ],
+  "statuses": [],
+  "delivery_recipient_cost": null,
+  "items": [],
+  "services": [],
+  "delivery_detail": {}
+ },
+ "get": {
+  "requests": [
+   {
+    "type": "CREATE",
+    "state": "SUCCESSFUL"
+   }
+  ],
+  "statuses": [
+   "CREATED",
+   "ACCEPTED"
+  ],
+  "delivery_recipient_cost": {
+   "value": 0.0
+  },
+  "items": [
+   {
+    "cost": 1000.0,
+    "payment": {
+     "value": 0.0
+    }
+   }
+  ],
+  "services": [
+   "INSURANCE"
+  ],
+  "delivery_detail": {
+   "delivery_sum": 250.0,
+   "total_sum": 314.15,
+   "payment_info": []
+  }
+ }
+}

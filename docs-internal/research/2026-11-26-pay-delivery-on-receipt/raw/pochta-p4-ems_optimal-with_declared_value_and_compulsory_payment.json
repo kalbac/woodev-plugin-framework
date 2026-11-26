@@ -1,0 +1,35 @@
+{
+ "date": "2026-11-26",
+ "request": {
+  "address-type-to": "DEFAULT",
+  "mail-type": "EMS_OPTIMAL",
+  "mail-category": "WITH_DECLARED_VALUE_AND_COMPULSORY_PAYMENT",
+  "mail-direct": 643,
+  "mass": 1000,
+  "index-to": 190000,
+  "region-to": "г Санкт-Петербург",
+  "place-to": "г Санкт-Петербург",
+  "street-to": "Невский пр-кт",
+  "house-to": "1",
+  "given-name": "Тест",
+  "surname": "TestovR1475",
+  "tel-address": 79000000000,
+  "order-num": "R1475-p4-1795651737",
+  "compulsory-payment": 30000,
+  "insr-value": 500000
+ },
+ "status": 200,
+ "response": {
+  "errors": [
+   {
+    "error-codes": [
+     {
+      "code": "RESTRICTED_MAIL_CATEGORY",
+      "description": "Для создания отправлений с наложенным платежом необходимо указать номер ЕСПП в настройках сервиса. Обратитесь к вашему персональному менеджеру в Почте или напишите письмо на почтовый ящик support.otpravka@russianpost.ru"
+     }
+    ],
+    "position": 0
+   }
+  ]
+ }
+}
