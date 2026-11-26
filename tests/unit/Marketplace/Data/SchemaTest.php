@@ -32,6 +32,7 @@ final class SchemaTest extends TestCase {
 			'accounts'      => [ 'account_id', 'name', 'external_id', 'secret_enc', 'secret_fingerprint', 'is_enabled', 'health', 'health_message', 'health_checked_at', 'key_expires_at', 'seller_id', 'currency', 'warehouse_id', 'stock_mode', 'price_direction', 'orders_enabled', 'import_enabled', 'notification_token', 'notification_state', 'settings', 'claim_token', 'claim_until' ],
 			'links'         => [ 'link_id', 'account_id', 'wc_product_id', 'wc_parent_id', 'kind', 'offer_id', 'card_state', 'is_created', 'sync_stock', 'sync_price', 'warehouse_id', 'is_oversize', 'price_rule_override', 'attribute_overrides', 'mapping_id', 'last_task_id', 'last_error_code', 'last_error_text', 'pending_offer_id', 'rename_error', 'rename_confirmed', 'last_pushed_stock', 'last_pushed_stock_at', 'last_pushed_price', 'last_pushed_price_at', 'updated_at' ],
 			'link_ids'      => [ 'link_id', 'account_id', 'id_name', 'id_value', 'id_type' ],
+			'link_barcodes' => [ 'link_id', 'account_id', 'barcode', 'position' ],
 			'tasks'         => [ 'task_id', 'account_id', 'kind', 'remote_task_id', 'status', 'submitted_at', 'last_polled_at', 'finished_at', 'poll_count', 'item_count', 'request_hash', 'result' ],
 			'task_items'    => [ 'task_id', 'link_id', 'offer_id', 'status', 'errors' ],
 			'events'        => [ 'event_id', 'account_id', 'type', 'dedup_key', 'received_at', 'processed_at', 'status', 'attempts', 'claim_token', 'claim_until', 'next_attempt_at', 'payload', 'result', 'source_ip', 'ip_trusted' ],
@@ -45,7 +46,7 @@ final class SchemaTest extends TestCase {
 			'profiles'      => [ 'profile_id', 'name', 'settings' ],
 			'catalog_cache' => [ 'cache_key', 'payload', 'fetched_at' ],
 			'bulk_runs'     => [ 'account_id', 'run_id', 'state', 'cancel', 'tick', 'action', 'payload', 'filter', 'user_id', 'cursor', 'items', 'counts', 'report', 'started_at', 'finished_at' ],
-			'cards'         => [ 'account_id', 'card_key', 'offer_id', 'name', 'image', 'state', 'is_created', 'failed', 'archived', 'details_ok', 'status_text', 'price', 'stock', 'remote_ids', 'group_key', 'group_size', 'position', 'seen_run', 'updated_at' ],
+			'cards'         => [ 'account_id', 'card_key', 'offer_id', 'name', 'image', 'state', 'is_created', 'failed', 'archived', 'details_ok', 'status_text', 'price', 'stock', 'remote_ids', 'group_key', 'group_size', 'unit_card', 'unit_article', 'unit_data', 'position', 'seen_run', 'updated_at' ],
 		];
 	}
 
@@ -191,6 +192,7 @@ final class SchemaTest extends TestCase {
 			'accounts'      => [ 'PRIMARY KEY  (account_id)', 'UNIQUE KEY external_id (external_id)' ],
 			'links'         => [ 'UNIQUE KEY account_product (account_id,wc_product_id)', 'UNIQUE KEY account_offer (account_id,offer_id)', 'KEY account_state (account_id,card_state)', 'KEY wc_parent (wc_parent_id)' ],
 			'link_ids'      => [ 'PRIMARY KEY  (link_id,id_name)', 'KEY account_lookup (account_id,id_name,id_value)' ],
+			'link_barcodes' => [ 'PRIMARY KEY  (account_id,barcode)', 'KEY link (link_id,position)' ],
 			'task_items'    => [ 'PRIMARY KEY  (task_id,link_id)' ],
 			'events'        => [ 'UNIQUE KEY account_dedup (account_id,dedup_key)' ],
 			'sync_state'    => [ 'PRIMARY KEY  (account_id,link_id,warehouse_id,kind)' ],
@@ -236,6 +238,17 @@ final class SchemaTest extends TestCase {
 		foreach ( [ 'id_name', 'id_value' ] as $column ) {
 			$this->assertStringContainsString( 'CHARACTER SET utf8mb4 COLLATE utf8mb4_bin', $columns[ $column ], $column );
 		}
+	}
+
+	/**
+	 * A barcode is a free string kept byte for byte: `12345Ejf5` and `12345EJF5` are two barcodes.
+	 *
+	 * @return void
+	 */
+	public function test_barcodes_are_binary(): void {
+		$columns = $this->parse( ( new Schema( 'fake' ) )->statements( self::PREFIX, '' )[ self::FAKE . 'link_barcodes' ] )['columns'];
+
+		$this->assertStringContainsString( 'CHARACTER SET utf8mb4 COLLATE utf8mb4_bin', $columns['barcode'] );
 	}
 
 	/**

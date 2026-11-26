@@ -47,6 +47,11 @@ final class Fake_Shop {
 		'height'            => '',
 		'image_id'          => 0,
 		'attributes'        => [],
+		'global_unique_id'  => '',
+		'description'       => '',
+		'short_description' => '',
+		'category_ids'      => [],
+		'gallery_image_ids' => [],
 	];
 
 	/**
@@ -69,6 +74,13 @@ final class Fake_Shop {
 	 * @var int
 	 */
 	public $fail_save_at = 0;
+
+	/**
+	 * Runs after every stored save: `function (): void`. A test that reads products by SQL rebuilds its tables here.
+	 *
+	 * @var callable|null
+	 */
+	public $after_save;
 
 	/**
 	 * Id of the next new product.
@@ -315,6 +327,10 @@ final class Fake_Shop {
 			'props' => $props,
 			'meta'  => $box->meta,
 		];
+
+		if ( null !== $this->after_save ) {
+			call_user_func( $this->after_save );
+		}
 
 		return $box->id;
 	}

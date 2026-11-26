@@ -13322,3 +13322,33 @@ msgstr ""
 msgctxt "posting noun: about many"
 msgid "об отправлениях"
 msgstr ""
+
+#: marketplace/admin/pages/products/class-remote-cards-actions.php:501
+msgid "Подходят несколько товаров сайта — свяжите нужный через «Связать с…»"
+msgstr ""
+
+#. translators: %s: number of a product.
+#: marketplace/admin/pages/products/class-remote-cards-units.php:130
+#, php-format
+msgid "Подходящий товар №%s подходит и другой карточке. Свяжите нужный вручную: «Связать с товаром…»."
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:623
+msgid "Артикул товара"
+msgstr ""
+
+#. translators: %s: list of products, each a name and a number.
+#: marketplace/flows/class-card-import.php:264
+#, php-format
+msgid "Под эту карточку подходят несколько товаров сайта: %s. Свяжите нужный вручную: «Связать с товаром…»."
+msgstr ""
+
+#: marketplace/flows/class-card-linker.php:244
+msgid "Артикул карточки длиннее 191 символа — связать её нельзя. Сократите артикул в кабинете маркетплейса."
+msgstr ""
+
+#. translators: 1: article (SKU), 2: name of the product that holds it, 3: its number.
+#: marketplace/flows/class-unit-products.php:148
+#, php-format
+msgid "Артикул «%1$s» уже занят товаром «%2$s» (№%3$d), поэтому товар создан без артикула. Задайте ему свой артикул."
+msgstr ""

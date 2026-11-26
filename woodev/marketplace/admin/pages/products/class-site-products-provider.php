@@ -22,6 +22,8 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Runner;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
+use Woodev\Framework\Marketplace\Flows\Article_Display;
+use Woodev\Framework\Marketplace\Flows\Unit_Products;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -96,9 +98,10 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	private $run_store;
 
 	/**
-	 * `adapter_id`, `marketplace` (merchant-facing name), `withheld` (action ids the adapter cannot serve).
+	 * `adapter_id`, `marketplace` (merchant-facing name), `withheld` (action ids the adapter cannot serve), `articles` (how a
+	 * marketplace that sells units shows an article, else null).
 	 *
-	 * @var array{adapter_id:string,marketplace:string,withheld:string[]}
+	 * @var array{adapter_id:string,marketplace:string,withheld:string[],articles:Article_Display|null}
 	 */
 	private $config;
 
@@ -114,7 +117,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * @param Site_Products_Bulk      $bulk       Bulk actions.
 	 * @param Warehouse_Options       $warehouses Warehouses of an account.
 	 * @param License_Gate            $license    Licence gate.
-	 * @param array<string,mixed>     $config     `adapter_id`, `marketplace` and `withheld`.
+	 * @param array<string,mixed>     $config     `adapter_id`, `marketplace`, `withheld` and, for an adapter that sells units, `articles`.
 	 * @param Bulk_Run_Runner|null    $runs       Bulk runs of the «все по фильтру» mode.
 	 * @param Bulk_Run_Store|null     $run_store  Their store.
 	 */
@@ -132,6 +135,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			'adapter_id'  => (string) ( $config['adapter_id'] ?? '' ),
 			'marketplace' => (string) ( $config['marketplace'] ?? '' ),
 			'withheld'    => (array) ( $config['withheld'] ?? [] ),
+			'articles'    => ( $config['articles'] ?? null ) instanceof Article_Display ? $config['articles'] : null,
 		];
 	}
 
@@ -853,6 +857,10 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * @return Site_Products_Rows
 	 */
 	private function row_builder( Account $account ): Site_Products_Rows {
+		$articles   = $this->config['articles'];
+		$adapter_id = $this->config['adapter_id'];
+		$account_id = $account->id();
+
 		return new Site_Products_Rows(
 			$this->config['marketplace'],
 			$this->warehouses->for_account( $account->id() ),
@@ -864,6 +872,14 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 				$photo   = $product instanceof \WC_Product && $product->get_image_id() ? wp_get_attachment_image_url( (int) $product->get_image_id(), 'thumbnail' ) : '';
 
 				return is_string( $photo ) && '' !== $photo ? $photo : wc_placeholder_img_src( 'thumbnail' );
+			},
+			null === $articles ? null : static function ( string $offer_id ) use ( $articles, $account_id ): string {
+				return $articles->of_link( $account_id, $offer_id );
+			},
+			null === $articles ? null : static function ( int $product_id ) use ( $adapter_id ): string {
+				$product = wc_get_product( $product_id );
+
+				return $product instanceof \WC_Product ? Unit_Products::sku_conflict_text( $adapter_id, $product ) : '';
 			}
 		);
 	}

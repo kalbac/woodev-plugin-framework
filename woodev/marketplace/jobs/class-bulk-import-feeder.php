@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Jobs;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Bulk_Run;
 use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
+use Woodev\Framework\Marketplace\Flows\Unit_Products;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -70,7 +71,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	private $entries;
 
 	/**
-	 * Names the articles whose shop product is half-made: `function ( string[] $articles ): string[]`.
+	 * Names the articles whose shop product is half-made: `function ( string[] $articles, int $account_id ): string[]`.
 	 *
 	 * @var callable
 	 */
@@ -79,14 +80,14 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	/**
 	 * The list the last refusal check read, kept for the freeze that follows it in the same tick: `[ run id, entries ]`.
 	 *
-	 * @var array{0:string,1:array{cards:array<int,array{0:string,1:string}>,on_site:string[]}}|null
+	 * @var array{0:string,1:array{cards:array<int,array<int,mixed>>,on_site:string[]}}|null
 	 */
 	private $listed = null;
 
 	/**
 	 * The frozen list of the run this tick works on: `[ run id, items ]`. One read per tick, not one per part.
 	 *
-	 * @var array{0:string,1:array<int,array{0:string,1:string}>}|null
+	 * @var array{0:string,1:array<int,array<int,mixed>>}|null
 	 */
 	private $items = null;
 
@@ -134,6 +135,40 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	}
 
 	/**
+	 * Returns the lookup of the half-made products of a marketplace that sells units: a unit's product is found by the pending
+	 * mark ({@see \Woodev\Framework\Marketplace\Flows\Unit_Products}), its unit key being no SKU.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @param \wpdb  $db          Database.
+	 * @param string $pending_key Meta key of the pending mark (`Unit_Products::pending_key()`).
+	 * @return callable `function ( string[] $articles, int $account_id ): string[]`.
+	 */
+	public static function pending_in_database( \wpdb $db, string $pending_key ): callable {
+		return static function ( array $articles, int $account_id ) use ( $db, $pending_key ): array {
+			$prefix  = Unit_Products::mark_value( $account_id, '' );
+			$pending = [];
+
+			foreach ( array_chunk( array_values( $articles ), self::LOOKUP ) as $chunk ) {
+				$values = [];
+
+				foreach ( $chunk as $article ) {
+					$values[] = $prefix . $article;
+				}
+
+				$holders = implode( ', ', array_fill( 0, count( $values ), '%s' ) );
+				$found   = $db->get_col( $db->prepare( "SELECT meta_value FROM {$db->postmeta} WHERE meta_key = %s AND meta_value IN ( {$holders} )", array_merge( [ $pending_key ], $values ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQLPlaceholders.UnsupportedPlaceholder -- Core table; only placeholders are interpolated.
+
+				foreach ( (array) $found as $value ) {
+					$pending[] = substr( (string) $value, strlen( $prefix ) );
+				}
+			}
+
+			return $pending;
+		};
+	}
+
+	/**
 	 * A run that has not frozen its list needs the list of cards to be loaded; a user who may not import stops it.
 	 *
 	 * @since 2.1.10
@@ -169,7 +204,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * @param Bulk_Run            $run     The run.
 	 * @param array<string,mixed> $cursor  Where the previous part stopped.
 	 * @param callable            $owns    `function (): bool`.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array<int,mixed>>}
 	 * @throws Bulk_Run_Lost When this tick lost the run.
 	 */
 	public function part( Account $account, Bulk_Run $run, array $cursor, callable $owns ): array {
@@ -186,7 +221,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * @param Account  $account Account.
 	 * @param Bulk_Run $run     The run.
 	 * @param callable $owns    `function (): bool`.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array<int,mixed>>}
 	 * @throws Bulk_Run_Lost When this tick lost the run.
 	 * @throws \RuntimeException When the list of cards expired between the refusal check and the freeze.
 	 */
@@ -199,7 +234,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 
 		$this->listed = null;
 		$on_site      = $entries['on_site'];
-		$items        = $this->in_import_order( $entries['cards'] );
+		$items        = self::first_of_each_card( $this->in_import_order( $entries['cards'], $account->id() ) );
 
 		unset( $entries );
 
@@ -229,7 +264,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * @param Bulk_Run $run     The run.
 	 * @param int      $index   The first article of the list not fed yet.
 	 * @param callable $owns    `function (): bool`.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array<int,mixed>>}
 	 * @throws Bulk_Run_Lost When this tick lost the run.
 	 */
 	private function feed( Account $account, Bulk_Run $run, int $index, callable $owns ): array {
@@ -249,14 +284,14 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 
 		$next = $index + count( $slice );
 
-		return $this->fed( $next, count( $slice ), $next >= count( $items ) );
+		return $this->fed( $next, self::cards_in( $slice ), $next >= count( $items ) );
 	}
 
 	/**
 	 * @param int  $next     The first article not fed yet.
 	 * @param int  $fed      Cards this part fed.
 	 * @param bool $finished Whether the list is over.
-	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array{0:string,1:string}>}
+	 * @return array{cursor:array<string,mixed>,finished:bool,counts:array<string,int>,groups:array<int,array<string,mixed>>,busy:int,items?:array<int,array<int,mixed>>}
 	 */
 	private function fed( int $next, int $fed, bool $finished ): array {
 		return [
@@ -273,7 +308,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 *
 	 * @param Account  $account Account.
 	 * @param Bulk_Run $run     The run.
-	 * @return array<int,array{0:string,1:string}>
+	 * @return array<int,array<int,mixed>>
 	 * @throws \RuntimeException When the run says it froze its list and the row holds none.
 	 */
 	private function frozen_items( Account $account, Bulk_Run $run ): array {
@@ -298,11 +333,11 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * (a pair is shared, never copied) — no bucket array per card, no copy of the list per step — so the freeze costs a slot per card
 	 * on top of the list itself, also on PHP 7.4 where every array is heavier.
 	 *
-	 * @param array<int,array{0:string,1:string}> $cards Article and group key of each card, in the snapshot's order.
-	 * @return array<int,array{0:string,1:string}>
+	 * @param array<int,array<int,mixed>> $cards Article and group key of each card, in the snapshot's order.
+	 * @return array<int,array<int,mixed>>
 	 */
-	private function in_import_order( array $cards ): array {
-		$resuming = array_flip( (array) call_user_func( $this->marked, array_column( $cards, 0 ) ) );
+	private function in_import_order( array $cards, int $account_id ): array {
+		$resuming = array_flip( (array) call_user_func( $this->marked, array_column( $cards, 0 ), $account_id ) );
 		$items    = [];
 		$next     = [];
 		$last     = [];
@@ -343,6 +378,42 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 		}
 
 		return $items;
+	}
+
+	/**
+	 * Marks, among the units of each card, the first one of the list: the run counts cards, and a card's units may be fed in
+	 * several parts. An item without a card of its own (any marketplace whose article is the card) is left as it is.
+	 *
+	 * @param array<int,array<int,mixed>> $items Article, group key and, for a unit, its card.
+	 * @return array<int,array<int,mixed>> The same, the third element telling whether the unit is its card's first.
+	 */
+	private static function first_of_each_card( array $items ): array {
+		$seen = [];
+
+		foreach ( $items as $position => $item ) {
+			if ( isset( $item[2] ) ) {
+				$items[ $position ][2] = ! isset( $seen[ $item[2] ] );
+				$seen[ $item[2] ]      = true;
+			}
+		}
+
+		return $items;
+	}
+
+	/**
+	 * How many cards a part of the list starts.
+	 *
+	 * @param array<int,array<int,mixed>> $items Items of {@see self::first_of_each_card()}.
+	 * @return int
+	 */
+	private static function cards_in( array $items ): int {
+		$cards = 0;
+
+		foreach ( $items as $item ) {
+			$cards += ! isset( $item[2] ) || $item[2] ? 1 : 0;
+		}
+
+		return $cards;
 	}
 
 	/**
@@ -404,7 +475,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * The list the refusal check read for this very run.
 	 *
 	 * @param Bulk_Run $run The run.
-	 * @return array{cards:array<int,array{0:string,1:string}>,on_site:string[]}|null
+	 * @return array{cards:array<int,array<int,mixed>>,on_site:string[]}|null
 	 */
 	private function listed_for( Bulk_Run $run ): ?array {
 		return null !== $this->listed && $run->run_id() === $this->listed[0] ? $this->listed[1] : null;

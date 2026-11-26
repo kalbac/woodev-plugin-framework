@@ -43,6 +43,10 @@ use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
+use Woodev\Framework\Marketplace\Flows\Sellable_Units;
+use Woodev\Framework\Marketplace\Flows\Article_Display;
+use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
+use Woodev\Framework\Marketplace\Data\Uninstaller;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -264,7 +268,7 @@ final class Embedded_Screens {
 			$guard,
 			$accounts,
 			$links,
-			new Panel_Reader( $links, $contexts, $adapter->export_facts(), $validator, $mappings, $warehouses, $store, $accounts, $license, Logging::for_plugin( $plugin ), $pinned, $adapter->article_policy(), $facts, null, null !== $renames ),
+			new Panel_Reader( $links, $contexts, $adapter->export_facts(), $validator, $mappings, $warehouses, $store, $accounts, $license, Logging::for_plugin( $plugin ), $pinned, $adapter->article_policy(), $facts, null, null !== $renames, new Article_Display( $adapter instanceof Sellable_Units ? $adapter : null, new Wpdb_Card_Store( $db, $table( 'cards' ), $table( 'links' ), Uninstaller::option_prefix( $plugin->get_id() ) ) ) ),
 			new Panel_View( $names, $facts->supports_oversize(), null !== $adapter->price_pusher(), null !== $renames ),
 			new Link_Settings_Writer( $links, $intents, $mappings, $warehouses, $stock, $pinned, $renames ),
 			new Link_Form_Input( $pinned ),

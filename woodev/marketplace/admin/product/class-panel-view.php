@@ -406,7 +406,7 @@ final class Panel_View {
 		// The words in `data-label` are the headings of a row that is stacked on a narrow panel (the heading row is hidden then).
 		$cells .= '<td class="woodev-mp-variations__name">' . esc_html( $name ) . '</td>';
 		$cells .= '<td class="woodev-mp-variations__state">' . $this->badge( $row['badge'] ) . '</td>';
-		$cells .= '<td class="woodev-mp-variations__article" data-label="' . esc_attr__( 'Артикул', 'woodev-plugin-framework' ) . '">' . esc_html( $row['offer_id'] ) . ( $row['planned'] ? $this->help_tip( __( 'Артикул будет отправлен на маркетплейс вместе с карточкой.', 'woodev-plugin-framework' ) ) : '' ) . $this->article_note( $row ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__article" data-label="' . esc_attr__( 'Артикул', 'woodev-plugin-framework' ) . '">' . esc_html( $row['offer_id'] ) . ( $row['planned'] ? $this->help_tip( __( 'Артикул будет отправлен на маркетплейс вместе с карточкой.', 'woodev-plugin-framework' ) ) : '' ) . $this->article_note( $row ) . ( '' !== (string) ( $row['notice'] ?? '' ) ? $this->help_tip( $row['notice'] ) : '' ) . '</td>';
 		$cells .= '<td class="woodev-mp-variations__stock" data-label="' . esc_attr__( 'Остаток', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_stock'] ?? '' ), (string) $row['stock'] ) ) . '</td>';
 		$cells .= '<td class="woodev-mp-variations__price" data-label="' . esc_attr__( 'Цена', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_price'] ?? '' ), (string) $row['price'] ) ) . '</td>';
 
@@ -616,6 +616,11 @@ final class Panel_View {
 			$html .= '<h3>' . esc_html__( 'Смена артикула', 'woodev-plugin-framework' ) . '</h3><p class="woodev-mp-error">' . ( empty( $block['ids']['rename_confirmed'] )
 				? esc_html( sprintf( /* translators: 1: article, 2: marketplace name. */ __( 'Не удалось сменить артикул на «%1$s». Ответ: %2$s', 'woodev-plugin-framework' ), $block['ids']['pending'], $this->names->name() ) ) . '<br />'
 				: '' ) . nl2br( esc_html( $block['ids']['rename_error'] ) ) . '</p>';
+		}
+
+		if ( '' !== (string) ( $block['ids']['notice'] ?? '' ) ) {
+			++$count;
+			$html .= '<h3>' . esc_html__( 'Артикул товара', 'woodev-plugin-framework' ) . '</h3><p class="woodev-mp-error">' . esc_html( $block['ids']['notice'] ) . '</p>';
 		}
 
 		if ( '' !== $block['remote_error'] ) {

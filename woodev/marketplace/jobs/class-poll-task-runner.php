@@ -612,6 +612,7 @@ final class Poll_Task_Runner {
 			Link_Record::STATE_CREATED,
 			[
 				'remote_ids'      => $outcome->remote_ids(),
+				'barcodes'        => $outcome->barcodes(),
 				'is_created'      => 1,
 				'last_error_code' => null,
 				'last_error_text' => null,

@@ -77,6 +77,21 @@ final class PollTaskRunnerTest extends Export_Test_Case {
 	}
 
 	/**
+	 * The barcodes the marketplace reports for a created card — those it generated included — are stored with the link, byte for byte.
+	 *
+	 * @return void
+	 */
+	public function test_a_created_card_stores_its_barcodes(): void {
+		$link = $this->sent( 'NB-1' );
+		$this->import_ok( 'NB-1', 'c-1' );
+		$this->lifecycle->cards = [ 'c-1' => new Card_Outcome( Link_Record::STATE_CREATED, true, false, 'created', [ 'card_ref' => 'c-1', 'model_ref' => 'm-1' ], null, [ '2060000000001', '12345Ejf5' ] ) ];
+
+		$this->poll();
+
+		$this->assertSame( [ '2060000000001', '12345Ejf5' ], $this->links()->barcodes_of( (int) $link->link_id() ) );
+	}
+
+	/**
 	 * A card that does not exist yet moves along the marketplace's states and the poll comes back.
 	 *
 	 * @return void

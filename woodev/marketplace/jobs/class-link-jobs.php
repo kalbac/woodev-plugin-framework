@@ -22,6 +22,8 @@ use Woodev\Framework\Marketplace\Flows\Card_List_Source;
 use Woodev\Framework\Marketplace\Flows\Card_Matcher;
 use Woodev\Framework\Marketplace\Flows\Link_Resolve_Exception;
 use Woodev\Framework\Marketplace\Flows\Link_Resolver;
+use Woodev\Framework\Marketplace\Flows\Sellable_Units;
+use Woodev\Framework\Marketplace\Flows\Unit_Matcher;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -36,6 +38,10 @@ defined( 'ABSPATH' ) || exit;
  * 3. The details of the matched cards; every **exact** pair is linked through {@see Card_Linker}; the **near** pairs go to the report
  *    the merchant confirms one by one ({@see Link_Report_Store}).
  * 4. A summary of the run is stored.
+ *
+ * For a marketplace that sells units ({@see Sellable_Units}) step 2 reads the products with their barcodes and {@see Unit_Matcher}
+ * pairs them by the adapter's match keys; there are no near pairs, and every card the keys do not settle is stored as a conflict
+ * for the cards list to show ({@see Link_Report_Store::replace_conflicts()}).
  *
  * **`refresh_cards( account_id, attempt )`** refreshes the stored list of the tab that lists the marketplace's cards
  * ({@see Wpdb_Card_Store}). A resolver that is a {@see Card_List_Source} is read page by page: each page is written before the next is
@@ -153,14 +159,22 @@ final class Link_Jobs {
 	private $progress;
 
 	/**
+	 * The adapter's unit rules; null for a marketplace whose article is the SKU.
+	 *
+	 * @var Sellable_Units|null
+	 */
+	private $units;
+
+	/**
 	 * Creates the jobs.
 	 *
 	 * @since 2.1.0
+	 * @since 2.1.23 `$units`.
 	 *
 	 * @param Job_Gate            $gate       Job gate.
 	 * @param Wpdb_Link_Store     $links      Links.
 	 * @param Card_Linker         $linker     Linker.
-	 * @param callable            $shop       `function ( ?int $category_id ): array`, the shop's products with an article (`Shop_Sku_Source::products()`).
+	 * @param callable            $shop       `function ( ?int $category_id, int $account_id ): array`, the shop's products with an article (`Shop_Sku_Source::products()`), for units `Unit_Product_Source::products()`.
 	 * @param Link_Report_Store   $reports    Reports.
 	 * @param Wpdb_Card_Store     $cards      The stored list of the cards.
 	 * @param Link_Scheduler      $scheduler  Scheduler.
@@ -172,8 +186,10 @@ final class Link_Jobs {
 	 * @param Link_Progress_Store $progress   Progress of interrupted runs.
 	 * @param callable|null       $clock      `function (): int`; the system clock when null.
 	 * @param callable|null       $account_ids `function (): int[]`, the enabled accounts the daily run refreshes; none when null.
+	 * @param Sellable_Units|null $units       The adapter, when it sells units.
 	 */
-	public function __construct( Job_Gate $gate, Wpdb_Link_Store $links, Card_Linker $linker, callable $shop, Link_Report_Store $reports, Wpdb_Card_Store $cards, Link_Scheduler $scheduler, Link_Resolver $resolver, Article_Policy $articles, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error, Link_Progress_Store $progress, ?callable $clock = null, ?callable $account_ids = null ) {
+	public function __construct( Job_Gate $gate, Wpdb_Link_Store $links, Card_Linker $linker, callable $shop, Link_Report_Store $reports, Wpdb_Card_Store $cards, Link_Scheduler $scheduler, Link_Resolver $resolver, Article_Policy $articles, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error, Link_Progress_Store $progress, ?callable $clock = null, ?callable $account_ids = null, ?Sellable_Units $units = null ) {
+		$this->units         = $units;
 		$this->links         = $links;
 		$this->linker        = $linker;
 		$this->shop_products = $shop;
@@ -378,9 +394,9 @@ final class Link_Jobs {
 		$before = $state;
 
 		try {
-			$cards   = $this->resolver->catalogue( $account, $context, $renew, $state['catalogue'] );
-			$products = call_user_func( $this->shop_products, $category_id );
-			$matched  = Card_Matcher::match( $cards, $products, $this->links->identity_map( $account_id ), $this->articles );
+			$cards    = $this->resolver->catalogue( $account, $context, $renew, $state['catalogue'] );
+			$products = call_user_func( $this->shop_products, $category_id, $account_id );
+			$matched  = $this->match( $account_id, $cards, $products );
 
 			$renew();
 			$details = $this->resolver->details(
@@ -409,6 +425,10 @@ final class Link_Jobs {
 
 		$dropped = $this->reports->replace_near_matches( $account_id, $entries );
 
+		if ( null !== $this->units ) {
+			$this->reports->replace_conflicts( $account_id, self::conflict_entries( $matched['conflicts'] ), null === $category_id ? null : array_map( 'intval', array_column( $products, 'id' ) ) );
+		}
+
 		$this->progress->clear( $account_id, Link_Progress_Store::KIND_LINK );
 		$this->reports->save_run(
 			$account_id,
@@ -424,6 +444,48 @@ final class Link_Jobs {
 				'category_id'    => (int) $category_id,
 				'error'          => '',
 			]
+		);
+	}
+
+	/**
+	 * Pairs the cabinet's cards with the shop's products, by article or, for units, by the adapter's match keys.
+	 *
+	 * @param int                            $account_id Account id.
+	 * @param array<int,array<string,mixed>> $cards      Cards.
+	 * @param array<int,array<string,mixed>> $products   Products.
+	 * @return array<string,mixed> The result of {@see Card_Matcher::match()}; for units also `conflicts`.
+	 */
+	private function match( int $account_id, array $cards, array $products ): array {
+		$linked = $this->links->identity_map( $account_id );
+
+		if ( null === $this->units ) {
+			return Card_Matcher::match( $cards, $products, $linked, $this->articles );
+		}
+
+		$matched = Unit_Matcher::match( $cards, $products, $linked, $this->units );
+
+		return $matched + [
+			'near'      => [],
+			'ambiguous' => count( $matched['conflicts'] ),
+		];
+	}
+
+	/**
+	 * Reduces the matcher's conflicts to what the report stores.
+	 *
+	 * @param array<int,array{card:array<string,mixed>,reason:string,product_ids:int[]}> $conflicts Conflicts.
+	 * @return array<int,array{offer_id:string,reason:string,product_ids:int[]}>
+	 */
+	private static function conflict_entries( array $conflicts ): array {
+		return array_map(
+			static function ( array $conflict ): array {
+				return [
+					'offer_id'    => (string) $conflict['card']['offer_id'],
+					'reason'      => $conflict['reason'],
+					'product_ids' => $conflict['product_ids'],
+				];
+			},
+			$conflicts
 		);
 	}
 
@@ -484,6 +546,10 @@ final class Link_Jobs {
 
 		if ( Card_Linker::CLAIM_LOST === $outcome ) {
 			throw new Claim_Lost( 'The account claim was taken over before a link was written.' );
+		}
+
+		if ( Card_Linker::KEY_TOO_LONG === $outcome ) {
+			$this->reports->set_import_note( $account_id, (string) $card['offer_id'], Card_Linker::message( $outcome ) );
 		}
 
 		if ( Card_Linker::LINKED === $outcome ) {

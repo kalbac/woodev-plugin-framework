@@ -64,14 +64,8 @@ final class Remote_Cards_Matching {
 			return null;
 		}
 
-		$counts  = $this->cards->on_site_counts( $account_id, $this->search( $query ) );
-		$on_site = Remote_Cards_Query::on_site_flag( $this->on_site( $query ) );
-
-		if ( null === $on_site ) {
-			return $counts['on_site'] + $counts['not_on_site'];
-		}
-
-		return $on_site ? $counts['on_site'] : $counts['not_on_site'];
+		// Cards, as the table counts them: the units of one card are one.
+		return $this->cards->card_count( $account_id, Remote_Cards_Query::on_site_flag( $this->on_site( $query ) ), $this->search( $query ) );
 	}
 
 	/**

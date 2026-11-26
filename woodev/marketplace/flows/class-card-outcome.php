@@ -60,6 +60,13 @@ final class Card_Outcome {
 	private $oversize;
 
 	/**
+	 * Barcodes of the unit, in the marketplace's order.
+	 *
+	 * @var string[]
+	 */
+	private $barcodes;
+
+	/**
 	 * Creates the outcome.
 	 *
 	 * @since 2.1.0
@@ -70,14 +77,27 @@ final class Card_Outcome {
 	 * @param string                   $status_text Status in the marketplace's words.
 	 * @param array<string,int|string> $remote_ids  Identifiers the card carries.
 	 * @param bool|null                $oversize    The marketplace's oversize flag, null when the answer does not carry one.
+	 * @param string[]                 $barcodes    Every barcode of the unit (those the marketplace generated included); none keeps the link's (2.1.23).
 	 */
-	public function __construct( string $state, bool $created, bool $failed, string $status_text, array $remote_ids = [], ?bool $oversize = null ) {
+	public function __construct( string $state, bool $created, bool $failed, string $status_text, array $remote_ids = [], ?bool $oversize = null, array $barcodes = [] ) {
 		$this->state       = $state;
 		$this->created     = $created;
 		$this->failed      = $failed;
 		$this->status_text = $status_text;
 		$this->remote_ids  = $remote_ids;
 		$this->oversize    = $oversize;
+		$this->barcodes    = $barcodes;
+	}
+
+	/**
+	 * Returns the barcodes of the unit.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @return string[] None when the answer carries none.
+	 */
+	public function barcodes(): array {
+		return $this->barcodes;
 	}
 
 	/**
