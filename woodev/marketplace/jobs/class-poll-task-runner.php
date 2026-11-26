@@ -12,8 +12,10 @@ use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Card_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Card_Outcome;
+use Woodev\Framework\Marketplace\Flows\Import_Deadlines;
 use Woodev\Framework\Marketplace\Flows\Import_Outcome;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
@@ -26,12 +28,15 @@ defined( 'ABSPATH' ) || exit;
  * {@see Card_Lifecycle}):
  *
  * 1. **Import** while items are open; when every item is final the task is `done` or `done_with_errors`. Unfinished 24 hours after
- *    the submit, the task is `expired` and its open items `failed`.
+ *    the submit, the task is `expired` and its open items `failed`. A task accepted without a task id is read by the articles of its
+ *    open items ({@see Article_Keyed_Lifecycle}).
  * 2. **Card lifecycle** for every link of the task already imported and not yet created, **whether or not the other items are
  *    final**, until the card exists. Before a link is marked `created` its first stock and price intents are seeded; a failed
  *    seeding leaves it for the next poll. Then the card-created callback fires once. A created card that still lacks an identifier
  *    the marketplace gives later is read until it arrives. A card not created 3 hours after the submit fails; a declined one at once,
  *    with the marketplace's words.
+ *
+ * Both deadlines (24 hours and 3 hours) are defaults: an adapter whose lifecycle is {@see Import_Deadlines} sets its own.
  *
  * Ownership: a run holds the account row's claim and every link write carries it plus the state the run read, so an older answer
  * cannot move a card back. Waits from the governor or a throttle reschedule without counting an attempt; a failed call or an
@@ -41,7 +46,7 @@ defined( 'ABSPATH' ) || exit;
  * cannot finalise the newer holder's task, and re-reads the link right before seeding, so a reset during the request seeds nothing.
  *
  * `poll_task( 0 )` is the **recovery sweep**, recurring every 15 minutes: an import task nobody has touched for 30 minutes is polled
- * again (a refused or lost schedule), and a task that never got the marketplace's number gives its links back to the export queue.
+ * again (a refused or lost schedule), and a task the marketplace never accepted gives its links back to the export queue.
  * Tasks that own unfinished links are found through the links whatever their age; links a refused export retry left queued get a
  * new batch.
  *
@@ -295,16 +300,17 @@ final class Poll_Task_Runner {
 	private function poll_import( Account $account, Async_Task $task, int $attempt, Claim_Fence $fence ): string {
 		$task_id = (int) $task->task_id();
 
-		if ( $this->age( $task ) > self::TASK_DEADLINE || null === $task->remote_task_id() ) {
+		if ( $this->age( $task ) > $this->task_deadline() || ! $this->is_readable( $task ) ) {
 			$this->hold( $task->account_id(), $fence );
-			$this->close_open_items( $task_id, 'task_expired', __( 'Маркетплейс не вернул результат за сутки.', 'woodev-plugin-framework' ), $fence );
+			/* translators: %d: number of hours. */
+			$this->close_open_items( $task_id, 'task_expired', sprintf( __( 'Маркетплейс не вернул результат за %d ч.', 'woodev-plugin-framework' ), self::hours( $this->task_deadline() ) ), $fence );
 			$this->ledger->record_poll( $task_id, Async_Task::STATUS_EXPIRED );
 
 			return self::PHASE_DONE;
 		}
 
 		try {
-			$outcomes = $this->lifecycle->read_import( $account, (string) $task->remote_task_id(), $this->scheduler->poll_hook() );
+			$outcomes = $this->read_import( $account, $task );
 		} catch ( \Throwable $thrown ) {
 			return $this->after_failure( $account, $task, $attempt, $this->remote_error( $thrown ), $fence );
 		}
@@ -336,6 +342,39 @@ final class Poll_Task_Runner {
 		$this->ledger->record_poll( $task_id, count( $imported ) === count( $items ) ? Async_Task::STATUS_DONE : Async_Task::STATUS_DONE_WITH_ERRORS, [ 'imported' => count( $imported ) ] );
 
 		return self::PHASE_DONE;
+	}
+
+	/**
+	 * Tells whether the marketplace can still be asked about a task: it has a task id, or it was accepted by articles and the adapter
+	 * can read it that way.
+	 *
+	 * @param Async_Task $task Task.
+	 * @return bool
+	 */
+	private function is_readable( Async_Task $task ): bool {
+		return null !== $task->remote_task_id() || ( $task->is_accepted_by_articles() && $this->lifecycle instanceof Article_Keyed_Lifecycle );
+	}
+
+	private function read_import( Account $account, Async_Task $task ): array {
+		$remote_task_id = $task->remote_task_id();
+
+		if ( null !== $remote_task_id ) {
+			return $this->lifecycle->read_import( $account, $remote_task_id, $this->scheduler->poll_hook() );
+		}
+
+		$open = [];
+
+		foreach ( $this->ledger->items( (int) $task->task_id() ) as $item ) {
+			if ( Task_Ledger::ITEM_PENDING === $item['status'] ) {
+				$open[] = $item['offer_id'];
+			}
+		}
+
+		if ( [] === $open || ! $this->lifecycle instanceof Article_Keyed_Lifecycle ) {
+			return [];
+		}
+
+		return $this->lifecycle->read_import_by_articles( $account, $open, $this->scheduler->poll_hook() );
 	}
 
 	/**
@@ -408,13 +447,13 @@ final class Poll_Task_Runner {
 			return self::PHASE_DONE;
 		}
 
-		if ( $this->age( $task ) <= self::CARD_DEADLINE ) {
+		if ( $this->age( $task ) <= $this->card_deadline() ) {
 			return self::PHASE_OPEN;
 		}
 
 		foreach ( $this->waiting_cards( $task_id, true ) as $card_id => $link ) {
 			if ( ! isset( $created[ $card_id ] ) ) {
-				$this->fail_link( $task_id, $link, 'card_not_created', sprintf( /* translators: %s: the marketplace's status of the card. */ __( 'Карточка не создана за 3 часа; статус маркетплейса: %s.', 'woodev-plugin-framework' ), $texts[ $card_id ] ?? $link->card_state() ), $fence );
+				$this->fail_link( $task_id, $link, 'card_not_created', sprintf( /* translators: 1: number of hours, 2: the marketplace's status of the card. */ __( 'Карточка не создана за %1$d ч.; статус маркетплейса: %2$s.', 'woodev-plugin-framework' ), self::hours( $this->card_deadline() ), $texts[ $card_id ] ?? $link->card_state() ), $fence );
 			}
 		}
 
@@ -807,11 +846,11 @@ final class Poll_Task_Runner {
 	private function sweep(): void {
 		$now      = (int) call_user_func( $this->clock );
 		$stale    = $now - self::STALE_AFTER;
-		$open     = $this->ledger->untouched_since( Async_Task::KIND_IMPORT, [ Async_Task::STATUS_SUBMITTED, Async_Task::STATUS_POLLING ], $stale, $now - self::TASK_DEADLINE - self::SWEEP_MARGIN, self::SWEEP_LIMIT );
-		$finished = $this->ledger->untouched_since( Async_Task::KIND_IMPORT, [ Async_Task::STATUS_DONE, Async_Task::STATUS_DONE_WITH_ERRORS, Async_Task::STATUS_FAILED, Async_Task::STATUS_EXPIRED ], $stale, $now - self::CARD_DEADLINE - self::SWEEP_MARGIN, self::SWEEP_LIMIT );
+		$open     = $this->ledger->untouched_since( Async_Task::KIND_IMPORT, [ Async_Task::STATUS_SUBMITTED, Async_Task::STATUS_POLLING ], $stale, $now - $this->task_deadline() - self::SWEEP_MARGIN, self::SWEEP_LIMIT );
+		$finished = $this->ledger->untouched_since( Async_Task::KIND_IMPORT, [ Async_Task::STATUS_DONE, Async_Task::STATUS_DONE_WITH_ERRORS, Async_Task::STATUS_FAILED, Async_Task::STATUS_EXPIRED ], $stale, $now - $this->card_deadline() - self::SWEEP_MARGIN, self::SWEEP_LIMIT );
 
 		// Unfinished work is found by its links, whatever the task's age: WP-cron on a quiet shop can be down for hours, and only
-		// the 24 h / 3 h deadlines may end such a link (with a reason), never its absence from the sweep.
+		// the task and card deadlines may end such a link (with a reason), never its absence from the sweep.
 		$owning = $this->ledger->untouched_among( Async_Task::KIND_IMPORT, $this->links->owning_task_ids( self::UNFINISHED_STATES, self::OWNER_SCAN_LIMIT ), $stale, self::SWEEP_LIMIT );
 
 		$tasks = [];
@@ -839,10 +878,10 @@ final class Poll_Task_Runner {
 
 		$this->requeue_orphans( $task );
 
-		if ( null !== $task->remote_task_id() || $task->is_final() ) {
+		if ( $task->is_accepted() || $task->is_final() ) {
 			$this->ledger->mark_polled( $task_id );
 
-			if ( ( ! $task->is_final() && null !== $task->remote_task_id() ) || [] !== $this->waiting_cards( $task_id ) ) {
+			if ( ! $task->is_final() || [] !== $this->waiting_cards( $task_id ) ) {
 				$this->poll_later( $task, 0, 0 );
 			}
 
@@ -871,7 +910,7 @@ final class Poll_Task_Runner {
 			$this->ledger->record_poll( $task_id, Async_Task::STATUS_FAILED, [ 'reason' => 'reclaimed' ] );
 
 			if ( [] !== $ids ) {
-				$this->scheduler->queue_export( $task->account_id(), $ids );
+				$this->queue_again( $task, $ids );
 			}
 		} finally {
 			$this->gate->release( $task->account_id(), $fence );
@@ -897,11 +936,23 @@ final class Poll_Task_Runner {
 			return;
 		}
 
-		$this->scheduler->queue_export( $task->account_id(), $ids );
+		$this->queue_again( $task, $ids );
 
 		foreach ( $ids as $link_id ) {
 			$this->links->advance( $link_id, $task_id, Link_Record::STATE_QUEUED, [ 'last_task_id' => null ], null, Link_Record::STATE_QUEUED );
 		}
+	}
+
+	/**
+	 * Queues links of one task as one batch again: they were sent as one, so any group among them stays together.
+	 *
+	 * @param Async_Task $task     Task that owned the links.
+	 * @param int[]      $link_ids Link ids.
+	 * @return void
+	 * @throws Export_Not_Scheduled When Action Scheduler refuses the batch.
+	 */
+	private function queue_again( Async_Task $task, array $link_ids ): void {
+		$this->scheduler->queue_export( $task->account_id(), $link_ids, array_fill_keys( $link_ids, 'task ' . $task->task_id() ) );
 	}
 
 	/**
@@ -914,6 +965,34 @@ final class Poll_Task_Runner {
 		$submitted = $task->submitted_at();
 
 		return null === $submitted ? 0 : (int) call_user_func( $this->clock ) - $submitted->getTimestamp();
+	}
+
+	/**
+	 * Returns how long the import result is waited for.
+	 *
+	 * @return int Seconds.
+	 */
+	private function task_deadline(): int {
+		return $this->lifecycle instanceof Import_Deadlines ? $this->lifecycle->task_deadline() : self::TASK_DEADLINE;
+	}
+
+	/**
+	 * Returns how long an imported card is waited for.
+	 *
+	 * @return int Seconds.
+	 */
+	private function card_deadline(): int {
+		return $this->lifecycle instanceof Import_Deadlines ? $this->lifecycle->card_deadline() : self::CARD_DEADLINE;
+	}
+
+	/**
+	 * Returns a deadline in hours, for the sentence the merchant reads.
+	 *
+	 * @param int $seconds Deadline.
+	 * @return int Whole hours, rounded up.
+	 */
+	private static function hours( int $seconds ): int {
+		return (int) ceil( $seconds / 3600 );
 	}
 
 	/**

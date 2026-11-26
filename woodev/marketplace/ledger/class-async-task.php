@@ -30,6 +30,11 @@ final class Async_Task {
 	public const STATUS_EXPIRED          = 'expired';
 
 	/**
+	 * Key of the result payload that marks a task accepted without a marketplace task id.
+	 */
+	public const RESULT_BY_ARTICLES = 'by_articles';
+
+	/**
 	 * Local id, null before the task is stored.
 	 *
 	 * @var int|null
@@ -205,6 +210,28 @@ final class Async_Task {
 	 */
 	public function remote_task_id(): ?string {
 		return $this->remote_task_id;
+	}
+
+	/**
+	 * Tells whether the marketplace accepted the task without giving it an id, so that it is read by the articles of its items.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @return bool
+	 */
+	public function is_accepted_by_articles(): bool {
+		return ! empty( $this->result[ self::RESULT_BY_ARTICLES ] );
+	}
+
+	/**
+	 * Tells whether the marketplace accepted the task: it gave an id, or the task is read by articles.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @return bool
+	 */
+	public function is_accepted(): bool {
+		return null !== $this->remote_task_id || $this->is_accepted_by_articles();
 	}
 
 	/**

@@ -48,9 +48,10 @@ final class BulkRunWorkerTest extends Products_Test_Case {
 	}
 
 	/**
+	 * @param bool $groups_exports Whether the adapter groups its exports.
 	 * @return Site_Products_Run_Worker
 	 */
-	private function worker(): Site_Products_Run_Worker {
+	private function worker( bool $groups_exports = false ): Site_Products_Run_Worker {
 		return new Site_Products_Run_Worker(
 			$this->reader(),
 			$this->bulk(),
@@ -58,7 +59,9 @@ final class BulkRunWorkerTest extends Products_Test_Case {
 				function (): bool {
 					return $this->licensed;
 				}
-			)
+			),
+			null,
+			$groups_exports
 		);
 	}
 
@@ -69,15 +72,16 @@ final class BulkRunWorkerTest extends Products_Test_Case {
 	 * @param int                  $parent Cursor parent.
 	 * @param int                  $child  Cursor child.
 	 * @param int                  $size   Part size.
+	 * @param bool                 $whole  Whether a product's variations are all read at once.
 	 * @return array{offers:int[],editable:array<int,int>,cursor:array{parent:int,child:int},products:int,exhausted:bool}
 	 */
-	private function read( Site_Products_Filter $filter, int $parent = 0, int $child = 0, int $size = 2 ): array {
+	private function read( Site_Products_Filter $filter, int $parent = 0, int $child = 0, int $size = 2, bool $whole = false ): array {
 		$method = new \ReflectionMethod( Site_Products_Run_Worker::class, 'read' );
 		if ( PHP_VERSION_ID < 80100 ) {
 			$method->setAccessible( true );
 		}
 
-		return $method->invoke( $this->worker(), $filter, $parent, $child, $size );
+		return $method->invoke( $this->worker(), $filter, $parent, $child, $size, $whole );
 	}
 
 	/**
@@ -177,6 +181,35 @@ final class BulkRunWorkerTest extends Products_Test_Case {
 
 		$this->assertSame( [ 100, 1 ], array_map( 'count', $parts ) );
 		$this->assertSame( $ids, array_merge( ...$parts ) );
+	}
+
+	public function test_a_part_that_keeps_products_whole_reads_every_variation_of_the_product_it_enters(): void {
+		$this->shop->product( 1000, 'Большой', 'BIG', null, null, 'variable' );
+		$ids = $this->variations( 1000, 1001, 5 );
+		$this->shop->product( 1100, 'Большой после', 'BIG-AFTER', 1, '5', 'simple' );
+		$filter = new Site_Products_Filter( $this->account_id, '', 0, false, 'Большой' );
+
+		$first = $this->read( $filter, 0, 0, 2, true );
+
+		$this->assertSame( $ids, $first['offers'], 'Over the size: the product is not cut.' );
+		$this->assertSame( [ 'parent' => 1000, 'child' => 0 ], $first['cursor'] );
+		$this->assertSame( 1, $first['products'] );
+		$this->assertSame( [ 1100 ], $this->read( $filter, 1000, 0, 2, true )['offers'] );
+	}
+
+	public function test_only_an_export_of_a_grouping_adapter_keeps_products_whole(): void {
+		$this->shop->product( 1000, 'Большой', 'BIG', null, null, 'variable' );
+		$this->variations( 1000, 1001, 101 );
+
+		$export = $this->run_of( Site_Products_Bulk::EXPORT, [], [ 'q' => 'Большой' ] );
+		$reset  = $this->run_of( Site_Products_Bulk::RESET, [], [ 'q' => 'Большой' ] );
+		$owns   = static function (): bool {
+			return true;
+		};
+
+		$this->assertSame( [ 'parent' => 1000, 'child' => 0 ], $this->worker( true )->part( $this->account_now(), $export, [], $owns )['cursor'] );
+		$this->assertSame( [ 'parent' => 1000, 'child' => 1100 ], $this->worker()->part( $this->account_now(), $export, [], $owns )['cursor'] );
+		$this->assertSame( [ 'parent' => 1000, 'child' => 0 ], $this->worker( true )->part( $this->account_now(), $reset, [], $owns )['cursor'], 'A part of 500 holds all 101 anyway.' );
 	}
 
 	public function test_a_variable_product_with_501_variations_is_finished_over_two_parts_and_the_parent_cursor_moves_after_the_last(): void {

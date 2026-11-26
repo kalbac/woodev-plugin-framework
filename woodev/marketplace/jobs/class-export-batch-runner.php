@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Gateway;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
@@ -21,7 +22,8 @@ use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Runs `woodev_{plugin id}_export_batch( account_id, link_ids ≤ 100, attempt )`: one import request and its task row.
+ * Runs `woodev_{plugin id}_export_batch( account_id, link_ids, attempt )`: one import request and its task row. The scheduler sizes
+ * the batch ({@see Export_Scheduler::queue_export()}); the run takes it whole.
  *
  * 1. The job gate: account enabled, licence, account pause; then the plugin's write gate — an account that may not write keeps its
  *    links queued and the batch waits.
@@ -33,6 +35,10 @@ defined( 'ABSPATH' ) || exit;
  *    those articles even if the outcome is uncertain.
  * 6. The marketplace's task number is stored and `poll_task` is scheduled in one minute; a refused scheduling is recovered by the
  *    poll sweep.
+ *
+ * A marketplace that gives no task number ({@see Article_Keyed_Lifecycle}): an empty answer is «accepted» and the task is polled by
+ * its articles. A card an earlier request already carried, with no identifier known, is first looked up in the card list (step 4½): a
+ * card that is there is not sent again, and when the lookup fails nothing is sent.
  *
  * Failures follow the adapter's {@see Error_Classifier}: a governor wait or a throttle reschedules with the delay it asked for
  * **without** counting an attempt; a server or transport error, or an unexpected exception before anything was sent, puts the links
@@ -118,22 +124,32 @@ final class Export_Batch_Runner {
 	private $log_error;
 
 	/**
+	 * The lifecycle of a marketplace that gives no task number, or null for one that does.
+	 *
+	 * @var Article_Keyed_Lifecycle|null
+	 */
+	private $by_article;
+
+	/**
 	 * Creates the runner.
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Job_Gate               $gate       Job gate.
-	 * @param Wpdb_Link_Store        $links      Links.
-	 * @param Task_Ledger            $ledger     Task ledger.
-	 * @param Export_Context_Builder $contexts   Export inputs.
-	 * @param Export_Validator       $validator  Validator with the marketplace's rules.
-	 * @param Export_Gateway         $gateway    The marketplace's card builder and import request.
-	 * @param Export_Scheduler       $scheduler  Scheduler.
-	 * @param Error_Classifier       $classifier Classifies a failed request.
-	 * @param Api_Error_Ring         $ring       Error ring.
-	 * @param callable               $log_error  `function ( string $line ): void`.
+	 * @since 2.1.21 `$by_article`.
+	 *
+	 * @param Job_Gate                     $gate       Job gate.
+	 * @param Wpdb_Link_Store              $links      Links.
+	 * @param Task_Ledger                  $ledger     Task ledger.
+	 * @param Export_Context_Builder       $contexts   Export inputs.
+	 * @param Export_Validator             $validator  Validator with the marketplace's rules.
+	 * @param Export_Gateway               $gateway    The marketplace's card builder and import request.
+	 * @param Export_Scheduler             $scheduler  Scheduler.
+	 * @param Error_Classifier             $classifier Classifies a failed request.
+	 * @param Api_Error_Ring               $ring       Error ring.
+	 * @param callable                     $log_error  `function ( string $line ): void`.
+	 * @param Article_Keyed_Lifecycle|null $by_article The lifecycle of a marketplace that gives no task number.
 	 */
-	public function __construct( Job_Gate $gate, Wpdb_Link_Store $links, Task_Ledger $ledger, Export_Context_Builder $contexts, Export_Validator $validator, Export_Gateway $gateway, Export_Scheduler $scheduler, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error ) {
+	public function __construct( Job_Gate $gate, Wpdb_Link_Store $links, Task_Ledger $ledger, Export_Context_Builder $contexts, Export_Validator $validator, Export_Gateway $gateway, Export_Scheduler $scheduler, Error_Classifier $classifier, Api_Error_Ring $ring, callable $log_error, ?Article_Keyed_Lifecycle $by_article = null ) {
 		$this->gate       = $gate;
 		$this->links      = $links;
 		$this->ledger     = $ledger;
@@ -144,6 +160,7 @@ final class Export_Batch_Runner {
 		$this->classifier = $classifier;
 		$this->ring       = $ring;
 		$this->log_error  = $log_error;
+		$this->by_article = $by_article;
 	}
 
 	/**
@@ -170,7 +187,7 @@ final class Export_Batch_Runner {
 	public function run( $account_id = 0, $link_ids = [], $attempt = 0 ): void {
 		$account_id = (int) $account_id;
 		$attempt    = (int) $attempt;
-		$link_ids   = array_slice( array_values( array_unique( array_filter( array_map( 'intval', (array) $link_ids ) ) ) ), 0, Export_Scheduler::BATCH_SIZE );
+		$link_ids   = array_values( array_unique( array_filter( array_map( 'intval', (array) $link_ids ) ) ) );
 
 		try {
 			$this->start( $account_id, $link_ids, $attempt );
@@ -253,11 +270,17 @@ final class Export_Batch_Runner {
 
 		$this->ledger->add_items( $run->task_id, $this->offer_ids( $claimed ) );
 
-		$items = $this->owned_items( $account->id(), $run->task_id, $fence, $this->build_items( $account, $run->task_id, $claimed, $fence ) );
+		$items = $this->build_items( $account, $run->task_id, $claimed, $fence );
+		$items = $this->without_existing_cards( $account, $run, $claimed, $items, $attempt, $fence );
+
+		if ( null === $items ) {
+			return;
+		}
+
+		$items = $this->owned_items( $account->id(), $run->task_id, $fence, $items );
 
 		if ( [] === $items ) {
-			$this->ledger->record_poll( $run->task_id, Async_Task::STATUS_DONE_WITH_ERRORS, [ 'reason' => 'nothing_valid' ] );
-			$run->settled = true;
+			$this->close_unsent( $account, $run );
 			return;
 		}
 
@@ -324,6 +347,112 @@ final class Export_Batch_Runner {
 	}
 
 	/**
+	 * For a marketplace without task numbers: an accepted import cannot be told from a lost one, so before a card is sent again the
+	 * marketplace's card list is read by article. A card that is there leaves the request, and its link goes on to the lifecycle poll.
+	 *
+	 * Asked only about cards an earlier request carried and that have no identifier yet: a card with identifiers is updated, which
+	 * can be repeated safely.
+	 *
+	 * @param Account                        $account Account.
+	 * @param Export_Run                     $run     The run.
+	 * @param Link_Record[]                  $claimed Claimed rows.
+	 * @param array<int,array<string,mixed>> $items   Link id => import item.
+	 * @param int                            $attempt Failed attempts so far.
+	 * @param Claim_Fence                    $fence   The run's claim.
+	 * @return array<int,array<string,mixed>>|null The items still to send; null when the read failed, which is then handled.
+	 * @throws \Throwable When the classifier does not know the failure.
+	 */
+	private function without_existing_cards( Account $account, Export_Run $run, array $claimed, array $items, int $attempt, Claim_Fence $fence ): ?array {
+		if ( null === $this->by_article ) {
+			return $items;
+		}
+
+		$resent = [];
+
+		foreach ( $claimed as $link ) {
+			$link_id = (int) $link->link_id();
+
+			if ( isset( $items[ $link_id ] ) && [] === $link->remote_ids() && null !== $this->ledger->sent_offer_id( $link_id ) ) {
+				$resent[ $link_id ] = (string) $link->offer_id();
+			}
+		}
+
+		if ( [] === $resent ) {
+			return $items;
+		}
+
+		try {
+			$cards = $this->by_article->find_cards( $account, array_values( $resent ), $this->scheduler->export_hook() );
+		} catch ( \Throwable $thrown ) {
+			$error = $this->classifier->classify( $thrown );
+
+			if ( null === $error ) {
+				throw $thrown;
+			}
+
+			$run->settled = true;
+			$this->after_failure( $account, $run->task_id, array_keys( $items ), $attempt, $error, $fence );
+
+			return null;
+		}
+
+		if ( ! $this->gate->still_holds( $account->id(), $fence ) ) {
+			throw new Claim_Lost( 'The account claim was taken over while the card list was read.' );
+		}
+
+		foreach ( $resent as $link_id => $offer_id ) {
+			if ( ! isset( $cards[ $offer_id ] ) ) {
+				continue;
+			}
+
+			if ( $this->links->advance( $link_id, $run->task_id, Link_Record::STATE_OFFER_VALIDATED, [ 'remote_ids' => $cards[ $offer_id ] ], $fence, Link_Record::STATE_SUBMITTED ) ) {
+				$this->ledger->settle_item( $run->task_id, $link_id, Task_Ledger::ITEM_IMPORTED );
+				++$run->found;
+			}
+
+			unset( $items[ $link_id ] );
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Closes the task of a run that has nothing to send: every link failed, was taken away, or its card already exists.
+	 *
+	 * @param Account    $account Account.
+	 * @param Export_Run $run     The run.
+	 * @return void
+	 */
+	private function close_unsent( Account $account, Export_Run $run ): void {
+		if ( 0 === $run->found ) {
+			$this->ledger->record_poll( $run->task_id, Async_Task::STATUS_DONE_WITH_ERRORS, [ 'reason' => 'nothing_valid' ] );
+			$run->settled = true;
+			return;
+		}
+
+		$status = $run->found === count( $this->ledger->items( $run->task_id ) ) ? Async_Task::STATUS_DONE : Async_Task::STATUS_DONE_WITH_ERRORS;
+
+		$this->ledger->record_poll( $run->task_id, $status, [ 'imported' => $run->found ] );
+		$run->settled = true;
+		$this->schedule_first_poll( $account->id(), $run->task_id );
+	}
+
+	/**
+	 * Schedules the first poll of a task; the poll sweep picks the task up when Action Scheduler refuses.
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $task_id    Task id.
+	 * @return void
+	 */
+	private function schedule_first_poll( int $account_id, int $task_id ): void {
+		try {
+			$this->scheduler->poll_later( $task_id, 0, self::FIRST_POLL );
+		} catch ( \Throwable $e ) {
+			$this->report( $account_id, 'export_batch: the poll of task ' . $task_id . ' could not be scheduled; the poll sweep picks it up: ' . $e->getMessage() );
+		}
+	}
+
+	/**
 	 * Keeps the items whose link this task still owns, checked right before the request; a link reset or taken meanwhile is left out
 	 * and its item marked skipped (not sent).
 	 *
@@ -356,7 +485,7 @@ final class Export_Batch_Runner {
 	}
 
 	/**
-	 * Sends the import request and records its task id.
+	 * Sends the import request and records its task id, or that it was accepted without one.
 	 *
 	 * @param Account                        $account Account.
 	 * @param Export_Run                     $run     The run.
@@ -386,23 +515,30 @@ final class Export_Batch_Runner {
 
 			$run->settled = true;
 			$this->after_failure( $account, $run->task_id, array_keys( $items ), $attempt, $error, $fence );
+
+			if ( $run->found > 0 ) {
+				$this->schedule_first_poll( $account->id(), $run->task_id ); // The cards found before the send still need their poll.
+			}
+
 			return;
 		}
 
-		if ( '' === $remote || '0' === $remote ) {
+		$without_number = '' === $remote || '0' === $remote;
+
+		if ( $without_number && null === $this->by_article ) {
 			$run->settled = true;
 			$this->after_failure( $account, $run->task_id, array_keys( $items ), $attempt, new Remote_Error( Remote_Error::RETRY, 'transport', __( 'Маркетплейс принял выгрузку, но не вернул номер задачи.', 'woodev-plugin-framework' ) ), $fence );
 			return;
 		}
 
-		$this->ledger->attach_remote( $run->task_id, $remote, $hash );
-		$run->settled = true;
-
-		try {
-			$this->scheduler->poll_later( $run->task_id, 0, self::FIRST_POLL );
-		} catch ( \Throwable $e ) {
-			$this->report( $account->id(), 'export_batch: task ' . $run->task_id . ' was submitted but its poll could not be scheduled; the poll sweep picks it up: ' . $e->getMessage() );
+		if ( $without_number ) {
+			$this->ledger->accept_by_articles( $run->task_id, $hash );
+		} else {
+			$this->ledger->attach_remote( $run->task_id, $remote, $hash );
 		}
+
+		$run->settled = true;
+		$this->schedule_first_poll( $account->id(), $run->task_id );
 	}
 
 	/**

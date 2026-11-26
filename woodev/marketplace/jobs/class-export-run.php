@@ -38,6 +38,13 @@ final class Export_Run {
 	public $sending = [];
 
 	/**
+	 * Links found in the marketplace's card list instead of being sent again.
+	 *
+	 * @var int
+	 */
+	public $found = 0;
+
+	/**
 	 * Whether the run's outcome is already written (submitted, refused or failed), so recovery must not touch it.
 	 *
 	 * @var bool

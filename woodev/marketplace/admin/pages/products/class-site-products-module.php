@@ -29,6 +29,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
+use Woodev\Framework\Marketplace\Flows\Export_Grouping;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
@@ -147,7 +148,8 @@ final class Site_Products_Module {
 			new Site_Products_Reader( $db, $table( 'links' ), $table( 'sync_state' ) ),
 			self::bulk( $plugin, $adapter, $accounts, $db, $links, $ledger, $table ),
 			License_Gate::for_plugin( $plugin ),
-			Account_Pause::over( $accounts, $adapter->error_classifier() )
+			Account_Pause::over( $accounts, $adapter->error_classifier() ),
+			$adapter->export_facts() instanceof Export_Grouping
 		);
 
 		return new Bulk_Run_Runner(

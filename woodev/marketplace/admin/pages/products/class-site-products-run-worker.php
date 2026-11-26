@@ -24,10 +24,14 @@ defined( 'ABSPATH' ) || exit;
  * 2. otherwise the next parents are read under the filter after `parent` (the list's own WHERE plus `ID > parent`, ascending). A simple
  *    product is one offer and finishes at once; a variable product enters step 1.
  *
- * So a part never holds more than its size, a variable product of any size is walked over as many parts as it needs, every offer is
- * reached once (a variation belongs to one parent and the `(parent, child)` order only grows), and a part runs the same
- * {@see Site_Products_Bulk} code the ticked mode does. The filter is read again for every new parent: a product is taken as it is when its
- * turn comes. A parent already entered is finished even if it leaves the filter half way.
+ * So a part never holds more than its size (one exception below), a variable product of any size is walked over as many parts as it
+ * needs, every offer is reached once (a variation belongs to one parent and the `(parent, child)` order only grows), and a part runs
+ * the same {@see Site_Products_Bulk} code the ticked mode does. The filter is read again for every new parent: a product is taken as
+ * it is when its turn comes. A parent already entered is finished even if it leaves the filter half way.
+ *
+ * The exception: for an adapter that groups its exports ({@see \Woodev\Framework\Marketplace\Flows\Export_Grouping}) an export part
+ * takes every remaining variation of a product it enters, so a group is queued whole; such a part may go over its size by up to one
+ * product.
  *
  * Part sizes are proposals, kept as constants ({@see self::SIZES}).
  *
@@ -80,20 +84,29 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 	private $pause;
 
 	/**
+	 * @var bool
+	 */
+	private $groups_exports;
+
+	/**
 	 * Creates the worker.
 	 *
 	 * @since 2.1.8
 	 *
-	 * @param Site_Products_Reader $reader  Reader.
-	 * @param Site_Products_Bulk   $bulk    The actions.
-	 * @param License_Gate         $license Licence gate.
-	 * @param Account_Pause|null   $pause   Account pause; none when null.
+	 * @since 2.1.21 `$groups_exports`.
+	 *
+	 * @param Site_Products_Reader $reader         Reader.
+	 * @param Site_Products_Bulk   $bulk           The actions.
+	 * @param License_Gate         $license        Licence gate.
+	 * @param Account_Pause|null   $pause          Account pause; none when null.
+	 * @param bool                 $groups_exports Whether the adapter groups its exports, so an export part must not cut a product.
 	 */
-	public function __construct( Site_Products_Reader $reader, Site_Products_Bulk $bulk, License_Gate $license, ?Account_Pause $pause = null ) {
-		$this->reader  = $reader;
-		$this->bulk    = $bulk;
-		$this->license = $license;
-		$this->pause   = $pause;
+	public function __construct( Site_Products_Reader $reader, Site_Products_Bulk $bulk, License_Gate $license, ?Account_Pause $pause = null, bool $groups_exports = false ) {
+		$this->reader         = $reader;
+		$this->bulk           = $bulk;
+		$this->license        = $license;
+		$this->pause          = $pause;
+		$this->groups_exports = $groups_exports;
 	}
 
 	/**
@@ -147,7 +160,8 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 	 */
 	public function part( Account $account, Bulk_Run $run, array $cursor, callable $owns ): array {
 		$filter = Site_Products_Filter::from_query( $account->id(), $run->filter() );
-		$read   = $this->read( $filter, (int) ( $cursor['parent'] ?? 0 ), (int) ( $cursor['child'] ?? 0 ), self::size_of( $run->action() ) );
+		$whole  = $this->groups_exports && Site_Products_Bulk::EXPORT === $run->action();
+		$read   = $this->read( $filter, (int) ( $cursor['parent'] ?? 0 ), (int) ( $cursor['child'] ?? 0 ), self::size_of( $run->action() ), $whole );
 		$empty  = [
 			'products_done'   => 0,
 			'offers_accepted' => 0,
@@ -198,9 +212,10 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 	 * @param int                  $parent The last product the run entered.
 	 * @param int                  $child  The last variation of it that was read; 0 when the parent is finished.
 	 * @param int                  $size   Most offers.
+	 * @param bool                 $whole  Whether a product's variations are all read at once, even past the size.
 	 * @return array{offers:int[],editable:array<int,int>,cursor:array{parent:int,child:int},products:int,exhausted:bool}
 	 */
-	private function read( Site_Products_Filter $filter, int $parent, int $child, int $size ): array {
+	private function read( Site_Products_Filter $filter, int $parent, int $child, int $size, bool $whole = false ): array {
 		$offers   = [];
 		$editable = [];
 		$products = 0;
@@ -211,7 +226,8 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 			$room = $size - $taken;
 
 			if ( $walking ) {
-				$ids = $this->reader->variation_ids_after( $parent, $child, $room );
+				$limit = $whole ? PHP_INT_MAX : $room;
+				$ids   = $this->reader->variation_ids_after( $parent, $child, $limit );
 
 				foreach ( $ids as $id ) {
 					$offers[]        = $id;
@@ -219,8 +235,8 @@ final class Site_Products_Run_Worker implements Bulk_Run_Worker {
 					++$taken;
 				}
 
-				// A read shorter than the room means the parent has no more variations.
-				$walking = count( $ids ) >= $room;
+				// A read shorter than its limit means the parent has no more variations.
+				$walking = count( $ids ) >= $limit;
 				$child   = $walking ? (int) end( $ids ) : 0;
 				$products += $walking ? 0 : 1;
 				continue;

@@ -58,6 +58,18 @@ interface Task_Ledger {
 	public function attach_remote( int $task_id, string $remote_task_id, string $request_hash ): void;
 
 	/**
+	 * Records that the marketplace accepted the submit and gave no task id: the task is read by the articles of its items.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @param int    $task_id      Task id.
+	 * @param string $request_hash SHA-1 of the request body.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function accept_by_articles( int $task_id, string $request_hash ): void;
+
+	/**
 	 * Records, just before the request goes out, that it is being sent: the body's SHA-1 and the links in it. From here on the
 	 * articles of those links count as sent (an uncertain outcome included), see {@see self::sent_offer_id()}.
 	 *

@@ -173,6 +173,36 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * @since 2.1.21
+	 *
+	 * @param int    $task_id      Task id.
+	 * @param string $request_hash SHA-1 of the request body.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function accept_by_articles( int $task_id, string $request_hash ): void {
+		$task   = $this->get( $task_id );
+		$result = null === $task ? [] : $task->result();
+
+		$result[ Async_Task::RESULT_BY_ARTICLES ] = true;
+
+		$updated = $this->db->update(
+			$this->tasks,
+			[
+				'request_hash' => $request_hash,
+				'result'       => (string) json_encode( $result ), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
+			],
+			[ 'task_id' => $task_id ]
+		);
+
+		if ( false === $updated ) {
+			throw new \RuntimeException( 'The accepted task could not be stored: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
 	 * @since 2.0.29
 	 *
 	 * @param int    $task_id      Task id.
@@ -497,11 +527,8 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 
 		if ( null !== $result ) {
 			$stored = $this->get( $task_id );
-			$sent   = null === $stored ? null : ( $stored->result()['sent_links'] ?? null );
-
-			if ( null !== $sent ) {
-				$result['sent_links'] = $sent; // What was sent stays known whatever the outcome.
-			}
+			$kept   = null === $stored ? [] : array_intersect_key( $stored->result(), array_flip( [ 'sent_links', Async_Task::RESULT_BY_ARTICLES ] ) );
+			$result = array_merge( $result, $kept ); // What was sent, and how it was accepted, stay known whatever the outcome.
 
 			$columns['result'] = (string) json_encode( $result ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
 		}

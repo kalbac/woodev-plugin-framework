@@ -21,7 +21,8 @@ defined( 'ABSPATH' ) || exit;
 interface Card_Lifecycle {
 	/**
 	 * Returns the name of the identifier (in {@see Link_Record::remote_ids()}) the marketplace names a card by when it is read
-	 * back, learned from the import result.
+	 * back, learned from the import result. It must differ between links: where several offers share one card (the sizes of a card),
+	 * name the identifier of the offer, not of the card.
 	 *
 	 * @since 2.1.0
 	 *

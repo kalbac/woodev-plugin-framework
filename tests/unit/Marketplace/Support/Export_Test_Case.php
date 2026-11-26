@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
@@ -324,7 +325,7 @@ abstract class Export_Test_Case extends Sync_Test_Case {
 	 * @return Export_Batch_Runner
 	 */
 	protected function export_runner(): Export_Batch_Runner {
-		return new Export_Batch_Runner( $this->job_gate(), $this->links(), $this->ledger(), $this->contexts(), $this->validator(), $this->gateway, $this->export_scheduler(), $this->classifier, $this->ring(), [ $this, 'log_line' ] );
+		return new Export_Batch_Runner( $this->job_gate(), $this->links(), $this->ledger(), $this->contexts(), $this->validator(), $this->gateway, $this->export_scheduler(), $this->classifier, $this->ring(), [ $this, 'log_line' ], $this->lifecycle instanceof Article_Keyed_Lifecycle ? $this->lifecycle : null );
 	}
 
 	/**
