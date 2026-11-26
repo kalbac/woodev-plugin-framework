@@ -13550,6 +13550,30 @@ msgstr ""
 msgid "Это действие уже отправляется для этой позиции. Дождитесь ответа."
 msgstr ""
 
+#: marketplace/admin/order/class-label-button.php:139
+msgid "Открыть этикетки для печати"
+msgstr ""
+
+#: marketplace/flows/class-label-bundle.php:172
+msgid "Не удалось собрать этикетки в архив. Попросите хостинг включить расширение PHP «zip» и проверить папку временных файлов."
+msgstr ""
+
+#: marketplace/flows/class-label-download.php:330
+msgid "Сохранённые этикетки не читаются. Напишите в поддержку плагина."
+msgstr ""
+
+#: marketplace/flows/class-label-sheet.php:56
+msgid "Этикетки для печати"
+msgstr ""
+
+#: marketplace/flows/class-label-sheet.php:58
+msgid "Напечатать"
+msgstr ""
+
+#: marketplace/flows/class-label-sheet.php:59
+msgid "Для принтера этикеток: в окне печати выберите поля «Нет» и масштаб 100 %."
+msgstr ""
+
 #. translators: %s: the marketplace's word for a shipment, «поставка».
 #: marketplace/admin/pages/orders/class-site-orders-shipments.php:239
 #, php-format

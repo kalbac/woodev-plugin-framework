@@ -784,16 +784,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		$document = $this->labels->covering( $account->id(), [ $key ] );
 
 		if ( $document > 0 ) {
-			return [
-				'requested' => 1,
-				'accepted'  => 1,
-				'skipped'   => 0,
-				'failed'    => 0,
-				'download'  => [
-					'url'      => $this->labels->url( $document ),
-					'filename' => '',
-				],
-			];
+			return $this->download_result( $document );
 		}
 
 		$this->require_write( $account );
@@ -812,6 +803,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			throw $this->unexpected( 'Asking for labels failed', $e );
 		}
 
+		$document = $this->labels->covering( $account->id(), [ $key ] );
+
+		if ( $document > 0 ) {
+			return $this->download_result( $document ); // The marketplace answered at once: nothing is queued.
+		}
+
 		return [
 			'requested' => 1,
 			'accepted'  => 1,
@@ -819,6 +816,26 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			'failed'    => 0,
 			'queued'    => true,
 			'rows'      => $this->build_rows( $account, $call['targets'] ),
+		];
+	}
+
+	/**
+	 * The result that hands a stored label document over.
+	 *
+	 * @param int $document_id Document id.
+	 * @return array<string,mixed>
+	 */
+	private function download_result( int $document_id ): array {
+		return [
+			'requested' => 1,
+			'accepted'  => 1,
+			'skipped'   => 0,
+			'failed'    => 0,
+			'download'  => [
+				'url'      => $this->labels->url( $document_id ),
+				'filename' => '',
+				'open'     => $this->labels->is_page( $document_id ),
+			],
 		];
 	}
 

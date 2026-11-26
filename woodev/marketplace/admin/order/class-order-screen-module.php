@@ -20,6 +20,7 @@ use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
+use Woodev\Framework\Marketplace\Flows\Label_Service;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Marketplace\Settings\Posting_Noun;
@@ -204,7 +205,9 @@ final class Order_Screen_Module {
 			},
 			static function (): int {
 				return 0;
-			}
+			},
+			null,
+			Label_Service::format_lookup( $adapter->label_provider(), $account_of )
 		);
 
 		$label_stored = static function ( int $account_id, string $external_key ) use ( $labels ): bool {

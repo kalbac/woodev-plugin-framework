@@ -39,6 +39,8 @@ use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
 use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
+use Woodev\Framework\Marketplace\Flows\Label_Answer;
+use Woodev\Framework\Marketplace\Flows\Label_File;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -47,7 +49,9 @@ use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Reasonless_Canceller;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Seller_Adapter;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Flows\Label_Test_Case;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Immediate_Label_Provider;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 
 require_once dirname( __DIR__, 3 ) . '/Shipping/Rest_Api/wp-rest-controller-stub.php';
 
@@ -967,9 +971,35 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( $order ) ], [] ) );
 
 			$this->assertSame( $this->label_url( $document ), $body['download']['url'], 'One set covers every order it was made for.' );
+			$this->assertArrayNotHasKey( 'open', $body['download'], 'A PDF is downloaded as before.' );
 		}
 
 		$this->assertSame( [], $this->provider_calls(), 'Nothing is asked of the marketplace again.' );
+	}
+
+	public function test_stickers_answered_at_once_are_handed_over_by_the_same_click_as_a_page(): void {
+		$this->stock( false );
+
+		$provider      = new Fake_Immediate_Label_Provider( Label_Answer::files( [ new Label_File( 'a.png', 'image/png', 'sticker' ) ] ) );
+		$this->adapter = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'error_classifier' => $this->classifier,
+				'label_provider'   => $provider,
+			]
+		);
+
+		$body = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertSame( 'done', $body['status'], 'Nothing is queued.' );
+		$this->assertSame( $this->label_url( 1 ), $body['download']['url'] );
+		$this->assertTrue( $body['download']['open'] );
+		$this->assertSame( [ [ 'labels_now', [ 'P-104' ] ] ], $provider->calls );
+
+		$again = Action_Response::apply( $this->definition(), $this->definition()->get_action( 'label' ), $this->provider()->apply( $this->context(), 'label', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertTrue( $again['download']['open'], 'The stored page is handed over again.' );
+		$this->assertCount( 1, $provider->calls );
 	}
 
 	public function test_a_busy_account_does_not_push_a_posting_out_of_view_and_a_similar_number_is_not_the_same_posting(): void {

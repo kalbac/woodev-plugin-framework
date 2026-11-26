@@ -857,7 +857,22 @@ describe( 'guarded downloads', () => {
 		const link = await within( dialog ).findByRole( 'link', { name: 'Скачать файл' } );
 		expect( link ).toHaveAttribute( 'href', '/wp-admin/admin-post.php?label=1' );
 		expect( link ).toHaveAttribute( 'download', 'labels.pdf' );
+		expect( link ).not.toHaveAttribute( 'target' );
 		expect( previews() ).toHaveLength( 0 );
+	} );
+
+	test( 'a page to show opens in a new tab, so the table stays', async () => {
+		serve( { apply: () => outcome( { download: { url: '/wp-admin/admin-post.php?label=2', filename: '', origins: [], open: true } } ) } );
+		await renderPage();
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
+		fireEvent.click( toolbarButton( 'Скачать этикетки' ) );
+		const dialog = await screen.findByRole( 'dialog' );
+
+		const link = await within( dialog ).findByRole( 'link', { name: 'Скачать файл' } );
+		expect( link ).toHaveAttribute( 'target', '_blank' );
+		expect( link ).toHaveAttribute( 'rel', 'noopener' );
+		expect( link ).not.toHaveAttribute( 'download' );
 	} );
 
 	test( 'with the admin and the front end on different hosts, the server’s origins are trusted', async () => {

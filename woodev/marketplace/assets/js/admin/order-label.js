@@ -2,9 +2,10 @@
  * The «Этикетка» button of a marketplace posting on the order screens (the order metabox, either order storage).
  *
  * It asks nothing the «Заказы маркетплейсов» table does not: the `label` row action and the activity read of the table's own records
- * routes (`data-url`), with the REST nonce. The table answers with the ready PDF, or queues the label and says so; then the button
- * waits on the activity read until the marketplace has made it and asks for the PDF again. Nothing is asked of the marketplace
- * more than once per click. Plain DOM calls only (`textContent`, never `innerHTML`).
+ * routes (`data-url`), with the REST nonce. The table answers with the ready labels, or queues the label and says so; then the button
+ * waits on the activity read until the marketplace has made it and asks for the file again. Nothing is asked of the marketplace
+ * more than once per click. A file is saved at once; a page to print (`download.open`) gets a link beside the button, which opens
+ * it in a new tab. Plain DOM calls only (`textContent`, never `innerHTML`).
  */
 ( function () {
 	'use strict';
@@ -97,6 +98,16 @@
 			}
 
 			link.href = file.url;
+
+			// The merchant's own click opens the page: a tab asked for after a wait is blocked by the browser.
+			if ( file.open ) {
+				link.target = '_blank';
+				link.rel = 'noopener';
+				link.textContent = text( 'open' );
+				status.appendChild( link );
+				return;
+			}
+
 			link.setAttribute( 'download', file.filename || '' );
 			document.body.appendChild( link );
 			link.click();
@@ -112,7 +123,7 @@
 			setOff( false );
 		}
 
-		// The answer of the table to a request: the PDF to download, the label being made, or a sentence for the merchant.
+		// The answer of the table to a request: the labels to hand over, the label being made, or a sentence for the merchant.
 		function handle( reply, afterQueue ) {
 			if ( ! reply.ok ) {
 				failure( reply );

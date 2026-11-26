@@ -156,7 +156,8 @@ final class Label_Jobs {
 	 * @param Account  $account       Account the orders belong to.
 	 * @param string[] $external_keys Remote-order keys.
 	 * @return int Local task id; the screen follows it through {@see Wpdb_Label_Store::task()} and
-	 *             {@see Wpdb_Label_Store::document_of_task()}.
+	 *             {@see Wpdb_Label_Store::document_of_task()}. 0 when the labels came at once ({@see Label_Service::create()}):
+	 *             their document is stored and there is nothing to poll.
 	 * @throws Label_Exception With a merchant-readable sentence.
 	 * @throws \Throwable When the marketplace refused the call for another reason.
 	 * @throws Persistence_Exception When the task or its poll could not be stored.
@@ -164,7 +165,9 @@ final class Label_Jobs {
 	public function request( Account $account, array $external_keys ): int {
 		$task_id = $this->service->create( $account, $external_keys );
 
-		$this->queue_poll( $task_id );
+		if ( $task_id > 0 ) {
+			$this->queue_poll( $task_id );
+		}
 
 		return $task_id;
 	}

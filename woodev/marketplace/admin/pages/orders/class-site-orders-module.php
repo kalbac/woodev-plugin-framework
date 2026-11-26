@@ -261,6 +261,6 @@ final class Site_Orders_Module {
 			$adapter->id()
 		);
 
-		return new Site_Orders_Labels( $db, $table( 'tasks' ), $table( 'documents' ), [ $download, 'url' ], [ $jobs, 'request' ] );
+		return new Site_Orders_Labels( $db, $table( 'tasks' ), $table( 'documents' ), [ $download, 'url' ], [ $jobs, 'request' ], null, Label_Service::format_lookup( $provider, [ $accounts, 'get' ] ) );
 	}
 }
