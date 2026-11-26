@@ -62,6 +62,14 @@ final class Sqlite_Wpdb extends \wpdb {
 	public $fail_read;
 
 	/**
+	 * Asked before every `query()`: `function ( string $query ): bool`; a statement it answers true for is not run and fails as on a
+	 * dropped connection, so a test can lose one particular write.
+	 *
+	 * @var callable|null
+	 */
+	public $fail_query;
+
+	/**
 	 * Whether an `UPDATE` reports the rows it CHANGED, as MySQL and MariaDB do, instead of the rows it matched, as SQLite does. A
 	 * statement that rewrites a row to the values it already holds then returns 0 — which the SQLite default hides.
 	 *
@@ -173,6 +181,12 @@ final class Sqlite_Wpdb extends \wpdb {
 		$this->statements[] = (string) $query;
 		$this->last_error   = '';
 
+		if ( null !== $this->fail_query && call_user_func( $this->fail_query, (string) $query ) ) {
+			$this->last_error = 'MySQL server has gone away';
+
+			return false;
+		}
+
 		try {
 			$table           = $this->count_changed_rows && 1 === preg_match( '/^\s*UPDATE\s+(\S+)\s+SET/i', (string) $query, $found ) ? $found[1] : null;
 			$before          = null === $table ? [] : $this->rows_of( $table );
@@ -180,6 +194,11 @@ final class Sqlite_Wpdb extends \wpdb {
 			$changed         = null === $table ? $changed : $this->rows_changed( $before, $this->rows_of( $table ) );
 			$this->insert_id = (int) $this->pdo->lastInsertId();
 		} catch ( \PDOException $e ) {
+			// MySQL accepts a COMMIT or ROLLBACK with no transaction open (after a refused START); SQLite calls it an error.
+			if ( false !== strpos( $e->getMessage(), 'no transaction is active' ) ) {
+				return 0;
+			}
+
 			// The real `wpdb` never throws: it records the error and returns false.
 			$this->last_error = $e->getMessage();
 

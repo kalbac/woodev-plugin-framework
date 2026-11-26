@@ -232,6 +232,36 @@ final class ExportBatchRunnerTest extends Export_Test_Case {
 	}
 
 	/**
+	 * The requeue before a retry does not depend on its transaction beginning: the run's outcome is already recorded by then, so a
+	 * link left `submitted` would be claimed by no retry and reclaimed by no sweep.
+	 *
+	 * @return void
+	 */
+	public function test_a_retry_requeues_and_resends_its_links_when_a_transaction_cannot_begin(): void {
+		$link                   = $this->queued( 'NB-1' );
+		$this->gateway->answers = [ Fake_Remote_Exception::of( Remote_Error::RETRY, 'HTTP 503' ) ];
+		$refused                = 0;
+		$this->db->fail_query   = static function ( string $query ) use ( &$refused ): bool {
+			$fails    = 0 === $refused && 'START TRANSACTION' === $query;
+			$refused += (int) $fails;
+
+			return $fails;
+		};
+
+		$this->run_batch( [ $link ] );
+
+		$this->assertSame( 1, $refused, 'The fault was injected.' );
+		$this->assertSame( Link_Record::STATE_QUEUED, $this->link_of( $link->wc_product_id() )->card_state() );
+		$this->assertSame( Task_Ledger::ITEM_SKIPPED, $this->ledger()->items( 1 )[ (int) $link->link_id() ]['status'] );
+		$this->assertRetry( $link, 1, Backoff::seconds_after( 1 ) );
+
+		$this->run_batch( [ $link ], 1 );
+
+		$this->assertSame( Link_Record::STATE_SUBMITTED, $this->link_of( $link->wc_product_id() )->card_state() );
+		$this->assertCount( 2, $this->gateway->submitted );
+	}
+
+	/**
 	 * A refusal that retrying cannot fix fails the links at once, with the marketplace's words.
 	 *
 	 * @return void

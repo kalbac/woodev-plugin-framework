@@ -16,7 +16,7 @@ use Woodev\Framework\Marketplace\Jobs\Poll_Task_Runner;
  * Reads the import by articles from {@see Scripted_Card_Lifecycle::$import}, answers the card list from {@see self::$existing} and
  * has its own deadlines.
  */
-final class Scripted_Article_Lifecycle extends Scripted_Card_Lifecycle implements Article_Keyed_Lifecycle, Import_Deadlines {
+class Scripted_Article_Lifecycle extends Scripted_Card_Lifecycle implements Article_Keyed_Lifecycle, Import_Deadlines {
 	/**
 	 * Cards the card list holds: article => identifiers.
 	 *

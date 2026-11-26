@@ -619,6 +619,38 @@ final class WpdbLinkStoreTest extends TestCase {
 	}
 
 	/**
+	 * A refused `START TRANSACTION` stops only the reset that releases something with it; every other write goes on, as it always did.
+	 *
+	 * @return void
+	 */
+	public function test_only_a_reset_with_a_release_stops_when_its_transaction_cannot_begin(): void {
+		$this->store->insert_if_absent( Link_Record::offer( 7, 101, 0, 'A', [ 'card_state' => 'queued' ] ) );
+		$link = $this->link_id( 101 );
+		$this->store->claim_for_task( 5, [ $link ] );
+		$this->db->fail_query = static function ( string $query ): bool {
+			return 'START TRANSACTION' === $query;
+		};
+
+		try {
+			$this->store->reset_state(
+				7,
+				[ $link ],
+				function (): void {
+					$this->fail( 'Nothing is released outside a transaction.' );
+				}
+			);
+			$this->fail( 'The reset must say it did not happen.' );
+		} catch ( Persistence_Exception $exception ) {
+			$this->assertSame( 'submitted', $this->store->find( 7, 101 )->card_state() );
+		}
+
+		$this->assertTrue( $this->store->advance( $link, 5, 'created', [ 'remote_ids' => [ 'product_id' => 9 ] ] ) );
+		$this->assertSame( 9, $this->store->find( 7, 101 )->remote_id( 'product_id' ) );
+		$this->assertTrue( $this->store->detach( 7, $link ) );
+		$this->assertSame( 'unlinked', $this->store->find( 7, 101 )->card_state() );
+	}
+
+	/**
 	 * «Detach» forgets the card locally, keeps the merchant's choices, and leaves a row that is being submitted alone.
 	 *
 	 * @return void

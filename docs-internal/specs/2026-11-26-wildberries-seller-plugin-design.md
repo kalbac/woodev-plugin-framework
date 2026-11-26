@@ -435,7 +435,9 @@ at 01:16:17, the card listed at 01:17:00. So:
   speaks of, and short enough that a refused create does not hang for a day;
 - the module does not queue a submitted link again (READ `data/class-wpdb-link-store.php`), so a merchant who has
   corrected the product before that uses the «Товары сайта» action «Сбросить состояние» and exports again; a re-send of
-  a create looks for the card first, and a corrected update goes through because the unshown write is retired.
+  a create looks for the card first, and a corrected update goes through because the unshown write is retired. The
+  products table lets the reset size be exported at once only when the plugin's lifecycle declares the marker
+  `Releases_Reset_Imports` (#2040); without it the old task holds the size until it ends.
 
 A card is found by its full article: a `textSearch` for a prefix returned nothing (MEASURED).
 

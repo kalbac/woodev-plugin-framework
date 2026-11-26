@@ -18,6 +18,7 @@ use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
+use Woodev\Framework\Marketplace\Flows\Releases_Reset_Imports;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Jobs\Export_Batch_Runner;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
@@ -316,7 +317,9 @@ abstract class Export_Test_Case extends Sync_Test_Case {
 	 * @return Export_Service
 	 */
 	protected function service(): Export_Service {
-		return new Export_Service( $this->links(), $this->contexts(), $this->export_scheduler(), $this->facts, $this->validator() );
+		$released = $this->lifecycle instanceof Releases_Reset_Imports ? $this->ledger() : null;
+
+		return new Export_Service( $this->links(), $this->contexts(), $this->export_scheduler(), $this->facts, $this->validator(), $released );
 	}
 
 	/**
