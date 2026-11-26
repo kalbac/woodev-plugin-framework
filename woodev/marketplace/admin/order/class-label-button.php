@@ -22,7 +22,8 @@ defined( 'ABSPATH' ) || exit;
  * The button is empty for an order without a posting. It is off, with the reason as its tooltip, for a user who may not edit the order,
  * for an account whose key cannot write, and for a posting that cannot have a label ({@see Posting_Action_Gate}: finished, not ready by
  * the adapter's own word, or not allowed by the marketplace), so no request is possible. While the marketplace is making the label the
- * script turns it off with the table's own sentence, and downloads the PDF once it is ready.
+ * script turns it off with the table's own sentence, and hands the labels over once they are ready: a file is downloaded, a page of
+ * stickers gets a link to open it.
  *
  * @since 2.1.13
  */
@@ -123,7 +124,7 @@ final class Label_Button {
 		wp_enqueue_script( self::ASSET_HANDLE, $this->assets_url . 'js/admin/order-label' . \Woodev_Plugin::get_assets_suffix() . '.js', [], $this->version, true );
 
 		return sprintf(
-			'<span class="woodev-mp-label-wrap"><button type="button" class="button %1$s%2$s" aria-disabled="%3$s"%4$s data-url="%5$s" data-account="%6$d" data-row="%7$s" data-nonce="%8$s" data-preparing="%9$s" data-waiting="%10$s" data-failed="%11$s">%12$s</button><span class="description woodev-mp-label__status" role="status"></span></span>',
+			'<span class="woodev-mp-label-wrap"><button type="button" class="button %1$s%2$s" aria-disabled="%3$s"%4$s data-url="%5$s" data-account="%6$d" data-row="%7$s" data-nonce="%8$s" data-preparing="%9$s" data-waiting="%10$s" data-failed="%11$s" data-open="%12$s">%13$s</button><span class="description woodev-mp-label__status" role="status"></span></span>',
 			esc_attr( self::BUTTON_CLASS ),
 			'' === $off_reason ? '' : ' disabled',
 			'' === $off_reason ? 'false' : 'true',
@@ -135,6 +136,7 @@ final class Label_Button {
 			esc_attr__( 'Маркетплейс готовит этикетку…', 'woodev-plugin-framework' ),
 			esc_attr__( 'Этикетка ещё готовится. Обновите страницу чуть позже и нажмите кнопку снова.', 'woodev-plugin-framework' ),
 			esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ),
+			esc_attr__( 'Открыть этикетки для печати', 'woodev-plugin-framework' ),
 			esc_html__( 'Этикетка', 'woodev-plugin-framework' )
 		);
 	}

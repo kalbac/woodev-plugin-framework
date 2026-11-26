@@ -145,6 +145,21 @@ class ActionResponseTest extends TestCase {
 		$this->assertSame( [ 'https://shop.example', 'https://admin.shop.example:8443' ], $body['download']['origins'] );
 	}
 
+	public function test_a_page_to_show_is_marked_only_when_the_provider_says_so(): void {
+		Functions\when( 'wp_parse_url' )->alias( static fn( $u, $component = -1 ) => parse_url( $u, $component ) );
+		Functions\when( 'home_url' )->justReturn( 'https://shop.example' );
+		Functions\when( 'site_url' )->justReturn( 'https://shop.example' );
+		Functions\when( 'admin_url' )->justReturn( 'https://shop.example/wp-admin/' );
+		$action = $this->definition->get_action( 'labels' );
+		$result = [ 'requested' => 1, 'accepted' => 1, 'skipped' => 0, 'failed' => 0, 'download' => [ 'url' => '/wp-admin/x', 'open' => true ] ];
+
+		$this->assertTrue( Action_Response::apply( $this->definition, $action, $result )['download']['open'] );
+
+		$result['download']['open'] = false;
+
+		$this->assertArrayNotHasKey( 'open', Action_Response::apply( $this->definition, $action, $result )['download'] );
+	}
+
 	public function test_a_download_file_name_is_a_bare_name(): void {
 		$download = $this->definition->get_action( 'labels' );
 		$result   = [ 'requested' => 1, 'accepted' => 1, 'skipped' => 0, 'failed' => 0, 'download' => [ 'url' => '/wp-admin/x', 'filename' => '../x.pdf' ] ];

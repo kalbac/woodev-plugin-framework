@@ -27,8 +27,9 @@ defined( 'ABSPATH' ) || exit;
  * - `requested`, `accepted`, `skipped`, `failed` — "accepted" means saved or queued, never
  *   completed remotely;
  * - optional `queued` (true when the work runs in the background), `rows` (the changed rows),
- *   `removed_ids`, `groups`, `messages`, and `download` (`url`, optional `filename`) for a
- *   download action;
+ *   `removed_ids`, `groups`, `messages`, and `download` (`url`, optional `filename`, and
+ *   `open` (since 2.1.28) `true` when the address is a page to show rather than a file to save)
+ *   for a download action;
  * - optional `run` (`id`, `products_total`) when an «every row under the filter» apply started a
  *   background run: the engine keeps exactly those two keys.
  *
@@ -331,11 +332,17 @@ final class Action_Response {
 			throw new \UnexpectedValueException( 'a download file name has no path.' );
 		}
 
-		return [
+		$body = [
 			'url'      => $download['url'],
 			'filename' => $filename,
 			'origins'  => self::own_origins(),
 		];
+
+		if ( true === ( $download['open'] ?? false ) ) {
+			$body['open'] = true;
+		}
+
+		return $body;
 	}
 
 	/**

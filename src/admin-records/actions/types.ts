@@ -47,6 +47,8 @@ export interface DownloadTarget {
 	filename: string;
 	/** The origins the server serves this site from (the front end and the admin may differ); the guard's allowlist. */
 	origins: string[];
+	/** The address is a page to show rather than a file to save: it opens in a new tab, so the table stays. */
+	open?: boolean;
 }
 
 export interface ApplyResponse {
