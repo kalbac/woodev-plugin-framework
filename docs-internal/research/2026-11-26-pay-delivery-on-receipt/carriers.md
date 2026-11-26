@@ -20,7 +20,7 @@ Source: official OpenAPI file,
 | Thresholds | `delivery_recipient_cost_adv` — fee by the redeemed goods sum, only with the «частичная доставка» service [docs] |
 | Collected sum | `delivery_detail.payment_sum`, `payment_info` on the order [docs] |
 | Payout | `GET /v2/registries`: `payment_sum`, `agent_commission_sum`, `transfer_sum` per order [docs]. That the delivery fee appears there is [inference] |
-| Receipt | `GET /v2/check` returns the receipts; `seller` {name, inn, phone} puts the true seller on them, else the contract holder [docs] |
+| Receipt | `GET /v2/check` returns the receipts. Whose details they show is set on the order: `seller` {name, inn, phone} of the order request puts the true seller on them, else the contract holder [docs] |
 | Collection fee | UNVERIFIED (third-party sites say 3 % for companies) |
 
 ### Probe (`probe_cdek.py`, production API, tariff 136 office→office)
@@ -117,9 +117,13 @@ Sources: [create request](https://yandex.ru/support/delivery-profile/ru/api/othe
 | Case | `payment_method` | item `unit_price` | `delivery_cost` | Offers | Collection commission |
 |---|---|---|---|---|---|
 | y1 | `already_paid` | 3000 | 300 | 5 | none (the field is accepted and ignored in pricing) |
-| y2 | `card_on_receipt` | **0** | **300** | 5 | **9.15 ₽** (3.05 % of the fee only) |
+| y2 | `card_on_receipt` | **0** | **300** | 5 | **9.15 ₽**, on the fee only (3.05 % effective) |
 | y3 | `card_on_receipt` | 0 | 0 | 5 | 0 |
 | y4 control | `card_on_receipt` | 3000 | 300 | 5 | 100.65 ₽ |
+
+The API reports the rate as 2.5 % (`pricing_commission_on_delivery_payment`); 9.15 = 300 × 2.5 % × 1.22 and
+100.65 = 3300 × 2.5 % × 1.22 fit 2.5 % plus 22 % VAT [inference: no VAT field is returned]. All four cases kept
+`assessed_unit_price` at the goods value, 3000 ₽.
 
 UNVERIFIED: `offers/confirm` / `request/create` accepting zero prices, the pickup-point flow («получателю нужно
 оплатить»), what the receipt shows, and whether Yandex permits declaring a prepaid order this way. A courier under
@@ -131,7 +135,9 @@ UNVERIFIED: `offers/confirm` / `request/create` accepting zero prices, the picku
 `includes/orders/class-yandex-order-request.php`: `payment_method` = `card_on_receipt` when
 `Yandex_Rate_Rules::is_cod()` (filter `woodev_yandex_delivery_cod_payment_methods`), else `already_paid`;
 `delivery_cost` = shipping line total plus tax under cash on delivery, else 0. `unit_price` carries the goods price in
-**both** cases, so the new mode must send 0 explicitly — otherwise the buyer pays for the goods twice. Quote
+**both** cases, so the new mode must send 0 explicitly — otherwise the buyer pays for the goods twice.
+`assessed_unit_price` must stay the goods value: it is the declared value, which caps what Yandex pays for a lost or
+damaged parcel ([corporate terms](https://yandex.ru/legal/logistics_terms_of_use/ru/), liability) [docs]. Quote
 (`Yandex_Pricing`, commission on the delivery amount), the courier hiding and `Yandex_Payment_Gateway_Filter` follow
 the same `is_cod()` test.
 

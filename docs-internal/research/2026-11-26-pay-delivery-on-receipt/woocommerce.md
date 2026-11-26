@@ -18,7 +18,7 @@ are `157c4bd9`. Everything here is read from code; nothing was run on a shop.
 | Zero-cost rate in classic checkout | label without a price (no «Free!») | `wc-cart-functions.php:380` |
 | Zero shipping on an order | shows the method name only; «Free!» only without a method name | `abstract-wc-order.php:2250` |
 | Totals rows (emails, thank-you, account, pay page) | `woocommerce_get_order_item_totals` | `class-wc-order.php:2510` |
-| Checkout retry | a resumed pending order is rebuilt from the cart | `class-wc-checkout.php:390` |
+| Checkout retry | classic: resumed only if the cart hash (contents and total) matches, else a new order; items are rebuilt, order meta stays. Store API: the draft order is reused | `class-wc-checkout.php:401`, [design](design.md#retries-and-the-order-meta) |
 | Pay-for-order page | sets the chosen method and pays; **shipping is not recalculated** | `class-wc-form-handler.php:456` |
 
 Block checkout may word a zero-cost rate as free — UNVERIFIED.
@@ -50,9 +50,11 @@ delivery revenue on the WooCommerce order» is the correct accounting is card qu
 - **Zero total.** Goods fully discounted → cart total 0 → no payment step, while the session still remembers the
   gateway. The mode must not apply then, and the order creation must re-check the order's own payment method.
 - **Free delivery** (threshold, coupon): amount 0 → the mode simply does not apply.
-- **Pay-for-order and retries.** For an order that carries the meta, offer only gateways with the switch on (or the
-  buyer pays goods only and nobody collects delivery). A cash-on-delivery switch there would otherwise collect goods
-  with shipping 0.
+- **Pay-for-order.** For an order that carries the meta, offer only gateways with the switch on (or the buyer pays
+  goods only and nobody collects delivery). A cash-on-delivery switch there would otherwise collect goods with
+  shipping 0.
+- **Checkout retries.** The lines are rebuilt, but order meta survives: the amount must live on the shipping line,
+  with any order copy rewritten or deleted on each build ([design](design.md#retries-and-the-order-meta)).
 - **Merchant edits.** Changing the method, items or shipping in admin does not recompute the meta; export must show the
   amount and refuse a mismatch.
 - **Refunds.** Only the goods can be refunded in WooCommerce. A delivery fee the carrier already collected is returned

@@ -45,8 +45,9 @@ already has most of the plumbing for a price that depends on the payment method 
    ([gotcha](../../gotchas/cdek-moves-the-delivery-point-with-only-a-warning-when-money-is-to-be-collected.md)).
 3. **Refusal on receipt.** The goods are paid, the delivery fee is never collected, and the carrier still bills the
    merchant for delivery and return (stated for Yandex; UNVERIFIED for CDEK and Russian Post).
-4. **A payment change after the order exists** (pay-for-order page, retry) would keep delivery at 0 with a gateway that
-   does not collect it. Needs a guard, see the design.
+4. **A payment change after the order exists.** The pay-for-order page would keep delivery at 0 with a gateway that
+   does not collect it; a checkout retry can leave a stale order meta that makes the export collect delivery twice.
+   Guards in the [design](design.md#retries-and-the-order-meta).
 5. **Receipts (54-FZ).** The goods receipt stays with the merchant's side; the carrier's receipt covers what it
    collects. Yandex's terms forbid taking money on a *prepaid* shipment, so the workaround rests on declaring it
    pay-on-receipt with zero goods price — its legal and fiscal standing is UNVERIFIED.
@@ -66,7 +67,8 @@ already has most of the plumbing for a price that depends on the payment method 
 - Probes, 26.11.2026, on accounts the owner declared test-only: CDEK — 6 orders created and deleted (deletion
   requested for all; five confirmed by a follow-up 400, the sixth by `v2_entity_not_found`); Russian Post — one order
   created in «Новые», deleted, 404; Yandex — 4 `offers/create` calls, nothing confirmed. No courier call, no hand-over,
-  no batch.
+  no batch. The scripts only printed the deletion and verification replies to the console: they are **not** saved in
+  `raw/`, so the deletions rest on this note.
 
 ## Not verified
 
