@@ -8,7 +8,7 @@
 - [api/rest-not-for-browser-auth] **A REST endpoint can't back a browser-facing screen that relies on cookie login.** → [rest-endpoint-not-for-browser-cookie-auth](../gotchas/rest-endpoint-not-for-browser-cookie-auth.md) (s24)
 - [api/catalog-fetch-timeout] **«Плагины» catalog fetch uses the default 5s timeout — cold cache fails on a slow issuer.** → [extensions-catalog-fetch-5s-timeout](../gotchas/extensions-catalog-fetch-5s-timeout.md) (s25; fixed s26)
 - [api/http-headers] **A plugin name outside ASCII in the User-Agent gets HTTP 400 from CDEK on every call but OAuth; the product token is `woodev-<plugin id>`, never the name (#1248).** → [a-non-ascii-plugin-name-in-the-user-agent-gets-http-400-from-cdek](../gotchas/a-non-ascii-plugin-name-in-the-user-agent-gets-http-400-from-cdek.md) (s160)
-- [api/logging] **A 4xx body thrown in `do_pre_parse_response_validation()` was logged empty before framework 2.1.28; since #1509 the redacted raw body is logged. Secret keys are masked, personal data is not — older frameworks still need the plugin override.** → [a-4xx-body-thrown-in-the-pre-parse-validation-is-logged-empty](../gotchas/a-4xx-body-thrown-in-the-pre-parse-validation-is-logged-empty.md) (s202)
+- [api/logging] **A 4xx body thrown in `do_pre_parse_response_validation()` was logged empty before 2.1.28; now the redacted raw body (secret keys only; personal data is not masked).** → [a-4xx-body-thrown-in-the-pre-parse-validation-is-logged-empty](../gotchas/a-4xx-body-thrown-in-the-pre-parse-validation-is-logged-empty.md) (s202)
 
 ## Related
 
