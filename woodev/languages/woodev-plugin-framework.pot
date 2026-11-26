@@ -2079,6 +2079,30 @@ msgid "Проверка сохранённого сопоставления: ч�
 msgstr ""
 
 #: marketplace/admin/pages/mappings/class-view-config.php:220
+msgid "Артикулы новых карточек"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:221
+msgid "Какой артикул получит товар, когда для него будет создана карточка по сохранённому сопоставлению. Товаров, у которых карточка уже есть или отправлялась на маркетплейс, здесь нет: сопоставление их артикул не меняет."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:222
+msgid "Прочерк — артикул пока не получается. Что мешает, покажет проверка товаров."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:223
+msgid "Считаем артикулы…"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:224
+msgid "В этом сопоставлении нет товаров, которым нужна новая карточка."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:227
+msgid "Вариации"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:220
 msgid "Название профиля"
 msgstr ""
 

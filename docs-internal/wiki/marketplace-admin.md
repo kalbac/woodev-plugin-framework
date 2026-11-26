@@ -1537,6 +1537,26 @@ successful empty read means a link stands alone.
 cell of the variants table (any price reason, encoded twice because it may quote the marketplace), «Товары сайта» (tooltip,
 parent's error count, «only errors») and the count of held prices in the diagnostics report.
 
+## The articles of new cards in the mapping form (#2038)
+
+Card #2038 of the Wildberries design (§5.5, `2.1.27`). A marketplace whose article is built from more than the SKU shows the
+merchant, under a **saved** mapping, which article each product would get. One **optional** adapter interface,
+`Catalog\Article_Preview`; Ozon Seller 2.0.0 needs no change — without it there is no card, no route and no request
+([gotcha](../gotchas/a-method-added-to-an-adapter-interface-fatals-released-plugins.md)).
+
+| Method | Contract |
+|---|---|
+| `preview_article( $product, $mapping, $profile )` | asked per sellable unit (a simple product or one variation) that has **no card**; answers the article as the merchant knows it, not the unit key; `''` = cannot be worked out. Reads the shop and stored facts only, **no request to the marketplace**. `$mapping` and `$profile` are the saved ones on the screen; the profile is empty when none is chosen |
+
+**Who is listed** (`Mapping_Article_Preview`): the products of the mapping's categories (`Mapping_Products`, as the product
+check), their variations when variable, minus what the marketplace does not export (`Export_Facts::is_exportable()`) and
+minus units whose article is kept on any account — a link with `frozen_offer_id()` or one a request already carried
+(`Task_Ledger::sent_offer_id()`). A typed (pinned) article of one product on one account is not read.
+
+**Route:** `GET R/mappings/{id}/articles?offset=` → `{ products: [ { id, name, url, articles: [ { article, variations } ] } ],
+next_offset }`. At most 20 products per answer and 200 read per request; units of one article share a line. The view
+(`article-preview.tsx`) reads past stretches with nothing to show, reads again after a save, and offers «Показать ещё».
+
 ## Changing the article after the export (framework 2.1.13, #1860)
 
 Before 2.1.13 the article (`offer_id`) was frozen once a card was sent. Operator decision 19.11.2026: it stays changeable, and the change goes to the marketplace by its own

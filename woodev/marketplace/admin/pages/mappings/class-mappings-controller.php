@@ -24,6 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * | `GET R/dictionary?category=&field=&search=` | searches the values of a dictionary attribute |
  * | `GET/POST/DELETE R/mappings[/{id}]` | mapping CRUD |
  * | `POST R/mappings/{id}/copy`, `POST R/mappings/{id}/check` | copy; one batch of the product check |
+ * | `GET R/mappings/{id}/articles?offset=` | the articles new cards would get; only for an adapter with an article preview |
  * | `GET/POST/DELETE R/profiles[/{id}]` | profile CRUD |
  *
  * Every route runs the same order: the capability (and, from WordPress core, the cookie nonce) before anything is
@@ -109,19 +110,27 @@ final class Mappings_Controller {
 	private $product_fields;
 
 	/**
+	 * The article preview, null for an adapter without one.
+	 *
+	 * @var Mapping_Article_Preview|null
+	 */
+	private $articles;
+
+	/**
 	 * Creates the controller.
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param string               $owner          Plugin id.
-	 * @param string               $capability     Capability the user needs.
-	 * @param Mapping_Editor       $mappings       Mapping editor.
-	 * @param Profile_Editor       $profiles       Profile editor.
-	 * @param Mapping_Check        $check          Product check.
-	 * @param Category_Finder      $categories     Marketplace categories.
-	 * @param Profile_Choices      $choices        What the profile form offers.
-	 * @param Price_Source|null    $price_source   The marketplace's price source.
-	 * @param array<string,string> $product_fields Product fields a `field` source may name.
+	 * @param string                       $owner          Plugin id.
+	 * @param string                       $capability     Capability the user needs.
+	 * @param Mapping_Editor               $mappings       Mapping editor.
+	 * @param Profile_Editor               $profiles       Profile editor.
+	 * @param Mapping_Check                $check          Product check.
+	 * @param Category_Finder              $categories     Marketplace categories.
+	 * @param Profile_Choices              $choices        What the profile form offers.
+	 * @param Price_Source|null            $price_source   The marketplace's price source.
+	 * @param array<string,string>         $product_fields Product fields a `field` source may name.
+	 * @param Mapping_Article_Preview|null $articles The article preview, null for an adapter without one.
 	 */
 	public function __construct(
 		string $owner,
@@ -132,7 +141,8 @@ final class Mappings_Controller {
 		Category_Finder $categories,
 		Profile_Choices $choices,
 		?Price_Source $price_source,
-		array $product_fields
+		array $product_fields,
+		?Mapping_Article_Preview $articles = null
 	) {
 		$this->owner          = $owner;
 		$this->capability     = $capability;
@@ -143,6 +153,7 @@ final class Mappings_Controller {
 		$this->choices        = $choices;
 		$this->price_source   = $price_source;
 		$this->product_fields = $product_fields;
+		$this->articles       = $articles;
 	}
 
 	/**
@@ -178,6 +189,10 @@ final class Mappings_Controller {
 				'DELETE' => 'delete_profile',
 			],
 		];
+
+		if ( null !== $this->articles ) {
+			$routes[ $base . '/mappings' . $id . '/articles' ] = [ 'GET' => 'get_articles' ];
+		}
 
 		foreach ( $routes as $pattern => $handlers ) {
 			$endpoints = [];
@@ -234,6 +249,7 @@ final class Mappings_Controller {
 						'product_fields'    => View_Config::options( $this->product_fields ),
 						'profile_form'      => View_Config::profile_form( $this->choices, $this->price_source ),
 						'categories_loaded' => $this->categories->is_loaded(),
+						'article_preview'   => null !== $this->articles,
 					]
 				);
 			}
@@ -424,6 +440,37 @@ final class Mappings_Controller {
 		return $this->remote(
 			function () use ( $request, $body ) {
 				return $this->run_check( $this->route_id( $request ), $body );
+			}
+		);
+	}
+
+	/**
+	 * `GET R/mappings/{id}/articles`: the next products of a saved mapping that would get a new card, with their articles.
+	 *
+	 * The route exists only for an adapter with an article preview.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function get_articles( \WP_REST_Request $request ) {
+		$unknown = $this->reject_unknown_query( $request, [ 'offset' ] );
+
+		if ( null !== $unknown ) {
+			return $unknown;
+		}
+
+		return $this->remote(
+			function () use ( $request ) {
+				$offset   = $this->query_int( $request, 'offset' ) ?? 0;
+				$articles = null === $this->articles ? null : $this->articles->read( $this->route_id( $request ), $offset );
+
+				if ( null === $articles ) {
+					return $this->error( 'woodev_mappings_not_found', Mapping_Messages::mapping_not_found(), 404 );
+				}
+
+				return $this->respond( $articles );
 			}
 		);
 	}

@@ -8,11 +8,15 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Mappings;
 
 use Brain\Monkey\Functions;
+use Mockery;
 use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Module;
+use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Catalog\Article_Preview;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 use Woodev\Tests\Unit\TestCase;
 
@@ -118,6 +122,57 @@ final class MappingsWiringTest extends TestCase {
 			}
 		}
 		$this->assertSame( 14, $handlers );
+	}
+
+	/**
+	 * An adapter with an article preview gets the route of the articles; the one above, without it, does not.
+	 *
+	 * @return void
+	 */
+	public function test_an_adapter_with_an_article_preview_gets_the_articles_route(): void {
+		$plugin = new class( 'ozon', self::MENU ) extends Test_Marketplace_Plugin {
+			/** @var Marketplace_Adapter */
+			public $adapter;
+
+			/** @return Marketplace_Adapter */
+			public function get_marketplace_adapter(): Marketplace_Adapter {
+				return $this->adapter;
+			}
+		};
+
+		$plugin->adapter = $this->adapter_with_a_preview();
+		$routes          = [];
+
+		Functions\when( 'register_rest_route' )->alias(
+			static function ( string $namespace, string $pattern ) use ( &$routes ): void {
+				$routes[] = $pattern;
+			}
+		);
+
+		Mappings_Module::controller( $plugin )->register_routes();
+
+		$this->assertContains( '/admin/marketplace/ozon/mappings/mappings/(?P<id>[1-9][0-9]{0,18})/articles', $routes );
+		$this->assertCount( 11, $routes );
+	}
+
+	/**
+	 * The fake adapter, with an article preview added: the fake is final, so every call is passed on to it.
+	 *
+	 * @return Marketplace_Adapter
+	 */
+	private function adapter_with_a_preview(): Marketplace_Adapter {
+		$fake    = new Fake_Marketplace_Adapter();
+		$adapter = Mockery::mock( Marketplace_Adapter::class, Article_Preview::class );
+
+		foreach ( get_class_methods( Marketplace_Adapter::class ) as $method ) {
+			$adapter->shouldReceive( $method )->andReturnUsing(
+				static function ( ...$arguments ) use ( $fake, $method ) {
+					return $fake->$method( ...$arguments );
+				}
+			);
+		}
+
+		return $adapter;
 	}
 
 	/**

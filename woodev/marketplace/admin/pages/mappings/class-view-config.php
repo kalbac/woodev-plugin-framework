@@ -217,6 +217,15 @@ final class View_Config {
 			'check'               => __( 'Проверить товары этой категории', 'woodev-plugin-framework' ),
 			'checking'            => __( 'Проверяем товары…', 'woodev-plugin-framework' ),
 			'checkHelp'           => __( 'Проверка сохранённого сопоставления: что помешает выгрузке его товаров.', 'woodev-plugin-framework' ),
+			'articlesHeading'     => __( 'Артикулы новых карточек', 'woodev-plugin-framework' ),
+			'articlesHelp'        => __( 'Какой артикул получит товар, когда для него будет создана карточка по сохранённому сопоставлению. Товаров, у которых карточка уже есть или отправлялась на маркетплейс, здесь нет: сопоставление их артикул не меняет.', 'woodev-plugin-framework' ),
+			'articlesMissing'     => __( 'Прочерк — артикул пока не получается. Что мешает, покажет проверка товаров.', 'woodev-plugin-framework' ),
+			'articlesLoading'     => __( 'Считаем артикулы…', 'woodev-plugin-framework' ),
+			'articlesEmpty'       => __( 'В этом сопоставлении нет товаров, которым нужна новая карточка.', 'woodev-plugin-framework' ),
+			'articlesMore'        => __( 'Показать ещё', 'woodev-plugin-framework' ),
+			'columnProduct'       => __( 'Товар', 'woodev-plugin-framework' ),
+			'columnVariations'    => __( 'Вариации', 'woodev-plugin-framework' ),
+			'columnArticle'       => __( 'Артикул', 'woodev-plugin-framework' ),
 		];
 	}
 
