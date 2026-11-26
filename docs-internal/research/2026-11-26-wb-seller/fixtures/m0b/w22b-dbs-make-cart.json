@@ -1,0 +1,28 @@
+{
+  "label": "w22b-dbs-make-cart",
+  "recorded_at": "2026-11-26T01:24:42+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/test/dbs/orders/make",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        {
+          "sku": "2000000285011",
+          "amount": 6
+        }
+      ],
+      "deliveryType": "dbs"
+    }
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": null
+  }
+}

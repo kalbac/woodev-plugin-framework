@@ -3,7 +3,8 @@
 
 Decision researched (operator, 26.11.2026, [#1670](https://github.com/kalbac/woodev-plugin-framework/issues/1670)):
 build a Wildberries plugin for WooCommerce sellers, the same kind as Ozon Seller 2.0 on `woodev/marketplace/`.
-Research only: no code changed, no request sent to any Wildberries API host.
+The research itself changed no code and sent no request to any Wildberries API host; the follow-up
+measurement cards did — the sandbox results (M0b, #1996) are in [measurement.md](measurement.md).
 
 ## Files
 
@@ -15,6 +16,9 @@ Research only: no code changed, no request sent to any Wildberries API host.
 | [owner-questions.ru.md](owner-questions.ru.md) | 11 questions for the owner, Russian, each with a recommendation |
 | [card-plan.md](card-plan.md) | Estimated framework and plugin cards (superseded by the design spec) |
 | [decisions.md](decisions.md) | The owner's answers of 26.11.2026 (D1–D11) — final; they win over every recommendation here |
+| [measurement.md](measurement.md) | Phase-0 measurement log: M0b sandbox (#1996, done 26.11.2026) — flows, checks, fidelity gaps, write ledger; M0a live cabinet (#1995) appends here |
+| [fixtures/m0b/](fixtures/m0b/) | 85 sandbox request/response pairs (test data only, token redacted) — samples for the plugin's tests |
+| [sandbox-environment-2026-11-26.json](sandbox-environment-2026-11-26.json) | The official sandbox OpenAPI spec, extracted from the portal page (no yaml download exists); sha256 in measurement.md |
 
 ## Outcome
 
@@ -61,17 +65,22 @@ Also: the mapping page says «категориям Ozon» to every marketplace (
 
 ## Not verified
 
-- Anything by execution: no WB request (sandbox or live), no framework test, no rig. Every "fits" in the gap map is a
-  reading of the contract.
-- WB's HTML pages (release notes, sandbox guide, business-solutions catalogue, knowledge base, offer and platform
-  agreement) — the portal refused the automated fetch (HTTP 498).
+- By execution: the research itself sent no WB request; **M0b (#1996) since ran the sandbox flows** —
+  [measurement.md](measurement.md) holds the results and fixtures. No live-cabinet request yet (M0a, #1995),
+  no framework test, no rig. Every "fits" in the gap map is still a reading of the contract.
+- WB's HTML pages: the portal answers HTTP 498 to curl and embedded browsers, but a fresh headed full Chrome
+  passes — the sandbox spec, the DBS knowledge-base article and the FBS-marking instruction were read that way
+  ([gotcha](../../gotchas/wb-portal-498-passes-in-a-fresh-headed-chrome.md)). Release notes, the business-solutions
+  catalogue and the agreements were not read.
 - Whether a self-hosted paid plugin may use a Personal token; whether a Test token needs a seller account.
-- Whether WB lowers seller-warehouse stock on an order; whether `vendorCode` can be changed; real subcategory
-  requirements (documents, marking); sandbox fidelity.
+- Whether WB lowers seller-warehouse stock on an order **in production** (the sandbox does, and does not restore it
+  on cancel — measurement.md); whether `vendorCode` can be changed; real subcategory requirements (the sandbox
+  returns zero required characteristics — a fidelity gap, not the production answer).
 - Assembly deadlines and penalties (not in the specs).
 - Adapter-only workarounds in the gap map rows 9 and 22 were not tried.
-- Marking: the production refusal for a missing code and code validation (a sandbox run cannot show them); whether the
-  identifiers the plugin will not support can be entered in the cabinet for an order handled from the shop.
+- Marking: the production refusal for a missing code and code validation (the sandbox validates nothing and never
+  requires a code — measured); the exact cabinet steps for entering codes (the official article's accordion body
+  did not expand under automation). What the sandbox did show is in measurement.md.
 - Demand: not researched here (the operator decided to build; #1670).
 
 ## Related

@@ -1,0 +1,28 @@
+{
+  "label": "w23b-dbs-make-pickuppoint",
+  "recorded_at": "2026-11-26T01:24:43+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/test/dbs/orders/make",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        {
+          "sku": "2000000285028",
+          "amount": 1
+        }
+      ],
+      "deliveryType": "dbsPickupPoint"
+    }
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": null
+  }
+}

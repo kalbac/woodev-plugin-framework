@@ -1,0 +1,37 @@
+{
+  "label": "stocks-fbs-after-make",
+  "recorded_at": "2026-11-26T01:21:43+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/stocks/179667",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "chrtIds": [
+        416208,
+        416209
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "stocks": [
+        {
+          "chrtId": 416209,
+          "amount": 6
+        },
+        {
+          "chrtId": 416208,
+          "amount": 3
+        }
+      ]
+    }
+  }
+}

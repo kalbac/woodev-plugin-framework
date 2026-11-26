@@ -1,0 +1,147 @@
+{
+  "label": "cards-list-initial",
+  "recorded_at": "2026-11-26T01:17:33+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://content-api-sandbox.wildberries.ru/content/v2/get/cards/list",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "settings": {
+        "cursor": {
+          "limit": 10
+        },
+        "filter": {
+          "withPhoto": -1
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "cards": [
+        {
+          "nmID": 416210,
+          "imtID": 416207,
+          "nmUUID": "a25a1892-64ef-4c04-84bd-72de91432af3",
+          "subjectID": 192,
+          "subjectName": "Футболки",
+          "vendorCode": "OWS-TEE-2",
+          "brand": "OW",
+          "title": "OW sandbox tee two",
+          "description": "sandbox card two",
+          "needKiz": false,
+          "dimensions": {
+            "length": 30,
+            "width": 20,
+            "height": 3,
+            "weightBrutto": 0.3,
+            "isValid": false
+          },
+          "sizes": [
+            {
+              "chrtID": 416208,
+              "techSize": "0",
+              "wbSize": "1",
+              "skus": [
+                "2000000285028"
+              ]
+            }
+          ],
+          "createdAt": "2026-11-02T17:17:09.324Z",
+          "updatedAt": "2026-11-02T17:17:09.324Z"
+        },
+        {
+          "nmID": 416211,
+          "imtID": 416205,
+          "nmUUID": "0271141f-f105-402a-bc69-5a9209de0857",
+          "subjectID": 192,
+          "subjectName": "Футболки",
+          "vendorCode": "OWS-TEE-1",
+          "brand": "OW",
+          "title": "OW sandbox tee one",
+          "description": "sandbox card one",
+          "needKiz": false,
+          "dimensions": {
+            "length": 30,
+            "width": 20,
+            "height": 3,
+            "weightBrutto": 0.3,
+            "isValid": false
+          },
+          "sizes": [
+            {
+              "chrtID": 416209,
+              "techSize": "0",
+              "wbSize": "1",
+              "skus": [
+                "2000000285011"
+              ]
+            }
+          ],
+          "createdAt": "2026-11-02T17:17:09.319Z",
+          "updatedAt": "2026-11-02T17:17:09.319Z"
+        },
+        {
+          "nmID": 416212,
+          "imtID": 416206,
+          "nmUUID": "d2d823ba-ad25-4ede-80c3-0234ccbabd90",
+          "subjectID": 192,
+          "subjectName": "Футболки",
+          "vendorCode": "OWS-TEE-MS",
+          "brand": "OW",
+          "title": "OW sandbox tee multisize",
+          "description": "sandbox multi size",
+          "needKiz": false,
+          "dimensions": {
+            "length": 30,
+            "width": 20,
+            "height": 3,
+            "weightBrutto": 0.3,
+            "isValid": false
+          },
+          "sizes": [
+            {
+              "chrtID": 416213,
+              "techSize": "S",
+              "wbSize": "44",
+              "skus": [
+                "2000000285035"
+              ]
+            },
+            {
+              "chrtID": 416214,
+              "techSize": "M",
+              "wbSize": "46",
+              "skus": [
+                "2000000285042"
+              ]
+            },
+            {
+              "chrtID": 416217,
+              "techSize": "L",
+              "wbSize": "48",
+              "skus": [
+                "2000000285059"
+              ]
+            }
+          ],
+          "createdAt": "2026-11-02T17:17:09.294Z",
+          "updatedAt": "2026-11-02T17:17:09.294Z"
+        }
+      ],
+      "cursor": {
+        "updatedAt": "2026-11-02T17:17:09Z",
+        "nmID": 416212,
+        "total": 3
+      }
+    }
+  }
+}

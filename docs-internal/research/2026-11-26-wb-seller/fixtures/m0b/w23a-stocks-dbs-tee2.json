@@ -1,0 +1,28 @@
+{
+  "label": "w23a-stocks-dbs-tee2",
+  "recorded_at": "2026-11-26T01:24:41+00:00",
+  "request": {
+    "method": "PUT",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/stocks/192391",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "stocks": [
+        {
+          "chrtId": 416208,
+          "amount": 10
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": null
+  }
+}

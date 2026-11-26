@@ -1,0 +1,97 @@
+{
+  "label": "dbs-delivery-date",
+  "recorded_at": "2026-11-26T01:24:55+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/dbs/orders/delivery-date",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        192400,
+        192401,
+        192402,
+        192403,
+        192404,
+        192405,
+        192406
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "dTimeFrom": "02:43",
+          "dTimeTo": "04:58",
+          "dTimeFromOld": "",
+          "dTimeToOld": "",
+          "dDateOld": "",
+          "dDate": "2026-11-29",
+          "id": 192400
+        },
+        {
+          "dTimeFrom": "02:43",
+          "dTimeTo": "04:58",
+          "dTimeFromOld": "",
+          "dTimeToOld": "",
+          "dDateOld": "",
+          "dDate": "2026-11-29",
+          "id": 192401
+        },
+        {
+          "dTimeFrom": "02:43",
+          "dTimeTo": "04:58",
+          "dTimeFromOld": "",
+          "dTimeToOld": "",
+          "dDateOld": "",
+          "dDate": "2026-11-29",
+          "id": 192402
+        },
+        {
+          "dTimeFrom": "02:43",
+          "dTimeTo": "04:58",
+          "dTimeFromOld": "",
+          "dTimeToOld": "",
+          "dDateOld": "",
+          "dDate": "2026-11-29",
+          "id": 192403
+        },
+        {
+          "dTimeFrom": "02:43",
+          "dTimeTo": "04:58",
+          "dTimeFromOld": "",
+          "dTimeToOld": "",
+          "dDateOld": "",
+          "dDate": "2026-11-29",
+          "id": 192404
+        },
+        {
+          "dTimeFrom": "02:43",
+          "dTimeTo": "04:58",
+          "dTimeFromOld": "",
+          "dTimeToOld": "",
+          "dDateOld": "",
+          "dDate": "2026-11-29",
+          "id": 192405
+        },
+        {
+          "dTimeFrom": "00:55",
+          "dTimeTo": "04:58",
+          "dTimeFromOld": "",
+          "dTimeToOld": "",
+          "dDateOld": "",
+          "dDate": "2026-11-29",
+          "id": 192406
+        }
+      ]
+    }
+  }
+}

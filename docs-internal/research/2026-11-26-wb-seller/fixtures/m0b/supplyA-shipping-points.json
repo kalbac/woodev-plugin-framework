@@ -1,0 +1,25 @@
+{
+  "label": "supplyA-shipping-points",
+  "recorded_at": "2026-11-26T01:21:58+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/fbs/supplies/WB-GI-SAND-192394/shipping-points",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "body": {
+      "detail": "Please consult the https://dev.wildberries.ru/openapi/api-information",
+      "origin": "ag-marketplace-sandbox",
+      "status": 404,
+      "statusText": "Not Found",
+      "title": "path not found"
+    }
+  }
+}

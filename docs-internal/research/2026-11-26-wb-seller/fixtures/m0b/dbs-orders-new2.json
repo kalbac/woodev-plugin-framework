@@ -1,0 +1,269 @@
+{
+  "label": "dbs-orders-new2",
+  "recorded_at": "2026-11-26T01:24:44+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/dbs/orders/new",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "address": {
+            "fullAddress": "г.Москва, Сумская улица, 6к5, кв. 5545",
+            "longitude": 55.627058,
+            "latitude": 37.606586
+          },
+          "salePrice": 100000,
+          "requiredMeta": null,
+          "deliveryType": "dbs",
+          "comment": "example comment",
+          "options": {
+            "isB2b": false
+          },
+          "orderUid": "1257894000_ZFjPjsM3qfNrRDjcwqE13lwhAp6pVMge",
+          "article": "OWS-TEE-1",
+          "colorCode": "example",
+          "rid": "1257894000_dEDKewDXbzHkMrkEHjrwG92wb12iSV9f",
+          "createdAt": "2026-11-26T01:24:42.236Z",
+          "skus": [
+            "2000000285011"
+          ],
+          "id": 192400,
+          "warehouseId": 192391,
+          "nmId": 416211,
+          "chrtId": 416209,
+          "price": 100000,
+          "finalPrice": 100000,
+          "convertedFinalPrice": 100000,
+          "convertedPrice": 100000,
+          "currencyCode": 643,
+          "convertedCurrencyCode": 643,
+          "cargoType": 1,
+          "isZeroOrder": false,
+          "groupId": "01a21574-7068-782d-af87-b8026598b1bd"
+        },
+        {
+          "address": {
+            "fullAddress": "г.Москва, Сумская улица, 6к5, кв. 5545",
+            "longitude": 55.627058,
+            "latitude": 37.606586
+          },
+          "salePrice": 100000,
+          "requiredMeta": null,
+          "deliveryType": "dbs",
+          "comment": "example comment",
+          "options": {
+            "isB2b": false
+          },
+          "orderUid": "1257894000_ZFjPjsM3qfNrRDjcwqE13lwhAp6pVMge",
+          "article": "OWS-TEE-1",
+          "colorCode": "example",
+          "rid": "1257894000_9MZCaaoDuyPRsBCV4uYgq18wFwXUThGC",
+          "createdAt": "2026-11-26T01:24:42.25Z",
+          "skus": [
+            "2000000285011"
+          ],
+          "id": 192401,
+          "warehouseId": 192391,
+          "nmId": 416211,
+          "chrtId": 416209,
+          "price": 100000,
+          "finalPrice": 100000,
+          "convertedFinalPrice": 100000,
+          "convertedPrice": 100000,
+          "currencyCode": 643,
+          "convertedCurrencyCode": 643,
+          "cargoType": 1,
+          "isZeroOrder": false,
+          "groupId": "01a21574-7068-782d-af87-b8026598b1bd"
+        },
+        {
+          "address": {
+            "fullAddress": "г.Москва, Сумская улица, 6к5, кв. 5545",
+            "longitude": 55.627058,
+            "latitude": 37.606586
+          },
+          "salePrice": 100000,
+          "requiredMeta": null,
+          "deliveryType": "dbs",
+          "comment": "example comment",
+          "options": {
+            "isB2b": false
+          },
+          "orderUid": "1257894000_ZFjPjsM3qfNrRDjcwqE13lwhAp6pVMge",
+          "article": "OWS-TEE-1",
+          "colorCode": "example",
+          "rid": "1257894000_EbykVlG2exObQKkO9vLSFSbNxXLUGj3M",
+          "createdAt": "2026-11-26T01:24:42.264Z",
+          "skus": [
+            "2000000285011"
+          ],
+          "id": 192402,
+          "warehouseId": 192391,
+          "nmId": 416211,
+          "chrtId": 416209,
+          "price": 100000,
+          "finalPrice": 100000,
+          "convertedFinalPrice": 100000,
+          "convertedPrice": 100000,
+          "currencyCode": 643,
+          "convertedCurrencyCode": 643,
+          "cargoType": 1,
+          "isZeroOrder": false,
+          "groupId": "01a21574-7068-782d-af87-b8026598b1bd"
+        },
+        {
+          "address": {
+            "fullAddress": "г.Москва, Сумская улица, 6к5, кв. 5545",
+            "longitude": 55.627058,
+            "latitude": 37.606586
+          },
+          "salePrice": 100000,
+          "requiredMeta": null,
+          "deliveryType": "dbs",
+          "comment": "example comment",
+          "options": {
+            "isB2b": false
+          },
+          "orderUid": "1257894000_ZFjPjsM3qfNrRDjcwqE13lwhAp6pVMge",
+          "article": "OWS-TEE-1",
+          "colorCode": "example",
+          "rid": "1257894000_oKtfaKTmzQNZITnNreEpKFm1y2uR5OtN",
+          "createdAt": "2026-11-26T01:24:42.278Z",
+          "skus": [
+            "2000000285011"
+          ],
+          "id": 192403,
+          "warehouseId": 192391,
+          "nmId": 416211,
+          "chrtId": 416209,
+          "price": 100000,
+          "finalPrice": 100000,
+          "convertedFinalPrice": 100000,
+          "convertedPrice": 100000,
+          "currencyCode": 643,
+          "convertedCurrencyCode": 643,
+          "cargoType": 1,
+          "isZeroOrder": false,
+          "groupId": "01a21574-7068-782d-af87-b8026598b1bd"
+        },
+        {
+          "address": {
+            "fullAddress": "г.Москва, Сумская улица, 6к5, кв. 5545",
+            "longitude": 55.627058,
+            "latitude": 37.606586
+          },
+          "salePrice": 100000,
+          "requiredMeta": null,
+          "deliveryType": "dbs",
+          "comment": "example comment",
+          "options": {
+            "isB2b": false
+          },
+          "orderUid": "1257894000_ZFjPjsM3qfNrRDjcwqE13lwhAp6pVMge",
+          "article": "OWS-TEE-1",
+          "colorCode": "example",
+          "rid": "1257894000_zm5VpTGoIeqWRLnwM4WE61GDDae1Lmh9",
+          "createdAt": "2026-11-26T01:24:42.292Z",
+          "skus": [
+            "2000000285011"
+          ],
+          "id": 192404,
+          "warehouseId": 192391,
+          "nmId": 416211,
+          "chrtId": 416209,
+          "price": 100000,
+          "finalPrice": 100000,
+          "convertedFinalPrice": 100000,
+          "convertedPrice": 100000,
+          "currencyCode": 643,
+          "convertedCurrencyCode": 643,
+          "cargoType": 1,
+          "isZeroOrder": false,
+          "groupId": "01a21574-7068-782d-af87-b8026598b1bd"
+        },
+        {
+          "address": {
+            "fullAddress": "г.Москва, Сумская улица, 6к5, кв. 5545",
+            "longitude": 55.627058,
+            "latitude": 37.606586
+          },
+          "salePrice": 100000,
+          "requiredMeta": null,
+          "deliveryType": "dbs",
+          "comment": "example comment",
+          "options": {
+            "isB2b": false
+          },
+          "orderUid": "1257894000_ZFjPjsM3qfNrRDjcwqE13lwhAp6pVMge",
+          "article": "OWS-TEE-1",
+          "colorCode": "example",
+          "rid": "1257894000_H9b83y9u6dOCd6xiSn1EF6xppDHDlxuS",
+          "createdAt": "2026-11-26T01:24:42.305Z",
+          "skus": [
+            "2000000285011"
+          ],
+          "id": 192405,
+          "warehouseId": 192391,
+          "nmId": 416211,
+          "chrtId": 416209,
+          "price": 100000,
+          "finalPrice": 100000,
+          "convertedFinalPrice": 100000,
+          "convertedPrice": 100000,
+          "currencyCode": 643,
+          "convertedCurrencyCode": 643,
+          "cargoType": 1,
+          "isZeroOrder": false,
+          "groupId": "01a21574-7068-782d-af87-b8026598b1bd"
+        },
+        {
+          "address": {
+            "fullAddress": "г.Москва, Сумская улица, 6к5, кв. 5545",
+            "longitude": 55.627058,
+            "latitude": 37.606586
+          },
+          "salePrice": 120000,
+          "requiredMeta": null,
+          "deliveryType": "dbsPickupPoint",
+          "comment": "example comment",
+          "options": {
+            "isB2b": false
+          },
+          "orderUid": "1257894000_B4XXtBWmDi8Gzh3ik21qBzvpT7kDrSqN",
+          "article": "OWS-TEE-2",
+          "colorCode": "example",
+          "rid": "1257894000_Tqi1yVRsDRDKZfxtt4bmKb0KIZmWXAxh",
+          "createdAt": "2026-11-26T01:24:43.292Z",
+          "skus": [
+            "2000000285028"
+          ],
+          "id": 192406,
+          "warehouseId": 192391,
+          "nmId": 416210,
+          "chrtId": 416208,
+          "price": 120000,
+          "finalPrice": 120000,
+          "convertedFinalPrice": 120000,
+          "convertedPrice": 120000,
+          "currencyCode": 643,
+          "convertedCurrencyCode": 643,
+          "cargoType": 1,
+          "isZeroOrder": false,
+          "groupId": "01a21574-748c-7207-b950-9bb23466a2e6"
+        }
+      ]
+    }
+  }
+}

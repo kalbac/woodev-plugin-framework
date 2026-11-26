@@ -1,0 +1,25 @@
+{
+  "label": "w12-supplyA-close-wb",
+  "recorded_at": "2026-11-26T01:22:51+00:00",
+  "request": {
+    "method": "PATCH",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/test/fbs/supplies/WB-GI-SAND-192394/close",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orderIds": [
+        192393
+      ]
+    }
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": null
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "label": "subjects-sneakers",
+  "recorded_at": "2026-11-26T01:18:45+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://content-api-sandbox.wildberries.ru/content/v2/object/all?name=%D0%9A%D1%80%D0%BE%D1%81%D1%81%D0%BE%D0%B2%D0%BA%D0%B8&limit=10",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "data": [
+        {
+          "subjectID": 105,
+          "parentID": 2,
+          "subjectName": "Кроссовки",
+          "parentName": "Обувь"
+        },
+        {
+          "subjectID": 1382,
+          "parentID": 239,
+          "subjectName": "Роликовые кроссовки",
+          "parentName": "Спортивный товар"
+        }
+      ],
+      "error": false,
+      "errorText": "",
+      "additionalErrors": null
+    }
+  }
+}

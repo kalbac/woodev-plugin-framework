@@ -3,6 +3,7 @@
 > One line per gotcha in this topic; the detail is in the linked file. Map of every topic:
 > [../GOTCHAS.md](../GOTCHAS.md). Format and the write protocol: `DOCS-SCHEMA.md` → "GOTCHAS.md Format".
 
+- [tooling/wb] **WB portal HTML answers 498 to curl/embedded browsers, but a fresh headed full Chrome passes the challenge; the sandbox spec exists only in the page's `__redoc_state` — no yaml download.** → [wb-portal-498-passes-in-a-fresh-headed-chrome](../gotchas/wb-portal-498-passes-in-a-fresh-headed-chrome.md) (#1996)
 - [tooling/orca] **The first Orca bot on a computer is made in the UI (`bot create --offer` works only from a bot chat); group rooms and effort are UI-only; repos join a bot via `worktree set --parent-worktree folder:<home>`.** → [the-first-orca-bot-on-a-computer-is-made-in-the-ui](../gotchas/the-first-orca-bot-on-a-computer-is-made-in-the-ui.md)
 - [tooling/orca] **Stopping a running `watch-workers.py` (`pkill`, `TaskStop`) loses the deliveries it already acked — let it exit, or read its output file, and check `orchestration inbox --terminal run:<run>` after every restart.** → [killing-the-watchdog-loses-the-deliveries-it-acked](../gotchas/killing-the-watchdog-loses-the-deliveries-it-acked.md) (s232)
 - [tooling/orca] **A worker for another repo needs `--worktree new-top-level --repo id:<id>`; `new-child` lands it in the coordinator's repo.** → [an-orca-worker-for-another-repo-needs-new-top-level-and-repo-id](../gotchas/an-orca-worker-for-another-repo-needs-new-top-level-and-repo-id.md) (s231)

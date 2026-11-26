@@ -39,7 +39,7 @@
 | [`shipping/*`](gotcha-index/shipping.md) | 16 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 4 | Payload size and wire cost |
 | [`i18n/*`](gotcha-index/i18n.md) | 15 | Localization |
-| [`tooling/*`](gotcha-index/tooling.md) | 137 | Dev tooling, codex critic |
+| [`tooling/*`](gotcha-index/tooling.md) | 138 | Dev tooling, codex critic |
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
