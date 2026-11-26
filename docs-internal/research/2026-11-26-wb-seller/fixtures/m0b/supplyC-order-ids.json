@@ -1,0 +1,25 @@
+{
+  "label": "supplyC-order-ids",
+  "recorded_at": "2026-11-26T02:13:26+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/supplies/WB-GI-SAND-192408/order-ids",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orderIds": [
+        192407
+      ]
+    }
+  }
+}
