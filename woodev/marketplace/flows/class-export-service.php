@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Jobs\Export_Not_Scheduled;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
+use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -25,7 +26,8 @@ defined( 'ABSPATH' ) || exit;
  *   {@see Export_Facts::is_exportable()} says, are skipped), finds or creates each offer row, validates it with the same inputs
  *   the job will build from, stores the report on a blocked link and queues the valid ones (`unlinked` → `queued`) in batches; a
  *   group the adapter names ({@see Export_Grouping}) is never split between two batches.
- * - {@see self::reset()}: «Сбросить состояние», the link back to `unlinked` without touching the marketplace.
+ * - {@see self::reset()}: «Сбросить состояние», the link back to `unlinked` without touching the marketplace; for a
+ *   {@see Releases_Reset_Imports} marketplace its open import items are closed too.
  *
  * @since 2.1.0
  */
@@ -66,22 +68,33 @@ final class Export_Service {
 	private $validator;
 
 	/**
+	 * Closes the open import items of a reset card; null when the marketplace keeps them ({@see Releases_Reset_Imports}).
+	 *
+	 * @var Task_Ledger|null
+	 */
+	private $released;
+
+	/**
 	 * Creates the service.
 	 *
 	 * @since 2.1.0
+	 * @since 2.1.26 Added `$released`.
 	 *
 	 * @param Wpdb_Link_Store        $links     Links.
 	 * @param Export_Context_Builder $contexts  Export inputs.
 	 * @param Export_Scheduler       $scheduler Scheduler.
 	 * @param Export_Facts           $facts     The marketplace's facts.
 	 * @param Export_Validator       $validator Validator with the marketplace's rules.
+	 * @param Task_Ledger|null       $released  The task ledger, when a reset also closes the card's open import items
+	 *                                          ({@see Releases_Reset_Imports}); null when they stay open.
 	 */
-	public function __construct( Wpdb_Link_Store $links, Export_Context_Builder $contexts, Export_Scheduler $scheduler, Export_Facts $facts, Export_Validator $validator ) {
+	public function __construct( Wpdb_Link_Store $links, Export_Context_Builder $contexts, Export_Scheduler $scheduler, Export_Facts $facts, Export_Validator $validator, ?Task_Ledger $released = null ) {
 		$this->links     = $links;
 		$this->contexts  = $contexts;
 		$this->scheduler = $scheduler;
 		$this->facts     = $facts;
 		$this->validator = $validator;
+		$this->released  = $released;
 	}
 
 	/**
@@ -264,7 +277,31 @@ final class Export_Service {
 			}
 		}
 
-		return $this->links->reset_state( $account->id(), $link_ids );
+		return $this->reset_links( $account, $link_ids );
+	}
+
+	/**
+	 * «Сбросить состояние» for offer rows already known by their link id.
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param Account $account  Account.
+	 * @param int[]   $link_ids Link ids.
+	 * @return int Links reset.
+	 */
+	public function reset_links( Account $account, array $link_ids ): int {
+		$reset = $this->links->reset_state( $account->id(), $link_ids );
+
+		// Nothing reset (a refused write included) keeps the items: they are what still moves a link that stayed `submitted`.
+		if ( $reset > 0 && null !== $this->released ) {
+			foreach ( $this->released->open_items( $account->id(), $link_ids ) as $link_id => $items ) {
+				foreach ( $items as $item ) {
+					$this->released->settle_item( $item['task_id'], $link_id, Task_Ledger::ITEM_SKIPPED );
+				}
+			}
+		}
+
+		return $reset;
 	}
 
 	/**

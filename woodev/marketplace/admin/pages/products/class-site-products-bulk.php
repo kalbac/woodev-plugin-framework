@@ -1055,7 +1055,7 @@ final class Site_Products_Bulk {
 				$changed = $this->links->set_warehouse( $account->id(), $link_ids, (int) $warehouse > 0 ? (int) $warehouse : null );
 				break;
 			default:
-				return $this->links->reset_state( $account->id(), $link_ids );
+				return $this->export->reset_links( $account, $link_ids );
 		}
 
 		if ( in_array( $action, [ self::SYNC_STOCK_ON, self::SYNC_PRICE_ON, self::SET_WAREHOUSE ], true ) ) {

@@ -18,7 +18,11 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Provider;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
+use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Releasing_Lifecycle;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 use Woodev\Tests\Unit\TestCase;
 
@@ -167,6 +171,37 @@ final class SiteProductsModuleTest extends TestCase {
 
 		$this->assertFalse( Site_Products_Module::register_provider( $plugin, $this->accounts(), new Sqlite_Wpdb() ) );
 		$this->assertNull( Records_Registry::instance()->get( 'ozon', 'products' ) );
+	}
+
+	public function test_the_bulk_actions_close_a_reset_cards_imports_only_for_a_marketplace_that_asks_for_it(): void {
+		$released = static function ( Marketplace_Plugin $plugin, Wpdb_Account_Store $accounts ) {
+			$private = static function ( object $owner, string $name ) {
+				return \Closure::bind(
+					function () use ( $name ) {
+						return $this->$name;
+					},
+					$owner,
+					get_class( $owner )
+				)();
+			};
+			$bulk    = Site_Products_Module::bulk_for( $plugin, $accounts, new Sqlite_Wpdb() );
+
+			return $private( $private( $bulk, 'export' ), 'released' );
+		};
+		$releasing = new class( 'ozon', self::MENU ) extends Test_Marketplace_Plugin {
+			public function get_marketplace_adapter(): Marketplace_Adapter {
+				return new Fake_Marketplace_Adapter(
+					null,
+					[
+						'capabilities'   => [ Capability::CATALOG ],
+						'card_lifecycle' => new Scripted_Releasing_Lifecycle(),
+					]
+				);
+			}
+		};
+
+		$this->assertInstanceOf( Wpdb_Task_Ledger::class, $released( $releasing, $this->accounts() ) );
+		$this->assertNull( $released( new Test_Marketplace_Plugin( 'ozon', self::MENU ), $this->accounts() ) );
 	}
 
 	public function test_linking_by_article_counts_the_products_with_an_article_that_have_no_card_identity(): void {
