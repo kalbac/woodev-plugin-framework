@@ -10,7 +10,7 @@ card gets a critic of another lineage. Delivery code is not touched. «G n» is 
 
 | Id | Size | Depends on | Scope · acceptance |
 |---|---|---|---|
-| M0 — Measurement on a real cabinet | M | [access](access-needed.ru.md) | A feed of 2–3 ads on a public URL (profile, schedule, `upload`, fetch addresses), report v4 timing and message shapes, `avito_id` mapping, adopt a hand-published ad by `AvitoId`, a second feed beside an existing one; stock write/read (reserved, the «several items» switch, refusal without subscription); price by API then a reload (conflict C7); category fields of two categories; with separate permission one order: statuses, `items[].id`, labels, errors. Accept: every UNVERIFIED line marked proven or still open; money spent reported. |
+| M0 — Measurement on a test cabinet if support gives one, else a real one | M | [access](access-needed.ru.md) | A feed of 2–3 ads on a public URL (profile, schedule, `upload`, fetch addresses), report v4 timing and message shapes, `avito_id` mapping, adopt a hand-published ad by `AvitoId`, a second feed beside an existing one; stock write/read (reserved, the «several items» switch, refusal without subscription); price by API then a reload (conflict C7); category fields of two categories; with separate permission one order: statuses, `items[].id`, labels, errors. Accept: every UNVERIFIED line marked proven or still open; money spent reported. |
 | S0 — Design spec | M | M0, owner answers | Feed snapshot lifecycle and its safety rules, adoption, money safety, price/stock precedence, order actions, categories offered. Accept: critic pass; cards re-estimated. |
 
 ## Framework (`woodev-plugin-framework`)
@@ -21,9 +21,9 @@ card gets a critic of another lineage. Delivery code is not touched. «G n» is 
 | AF2 — Results without a task | M–L | AF1 | extends WF2 | G 7–8. Results read by article from reports; schedule-driven polling and long deadlines. Accept: late, partial and replaced reports. |
 | AF3 — Marketplace without warehouses | S–M | — | new | G 13. Capability; no warehouse selects or reasons; stock keyed without a warehouse. Accept: Ozon behaviour unchanged. |
 | AF4 — Conditional fields | M | S0 | new | G 4–5. Visible / required / hidden rules in `Field_Definition`, the mapping screen and the validator; account-level defaults if missing. |
-| AF5 — Link by marketplace number, adoption | M | S0 | extends WF3 | G 10. Link a product to a listing by its number or an old article; a seam to refuse adoption with missing fields. |
+| AF5 — Safe adoption of linked listings | S | AF1 | new | G 10a. The existing manual link stays; feed inclusion waits until required fields are filled, a seam to warn or refuse at link time, no first stock/price send before adoption. A typed-number input only if M0 shows the list is not enough. |
 | AF6 — Order actions | L | S0 | **= WF6** + forms | G 19–20. Cancel without reasons; adapter-declared actions, including ones with input (tracking number, courier interval, codes) and deadlines shown on the order. |
-| AF7 — Capability names, wording, dead contracts | S | AF6 | **= WF8**, part of G 12 | G 12, 26, 27. Export/link not tied to import; nouns from the descriptor. |
+| AF7 — Capability names, wording, dead contracts | S | AF6 | **= WF8**, part of G 12 | G 12, 26, 27. Export and linking not tied to import; nouns from the descriptor. |
 
 ## Plugin (new repository, name after Q2)
 
@@ -33,7 +33,7 @@ card gets a critic of another lineage. Delivery code is not touched. «G n» is 
 | AP2 — Categories, mappings, validation | L | AF4, AP1 | Tree and fields cache, value lists, common ad fields, address, delivery and document fields, photo rules and WebP conversion. |
 | AP3 — Feed and autoload profile | L | AF1, AP2 | Ad XML, profile read-merge-write, schedule with confirmation, no paid options, upload button with a warning, host checks (public HTTPS, blocked bots). |
 | AP4 — Load report and listing states | M | AF2, AP3 | Uploads, per-ad messages in the products table, `avito_id` collection. |
-| AP5 — Existing listings | M | AF5, AP3 | Listing list, linking, adoption. |
+| AP5 — Existing listings | M | AF5, AP3 | Resolver (ids for hand-published ads), linking on the existing screen (needs AF7, or the declared-capability workaround of G 12), adoption. |
 | AP6 — Stock and prices | M | AF3, AP4 | Writers, readers, formula from M0, subscription refusal. |
 | AP7 — Delivery orders | L | AF6, AP5 | Poll, mapping, accounting, confirm/reject, courier slot, deadlines. |
 | AP8 — Labels and «Честный знак» | M | AP7 | PDF A6 / thermal; codes before confirm. |
@@ -52,8 +52,8 @@ AP5 + AF6 → AP7 → AP8 → AP9
 AF7 after AF6
 ```
 
-2 phase-0 cards, 7 framework cards (2 L, 3 M or M–L, 2 S or S–M), 9 plugin cards (3 L, 6 M). If Wildberries ships
-first, AF6 and AF7 shrink to their Avito additions; AF2 and AF5 start from WB's work.
+2 phase-0 cards, 7 framework cards (2 L, 2 M or M–L, 3 S or S–M), 9 plugin cards (3 L, 6 M). If Wildberries ships
+first, AF6 and AF7 shrink to their Avito additions; AF2 starts from WB's work.
 
 ## Related
 

@@ -19,8 +19,8 @@ to `api.avito.ru`.
 
 Feasible, on the existing module, with **a publication model the module does not have**. Avito goods listings cannot
 be created or edited by API: the shop publishes a feed file that Avito downloads, and learns the result from a
-report. Stock, price and delivery orders are ordinary API calls. Accounts, jobs, prices, order writing, labels and
-the pages carry over; four v1 paths need framework changes first.
+report. Stock, price and delivery orders are ordinary API calls. Accounts, jobs, prices, order writing, labels,
+manual linking and the pages carry over; three v1 paths need framework changes first.
 
 ## Top findings
 
@@ -33,12 +33,13 @@ the pages carry over; four v1 paths need framework changes first.
    links) is the full list: a missing ad is archived. «v4» is the report API; v2/v3 reports end 08.03.2027.
 3. **The feed can spend the seller's money** (paid placement and promotion fields), and the API load trigger ignores
    the schedule's publication limits. Money safety belongs in the design.
-4. **Four framework blockers:** feed publication, results without a task number, stock without a warehouse (today
-   nothing would be sent), linking hand-published listings by their Avito number. Seven items are shared with the
-   Wildberries plan.
+4. **Three framework blockers:** feed publication, results without a task number, stock without a warehouse (today
+   nothing would be sent). Existing listings can be linked by hand on the module's own screen; adopting them into the
+   feed safely is a small addition. Six changes are shared with the Wildberries plan.
 5. **Orders are poll-only**, cancel has no reasons, required actions have deadlines that cancel the order, labels
    (PDF) exist for pickup-point orders only, buyer data only for the seller's own delivery.
-6. **No seller sandbox** and no documented read-only key: measurement happens on a real cabinet with real listings.
+6. **No public seller sandbox was found**; whether support issues test cabinets is UNVERIFIED, and no read-only key
+   is documented. Until support answers, the fallback is measurement on a real cabinet with real listings.
 7. **API terms 2.7 forbid Avito's trademarks and name in an application.** Settle the product name before any
    identifier is fixed.
 8. Official pages disagree on eight points, including which edits survive a feed reload — to be measured.
@@ -69,6 +70,8 @@ the pages carry over; four v1 paths need framework changes first.
   limits, stock parameters in XLSX templates.
 - Whether account-wide defaults for adapter fields already exist in mappings or settings (gap map row 5); the
   fake-warehouse workaround (row 13).
+- The manual-linking path with an Avito-like adapter: the made-up `Id` for hand-published ads and declaring
+  `IMPORT_PRODUCTS` without `Card_Importer` (rows 10 and 12) were read in code, not tried.
 - The existing third-party generators (formats, ids, migration path).
 
 ## Related
