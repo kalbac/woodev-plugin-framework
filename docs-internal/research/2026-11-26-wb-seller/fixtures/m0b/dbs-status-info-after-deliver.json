@@ -1,0 +1,76 @@
+{
+  "label": "dbs-status-info-after-deliver",
+  "recorded_at": "2026-11-26T01:25:12+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/dbs/orders/status/info",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "ordersIds": [
+        192400,
+        192401,
+        192402,
+        192403,
+        192404,
+        192405,
+        192406
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "errors": null,
+          "orderId": 192400,
+          "supplierStatus": "deliver",
+          "wbStatus": "waiting"
+        },
+        {
+          "errors": null,
+          "orderId": 192401,
+          "supplierStatus": "deliver",
+          "wbStatus": "waiting"
+        },
+        {
+          "errors": null,
+          "orderId": 192402,
+          "supplierStatus": "deliver",
+          "wbStatus": "waiting"
+        },
+        {
+          "errors": null,
+          "orderId": 192403,
+          "supplierStatus": "deliver",
+          "wbStatus": "waiting"
+        },
+        {
+          "errors": null,
+          "orderId": 192404,
+          "supplierStatus": "new",
+          "wbStatus": "waiting"
+        },
+        {
+          "errors": null,
+          "orderId": 192405,
+          "supplierStatus": "new",
+          "wbStatus": "waiting"
+        },
+        {
+          "errors": null,
+          "orderId": 192406,
+          "supplierStatus": "new",
+          "wbStatus": "waiting"
+        }
+      ]
+    }
+  }
+}

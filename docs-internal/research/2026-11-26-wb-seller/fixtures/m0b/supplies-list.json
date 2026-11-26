@@ -1,0 +1,49 @@
+{
+  "label": "supplies-list",
+  "recorded_at": "2026-11-26T01:33:11+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/supplies?limit=10&next=0",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "next": 2,
+      "supplies": [
+        {
+          "id": "WB-GI-SAND-192394",
+          "isPickupPointShipmentAllowed": true,
+          "done": true,
+          "createdAt": "2026-11-26T01:21:44.703Z",
+          "closedAt": "2026-11-26T01:22:38.105Z",
+          "scanDt": "2026-11-26T01:22:51.609Z",
+          "name": "M0b test supply A",
+          "cargoType": 1,
+          "destinationOfficeId": 1,
+          "spotAvailable": false
+        },
+        {
+          "id": "WB-GI-SAND-192397",
+          "isPickupPointShipmentAllowed": true,
+          "done": true,
+          "createdAt": "2026-11-26T01:23:29.336Z",
+          "closedAt": "2026-11-26T01:24:01.176Z",
+          "scanDt": null,
+          "name": "M0b test supply B",
+          "cargoType": 1,
+          "destinationOfficeId": 1,
+          "spotAvailable": false
+        }
+      ]
+    }
+  }
+}

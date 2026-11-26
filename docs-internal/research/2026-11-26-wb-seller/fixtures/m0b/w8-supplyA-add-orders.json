@@ -1,0 +1,26 @@
+{
+  "label": "w8-supplyA-add-orders",
+  "recorded_at": "2026-11-26T01:21:55+00:00",
+  "request": {
+    "method": "PATCH",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/supplies/WB-GI-SAND-192394/orders",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        192392,
+        192393
+      ]
+    }
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": null
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "label": "stocks-dbs-readback",
+  "recorded_at": "2026-11-26T01:21:03+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/stocks/192391",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "chrtIds": [
+        416209,
+        440889
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "stocks": [
+        {
+          "chrtId": 416209,
+          "amount": 10
+        },
+        {
+          "chrtId": 440889,
+          "amount": 10
+        }
+      ]
+    }
+  }
+}

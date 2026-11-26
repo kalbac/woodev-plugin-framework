@@ -1,0 +1,75 @@
+{
+  "label": "fbs-meta-before-code",
+  "recorded_at": "2026-11-26T01:23:31+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/orders/meta",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        192395,
+        192396
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "id": 192395,
+          "meta": {
+            "imei": {
+              "value": null
+            },
+            "uin": {
+              "value": null
+            },
+            "gtin": {
+              "value": null
+            },
+            "sgtin": {
+              "value": null
+            },
+            "expiration": {
+              "value": null
+            },
+            "customsDeclaration": {
+              "value": null
+            }
+          }
+        },
+        {
+          "id": 192396,
+          "meta": {
+            "imei": {
+              "value": null
+            },
+            "uin": {
+              "value": null
+            },
+            "gtin": {
+              "value": null
+            },
+            "sgtin": {
+              "value": null
+            },
+            "expiration": {
+              "value": null
+            },
+            "customsDeclaration": {
+              "value": null
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "label": "w5-price-task-kiz",
+  "recorded_at": "2026-11-26T01:20:55+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://discounts-prices-api-sandbox.wildberries.ru/api/v2/upload/task",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "data": [
+        {
+          "nmID": 440890,
+          "price": 2500,
+          "discount": 0
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "data": null,
+      "error": true,
+      "errorText": "all item Nos. are specified incorrectly, or the specified prices and discounts are already set",
+      "additionalErrors": null
+    }
+  }
+}

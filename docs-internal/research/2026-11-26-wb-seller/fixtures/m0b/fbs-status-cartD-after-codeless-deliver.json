@@ -1,0 +1,33 @@
+{
+  "label": "fbs-status-cartD-after-codeless-deliver",
+  "recorded_at": "2026-11-26T02:13:36+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/orders/status",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        192407
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "id": 192407,
+          "supplierStatus": "complete",
+          "wbStatus": "waiting"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "label": "prices-416210",
+  "recorded_at": "2026-11-26T01:18:09+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://discounts-prices-api-sandbox.wildberries.ru/api/v2/list/goods/filter?filterNmID=416210&limit=10",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "data": {
+        "listGoods": [
+          {
+            "nmID": 416210,
+            "vendorCode": "OWS-TEE-2",
+            "sizes": [
+              {
+                "sizeID": 416208,
+                "price": 1200,
+                "discountedPrice": 1200,
+                "clubDiscountedPrice": 1200,
+                "techSizeName": "0"
+              }
+            ],
+            "currencyIsoCode4217": "RUB",
+            "discount": 0,
+            "clubDiscount": 0,
+            "editableSizePrice": false
+          }
+        ]
+      },
+      "error": false,
+      "errorText": ""
+    }
+  }
+}

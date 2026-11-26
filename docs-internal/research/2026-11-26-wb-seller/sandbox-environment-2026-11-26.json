@@ -1,0 +1,2949 @@
+{
+ "openapi": "3.0.1",
+ "info": {
+  "title": "Seller API Test Environment",
+  "x-file-name": "sandbox-environment",
+  "version": "",
+  "description": "Use the test scope of the service to set up the integration and emulate buyers actions.<br>\nTo test the main work scenarios, use the test methods specified in the **Sandbox** blocks of the [Wb API documentation](/docs/openapi/api-information).<br><br>\nFor [authorization](/en/docs/openapi/api-information#tag/authorization) you need to use the token with the **Test scope** type. <br> <br>\nThe using of the test scope does not carry the risk of unintentional disclosure of information.\n"
+ },
+ "security": [
+  {
+   "HeaderApiKey": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "Seller API Test Environment",
+   "description": "<div class=\"api-description\">\n\nUse the test scope of the service to set up the integration and emulate buyers actions.<br>\nTo test the main work scenarios, use the test methods specified in the **Sandbox** blocks of the [Wb API documentation](/docs/openapi/api-information).<br><br>\nFor [authorization](/en/docs/openapi/api-information#tag/authorization) you need to use the token with the **Test scope** type. <br> <br>\nThe using of the test scope does not carry the risk of unintentional disclosure of information.\n\n\n</div>",
+   "x-traitTag": true
+  },
+  {
+   "name": "promotion",
+   "x-displayName": "Promotion",
+   "description": "To access the test environment, use the `https://advert-api-sandbox.wildberries.ru` address.\n<br>\nCampaigns will be deleted 30 days after the last modifications.\n<br>\nDeleted campaigns (`-1` status) will be removed after 3 minutes.\n<br>\nA maximum of 50 campaigns can be created.\n<br>\nThe maximum number of requests is the same as in the main API.\n<br>\n<br>\nStatistics are generated only for campaigns of type `8` — automatic campaign and `9` — Auction.<br>\nTo generate statistics:\n- the campaign must be in status `9`— on impressions\n- type `8` campaign must have a positive bid\n- type `9` campaign must have a positive bid in the catalog\n- the campaign budget must be positive\n<br>\n<br>\nYou can list items in the <a href='/en/sandbox'>content sandbox</a> and use it in the Promotion sandbox.\n"
+  },
+  {
+   "name": "marketplaceFbs",
+   "x-displayName": "Marketplace FBS",
+   "description": "To access the test environment, use the `https://marketplace-api-sandbox.wildberries.ru` address.\n<br>\n<br>\nYou can list items in the <a href='/en/sandbox'>content sandbox</a> and use the generated listing SKUs in the marketplace sandbox.\n<br>\n<br>\nRegular expressions are used for:\n  - Supplies IDs — `^WB-GI-SAND-[0-9]+$`\n  - Boxes IDs — `^WB-TRBX-SAND-[0-9]+$`\n\n# Status Model for FBS\n\nThere are two types of [statuses](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/postV3OrdersStatus) for the assembly orders:\n  1. **supplierStatus** — a status that can be changed by the seller.\n  2. **wbStatus** — a status in the system. It can only be changed by WB.\n\nIn the sandbox, you can emulate WB actions by manually changing the `wbStatus` field. Use the following statuses:\n\n| **wbStatus** | **supplierStatus**   | Description            | How to move the order to this status |\n|--------------|-------|----------------------|--------------------------------------|\n| **waiting** | **new**      | New assembly order | [Create a test FBS assembly order](./sandbox-environment#tag/marketplaceFbs/operation/postV3TestFbsOrdersMake) |\n| **declined_by_client** | **new**   | The assembly order was canceled by the buyer. It is available for one hour after [creating an assembly order](./sandbox-environment#tag/marketplaceFbs/operation/postV3TestFbsOrdersMake), only in the sandbox.   | [Notify that the buyer has canceled the order](./sandbox-environment#tag/marketplaceFbs/operation/patchV3TestFbsOrdersOrderIdDecline) |\n| **waiting** | **confirm**  | On assembly | [Add the order to the supply](/en/docs/openapi/orders-fbs#tag/fbsSupplies/operation/patchV3SuppliesSupplyIdOrders)\n| **canceled** | **cancel**   | The assembly order was canceled by the seller. Available at any stage until [the supply is moved to the delivery](/en/docs/openapi/orders-fbs#tag/fbsSupplies/operation/patchV3SuppliesSupplyIdDeliver).   | [Cancel the assembly order](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/patchV3OrdersOrderIdCancel) |\n| **waiting** | **complete** | In delivery  | [Move the supply to the delivery](/en/docs/openapi/orders-fbs#tag/fbsSupplies/operation/patchV3SuppliesSupplyIdDeliver) |\n| **sorted** | **complete** | WB has accepted the assembly order  | [Close supply](./sandbox-environment#tag/marketplaceFbs/operation/patchV3TestFbsSuppliesSupplyIdClose) |\n| **ready_for_pickup** | **complete** | The order has arrived at the pickup point | [Notify that the order has arrived at the pickup point](./sandbox-environment#tag/marketplaceFbs/operation/patchV3TestFbsOrdersOrderIdDeliver) |\n| **sold** | **complete** | The buyer has received the order at the pickup point | [Notify that the order has been accepted by the buyer](./sandbox-environment#tag/marketplaceFbs/operation/patchV3TestFbsOrdersOrderIdReceive) |\n| **canceled_by_client** | **complete** | The buyer has canceled the order upon receipt at the pickup point | [Notify that the buyer has declined the order](./sandbox-environment#tag/marketplaceFbs/operation/patchV3TestFbsOrdersOrderIdReject) |\n| **defect** | **complete** | The buyer has canceled the order due to a defect | [Notify that the buyer has canceled the order due to a defect](./sandbox-environment#tag/marketplaceFbs/operation/patchV3TestFbsOrdersOrderIdDefect) |\n"
+  },
+  {
+   "name": "marketplaceDbs",
+   "x-displayName": "Marketplace DBS",
+   "description": "To access the test environment, use the `https://marketplace-api-sandbox.wildberries.ru` address.\n<br>\n<br>\nYou can list items in the <a href='/en/sandbox'>content sandbox</a> and use the generated listing SKUs in the marketplace sandbox.\n<br>\n<br>\nFor the order retrieval code in the [confirmation of receipt](/en/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusReceive) and [rejection of receipt](/en/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusReject) methods, you can use any combination of characters.\n\n# Status Model for DBS\n\nThere are two types of [statuses](/en/docs/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusInfo) for the assembly orders:\n  1. **supplierStatus** — a status that can be changed by the seller.\n  2. **wbStatus** — a status in the system. It can only be changed by WB.\n\nIn the sandbox, you can emulate WB actions by manually changing the `wbStatus` field. Use the following statuses:\n\n| **wbStatus** | **supplierStatus**   | Description            | How to move the order to this status |\n|--------------|-------|----------------------|--------------------------------------|\n| **waiting** | **new**      | New assembly order | [Create a test DBS assembly order](./sandbox-environment#tag/marketplaceDbs/operation/postV3TestDbsOrdersMake) |\n| **declined_by_client** | **new**   | The assembly order was canceled by the buyer. It is available for one hour after [creating an assembly order](./sandbox-environment#tag/marketplaceDbs/operation/postV3TestDbsOrdersMake), only in the sandbox.   | [Notify that the buyer has canceled the order](./sandbox-environment#tag/marketplaceDbs/operation/patchV3TestDbsOrdersOrderIdDecline) |\n| **canceled** | **cancel**   | The assembly order was canceled by the seller. Available before [transferring the assembly order to assembly](/en/docs/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusConfirm).   | [Cancel the assembly order](/en/docs/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusCancel) |\n| **waiting** | **confirm**  | On assembly | [Transfer assembly order to assembly](/en/docs/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusConfirm) |\n| **waiting** | **deliver** | In delivery  | [Transfer assembly order to delivery](/en/docs/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusDeliver) |\n| **sold** | **receive** | The buyer has received the order | [Notify that the order has been accepted by the buyer](/en/docs/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusReceive) |\n| **canceled_by_client** | **reject** | The buyer has canceled the order upon receipt | [Notify that the buyer has declined the order](/en/docs/openapi/dbs#tag/dbsAssemblyOrders/operation/postV3DbsOrdersStatusReject) |\n"
+  },
+  {
+   "name": "marketplaceInStorePickup",
+   "x-displayName": "Marketplace In-Store Pickup",
+   "description": "To access the test environment, use the `https://marketplace-api-sandbox.wildberries.ru` address.\n<br>\n<br>\nYou can list items in the <a href='/en/sandbox'>content sandbox</a> and use the generated listing SKUs in the marketplace sandbox.\n<br>\n<br>\nRegular expressions are used for:\n  - Supplies IDs — `^WB-GI-SAND-[0-9]+$`\n  - Boxes IDs — `^WB-TRBX-SAND-[0-9]+$`\n\n<div class=\"description_important\">\n  Always specify the combination <code>\"11111\"</code> in the <code>passCode</code> request parameter of the test method for <a href='/en/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/postV3ClickCollectOrdersClientIdentity'>checking if the assembly task belongs to the buyer</a>.\n</div>\n\n# Status Model for In-Store Pickup\n\nThere are two types of [statuses](/en/docs/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/postV3ClickCollectOrdersStatusInfo) for the assembly orders:\n  1. **supplierStatus** — a status that can be changed by the seller.\n  2. **wbStatus** — a status in the system. It can only be changed by WB.\n\nIn the sandbox, you can emulate WB actions by manually changing the `wbStatus` field. Use the following statuses:\n\n| **wbStatus** | **supplierStatus**   | Description            | How to move the order to this status |\n|--------------|-------|----------------------|--------------------------------------|\n| **waiting** | **new**      | New assembly order | [Create a test In-Store Pickup assembly order](./sandbox-environment#tag/marketplaceInStorePickup/operation/postV3TestClickCollectOrdersMake) |\n| **declined_by_client** | **new**   | The assembly order was canceled by the buyer. It is available for one hour after [creating an assembly order](./sandbox-environment#tag/marketplaceInStorePickup/operation/postV3TestClickCollectOrdersMake), only in the sandbox.   | [Notify that the buyer has canceled the order](./sandbox-environment#tag/marketplaceInStorePickup/operation/patchV3TestClickCollectOrdersOrderIdDecline) |\n| **waiting** | **confirm**  | On assembly | [Transfer assembly order to assembly](/en/docs/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/postV3ClickCollectOrdersStatusConfirm) |\n| **canceled** | **cancel**   | The assembly order was canceled by the seller. Available before [notifying that the assembly order is ready for pickup](/en/docs/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/postV3ClickCollectOrdersStatusPrepare).   | [Cancel the assembly order](/en/docs/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/postV3ClickCollectOrdersStatusCancel) |\n| **ready_for_pickup** | **prepare** |  The order is ready for pickup | [Notify that the order is ready for pickup](/en/docs/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/postV3ClickCollectOrdersStatusPrepare) |\n| **sold** | **receive** | The buyer has received the order | [Notify that the order has been accepted by the buyer](/en/docs/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/postV3ClickCollectOrdersStatusReceive) |\n| **canceled_by_client** | **reject** | The buyer has canceled the order upon receipt | [Notify that the buyer has declined the order](/en/docs/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/postV3ClickCollectOrdersStatusReject) |\n"
+  },
+  {
+   "name": "questionsAndFeedbacks",
+   "x-displayName": "Questions and Feedbacks",
+   "description": "To access the test environment, use the `https://feedbacks-api-sandbox.wildberries.ru` address.\n<br>\n<br>\nIn the sandbox you can create test Questions and Feedbacks. Created Questions and Feedbacks are stored for 5 days\n"
+  },
+  {
+   "name": "itemManagement",
+   "x-displayName": "Item Management",
+   "description": "To access the test environment, use the `https://content-api-sandbox.wildberries.ru` address\n"
+  }
+ ],
+ "paths": {
+  "/adv/v1/test/update/balance": {
+   "servers": [
+    {
+     "url": "https://advert-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "operationId": "postV1TestUpdateBalance",
+    "deprecated": true,
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "summary": "Top-up Test Balance{{ /adv/v1/test/update/balance }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe deprecated method will be disabled on [5 November](/en/release-notes?id=602).\n",
+    "tags": [
+     "promotion"
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "balance": {
+          "description": "Account top-up amount, ₽",
+          "type": "integer"
+         },
+         "net": {
+          "description": "Balance top-up amount, ₽",
+          "type": "integer"
+         },
+         "bonus": {
+          "description": "Bonuses top-up amount, ₽",
+          "type": "integer"
+         }
+        }
+       },
+       "example": {
+        "balance": 1000,
+        "net": 1000,
+        "bonus": 1000
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "<span class='response__value response__value_success'>Success</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "balance": {
+           "description": "Final account, ₽",
+           "type": "integer"
+          },
+          "net": {
+           "description": "Final balance, ₽",
+           "type": "integer"
+          },
+          "bonus": {
+           "description": "Final bonuses, ₽",
+           "type": "integer"
+          }
+         }
+        },
+        "example": {
+         "balance": 9100,
+         "net": 8000,
+         "bonus": 10000
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "error": {
+           "description": "Error description",
+           "type": "string"
+          }
+         }
+        },
+        "examples": {
+         "ErrIncorrectBalance": {
+          "$ref": "#/components/examples/ErrIncorrectBalance"
+         },
+         "ErrIncorrectBonus": {
+          "$ref": "#/components/examples/ErrIncorrectBonus"
+         },
+         "ErrIncorrectNet": {
+          "$ref": "#/components/examples/ErrIncorrectNet"
+         },
+         "ErrUpdateBalanceSumTest": {
+          "$ref": "#/components/examples/ErrUpdateBalanceSumTest"
+         },
+         "ErrUpdateBonusSumTest": {
+          "$ref": "#/components/examples/ErrUpdateBonusSumTest"
+         },
+         "ErrUpdateNetSumUpdate": {
+          "$ref": "#/components/examples/ErrUpdateNetSumUpdate"
+         },
+         "ErrRequestBody": {
+          "$ref": "#/components/examples/ErrRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "$ref": "#/components/responses/403"
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/dbs/orders/make": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "operationId": "postV3TestDbsOrdersMake",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "summary": "Create Test DBS Assembly Orders{{ /api/v3/test/dbs/orders/make }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method allows you to create test DBS assembly orders, emulating buyer's actions.\n<br>\n<br>\nA single request creates assembly orders for items from one buyer's cart. They share a single transaction ID — `orderUid`, which is included in the responses of methods for retrieving [new](/en/openapi/dbs#tag/dbsAssemblyOrders/operation/getV3DbsOrdersNew) and [completed](/en/openapi/dbs#tag/dbsAssemblyOrders/operation/getV3DbsOrders) assembly orders.\n<br>\n<br>\nAn assembly order could be created if:\n  1. All item SKUs from the request have inventory in DBS warehouses.\n  2. The inventory in the warehouse is greater than or equal to the amount in the request.\n  3. The price of the item is not zero.\n",
+    "tags": [
+     "marketplaceDbs"
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DataMakeOrdersDbs"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         },
+         "ResponseErrorIncorrectAddress": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectAddress"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/dbs/orders/{orderId}/decline": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "patch": {
+    "operationId": "patchV3TestDbsOrdersOrderIdDecline",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceDbs"
+    ],
+    "summary": "Notify that the Buyer has Canceled the Order{{ /api/v3/test/dbs/orders/{orderId}/decline }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nMethod transfers the [assembly order](/en/openapi/dbs#tag/dbsAssemblyOrders/operation/getV3DbsOrdersNew) to the `\"wbStatus\":\"declined_by_client\"` — declined by the buyer. It is available for one hour after [creating an assembly order](./sandbox-environment#tag/marketplaceDbs/operation/postV3TestDbsOrdersMake).<br><br>\n\nThe method emulates WB actions\n",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "orderId",
+      "description": "Assembly order ID",
+      "required": true,
+      "schema": {
+       "format": "int64",
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         },
+         "SupplyIsClosed": {
+          "$ref": "#/components/examples/SupplyIsClosed"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/fbs/orders/make": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "operationId": "postV3TestFbsOrdersMake",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceFbs"
+    ],
+    "summary": "Create Test FBS Assembly Orders{{ /api/v3/test/fbs/orders/make }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method allows you to create test FBS assembly orders, emulating buyer's actions.\n<br>\n<br>\nA single request creates assembly orders for items from one buyer's cart. They share a single transaction ID — `orderUid`, which is included in the responses of methods for retrieving [new](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/getV3OrdersNew) and [all](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/getV3Orders) assembly orders.\n<br>\n<br>\nAn assembly order could be created if:\n  1. All item SKUs from the request have inventory in FBS warehouses.\n  2. The inventory in the warehouse is greater than or equal to the amount in the request.\n  3. The price of the item is not zero.\n",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DataMakeOrders"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/fbs/orders/{orderId}/decline": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "patch": {
+    "operationId": "patchV3TestFbsOrdersOrderIdDecline",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceFbs"
+    ],
+    "summary": "Notify that the Buyer has Canceled the Order{{ /api/v3/test/fbs/orders/{orderId}/decline }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nMethod transfers the [assembly order](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/getV3Orders) to the status `\"wbStatus\":\"declined_by_client\"` — declined by the buyer. It is available for one hour after [creating an assembly order](./sandbox-environment#tag/marketplaceFbs/operation/postV3TestFbsOrdersMake).<br><br>\n\nThe method emulates WB actions\n",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "orderId",
+      "description": "Assembly order ID",
+      "required": true,
+      "schema": {
+       "format": "int64",
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         },
+         "SupplyIsClosed": {
+          "$ref": "#/components/examples/SupplyIsClosed"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/fbs/supplies/{supplyId}/close": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "patch": {
+    "operationId": "patchV3TestFbsSuppliesSupplyIdClose",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceFbs"
+    ],
+    "summary": "Close Supply{{ /api/v3/test/fbs/supplies/{supplyId}/close }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method closes the FBS supply and marks all assembly orders as requiring [reshipment](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/getV3SuppliesOrdersReshipment).<br><br>\n\nAll `orderId` listed in the request are marked as requiring reshipment. Unspecified `orderId` related to the given `supplyId` are set to `\"wbStatus\": \"sorted\"`.<br><br>\n\nThe method emulates WB actions\n",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "supplyId",
+      "description": "Supply ID",
+      "required": true,
+      "schema": {
+       "pattern": "^WB-GI-SAND-[0-9]+$",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/OrderIDs"
+       }
+      }
+     }
+    },
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         },
+         "SupplyIsClosed": {
+          "$ref": "#/components/examples/SupplyIsClosed"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/fbs/orders/{orderId}/deliver": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "patch": {
+    "operationId": "patchV3TestFbsOrdersOrderIdDeliver",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceFbs"
+    ],
+    "summary": "Notify that the Order has Arrived at the Pickup Point{{ /api/v3/test/fbs/orders/{orderId}/deliver }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nMethod transfers the [assembly order](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/getV3Orders) to the status `\"wbStatus\":\"ready_for_pickup\"` — the order has arrived at the pickup point.<br><br>\n\nThe method emulates WB actions\n",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "orderId",
+      "description": "Assembly order ID",
+      "required": true,
+      "schema": {
+       "format": "int64",
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         },
+         "SupplyIsClosed": {
+          "$ref": "#/components/examples/SupplyIsClosed"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/fbs/orders/{orderId}/receive": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "patch": {
+    "operationId": "patchV3TestFbsOrdersOrderIdReceive",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceFbs"
+    ],
+    "summary": "Notify that the Order has been Accepted by the Buyer{{ /api/v3/test/fbs/orders/{orderId}/receive }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nMethod transfers the [assembly order](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/getV3Orders) to the status `\"wbStatus\":\"sold\"` — received by the buyer.<br><br>\n\nThe method emulates WB actions\n",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "orderId",
+      "description": "Assembly order ID",
+      "required": true,
+      "schema": {
+       "format": "int64",
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Code"
+       }
+      }
+     }
+    },
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/fbs/orders/{orderId}/reject": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "patch": {
+    "operationId": "patchV3TestFbsOrdersOrderIdReject",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceFbs"
+    ],
+    "summary": "Notify that the Buyer has Declined the Order{{ /api/v3/test/fbs/orders/{orderId}/reject }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nMethod transfers the [assembly order](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/getV3Orders) to the status `\"wbStatus\":\"canceled_by_client\"` — declined upon receipt.<br><br>\n\nThe method emulates WB actions\n",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "orderId",
+      "description": "Assembly order ID",
+      "required": true,
+      "schema": {
+       "format": "int64",
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Code"
+       }
+      }
+     }
+    },
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/fbs/orders/{orderId}/defect": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "patch": {
+    "operationId": "patchV3TestFbsOrdersOrderIdDefect",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceFbs"
+    ],
+    "summary": "Notify that the Buyer has Canceled the Order due to a Defect{{ /api/v3/test/fbs/orders/{orderId}/defect }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nMethod transfers the [assembly order](/en/docs/openapi/orders-fbs#tag/fbsAssemblyOrders/operation/getV3Orders) to the status `\"wbStatus\":\"defect\"` — cancellation of the order due to a defect.<br><br>\n\nThe method emulates WB actions\n",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "orderId",
+      "description": "Assembly order ID",
+      "required": true,
+      "schema": {
+       "format": "int64",
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/click-collect/orders/make": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "operationId": "postV3TestClickCollectOrdersMake",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "summary": "Create Test In-Store Pickup Assembly Orders{{ /api/v3/test/click-collect/orders/make }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method allows you to create test In-Store Pickup assembly orders, emulating buyer's actions.\n<br>\n<br>\nA single request creates assembly orders for items from one buyer's cart with the same `orderCode` — buyer order ID, which is included in the response of the method for getting [new assembly orders](/en/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/getV3ClickCollectOrdersNew).\n<br>\n<br>\nAn assembly order could be created if:\n  1. All item SKUs from the request have inventory in warehouses.\n  2. The inventory in the warehouse is greater than or equal to the amount in the request.\n  3. The price of the item is not zero.\n",
+    "tags": [
+     "marketplaceInStorePickup"
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DataMakeOrders"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v3/test/click-collect/orders/{orderId}/decline": {
+   "servers": [
+    {
+     "url": "https://marketplace-api-sandbox.wildberries.ru"
+    }
+   ],
+   "patch": {
+    "operationId": "patchV3TestClickCollectOrdersOrderIdDecline",
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "tags": [
+     "marketplaceInStorePickup"
+    ],
+    "summary": "Notify that the Buyer has Canceled the Order{{ /api/v3/test/click-collect/orders/{orderId}/decline }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nMethod transfers the [assembly order](/en/openapi/in-store-pickup#tag/inStorePickupAssemblyOrders/operation/getV3ClickCollectOrdersNew) to the `\"wbStatus\":\"declined_by_client\"` — declined by the buyer. It is available for one hour after [creating an assembly order](./sandbox-environment#tag/marketplaceInStorePickup/operation/postV3TestClickCollectOrdersMake).<br><br>\n\nThe method emulates WB actions\n",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "orderId",
+      "description": "Assembly order ID",
+      "required": true,
+      "schema": {
+       "format": "int64",
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "<span class='response__value response__value_success'>Success</span>"
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorIncorrectParam": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectParam"
+         },
+         "ResponseErrorIncorrectRequestBody": {
+          "$ref": "#/components/examples/ResponseErrorIncorrectRequestBody"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "<span class='response__value '>Conflict</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Error"
+         }
+        },
+        "examples": {
+         "ResponseErrorNotFound": {
+          "$ref": "#/components/examples/ResponseErrorNotFound"
+         },
+         "ResponseErrorConflict": {
+          "$ref": "#/components/examples/ResponseErrorConflict"
+         },
+         "ResponseErrorEmptyPrice": {
+          "$ref": "#/components/examples/ResponseErrorEmptyPrice"
+         },
+         "SupplyIsClosed": {
+          "$ref": "#/components/examples/SupplyIsClosed"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v1/test/make/feedbacks/batch": {
+   "servers": [
+    {
+     "url": "https://feedbacks-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "summary": "Create Test Feedbacks{{ /api/v1/test/make/feedbacks/batch }}",
+    "operationId": "postV1TestMakeFeedbacksBatch",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method creates test feedbacks for test WB item numbers.\n\n<div class=\"description_important\">\nThe system does not validate WB item numbers in the Sandbox. If incorrect <code>nmID</code> are passed in the request, you will receive a successful response, but the feedbacks will not be created.\n</div>\n",
+    "tags": [
+     "questionsAndFeedbacks"
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PostMakeFeedbacksBatchRequestBody"
+       },
+       "example": {
+        "feedbacks": [
+         {
+          "nmId": 123456789,
+          "texts": [
+           "Первый отзыв",
+           "Второй отзыв",
+           "Третий отзыв"
+          ]
+         },
+         {
+          "nmId": 987654321,
+          "texts": []
+         }
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "<span class='response__value response__value_success'>Success</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PostMakeFeedbacksBatchResponseBody"
+        },
+        "example": {
+         "data": [
+          {
+           "nmId": 123456789,
+           "feedbackIds": [
+            "THI5C30CUyyHR9a6",
+            "GZ1cVhwiVISKBwDW",
+            "u4H0tIKOapinkxRN"
+           ]
+          },
+          {
+           "nmId": 331645,
+           "feedbackIds": [
+            "ZAgd9FSSWglIuGrB"
+           ]
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error400"
+        },
+        "example": {
+         "data": null,
+         "error": true,
+         "errorText": "Слишком длинный текст",
+         "additionalErrors": null,
+         "requestId": "ac668d59-5356-4599-a0e1-64e84f73ac67"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v1/test/delete/feedbacks": {
+   "servers": [
+    {
+     "url": "https://feedbacks-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "tags": [
+     "questionsAndFeedbacks"
+    ],
+    "summary": "Delete Test Feedbacks{{ /api/v1/test/delete/feedbacks }}",
+    "operationId": "postV1TestDeleteFeedbacks",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method removes test feedbacks.\n",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "ids"
+        ],
+        "properties": {
+         "ids": {
+          "type": "array",
+          "description": "List of feedback IDs",
+          "items": {
+           "type": "string"
+          },
+          "maxItems": 1000
+         }
+        }
+       },
+       "example": {
+        "ids": [
+         "vRyfJrG7LLiNtEQJ",
+         "aB3cD4eF5gH6iJ7k"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "<span class='response__value response__value_success'>Success</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "results": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/BatchFeedbacksDeleteResultItem"
+           }
+          }
+         }
+        },
+        "example": {
+         "results": [
+          {
+           "id": "vRyfJrG7LLiNtEQJ",
+           "success": true
+          },
+          {
+           "id": "aB3cD4eF5gH6iJ7k",
+           "error": {
+            "status": 404,
+            "title": "Not Found",
+            "detail": "Feedback aB3cD4eF5gH6iJ7k not found"
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error400"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v1/test/make/questions/batch": {
+   "servers": [
+    {
+     "url": "https://feedbacks-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "security": [
+     {
+      "HeaderApiKey": []
+     }
+    ],
+    "summary": "Create Test Questions{{ /api/v1/test/make/questions/batch }}",
+    "operationId": "postV1TestMakeQuestionsBatch",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method creates test questions for test WB item numbers.\n\n<div class=\"description_important\">\nThe system does not validate WB item numbers in the Sandbox. If incorrect <code>nmID</code> are passed in the request, you will receive a successful response, but the questions will not be created.\n</div>\n",
+    "tags": [
+     "questionsAndFeedbacks"
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PostMakeQuestionsBatchRequestBody"
+       },
+       "example": {
+        "questions": [
+         {
+          "nmId": 123456789,
+          "texts": [
+           "Первый вопрос",
+           "Второй вопрос",
+           "Третий вопрос"
+          ]
+         },
+         {
+          "nmId": 987654321,
+          "texts": []
+         }
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "<span class='response__value response__value_success'>Success</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PostMakeQuestionsBatchResponseBody"
+        },
+        "example": {
+         "data": [
+          {
+           "nmId": 333885,
+           "questionIds": [
+            "z1euscflMAbjVnp5",
+            "5XS3EkL2keJJdKMO",
+            "5UZ69YEGdwODwX8d"
+           ]
+          },
+          {
+           "nmId": 331645,
+           "questionIds": [
+            "VXp6I50x9XT8UQZd"
+           ]
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error400"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/api/v1/test/delete/questions": {
+   "servers": [
+    {
+     "url": "https://feedbacks-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "tags": [
+     "questionsAndFeedbacks"
+    ],
+    "summary": "Delete Test Questions{{ /api/v1/test/delete/questions }}",
+    "operationId": "postV1TestDeleteQuestions",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method removes test questions.\n",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "ids"
+        ],
+        "properties": {
+         "ids": {
+          "type": "array",
+          "description": "List of question IDs",
+          "items": {
+           "type": "string"
+          },
+          "maxItems": 1000
+         }
+        }
+       },
+       "example": {
+        "ids": [
+         "HZcc1B6yfYERUVcu",
+         "aB3cD4eF5gH6iJ7k"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "<span class='response__value response__value_success'>Success</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "results": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/BatchQuestionsDeleteResultItem"
+           }
+          }
+         }
+        },
+        "example": {
+         "results": [
+          {
+           "id": "HZcc1B6yfYERUVcu",
+           "success": true
+          },
+          {
+           "id": "aB3cD4eF5gH6iJ7k",
+           "error": {
+            "status": 404,
+            "title": "Not Found",
+            "detail": "Question aB3cD4eF5gH6iJ7k not found"
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error400"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "ResponseErrorAccessDenied": {
+          "$ref": "#/components/examples/ResponseErrorAccessDenied"
+         }
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  },
+  "/content/v1/cards/delete": {
+   "servers": [
+    {
+     "url": "https://content-api-sandbox.wildberries.ru"
+    }
+   ],
+   "post": {
+    "operationId": "postV1CardsDelete",
+    "tags": [
+     "itemManagement"
+    ],
+    "summary": "Delete Listings from Trash{{ /content/v1/cards/delete }}",
+    "description": "<div class='description-title'><span>Описание метода</span></div>\n\nThe method deletes [listings from the trash](/en/docs/openapi/item-management#tag/listings/operation/postV2GetCardsTrash). You can not restore the listings after deleting them.\n\nUse this method to free up space for creating new listings, including when approaching or reaching the [limit](/en/docs/openapi/item-management#tag/listingItems/operation/getV2CardsLimits) on the number of listings.\n",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FullDeleteCardsFromTrashReq"
+       },
+       "example": {
+        "nmIds": [
+         123456789,
+         987654321
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "<span class='response__value response__value_success'>Success</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "data": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/FullDeleteCardsFromTrashResp"
+           }
+          },
+          "error": {
+           "description": "Error flag",
+           "type": "boolean",
+           "example": false
+          },
+          "errorText": {
+           "description": "Error description",
+           "type": "string"
+          },
+          "additionalErrors": {
+           "description": "Additional errors",
+           "nullable": false,
+           "type": "object"
+          }
+         }
+        },
+        "example": {
+         "data": [
+          {
+           "nmId": 320791,
+           "error": {
+            "status": 404,
+            "title": "Not Found",
+            "detail": "nmID 123456789 does not exist"
+           }
+          },
+          {
+           "nmId": 987654321,
+           "success": true
+          }
+         ],
+         "error": false,
+         "errorText": "",
+         "additionalErrors": {}
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "<span class='response__value '>Bad request</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ContentDeleteListingsError400"
+        },
+        "examples": {
+         "InvalidRequestFormat": {
+          "$ref": "#/components/examples/InvalidRequestFormat"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401"
+     },
+     "403": {
+      "description": "<span class='response__value '>Access denied</span>",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       },
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Response4XX"
+        },
+        "examples": {
+         "Response403TokenCategory": {
+          "$ref": "#/components/examples/Response403TokenCategory"
+         }
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/429"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "HeaderApiKey": {
+    "type": "apiKey",
+    "name": "Authorization",
+    "in": "header"
+   }
+  },
+  "schemas": {
+   "BatchFeedbacksDeleteResultItem": {
+    "type": "object",
+    "required": [
+     "id"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "Feedback ID"
+     },
+     "success": {
+      "type": "boolean",
+      "description": "Is the feedback deleted:\n  - `true` — deleted\n  - The field is absent — not deleted, use the `error` field\n"
+     },
+     "error": {
+      "type": "object",
+      "required": [
+       "status",
+       "title",
+       "detail"
+      ],
+      "description": "Error information",
+      "nullable": true,
+      "properties": {
+       "status": {
+        "type": "integer",
+        "description": "HTTP status code",
+        "example": 404
+       },
+       "title": {
+        "type": "string",
+        "description": "Error title",
+        "example": "Not Found"
+       },
+       "detail": {
+        "type": "string",
+        "description": "Error details",
+        "example": "Feedback VXp6I50x9XT8UQZd not found"
+       }
+      }
+     }
+    }
+   },
+   "BatchQuestionsDeleteResultItem": {
+    "type": "object",
+    "required": [
+     "id"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "Question ID"
+     },
+     "success": {
+      "type": "boolean",
+      "description": "Is the question deleted:\n  - `true` — deleted\n  - The field is absent — not deleted, use the `error` field\n"
+     },
+     "error": {
+      "type": "object",
+      "required": [
+       "status",
+       "title",
+       "detail"
+      ],
+      "description": "Error information",
+      "nullable": true,
+      "properties": {
+       "status": {
+        "type": "integer",
+        "description": "HTTP status code",
+        "example": 404
+       },
+       "title": {
+        "type": "string",
+        "description": "Error title",
+        "example": "Not Found"
+       },
+       "detail": {
+        "type": "string",
+        "description": "Error details",
+        "example": "Question GZ1cVhwiVISKBwDW not found"
+       }
+      }
+     }
+    }
+   },
+   "MakeQuestionsBatchResult": {
+    "additionalProperties": false,
+    "properties": {
+     "nmId": {
+      "format": "int64",
+      "type": "integer",
+      "description": "WB item number"
+     },
+     "questionIds": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "description": "Question IDs"
+     }
+    },
+    "required": [
+     "nmId",
+     "questionIds"
+    ],
+    "type": "object"
+   },
+   "PostMakeQuestionsBatchResponseBody": {
+    "additionalProperties": false,
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/MakeQuestionsBatchResult"
+      }
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "MakeQuestionsBatchItem": {
+    "additionalProperties": false,
+    "properties": {
+     "nmId": {
+      "format": "int64",
+      "type": "integer",
+      "description": "WB item number"
+     },
+     "texts": {
+      "items": {
+       "type": "string",
+       "maxLength": 5000,
+       "minLength": 0
+      },
+      "description": "Question texts. If you pass an empty array, one question will be created with automatically generated text",
+      "type": "array",
+      "maxItems": 100,
+      "minItems": 0
+     }
+    },
+    "required": [
+     "nmId"
+    ],
+    "type": "object"
+   },
+   "PostMakeQuestionsBatchRequestBody": {
+    "additionalProperties": false,
+    "properties": {
+     "questions": {
+      "items": {
+       "$ref": "#/components/schemas/MakeQuestionsBatchItem"
+      },
+      "type": "array",
+      "maxItems": 1000
+     }
+    },
+    "required": [
+     "questions"
+    ],
+    "type": "object"
+   },
+   "MakeFeedbacksBatchResult": {
+    "additionalProperties": false,
+    "properties": {
+     "feedbackIds": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "description": "Feedback IDs"
+     },
+     "nmId": {
+      "format": "int64",
+      "type": "integer",
+      "description": "WB item number"
+     }
+    },
+    "required": [
+     "nmId",
+     "feedbackIds"
+    ],
+    "type": "object"
+   },
+   "PostMakeFeedbacksBatchResponseBody": {
+    "additionalProperties": false,
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/MakeFeedbacksBatchResult"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "PostMakeFeedbacksBatchRequestBody": {
+    "additionalProperties": false,
+    "properties": {
+     "feedbacks": {
+      "items": {
+       "$ref": "#/components/schemas/MakeFeedbacksBatchItem"
+      },
+      "type": "array",
+      "maxItems": 1000
+     }
+    },
+    "required": [
+     "feedbacks"
+    ],
+    "type": "object"
+   },
+   "MakeFeedbacksBatchItem": {
+    "additionalProperties": false,
+    "properties": {
+     "nmId": {
+      "format": "int64",
+      "type": "integer",
+      "description": "WB item number"
+     },
+     "texts": {
+      "items": {
+       "type": "string",
+       "maxLength": 5000,
+       "minLength": 0
+      },
+      "description": "Feedback texts. If you pass an empty array, one Feedback will be created with automatically generated text",
+      "type": "array",
+      "maxItems": 100,
+      "minItems": 0
+     }
+    },
+    "required": [
+     "nmId"
+    ],
+    "type": "object"
+   },
+   "FullDeleteCardsFromTrashReq": {
+    "type": "object",
+    "required": [
+     "nmIds"
+    ],
+    "properties": {
+     "nmIds": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "format": "int64"
+      },
+      "minItems": 1,
+      "maxItems": 1000,
+      "description": "List of WB item numbers"
+     }
+    }
+   },
+   "FullDeleteCardsFromTrashResp": {
+    "type": "object",
+    "required": [
+     "nmId"
+    ],
+    "properties": {
+     "nmId": {
+      "type": "integer",
+      "format": "int64",
+      "description": "WB item number ID"
+     },
+     "success": {
+      "type": "boolean",
+      "description": "- `false` — the listing was not deleted\n- `true` — the listing was deleted\n"
+     },
+     "error": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/ErrorDeleteListings"
+       },
+       {
+        "description": "Error details"
+       }
+      ]
+     }
+    }
+   },
+   "OrderIDs": {
+    "additionalProperties": false,
+    "properties": {
+     "orderIds": {
+      "items": {
+       "format": "int64",
+       "type": "integer"
+      },
+      "minimum": 0,
+      "type": "array",
+      "nullable": true,
+      "example": [
+       9007199254740991
+      ]
+     }
+    },
+    "required": [
+     "orderIds"
+    ],
+    "type": "object"
+   },
+   "DataMakeOrders": {
+    "description": "Array of item SKUs and item inventory for the assembly order",
+    "additionalProperties": false,
+    "properties": {
+     "orders": {
+      "nullable": true,
+      "items": {
+       "$ref": "#/components/schemas/MakeOrder"
+      },
+      "maxItems": 10,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "orders"
+    ],
+    "type": "object"
+   },
+   "MakeOrder": {
+    "additionalProperties": false,
+    "properties": {
+     "amount": {
+      "type": "integer",
+      "maximum": 10,
+      "description": "Quantity",
+      "example": 1
+     },
+     "sku": {
+      "type": "string",
+      "description": "SKU",
+      "example": "SKUTest123"
+     }
+    },
+    "required": [
+     "sku",
+     "amount"
+    ],
+    "type": "object"
+   },
+   "DataMakeOrdersDbs": {
+    "type": "object",
+    "required": [
+     "orders"
+    ],
+    "properties": {
+     "orders": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "description": "Array of item SKUs and item inventory for the assembly order",
+      "items": {
+       "type": "object",
+       "required": [
+        "sku",
+        "amount"
+       ],
+       "properties": {
+        "sku": {
+         "type": "string",
+         "description": "SKU",
+         "example": "SKUTest123"
+        },
+        "amount": {
+         "type": "integer",
+         "maximum": 10,
+         "description": "Quantity. <br> A separate assembly order with a single `orderUid` is created for each item",
+         "example": 1
+        }
+       }
+      }
+     },
+     "deliveryType": {
+      "type": "string",
+      "default": "dbs",
+      "description": "Delivery type:\n - `dbs` — Delivery By Seller\n - `dbsPickupPoint` — Delivery By Seller to Pickup Point\n - `edbs` — Express Delivery By Seller\n",
+      "enum": [
+       "dbs",
+       "dbsPickupPoint",
+       "edbs"
+      ],
+      "example": "edbs"
+     },
+     "address": {
+      "type": "object",
+      "description": "Delivery address of the assembly order. <br>Specify the address without abbreviations, as in the request example.If no address is specified, the default address is used — <code>Москва, Сумская улица, 6 к 5, 5545</code>",
+      "required": [
+       "region",
+       "locality",
+       "street",
+       "houseNumber"
+      ],
+      "properties": {
+       "region": {
+        "description": "Delivery region",
+        "type": "string",
+        "example": "Челябинская область"
+       },
+       "locality": {
+        "description": "Delivery locality",
+        "type": "string",
+        "example": "Архангельское"
+       },
+       "street": {
+        "description": "Street",
+        "type": "string",
+        "example": "переулок Солнечный"
+       },
+       "houseNumber": {
+        "description": "House number, unit and letter",
+        "type": "string",
+        "example": "8А к 1"
+       },
+       "entrance": {
+        "description": "Entrance number",
+        "type": "string",
+        "example": "5"
+       },
+       "intercom": {
+        "description": "Intercom code",
+        "type": "string",
+        "example": "4857"
+       },
+       "floor": {
+        "description": "Floor",
+        "type": "string",
+        "example": "4"
+       },
+       "apartment": {
+        "description": "Apartment number",
+        "type": "string",
+        "example": "18"
+       }
+      }
+     }
+    }
+   },
+   "Code": {
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "description": "Order retrieval code. In the test environment, you can use any combination of characters.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code"
+    ],
+    "type": "object"
+   },
+   "Error": {
+    "type": "object",
+    "nullable": false,
+    "properties": {
+     "code": {
+      "type": "string",
+      "description": "Error code",
+      "nullable": false
+     },
+     "message": {
+      "type": "string",
+      "description": "Error description",
+      "nullable": false
+     },
+     "data": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      },
+      "nullable": true,
+      "description": "Additional data enriching the error"
+     }
+    }
+   },
+   "ErrorDeleteListings": {
+    "type": "object",
+    "required": [
+     "status",
+     "title",
+     "detail"
+    ],
+    "properties": {
+     "status": {
+      "type": "integer",
+      "description": "HTTP status code"
+     },
+     "title": {
+      "type": "string",
+      "description": "Error title"
+     },
+     "detail": {
+      "type": "string",
+      "description": "Error details"
+     }
+    }
+   },
+   "Error400": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "nullable": true,
+      "example": null
+     },
+     "error": {
+      "description": "Error flag",
+      "type": "boolean",
+      "example": true
+     },
+     "errorText": {
+      "description": "Error description",
+      "type": "string",
+      "example": "Неверный синтаксис JSON"
+     },
+     "additionalErrors": {
+      "description": "Additional errors",
+      "nullable": true,
+      "type": "array",
+      "example": null,
+      "items": {
+       "type": "string"
+      }
+     },
+     "requestId": {
+      "description": "Request ID",
+      "type": "string",
+      "example": "e270b5b7-ff63-481c-89c6-dd24fe6949d1"
+     }
+    }
+   },
+   "ContentDeleteListingsError400": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "description": "Data",
+      "type": "object",
+      "nullable": true,
+      "example": null
+     },
+     "error": {
+      "description": "Error flag",
+      "type": "boolean",
+      "example": true
+     },
+     "errorText": {
+      "description": "Error description",
+      "type": "string",
+      "example": "Неверный синтаксис JSON"
+     },
+     "additionalErrors": {
+      "description": "Additional errors",
+      "nullable": false,
+      "type": "object"
+     }
+    }
+   },
+   "Response4XX": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "description": "Error title"
+     },
+     "detail": {
+      "type": "string",
+      "description": "Error details"
+     },
+     "code": {
+      "type": "string",
+      "description": "Internal error code"
+     },
+     "requestId": {
+      "type": "string",
+      "description": "Request ID"
+     },
+     "origin": {
+      "type": "string",
+      "description": "WB internal service ID"
+     },
+     "status": {
+      "type": "number",
+      "description": "HTTP status code"
+     },
+     "statusText": {
+      "type": "string",
+      "description": "Text of the HTTP status code"
+     },
+     "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Request date and time"
+     }
+    }
+   }
+  },
+  "examples": {
+   "ErrIncorrectBalance": {
+    "value": {
+     "error": "Invalid bonus top-up data. The minimum top-up amount is 100"
+    }
+   },
+   "ErrIncorrectBonus": {
+    "value": {
+     "error": "Invalid balance top-up data. The minimum top-up amount is 100"
+    }
+   },
+   "ErrIncorrectNet": {
+    "value": {
+     "error": "Invalid balance top-up data. The minimum top-up amount is 100"
+    }
+   },
+   "ErrUpdateBalanceSumTest": {
+    "value": {
+     "error": "The account cannot be increased by such an amount. The maximum account amount is 100"
+    }
+   },
+   "ErrUpdateBonusSumTest": {
+    "value": {
+     "error": "The bonus cannot be increased by such an amount. The maximum bonus amount is 100"
+    }
+   },
+   "ErrUpdateNetSumUpdate": {
+    "value": {
+     "error": "The balance cannot be increased by such an amount. The maximum balance amount is 100"
+    }
+   },
+   "ErrRequestBody": {
+    "value": {
+     "error": "Error processing request body"
+    }
+   },
+   "InvalidRequestFormat": {
+    "description": "Bad request",
+    "value": {
+     "data": null,
+     "error": true,
+     "errorText": "Invalid request format",
+     "additionalErrors": {}
+    }
+   },
+   "ResponseErrorIncorrectRequestBody": {
+    "value": {
+     "code": "IncorrectRequestBody",
+     "message": "Incorrect required body"
+    }
+   },
+   "ResponseErrorIncorrectParam": {
+    "value": {
+     "code": "IncorrectParameter",
+     "message": "Incorrect parameter"
+    }
+   },
+   "ResponseErrorIncorrectAddress": {
+    "value": {
+     "code": "IncorrectAddress",
+     "message": "Incorrect address"
+    }
+   },
+   "ResponseErrorAccessDenied": {
+    "value": {
+     "code": "AccessDenied",
+     "message": "AccessDenied"
+    }
+   },
+   "ResponseErrorNotFound": {
+    "value": [
+     {
+      "data": [
+       {
+        "sku": "SKUTest123",
+        "amount": 1
+       }
+      ],
+      "code": "NotFound",
+      "message": "Not Found"
+     }
+    ]
+   },
+   "ResponseErrorConflict": {
+    "value": [
+     {
+      "data": [
+       {
+        "sku": "SKUTest123",
+        "amount": 1
+       }
+      ],
+      "code": "Conflict",
+      "message": "Exceeded inventory amount in the warehouse"
+     }
+    ]
+   },
+   "ResponseErrorEmptyPrice": {
+    "value": [
+     {
+      "code": "Conflict",
+      "message": "The order has a zero price"
+     }
+    ]
+   },
+   "SupplyIsClosed": {
+    "value": [
+     {
+      "code": "SupplyIsClosed",
+      "message": "supply is closed"
+     }
+    ]
+   },
+   "Response403TokenCategory": {
+    "value": {
+     "status": 403,
+     "statusText": "Forbidden",
+     "title": "Forbidden",
+     "detail": "scope is not allowed for this resource",
+     "requestId": "2dbf6fc9-bad8-4ef9-a058-c938a8553ba5",
+     "origin": "ag-marketplace",
+     "timestamp": "2026-09-03T13:55:15Z"
+    },
+    "description": "Invalid token category"
+   }
+  },
+  "responses": {
+   "401": {
+    "description": "<span class='response__value '>User not authorized</span>",
+    "content": {
+     "application/problem+json": {
+      "schema": {
+       "type": "object",
+       "properties": {
+        "title": {
+         "type": "string",
+         "description": "Error title"
+        },
+        "detail": {
+         "type": "string",
+         "description": "Error details"
+        },
+        "code": {
+         "type": "string",
+         "description": "Internal error code"
+        },
+        "requestId": {
+         "type": "string",
+         "description": "Request ID"
+        },
+        "origin": {
+         "type": "string",
+         "description": "WB internal service ID"
+        },
+        "status": {
+         "type": "number",
+         "description": "HTTP status code"
+        },
+        "statusText": {
+         "type": "string",
+         "description": "Text of the HTTP status code"
+        },
+        "timestamp": {
+         "type": "string",
+         "format": "date-time",
+         "description": "Request date and time"
+        }
+       }
+      },
+      "example": {
+       "title": "unauthorized",
+       "detail": "token problem; token is malformed: could not base64 decode signature: illegal base64 data at input byte 84",
+       "code": "07e4668e--a53a3d31f8b0-[UK-oWaVDUqNrKG]; 03bce=277; 84bd353bf-75",
+       "requestId": "7b80742415072fe8b6b7f7761f1d1211",
+       "origin": "ag-marketplace",
+       "status": 401,
+       "statusText": "Unauthorized",
+       "timestamp": "2024-09-30T06:52:38Z"
+      }
+     }
+    }
+   },
+   "403": {
+    "description": "<span class='response__value '>Access denied</span>",
+    "content": {
+     "application/problem+json": {
+      "schema": {
+       "type": "object",
+       "properties": {
+        "title": {
+         "type": "string",
+         "description": "Error title"
+        },
+        "detail": {
+         "type": "string",
+         "description": "Error details"
+        },
+        "code": {
+         "type": "string",
+         "description": "Internal error code"
+        },
+        "requestId": {
+         "type": "string",
+         "description": "Request ID"
+        },
+        "origin": {
+         "type": "string",
+         "description": "WB internal service ID"
+        },
+        "status": {
+         "type": "number",
+         "description": "HTTP status code"
+        },
+        "statusText": {
+         "type": "string",
+         "description": "Text of the HTTP status code"
+        },
+        "timestamp": {
+         "type": "string",
+         "format": "date-time",
+         "description": "Request date and time"
+        }
+       }
+      },
+      "examples": {
+       "Response403TokenCategory": {
+        "value": {
+         "status": 403,
+         "statusText": "Forbidden",
+         "title": "Forbidden",
+         "detail": "scope is not allowed for this resource",
+         "requestId": "2dbf6fc9-bad8-4ef9-a058-c938a8553ba5",
+         "origin": "ag-marketplace",
+         "timestamp": "2026-09-03T13:55:15Z"
+        },
+        "description": "Invalid token category"
+       }
+      }
+     }
+    }
+   },
+   "429": {
+    "description": "<span class='response__value '>Too many requests</span>",
+    "content": {
+     "application/problem+json": {
+      "schema": {
+       "type": "object",
+       "properties": {
+        "title": {
+         "type": "string",
+         "description": "Error title"
+        },
+        "detail": {
+         "type": "string",
+         "description": "Error details"
+        },
+        "code": {
+         "type": "string",
+         "description": "Internal error code"
+        },
+        "requestId": {
+         "type": "string",
+         "description": "Request ID"
+        },
+        "origin": {
+         "type": "string",
+         "description": "WB internal service ID"
+        },
+        "status": {
+         "type": "number",
+         "description": "HTTP status code"
+        },
+        "statusText": {
+         "type": "string",
+         "description": "Text of the HTTP status code"
+        },
+        "timestamp": {
+         "type": "string",
+         "format": "date-time",
+         "description": "Request date and time"
+        }
+       }
+      },
+      "example": {
+       "title": "too many requests",
+       "detail": "limited by c122a060-a7fb-4bb4-abb0-32fd4e18d489",
+       "code": "07e4668e-ac2242c5c8c5-[UK-4dx7JUdskGZ]",
+       "requestId": "9d3c02cc698f8b041c661a7c28bed293",
+       "origin": "ag-marketplace",
+       "status": 429,
+       "statusText": "Too Many Requests",
+       "timestamp": "2024-09-30T06:52:38Z"
+      }
+     }
+    }
+   }
+  }
+ }
+}

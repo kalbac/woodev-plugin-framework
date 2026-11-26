@@ -1,0 +1,25 @@
+{
+  "label": "w17-sgtin-write-f3",
+  "recorded_at": "2026-11-26T01:23:32+00:00",
+  "request": {
+    "method": "PUT",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/orders/192395/meta/sgtin",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "sgtins": [
+        "0104630568317423215M0BTEST00001\u001d91EE12\u001d92VygELprJ87wrc/qF/Vq/KEFUVpZm4vDPQt2kqUw308Y="
+      ]
+    }
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": null
+  }
+}
