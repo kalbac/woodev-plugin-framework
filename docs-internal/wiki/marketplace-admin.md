@@ -1411,7 +1411,12 @@ link, and the pending task's result payload plus `revisions` (link id → revisi
 adapter keeps there whatever it needs to map the answers to links. A duplicate receipt joins the open task of the same id.
 
 **Waiting.** `sync_state` (schema revision 6) holds `task_id`: the pair is not due while it is set, so a newer price waits for the
-answer. `open_items()` lists card imports only — a price task locks nothing.
+answer. `open_items()` lists card imports only — a price task locks nothing. Because the pair is pinned to the task, a task is
+closed only when no item is pending **and** no pair waits for it; `Task_Ledger::items()` throws on a failed read (an empty answer
+used to read as «finished»), and a poll that fails on our own tables is rescheduled on the ladder.
+
+**Answers at once.** In a pending or duplicate receipt, an immediate failure without `retry_after` is as final as the task's would
+be (`Jobs\Price_Refusal_Writer`, shared with the poll). A receipt that answers everything at once (Ozon) keeps the retry ladder.
 
 **Outcomes** (`Jobs\Price_Poll_Runner`, on the shared `poll_task` hook, under the account claim):
 

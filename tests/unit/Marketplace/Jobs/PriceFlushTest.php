@@ -9,8 +9,11 @@ namespace Woodev\Tests\Unit\Marketplace\Jobs;
 
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
+use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Ledger\Item_Result;
 use Woodev\Framework\Marketplace\Price\Flush_Result;
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
+use Woodev\Framework\Marketplace\Price\Push_Receipt;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Price_Pusher;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
@@ -493,6 +496,61 @@ final class PriceFlushTest extends Sync_Test_Case {
 		$this->assertSame( [ [ 'kept' ] ], array_map( 'array_keys', $this->prices->requests ) );
 		$this->assertSame( [ 1, 1 ], [ $result->sent(), $result->failed() ] );
 		$this->assertSame( 'Товар или его связь с карточкой маркетплейса больше не существуют.', $this->price_row( $gone )['last_error'] );
+	}
+
+	/**
+	 * A pending receipt may answer some lines at once. A failure it carries is as final as the one a price task would bring: the
+	 * price keeps its reason and is not sent again until it changes, while the other line waits for the task.
+	 *
+	 * @dataProvider immediate_refusals
+	 * @param string $code    The pusher's code.
+	 * @param string $stored  The reason code kept with the price.
+	 * @param string $message The text the merchant reads.
+	 * @return void
+	 */
+	public function test_a_failure_in_a_pending_receipt_is_final( string $code, string $stored, string $message ): void {
+		$turned_down = $this->priced( 'a' );
+		$deferred    = $this->priced( 'b' );
+		$this->want_price( $turned_down );
+		$this->want_price( $deferred );
+
+		$this->prices->script[] = function () use ( $turned_down, $code ): Push_Receipt {
+			return new Push_Receipt(
+				$this->refused( $turned_down, $code, 'the marketplace said no' ),
+				new Async_Task( $this->account_id, Async_Task::KIND_PRICE, 'price-task-1' )
+			);
+		};
+		$result                 = $this->flush_now();
+
+		$row = $this->price_row( $turned_down );
+		$this->assertSame( [ $stored, $message ], [ $row['error_code'], $row['last_error'] ] );
+		$this->assertNotNull( $row['refused_payload'] );
+		$this->assertNull( $row['task_id'] );
+		$this->assertSame( [ 1, 1 ], [ $result->failed(), $result->awaiting() ] );
+		$this->assertNotNull( $this->price_row( $deferred )['task_id'] );
+		$this->assertSame( [ $this->link_id( $deferred ) ], array_keys( $this->task_ledger()->items( 1 ) ) );
+
+		$this->now += 4000;
+		$this->flush_now();
+
+		$this->assertCount( 1, $this->prices->requests, 'an unchanged price is never sent again' );
+
+		$this->want_price( $turned_down, [ 'price' => '120.00' ] );
+		$this->flush_now();
+
+		$this->assertSame( [ 'a' ], array_keys( $this->prices->requests[1] ), 'a changed price is a new try' );
+	}
+
+	/**
+	 * Failures a pending receipt may carry at once.
+	 *
+	 * @return array<string,array{0:string,1:string,2:string}>
+	 */
+	public function immediate_refusals(): array {
+		return [
+			'quarantine' => [ Price_Refusal::QUARANTINED, Price_Refusal::QUARANTINED, self::MARKETPLACE_NAME . ' держит новую цену в карантине: она намного ниже текущей' ],
+			'refusal'    => [ 'price_error', Price_Refusal::REFUSED, 'the marketplace said no' ],
+		];
 	}
 
 	/**

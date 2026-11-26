@@ -54,6 +54,14 @@ final class Sqlite_Wpdb extends \wpdb {
 	public $fail_reads = false;
 
 	/**
+	 * Asked before every read: `function ( string $query ): bool`; a read it answers true for fails as with `$fail_reads`, so a test
+	 * can lose one particular read.
+	 *
+	 * @var callable|null
+	 */
+	public $fail_read;
+
+	/**
 	 * Whether an `UPDATE` reports the rows it CHANGED, as MySQL and MariaDB do, instead of the rows it matched, as SQLite does. A
 	 * statement that rewrites a row to the values it already holds then returns 0 — which the SQLite default hides.
 	 *
@@ -224,7 +232,7 @@ final class Sqlite_Wpdb extends \wpdb {
 		$this->statements[] = (string) $query;
 		$this->last_error   = '';
 
-		if ( $this->fail_reads ) {
+		if ( $this->fail_reads || ( null !== $this->fail_read && call_user_func( $this->fail_read, (string) $query ) ) ) {
 			$this->last_error = 'MySQL server has gone away';
 
 			return null;

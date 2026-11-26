@@ -29,8 +29,6 @@ use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
  * refused, held in quarantine or never answered. The flush and the poll run over the real queue, ledger and links on SQLite.
  */
 final class PriceSettlementTest extends Sync_Test_Case {
-	private const NAME = 'Тестовый маркетплейс';
-
 	/**
 	 * The marketplace double.
 	 *
@@ -515,6 +513,98 @@ final class PriceSettlementTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * One of our own reads fails during a poll: what the task still owes is unknown, so it stays open, the price keeps waiting and the
+	 * task is asked about again, and the next poll settles it.
+	 *
+	 * @dataProvider lost_reads
+	 * @param string $table Table whose read fails.
+	 * @param int    $nth   Which read of that table in the poll.
+	 * @return void
+	 */
+	public function test_a_failed_database_read_leaves_the_task_open( string $table, int $nth ): void {
+		$product = $this->card( 'a' );
+		$this->want_price( $product, [ 'price' => '900.00' ] );
+		$this->flush_now();
+		$this->prices->undecided  = true;
+		$this->scheduler->actions = [];
+		$this->lose_read( $table, $nth );
+
+		$this->poll();
+
+		$this->assertNull( $this->db->fail_read, 'the poll reached the read the test loses' );
+		$this->assertFalse( $this->only_task()->is_final() );
+		$this->assertSame( 1, (int) $this->price_row( $product )['task_id'] );
+		$this->assertSame( [ [ 1, 1 ] ], array_column( $this->scheduler->of( $this->poll_hook() ), 'args' ) );
+		$this->assertNotNull( $token = $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL ), 'the claim was released' );
+		$this->accounts()->release_claim( $this->account_id, (string) $token );
+
+		$this->prices->undecided = false;
+		$this->poll();
+
+		$this->assertSame( Async_Task::STATUS_DONE, $this->only_task()->status() );
+		$this->assertSame( '900.00', $this->price_row( $product )['sent_payload']['price'] );
+	}
+
+	/**
+	 * The reads of one poll of an undecided task.
+	 *
+	 * @return array<string,array{0:string,1:int}>
+	 */
+	public function lost_reads(): array {
+		return [
+			'the waiting prices, for the decisions'   => [ 'sync_state', 1 ],
+			'the waiting prices, for what is left'    => [ 'sync_state', 2 ],
+			'the items, while deciding'               => [ 'task_items', 1 ],
+			'the items, before the task is closed'    => [ 'task_items', 2 ],
+		];
+	}
+
+	/**
+	 * A read lost while a decided task is being closed does not close it with an item unread; past the deadline the next good poll
+	 * ends it.
+	 *
+	 * @return void
+	 */
+	public function test_a_read_lost_past_the_deadline_expires_the_task_at_the_next_poll(): void {
+		$product = $this->card( 'a' );
+		$this->want_price( $product, [ 'price' => '900.00' ] );
+		$this->flush_now();
+		$this->prices->undecided = true;
+		$this->now             += Fake_Price_Pusher::DEADLINE + 1;
+		$this->lose_read( 'task_items', 1 );
+
+		$this->poll();
+		$this->assertFalse( $this->only_task()->is_final() );
+
+		$this->poll();
+		$this->assertSame( Async_Task::STATUS_EXPIRED, $this->only_task()->status() );
+		$this->assertNull( $this->price_row( $product )['task_id'] );
+	}
+
+	/**
+	 * A price that still waits keeps its task open even when the ledger item says otherwise: nothing may wait for a closed task.
+	 *
+	 * @return void
+	 */
+	public function test_a_task_is_not_closed_while_a_price_waits_for_it(): void {
+		$product = $this->card( 'a' );
+		$this->want_price( $product, [ 'price' => '900.00' ] );
+		$this->flush_now();
+		$this->task_ledger()->settle_item( 1, $this->link_id( $product ), Task_Ledger::ITEM_SKIPPED );
+		$this->prices->undecided = true;
+
+		$this->poll();
+		$this->assertFalse( $this->only_task()->is_final() );
+
+		$this->prices->undecided = false;
+		$this->poll();
+
+		$this->assertSame( Async_Task::STATUS_DONE, $this->only_task()->status() );
+		$this->assertNull( $this->price_row( $product )['task_id'] );
+		$this->assertSame( '900.00', $this->price_row( $product )['sent_payload']['price'] );
+	}
+
+	/**
 	 * Another run holds the account: the poll comes back later and changes nothing.
 	 *
 	 * @return void
@@ -563,6 +653,27 @@ final class PriceSettlementTest extends Sync_Test_Case {
 
 		$this->assertSame( [], $this->prices->reads );
 		$this->assertSame( Async_Task::STATUS_SUBMITTED, $this->task_ledger()->get( $task_id )->status() );
+	}
+
+	/**
+	 * Makes one read of a table fail, as a dropped connection does.
+	 *
+	 * @param string $table Table, without prefix.
+	 * @param int    $nth   Which read from now on, counted from 1.
+	 * @return void
+	 */
+	private function lose_read( string $table, int $nth ): void {
+		$name                = Sqlite_Tables::table( $table );
+		$seen                = 0;
+		$this->db->fail_read = function ( string $query ) use ( $name, $nth, &$seen ): bool {
+			if ( 0 !== strpos( $query, 'SELECT' ) || false === strpos( $query, $name ) || false !== strpos( $query, 'claim' ) || ++$seen !== $nth ) {
+				return false;
+			}
+
+			$this->db->fail_read = null;
+
+			return true;
+		};
 	}
 
 	/**
@@ -616,9 +727,7 @@ final class PriceSettlementTest extends Sync_Test_Case {
 			$this->prices,
 			new Export_Scheduler( $this->names() ),
 			$this->classifier,
-			static function (): string {
-				return self::NAME;
-			},
+			$this->refusal_writer(),
 			new Api_Error_Ring( $this->db, Sqlite_Tables::table( 'api_errors' ), $this->clock() ),
 			[ $this, 'log_line' ],
 			$this->clock()

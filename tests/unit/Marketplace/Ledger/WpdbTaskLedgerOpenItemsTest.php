@@ -137,6 +137,19 @@ final class WpdbTaskLedgerOpenItemsTest extends TestCase {
 	}
 
 	/**
+	 * A task's items that cannot be read are not «no items»: the caller must not take the task for finished.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_read_of_a_tasks_items_throws(): void {
+		$task                  = $this->open_task( 5, array( 11 => 'A-11' ) );
+		$this->db->fail_reads = true;
+
+		$this->expectException( \RuntimeException::class );
+		$this->ledger->items( $task );
+	}
+
+	/**
 	 * No ids, or only ids that are not links, ask the database nothing.
 	 *
 	 * @return void

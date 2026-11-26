@@ -79,6 +79,7 @@ use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Jobs\Price_Flush_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Poll_Runner;
+use Woodev\Framework\Marketplace\Jobs\Price_Refusal_Writer;
 use Woodev\Framework\Marketplace\Jobs\Price_Recompute_Runner;
 use Woodev\Framework\Marketplace\Jobs\Rename_Offer_Ids_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Refresh_Runner;
@@ -420,15 +421,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$classifier = $adapter->error_classifier();
 			$ledger     = new Wpdb_Task_Ledger( $this->db, $this->table( 'tasks' ), $this->table( 'task_items' ) );
 			$scheduler  = new Export_Scheduler( $this->names );
-			$name       = static function () use ( $adapter ): string {
-				return $adapter->settings_descriptor()->marketplace_name();
-			};
+			$refusals   = new Price_Refusal_Writer(
+				$queue,
+				static function () use ( $adapter ): string {
+					return $adapter->settings_descriptor()->marketplace_name();
+				}
+			);
 
-			( new Price_Poll_Runner( $this->gate, $ledger, $queue, $pusher, $scheduler, $classifier, $name, $this->ring, $this->log_error ) )->register();
+			( new Price_Poll_Runner( $this->gate, $ledger, $queue, $pusher, $scheduler, $classifier, $refusals, $this->ring, $this->log_error ) )->register();
 
 			$opener = new Price_Task_Opener( $ledger, $queue, $pusher, $scheduler, $this->log_error );
 
-			return new Price_Flush_Runner( $this->gate, $this->accounts, $queue, $this->links, $pusher, $adapter->sync_limits(), $classifier, $this->log_error, $opener );
+			return new Price_Flush_Runner( $this->gate, $this->accounts, $queue, $this->links, $pusher, $adapter->sync_limits(), $classifier, $this->log_error, $opener, $refusals );
 		}
 
 		/**

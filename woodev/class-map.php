@@ -390,6 +390,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Poll_Runner' => 'woodev/marketplace/jobs/class-price-poll-runner.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Recompute_Runner' => 'woodev/marketplace/jobs/class-price-recompute-runner.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Refresh_Runner' => 'woodev/marketplace/jobs/class-price-refresh-runner.php',
+	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Refusal_Writer' => 'woodev/marketplace/jobs/class-price-refusal-writer.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Scheduler' => 'woodev/marketplace/jobs/class-price-scheduler.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Price_Task_Opener' => 'woodev/marketplace/jobs/class-price-task-opener.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Reconcile_Stock_Runner' => 'woodev/marketplace/jobs/class-reconcile-stock-runner.php',

@@ -47,7 +47,8 @@ defined( 'ABSPATH' ) || exit;
  *   after it.
  * - **Asynchronous acceptance** (2.1.25): the lines of a pending or duplicate receipt that have no immediate answer open a price
  *   task ({@see Price_Task_Opener}) and wait for it; nothing sends them meanwhile, and {@see Price_Poll_Runner} settles them. Lines
- *   the receipt answers at once are settled as above.
+ *   such a receipt answers at once are settled as above, except that a refusal is final, as the task's would be: the price is not
+ *   sent again until it changes ({@see Price_Refusal_Writer}).
  *
  * @since 2.1.0
  */
@@ -116,23 +117,31 @@ final class Price_Flush_Runner {
 	private $tasks;
 
 	/**
+	 * Keeps a price the marketplace turned down for good.
+	 *
+	 * @var Price_Refusal_Writer
+	 */
+	private $refusals;
+
+	/**
 	 * Creates the runner.
 	 *
 	 * @since 2.1.0
 	 *
-	 * @since 2.1.25 `$tasks`.
+	 * @since 2.1.25 `$tasks` and `$refusals`.
 	 *
-	 * @param Job_Gate           $gate       Job gate (the pause and the write gate).
-	 * @param Wpdb_Account_Store $accounts   Accounts.
-	 * @param Price_Sync_Queue   $queue      Price queue.
-	 * @param Wpdb_Link_Store    $links      Links.
-	 * @param Price_Pusher       $pusher     Pusher.
-	 * @param Sync_Limits        $limits     Per-request limits of the marketplace.
-	 * @param Error_Classifier   $classifier Classifies a failed request.
-	 * @param callable           $log_error  `function ( string $line ): void`.
-	 * @param Price_Task_Opener  $tasks      Opens the task of an upload the marketplace decides on later.
+	 * @param Job_Gate             $gate       Job gate (the pause and the write gate).
+	 * @param Wpdb_Account_Store   $accounts   Accounts.
+	 * @param Price_Sync_Queue     $queue      Price queue.
+	 * @param Wpdb_Link_Store      $links      Links.
+	 * @param Price_Pusher         $pusher     Pusher.
+	 * @param Sync_Limits          $limits     Per-request limits of the marketplace.
+	 * @param Error_Classifier     $classifier Classifies a failed request.
+	 * @param callable             $log_error  `function ( string $line ): void`.
+	 * @param Price_Task_Opener    $tasks      Opens the task of an upload the marketplace decides on later.
+	 * @param Price_Refusal_Writer $refusals Keeps a price the marketplace turned down for good.
 	 */
-	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Price_Sync_Queue $queue, Wpdb_Link_Store $links, Price_Pusher $pusher, Sync_Limits $limits, Error_Classifier $classifier, callable $log_error, Price_Task_Opener $tasks ) {
+	public function __construct( Job_Gate $gate, Wpdb_Account_Store $accounts, Price_Sync_Queue $queue, Wpdb_Link_Store $links, Price_Pusher $pusher, Sync_Limits $limits, Error_Classifier $classifier, callable $log_error, Price_Task_Opener $tasks, Price_Refusal_Writer $refusals ) {
 		$this->gate       = $gate;
 		$this->accounts   = $accounts;
 		$this->queue      = $queue;
@@ -142,6 +151,7 @@ final class Price_Flush_Runner {
 		$this->classifier = $classifier;
 		$this->log_error  = $log_error;
 		$this->tasks      = $tasks;
+		$this->refusals   = $refusals;
 	}
 
 	/**
@@ -306,25 +316,67 @@ final class Price_Flush_Runner {
 			return [ true, $this->settle_all( $account, $token, $batch, $receipt, $result ) ];
 		}
 
+		return [ true, $this->settle_pending( $account, $token, $batch, $receipt, $result ) ];
+	}
+
+	/**
+	 * Settles a batch whose receipt is pending: what it refuses at once is final, what it accepts or puts off at once is settled as an
+	 * immediate answer is, and the rest waits for the price task.
+	 *
+	 * @param Account                                            $account Account.
+	 * @param string                                             $token   Claim token.
+	 * @param array<int,array{0:Price_Intent,1:Price_Line|null}> $batch   Intents of the request.
+	 * @param Push_Receipt                                       $receipt The marketplace's answer.
+	 * @param Flush_Result                                       $result  Tally.
+	 * @return bool False when the claim is gone: the run must stop.
+	 */
+	private function settle_pending( Account $account, string $token, array $batch, Push_Receipt $receipt, Flush_Result $result ): bool {
 		$answers  = $receipt->immediate_results();
 		$answered = [];
 		$awaited  = [];
+		$go_on    = true;
 
 		foreach ( $batch as list( $intent, $line ) ) {
 			if ( null === $line ) {
 				continue;
 			}
 
-			if ( isset( $answers[ $intent->link_id() ] ) ) {
+			$answer = $answers[ $intent->link_id() ] ?? null;
+
+			if ( null === $answer ) {
+				$awaited[] = [ $intent, $line ];
+			} elseif ( $answer->is_ok() || null !== $answer->retry_after_seconds() ) {
 				$answered[] = [ $intent, $line ];
 			} else {
-				$awaited[] = [ $intent, $line ];
+				$go_on = $this->refuse_for_good( $account, $token, $intent, $answer, $result ) && $go_on;
 			}
 		}
 
-		$go_on = $this->settle_all( $account, $token, $answered, $receipt, $result );
+		$go_on = $this->settle_all( $account, $token, $answered, $receipt, $result ) && $go_on;
 
-		return [ true, $this->await_all( $account, $token, $awaited, $receipt, $result ) && $go_on ];
+		return $this->await_all( $account, $token, $awaited, $receipt, $result ) && $go_on;
+	}
+
+	/**
+	 * Records a refusal that no retry can change.
+	 *
+	 * @param Account      $account Account.
+	 * @param string       $token   Claim token.
+	 * @param Price_Intent $intent  Intent.
+	 * @param Item_Result  $answer  The marketplace's refusal.
+	 * @param Flush_Result $result  Tally.
+	 * @return bool False when the claim is gone.
+	 */
+	private function refuse_for_good( Account $account, string $token, Price_Intent $intent, Item_Result $answer, Flush_Result $result ): bool {
+		$message = $this->refusals->write( $account->id(), $intent, $answer, $token );
+
+		if ( null === $message ) {
+			return $this->lost( $account );
+		}
+
+		$result->add_failed( $message );
+
+		return true;
 	}
 
 	/**

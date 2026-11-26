@@ -13353,12 +13353,12 @@ msgid "Артикул «%1$s» уже занят товаром «%2$s» (№%3$
 msgstr ""
 
 #. translators: %s: marketplace name.
-#: marketplace/jobs/class-price-poll-runner.php:510
+#: marketplace/jobs/class-price-refusal-writer.php:69
 #, php-format
 msgid "%s держит новую цену в карантине: она намного ниже текущей"
 msgstr ""
 
-#: marketplace/jobs/class-price-poll-runner.php:520
+#: marketplace/jobs/class-price-refusal-writer.php:72
 msgid "Маркетплейс отклонил новую цену."
 msgstr ""
 

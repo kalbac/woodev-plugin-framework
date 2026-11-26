@@ -482,15 +482,23 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 	 * {@inheritDoc}
 	 *
 	 * @since 2.0.29
+	 * @since 2.1.25 A failed read throws.
 	 *
 	 * @param int $task_id Task id.
 	 * @return array<int,array{link_id:int,offer_id:string,status:string,errors:array<int,mixed>}>
+	 * @throws \RuntimeException When the database refuses the read.
 	 */
 	public function items( int $task_id ): array {
-		$rows  = $this->db->get_results( $this->db->prepare( 'SELECT * FROM %i WHERE task_id = %d ORDER BY link_id ASC', $this->items, $task_id ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+		$rows = $this->db->get_results( $this->db->prepare( 'SELECT * FROM %i WHERE task_id = %d ORDER BY link_id ASC', $this->items, $task_id ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+
+		// A failed read is not «the task has no items»: a task read that way would be closed as finished.
+		if ( ! is_array( $rows ) || '' !== (string) $this->db->last_error ) {
+			throw new \RuntimeException( 'The items of a task could not be read: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
 		$items = [];
 
-		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+		foreach ( $rows as $row ) {
 			$errors = json_decode( (string) ( $row['errors'] ?? '' ), true );
 
 			$items[ (int) $row['link_id'] ] = [

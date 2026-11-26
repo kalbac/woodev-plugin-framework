@@ -206,9 +206,11 @@ interface Task_Ledger {
 	 * Lists the items of a task.
 	 *
 	 * @since 2.0.29
+	 * @since 2.1.25 A failed read throws.
 	 *
 	 * @param int $task_id Task id.
 	 * @return array<int,array{link_id:int,offer_id:string,status:string,errors:array<int,mixed>}> Keyed by link id.
+	 * @throws \RuntimeException When the database refuses the read: that is not a task without items.
 	 */
 	public function items( int $task_id ): array;
 

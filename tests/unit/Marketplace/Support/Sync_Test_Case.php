@@ -28,6 +28,7 @@ use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Price_Flush_Runner;
+use Woodev\Framework\Marketplace\Jobs\Price_Refusal_Writer;
 use Woodev\Framework\Marketplace\Jobs\Price_Task_Opener;
 use Woodev\Framework\Marketplace\Ledger\Item_Result;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
@@ -68,6 +69,8 @@ abstract class Sync_Test_Case extends TestCase {
 	protected const NOW       = 1794139200;
 	protected const WAREHOUSE = 22;
 	protected const PLUGIN_ID = 'fake-seller';
+
+	protected const MARKETPLACE_NAME = 'Тестовый маркетплейс';
 
 	/**
 	 * Database.
@@ -789,6 +792,20 @@ abstract class Sync_Test_Case extends TestCase {
 	}
 
 	/**
+	 * Keeps refused prices, naming the marketplace as the merchant reads it.
+	 *
+	 * @return Price_Refusal_Writer
+	 */
+	protected function refusal_writer(): Price_Refusal_Writer {
+		return new Price_Refusal_Writer(
+			$this->price_queue(),
+			static function (): string {
+				return self::MARKETPLACE_NAME;
+			}
+		);
+	}
+
+	/**
 	 * Builds the price half over a pusher.
 	 *
 	 * @param Price_Pusher $pusher Pusher.
@@ -797,7 +814,7 @@ abstract class Sync_Test_Case extends TestCase {
 	protected function price_runner( Price_Pusher $pusher ): Price_Flush_Runner {
 		$opener = new Price_Task_Opener( $this->task_ledger(), $this->price_queue(), $pusher, new Export_Scheduler( $this->names() ), [ $this, 'log_line' ] );
 
-		return new Price_Flush_Runner( $this->job_gate(), $this->accounts(), $this->price_queue(), $this->links(), $pusher, $this->limits(), $this->classifier, [ $this, 'log_line' ], $opener );
+		return new Price_Flush_Runner( $this->job_gate(), $this->accounts(), $this->price_queue(), $this->links(), $pusher, $this->limits(), $this->classifier, [ $this, 'log_line' ], $opener, $this->refusal_writer() );
 	}
 
 	/**

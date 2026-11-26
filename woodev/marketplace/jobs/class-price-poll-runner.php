@@ -32,8 +32,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * A price that no longer waits (pulled from the marketplace or detached meanwhile) is skipped. Prices still undecided when the
  * task's deadline passes expire: each is sent once more, and a price that expires a second time is not sent again until it changes.
- * A failed read is retried on the {@see Backoff} ladder, never more often than the poll interval; the deadline bounds the task, so
- * there is no attempt limit.
+ * A failed read — of the marketplace or of our own tables — is retried on the {@see Backoff} ladder, never more often than the poll
+ * interval; the deadline bounds the task, so there is no attempt limit, and a task is closed only once no price waits for it.
  *
  * The deadline and the interval are the pusher's ({@see Price_Task_Schedule}), one hour and one minute without it.
  *
@@ -94,11 +94,11 @@ final class Price_Poll_Runner {
 	private $classifier;
 
 	/**
-	 * Returns the marketplace's name for the merchant: `function (): string`.
+	 * Keeps a price the marketplace turned down.
 	 *
-	 * @var callable
+	 * @var Price_Refusal_Writer
 	 */
-	private $marketplace_name;
+	private $refusals;
 
 	/**
 	 * Error ring.
@@ -126,28 +126,28 @@ final class Price_Poll_Runner {
 	 *
 	 * @since 2.1.25
 	 *
-	 * @param Job_Gate         $gate             Job gate.
-	 * @param Task_Ledger      $ledger           Task ledger.
-	 * @param Price_Sync_Queue $queue            Price queue.
-	 * @param Price_Pusher     $pusher           Pusher.
-	 * @param Export_Scheduler $scheduler        Schedules the task poll.
-	 * @param Error_Classifier $classifier       Classifies a failed request.
-	 * @param callable         $marketplace_name `function (): string`, the marketplace's name for the merchant.
-	 * @param Api_Error_Ring   $ring             Error ring.
-	 * @param callable         $log_error        `function ( string $line ): void`.
-	 * @param callable|null    $clock            `function (): int`; the system clock when null.
+	 * @param Job_Gate             $gate       Job gate.
+	 * @param Task_Ledger          $ledger     Task ledger.
+	 * @param Price_Sync_Queue     $queue      Price queue.
+	 * @param Price_Pusher         $pusher     Pusher.
+	 * @param Export_Scheduler     $scheduler  Schedules the task poll.
+	 * @param Error_Classifier     $classifier Classifies a failed request.
+	 * @param Price_Refusal_Writer $refusals   Keeps a price the marketplace turned down.
+	 * @param Api_Error_Ring       $ring       Error ring.
+	 * @param callable             $log_error  `function ( string $line ): void`.
+	 * @param callable|null        $clock      `function (): int`; the system clock when null.
 	 */
-	public function __construct( Job_Gate $gate, Task_Ledger $ledger, Price_Sync_Queue $queue, Price_Pusher $pusher, Export_Scheduler $scheduler, Error_Classifier $classifier, callable $marketplace_name, Api_Error_Ring $ring, callable $log_error, ?callable $clock = null ) {
-		$this->gate             = $gate;
-		$this->ledger           = $ledger;
-		$this->queue            = $queue;
-		$this->pusher           = $pusher;
-		$this->scheduler        = $scheduler;
-		$this->classifier       = $classifier;
-		$this->marketplace_name = $marketplace_name;
-		$this->ring             = $ring;
-		$this->log_error        = $log_error;
-		$this->clock            = $clock ?? 'time';
+	public function __construct( Job_Gate $gate, Task_Ledger $ledger, Price_Sync_Queue $queue, Price_Pusher $pusher, Export_Scheduler $scheduler, Error_Classifier $classifier, Price_Refusal_Writer $refusals, Api_Error_Ring $ring, callable $log_error, ?callable $clock = null ) {
+		$this->gate       = $gate;
+		$this->ledger     = $ledger;
+		$this->queue      = $queue;
+		$this->pusher     = $pusher;
+		$this->scheduler  = $scheduler;
+		$this->classifier = $classifier;
+		$this->refusals   = $refusals;
+		$this->ring       = $ring;
+		$this->log_error  = $log_error;
+		$this->clock      = $clock ?? 'time';
 	}
 
 	/**
@@ -240,6 +240,12 @@ final class Price_Poll_Runner {
 
 		try {
 			$this->poll( $account, $task, $attempt, $fence );
+		} catch ( Claim_Lost $e ) {
+			throw $e; // Another run owns the account now and the task with it; this one writes and schedules nothing more.
+		} catch ( \Throwable $e ) {
+			// Our own side failed (a database read or write): what the task still owes is unknown, so it is asked about again.
+			$this->report( $account->id(), 'poll_task (prices) ' . $task->task_id() . ' failed unexpectedly: ' . get_class( $e ) . ': ' . $e->getMessage() );
+			$this->poll_later( $task, $attempt + 1, $this->retry_delay( $attempt ) );
 		} finally {
 			$this->gate->release( $account->id(), $fence );
 		}
@@ -268,7 +274,7 @@ final class Price_Poll_Runner {
 		$this->hold( $account->id(), $fence );
 		$this->decide( $account, $task_id, $results, $fence );
 
-		if ( [] === $this->open_links( $task_id ) ) {
+		if ( [] === $this->open_links( $account->id(), $task_id ) ) {
 			$this->finish( $account, $task_id, $fence );
 		} elseif ( $this->is_overdue( $task ) ) {
 			$this->expire( $account, $task_id, $fence );
@@ -297,7 +303,7 @@ final class Price_Poll_Runner {
 
 		$waiting = $this->queue->awaiting( $account->id(), $task_id );
 
-		foreach ( $this->open_links( $task_id ) as $link_id ) {
+		foreach ( $this->open_links( $account->id(), $task_id ) as $link_id ) {
 			if ( ! isset( $waiting[ $link_id ] ) ) {
 				$this->ledger->settle_item( $task_id, $link_id, Task_Ledger::ITEM_SKIPPED );
 			} elseif ( isset( $answers[ $link_id ] ) ) {
@@ -334,11 +340,7 @@ final class Price_Poll_Runner {
 			return;
 		}
 
-		$quarantined = Price_Refusal::QUARANTINED === $answer->code();
-		$code        = $quarantined ? Price_Refusal::QUARANTINED : Price_Refusal::REFUSED;
-		$message     = $quarantined ? $this->quarantine_sentence() : $this->refusal_text( $answer );
-
-		$this->written( $this->queue->refuse( $account->id(), $intent, $code, $message, $token ) );
+		$this->written( null !== $this->refusals->write( $account->id(), $intent, $answer, $token ) );
 		$this->fail_item( $task_id, $intent->link_id(), $answer->code(), $answer->message() );
 	}
 
@@ -355,7 +357,7 @@ final class Price_Poll_Runner {
 	private function expire( Account $account, int $task_id, Claim_Fence $fence ): void {
 		$waiting = $this->queue->awaiting( $account->id(), $task_id );
 
-		foreach ( $this->open_links( $task_id ) as $link_id ) {
+		foreach ( $this->open_links( $account->id(), $task_id ) as $link_id ) {
 			$pair = $waiting[ $link_id ] ?? null;
 
 			if ( null === $pair ) {
@@ -440,8 +442,18 @@ final class Price_Poll_Runner {
 		} elseif ( null !== $error && $error->is( Remote_Error::THROTTLE ) ) {
 			$this->poll_later( $task, $attempt, max( 1, (int) ( $error->retry_after() ?? self::interval_of( $this->pusher ) ) ) );
 		} else {
-			$this->poll_later( $task, $attempt + 1, max( self::interval_of( $this->pusher ), Backoff::seconds_after( $attempt + 1 ) ) );
+			$this->poll_later( $task, $attempt + 1, $this->retry_delay( $attempt ) );
 		}
+	}
+
+	/**
+	 * Returns the wait after a failed poll: the {@see Backoff} ladder, never shorter than the poll interval.
+	 *
+	 * @param int $attempt Failed polls in a row before this one.
+	 * @return int Seconds.
+	 */
+	private function retry_delay( int $attempt ): int {
+		return max( self::interval_of( $this->pusher ), Backoff::seconds_after( $attempt + 1 ) );
 	}
 
 	/**
@@ -460,13 +472,16 @@ final class Price_Poll_Runner {
 	}
 
 	/**
-	 * Lists the links of a task whose item is still pending.
+	 * Lists the links a task still owes: those whose item is pending, and those whose price waits for it whatever the item says. A
+	 * task is closed only when there are none, so that it never leaves a price waiting for a task that is no longer read.
 	 *
-	 * @param int $task_id Task id.
+	 * @param int $account_id Account id.
+	 * @param int $task_id    Task id.
 	 * @return int[]
+	 * @throws \RuntimeException When a read fails.
 	 */
-	private function open_links( int $task_id ): array {
-		$open = [];
+	private function open_links( int $account_id, int $task_id ): array {
+		$open = array_keys( $this->queue->awaiting( $account_id, $task_id ) );
 
 		foreach ( $this->ledger->items( $task_id ) as $item ) {
 			if ( Task_Ledger::ITEM_PENDING === $item['status'] ) {
@@ -474,7 +489,7 @@ final class Price_Poll_Runner {
 			}
 		}
 
-		return $open;
+		return array_values( array_unique( $open ) );
 	}
 
 	/**
@@ -498,26 +513,6 @@ final class Price_Poll_Runner {
 				],
 			]
 		);
-	}
-
-	/**
-	 * Returns the sentence of a quarantined price.
-	 *
-	 * @return string
-	 */
-	private function quarantine_sentence(): string {
-		/* translators: %s: marketplace name. */
-		return sprintf( __( '%s держит новую цену в карантине: она намного ниже текущей', 'woodev-plugin-framework' ), (string) call_user_func( $this->marketplace_name ) );
-	}
-
-	/**
-	 * Returns the marketplace's words on a refused price.
-	 *
-	 * @param Item_Result $answer Refusal.
-	 * @return string
-	 */
-	private function refusal_text( Item_Result $answer ): string {
-		return '' !== $answer->message() ? $answer->message() : __( 'Маркетплейс отклонил новую цену.', 'woodev-plugin-framework' );
 	}
 
 	/**

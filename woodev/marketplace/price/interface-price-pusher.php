@@ -46,8 +46,9 @@ interface Price_Pusher {
 	 *   one;
 	 * - any other failure: refused, with the marketplace's text as the message.
 	 *
-	 * A refused or quarantined price is not sent again until the price changes. A link with no result is asked about again until
-	 * the task's deadline ({@see Price_Task_Schedule}).
+	 * A refused or quarantined price is not sent again until the price changes — also when a pending receipt of
+	 * {@see self::submit()} carries that failure at once. A link with no result is asked about again until the task's deadline
+	 * ({@see Price_Task_Schedule}).
 	 *
 	 * @since 2.0.29
 	 *
