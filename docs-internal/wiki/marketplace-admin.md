@@ -1309,7 +1309,7 @@ and runs against the newest framework copy
 | Interface | Implemented by | What it changes |
 |---|---|---|
 | `Export_Grouping` | the adapter's `Export_Facts` | `export_group( $link, $product )` names a group; `Export_Scheduler` never splits it (a group over 100 links is one larger batch), and an export part of a bulk run takes whole products |
-| `Article_Keyed_Lifecycle` | the adapter's `Card_Lifecycle` | an empty `submit()` answer means «accepted»; the task is read by `read_import_by_articles()`; a re-send first asks `find_cards()` |
+| `Article_Keyed_Lifecycle` | the adapter's `Card_Lifecycle` | an empty `submit()` answer means «accepted»; the task is read by `read_import_by_articles()`; a re-send first asks `find_cards()`; a re-send refused as `Remote_Error::ARTICLE_TAKEN` waits for the card |
 | `Import_Deadlines` | the adapter's `Card_Lifecycle` | `task_deadline()` and `card_deadline()` replace 24 h and 3 h |
 
 **A group** is offers of one WooCommerce product. A group spanning several products is kept together only when they are queued in one
@@ -1322,7 +1322,13 @@ call. Offers the validator refuses are not waited for.
 request carried the link (`Task_Ledger::sent_offer_id()`), and the link has no remote identifier. `find_cards()` reads the card list
 only (an error-list entry is no card). A card found there is not sent: its link moves to `offer_validated` with the identifiers
 returned and `read_cards()` takes over; the data of this second export is sent by the next one. A failed lookup sends nothing.
-Left open: a card the marketplace accepted but does not list yet at retry time is sent again.
+
+**The card list lags.** A card the marketplace accepted may not be listed at retry time, so it is sent again and the marketplace
+refuses the article. The adapter's classifier answers `Remote_Error::ARTICLE_TAKEN` for that refusal; the job then fails nothing it
+may have created: the task stays open (`result.refusal`, `Async_Task::refusal()`), the poll asks `find_cards()` only — never the
+error list, which echoes the refusal — and links the card when it appears. At the task deadline the link fails with the
+marketplace's words. The other links of the refused request are queued again; a first send refused this way fails at once. An
+adapter that classifies the refusal as plain `FAIL` loses this: WP4 must map it.
 
 `Card_Lifecycle::card_id_name()` must differ between links: for sizes sharing a card it is the size's identifier.
 

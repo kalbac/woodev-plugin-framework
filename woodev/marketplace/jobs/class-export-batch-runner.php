@@ -38,7 +38,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * A marketplace that gives no task number ({@see Article_Keyed_Lifecycle}): an empty answer is «accepted» and the task is polled by
  * its articles. A card an earlier request already carried, with no identifier known, is first looked up in the card list (step 4½): a
- * card that is there is not sent again, and when the lookup fails nothing is sent.
+ * card that is there is not sent again, and when the lookup fails nothing is sent. The
+ * list may lag behind: when such a card is sent and refused as {@see Remote_Error::ARTICLE_TAKEN}, it is not failed — the task stays
+ * open and the poll reads the card list until the card appears or the task's deadline passes.
  *
  * Failures follow the adapter's {@see Error_Classifier}: a governor wait or a throttle reschedules with the delay it asked for
  * **without** counting an attempt; a server or transport error, or an unexpected exception before anything was sent, puts the links
@@ -413,6 +415,8 @@ final class Export_Batch_Runner {
 			unset( $items[ $link_id ] );
 		}
 
+		$run->unconfirmed = array_keys( array_intersect_key( $resent, $items ) );
+
 		return $items;
 	}
 
@@ -514,6 +518,13 @@ final class Export_Batch_Runner {
 			}
 
 			$run->settled = true;
+			$awaited      = $error->is( Remote_Error::ARTICLE_TAKEN ) ? array_intersect( array_keys( $items ), $run->unconfirmed ) : [];
+
+			if ( [] !== $awaited ) {
+				$this->await_cards( $account, $run->task_id, array_values( array_diff( array_keys( $items ), $awaited ) ), $attempt, $error, $fence );
+				return;
+			}
+
 			$this->after_failure( $account, $run->task_id, array_keys( $items ), $attempt, $error, $fence );
 
 			if ( $run->found > 0 ) {
@@ -539,6 +550,40 @@ final class Export_Batch_Runner {
 
 		$run->settled = true;
 		$this->schedule_first_poll( $account->id(), $run->task_id );
+	}
+
+	/**
+	 * The re-send was refused because an article is taken, and the card list did not show the card a moment ago: most likely it is the
+	 * card of the earlier, unconfirmed request, not listed yet. Failing it would leave a real card unlinked, so the task stays open
+	 * and the poll waits for it. The marketplace refused the request as a whole, so the other links of it are queued again.
+	 *
+	 * @param Account      $account Account.
+	 * @param int          $task_id Task id.
+	 * @param int[]        $others  Links of the request that no earlier request may have created.
+	 * @param int          $attempt Failed attempts so far.
+	 * @param Remote_Error $error   The refusal.
+	 * @param Claim_Fence  $fence   The run's claim.
+	 * @return void
+	 */
+	private function await_cards( Account $account, int $task_id, array $others, int $attempt, Remote_Error $error, Claim_Fence $fence ): void {
+		$this->log( 'export_batch: account ' . $account->id() . ': task ' . $task_id . ' waits for the cards of refused articles: ' . $error->describe() );
+		$this->ledger->await_cards( $task_id, $error->message() );
+
+		if ( [] !== $others ) {
+			$this->retry_or_give_up( $account->id(), $others, $attempt, $task_id, $fence, $this->refused_text( $error ), $error );
+		}
+
+		$this->schedule_first_poll( $account->id(), $task_id );
+	}
+
+	/**
+	 * Returns the sentence a link refused by the marketplace shows.
+	 *
+	 * @param Remote_Error $error The refusal.
+	 * @return string
+	 */
+	private function refused_text( Remote_Error $error ): string {
+		return sprintf( /* translators: %s: reason. */ __( 'Маркетплейс отклонил выгрузку: %s', 'woodev-plugin-framework' ), $error->message() );
 	}
 
 	/**
@@ -573,7 +618,7 @@ final class Export_Batch_Runner {
 			return;
 		}
 
-		$this->fail_links( $task_id, $link_ids, $error->kind(), sprintf( /* translators: %s: reason. */ __( 'Маркетплейс отклонил выгрузку: %s', 'woodev-plugin-framework' ), $error->message() ), $fence );
+		$this->fail_links( $task_id, $link_ids, $error->kind(), $this->refused_text( $error ), $fence );
 	}
 
 	/**

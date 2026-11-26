@@ -150,6 +150,126 @@ final class ArticleKeyedExportTest extends Export_Test_Case {
 	}
 
 	/**
+	 * The card list lags: a re-send refused because the article is taken does not fail the link. The task waits, asks the card
+	 * list only (the error list holds the echo of the refusal), and links the card once it is listed.
+	 *
+	 * @return void
+	 */
+	public function test_a_re_send_refused_as_taken_waits_for_the_card_and_links_it(): void {
+		$link = $this->lost_answer( 'NB-1' );
+
+		$this->gateway->answers = [ Fake_Remote_Exception::of( Remote_Error::ARTICLE_TAKEN, 'article used in another card' ) ];
+		$this->run_batch( [ $link ], 1 );
+
+		$this->assertCount( 2, $this->gateway->submitted );
+		$this->assertSame( Link_Record::STATE_SUBMITTED, $this->state_of( $link ) );
+		$this->assertSame( [], $this->scheduler->of( self::EXPORT ), 'no third create' );
+		$this->assertSame( [ 2, 0 ], $this->scheduler->of( self::POLL )[0]['args'] );
+
+		$this->lifecycle->reads  = [];
+		$this->lifecycle->import = [ 'NB-1' => new Import_Outcome( true, Link_Record::STATE_FAILED, Task_Ledger::ITEM_FAILED, 'taken', 'article used in another card' ) ];
+		$this->poll( 2 );
+
+		$this->assertSame( [ [ 'find', [ 'NB-1' ] ] ], $this->lifecycle->reads );
+		$this->assertSame( Link_Record::STATE_SUBMITTED, $this->state_of( $link ) );
+		$this->assertSame( Async_Task::STATUS_POLLING, $this->ledger()->get( 2 )->status() );
+
+		$this->lifecycle->existing = [ 'NB-1' => [ 'card_ref' => 'c-1' ] ];
+		$this->lifecycle->cards    = [ 'c-1' => new Card_Outcome( Link_Record::STATE_CREATED, true, false, 'created', [ 'card_ref' => 'c-1', 'model_ref' => 'm-1' ] ) ];
+		$this->now                += Poll_Task_Runner::STALE_AFTER + 1;
+		$this->scheduler->actions  = [];
+		$this->poll_runner()->run( Poll_Task_Runner::SWEEP_TASK, 0 );
+
+		$this->assertSame( [], $this->scheduler->of( self::EXPORT ), 'the sweep polls, it does not send' );
+		$this->assertSame( [ 2, 0 ], $this->scheduler->of( self::POLL )[0]['args'] );
+
+		$this->poll( 2 );
+
+		$this->assertSame( Link_Record::STATE_CREATED, $this->state_of( $link ) );
+		$this->assertSame( 'c-1', $this->link_of( $link->wc_product_id() )->remote_id( 'card_ref' ) );
+		$this->assertSame( [ (int) $link->link_id() ], $this->seeded );
+		$this->assertSame( [ [ (int) $link->link_id(), $this->account_id ] ], $this->created );
+		$this->assertSame( Async_Task::STATUS_DONE, $this->ledger()->get( 2 )->status() );
+	}
+
+	/**
+	 * The same after a run that died during its send: the sweep queues the link, the re-send is refused, the task waits.
+	 *
+	 * @return void
+	 */
+	public function test_a_re_send_after_a_dead_run_refused_as_taken_waits_for_the_card(): void {
+		$link    = $this->queued( 'NB-1' );
+		$task_id = $this->ledger()->open( new Async_Task( $this->account_id, Async_Task::KIND_IMPORT ), [ (int) $link->link_id() => 'NB-1' ] );
+		$this->links()->claim_for_task( $task_id, [ (int) $link->link_id() ] );
+		$this->ledger()->mark_sending( $task_id, 'hash', [ (int) $link->link_id() ] );
+		$this->now += Poll_Task_Runner::STALE_AFTER + 1;
+		$this->poll_runner()->run( Poll_Task_Runner::SWEEP_TASK, 0 );
+
+		$this->gateway->answers = [ Fake_Remote_Exception::of( Remote_Error::ARTICLE_TAKEN, 'article used in another card' ) ];
+		$this->run_batch( [ $link ] );
+		$this->lifecycle->existing = [ 'NB-1' => [ 'card_ref' => 'c-1' ] ];
+		$this->poll( 2 );
+
+		$this->assertSame( Link_Record::STATE_OFFER_VALIDATED, $this->state_of( $link ) );
+	}
+
+	/**
+	 * A card that never shows up fails at the task deadline with the marketplace's refusal.
+	 *
+	 * @return void
+	 */
+	public function test_an_awaited_card_that_never_appears_fails_with_the_refusal(): void {
+		$link                   = $this->lost_answer( 'NB-1' );
+		$this->gateway->answers = [ Fake_Remote_Exception::of( Remote_Error::ARTICLE_TAKEN, 'article used in another card' ) ];
+		$this->run_batch( [ $link ], 1 );
+
+		$this->now += Poll_Task_Runner::TASK_DEADLINE + 1;
+		$this->poll( 2 );
+
+		$this->assertSame( Link_Record::STATE_FAILED, $this->state_of( $link ) );
+		$this->assertStringContainsString( 'article used in another card', $this->links()->last_error( (int) $link->link_id() )['text'] );
+		$this->assertSame( Async_Task::STATUS_EXPIRED, $this->ledger()->get( 2 )->status() );
+	}
+
+	/**
+	 * A first send refused as taken follows no earlier request: it fails at once.
+	 *
+	 * @return void
+	 */
+	public function test_a_first_send_refused_as_taken_fails_at_once(): void {
+		$link                   = $this->queued( 'NB-1' );
+		$this->gateway->answers = [ Fake_Remote_Exception::of( Remote_Error::ARTICLE_TAKEN, 'article used in another card' ) ];
+
+		$this->run_batch( [ $link ] );
+
+		$this->assertSame( Link_Record::STATE_FAILED, $this->state_of( $link ) );
+		$this->assertStringContainsString( 'article used in another card', $this->links()->last_error( (int) $link->link_id() )['text'] );
+		$this->assertSame( [], $this->scheduler->of( self::POLL ) );
+	}
+
+	/**
+	 * In a mixed batch only the card an earlier request carried is awaited; the new one is queued again.
+	 *
+	 * @return void
+	 */
+	public function test_a_card_never_sent_before_is_queued_again_when_the_batch_is_refused_as_taken(): void {
+		$old                    = $this->lost_answer( 'NB-1' );
+		$new                    = $this->queued( 'NB-2' );
+		$this->gateway->answers = [ Fake_Remote_Exception::of( Remote_Error::ARTICLE_TAKEN, 'article used in another card' ) ];
+
+		$this->run_batch( [ $old, $new ], 1 );
+
+		$this->assertSame( Link_Record::STATE_SUBMITTED, $this->state_of( $old ) );
+		$this->assertSame( Link_Record::STATE_QUEUED, $this->state_of( $new ) );
+		$this->assertSame( [ $this->account_id, [ (int) $new->link_id() ], 2 ], $this->scheduler->of( self::EXPORT )[0]['args'] );
+
+		$this->lifecycle->reads = [];
+		$this->poll( 2 );
+
+		$this->assertSame( [ [ 'find', [ 'NB-1' ] ] ], $this->lifecycle->reads );
+	}
+
+	/**
 	 * Of a batch only the missing cards are sent; the ones found are polled even when that send fails.
 	 *
 	 * @return void

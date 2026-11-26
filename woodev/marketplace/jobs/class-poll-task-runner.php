@@ -29,7 +29,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * 1. **Import** while items are open; when every item is final the task is `done` or `done_with_errors`. Unfinished 24 hours after
  *    the submit, the task is `expired` and its open items `failed`. A task accepted without a task id is read by the articles of its
- *    open items ({@see Article_Keyed_Lifecycle}).
+ *    open items ({@see Article_Keyed_Lifecycle}). A task whose re-send was refused because the cards may exist already is read from the
+ *    card list only, and fails with the marketplace's refusal when the deadline passes.
  * 2. **Card lifecycle** for every link of the task already imported and not yet created, **whether or not the other items are
  *    final**, until the card exists. Before a link is marked `created` its first stock and price intents are seeded; a failed
  *    seeding leaves it for the next poll. Then the card-created callback fires once. A created card that still lacks an identifier
@@ -302,8 +303,7 @@ final class Poll_Task_Runner {
 
 		if ( $this->age( $task ) > $this->task_deadline() || ! $this->is_readable( $task ) ) {
 			$this->hold( $task->account_id(), $fence );
-			/* translators: %d: number of hours. */
-			$this->close_open_items( $task_id, 'task_expired', sprintf( __( 'Маркетплейс не вернул результат за %d ч.', 'woodev-plugin-framework' ), self::hours( $this->task_deadline() ) ), $fence );
+			$this->close_open_items( $task_id, 'task_expired', $this->expiry_text( $task ), $fence );
 			$this->ledger->record_poll( $task_id, Async_Task::STATUS_EXPIRED );
 
 			return self::PHASE_DONE;
@@ -355,6 +355,30 @@ final class Poll_Task_Runner {
 		return null !== $task->remote_task_id() || ( $task->is_accepted_by_articles() && $this->lifecycle instanceof Article_Keyed_Lifecycle );
 	}
 
+	/**
+	 * Returns why the open items of an expired task failed.
+	 *
+	 * @param Async_Task $task Task.
+	 * @return string
+	 */
+	private function expiry_text( Async_Task $task ): string {
+		if ( '' !== $task->refusal() ) {
+			return sprintf( /* translators: %s: reason. */ __( 'Маркетплейс отклонил выгрузку: %s', 'woodev-plugin-framework' ), $task->refusal() );
+		}
+
+		/* translators: %d: number of hours. */
+		return sprintf( __( 'Маркетплейс не вернул результат за %d ч.', 'woodev-plugin-framework' ), self::hours( $this->task_deadline() ) );
+	}
+
+	/**
+	 * Asks the marketplace for the import result, by the task id or by the articles still open. A task that waits for the cards of a
+	 * refused re-send asks the card list only: the refusal itself says nothing about the earlier request.
+	 *
+	 * @param Account    $account Account.
+	 * @param Async_Task $task    A readable task.
+	 * @return array<string,Import_Outcome> By article.
+	 * @throws \Throwable When the request fails.
+	 */
 	private function read_import( Account $account, Async_Task $task ): array {
 		$remote_task_id = $task->remote_task_id();
 
@@ -374,7 +398,26 @@ final class Poll_Task_Runner {
 			return [];
 		}
 
+		if ( '' !== $task->refusal() ) {
+			return self::listed_cards( $this->lifecycle->find_cards( $account, $open, $this->scheduler->poll_hook() ) );
+		}
+
 		return $this->lifecycle->read_import_by_articles( $account, $open, $this->scheduler->poll_hook() );
+	}
+
+	/**
+	 * Reads each card found in the card list as an imported item.
+	 *
+	 * @param array<string,array<string,int|string>> $cards Article => identifiers.
+	 * @return array<string,Import_Outcome> By article.
+	 */
+	private static function listed_cards( array $cards ): array {
+		return array_map(
+			static function ( array $remote_ids ): Import_Outcome {
+				return new Import_Outcome( true, Link_Record::STATE_OFFER_VALIDATED, Task_Ledger::ITEM_IMPORTED, '', '', [], $remote_ids );
+			},
+			$cards
+		);
 	}
 
 	/**
