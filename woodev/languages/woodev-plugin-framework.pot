@@ -13405,3 +13405,79 @@ msgstr ""
 #, php-format
 msgid "маркетплейс не принял эту цену — измените её, чтобы отправить: %s"
 msgstr ""
+
+#. translators: 1: the marketplace's word for a posting, capitalised: «Отправление», 2: posting number, 3: marketplace name.
+#: marketplace/admin/order/class-cancel-note.php:33
+#, php-format
+msgid "%1$s %2$s отменено: %3$s, из WooCommerce."
+msgstr ""
+
+#: marketplace/admin/order/class-posting-unit.php:99
+msgid "Позиция"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:297
+msgid "Маркетплейс не ответил: действие могло выполниться. Проверьте состояние заказа, прежде чем повторять."
+msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:393
+msgid "Это действие не относится к этому заказу."
+msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:443
+msgid "Маркетплейс не ответил по этой позиции. Проверьте её состояние в кабинете, прежде чем повторять."
+msgstr ""
+
+#. translators: 1: marketplace name, 2: name of the action.
+#: marketplace/admin/order/class-seller-action-runner.php:469
+#, php-format
+msgid "%1$s: действие «%2$s», из WooCommerce."
+msgstr ""
+
+#. translators: %s: goods, separated by semicolons.
+#: marketplace/admin/order/class-seller-action-runner.php:473
+#, php-format
+msgid "Выполнено: %s."
+msgstr ""
+
+#. translators: %s: goods with the reason of each, separated by semicolons.
+#: marketplace/admin/order/class-seller-action-runner.php:478
+#, php-format
+msgid "Не выполнено: %s"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:517
+msgid "Приём заказов с маркетплейса выключен в настройках плагина, поэтому заказ не обновится после действия. Включите приём заказов в настройках и повторите."
+msgstr ""
+
+#. translators: %s: name of the action, «Принять в работу».
+#: marketplace/admin/order/class-seller-action-runner.php:529
+#, php-format
+msgid "выполнить действие «%s» на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:586
+msgid "У этого заказа нет сведений о товарах на маркетплейсе, поэтому действие недоступно."
+msgstr ""
+
+#: marketplace/admin/order/class-seller-unit-result.php:63
+msgid "Маркетплейс отказал и не назвал причину."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-seller.php:300
+msgid "Другие причины: выберите меньше заказов, чтобы увидеть каждую."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-seller.php:338
+msgid "Числа ниже — товары в выбранных заказах."
+msgstr ""
+
+#: marketplace/admin/shared/class-posting-action-gate.php:195
+msgid "В текущем статусе это действие недоступно."
+msgstr ""
+
+#. translators: %s: the marketplace status of the goods, as the merchant reads it.
+#: marketplace/admin/shared/class-posting-action-gate.php:199
+#, php-format
+msgid "В статусе «%s» это действие недоступно."
+msgstr ""

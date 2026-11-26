@@ -221,4 +221,38 @@ final class Screen_Names {
 	public function cancel_nonce( int $order_id ): string {
 		return 'woodev_' . $this->marketplace_id . '_cancel_' . $order_id;
 	}
+
+	/**
+	 * Returns the `wp_ajax_` action that runs a seller action from the order screen.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @return string
+	 */
+	public function seller_action(): string {
+		return 'woodev_' . $this->marketplace_id . '_seller_action';
+	}
+
+	/**
+	 * Returns the `wp_ajax_` action that lists the choices of a seller action's field on the order screen.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @return string
+	 */
+	public function seller_options_action(): string {
+		return 'woodev_' . $this->marketplace_id . '_seller_options';
+	}
+
+	/**
+	 * Returns the nonce action of one order's seller action buttons.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param int $order_id Order id.
+	 * @return string
+	 */
+	public function seller_nonce( int $order_id ): string {
+		return 'woodev_' . $this->marketplace_id . '_seller_' . $order_id;
+	}
 }

@@ -15,10 +15,14 @@ use Woodev\Framework\Marketplace\Admin\Order\Cancel_Modal;
 use Woodev\Framework\Marketplace\Admin\Order\Label_Button;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Details_Box;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Buttons;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
+use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Seller_Adapter;
 use Woodev\Tests\Unit\TestCase;
 
 /**
@@ -262,7 +266,7 @@ final class OrderDetailsBoxTest extends TestCase {
 	 * @param Label_Button|null   $label_button The label button.
 	 * @return Order_Details_Box
 	 */
-	private function box( Marketplace_Adapter $adapter, ?Cancel_Modal $modal = null, ?Label_Button $label_button = null ): Order_Details_Box {
+	private function box( Marketplace_Adapter $adapter, ?Cancel_Modal $modal = null, ?Label_Button $label_button = null, ?Seller_Action_Buttons $seller = null ): Order_Details_Box {
 		return new Order_Details_Box(
 			new Screen_Names( 'fake', 'Fake' ),
 			$adapter,
@@ -272,8 +276,40 @@ final class OrderDetailsBoxTest extends TestCase {
 			$modal,
 			$label_button,
 			'https://example.test/assets/',
+			'1.0',
+			$seller
+		);
+	}
+
+	public function test_the_seller_actions_of_the_order_and_of_its_goods_are_in_the_box(): void {
+		$adapter = new Fake_Seller_Adapter();
+		$account = new Account( 1, 'fake', 'Основной', true, [], null, [] );
+		$runner  = new Seller_Action_Runner(
+			$adapter,
+			new Posting_Action_Gate( new Label_Availability( null ), null, null, null, $adapter ),
+			new License_Gate( '__return_true' ),
+			'Fake'
+		);
+		$buttons = new Seller_Action_Buttons(
+			new Screen_Names( 'fake', 'Fake' ),
+			$runner,
+			static function () use ( $account ): Account {
+				return $account;
+			},
+			'https://example.test/assets/',
 			'1.0'
 		);
+		$order   = $this->order( 700 );
+		$order->shouldReceive( 'get_meta' )->andReturn( [ [ 'u-1', 'Футболка, M', 'new' ] ] );
+		Functions\when( '__return_true' )->justReturn( true );
+		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+
+		$html = $this->render( $this->box( Mockery::mock( Marketplace_Adapter::class ), null, null, $buttons ), $order );
+
+		$this->assertStringContainsString( '<table class="widefat striped woodev-mp-units">', $html );
+		$this->assertStringContainsString( 'Футболка, M', $html );
+		$this->assertStringContainsString( '<div class="actions">', $html );
+		$this->assertStringContainsString( '>Принять в работу<', $html );
 	}
 
 	/**

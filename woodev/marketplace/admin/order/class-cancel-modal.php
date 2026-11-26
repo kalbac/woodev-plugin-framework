@@ -151,13 +151,20 @@ final class Cancel_Modal {
 			return;
 		}
 
-		$printed = true;
-		$noun    = $this->names->posting_noun();
+		$printed    = true;
+		$noun       = $this->names->posting_noun();
+		$reasonless = false;
+		$warning    = '';
+
+		if ( $this->canceller instanceof Reasonless_Canceller ) {
+			$reasonless = true;
+			$warning    = $this->canceller->cancel_warning();
+		}
 
 		/* translators: %s: the marketplace's word for a posting, «отправление». */
 		$cancel_label = sprintf( __( 'Отменить %s', 'woodev-plugin-framework' ), $noun->one() );
 		?>
-		<dialog id="<?php echo esc_attr( self::DIALOG_ID ); ?>" class="woodev-dialog woodev-mp-cancel-dialog" aria-labelledby="woodev-mp-cancel-title" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-button="<?php echo esc_attr( '.' . self::BUTTON_CLASS ); ?>" data-loading="<?php echo esc_attr__( 'Загружаем причины…', 'woodev-plugin-framework' ); ?>" data-sending="<?php echo esc_attr__( 'Отменяем…', 'woodev-plugin-framework' ); ?>" data-failed="<?php echo esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ); ?>">
+		<dialog id="<?php echo esc_attr( self::DIALOG_ID ); ?>" class="woodev-dialog woodev-mp-cancel-dialog" aria-labelledby="woodev-mp-cancel-title" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-button="<?php echo esc_attr( '.' . self::BUTTON_CLASS ); ?>" data-reasonless="<?php echo esc_attr( $reasonless ? '1' : '0' ); ?>" data-loading="<?php echo esc_attr__( 'Загружаем причины…', 'woodev-plugin-framework' ); ?>" data-sending="<?php echo esc_attr__( 'Отменяем…', 'woodev-plugin-framework' ); ?>" data-failed="<?php echo esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ); ?>">
 			<div class="woodev-dialog__header">
 				<h2 class="woodev-dialog__title" id="woodev-mp-cancel-title"><?php echo esc_html( $cancel_label ); ?></h2>
 				<button type="button" class="woodev-dialog__close" data-woodev-dialog-close aria-label="<?php esc_attr_e( 'Закрыть', 'woodev-plugin-framework' ); ?>"></button>
@@ -169,14 +176,14 @@ final class Cancel_Modal {
 					echo esc_html( sprintf( __( '%s будет отменено на маркетплейсе. Это нельзя отменить: покупатель получит уведомление, а товар вернётся на склад сайта.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $noun->one() ) ) );
 					?>
 				</p>
-				<p>
-					<label for="woodev-mp-cancel-reason"><?php esc_html_e( 'Причина отмены', 'woodev-plugin-framework' ); ?></label><br>
-					<select id="woodev-mp-cancel-reason" disabled></select>
-				</p>
-				<p id="woodev-mp-cancel-message-row" hidden>
-					<label for="woodev-mp-cancel-message"><?php esc_html_e( 'Напишите, что случилось', 'woodev-plugin-framework' ); ?></label><br>
-					<textarea id="woodev-mp-cancel-message" class="large-text" rows="3"></textarea>
-				</p>
+				<?php if ( '' !== $warning ) : ?>
+					<p><strong><?php echo esc_html( $warning ); ?></strong></p>
+				<?php endif; ?>
+				<?php
+				if ( ! $reasonless ) {
+					$this->print_reason_fields();
+				}
+				?>
 				<p id="woodev-mp-cancel-status" role="status"></p>
 			</div>
 			<div class="woodev-dialog__footer">
@@ -184,6 +191,24 @@ final class Cancel_Modal {
 				<button type="button" class="button button-primary" id="woodev-mp-cancel-confirm" disabled><?php echo esc_html( $cancel_label ); ?></button>
 			</div>
 		</dialog>
+		<?php
+	}
+
+	/**
+	 * Prints the reason list and the free-text field of a cancellation that asks for a reason.
+	 *
+	 * @return void
+	 */
+	private function print_reason_fields(): void {
+		?>
+		<p>
+			<label for="woodev-mp-cancel-reason"><?php esc_html_e( 'Причина отмены', 'woodev-plugin-framework' ); ?></label><br>
+			<select id="woodev-mp-cancel-reason" disabled></select>
+		</p>
+		<p id="woodev-mp-cancel-message-row" hidden>
+			<label for="woodev-mp-cancel-message"><?php esc_html_e( 'Напишите, что случилось', 'woodev-plugin-framework' ); ?></label><br>
+			<textarea id="woodev-mp-cancel-message" class="large-text" rows="3"></textarea>
+		</p>
 		<?php
 	}
 

@@ -21,6 +21,8 @@
 	var message    = document.getElementById( 'woodev-mp-cancel-message' );
 	var status     = document.getElementById( 'woodev-mp-cancel-status' );
 	var confirm    = document.getElementById( 'woodev-mp-cancel-confirm' );
+	// A marketplace whose cancellation takes no reason: PHP prints no reason fields.
+	var reasonless = dialog.getAttribute( 'data-reasonless' ) === '1';
 	var order      = null;
 	var otherReason = 0;
 
@@ -59,13 +61,24 @@
 			reasonsAction: button.getAttribute( 'data-reasons-action' ),
 			cancelAction: button.getAttribute( 'data-cancel-action' )
 		};
-		select.textContent = '';
-		select.disabled = true;
+		if ( reasonless ) {
+			confirm.disabled = false;
+			say( '' );
+			handle.open();
+			return;
+		}
+
 		confirm.disabled = true;
-		message.value = '';
-		messageRow.hidden = true;
 		say( dialog.getAttribute( 'data-loading' ) );
 		handle.open();
+		loadReasons();
+	}
+
+	function loadReasons() {
+		select.textContent = '';
+		select.disabled = true;
+		message.value = '';
+		messageRow.hidden = true;
 
 		post( order.reasonsAction ).then( function ( answer ) {
 			if ( ! answer || ! answer.success ) {
@@ -98,12 +111,17 @@
 			open( button );
 		}
 	} );
-	select.addEventListener( 'change', syncMessage );
+	if ( ! reasonless ) {
+		select.addEventListener( 'change', syncMessage );
+	}
+
 	confirm.addEventListener( 'click', function () {
+		var chosen = reasonless ? {} : { reason_id: select.value, message: message.value };
+
 		confirm.disabled = true;
 		say( dialog.getAttribute( 'data-sending' ) );
 
-		post( order.cancelAction, { reason_id: select.value, message: message.value } ).then( function ( answer ) {
+		post( order.cancelAction, chosen ).then( function ( answer ) {
 			if ( answer && answer.success ) {
 				window.location.reload();
 				return;

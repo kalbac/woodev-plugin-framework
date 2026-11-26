@@ -10,6 +10,8 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Actions;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -38,7 +40,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * The provider is built when the REST API starts, not on every request, and only when the plugin still has the `orders` page. An
  * adapter without label calls ({@see Capability::GET_LABEL}) gets the table without the label column and action; one that is not an
- * {@see Order_Canceller} gets it without «Отменить отправление».
+ * {@see Order_Canceller} gets it without «Отменить отправление»; one that declares {@see Seller_Actions} gets their row and bulk
+ * actions.
  *
  * @since 2.1.5
  */
@@ -151,8 +154,30 @@ final class Site_Orders_Module {
 			self::data_status( $plugin, $adapter ),
 			null,
 			$gate,
-			$noun
+			$noun,
+			self::seller( $plugin, $adapter, $gate, $license )
 		);
+	}
+
+	/**
+	 * The seller actions of an adapter that declares them.
+	 *
+	 * @param Marketplace_Plugin  $plugin  Plugin.
+	 * @param Marketplace_Adapter $adapter Adapter.
+	 * @param Posting_Action_Gate $gate    The write rule.
+	 * @param License_Gate        $license Licence gate.
+	 * @return Site_Orders_Seller|null
+	 */
+	private static function seller( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, Posting_Action_Gate $gate, License_Gate $license ): ?Site_Orders_Seller {
+		if ( ! $adapter instanceof Seller_Actions ) {
+			return null;
+		}
+
+		$log = static function ( string $line ) use ( $plugin ): void {
+			$plugin->log_error( $line );
+		};
+
+		return new Site_Orders_Seller( new Seller_Action_Runner( $adapter, $gate, $license, $adapter->settings_descriptor()->marketplace_name(), $log ) );
 	}
 
 	/**

@@ -8,8 +8,10 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Order\Cancel_Note;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Refused;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
+use Woodev\Framework\Marketplace\Admin\Order\Reasonless_Canceller;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -150,6 +152,28 @@ final class Site_Orders_Cancel {
 	}
 
 	/**
+	 * Whether the marketplace's cancellation takes a reason; one that takes none is never asked for the list.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @return bool
+	 */
+	public function needs_reason(): bool {
+		return ! $this->canceller instanceof Reasonless_Canceller;
+	}
+
+	/**
+	 * What the merchant should know before confirming a cancellation that takes no reason.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @return string Empty for none.
+	 */
+	public function warning(): string {
+		return $this->canceller instanceof Reasonless_Canceller ? $this->canceller->cancel_warning() : '';
+	}
+
+	/**
 	 * Whether a reason asks the merchant for a free-text message.
 	 *
 	 * @since 2.1.5
@@ -189,8 +213,7 @@ final class Site_Orders_Cancel {
 
 		$reason = $this->canceller->cancel( $account, $posting, $reason_id, $message );
 
-		/* translators: 1: the marketplace's word for a posting, capitalised: «Отправление», 2: posting number, 3: marketplace name, 4: cancellation reason. */
-		$order->add_order_note( sprintf( __( '%1$s %2$s отменено: %3$s, из WooCommerce. Причина: %4$s.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $this->noun->one() ), $posting, $this->marketplace, $reason['title'] ) );
+		$order->add_order_note( Cancel_Note::text( Posting_Noun::capitalised( $this->noun->one() ), $posting, $this->marketplace, (string) $reason['title'] ) );
 
 		try {
 			$this->canceller->queue_refresh( $account, $posting );

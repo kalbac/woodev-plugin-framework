@@ -27,3 +27,4 @@
 
 - [admin-ui/records] **A records page passes every unit/jest test and asset parity while its extensions are never mounted — check the built entry mounts the hooks.** → [a-records-page-can-pass-every-test-while-its-extensions-are-never-mounted](../gotchas/a-records-page-can-pass-every-test-while-its-extensions-are-never-mounted.md) (s229)
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [admin-ui/tables] **The records engine does not truncate: one provider string over its bound (a marketplace refusal as a row reason, > 500) answers 500 for the whole table.** → [a-too-long-provider-string-fails-the-whole-records-response](../gotchas/a-too-long-provider-string-fails-the-whole-records-response.md) (card #2003)

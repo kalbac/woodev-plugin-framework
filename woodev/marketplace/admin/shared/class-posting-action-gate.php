@@ -8,16 +8,20 @@
 namespace Woodev\Framework\Marketplace\Admin\Shared;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Order\Posting_Unit;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Action;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Actions;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * The one rule behind «Отменить» and «Этикетки» on both the «Заказы» table and the order screen: a write action is offered only when
- * the account can write ({@see \Woodev\Framework\Marketplace\Marketplace_Plugin::account_write_gate()}, the gate the write jobs ask
- * too) and, for this posting, the marketplace allows it ({@see Posting_Allowed_Actions}); a label also needs the posting to be ready
- * for one ({@see Label_Availability}). Each answer is the sentence for the merchant, or an empty string when the action is on offer.
+ * The one rule behind «Отменить», «Этикетки» and the seller actions on both the «Заказы» table and the order screen: a write
+ * action is offered only when the account can write ({@see \Woodev\Framework\Marketplace\Marketplace_Plugin::account_write_gate()},
+ * the gate the write jobs ask too) and, for this posting, the marketplace allows it ({@see Posting_Allowed_Actions}); a label also
+ * needs the posting to be ready for one ({@see Label_Availability}), and a seller action a unit in one of its statuses
+ * ({@see Seller_Action}). Each answer is the sentence for the merchant, or an empty string when the action is on offer.
  *
  * Everything is decided from what the plugin has stored, so no answer costs a call to the marketplace. The server asks again before it
  * acts on a request: an action that is off in the interface is off for a hand-made request too.
@@ -54,21 +58,31 @@ final class Posting_Action_Gate {
 	private $noun;
 
 	/**
+	 * The adapter's seller actions, when it declares them.
+	 *
+	 * @var Seller_Actions|null
+	 */
+	private $seller;
+
+	/**
 	 * Creates the rule.
 	 *
 	 * @since 2.1.17
 	 * @since 2.1.23 Takes the posting noun.
+	 * @since 2.1.27 Takes the seller actions.
 	 *
 	 * @param Label_Availability           $labels     The label rule.
 	 * @param Posting_Allowed_Actions|null $allowed    The adapter's allowed actions; null for an adapter that has none.
 	 * @param callable|null                $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (`true` allows, `false` refuses with the generic sentence, a string refuses with that sentence); null for none.
 	 * @param Posting_Noun|null            $noun       The marketplace's word for a posting; null for «отправление».
+	 * @param Seller_Actions|null          $seller     The adapter's seller actions, asked for their refusals; null for an adapter that declares none.
 	 */
-	public function __construct( Label_Availability $labels, ?Posting_Allowed_Actions $allowed = null, ?callable $write_gate = null, ?Posting_Noun $noun = null ) {
+	public function __construct( Label_Availability $labels, ?Posting_Allowed_Actions $allowed = null, ?callable $write_gate = null, ?Posting_Noun $noun = null, ?Seller_Actions $seller = null ) {
 		$this->labels     = $labels;
 		$this->allowed    = $allowed;
 		$this->write_gate = $write_gate;
 		$this->noun       = $noun ?? Posting_Noun::shipment();
+		$this->seller     = $seller;
 	}
 
 	/**
@@ -88,7 +102,8 @@ final class Posting_Action_Gate {
 			new Label_Availability( $adapter instanceof Label_Readiness ? $adapter : null, $noun ),
 			$adapter instanceof Posting_Allowed_Actions ? $adapter : null,
 			$write_gate,
-			$noun
+			$noun,
+			$adapter instanceof Seller_Actions ? $adapter : null
 		);
 	}
 
@@ -160,6 +175,31 @@ final class Posting_Action_Gate {
 
 		/* translators: 1: the marketplace's word for a posting in the genitive, «отправления», 2: the same word, «отправление». */
 		return sprintf( __( 'Маркетплейс ещё не выдал этикетку для этого %1$s — она станет доступна, когда %2$s будет собрано.', 'woodev-plugin-framework' ), $this->noun->of_one(), $this->noun->one() );
+	}
+
+	/**
+	 * Tells why a seller action cannot be applied to a unit: its status is not one the action is declared for, or the marketplace
+	 * has said no for this unit ({@see Seller_Actions::seller_action_refusal()}). The account is judged apart
+	 * ({@see self::write_refusal()}).
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param \WC_Order     $order  The order of the unit.
+	 * @param Posting_Unit  $unit   The unit.
+	 * @param Seller_Action $action The declared action.
+	 * @return string The sentence for the merchant; empty when the action can be applied.
+	 */
+	public function seller_reason( \WC_Order $order, Posting_Unit $unit, Seller_Action $action ): string {
+		if ( ! $action->is_offered_in( $unit->status() ) ) {
+			if ( '' === $unit->status_label() ) {
+				return __( 'В текущем статусе это действие недоступно.', 'woodev-plugin-framework' );
+			}
+
+			/* translators: %s: the marketplace status of the goods, as the merchant reads it. */
+			return sprintf( __( 'В статусе «%s» это действие недоступно.', 'woodev-plugin-framework' ), $unit->status_label() );
+		}
+
+		return null === $this->seller ? '' : $this->seller->seller_action_refusal( $order, $unit, $action->id() );
 	}
 
 	/**
