@@ -27,6 +27,7 @@ use Woodev\Framework\Marketplace\Flows\Export_Facts;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
+use Woodev\Framework\Marketplace\Sync\Stock_Warehouse;
 use Woodev\Framework\Marketplace\Flows\Article_Display;
 use Woodev\Framework\Marketplace\Flows\Unit_Products;
 
@@ -626,11 +627,12 @@ final class Panel_Reader {
 		$next    = max( (int) ( $overview['stock']['next_attempt_at'] ?? 0 ), (int) ( $overview['price']['next_attempt_at'] ?? 0 ) );
 		$error   = $this->links->last_error( (int) $record->link_id() )['text'];
 		$facts   = [
-			'license_ok'           => $this->license->is_in_force(),
-			'health'               => null === $health ? Health_Result::OK : $health->status(),
-			'default_warehouse_id' => $account->setting( 'warehouse_id' ),
-			'retry_after_seconds'  => $next > $now ? $next - $now : null,
-			'last_error'           => self::first_filled( $error, (string) ( $overview['stock']['last_error'] ?? '' ), (string) ( $overview['price']['last_error'] ?? '' ) ),
+			'license_ok'            => $this->license->is_in_force(),
+			'health'                => null === $health ? Health_Result::OK : $health->status(),
+			'default_warehouse_id'  => $account->setting( 'warehouse_id' ),
+			'warehouse_unavailable' => $this->warehouses->is_unavailable( $account->id(), (int) Stock_Warehouse::chosen( $account, $record ) ),
+			'retry_after_seconds'   => $next > $now ? $next - $now : null,
+			'last_error'            => self::first_filled( $error, (string) ( $overview['stock']['last_error'] ?? '' ), (string) ( $overview['price']['last_error'] ?? '' ) ),
 		];
 		$reasons = Why_Not_Syncing::reasons( $link, $account, $facts );
 		$list    = Sync_Reason_Text::sentences( $reasons );

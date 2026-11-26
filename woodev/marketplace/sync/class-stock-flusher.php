@@ -32,7 +32,10 @@ defined( 'ABSPATH' ) || exit;
  * Per run: the due pairs (pending ≠ sent, or a send unresolved; not backing off; not failed), one request's worth at a time
  * ({@see Sync_Limits::stock_batch()}). Before anything is sent the pair's warehouse is resolved again ({@see Stock_Warehouse}):
  * a pair for a warehouse that is no longer selected is retired, and its payload moves to the selected one (none = «Не выбран
- * склад», no stock is sent); where the left warehouse may still hold units it is sent zero instead of being retired. Right before a request each pair's newest pending payload is frozen as in flight. Per item of the
+ * склад», no stock is sent); where the left warehouse may still hold units it is sent zero instead of being retired. While the
+ * chosen warehouse is switched off by the marketplace nothing could take the stock over, so the link's pairs wait: no warehouse
+ * is zeroed or retired. A run sends all its zeros before any stock; a zero the marketplace puts off or refuses item by item does
+ * not hold the stock back. Right before a request each pair's newest pending payload is frozen as in flight. Per item of the
  * answer ({@see Stock_Rules::verdict()}):
  *
  * | The marketplace says | The pair |
@@ -197,10 +200,12 @@ final class Stock_Flusher {
 	private function flush_due( Account_Run $run, Stock_Flush_Result $result ): void {
 		$batches = $this->batches( $run, $result );
 
-		foreach ( $batches['push'] as $warehouse_id => $pairs ) {
-			foreach ( array_chunk( $pairs, $this->limits->stock_batch() ) as $chunk ) {
-				if ( ! $run->can_request() || ! $this->send( $run, (int) $warehouse_id, $chunk, $result ) ) {
-					return;
+		foreach ( $batches['push'] as $warehouses ) {
+			foreach ( $warehouses as $warehouse_id => $pairs ) {
+				foreach ( array_chunk( $pairs, $this->limits->stock_batch() ) as $chunk ) {
+					if ( ! $run->can_request() || ! $this->send( $run, (int) $warehouse_id, $chunk, $result ) ) {
+						return;
+					}
 				}
 			}
 		}
@@ -209,16 +214,18 @@ final class Stock_Flusher {
 	}
 
 	/**
-	 * Reads the due pairs and sorts them: pairs to push, by warehouse, and pairs whose only work left is the archive.
+	 * Reads the due pairs and sorts them: pairs to push, and pairs whose only work left is the archive. The pushes come in two
+	 * groups, each by warehouse, in the order they are sent: the zeros of left warehouses, then the stock of chosen ones.
 	 *
 	 * @param Account_Run        $run    The run.
 	 * @param Stock_Flush_Result $result Result.
-	 * @return array{push:array<int,array<int,array<string,mixed>>>,archive:array<int,array<string,mixed>>}
+	 * @return array{push:array<int,array<int,array<int,array<string,mixed>>>>,archive:array<int,array<string,mixed>>}
 	 * @throws Claim_Lost When the claim was taken over.
 	 */
 	private function batches( Account_Run $run, Stock_Flush_Result $result ): array {
 		$account = $run->account();
-		$push    = [];
+		$zeros   = [];
+		$stock   = [];
 		$archive = [];
 		$site    = Stock_Mode::is_site( $account );
 
@@ -248,6 +255,15 @@ final class Stock_Flusher {
 				continue;
 			}
 
+			$chosen = Stock_Warehouse::chosen( $account, $link );
+
+			if ( ! $archives && null !== $chosen && ! Stock_Warehouse::is_available( $account, $chosen ) ) {
+				// Nothing can take the product's stock over, so no warehouse is zeroed or retired: the pair waits.
+				$run->write( $this->queue->defer( $key, self::NOT_READY_SECONDS, self::switched_off_text(), false, $run->token() ) );
+				++$result->waiting;
+				continue;
+			}
+
 			if ( ! $this->in_current_warehouse( $run, $key, $link, $row, $archives ) ) {
 				continue;
 			}
@@ -262,13 +278,15 @@ final class Stock_Flusher {
 			// as a later send: an archive retry never repeats the push, which would clear the failure count of the refusals.
 			if ( $archives && ( 0 === (int) $row['warehouse_id'] || ( self::zero_sent( $row['sent_payload'] ) && self::settled_at_sent( $row ) ) ) ) {
 				$archive[] = $pair;
+			} elseif ( (int) $row['warehouse_id'] === $chosen ) {
+				$stock[ (int) $row['warehouse_id'] ][] = $pair;
 			} else {
-				$push[ (int) $row['warehouse_id'] ][] = $pair;
+				$zeros[ (int) $row['warehouse_id'] ][] = $pair;
 			}
 		}
 
 		return [
-			'push'    => $push,
+			'push'    => [ $zeros, $stock ],
 			'archive' => $archive,
 		];
 	}
@@ -527,7 +545,12 @@ final class Stock_Flusher {
 				break;
 			default:
 				$this->fail( $run, $pair['key'], $code . ': ' . $text, $result );
-				$run->write( $this->links->record_stock_outcome( $link_id, null, $code, $text, $run->fence() ) );
+
+				if ( ! self::vacates( $pair['payload'] ) ) {
+					// A refused zero stays on its own row: the product may be selling well from its new warehouse.
+					$run->write( $this->links->record_stock_outcome( $link_id, null, $code, $text, $run->fence() ) );
+				}
+
 				$result->error( $text );
 		}
 
@@ -699,6 +722,15 @@ final class Stock_Flusher {
 	 */
 	private static function vacates( $payload ): bool {
 		return is_array( $payload ) && true === ( $payload[ Sync_State_Store::VACATE_FLAG ] ?? false );
+	}
+
+	/**
+	 * What a pair that waits for a switched-off warehouse says.
+	 *
+	 * @return string
+	 */
+	private static function switched_off_text(): string {
+		return __( 'Выбранный склад отключён в маркетплейсе — остатки не отправляются, на прежнем складе остаётся последнее отправленное количество.', 'woodev-plugin-framework' );
 	}
 
 	/**

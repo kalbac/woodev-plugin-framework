@@ -1259,7 +1259,7 @@ msgstr ""
 #. translators: %s: saved warehouse ids, for example «#123».
 #: marketplace/settings/class-account-status.php:177
 #, php-format
-msgid "Склад %s отключён в маркетплейсе — остатки на него не отправляются. Выберите другой склад в настройках аккаунта."
+msgid "Склад %s отключён в маркетплейсе — остатки на него не отправляются, на прежних складах остаётся последнее отправленное количество. Выберите другой склад в настройках аккаунта."
 msgstr ""
 
 #: marketplace/settings/class-warehouse-options.php:139
@@ -11715,6 +11715,18 @@ msgstr ""
 
 #: marketplace/admin/pages/products/class-site-products-bulk.php:1038
 msgid "Склад выбран, но отправку остатков записать не удалось. Повторите действие — оно запишет недостающее."
+msgstr ""
+
+#: marketplace/sync/class-stock-flusher.php:733
+msgid "Выбранный склад отключён в маркетплейсе — остатки не отправляются, на прежнем складе остаётся последнее отправленное количество."
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:54
+msgid "Выбранный склад отключён в маркетплейсе — остатки не отправляются, на прежнем складе остаётся последнее отправленное количество. Выберите другой склад."
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:871
+msgid "выбранный склад отключён в маркетплейсе"
 msgstr ""
 
 #: marketplace/admin/pages/products/class-site-products-bulk.php:267

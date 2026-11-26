@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
+use Woodev\Framework\Marketplace\Sync\Stock_Flusher;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
@@ -249,17 +250,15 @@ final class StockWarehouseChangeTest extends Sync_Test_Case {
 	 */
 	public function test_a_switched_off_left_warehouse_is_not_written_to(): void {
 		$this->synced_product( 'a', 1001, 7 );
-		$cache = new Wpdb_Catalog_Cache( $this->db, Sqlite_Tables::table( 'catalog_cache' ) );
-		$cache->put( Warehouse_Options::key_for( $this->account_id ), [ 'warehouses' => [ [ 'warehouse_id' => self::OTHER ] ] ] );
-		$GLOBALS['wpdb'] = $this->db;
 
-		try {
-			$this->set_account( [ 'warehouse_id' => self::OTHER ] );
-			$this->reseed()->run( $this->account_id );
-			$this->flush();
-		} finally {
-			unset( $GLOBALS['wpdb'] );
-		}
+		$this->with_listed_warehouses(
+			[ self::OTHER ],
+			function (): void {
+				$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+				$this->reseed()->run( $this->account_id );
+				$this->flush();
+			}
+		);
 
 		$this->assertSame( [ [ self::OTHER, [ 'a' => 7 ] ] ], $this->pushes() );
 	}
@@ -292,6 +291,191 @@ final class StockWarehouseChangeTest extends Sync_Test_Case {
 		$this->flush();
 
 		$this->assertContains( [ self::WAREHOUSE, [ 'a' => 0 ] ], $this->pushes() );
+	}
+
+	/**
+	 * A new warehouse the marketplace switched off takes nothing over: the old one keeps its stock and the pairs say why. Once
+	 * another warehouse is chosen, the move happens.
+	 *
+	 * @return void
+	 */
+	public function test_a_switched_off_new_warehouse_leaves_the_old_one_alone(): void {
+		$product = $this->synced_product( 'a', 1001, 7 );
+
+		$this->with_listed_warehouses(
+			[ self::WAREHOUSE, self::THIRD ],
+			function () use ( $product ): void {
+				$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+				$this->reseed()->run( $this->account_id );
+				$this->flush();
+
+				$this->assertSame( [], $this->pushes(), 'nothing is zeroed and nothing is sent' );
+				$this->assertSame( [ 'stock' => 7 ], $this->stock_row( $product )['sent_payload'] );
+				$this->assertNull( $this->stock_row( $product, self::OTHER ) );
+
+				$this->set_account( [ 'warehouse_id' => self::THIRD ] );
+				$this->reseed()->run( $this->account_id );
+				$this->flush();
+
+				$this->assertSame(
+					[
+						[ self::WAREHOUSE, [ 'a' => 0 ] ],
+						[ self::THIRD, [ 'a' => 7 ] ],
+					],
+					$this->pushes()
+				);
+			}
+		);
+	}
+
+	/**
+	 * Pairs already due when the chosen warehouse turns out to be switched off wait with the reason: neither the pending stock of
+	 * the old warehouse nor a recorded zero goes out. Listed again, the zero goes first.
+	 *
+	 * @return void
+	 */
+	public function test_due_pairs_wait_while_the_chosen_warehouse_is_switched_off(): void {
+		$moved  = $this->synced_product( 'moved', 1001, 7 );
+		$zeroed = $this->synced_product( 'zeroed', 1002, 3 );
+		$this->links()->set_warehouse( $this->account_id, [ $this->link_id( $zeroed ) ], self::OTHER );
+		$this->stock->record_stock( $this->link_of( $zeroed ) ); // The zero and the stock are recorded while 99 is still listed.
+		$this->set_stock( $moved, 5 );
+		$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+
+		$this->with_listed_warehouses(
+			[ self::WAREHOUSE ],
+			function () use ( $moved, $zeroed ): void {
+				$result = $this->flush();
+
+				$this->assertSame( [], $this->pushes() );
+				$this->assertSame( 3, $result->waiting );
+				$this->assertStringContainsString( 'отключён', (string) $this->stock_row( $moved )['last_error'] );
+				$this->assertSame( 0, (int) $this->stock_row( $zeroed )['attempts'] );
+				$this->assertSame( 0, $this->stock_row( $zeroed )['pending_payload']['stock'] );
+			}
+		);
+
+		$this->now += Stock_Flusher::NOT_READY_SECONDS;
+		$this->with_listed_warehouses(
+			[ self::WAREHOUSE, self::OTHER ],
+			function (): void {
+				$this->flush();
+
+				$this->assertSame(
+					[
+						[
+							self::WAREHOUSE,
+							[
+								'zeroed' => 0,
+								'moved'  => 0,
+							],
+						],
+						[ self::OTHER, [ 'zeroed' => 3 ] ],
+					],
+					$this->pushes(),
+					'the zeros of the left warehouse first'
+				);
+
+				$this->now += 31;
+				$this->flush();
+
+				$this->assertSame( [ self::OTHER, [ 'moved' => 5 ] ], $this->pushes()[2] );
+			}
+		);
+	}
+
+	/**
+	 * A product whose stock is not managed gets nothing in the new warehouse, so the old one is not zeroed either.
+	 *
+	 * @return void
+	 */
+	public function test_a_product_without_managed_stock_keeps_the_old_warehouse(): void {
+		$product = $this->synced_product( 'a', 1001, 7 );
+		$unmanaged = \Mockery::mock( 'WC_Product' );
+		$unmanaged->shouldReceive( 'get_id' )->andReturn( $product );
+		$unmanaged->shouldReceive( 'managing_stock' )->andReturn( false );
+		$unmanaged->shouldReceive( 'get_stock_managed_by_id' )->andReturn( $product );
+		$this->products[ $product ] = $unmanaged;
+
+		$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+		$this->reseed()->run( $this->account_id );
+		$this->flush();
+
+		$this->assertSame( [], $this->pushes() );
+	}
+
+	/**
+	 * The zeros go out before any stock, also when the left warehouse has the higher id and when two products swap warehouses.
+	 *
+	 * @return void
+	 */
+	public function test_the_zeros_are_sent_before_any_stock(): void {
+		$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+		$first  = $this->synced_product( 'first', 1001, 7 );
+		$second = $this->synced_product( 'second', 1002, 3 );
+		$this->links()->set_warehouse( $this->account_id, [ $this->link_id( $second ) ], self::WAREHOUSE );
+		$this->stock->record_stock( $this->link_of( $second ) );
+		$this->flush();
+		$this->now             += 31;
+		$this->market->requests = [];
+
+		// Swap: 99 → 22 and 22 → 99.
+		$this->links()->set_warehouse( $this->account_id, [ $this->link_id( $first ) ], self::WAREHOUSE );
+		$this->stock->record_stock( $this->link_of( $first ) );
+		$this->links()->set_warehouse( $this->account_id, [ $this->link_id( $second ) ], self::OTHER );
+		$this->stock->record_stock( $this->link_of( $second ) );
+		$this->flush();
+
+		$sent = array_map(
+			static function ( array $push ): int {
+				return array_sum( $push[1] );
+			},
+			$this->pushes()
+		);
+		$this->assertSame( [ 0, 0 ], array_slice( $sent, 0, 2 ), 'both zeros first' );
+		$this->assertSame( 10, array_sum( array_slice( $sent, 2 ) ) );
+	}
+
+	/**
+	 * A limit on the due list never takes the stock and leaves its zero behind.
+	 *
+	 * @return void
+	 */
+	public function test_the_due_list_starts_with_the_zeros(): void {
+		$product = $this->synced_product( 'a', 1001, 7 );
+		$older   = $this->stock_product( 'older', 1002, 4 );
+		$this->set_stock( $older, 4 );
+		++$this->now;
+
+		$this->links()->set_warehouse( $this->account_id, [ $this->link_id( $product ) ], self::OTHER );
+		$this->stock->record_stock( $this->link_of( $product ) );
+
+		$due = $this->queue()->due( $this->account_id, Sync_State_Store::KIND_STOCK, 1 );
+
+		$this->assertSame( self::WAREHOUSE, (int) $due[0]['warehouse_id'] );
+		$this->assertSame( 0, $due[0]['pending_payload']['stock'] );
+	}
+
+	/**
+	 * A zero refused by the marketplace stays on its row: it is not the product's stock error.
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_zero_is_not_the_products_stock_error(): void {
+		$product = $this->synced_product( 'a', 1001, 7 );
+		$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+		$this->reseed()->run( $this->account_id );
+		$this->market->script = [
+			function () use ( $product ): array {
+				return $this->refused( $product, 'fake_bad_item', 'invalid item' );
+			},
+		];
+
+		$result = $this->flush();
+
+		$this->assertSame( [ 'invalid item' ], $result->errors );
+		$this->assertStringContainsString( 'invalid item', (string) $this->stock_row( $product )['last_error'] );
+		$this->assertSame( '', (string) $this->links()->last_error( $this->link_id( $product ) )['text'] );
 	}
 
 	/**
@@ -395,6 +579,33 @@ final class StockWarehouseChangeTest extends Sync_Test_Case {
 		$this->reseed( $failing )->run( $this->account_id );
 
 		$this->assertSame( [ [ $this->account_id, 0, 1 ] ], array_column( $this->scheduler->of( 'woodev_fake_seller_reseed_stock' ), 'args' ) );
+	}
+
+	/**
+	 * Runs something while the account's current warehouse list holds these ids only.
+	 *
+	 * @param int[]    $ids  Listed warehouses.
+	 * @param callable $then What to run.
+	 * @return void
+	 */
+	private function with_listed_warehouses( array $ids, callable $then ): void {
+		// The system clock: the sender and the intents judge the list's age by it.
+		$cache = new Wpdb_Catalog_Cache( $this->db, Sqlite_Tables::table( 'catalog_cache' ) );
+		$list  = array_map(
+			static function ( int $id ): array {
+				return [ 'warehouse_id' => $id ];
+			},
+			$ids
+		);
+
+		$cache->put( Warehouse_Options::key_for( $this->account_id ), [ 'warehouses' => $list ] );
+		$GLOBALS['wpdb'] = $this->db;
+
+		try {
+			$then();
+		} finally {
+			unset( $GLOBALS['wpdb'] );
+		}
 	}
 
 	/**

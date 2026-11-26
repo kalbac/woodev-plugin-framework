@@ -25,7 +25,8 @@ defined( 'ABSPATH' ) || exit;
  *   in an account in `site` mode with `sync_stock` on and a warehouse ({@see Stock_Warehouse}). The quantity follows
  *   {@see Stock_Policy}. A variable product that manages its variations' stock records for every variation it manages.
  * - **A changed warehouse**: recording a link's stock also wants zero on every other warehouse that may still hold its units
- *   ({@see Sync_State_Store::record_vacate()}), so one product feeds one warehouse.
+ *   ({@see Sync_State_Store::record_vacate()}), so one product feeds one warehouse. Not while the chosen warehouse gets nothing
+ *   (the marketplace switched it off, or the stock is not managed): then the left ones keep what they hold.
  * - **A product trashed or deleted** with a `created` link records `{stock: 0, archive: true}`; the flusher archives the card
  *   once the marketplace has accepted the zero. A pair without a warehouse is archived without the zero. Taking the product out
  *   of the trash records its stock again, which cancels an archive not yet done.
@@ -194,7 +195,8 @@ final class Stock_Intents {
 	}
 
 	/**
-	 * Records the current stock of one link when its account pushes stock, and zero for every warehouse the link has left.
+	 * Records the current stock of one link when its account pushes stock, and zero for every warehouse the link has left — only
+	 * when the stock is recorded for the chosen warehouse, or no warehouse is chosen.
 	 *
 	 * @since 2.1.0
 	 *
@@ -210,14 +212,18 @@ final class Stock_Intents {
 			return false;
 		}
 
-		// First: the zeros are the older intents, so they go out before the new warehouse starts selling.
-		$this->vacate_left_warehouses( $account, $link );
-
 		$warehouse = Stock_Warehouse::for_link( $account, $link );
 		$quantity  = self::managed_quantity( wc_get_product( $link->wc_product_id() ) );
+		$replaced  = null !== $warehouse && null !== $quantity;
 
-		if ( null === $warehouse || null === $quantity ) {
-			return false; // «Не выбран склад» or no managed stock: the diagnostics tell the merchant; nothing is sent.
+		// A chosen warehouse that gets nothing (switched off, or no managed stock) must not cost the left one its stock: the
+		// product would stop selling altogether. With no warehouse chosen, selling nowhere is what the merchant asked for.
+		if ( $replaced || null === Stock_Warehouse::chosen( $account, $link ) ) {
+			$this->vacate_left_warehouses( $account, $link );
+		}
+
+		if ( ! $replaced ) {
+			return false; // «Не выбран склад» or no managed stock: the diagnostics tell the merchant; no stock is sent.
 		}
 
 		$key      = Sync_State_Queue::key( $account->id(), (int) $link->link_id(), $warehouse, Sync_State_Store::KIND_STOCK );

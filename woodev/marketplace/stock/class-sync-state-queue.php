@@ -96,7 +96,8 @@ final class Sync_State_Queue {
 	}
 
 	/**
-	 * Lists the rows of an account that have something to send and are not backing off, oldest intent first.
+	 * Lists the rows of an account that have something to send and are not backing off: the zeros of left warehouses first (since
+	 * 2.1.25, so a limit never cuts one off behind the stock that replaces it), then the oldest intent first.
 	 *
 	 * @since 2.0.29
 	 *
@@ -111,12 +112,13 @@ final class Sync_State_Queue {
 	public function due( int $account_id, string $kind, int $limit ): array {
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The flusher must read fresh.
 			$this->db->prepare(
-				'SELECT account_id, link_id, warehouse_id, kind, pending_payload, sent_payload, pending_rev, pending_since, in_flight_rev, sent_rev, attempts, last_error, remote_present FROM %i WHERE account_id = %d AND kind = %s AND pending_payload IS NOT NULL AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND attempts < %d AND (next_attempt_at IS NULL OR next_attempt_at <= %s) ORDER BY pending_since ASC, link_id ASC LIMIT %d',
+				'SELECT account_id, link_id, warehouse_id, kind, pending_payload, sent_payload, pending_rev, pending_since, in_flight_rev, sent_rev, attempts, last_error, remote_present FROM %i WHERE account_id = %d AND kind = %s AND pending_payload IS NOT NULL AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND attempts < %d AND (next_attempt_at IS NULL OR next_attempt_at <= %s) ORDER BY CASE WHEN pending_payload = %s THEN 0 ELSE 1 END, pending_since ASC, link_id ASC LIMIT %d',
 				$this->table,
 				$account_id,
 				$kind,
 				$this->cadence->max_attempts(),
 				$this->time( 0 ),
+				self::vacate_json(),
 				max( 1, $limit )
 			),
 			'ARRAY_A'
@@ -267,9 +269,16 @@ final class Sync_State_Queue {
 	 * @return bool True when the zero was dropped.
 	 */
 	public function cancel_vacate( array $key, string $token ): bool {
-		$vacate = (string) json_encode( Sync_State_Store::VACATE_PAYLOAD ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
+		return $this->fenced( $key, $token, 'pending_payload = NULL, next_attempt_at = NULL', [], $this->db->prepare( ' AND pending_payload = %s', self::vacate_json() ) );
+	}
 
-		return $this->fenced( $key, $token, 'pending_payload = NULL, next_attempt_at = NULL', [], $this->db->prepare( ' AND pending_payload = %s', $vacate ) );
+	/**
+	 * The pending column of a left warehouse's zero, as {@see Sync_State_Store::record_vacate()} writes it.
+	 *
+	 * @return string
+	 */
+	private static function vacate_json(): string {
+		return (string) json_encode( Sync_State_Store::VACATE_PAYLOAD ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
 	}
 
 	/**

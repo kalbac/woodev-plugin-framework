@@ -25,8 +25,12 @@ if ( Sync_State_Queue::may_hold_stock( $row ) ) {
 }
 ```
 
-Three traps come with that zero:
+Five traps come with that zero:
 
+- **Only when something replaces it.** If the chosen warehouse cannot be written to (switched off) or the stock is not managed,
+  zeroing the old one stops the sales altogether — for the whole account when it is the default warehouse.
+- **Order it explicitly.** Equal `pending_since` and `link_id` leave the warehouse id to break the tie: a test passed only
+  because the left id was the lower one.
 - **It is not the product's stock.** Do not write it to the link's last pushed stock, and clear the row's readback:
   `Sync_State_Store::overview()` takes a link's newest readback across warehouses (Ozon's storefront buy button reads it).
 - **The due list is a snapshot.** While one pair is settled, a value may be moved onto another row already read. Cancel a zero

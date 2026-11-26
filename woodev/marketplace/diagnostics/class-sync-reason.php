@@ -29,6 +29,13 @@ final class Sync_Reason {
 	public const LAST_ERROR       = 'last_error';
 
 	/**
+	 * The chosen warehouse is switched off by the marketplace.
+	 *
+	 * @since 2.1.25
+	 */
+	public const WAREHOUSE_UNAVAILABLE = 'warehouse_unavailable';
+
+	/**
 	 * Reason code.
 	 *
 	 * @var string

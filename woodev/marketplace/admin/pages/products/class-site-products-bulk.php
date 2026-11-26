@@ -866,7 +866,9 @@ final class Site_Products_Bulk {
 	 */
 	private function reason_without_stock( Account $account, Link_Record $record ): ?string {
 		if ( null === Stock_Warehouse::for_link( $account, $record ) ) {
-			return __( 'не выбран склад', 'woodev-plugin-framework' );
+			return null === Stock_Warehouse::chosen( $account, $record )
+				? __( 'не выбран склад', 'woodev-plugin-framework' )
+				: __( 'выбранный склад отключён в маркетплейсе', 'woodev-plugin-framework' );
 		}
 
 		$product = $this->contexts->product( $record->wc_product_id() );

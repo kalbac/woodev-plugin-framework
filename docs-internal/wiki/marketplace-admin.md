@@ -497,8 +497,12 @@ What the code settled, where the text above left it open:
   no longer the chosen one gets the pending payload `{stock: 0, vacate: true}` (`Sync_State_Store::record_vacate()`). The flusher
   sends it although the warehouse is not the link's, then clears the row's readback; it never touches the link's last pushed stock.
   A changed default or oversize warehouse fires `woodev_{plugin id}_account_warehouse_changed`, and `Reseed_Stock_Runner` records
-  every created card again; the bulk «Выбрать склад» and the product tab record their own cards. A warehouse the marketplace has
-  switched off cannot be written to and is zeroed at the next record after it is listed again. A warehouse flag the marketplace
+  every created card again; the bulk «Выбрать склад» and the product tab record their own cards. A run sends all its zeros before
+  any stock (`Sync_State_Queue::due()` lists them first, the flusher sends them as their own group). A left warehouse is zeroed
+  only when something replaces it: not while the CHOSEN warehouse is switched off by the marketplace (the link's due pairs wait,
+  with the reason; the product tab says `warehouse_unavailable`) and not for a product without managed stock. With no warehouse
+  chosen the left one is zeroed. A LEFT warehouse the marketplace has switched off cannot be written to and is zeroed at the next
+  record after it is listed again. A warehouse flag the marketplace
   itself flips (oversize, from the card poll) is followed only at the product's next stock record.
 - **Notification types are switches.** The adapter declares them in `Push_Protocol::webhook_types()` (`Webhook_Type`: id = the
   decoder's event type, label, purpose, cabinet location, default). The framework registers one toggle per type

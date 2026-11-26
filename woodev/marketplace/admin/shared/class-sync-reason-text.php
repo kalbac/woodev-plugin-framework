@@ -50,6 +50,8 @@ final class Sync_Reason_Text {
 				return __( 'Синхронизация остатков выключена для товара — включите её на вкладке товара.', 'woodev-plugin-framework' );
 			case Sync_Reason::NO_WAREHOUSE:
 				return __( 'Не выбран склад — выберите склад в настройках аккаунта.', 'woodev-plugin-framework' );
+			case Sync_Reason::WAREHOUSE_UNAVAILABLE:
+				return __( 'Выбранный склад отключён в маркетплейсе — остатки не отправляются, на прежнем складе остаётся последнее отправленное количество. Выберите другой склад.', 'woodev-plugin-framework' );
 			case Sync_Reason::RATE_LIMITED:
 				/* translators: %d: seconds until the next retry. */
 				return sprintf( __( 'Маркетплейс ограничил частоту запросов — следующая попытка через %d с.', 'woodev-plugin-framework' ), (int) ( $params['seconds'] ?? 0 ) );
