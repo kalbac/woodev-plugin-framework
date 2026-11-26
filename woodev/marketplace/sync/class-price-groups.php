@@ -37,7 +37,7 @@ defined( 'ABSPATH' ) || exit;
  * 5. otherwise it is sent. Where the group takes different prices, a price that was refused, or whose sends failed as often
  *    as the price cadence allows, is left out; where it keeps one price, such a failed one goes with the group again.
  *
- * @since 2.1.25
+ * @since 2.1.26
  */
 final class Price_Groups {
 	/**
@@ -71,7 +71,7 @@ final class Price_Groups {
 	/**
 	 * Creates the groups.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param Price_Grouping   $grouping  The marketplace's grouping.
 	 * @param Price_Sync_Queue $queue     Price queue.
@@ -90,7 +90,7 @@ final class Price_Groups {
 	 * marketplace takes different prices now, or the link left the group (price synchronisation off, card detached). A link
 	 * that joined a group that still conflicts is held with it. The prices that stay held are counted as failed.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param Account      $account Account.
 	 * @param string       $token   Account claim token.
@@ -134,7 +134,7 @@ final class Price_Groups {
 	 * A group that would take the request over the limit is left for the next one; a group larger than the limit is taken
 	 * alone. A group that is not sent leaves no due price behind, so the queue is read again until it gives something to send.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param Account      $account Account.
 	 * @param int          $limit   Most prices of one request.

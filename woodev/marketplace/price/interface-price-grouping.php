@@ -37,13 +37,13 @@ defined( 'ABSPATH' ) || exit;
  *
  * Both methods are asked while a price run prepares a request: they read stored facts and send nothing to the marketplace.
  *
- * @since 2.1.25
+ * @since 2.1.26
  */
 interface Price_Grouping {
 	/**
 	 * Names the remote identifier whose value ties links into one price group.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @return string Name in the links' `remote_ids`; a link that holds no value for it is its own group.
 	 */
@@ -54,7 +54,7 @@ interface Price_Grouping {
 	 *
 	 * Asked only about a group whose computed prices differ, or one that holds a refused or repeatedly failed price.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param Account        $account Account.
 	 * @param Product_Link[] $members The links of the group that take part, two or more.

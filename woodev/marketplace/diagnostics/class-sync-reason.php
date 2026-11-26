@@ -54,7 +54,7 @@ final class Sync_Reason {
 
 	/**
 	 * The links of one price group want different prices and the marketplace keeps one price for the group, so none is sent
-	 * (2.1.25). The price queue stores this code beside each of them ({@see \Woodev\Framework\Marketplace\Price\Price_Sync_Queue}).
+	 * (2.1.26). The price queue stores this code beside each of them ({@see \Woodev\Framework\Marketplace\Price\Price_Sync_Queue}).
 	 */
 	public const PRICE_GROUP_DIFFERS = 'price_group_differs';
 

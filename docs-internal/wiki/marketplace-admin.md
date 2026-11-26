@@ -1478,7 +1478,7 @@ is in. A cabinet card no product carries has no link and so no note.
 
 ## One price for several links: price groups (#2001)
 
-Card WF4 of the Wildberries design (`2.1.25`), owner decision D7. One **optional** interface, `Price\Price_Grouping`, implemented
+Card WF4 of the Wildberries design (`2.1.26`), owner decision D7. One **optional** interface, `Price\Price_Grouping`, implemented
 by the **price pusher** — not by the adapter ([gotcha](../gotchas/a-method-added-to-an-adapter-interface-fatals-released-plugins.md)).
 A pusher without it keeps one group per link (Ozon needs no change).
 

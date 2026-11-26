@@ -383,7 +383,7 @@ final class Price_Poll_Runner {
 	/**
 	 * Returns the sentence of a price whose task expired once and which is sent again.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @return string
 	 */

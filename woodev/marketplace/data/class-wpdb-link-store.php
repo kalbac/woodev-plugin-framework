@@ -1051,7 +1051,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 *
 	 * A given link that is not a member, or holds no value of the identifier, brings nothing by itself.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param int    $account_id Account id.
 	 * @param string $id_name    Remote identifier that ties a group.

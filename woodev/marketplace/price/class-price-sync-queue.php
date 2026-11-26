@@ -31,7 +31,7 @@ defined( 'ABSPATH' ) || exit;
  * - **refused** (2.1.25): a price a task refused for good ({@see self::refuse()}) is kept beside the pair and not sent again; a
  *   different pending price is due, also one equal to the sent payload — it is what releases a quarantined price. A pair whose
  *   task expired is due whatever it was changed to: what the marketplace holds is unknown.
- * - **held** (2.1.25): the pairs of a price group the marketplace cannot take ({@see Price_Grouping}) carry the reason code
+ * - **held** (2.1.26): the pairs of a price group the marketplace cannot take ({@see Price_Grouping}) carry the reason code
  *   {@see Sync_Reason::PRICE_GROUP_DIFFERS} ({@see self::hold()}) and are not due while they do. The sender looks at the held
  *   pairs again on every run and frees them ({@see self::unhold()}) once their group may be sent. A pair whose task expired keeps
  *   its in-flight snapshot while held — the only held pair that has one — and is an expired pair again once freed.
@@ -524,7 +524,7 @@ final class Price_Sync_Queue {
 	 * revision failed as often as the cadence allows. `wait` is the seconds until the pair's deadline and the least time since
 	 * its last accepted send have both passed, 0 when they have.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param int   $account_id Account id.
 	 * @param int[] $link_ids   Link ids.
@@ -582,7 +582,7 @@ final class Price_Sync_Queue {
 	/**
 	 * Moves the deadline of a pair that was not sent, because another link of its price group has to wait.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param int          $account_id Account id.
 	 * @param Price_Intent $intent     The pair as read by {@see self::due()}.
@@ -603,7 +603,7 @@ final class Price_Sync_Queue {
 	 * Refuses a pair that was not sent, because the marketplace already turned down this price for another link of its price
 	 * group: it ends as {@see self::refuse()} ends a pair that was sent.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param int          $account_id Account id.
 	 * @param Price_Intent $intent     The pair as read by {@see self::due()}.
@@ -626,7 +626,7 @@ final class Price_Sync_Queue {
 	/**
 	 * Lists the held links of an account: those whose price group cannot be sent.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param int $account_id Account id.
 	 * @return int[]
@@ -653,7 +653,7 @@ final class Price_Sync_Queue {
 	 * Two kinds of pair are left as they are, because what they say is still true: one that waits for a price task, and one
 	 * whose pending price is turned down already (it keeps the marketplace's reason and is not sent anyway).
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param int    $account_id Account id.
 	 * @param int[]  $link_ids   Links of the group.
@@ -688,7 +688,7 @@ final class Price_Sync_Queue {
 	 * again: it is due whatever it was changed to, and a second expiry of the same revision still stops it. A pair that is not
 	 * held is left alone.
 	 *
-	 * @since 2.1.25
+	 * @since 2.1.26
 	 *
 	 * @param int    $account_id Account id.
 	 * @param int[]  $link_ids   Links to free.
