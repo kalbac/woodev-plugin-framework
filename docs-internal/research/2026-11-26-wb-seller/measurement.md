@@ -37,7 +37,8 @@ payload (`__redoc_state.spec.data`, `x-file-name: sandbox-environment`); it was 
 [sandbox-environment-2026-11-26.json](sandbox-environment-2026-11-26.json)
 (sha256 `94558ff8798574b2109b04e1c1fbc471ed1ebdde9c970367b5a0af46732730c2`). There is **no downloadable
 yaml** for this spec: `/api/swagger/yaml/en/sandbox-environment.yaml` and every probed variant answer 404,
-while the 13 numbered category yamls download fine (their sha256 prefixes match the API map exactly).
+while the numbered category yamls download fine — the four fetched for this card (01-general, 02-items,
+03-orders-fbs, 05-dbs) match the API map's sha256 prefixes exactly, i.e. the same file versions.
 `seller.wildberries.ru` instruction pages load the same way (the official FBS-marking instruction was read
 there); only the article's collapsed accordion body resisted automation. Gotcha:
 [wb-portal-498-passes-in-a-fresh-headed-chrome](../../gotchas/wb-portal-498-passes-in-a-fresh-headed-chrome.md).
@@ -234,9 +235,9 @@ closed order).
   IMEI: «система не даст создать отправление без IMEI»; UIN: «Без УИН отгрузить ювелирные изделия не
   получится». The article has a section «Как добавить маркировку в приложении WB Partners» — the
   cabinet/app route exists officially, but its body is a collapsed accordion that did not expand under
-  automation (four attempts, including direct clicks on the `collapsible-container` control), so the exact
-  cabinet steps for a shop-handled order remain unread. SECONDARY sources describe them («open the assembly
-  order, press «Добавить КИЗ», scan the code» — getmark.ru, 12.10.2026; mertech.ru, 15.11.2024).
+  automation (repeated attempts, including direct clicks on the `collapsible-container` control), so the
+  exact cabinet steps for a shop-handled order remain unread. SECONDARY sources describe them («open the
+  assembly order, press «Добавить КИЗ», scan the code» — getmark.ru, 12.10.2026; mertech.ru, 15.11.2024).
 - GTIN side-finding (SOURCED, same article): since 01.10.2026 WB checks GTIN in cards of marked goods via
   ГИС МТ and blocks cards with a missing/invalid GTIN; one GTIN cannot sit in the «Баркоды» field of several
   cards — the others use «Дополнительный GTIN». Relevant to the card-export cards (M0a/S1), not to orders.
