@@ -220,7 +220,7 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 		$columns['result'] = (string) json_encode( $result ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
 
 		if ( false === $this->db->update( $this->tasks, $columns, [ 'task_id' => $task_id ] ) ) {
-			throw new \RuntimeException( 'The accepted task could not be stored: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+			throw new \RuntimeException( 'The task result could not be stored: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 	}
 
@@ -441,16 +441,64 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * @since 2.1.25
+	 *
+	 * @param int    $account_id     Account id.
+	 * @param string $kind           Task kind.
+	 * @param string $remote_task_id Marketplace task id.
+	 * @return Async_Task|null
+	 */
+	public function find_open( int $account_id, string $kind, string $remote_task_id ): ?Async_Task {
+		$task_id = $this->db->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+			$this->db->prepare(
+				'SELECT task_id FROM %i WHERE account_id = %d AND kind = %s AND remote_task_id = %s AND status IN (%s, %s) ORDER BY task_id DESC LIMIT 1',
+				$this->tasks,
+				$account_id,
+				$kind,
+				$remote_task_id,
+				Async_Task::STATUS_SUBMITTED,
+				Async_Task::STATUS_POLLING
+			)
+		);
+
+		return null === $task_id ? null : $this->get( (int) $task_id );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param int                 $task_id Task id.
+	 * @param array<string,mixed> $entries Result entries.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function merge_result( int $task_id, array $entries ): void {
+		$this->remember( $task_id, $entries );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
 	 * @since 2.0.29
+	 * @since 2.1.25 A failed read throws.
 	 *
 	 * @param int $task_id Task id.
 	 * @return array<int,array{link_id:int,offer_id:string,status:string,errors:array<int,mixed>}>
+	 * @throws \RuntimeException When the database refuses the read.
 	 */
 	public function items( int $task_id ): array {
-		$rows  = $this->db->get_results( $this->db->prepare( 'SELECT * FROM %i WHERE task_id = %d ORDER BY link_id ASC', $this->items, $task_id ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+		$rows = $this->db->get_results( $this->db->prepare( 'SELECT * FROM %i WHERE task_id = %d ORDER BY link_id ASC', $this->items, $task_id ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+
+		// A failed read is not «the task has no items»: a task read that way would be closed as finished.
+		if ( ! is_array( $rows ) || '' !== (string) $this->db->last_error ) {
+			throw new \RuntimeException( 'The items of a task could not be read: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
 		$items = [];
 
-		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+		foreach ( $rows as $row ) {
 			$errors = json_decode( (string) ( $row['errors'] ?? '' ), true );
 
 			$items[ (int) $row['link_id'] ] = [
@@ -483,9 +531,9 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own tables.
 			$this->db->prepare(
 				'SELECT i.link_id, i.offer_id, t.task_id, t.kind, t.status FROM %i i INNER JOIN %i t ON t.task_id = i.task_id'
-				. ' WHERE t.account_id = %d AND i.status = %s AND t.status IN (%s, %s) AND i.link_id IN (' . implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) ) . ')' // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				. ' WHERE t.account_id = %d AND t.kind = %s AND i.status = %s AND t.status IN (%s, %s) AND i.link_id IN (' . implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) ) . ')' // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 				. ' ORDER BY t.task_id ASC, i.link_id ASC',
-				array_merge( [ $this->items, $this->tasks, $account_id, self::ITEM_PENDING, Async_Task::STATUS_SUBMITTED, Async_Task::STATUS_POLLING ], $link_ids )
+				array_merge( [ $this->items, $this->tasks, $account_id, Async_Task::KIND_IMPORT, self::ITEM_PENDING, Async_Task::STATUS_SUBMITTED, Async_Task::STATUS_POLLING ], $link_ids )
 			),
 			'ARRAY_A'
 		);

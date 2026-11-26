@@ -38,6 +38,13 @@ final class Flush_Result {
 	private $waiting = 0;
 
 	/**
+	 * Prices sent to a marketplace that decides later.
+	 *
+	 * @var int
+	 */
+	private $awaiting = 0;
+
+	/**
 	 * Text of the first failure, verbatim.
 	 *
 	 * @var string
@@ -90,6 +97,18 @@ final class Flush_Result {
 	}
 
 	/**
+	 * Counts prices the marketplace took and will decide on later.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param int $count How many.
+	 * @return void
+	 */
+	public function add_awaiting( int $count = 1 ): void {
+		$this->awaiting += $count;
+	}
+
+	/**
 	 * Marks the run as skipped because the account does not push prices now.
 	 *
 	 * @since 2.0.29
@@ -135,6 +154,17 @@ final class Flush_Result {
 	}
 
 	/**
+	 * Returns the count of prices the marketplace has not decided on yet.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @return int
+	 */
+	public function awaiting(): int {
+		return $this->awaiting;
+	}
+
+	/**
 	 * Returns the first failure text.
 	 *
 	 * @since 2.0.29
@@ -163,6 +193,10 @@ final class Flush_Result {
 
 		if ( $this->sent > 0 ) {
 			return 'Отправлено: ' . $this->sent;
+		}
+
+		if ( $this->awaiting > 0 ) {
+			return 'Отправлено, ждём ответа маркетплейса: ' . $this->awaiting;
 		}
 
 		return $this->waiting > 0 ? 'Отправка отложена: ' . $this->waiting . '.' : 'Нечего отправлять (значения совпадают)';

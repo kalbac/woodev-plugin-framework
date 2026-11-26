@@ -13343,3 +13343,47 @@ msgstr ""
 #, php-format
 msgid "Артикул «%1$s» уже занят товаром «%2$s» (№%3$d), поэтому товар создан без артикула. Задайте ему свой артикул."
 msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/jobs/class-price-refusal-writer.php:69
+#, php-format
+msgid "%s держит новую цену в карантине: она намного ниже текущей"
+msgstr ""
+
+#: marketplace/jobs/class-price-refusal-writer.php:72
+msgid "Маркетплейс отклонил новую цену."
+msgstr ""
+
+#: marketplace/jobs/class-price-poll-runner.php:367
+msgid "Маркетплейс не сообщил, принял ли он новую цену. Чтобы отправить её снова, измените цену."
+msgstr ""
+
+#: marketplace/jobs/class-price-poll-runner.php:370
+msgid "Маркетплейс не сообщил, принял ли он новую цену. Она будет отправлена ещё раз."
+msgstr ""
+
+#. translators: %s: reason returned by the marketplace.
+#: marketplace/admin/shared/class-sync-reason-text.php:58
+#, php-format
+msgid "Маркетплейс не принял новую цену: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:633
+msgid "Новая цена"
+msgstr ""
+
+#. translators: %s: the sentence about the quarantine, which names the marketplace.
+#: marketplace/admin/pages/products/class-site-products-bulk.php:949
+#, php-format
+msgid "%s. Не отправится, пока вы не измените цену; карантин снимается и в кабинете маркетплейса"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:957
+msgid "маркетплейс уже не принял эту цену — измените её, чтобы отправить"
+msgstr ""
+
+#. translators: %s: the marketplace's reason.
+#: marketplace/admin/pages/products/class-site-products-bulk.php:965
+#, php-format
+msgid "маркетплейс не принял эту цену — измените её, чтобы отправить: %s"
+msgstr ""

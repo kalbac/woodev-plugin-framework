@@ -7,6 +7,8 @@
 
 namespace Woodev\Tests\Unit\Marketplace\Admin\Product;
 
+use Brain\Monkey;
+use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Flows\Article_Display;
 use Mockery;
 use PHPUnit\Framework\TestCase;
@@ -21,6 +23,16 @@ use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Article_Policy;
  * An adapter that changes articles shows a sent card's article as a line with «изменить» and the state of a change; one that does not keeps it frozen.
  */
 final class PanelReaderArticleTest extends TestCase {
+	protected function setUp(): void {
+		parent::setUp();
+		Monkey\setUp();
+	}
+
+	protected function tearDown(): void {
+		Monkey\tearDown();
+		parent::tearDown();
+	}
+
 	public function test_a_sent_card_is_renamable_only_for_an_adapter_that_can_change_articles(): void {
 		$row = Link_Record::offer( 3, 41, 0, 'ART-1', [ 'card_state' => Link_Record::STATE_CREATED ] );
 
@@ -64,6 +76,23 @@ final class PanelReaderArticleTest extends TestCase {
 		$this->assertTrue( $this->has_unsent( [ 5 => $created->with( [ 'card_state' => Link_Record::STATE_FAILED ] ) ] ), 'a card that failed was never created' );
 		$this->assertFalse( $this->has_unsent( [ 5 => $created->with( [ 'card_state' => Link_Record::STATE_ARCHIVED ] ), 6 => $created->with( [ 'card_state' => Link_Record::STATE_QUEUED ] ) ] ), 'an archived and a queued card both exist' );
 		$this->assertFalse( $this->has_unsent( [] ), 'no variation sold on the marketplace: nothing to export' );
+	}
+
+	public function test_the_price_issue_comes_from_a_price_row_that_says_why(): void {
+		$method = new \ReflectionMethod( Panel_Reader::class, 'price_issue' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true ); // Needed before PHP 8.1; deprecated from 8.5.
+		}
+
+		Functions\stubTranslationFunctions();
+
+		$refused = [ 'price' => [ 'error_code' => 'price_refused', 'last_error' => 'Too low' ] ];
+		$plain   = [ 'price' => [ 'error_code' => '', 'last_error' => 'the marketplace did not answer' ] ];
+
+		$this->assertSame( 'Маркетплейс не принял новую цену: Too low', $method->invoke( null, $refused ) );
+		$this->assertSame( '', $method->invoke( null, $plain ), 'an ordinary send error stays with the sync reasons' );
+		$this->assertSame( '', $method->invoke( null, null ) );
 	}
 
 	/**

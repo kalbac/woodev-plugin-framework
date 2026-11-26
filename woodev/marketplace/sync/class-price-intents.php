@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Price\Price_Pair;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 
 defined( 'ABSPATH' ) || exit;
@@ -215,6 +216,21 @@ final class Price_Intents {
 		$this->store->record( $account->id(), (int) $link->link_id(), 0, Sync_State_Store::KIND_PRICE, $this->contexts->payload( $pair ), Shop_Price_Writer::snapshot( $product ) );
 
 		return self::RECORDED;
+	}
+
+	/**
+	 * Tells whether sending a link's current price would send nothing because the marketplace already turned exactly that price down.
+	 * It writes nothing.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param Account     $account Account.
+	 * @param Link_Record $link    Offer row.
+	 * @param Price_Pair  $pair    The price the link would be sent with.
+	 * @return array{code:string,message:string}|null What {@see Sync_State_Store::held_price()} answers.
+	 */
+	public function held( Account $account, Link_Record $link, Price_Pair $pair ): ?array {
+		return $this->store->held_price( $account->id(), (int) $link->link_id(), $this->contexts->payload( $pair ) );
 	}
 
 	/**

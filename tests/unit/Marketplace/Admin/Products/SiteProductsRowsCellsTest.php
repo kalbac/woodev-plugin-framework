@@ -113,6 +113,31 @@ final class SiteProductsRowsCellsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'sync', $cells );
 	}
 
+	/**
+	 * Why the new price did not take effect is a line of the same tooltip: a refusal quotes the marketplace, a quarantine is shown
+	 * as stored.
+	 *
+	 * @return void
+	 */
+	public function test_a_price_that_did_not_take_effect_is_said_in_the_badge_tooltip(): void {
+		$refused     = $this->tooltip_lines( [ 'price_error_code' => 'price_refused', 'price_error' => 'Too low' ] );
+		$quarantined = $this->tooltip_lines( [ 'price_error_code' => 'price_quarantined', 'price_error' => 'Тестмаркет держит новую цену в карантине: она намного ниже текущей' ] );
+
+		$this->assertSame( 'Маркетплейс не принял новую цену: Too low', end( $refused ) );
+		$this->assertSame( 'Тестмаркет держит новую цену в карантине: она намного ниже текущей', end( $quarantined ) );
+	}
+
+	/**
+	 * A parent row counts a variation with a price reason among its errors.
+	 *
+	 * @return void
+	 */
+	public function test_a_variable_product_counts_a_price_reason_among_the_errors_of_its_variations(): void {
+		$cells = $this->parent_cells( [ 'created', 'created', 'error' ], [ 1 => 'price_quarantined' ] );
+
+		$this->assertSame( 'Ошибка у 2 вариантов', $cells['state'][0]['value']['tooltip'] );
+	}
+
 	public function test_stock_and_price_are_one_text_site_slash_marketplace_with_a_dash_for_a_missing_side(): void {
 		$this->assertSame( '5 / —', $this->cells( [] )['stock'] );
 		$this->assertSame( '100 / —', $this->cells( [] )['price'] );
@@ -124,10 +149,11 @@ final class SiteProductsRowsCellsTest extends TestCase {
 	/**
 	 * The state cell of a variable product with the given variation groups, one variation per entry.
 	 *
-	 * @param string[] $groups Group of each variation; a variation of the group `error` carries an error text.
+	 * @param string[]          $groups Group of each variation; a variation of the group `error` carries an error text.
+	 * @param array<int,string> $prices Variation index => price reason code.
 	 * @return array<string,mixed> The cells of the parent row.
 	 */
-	private function parent_cells( array $groups ): array {
+	private function parent_cells( array $groups, array $prices = [] ): array {
 		$offers = [];
 
 		foreach ( $groups as $index => $group ) {
@@ -147,6 +173,7 @@ final class SiteProductsRowsCellsTest extends TestCase {
 				'warehouse_id' => null,
 				'error'        => 'error' === $group ? 'Не заполнен бренд' : '',
 				'stock_pool'   => null,
+				'price_error_code' => $prices[ $index ] ?? '',
 			];
 		}
 

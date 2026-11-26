@@ -55,6 +55,13 @@ final class Sync_Reason_Text {
 			case Sync_Reason::RATE_LIMITED:
 				/* translators: %d: seconds until the next retry. */
 				return sprintf( __( 'Маркетплейс ограничил частоту запросов — следующая попытка через %d с.', 'woodev-plugin-framework' ), (int) ( $params['seconds'] ?? 0 ) );
+			case Sync_Reason::PRICE_REFUSED:
+				/* translators: %s: reason returned by the marketplace. */
+				return sprintf( __( 'Маркетплейс не принял новую цену: %s', 'woodev-plugin-framework' ), (string) ( $params['message'] ?? '' ) );
+			case Sync_Reason::PRICE_QUARANTINED:
+			case Sync_Reason::PRICE_EXPIRED:
+				// The stored text is already the whole sentence: it names the marketplace or says what happens next.
+				return (string) ( $params['message'] ?? '' );
 			case Sync_Reason::LAST_ERROR:
 				/* translators: %s: error text returned by the marketplace. */
 				return sprintf( __( 'Последняя ошибка маркетплейса: %s', 'woodev-plugin-framework' ), (string) ( $params['message'] ?? '' ) );

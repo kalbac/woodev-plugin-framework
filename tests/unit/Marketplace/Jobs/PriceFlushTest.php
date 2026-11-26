@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Ledger\Item_Result;
 use Woodev\Framework\Marketplace\Price\Flush_Result;
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
 use Woodev\Framework\Marketplace\Price\Push_Receipt;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Price_Pusher;
@@ -498,47 +499,58 @@ final class PriceFlushTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * Asynchronous acceptance is not supported: nothing settles a price task later. A pending receipt therefore carries no
-	 * answer the sender can use, and its pairs are counted as unanswered — never parked as «waiting» and sent again without end.
-	 * The fifth such answer stops the retries of the revision; a changed payload is a new try.
+	 * A pending receipt may answer some lines at once. A failure it carries is as final as the one a price task would bring: the
+	 * price keeps its reason and is not sent again until it changes, while the other line waits for the task.
 	 *
+	 * @dataProvider immediate_refusals
+	 * @param string $code    The pusher's code.
+	 * @param string $stored  The reason code kept with the price.
+	 * @param string $message The text the merchant reads.
 	 * @return void
 	 */
-	public function test_a_pending_receipt_is_a_bounded_failure_not_an_endless_resend(): void {
-		$product = $this->priced( 'a' );
-		$this->want_price( $product );
+	public function test_a_failure_in_a_pending_receipt_is_final( string $code, string $stored, string $message ): void {
+		$turned_down = $this->priced( 'a' );
+		$deferred    = $this->priced( 'b' );
+		$this->want_price( $turned_down );
+		$this->want_price( $deferred );
 
-		$pending = function (): Push_Receipt {
-			return Push_Receipt::pending( new Async_Task( $this->account_id, Async_Task::KIND_PRICE, 'price-task-1', Async_Task::STATUS_POLLING, 1, new \DateTimeImmutable( '@' . $this->now ) ) );
+		$this->prices->script[] = function () use ( $turned_down, $code ): Push_Receipt {
+			return new Push_Receipt(
+				$this->refused( $turned_down, $code, 'the marketplace said no' ),
+				new Async_Task( $this->account_id, Async_Task::KIND_PRICE, 'price-task-1' )
+			);
 		};
+		$result                 = $this->flush_now();
 
-		$this->prices->script[] = $pending;
-		$first                  = $this->flush_now();
-		$row                    = $this->price_row( $product );
+		$row = $this->price_row( $turned_down );
+		$this->assertSame( [ $stored, $message ], [ $row['error_code'], $row['last_error'] ] );
+		$this->assertNotNull( $row['refused_payload'] );
+		$this->assertNull( $row['task_id'] );
+		$this->assertSame( [ 1, 1 ], [ $result->failed(), $result->awaiting() ] );
+		$this->assertNotNull( $this->price_row( $deferred )['task_id'] );
+		$this->assertSame( [ $this->link_id( $deferred ) ], array_keys( $this->task_ledger()->items( 1 ) ) );
 
-		$this->assertSame( [ 0, 1, 0 ], [ $first->sent(), $first->failed(), $first->waiting() ], 'not sent, not waiting: refused' );
-		$this->assertSame( 1, (int) $row['attempts'] );
-		$this->assertSame( 'Маркетплейс не вернул ответ по этому товару.', $row['last_error'] );
-		$this->assertNotSame( [], preg_grep( '/pending receipt, which this sender does not settle/', $this->log ) );
-
-		// The run the critic's probe made: one price interval later the pair is due again and the receipt is pending again.
-		for ( $run = 0; $run < 8; $run++ ) {
-			$this->now           += 4000;
-			$this->prices->script = [ $pending ];
-			$this->flush_now();
-		}
-
-		$row = $this->price_row( $product );
-
-		$this->assertCount( 5, $this->prices->requests, 'the attempt cap ends the re-submission' );
-		$this->assertSame( 5, (int) $row['attempts'] );
-		$this->assertNull( $row['sent_payload'], 'nothing was ever reported as accepted' );
-
-		$this->prices->script = [];
-		$this->want_price( $product, [ 'price' => '120.00' ] );
+		$this->now += 4000;
 		$this->flush_now();
 
-		$this->assertCount( 6, $this->prices->requests, 'a changed payload is a new try' );
+		$this->assertCount( 1, $this->prices->requests, 'an unchanged price is never sent again' );
+
+		$this->want_price( $turned_down, [ 'price' => '120.00' ] );
+		$this->flush_now();
+
+		$this->assertSame( [ 'a' ], array_keys( $this->prices->requests[1] ), 'a changed price is a new try' );
+	}
+
+	/**
+	 * Failures a pending receipt may carry at once.
+	 *
+	 * @return array<string,array{0:string,1:string,2:string}>
+	 */
+	public function immediate_refusals(): array {
+		return [
+			'quarantine' => [ Price_Refusal::QUARANTINED, Price_Refusal::QUARANTINED, self::MARKETPLACE_NAME . ' держит новую цену в карантине: она намного ниже текущей' ],
+			'refusal'    => [ 'price_error', Price_Refusal::REFUSED, 'the marketplace said no' ],
+		];
 	}
 
 	/**

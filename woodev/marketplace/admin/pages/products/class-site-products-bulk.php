@@ -18,8 +18,10 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Lost;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Report;
 use Woodev\Framework\Marketplace\Jobs\Link_Scheduler;
 use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
 use Woodev\Framework\Marketplace\Sync\Price_Context;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
@@ -91,6 +93,17 @@ final class Site_Products_Bulk {
 	 * Names examples under each reason in a group.
 	 */
 	private const EXAMPLES = 5;
+
+	/**
+	 * Most reasons a plan names on its own: every refused price quotes its own marketplace text, and the records engine's answer
+	 * carries at most 50 groups, the ones added after the plan included.
+	 */
+	private const REASONS = 40;
+
+	/**
+	 * Longest marketplace text quoted in the reason of a refused price, in characters.
+	 */
+	private const REFUSAL_TEXT_LENGTH = 110;
 
 	/**
 	 * Actions whose work runs in the background after the request: the answer says «queued».
@@ -729,8 +742,27 @@ final class Site_Products_Bulk {
 			'enabled'  => $enabled,
 			'will'     => count( $targets ),
 			'warnings' => 0,
-			'groups'   => $groups,
+			'groups'   => $this->bounded( $groups ),
 		];
+	}
+
+	/**
+	 * Folds the smallest groups into one «other reasons» group, so that the counts still add up.
+	 *
+	 * @param array<int,array<string,mixed>> $groups Groups, the biggest first.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function bounded( array $groups ): array {
+		if ( count( $groups ) <= self::REASONS ) {
+			return $groups;
+		}
+
+		$named = array_slice( $groups, 0, self::REASONS - 1 );
+		$rest  = (int) array_sum( array_column( array_slice( $groups, self::REASONS - 1 ), 'count' ) );
+
+		$named[] = $this->group( Bulk_Run_Report::overflow_reason(), [], null, $rest );
+
+		return $named;
 	}
 
 	/**
@@ -883,7 +915,8 @@ final class Site_Products_Bulk {
 	}
 
 	/**
-	 * Asks what the price send would store, without storing, and names the gap.
+	 * Asks what the price send would store, without storing, and names the gap: a product with no price to send, and a price the
+	 * marketplace already turned down, which would not go out.
 	 *
 	 * @param Account     $account Account.
 	 * @param Link_Record $record  Link row.
@@ -902,7 +935,43 @@ final class Site_Products_Bulk {
 			return $this->unreadable_price();
 		}
 
-		return null === $pair ? __( 'у товара нет цены, которую можно отправить', 'woodev-plugin-framework' ) : null;
+		if ( null === $pair ) {
+			return __( 'у товара нет цены, которую можно отправить', 'woodev-plugin-framework' );
+		}
+
+		$held = $this->prices->held( $account, $record, $pair );
+
+		return null === $held ? null : $this->held_price_reason( $held['code'], $held['message'] );
+	}
+
+	/**
+	 * Says why a price the marketplace turned down is not sent again, and what to do. The sentence stays short enough for the report
+	 * of a bulk run, so a long marketplace text is cut, never the advice before it.
+	 *
+	 * @param string $code    `Price_Refusal` code; '' when only the refusal itself is known.
+	 * @param string $message The stored text of the refusal.
+	 * @return string
+	 */
+	private function held_price_reason( string $code, string $message ): string {
+		if ( Price_Refusal::QUARANTINED === $code ) {
+			/* translators: %s: the sentence about the quarantine, which names the marketplace. */
+			return sprintf( __( '%s. Не отправится, пока вы не измените цену; карантин снимается и в кабинете маркетплейса', 'woodev-plugin-framework' ), $message );
+		}
+
+		if ( Price_Refusal::EXPIRED === $code ) {
+			return $message;
+		}
+
+		if ( '' === $message ) {
+			return __( 'маркетплейс уже не принял эту цену — измените её, чтобы отправить', 'woodev-plugin-framework' );
+		}
+
+		if ( mb_strlen( $message ) > self::REFUSAL_TEXT_LENGTH ) {
+			$message = mb_substr( $message, 0, self::REFUSAL_TEXT_LENGTH - 1 ) . '…';
+		}
+
+		/* translators: %s: the marketplace's reason. */
+		return sprintf( __( 'маркетплейс не принял эту цену — измените её, чтобы отправить: %s', 'woodev-plugin-framework' ), $message );
 	}
 
 	/**

@@ -135,6 +135,9 @@ final class Sqlite_Schema {
 				remote_present INTEGER NULL DEFAULT NULL,
 				remote_reserved INTEGER NULL DEFAULT NULL,
 				remote_read_at TEXT NULL DEFAULT NULL,
+				task_id INTEGER NULL DEFAULT NULL,
+				refused_payload TEXT NULL,
+				error_code TEXT NULL DEFAULT NULL,
 				PRIMARY KEY (account_id, link_id, warehouse_id, kind)
 			)'
 		);

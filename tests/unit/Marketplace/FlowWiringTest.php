@@ -68,8 +68,8 @@ final class FlowWiringTest extends TestCase {
 	private const OTHER  = 'other-seller';
 
 	/**
-	 * Hooks one registration adds, with how many callbacks each gets. `poll_task` is shared by design: the export poll and the
-	 * label poll each answer their own kind of task.
+	 * Hooks one registration adds, with how many callbacks each gets. `poll_task` is shared by design: the export poll, the price
+	 * poll and the label poll each answer their own kind of task.
 	 *
 	 * @var array<string,int>
 	 */
@@ -81,7 +81,7 @@ final class FlowWiringTest extends TestCase {
 		'woodev_%s_recompute_prices'              => 1,
 		'woodev_%s_refresh_prices'                => 1,
 		'woodev_%s_export_batch'                  => 1,
-		'woodev_%s_poll_task'                     => 2,
+		'woodev_%s_poll_task'                     => 3,
 		'woodev_%s_link_cards'                    => 1,
 		'woodev_%s_import_cards'                  => 1,
 		'woodev_%s_refresh_cards'                 => 1,
@@ -210,9 +210,9 @@ final class FlowWiringTest extends TestCase {
 			Actions\expectAdded( $name )->times( $times );
 		}
 
-		// The schedule checks: stock and price sender, daily stock reconcile, posting poll, label prune, export sweep, weekly catalogue refresh,
-		// daily cards list refresh.
-		Actions\expectAdded( 'action_scheduler_init' )->times( 7 );
+		// The schedule checks: stock and price sender, daily stock reconcile, posting poll, label prune, price task sweep, export sweep (the
+		// same recurring action as the price one), weekly catalogue refresh, daily cards list refresh.
+		Actions\expectAdded( 'action_scheduler_init' )->times( 8 );
 		// A changed price rule is named after the adapter, not the plugin.
 		Actions\expectAdded( 'woodev_fake_wildberries_profile_price_changed' )->once();
 		// The settings screen fires this one after saving an account's markup or price direction.

@@ -178,18 +178,45 @@ interface Task_Ledger {
 	public function get( int $task_id ): ?Async_Task;
 
 	/**
+	 * Finds the unfinished task of an account that carries a marketplace task id, so that a marketplace that answers «this task
+	 * already exists» does not get a second one.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param int    $account_id     Account id.
+	 * @param string $kind           `Async_Task::KIND_*`.
+	 * @param string $remote_task_id Marketplace task id.
+	 * @return Async_Task|null The newest one, null when the account has none open.
+	 */
+	public function find_open( int $account_id, string $kind, string $remote_task_id ): ?Async_Task;
+
+	/**
+	 * Adds entries to a task's result payload; entries it already holds under the same keys are replaced.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param int                 $task_id Task id.
+	 * @param array<string,mixed> $entries Result entries.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function merge_result( int $task_id, array $entries ): void;
+
+	/**
 	 * Lists the items of a task.
 	 *
 	 * @since 2.0.29
+	 * @since 2.1.25 A failed read throws.
 	 *
 	 * @param int $task_id Task id.
 	 * @return array<int,array{link_id:int,offer_id:string,status:string,errors:array<int,mixed>}> Keyed by link id.
+	 * @throws \RuntimeException When the database refuses the read: that is not a task without items.
 	 */
 	public function items( int $task_id ): array;
 
 	/**
-	 * Lists, for a set of links of one account, the items whose task has not finished and whose own result is still pending: the
-	 * work a card import still owes those links. One read for the whole set, so a screen that shows many rows asks once. It changes
+	 * Lists, for a set of links of one account, the items of unfinished card imports whose own result is still pending: the
+	 * work a card import still owes those links. A price task is not work of this kind: it holds nothing of the card. One read for the whole set, so a screen that shows many rows asks once. It changes
 	 * nothing, claims nothing and calls no marketplace.
 	 *
 	 * @since 2.0.29

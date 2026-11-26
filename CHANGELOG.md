@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.24] — 2026-11-26
+### Features
+- **marketplace**: A note on a card, at the product (WF12) (#2032)
+
+
+
 ## [2.1.23] — 2026-11-26
 ### Documentation
 - **specs**: Wildberries Seller S0 — fold the phase-0 measurements into the design (#2018)
