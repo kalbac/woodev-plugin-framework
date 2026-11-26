@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Framework\Marketplace\Admin\Page;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Marketplace_Orders_Page;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Orders_Analytics_Controller;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 use Woodev\Tests\Unit\TestCase;
 
 /**
@@ -152,21 +153,33 @@ final class MarketplaceOrdersPageTest extends TestCase {
 			],
 		];
 
-		$manifest = Marketplace_Orders_Page::build_manifest( $entries, [ 'ozon-seller' => 'Ozon' ] );
+		$noun     = new Posting_Noun(
+			[
+				'one'        => 'сборочное задание',
+				'of_one'     => 'сборочного задания',
+				'to_one'     => 'сборочному заданию',
+				'with_one'   => 'со сборочным заданием',
+				'many'       => 'сборочные задания',
+				'of_many'    => 'сборочных заданий',
+				'about_many' => 'о сборочных заданиях',
+			]
+		);
+		$manifest = Marketplace_Orders_Page::build_manifest( $entries, [ 'ozon-seller' => 'Ozon' ], [ 'wildberries' => $noun ] );
 
 		$this->assertSame( '/woodev-marketplace-orders', $manifest['path'] );
 		$this->assertSame( 'toplevel_page_woocommerce', $manifest['domId'], 'The WooCommerce menu stays open on the page.' );
 		$this->assertSame( [ 'Заказы маркетплейсов' ], $manifest['breadcrumbs'] );
 		$this->assertSame(
 			[
-				[ 'id' => 'ozon-seller', 'label' => 'Ozon', 'table' => 'orders', 'help' => $help ],
-				[ 'id' => 'wildberries', 'label' => 'Wildberries', 'table' => 'orders' ],
+				[ 'id' => 'ozon-seller', 'label' => 'Ozon', 'table' => 'orders', 'analytics' => Orders_Analytics_Controller::messages(), 'help' => $help ],
+				[ 'id' => 'wildberries', 'label' => 'Wildberries', 'table' => 'orders', 'analytics' => Orders_Analytics_Controller::messages( $noun ) ],
 			],
 			$manifest['marketplaces'],
-			'The marketplace name when the plugin gives one, the menu title otherwise.'
+			'The marketplace name when the plugin gives one, the menu title otherwise; the «Аналитика» tab gets its words from PHP, in each marketplace\'s wording.'
 		);
+		$this->assertSame( 'Зависшие отправления', $manifest['marketplaces'][0]['analytics']['stuck'] );
+		$this->assertSame( 'Зависшие сборочные задания', $manifest['marketplaces'][1]['analytics']['stuck'] );
 		$this->assertSame( [ 'marketplace', 'tabs', 'orders', 'analytics' ], array_keys( $manifest['labels'] ) );
-		$this->assertSame( array_keys( Orders_Analytics_Controller::messages() ), array_keys( $manifest['analytics'] ), 'The «Аналитика» tab gets its words from PHP.' );
 		$this->assertNull(
 			Marketplace_Orders_Page::build_manifest( [ [ 'pluginId' => 'x', 'title' => 'X', 'pages' => [ $entries[0]['pages'][0] ] ] ], [] ),
 			'No orders page the user may open: no page.'

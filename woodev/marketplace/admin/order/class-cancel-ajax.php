@@ -16,6 +16,7 @@ use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -149,7 +150,10 @@ final class Cancel_Ajax {
 		}
 
 		if ( [] === $reasons ) {
-			wp_send_json_error( [ 'message' => __( 'Маркетплейс не вернул причин, с которыми можно отменить это отправление. Попробуйте позже.', 'woodev-plugin-framework' ) ], 502 );
+			/* translators: %s: the marketplace's word for a posting, «отправление». */
+			$message = sprintf( __( 'Маркетплейс не вернул причин, с которыми можно отменить это %s. Попробуйте позже.', 'woodev-plugin-framework' ), $this->names->posting_noun()->one() );
+
+			wp_send_json_error( [ 'message' => $message ], 502 );
 		}
 
 		wp_send_json_success(
@@ -185,11 +189,14 @@ final class Cancel_Ajax {
 			$this->fail_unexpectedly( $e );
 		}
 
-		/* translators: 1: posting number, 2: marketplace name, 3: cancellation reason. */
-		$order->add_order_note( sprintf( __( 'Отправление %1$s отменено: %2$s, из WooCommerce. Причина: %3$s.', 'woodev-plugin-framework' ), $posting_number, $this->names->name(), $reason['title'] ) );
+		$noun = Posting_Noun::capitalised( $this->names->posting_noun()->one() );
+
+		/* translators: 1: the marketplace's word for a posting, capitalised: «Отправление», 2: posting number, 3: marketplace name, 4: cancellation reason. */
+		$order->add_order_note( sprintf( __( '%1$s %2$s отменено: %3$s, из WooCommerce. Причина: %4$s.', 'woodev-plugin-framework' ), $noun, $posting_number, $this->names->name(), $reason['title'] ) );
 		$this->queue_refresh( $account, $posting_number );
 
-		wp_send_json_success( [ 'message' => __( 'Отправление отменено. Заказ обновится в течение нескольких минут.', 'woodev-plugin-framework' ) ] );
+		/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
+		wp_send_json_success( [ 'message' => sprintf( __( '%s отменено. Заказ обновится в течение нескольких минут.', 'woodev-plugin-framework' ), $noun ) ] );
 	}
 
 	/**
@@ -258,7 +265,9 @@ final class Cancel_Ajax {
 	 * @throws Cancel_Refused When the licence is not in force.
 	 */
 	private function require_licence(): void {
-		$refusal = $this->license->refusal_for( __( 'отменить отправление на маркетплейсе', 'woodev-plugin-framework' ) );
+		/* translators: %s: the marketplace's word for a posting, «отправление». */
+		$action  = sprintf( __( 'отменить %s на маркетплейсе', 'woodev-plugin-framework' ), $this->names->posting_noun()->one() );
+		$refusal = $this->license->refusal_for( $action );
 
 		if ( null !== $refusal ) {
 			throw new Cancel_Refused( $refusal, 403 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
@@ -357,7 +366,10 @@ final class Cancel_Ajax {
 	 */
 	private function require_open( \WC_Order $order ): void {
 		if ( $this->canceller->is_finished( $order ) ) {
-			throw new Cancel_Refused( __( 'Это отправление уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), 409 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+			/* translators: %s: the marketplace's word for a posting, «отправление». */
+			$message = sprintf( __( 'Это %s уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), $this->names->posting_noun()->one() );
+
+			throw new Cancel_Refused( $message, 409 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 	}
 

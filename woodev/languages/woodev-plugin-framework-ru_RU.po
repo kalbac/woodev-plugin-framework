@@ -716,8 +716,10 @@ msgstr ""
 msgid "Суммы"
 msgstr ""
 
-#: marketplace/admin/order/class-order-details-box.php:166
-msgid "Номер отправления"
+#. translators: %s: the marketplace's word for a posting in the genitive, «отправления».
+#: marketplace/admin/order/class-order-details-box.php:162
+#, php-format
+msgid "Номер %s"
 msgstr ""
 
 #: marketplace/admin/order/class-order-details-box.php:167
@@ -7196,7 +7198,7 @@ msgid "Не удалось получить данные маркетплейс�
 msgstr ""
 
 #: marketplace/admin/pages/mappings/class-mapping-messages.php:268
-msgid "У этой характеристики нет словаря маркетплейса."
+msgid "У этой характеристики нет справочника маркетплейса."
 msgstr ""
 
 #: marketplace/admin/pages/mappings/class-mapping-messages.php:279
@@ -9020,20 +9022,24 @@ msgstr ""
 msgid "%s (КГТ)"
 msgstr ""
 
-#: marketplace/admin/order/class-cancel-ajax.php:141
-msgid "Маркетплейс не вернул причин, с которыми можно отменить это отправление. Попробуйте позже."
-msgstr ""
-
-#. translators: 1: posting number, 2: marketplace name, 3: cancellation reason.
-#: marketplace/admin/order/class-cancel-ajax.php:178
-#: marketplace/admin/pages/orders/class-site-orders-cancel.php:177
+#. translators: %s: the marketplace's word for a posting, «отправление».
+#: marketplace/admin/order/class-cancel-ajax.php:154
 #, php-format
-msgid "Отправление %1$s отменено: %2$s, из WooCommerce. Причина: %3$s."
+msgid "Маркетплейс не вернул причин, с которыми можно отменить это %s. Попробуйте позже."
 msgstr ""
 
-#: marketplace/admin/order/class-cancel-ajax.php:181
-#: marketplace/admin/pages/orders/class-site-orders-provider.php:472
-msgid "Отправление отменено. Заказ обновится в течение нескольких минут."
+#. translators: 1: the marketplace's word for a posting, capitalised: «Отправление», 2: posting number, 3: marketplace name, 4: cancellation reason.
+#: marketplace/admin/order/class-cancel-ajax.php:195
+#: marketplace/admin/pages/orders/class-site-orders-cancel.php:193
+#, php-format
+msgid "%1$s %2$s отменено: %3$s, из WooCommerce. Причина: %4$s."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a posting, capitalised: «Отправление».
+#: marketplace/admin/order/class-cancel-ajax.php:199
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:551
+#, php-format
+msgid "%s отменено. Заказ обновится в течение нескольких минут."
 msgstr ""
 
 #: marketplace/admin/order/class-cancel-ajax.php:195
@@ -9041,9 +9047,11 @@ msgstr ""
 msgid "Страница устарела или у вас нет прав для этого действия. Обновите страницу и повторите."
 msgstr ""
 
-#: marketplace/admin/order/class-cancel-ajax.php:224
-#: marketplace/admin/pages/orders/class-site-orders-cancel.php:95
-msgid "отменить отправление на маркетплейсе"
+#. translators: %s: the marketplace's word for a posting, «отправление».
+#: marketplace/admin/order/class-cancel-ajax.php:269
+#: marketplace/admin/pages/orders/class-site-orders-cancel.php:108
+#, php-format
+msgid "отменить %s на маркетплейсе"
 msgstr ""
 
 #: marketplace/admin/order/class-cancel-ajax.php:242
@@ -9068,22 +9076,18 @@ msgstr ""
 msgid "Заказ не найден среди заказов «%s» этого сайта. Обновите страницу."
 msgstr ""
 
-#: marketplace/admin/order/class-cancel-ajax.php:323
-#: marketplace/admin/pages/orders/class-site-orders-cancel.php:171
-#: marketplace/admin/pages/orders/class-site-orders-provider.php:421
-#: marketplace/admin/pages/orders/class-site-orders-provider.php:444
-#: marketplace/admin/pages/orders/class-site-orders-rows.php:273
-msgid "Это отправление уже завершено или отменено, отменить его нельзя."
-msgstr ""
-
-#. translators: %s: posting number.
-#: marketplace/admin/order/class-cancel-metabox.php:114
+#. translators: %s: the marketplace's word for a posting, «отправление».
+#: marketplace/admin/order/class-cancel-ajax.php:370
+#: marketplace/admin/pages/orders/class-site-orders-cancel.php:185
+#: marketplace/admin/pages/orders/class-site-orders-provider.php:560
 #, php-format
-msgid "Отправление: %s"
+msgid "Это %s уже завершено или отменено, отменить его нельзя."
 msgstr ""
 
-#: marketplace/admin/order/class-cancel-metabox.php:119
-msgid "Отправление завершено или отменено — отменить его нельзя."
+#. translators: %s: the marketplace's word for a posting, capitalised: «Отправление».
+#: marketplace/admin/order/class-order-details-box.php:235
+#, php-format
+msgid "%s завершено или отменено — отменить его нельзя."
 msgstr ""
 
 #. translators: %s: marketplace name.
@@ -9104,15 +9108,17 @@ msgstr ""
 msgid "Не удалось связаться с сайтом. Проверьте интернет и повторите."
 msgstr ""
 
-#: marketplace/admin/order/class-cancel-modal.php:124
-#: marketplace/admin/order/class-cancel-modal.php:136
-#: marketplace/admin/pages/orders/class-site-orders-definition.php:216
-#: marketplace/admin/pages/orders/class-site-orders-definition.php:222
-msgid "Отменить отправление"
+#. translators: %s: the marketplace's word for a posting, «отправление».
+#: marketplace/admin/order/class-cancel-modal.php:158
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:209
+#, php-format
+msgid "Отменить %s"
 msgstr ""
 
-#: marketplace/admin/order/class-cancel-modal.php:125
-msgid "Отправление будет отменено на маркетплейсе. Это нельзя отменить: покупатель получит уведомление, а товар вернётся на склад сайта."
+#. translators: %s: the marketplace's word for a posting, capitalised: «Отправление».
+#: marketplace/admin/order/class-cancel-modal.php:169
+#, php-format
+msgid "%s будет отменено на маркетплейсе. Это нельзя отменить: покупатель получит уведомление, а товар вернётся на склад сайта."
 msgstr ""
 
 #: marketplace/admin/order/class-cancel-modal.php:127
@@ -10295,20 +10301,20 @@ msgstr ""
 msgid "Заказ обновляется по данным маркетплейса"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-site-orders-definition.php:99
-msgid "Отправление"
-msgstr ""
-
 #: marketplace/admin/pages/orders/class-site-orders-definition.php:132
 msgid "Этикетки"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-site-orders-definition.php:154
-msgid "Поиск по отправлению или ID заказа"
+#. translators: %s: the marketplace's word for a posting in the dative, «отправлению».
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:148
+#, php-format
+msgid "Поиск по %s или ID заказа"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-site-orders-definition.php:159
-msgid "Состояние отправления"
+#. translators: %s: the marketplace's word for a posting in the genitive, «отправления».
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:154
+#, php-format
+msgid "Состояние %s"
 msgstr ""
 
 #: marketplace/admin/pages/orders/class-site-orders-definition.php:168
@@ -10324,8 +10330,10 @@ msgstr ""
 msgid "Скачать этикетки"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-site-orders-definition.php:221
-msgid "Отправление будет отменено на маркетплейсе. Заказ на сайте обновится в течение нескольких минут."
+#. translators: %s: the marketplace's word for a posting, capitalised: «Отправление».
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:240
+#, php-format
+msgid "%s будет отменено на маркетплейсе. Заказ на сайте обновится в течение нескольких минут."
 msgstr ""
 
 #: marketplace/admin/pages/orders/class-site-orders-definition.php:233
@@ -10901,16 +10909,14 @@ msgstr ""
 msgid "Задачи на отправку и проверку"
 msgstr ""
 
-#: marketplace/deletion/class-account-deletion-preview.php:94
-msgid "Отправления"
-msgstr ""
-
 #: marketplace/deletion/class-account-deletion-preview.php:95
 msgid "Документы и этикетки"
 msgstr ""
 
-#: marketplace/deletion/class-account-deletion-preview.php:126
-msgid "У аккаунта выключен импорт заказов, поэтому отправления в плагине — единственный учёт списанных остатков. После удаления отмена старого отправления не вернёт остаток на склад."
+#. translators: 1: the marketplace's word for several postings, «отправления», 2: the word for one in the genitive, «отправления».
+#: marketplace/deletion/class-account-deletion-preview.php:149
+#, php-format
+msgid "У аккаунта выключен импорт заказов, поэтому %1$s в плагине — единственный учёт списанных остатков. После удаления отмена старого %2$s не вернёт остаток на склад."
 msgstr ""
 
 #: marketplace/deletion/class-account-deletion-preview.php:130
@@ -12682,10 +12688,12 @@ msgid "час"
 msgstr ""
 
 #: marketplace/admin/shared/class-russian-age.php:50
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:393
 msgid "часа"
 msgstr ""
 
 #: marketplace/admin/shared/class-russian-age.php:50
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:393
 msgid "часов"
 msgstr ""
 
@@ -12735,8 +12743,10 @@ msgstr ""
 msgid "Товары и заказы WooCommerce остаются в магазине: заказы удаляются отдельно."
 msgstr ""
 
-#: marketplace/deletion/class-account-deletion-preview.php:92
-msgid "Аккаунт включён. Выключить и удалить? Перед удалением плагин выключит аккаунт: остатки, цены и заказы по нему перестанут синхронизироваться. Связи товаров с карточками и записи об отправлениях будут удалены."
+#. translators: %s: «about several postings», preposition included: «об отправлениях».
+#: marketplace/deletion/class-account-deletion-preview.php:104
+#, php-format
+msgid "Аккаунт включён. Выключить и удалить? Перед удалением плагин выключит аккаунт: остатки, цены и заказы по нему перестанут синхронизироваться. Связи товаров с карточками и записи %s будут удалены."
 msgstr ""
 
 #. translators: %s: marketplace name, for example «Ozon».
@@ -12930,8 +12940,10 @@ msgstr ""
 msgid "Сопоставление и профили"
 msgstr ""
 
-#: marketplace/admin/pages/mappings/class-mapping-list-definition.php:64
-msgid "На этой странице настраивается соответствие категорий вашего магазина категориям Ozon и указывается, откуда брать значения характеристик товаров."
+#. translators: %s: marketplace name.
+#: marketplace/admin/pages/mappings/class-mapping-list-definition.php:68
+#, php-format
+msgid "На этой странице настраивается соответствие категорий вашего магазина категориям %s и указывается, откуда брать значения характеристик товаров."
 msgstr ""
 
 #: marketplace/admin/pages/mappings/class-mapping-list-definition.php:66
@@ -13052,29 +13064,36 @@ msgstr ""
 msgid "Этикетка ещё готовится. Обновите страницу чуть позже и нажмите кнопку снова."
 msgstr ""
 
-#: marketplace/admin/shared/class-label-availability.php:49
-msgid "Отправление завершено — этикетка не нужна."
+#. translators: %s: the marketplace's word for a posting, capitalised: «Отправление».
+#: marketplace/admin/shared/class-label-availability.php:62
+#, php-format
+msgid "%s завершено — этикетка не нужна."
 msgstr ""
 
 #: marketplace/admin/shared/class-posting-action-gate.php:92
 msgid "Ключ этого аккаунта не позволяет менять данные на маркетплейсе (например, он выдан только для чтения), поэтому действие недоступно."
 msgstr ""
 
-#: marketplace/admin/shared/class-posting-action-gate.php:108
-msgid "Маркетплейс сейчас не разрешает отменить это отправление — например, оно уже передано в доставку."
+#. translators: %s: the marketplace's word for a posting, «отправление».
+#: marketplace/admin/shared/class-posting-action-gate.php:140
+#, php-format
+msgid "Маркетплейс сейчас не разрешает отменить это %s — например, оно уже передано в доставку."
 msgstr ""
 
-#: marketplace/admin/shared/class-posting-action-gate.php:129
-msgid "Маркетплейс ещё не выдал этикетку для этого отправления — она станет доступна, когда отправление будет собрано."
+#. translators: 1: the marketplace's word for a posting in the genitive, «отправления», 2: the same word, «отправление».
+#: marketplace/admin/shared/class-posting-action-gate.php:162
+#, php-format
+msgid "Маркетплейс ещё не выдал этикетку для этого %1$s — она станет доступна, когда %2$s будет собрано."
 msgstr ""
 
 #: marketplace/settings/class-accounts-sections.php:804
 msgid "Статус нового заказа"
 msgstr ""
 
-#: marketplace/settings/class-accounts-sections.php:807
+#. translators: 1: marketplace name, 2: «with a posting», preposition included: «с отправлением».
+#: marketplace/settings/class-accounts-sections.php:833
 #, php-format
-msgid "В каком статусе WooCommerce создаётся заказ, пришедший с %s. Дальше статус меняется вместе с отправлением."
+msgid "В каком статусе WooCommerce создаётся заказ, пришедший с %1$s. Дальше статус меняется вместе %2$s."
 msgstr ""
 
 #: marketplace/settings/class-accounts-sections.php:932
@@ -13109,8 +13128,10 @@ msgstr ""
 msgid "ключ до %1$s (%2$s)"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:163
-msgid "На этой странице отображаются заказы маркетплейса за выбранный период: выручка и отмены по аккаунтам, проданные товары, статусы отправлений и отправления, которые ждут упаковки или отгрузки."
+#. translators: 1: the marketplace's word for a posting in the genitive plural, «отправлений», 2: the plural, «отправления».
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:180
+#, php-format
+msgid "На этой странице отображаются заказы маркетплейса за выбранный период: выручка и отмены по аккаунтам, проданные товары, статусы %1$s и %2$s, которые ждут упаковки или отгрузки."
 msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:165
@@ -13159,32 +13180,38 @@ msgstr ""
 msgid "По аккаунтам"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:189
-msgid "Отправления по статусам"
+#. translators: %s: the marketplace's word for several postings, capitalised: «Отправления».
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:206
+#, php-format
+msgid "%s по статусам"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:190
-msgid "Все отправления по их статусу на маркетплейсе сейчас, завершённые тоже. Число открывает список заказов с этим статусом."
-msgstr ""
-
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:192
-msgid "Отправлений"
+#. translators: %s: the marketplace's word for several postings, «отправления».
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:208
+#, php-format
+msgid "Все %s по их статусу на маркетплейсе сейчас, завершённые тоже. Число открывает список заказов с этим статусом."
 msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:193
 msgid "Всего"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:194
-msgid "Отправлений пока нет."
+#. translators: %s: the marketplace's word for a posting in the genitive plural, capitalised: «Отправлений».
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:213
+#, php-format
+msgid "%s пока нет."
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:195
-msgid "Зависшие отправления"
+#. translators: %s: the marketplace's word for several postings, «отправления».
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:215
+#, php-format
+msgid "Зависшие %s"
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:196
-msgid "Зависших отправлений нет."
+#. translators: %s: the marketplace's word for a posting in the genitive plural, «отправлений».
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:217
+#, php-format
+msgid "Зависших %s нет."
 msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:199
@@ -13219,17 +13246,20 @@ msgstr ""
 msgid "Все проданные позиции связаны с товарами магазина."
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:208
-msgid "Отменённые — отменённые заказы и отправления, которые маркетплейс отменил или не принял; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же."
+#. translators: %s: the marketplace's word for several postings, «отправления».
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:230
+#, php-format
+msgid "Отменённые — отменённые заказы и %s, которые маркетплейс отменил или не принял; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же."
 msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:209
 msgid "Отменённые — заказы со статусом «Отменён»; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же."
 msgstr ""
 
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:367
+#. translators: 1: the marketplace's word for several postings, capitalised: «Отправления», 2: hours, 3: the word «час» in the form that goes with the number.
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:397
 #, php-format
-msgid "Отправления, которые ждут упаковки или отгрузки дольше %d часа с момента, когда они поступили в обработку."
+msgid "%1$s, которые ждут упаковки или отгрузки дольше %2$d %3$s с момента, когда они поступили в обработку."
 msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:392
@@ -13249,6 +13279,41 @@ msgstr ""
 #: marketplace/admin/order/class-order-source-filter.php:468
 #, php-format
 msgid "%s не передаёт данные покупателя"
+msgstr ""
+
+#: marketplace/settings/class-posting-noun.php:83
+msgctxt "posting noun: one"
+msgid "отправление"
+msgstr ""
+
+#: marketplace/settings/class-posting-noun.php:84
+msgctxt "posting noun: of one"
+msgid "отправления"
+msgstr ""
+
+#: marketplace/settings/class-posting-noun.php:85
+msgctxt "posting noun: to one"
+msgid "отправлению"
+msgstr ""
+
+#: marketplace/settings/class-posting-noun.php:86
+msgctxt "posting noun: with one"
+msgid "с отправлением"
+msgstr ""
+
+#: marketplace/settings/class-posting-noun.php:87
+msgctxt "posting noun: many"
+msgid "отправления"
+msgstr ""
+
+#: marketplace/settings/class-posting-noun.php:88
+msgctxt "posting noun: of many"
+msgid "отправлений"
+msgstr ""
+
+#: marketplace/settings/class-posting-noun.php:89
+msgctxt "posting noun: about many"
+msgid "об отправлениях"
 msgstr ""
 
 #: marketplace/admin/pages/products/class-remote-cards-actions.php:501

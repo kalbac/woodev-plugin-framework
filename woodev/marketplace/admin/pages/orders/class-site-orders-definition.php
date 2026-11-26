@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
 use Woodev\Framework\Admin\Records\Standard_Messages;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -49,15 +50,17 @@ final class Site_Orders_Definition {
 	 * @param string[]                                    $offered    Row action ids the adapter can serve: `open`, and `label` and `cancel` when it has them.
 	 * @return array<string,mixed>
 	 */
-	public static function build( array $accounts, array $statuses, array $offered ): array {
+	public static function build( array $accounts, array $statuses, array $offered, ?Posting_Noun $noun = null ): array {
+		$noun = $noun ?? Posting_Noun::shipment();
+
 		return [
 			'context'     => [
 				'label'   => __( 'Аккаунт', 'woodev-plugin-framework' ),
 				'options' => $accounts,
 				'default' => (string) ( $accounts[0]['value'] ?? '' ),
 			],
-			'columns'     => self::columns(),
-			'filters'     => self::filters( $statuses ),
+			'columns'     => self::columns( $noun ),
+			'filters'     => self::filters( $statuses, $noun ),
 			'sorts'       => [
 				'keys'    => Site_Orders_Storage::SORT_KEYS,
 				'default' => [
@@ -71,7 +74,7 @@ final class Site_Orders_Definition {
 				'max_per_page'     => 100,
 				'max_selection'    => 100,
 			],
-			'row_actions' => self::row_actions( $offered ),
+			'row_actions' => self::row_actions( $offered, $noun ),
 			'activity'    => [
 				'refresh_ms'     => 5000,
 				'max_refresh_ms' => 60000,
@@ -86,7 +89,7 @@ final class Site_Orders_Definition {
 	/**
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function columns(): array {
+	private static function columns( Posting_Noun $noun ): array {
 		return [
 			[
 				'id'        => 'order',
@@ -97,7 +100,7 @@ final class Site_Orders_Definition {
 			],
 			[
 				'id'        => 'posting',
-				'label'     => __( 'Отправление', 'woodev-plugin-framework' ),
+				'label'     => Posting_Noun::capitalised( $noun->one() ),
 				'cell_type' => 'text',
 				'sort_key'  => 'posting',
 			],
@@ -137,16 +140,18 @@ final class Site_Orders_Definition {
 	 * @param array<int,array{value:string,label:string}> $statuses WooCommerce order statuses.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function filters( array $statuses ): array {
+	private static function filters( array $statuses, Posting_Noun $noun ): array {
 		$filters = [
 			[
 				'id'    => 'q',
-				'label' => __( 'Поиск по отправлению или ID заказа', 'woodev-plugin-framework' ),
+				/* translators: %s: the marketplace's word for a posting in the dative, «отправлению». */
+				'label' => sprintf( __( 'Поиск по %s или ID заказа', 'woodev-plugin-framework' ), $noun->to_one() ),
 				'type'  => 'search',
 			],
 			[
 				'id'      => 'state',
-				'label'   => __( 'Состояние отправления', 'woodev-plugin-framework' ),
+				/* translators: %s: the marketplace's word for a posting in the genitive, «отправления». */
+				'label'   => sprintf( __( 'Состояние %s', 'woodev-plugin-framework' ), $noun->of_one() ),
 				'type'    => 'select',
 				'views'   => true,
 				'options' => [
@@ -199,7 +204,10 @@ final class Site_Orders_Definition {
 	 * @param string[] $offered Action ids to declare.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function row_actions( array $offered ): array {
+	private static function row_actions( array $offered, Posting_Noun $noun ): array {
+		/* translators: %s: the marketplace's word for a posting, «отправление». */
+		$cancel = sprintf( __( 'Отменить %s', 'woodev-plugin-framework' ), $noun->one() );
+
 		$actions = [
 			self::OPEN   => [
 				'id'          => self::OPEN,
@@ -221,15 +229,16 @@ final class Site_Orders_Definition {
 			],
 			self::CANCEL => [
 				'id'             => self::CANCEL,
-				'label'          => __( 'Отменить отправление', 'woodev-plugin-framework' ),
+				'label'          => $cancel,
 				'short_label'    => __( 'Отменить', 'woodev-plugin-framework' ),
 				'icon'           => 'remove',
 				'tone'           => 'danger',
 				'effect'         => 'mutate',
 				'interaction'    => 'dialog',
 				'capability'     => self::EDIT,
-				'scope_sentence' => __( 'Отправление будет отменено на маркетплейсе. Заказ на сайте обновится в течение нескольких минут.', 'woodev-plugin-framework' ),
-				'confirm_label'  => __( 'Отменить отправление', 'woodev-plugin-framework' ),
+				/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
+				'scope_sentence' => sprintf( __( '%s будет отменено на маркетплейсе. Заказ на сайте обновится в течение нескольких минут.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $noun->one() ) ),
+				'confirm_label'  => $cancel,
 				'fields'         => [
 					[
 						'id'             => 'reason',

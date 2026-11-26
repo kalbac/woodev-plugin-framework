@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Order;
 
 use Woodev\Framework\Marketplace\Admin\Dialog_Assets;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -151,14 +152,23 @@ final class Cancel_Modal {
 		}
 
 		$printed = true;
+		$noun    = $this->names->posting_noun();
+
+		/* translators: %s: the marketplace's word for a posting, «отправление». */
+		$cancel_label = sprintf( __( 'Отменить %s', 'woodev-plugin-framework' ), $noun->one() );
 		?>
 		<dialog id="<?php echo esc_attr( self::DIALOG_ID ); ?>" class="woodev-dialog woodev-mp-cancel-dialog" aria-labelledby="woodev-mp-cancel-title" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-button="<?php echo esc_attr( '.' . self::BUTTON_CLASS ); ?>" data-loading="<?php echo esc_attr__( 'Загружаем причины…', 'woodev-plugin-framework' ); ?>" data-sending="<?php echo esc_attr__( 'Отменяем…', 'woodev-plugin-framework' ); ?>" data-failed="<?php echo esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ); ?>">
 			<div class="woodev-dialog__header">
-				<h2 class="woodev-dialog__title" id="woodev-mp-cancel-title"><?php esc_html_e( 'Отменить отправление', 'woodev-plugin-framework' ); ?></h2>
+				<h2 class="woodev-dialog__title" id="woodev-mp-cancel-title"><?php echo esc_html( $cancel_label ); ?></h2>
 				<button type="button" class="woodev-dialog__close" data-woodev-dialog-close aria-label="<?php esc_attr_e( 'Закрыть', 'woodev-plugin-framework' ); ?>"></button>
 			</div>
 			<div class="woodev-dialog__body">
-				<p><?php esc_html_e( 'Отправление будет отменено на маркетплейсе. Это нельзя отменить: покупатель получит уведомление, а товар вернётся на склад сайта.', 'woodev-plugin-framework' ); ?></p>
+				<p>
+					<?php
+					/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
+					echo esc_html( sprintf( __( '%s будет отменено на маркетплейсе. Это нельзя отменить: покупатель получит уведомление, а товар вернётся на склад сайта.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $noun->one() ) ) );
+					?>
+				</p>
 				<p>
 					<label for="woodev-mp-cancel-reason"><?php esc_html_e( 'Причина отмены', 'woodev-plugin-framework' ); ?></label><br>
 					<select id="woodev-mp-cancel-reason" disabled></select>
@@ -171,7 +181,7 @@ final class Cancel_Modal {
 			</div>
 			<div class="woodev-dialog__footer">
 				<button type="button" class="button" id="woodev-mp-cancel-close" data-woodev-dialog-close><?php esc_html_e( 'Не отменять', 'woodev-plugin-framework' ); ?></button>
-				<button type="button" class="button button-primary" id="woodev-mp-cancel-confirm" disabled><?php esc_html_e( 'Отменить отправление', 'woodev-plugin-framework' ); ?></button>
+				<button type="button" class="button button-primary" id="woodev-mp-cancel-confirm" disabled><?php echo esc_html( $cancel_label ); ?></button>
 			</div>
 		</dialog>
 		<?php

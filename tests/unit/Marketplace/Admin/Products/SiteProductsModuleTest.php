@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Provider;
+use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
@@ -181,6 +182,20 @@ final class SiteProductsModuleTest extends TestCase {
 
 		$this->assertSame( 2, Site_Products_Module::count_candidates( $products, $identity ) );
 		$this->assertSame( 3, Site_Products_Module::count_candidates( $products, [] ) );
+	}
+
+	public function test_a_catalogue_alone_is_enough_to_export_and_link(): void {
+		$adapter = Mockery::mock( Marketplace_Adapter::class );
+
+		$adapter->shouldReceive( 'supports' )->andReturnUsing(
+			static function ( string $capability ): bool {
+				return Capability::CATALOG === $capability;
+			}
+		);
+		$adapter->shouldReceive( 'price_reader' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Sync\Price_Reader::class ) );
+		$adapter->shouldReceive( 'price_pusher' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Price\Price_Pusher::class ) );
+
+		$this->assertSame( [], Site_Products_Module::withheld_actions( $adapter ) );
 	}
 
 	public function test_an_adapter_withholds_the_bulk_actions_it_cannot_serve(): void {

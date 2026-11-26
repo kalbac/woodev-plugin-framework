@@ -112,7 +112,7 @@ export function OrdersPage( { page, query: routeQuery }: PageProps ) {
 					<AnalyticsTab
 						key={ marketplace.id }
 						marketplace={ marketplace.id }
-						messages={ page.analytics }
+						messages={ marketplace.analytics }
 						path={ page.path }
 						query={ query }
 						leading={ <MarketplaceSelect page={ page } query={ query } marketplace={ marketplace } /> }

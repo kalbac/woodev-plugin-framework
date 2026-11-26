@@ -8,6 +8,8 @@
 namespace Woodev\Framework\Marketplace\Admin\Shared;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -45,22 +47,33 @@ final class Posting_Action_Gate {
 	private $write_gate;
 
 	/**
+	 * The marketplace's word for a posting.
+	 *
+	 * @var Posting_Noun
+	 */
+	private $noun;
+
+	/**
 	 * Creates the rule.
 	 *
 	 * @since 2.1.17
+	 * @since 2.1.23 Takes the posting noun.
 	 *
 	 * @param Label_Availability           $labels     The label rule.
 	 * @param Posting_Allowed_Actions|null $allowed    The adapter's allowed actions; null for an adapter that has none.
 	 * @param callable|null                $write_gate `function ( Account $account ): bool|string`, the plugin's write gate (`true` allows, `false` refuses with the generic sentence, a string refuses with that sentence); null for none.
+	 * @param Posting_Noun|null            $noun       The marketplace's word for a posting; null for «отправление».
 	 */
-	public function __construct( Label_Availability $labels, ?Posting_Allowed_Actions $allowed = null, ?callable $write_gate = null ) {
+	public function __construct( Label_Availability $labels, ?Posting_Allowed_Actions $allowed = null, ?callable $write_gate = null, ?Posting_Noun $noun = null ) {
 		$this->labels     = $labels;
 		$this->allowed    = $allowed;
 		$this->write_gate = $write_gate;
+		$this->noun       = $noun ?? Posting_Noun::shipment();
 	}
 
 	/**
 	 * Builds the rule from what an adapter implements: {@see Label_Readiness} and {@see Posting_Allowed_Actions}, each optional.
+	 * An adapter's sentences use the noun of its settings descriptor.
 	 *
 	 * @since 2.1.17
 	 *
@@ -69,10 +82,13 @@ final class Posting_Action_Gate {
 	 * @return self
 	 */
 	public static function for_adapter( $adapter, ?callable $write_gate = null ): self {
+		$noun = $adapter instanceof Marketplace_Adapter ? Posting_Noun::for_descriptor( $adapter->settings_descriptor() ) : null;
+
 		return new self(
-			new Label_Availability( $adapter instanceof Label_Readiness ? $adapter : null ),
+			new Label_Availability( $adapter instanceof Label_Readiness ? $adapter : null, $noun ),
 			$adapter instanceof Posting_Allowed_Actions ? $adapter : null,
-			$write_gate
+			$write_gate,
+			$noun
 		);
 	}
 
@@ -120,7 +136,8 @@ final class Posting_Action_Gate {
 			return '';
 		}
 
-		return __( 'Маркетплейс сейчас не разрешает отменить это отправление — например, оно уже передано в доставку.', 'woodev-plugin-framework' );
+		/* translators: %s: the marketplace's word for a posting, «отправление». */
+		return sprintf( __( 'Маркетплейс сейчас не разрешает отменить это %s — например, оно уже передано в доставку.', 'woodev-plugin-framework' ), $this->noun->one() );
 	}
 
 	/**
@@ -141,7 +158,8 @@ final class Posting_Action_Gate {
 			return $reason;
 		}
 
-		return __( 'Маркетплейс ещё не выдал этикетку для этого отправления — она станет доступна, когда отправление будет собрано.', 'woodev-plugin-framework' );
+		/* translators: 1: the marketplace's word for a posting in the genitive, «отправления», 2: the same word, «отправление». */
+		return sprintf( __( 'Маркетплейс ещё не выдал этикетку для этого %1$s — она станет доступна, когда %2$s будет собрано.', 'woodev-plugin-framework' ), $this->noun->of_one(), $this->noun->one() );
 	}
 
 	/**

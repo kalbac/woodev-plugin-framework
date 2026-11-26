@@ -580,7 +580,7 @@ final class Fake_Marketplace_Adapter implements Marketplace_Adapter, Card_Import
 	 * @return string[]
 	 */
 	public function import_event_types(): array {
-		return [ 'CARD_CHANGED' ];
+		return $this->policies['import_event_types'] ?? [ 'CARD_CHANGED' ];
 	}
 
 	/**

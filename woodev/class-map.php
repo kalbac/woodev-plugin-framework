@@ -450,6 +450,8 @@ return [
 	'Woodev\\Framework\\Marketplace\\Settings\\Field_Kit' => 'woodev/marketplace/settings/class-field-kit.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Notifications_Section' => 'woodev/marketplace/settings/class-notifications-section.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Order_Status_Options' => 'woodev/marketplace/settings/class-order-status-options.php',
+	'Woodev\\Framework\\Marketplace\\Settings\\Posting_Noun' => 'woodev/marketplace/settings/class-posting-noun.php',
+	'Woodev\\Framework\\Marketplace\\Settings\\Posting_Wording' => 'woodev/marketplace/settings/interface-posting-wording.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Push_Admin' => 'woodev/marketplace/settings/interface-push-admin.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Settings_Descriptor' => 'woodev/marketplace/settings/interface-settings-descriptor.php',
 	'Woodev\\Framework\\Marketplace\\Settings\\Settings_Extension' => 'woodev/marketplace/settings/interface-settings-extension.php',

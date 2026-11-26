@@ -92,7 +92,7 @@ final class MappingListsTest extends TestCase {
 	 * @return Mapping_List_Provider
 	 */
 	private function mappings(): Mapping_List_Provider {
-		return new Mapping_List_Provider( self::PAGE, $this->h->editor, $this->h->profile_editor );
+		return new Mapping_List_Provider( self::PAGE, $this->h->editor, $this->h->profile_editor, 'Фейк' );
 	}
 
 	/**
@@ -151,10 +151,10 @@ final class MappingListsTest extends TestCase {
 	 * @return void
 	 */
 	public function test_the_definitions_are_valid_and_carry_the_agreed_descriptions(): void {
-		$mappings = Records_Definition::from_array( Mapping_List_Definition::build() )->to_array();
+		$mappings = Records_Definition::from_array( Mapping_List_Definition::build( 'Фейк' ) )->to_array();
 		$profiles = Records_Definition::from_array( Profile_List_Definition::build() )->to_array();
 
-		$this->assertSame( 'На этой странице настраивается соответствие категорий вашего магазина категориям Ozon и указывается, откуда брать значения характеристик товаров.', $mappings['messages']['description'] );
+		$this->assertSame( 'На этой странице настраивается соответствие категорий вашего магазина категориям Фейк и указывается, откуда брать значения характеристик товаров.', $mappings['messages']['description'], 'the page names the marketplace it belongs to' );
 		$this->assertSame( 'На этой странице хранятся профили выгрузки — общие правила для габаритов, веса, НДС и цены. Профиль настраивается один раз и выбирается в нужных сопоставлениях.', $profiles['messages']['description'] );
 		$this->assertSame( [ 'name', 'category', 'shop', 'profile', 'attributes', 'products', 'actions' ], array_column( $mappings['columns'], 'id' ) );
 		$this->assertSame( [ 'name', 'properties', 'used_in', 'actions' ], array_column( $profiles['columns'], 'id' ) );

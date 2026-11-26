@@ -32,6 +32,7 @@ use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 
@@ -153,7 +154,8 @@ final class Deletion_Module {
 				'documents' => [ $stores['documents'], 'count_for_account' ],
 			],
 			Effective_Settings::for_adapter( $adapter->id() ),
-			$has_push
+			$has_push,
+			Posting_Noun::for_descriptor( $adapter->settings_descriptor() )
 		);
 
 		return [

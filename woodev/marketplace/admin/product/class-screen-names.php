@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Product;
 
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -32,16 +34,37 @@ final class Screen_Names {
 	private $marketplace_name;
 
 	/**
+	 * The marketplace's word for a posting; null for «отправление».
+	 *
+	 * @var Posting_Noun|null
+	 */
+	private $posting_noun;
+
+	/**
 	 * Creates the names.
 	 *
 	 * @since 2.1.2
+	 * @since 2.1.23 Takes the posting noun.
 	 *
-	 * @param string $marketplace_id   Adapter id (`ozon`).
-	 * @param string $marketplace_name Merchant-facing name, translated.
+	 * @param string            $marketplace_id   Adapter id (`ozon`).
+	 * @param string            $marketplace_name Merchant-facing name, translated.
+	 * @param Posting_Noun|null $posting_noun     The marketplace's word for a posting; null for «отправление».
 	 */
-	public function __construct( string $marketplace_id, string $marketplace_name ) {
+	public function __construct( string $marketplace_id, string $marketplace_name, ?Posting_Noun $posting_noun = null ) {
 		$this->marketplace_id   = (string) preg_replace( '/[^a-z0-9_]/', '', strtolower( $marketplace_id ) );
 		$this->marketplace_name = $marketplace_name;
+		$this->posting_noun     = $posting_noun;
+	}
+
+	/**
+	 * Returns the marketplace's word for a posting.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @return Posting_Noun
+	 */
+	public function posting_noun(): Posting_Noun {
+		return $this->posting_noun ?? Posting_Noun::shipment();
 	}
 
 	/**

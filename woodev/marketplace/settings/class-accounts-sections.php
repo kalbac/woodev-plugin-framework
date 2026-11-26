@@ -828,8 +828,12 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 				self::setting_id( $key, Order_Status_Options::FIELD ),
 				__( 'Статус нового заказа', 'woodev-plugin-framework' ),
 				Order_Status_Options::choices(),
-				/* translators: %s: marketplace name. */
-				sprintf( __( 'В каком статусе WooCommerce создаётся заказ, пришедший с %s. Дальше статус меняется вместе с отправлением.', 'woodev-plugin-framework' ), $marketplace )
+				sprintf(
+					/* translators: 1: marketplace name, 2: «with a posting», preposition included: «с отправлением». */
+					__( 'В каком статусе WooCommerce создаётся заказ, пришедший с %1$s. Дальше статус меняется вместе %2$s.', 'woodev-plugin-framework' ),
+					$marketplace,
+					Posting_Noun::for_descriptor( $this->adapter->settings_descriptor() )->with_one()
+				)
 			);
 		}
 	}

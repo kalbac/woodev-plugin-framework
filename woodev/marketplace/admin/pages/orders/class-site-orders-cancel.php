@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -50,18 +51,28 @@ final class Site_Orders_Cancel {
 	private $marketplace;
 
 	/**
+	 * The marketplace's word for a posting.
+	 *
+	 * @var Posting_Noun
+	 */
+	private $noun;
+
+	/**
 	 * Creates the cancellation.
 	 *
 	 * @since 2.1.5
+	 * @since 2.1.23 Takes the posting noun.
 	 *
-	 * @param Order_Canceller $canceller   The marketplace's cancellation.
-	 * @param License_Gate    $license     Licence: no licence in force, no remote call.
-	 * @param string          $marketplace Merchant-facing marketplace name.
+	 * @param Order_Canceller   $canceller   The marketplace's cancellation.
+	 * @param License_Gate      $license     Licence: no licence in force, no remote call.
+	 * @param string            $marketplace Merchant-facing marketplace name.
+	 * @param Posting_Noun|null $noun        The marketplace's word for a posting; null for «отправление».
 	 */
-	public function __construct( Order_Canceller $canceller, License_Gate $license, string $marketplace ) {
+	public function __construct( Order_Canceller $canceller, License_Gate $license, string $marketplace, ?Posting_Noun $noun = null ) {
 		$this->canceller   = $canceller;
 		$this->license     = $license;
 		$this->marketplace = $marketplace;
+		$this->noun        = $noun ?? Posting_Noun::shipment();
 	}
 
 	/**
@@ -93,7 +104,8 @@ final class Site_Orders_Cancel {
 			return __( 'Приём заказов с маркетплейса выключен в настройках плагина, поэтому заказ не обновится после отмены. Включите приём заказов в настройках и повторите.', 'woodev-plugin-framework' );
 		}
 
-		return $this->license->refusal_for( __( 'отменить отправление на маркетплейсе', 'woodev-plugin-framework' ) );
+		/* translators: %s: the marketplace's word for a posting, «отправление». */
+		return $this->license->refusal_for( sprintf( __( 'отменить %s на маркетплейсе', 'woodev-plugin-framework' ), $this->noun->one() ) );
 	}
 
 	/**
@@ -169,13 +181,16 @@ final class Site_Orders_Cancel {
 		}
 
 		if ( $this->canceller->is_finished( $order ) ) {
-			throw new Cancel_Refused( __( 'Это отправление уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), 409 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+			/* translators: %s: the marketplace's word for a posting, «отправление». */
+			$text = sprintf( __( 'Это %s уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), $this->noun->one() );
+
+			throw new Cancel_Refused( $text, 409 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
 		$reason = $this->canceller->cancel( $account, $posting, $reason_id, $message );
 
-		/* translators: 1: posting number, 2: marketplace name, 3: cancellation reason. */
-		$order->add_order_note( sprintf( __( 'Отправление %1$s отменено: %2$s, из WooCommerce. Причина: %3$s.', 'woodev-plugin-framework' ), $posting, $this->marketplace, $reason['title'] ) );
+		/* translators: 1: the marketplace's word for a posting, capitalised: «Отправление», 2: posting number, 3: marketplace name, 4: cancellation reason. */
+		$order->add_order_note( sprintf( __( '%1$s %2$s отменено: %3$s, из WooCommerce. Причина: %4$s.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $this->noun->one() ), $posting, $this->marketplace, $reason['title'] ) );
 
 		try {
 			$this->canceller->queue_refresh( $account, $posting );

@@ -49,6 +49,8 @@ export interface OrdersPageMarketplace {
 	table: string;
 	help?: HelpLinkData;
 	problems?: HelpLinkData;
+	/** The words of the «Аналитика» tab, in this marketplace's wording (`Orders_Analytics_Controller::messages()`). */
+	analytics: Record< string, string >;
 }
 
 /** The shared «Заказы маркетплейсов» page (`Marketplace_Orders_Page::build_manifest()`). */
@@ -65,8 +67,6 @@ export interface OrdersPageManifest {
 		orders: string;
 		analytics: string;
 	};
-	/** The words of the «Аналитика» tab (`Orders_Analytics_Controller::messages()`). */
-	analytics: Record< string, string >;
 }
 
 export interface ManifestMenu {

@@ -152,7 +152,7 @@ final class MappingRulesTest extends Validator_Test_Case {
 		$this->assertSame( array( 'dictionary_value_unresolved' ), $this->error_codes( $no_lookup ) );
 		$this->assertSame( Validation_Report::FIX_DICTIONARY, $no_lookup->first_error()['fix'] );
 		$this->assertStringContainsString( 'Красный», «Синий', $no_lookup->first_error()['message'] );
-		$this->assertStringContainsString( 'Найти в словаре', $no_lookup->first_error()['message'] );
+		$this->assertStringContainsString( 'выберите подходящее значение в «Сопоставлении»', $no_lookup->first_error()['message'] );
 
 		$partial     = $this->context(
 			array(

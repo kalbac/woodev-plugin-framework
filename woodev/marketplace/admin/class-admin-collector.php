@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin;
 
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Marketplace_Orders_Page;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -479,6 +480,7 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 		public function build_manifest(): array {
 			$menus = [];
 			$names = [];
+			$nouns = [];
 
 			foreach ( $this->get_menus() as $menu ) {
 				$plugin = $this->plugins[ $menu->get_plugin_id() ] ?? null;
@@ -489,13 +491,15 @@ if ( ! class_exists( Admin_Collector::class, false ) ) :
 				}
 
 				if ( null !== $plugin ) {
-					$names[ $menu->get_plugin_id() ] = $plugin->get_marketplace_adapter()->settings_descriptor()->marketplace_name();
+					$descriptor                      = $plugin->get_marketplace_adapter()->settings_descriptor();
+					$names[ $menu->get_plugin_id() ] = $descriptor->marketplace_name();
+					$nouns[ $menu->get_plugin_id() ] = Posting_Noun::for_descriptor( $descriptor );
 				}
 			}
 
 			$manifest     = [ 'menus' => $menus ];
 			$explanations = $this->build_explanations();
-			$orders       = Marketplace_Orders_Page::build_manifest( $menus, $names );
+			$orders       = Marketplace_Orders_Page::build_manifest( $menus, $names, $nouns );
 
 			if ( [] !== $explanations ) {
 				$manifest['explanations'] = $explanations;

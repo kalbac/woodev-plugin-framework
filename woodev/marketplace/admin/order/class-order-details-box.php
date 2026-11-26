@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -157,8 +158,11 @@ final class Order_Details_Box {
 	 * @return array<string,string> Label => HTML.
 	 */
 	private function general_rows( \WC_Order $order ): array {
+		/* translators: %s: the marketplace's word for a posting in the genitive, «отправления». */
+		$number_label = sprintf( __( 'Номер %s', 'woodev-plugin-framework' ), $this->names->posting_noun()->of_one() );
+
 		$rows = [
-			__( 'Номер отправления', 'woodev-plugin-framework' ) => esc_html( $this->posting_number( $order ) ),
+			$number_label => esc_html( $this->posting_number( $order ) ),
 			__( 'Номер заказа на сайте', 'woodev-plugin-framework' ) => esc_html( (string) $order->get_order_number() ),
 			__( 'Статус на сайте', 'woodev-plugin-framework' ) => esc_html( html_entity_decode( (string) wc_get_order_status_name( $order->get_status() ), ENT_QUOTES, 'UTF-8' ) ),
 			__( 'Создан', 'woodev-plugin-framework' ) => esc_html( $this->date( $order->get_date_created() ) ),
@@ -227,7 +231,9 @@ final class Order_Details_Box {
 		$html = null === $this->modal ? '' : $this->modal->button( $order );
 
 		if ( '' === $html && $this->adapter instanceof Order_Canceller && $this->adapter->is_finished( $order ) ) {
-			$html = '<span class="description">' . esc_html__( 'Отправление завершено или отменено — отменить его нельзя.', 'woodev-plugin-framework' ) . '</span>';
+			/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
+			$text = sprintf( __( '%s завершено или отменено — отменить его нельзя.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $this->names->posting_noun()->one() ) );
+			$html = '<span class="description">' . esc_html( $text ) . '</span>';
 		}
 
 		if ( null !== $this->label_button ) {

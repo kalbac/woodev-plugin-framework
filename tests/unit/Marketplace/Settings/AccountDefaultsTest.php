@@ -331,6 +331,18 @@ final class AccountDefaultsTest extends TestCase {
 		);
 	}
 
+	public function test_a_marketplace_that_announces_no_cards_offers_no_auto_import_switch(): void {
+		[ $adapter, $store ] = $this->adapter_and_store( [ Capability::IMPORT_PRODUCTS ], '', [ 'import_event_types' => [] ] );
+		$section             = new Defaults_Section( $adapter, $store, self::PLUGIN );
+
+		$this->assertSame(
+			[ 'defaults_orders_enabled', 'defaults_sync_on_link', 'defaults_import_publish', 'defaults_import_create_categories' ],
+			$section->sections()[0]->get_groups()[1]->get_setting_ids(),
+			'cards are still imported on demand, so their two settings stay'
+		);
+		$this->assertFalse( $section->handles( 'defaults_import_enabled' ) );
+	}
+
 	public function test_the_import_defaults_are_draft_and_create_categories_and_the_saved_values_survive_a_reload(): void {
 		[ $adapter, $store ] = $this->adapter_and_store( [ Capability::IMPORT_PRODUCTS ] );
 		$section             = new Defaults_Section( $adapter, $store, self::PLUGIN );

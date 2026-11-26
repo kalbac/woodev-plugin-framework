@@ -85,7 +85,7 @@ final class Mappings_Module {
 
 		$page_url = admin_url( 'admin.php?page=wc-admin&path=' . rawurlencode( $parts['path'] ) );
 		$registry = Records_Registry::instance();
-		$mappings = new Mapping_List_Provider( $page_url, $parts['mappings'], $parts['profiles'] );
+		$mappings = new Mapping_List_Provider( $page_url, $parts['mappings'], $parts['profiles'], $plugin->get_marketplace_adapter()->settings_descriptor()->marketplace_name() );
 		$profiles = new Profile_List_Provider( $page_url, $parts['profiles'] );
 
 		return $registry->register( $plugin->get_id(), $mappings, $parts['capability'] )

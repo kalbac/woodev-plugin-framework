@@ -122,6 +122,41 @@ Framework bundles under `woodev/assets/build/` and the framework's own files are
 - Name hook callback methods `handle_{hook_name}` and mark them `@internal`
   (`.ai/skills/woodev-framework-backend-dev/hooks.md`).
 
+## A marketplace adapter: its wording and its capabilities
+
+For a `Marketplace_Plugin`; the full design is `docs-internal/wiki/marketplace-admin.md`, «Wording and the catalogue of a second
+marketplace» (#2009).
+
+- **Your word for a posting.** The framework's order screens, «Аналитика» and the account deletion say «отправление». A
+  marketplace with another word implements `Settings\Posting_Wording` on its **settings descriptor** and returns a
+  `Settings\Posting_Noun` (`woodev/marketplace/settings/class-posting-noun.php`). All seven forms are required, translated in
+  your text domain, lower case; the noun must be **neuter and inanimate** («сборочное задание»), a masculine or feminine word
+  reads wrong in the framework's sentences.
+
+```php
+public function posting_noun(): Posting_Noun {
+    return new Posting_Noun(
+        [
+            'one'        => __( 'сборочное задание', 'my-plugin' ),
+            'of_one'     => __( 'сборочного задания', 'my-plugin' ),
+            'to_one'     => __( 'сборочному заданию', 'my-plugin' ),
+            'with_one'   => __( 'со сборочным заданием', 'my-plugin' ),   // with the preposition
+            'many'       => __( 'сборочные задания', 'my-plugin' ),
+            'of_many'    => __( 'сборочных заданий', 'my-plugin' ),
+            'about_many' => __( 'о сборочных заданиях', 'my-plugin' ),    // with the preposition
+        ]
+    );
+}
+```
+
+- **Catalogue and import are two capabilities** (`woodev/marketplace/capabilities/class-capability.php`).
+  `Capability::CATALOG`: export, linking, the cabinet's cards and the catalogue refresh. `Capability::IMPORT_PRODUCTS`: cards
+  become shop products through a `Flows\Card_Importer` (it implies a catalogue). A plugin with a catalogue and no import
+  declares `CATALOG` only.
+- **A marketplace that announces no cards** returns `[]` from `Card_Importer::import_event_types()`; the account settings then
+  offer no «Импортировать новые карточки автоматически» switch.
+- `order_source()` and `card_exporter()` are deprecated and never called: throw a `\LogicException`.
+
 ## Subclassing traps that fatal at declaration time
 
 - A base constructor that ASSIGNS a property the subclass set BEFORE calling `parent::__construct()`

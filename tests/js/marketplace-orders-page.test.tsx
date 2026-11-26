@@ -38,6 +38,7 @@ const LABELS = {
 };
 
 const ANALYTICS = { intro: 'На этой странице отображаются заказы маркетплейса за выбранный период.', refresh: 'Обновить', loadFailed: 'Не удалось загрузить аналитику.' };
+const WB_ANALYTICS = { ...ANALYTICS, intro: 'Статусы сборочных заданий за выбранный период.' };
 
 function ordersPage( marketplaces: OrdersPageManifest[ 'marketplaces' ] ): OrdersPageManifest {
 	return {
@@ -47,12 +48,11 @@ function ordersPage( marketplaces: OrdersPageManifest[ 'marketplaces' ] ): Order
 		domId: 'toplevel_page_woocommerce',
 		marketplaces,
 		labels: LABELS,
-		analytics: ANALYTICS,
 	};
 }
 
-const OZON = { id: 'ozon-seller', label: 'Ozon', table: 'orders', help: { url: 'https://woodev.ru/docs/ozon/orders', text: 'Подробнее' } };
-const WB = { id: 'wildberries', label: 'Wildberries', table: 'orders' };
+const OZON = { id: 'ozon-seller', label: 'Ozon', table: 'orders', analytics: ANALYTICS, help: { url: 'https://woodev.ru/docs/ozon/orders', text: 'Подробнее' } };
+const WB = { id: 'wildberries', label: 'Wildberries', table: 'orders', analytics: WB_ANALYTICS };
 
 function FakeTableCard( props: TableCardProps ) {
 	return props.isLoading ? <div data-testid="table-loading" /> : <table aria-label={ props.title } />;
@@ -205,5 +205,12 @@ describe( 'the page', () => {
 		fireEvent.click( screen.getByRole( 'tab', { name: 'Заказы' } ) );
 
 		expect( navigate ).toHaveBeenLastCalledWith( { tab: undefined } );
+	} );
+
+	test( 'each marketplace\'s analytics tab speaks its own words', () => {
+		render( <OrdersPage page={ ordersPage( [ OZON, WB ] ) } query={ { tab: 'analytics', marketplace: 'wildberries' } } /> );
+
+		expect( screen.getByText( WB_ANALYTICS.intro ) ).toBeInTheDocument();
+		expect( screen.queryByText( ANALYTICS.intro ) ).not.toBeInTheDocument();
 	} );
 } );

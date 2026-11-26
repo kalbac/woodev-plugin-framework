@@ -57,10 +57,10 @@ final class Dictionary_Values_Rule implements Validation_Rule {
 				$report = $report->with_issue(
 					Validation_Report::ERROR,
 					self::CODE,
-					'Значение «' . implode( '», «', $unknown ) . '» поля «' . $field->name() . '» не найдено в словаре ' . $context->marketplace( 'маркетплейса' ) . ' — нажмите «Найти в словаре» и выберите подходящее.',
+					'Значение «' . implode( '», «', $unknown ) . '» поля «' . $field->name() . '» не найдено в справочнике ' . $context->marketplace( 'маркетплейса' ) . ' — выберите подходящее значение в «Сопоставлении».',
 					$field->id(),
 					Validation_Report::FIX_DICTIONARY,
-					'значение поля «' . $field->name() . '» не найдено в словаре'
+					'значение поля «' . $field->name() . '» не найдено в справочнике'
 				);
 			}
 		}

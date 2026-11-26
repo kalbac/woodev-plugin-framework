@@ -20,6 +20,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flows\Label_Exception;
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -124,6 +125,13 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	private $gate;
 
 	/**
+	 * The marketplace's word for a posting.
+	 *
+	 * @var Posting_Noun
+	 */
+	private $noun;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
@@ -141,10 +149,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param Site_Orders_Data_Status|null $data_status The «Статус данных» block (since 2.1.13); null shows none.
 	 * @param Label_Availability|null      $availability Whether a label can be asked for a posting (since 2.1.13); null for an adapter that says nothing.
 	 * @param Posting_Action_Gate|null     $gate         Whether the write actions are on offer for a posting (since 2.1.17); when given it is used instead of `$availability`, and null offers every action to every account.
+	 * @param Posting_Noun|null            $noun         The marketplace's word for a posting (since 2.1.23); null for «отправление».
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null ) {
+		$this->noun        = $noun ?? Posting_Noun::shipment();
 		$this->data_status = $data_status;
-		$this->gate        = $gate ?? new Posting_Action_Gate( $availability ?? new Label_Availability( null ) );
+		$this->gate        = $gate ?? new Posting_Action_Gate( $availability ?? new Label_Availability( null, $this->noun ), null, null, $this->noun );
 		$this->accounts   = $accounts;
 		$this->reader     = $reader;
 		$this->rows       = $rows;
@@ -194,7 +204,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @return array<string,mixed>
 	 */
 	public function get_definition( array $context ): array {
-		return Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered() );
+		return Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun );
 	}
 
 	/**
@@ -474,7 +484,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		$order = $this->order_to_cancel( $call );
 
 		if ( $this->cancel->is_finished( $order ) ) {
-			return $this->refused_plan( __( 'Это отправление уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), $call['targets'][0]['external_key'] );
+			return $this->refused_plan( $this->finished_refusal(), $call['targets'][0]['external_key'] );
 		}
 
 		$not_allowed = $this->gate->cancel_reason( $order );
@@ -503,7 +513,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		$order = $this->order_to_cancel( $call );
 
 		if ( $this->cancel->is_finished( $order ) ) {
-			return $this->refused_result( __( 'Это отправление уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), $call['targets'][0]['external_key'] );
+			return $this->refused_result( $this->finished_refusal(), $call['targets'][0]['external_key'] );
 		}
 
 		$not_allowed = $this->gate->cancel_reason( $order );
@@ -537,8 +547,17 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			'skipped'   => 0,
 			'failed'    => 0,
 			'rows'      => $this->build_rows( $call['account'], $call['targets'] ),
-			'messages'  => [ 'action_status_done' => __( 'Отправление отменено. Заказ обновится в течение нескольких минут.', 'woodev-plugin-framework' ) ],
+			/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
+			'messages'  => [ 'action_status_done' => sprintf( __( '%s отменено. Заказ обновится в течение нескольких минут.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $this->noun->one() ) ) ],
 		];
+	}
+
+	/**
+	 * @return string Why a finished posting cannot be cancelled.
+	 */
+	private function finished_refusal(): string {
+		/* translators: %s: the marketplace's word for a posting, «отправление». */
+		return sprintf( __( 'Это %s уже завершено или отменено, отменить его нельзя.', 'woodev-plugin-framework' ), $this->noun->one() );
 	}
 
 	/**

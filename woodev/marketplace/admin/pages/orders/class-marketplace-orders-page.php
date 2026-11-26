@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
 use Woodev\Framework\Marketplace\Admin\Menu;
 use Woodev\Framework\Marketplace\Admin\Page;
+use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -226,21 +227,23 @@ final class Marketplace_Orders_Page {
 	 * The page as the React bundle reads it, or null when the user may open the orders of no marketplace.
 	 *
 	 * Built from the menus' own manifest entries, so the marketplaces are already limited to the pages the user may open and each
-	 * carries the help links its plugin resolved for its «Заказы» page.
+	 * carries the help links its plugin resolved for its «Заказы» page, and the words of its «Аналитика» tab.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.23 Takes the posting nouns; the words of the «Аналитика» tab moved into each marketplace's entry.
 	 *
 	 * @param array<int,array<string,mixed>> $menu_entries Menus as `Menu::build_manifest()` gives them.
 	 * @param array<string,string>           $names        Marketplace name by plugin id; the menu title when absent.
+	 * @param array<string,Posting_Noun>     $nouns        Marketplace's word for a posting by plugin id; «отправление» when absent.
 	 * @return array<string,mixed>|null
 	 */
-	public static function build_manifest( array $menu_entries, array $names ): ?array {
+	public static function build_manifest( array $menu_entries, array $names, array $nouns = [] ): ?array {
 		$marketplaces = [];
 
 		foreach ( $menu_entries as $menu_entry ) {
 			foreach ( $menu_entry['pages'] as $page ) {
 				if ( self::is_orders_entry( $page ) ) {
-					$marketplaces[] = self::marketplace_entry( $menu_entry, $page, $names );
+					$marketplaces[] = self::marketplace_entry( $menu_entry, $page, $names, $nouns );
 				}
 			}
 		}
@@ -261,7 +264,6 @@ final class Marketplace_Orders_Page {
 				'orders'      => __( 'Заказы', 'woodev-plugin-framework' ),
 				'analytics'   => __( 'Аналитика', 'woodev-plugin-framework' ),
 			],
-			'analytics'    => Orders_Analytics_Controller::messages(),
 		];
 	}
 
@@ -300,17 +302,19 @@ final class Marketplace_Orders_Page {
 	}
 
 	/**
-	 * @param array<string,mixed>  $menu_entry A menu manifest entry.
-	 * @param array<string,mixed>  $page       Its «Заказы» page entry.
-	 * @param array<string,string> $names     Marketplace name by plugin id.
+	 * @param array<string,mixed>        $menu_entry A menu manifest entry.
+	 * @param array<string,mixed>        $page       Its «Заказы» page entry.
+	 * @param array<string,string>       $names Marketplace name by plugin id.
+	 * @param array<string,Posting_Noun> $nouns Posting noun by plugin id.
 	 * @return array<string,mixed>
 	 */
-	private static function marketplace_entry( array $menu_entry, array $page, array $names ): array {
+	private static function marketplace_entry( array $menu_entry, array $page, array $names, array $nouns ): array {
 		$plugin_id = (string) $menu_entry['pluginId'];
 		$entry     = [
-			'id'    => $plugin_id,
-			'label' => $names[ $plugin_id ] ?? (string) $menu_entry['title'],
-			'table' => Site_Orders_Provider::TABLE,
+			'id'        => $plugin_id,
+			'label'     => $names[ $plugin_id ] ?? (string) $menu_entry['title'],
+			'table'     => Site_Orders_Provider::TABLE,
+			'analytics' => Orders_Analytics_Controller::messages( $nouns[ $plugin_id ] ?? null ),
 		];
 
 		foreach ( [ 'help', 'problems' ] as $link ) {

@@ -199,6 +199,30 @@ final class OrdersAnalyticsControllerTest extends TestCase {
 		$this->assertSame( 24, $this->controller()->stuck_hours() );
 	}
 
+	/**
+	 * @dataProvider provide_hour_words
+	 *
+	 * @param int    $hours The threshold.
+	 * @param string $words The number and the word in the genitive «дольше» asks for.
+	 */
+	public function test_the_stuck_hint_says_hours_in_the_form_the_number_takes( int $hours, string $words ): void {
+		$this->assertStringContainsString( 'дольше ' . $words . ' с момента', Orders_Analytics_Controller::stuck_hint( $hours ) );
+	}
+
+	/**
+	 * @return array<string,array{0:int,1:string}>
+	 */
+	public function provide_hour_words(): array {
+		return [
+			'one'                => [ 1, '1 часа' ],
+			'two'                => [ 2, '2 часов' ],
+			'eleven'             => [ 11, '11 часов' ],
+			'twenty one'         => [ 21, '21 часа' ],
+			'the default'        => [ 24, '24 часов' ],
+			'one hundred eleven' => [ 111, '111 часов' ],
+		];
+	}
+
 	public function test_a_filtered_threshold_reaches_the_report(): void {
 		Filters\expectApplied( 'woodev_marketplace_stuck_posting_hours' )->andReturn( 3 );
 
