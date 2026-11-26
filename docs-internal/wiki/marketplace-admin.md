@@ -1603,6 +1603,51 @@ marking code needs an engine change first.
 that cancels **per unit** (Wildberries) declares its cancellation as a seller action instead — `cancel()` answers for the whole
 posting only. Implementing both puts two cancel buttons on a row.
 
+## The page of shipments (#2006)
+
+A marketplace that gathers goods into shipments and hands each one over gets a records page after «Заказы», the actions of that
+page, and «add to a shipment» on «Заказы». It is offered only when the adapter reports `Capability::CONFIRM_SHIPMENT` **and**
+implements the optional `Shipments\Shipment_Batches` (`Shipments_Module::is_offered()`); any other plugin keeps its menu. Ozon
+Seller 2.0.0 declares neither.
+
+**Words.** The settings descriptor may implement `Settings\Shipment_Wording` and return a `Shipment_Noun` (the page title and every
+form of the shipment — feminine — and of a cargo place — neuter). Without it: «Отгрузки» / «грузовое место».
+
+**Contract** (`woodev/marketplace/shipments/`, domain layer). Three groups of methods:
+
+| Group | Methods | Rule |
+|---|---|---|
+| read | `list_shipments` (cursor pages), `read_shipment` (header + units + what each misses + cargo places), `units_to_reship` | the job and the one shipment an action touched |
+| stored data | `shipment_candidates`, `move_refusal`, `shipping_fields`, `hand_over_refusal`, `max_cargo_places`, `cargo_place_refusal`, `shipment_documents`, `document_refusal` | asked while a screen is drawn: **no remote call** |
+| change | `create_shipment`, `add_units`, `move_units`, `shipping_options` (when the list opens), `choose_shipping`, `add_cargo_places`, `hand_over`, `shipment_document` | a merchant's request |
+
+- A marketplace refusal is thrown as `Shipment_Refused` (merchant sentence). Any other failure is classified; the merchant reads
+  that the action may have happened. Units are answered one by one; an unmentioned unit is failed.
+- A rule about a whole selection (one cargo kind per shipment) is `shipment_candidates()` refusing the units.
+- `Shipment` takes `facts` (the adapter's notes, e.g. the cargo kind) and `still_changing`: a handed-over shipment the marketplace
+  is still working on is read again at every refresh. A shipment holding units to ship again is read again too — that is when a unit
+  becomes movable (`Shipment_Unit` `movable`).
+- `Shipment_Requirement` is one line of «what is missing»: met / waiting / refused / missing, blocking or only a warning. A blocking
+  unmet one keeps «Передать в доставку» off; the hand-over reads the shipment again first and refuses before sending.
+- `Shipment_Unit::posting_key()` is the order registry key; the framework resolves the WooCommerce order from it.
+
+**Storage and job.** Tables `shipments` and `shipment_units` (schema revision 8, `Data\Wpdb_Shipment_Store`); a table read touches
+only them. `Jobs\Shipment_Jobs`: `poll_shipments` per account every 15 minutes and `refresh_shipments` (after an action, «Обновить
+список», continuations: 10 list pages and 20 shipment reads a run). A full listing sweeps what the marketplace no longer lists after
+its last page. Only a throttle answer re-queues; any other failure waits for the next poll. Deleting an account removes the rows.
+
+**Locks.** An action holds its shipment (`lock_until`, 300 s at most); a second action is refused and the row shows the busy marker.
+
+**Counterpart in «Заказы доставки»** (reference only; no delivery code changed): the view row of states with counts, icon row actions
+that stay visible and off with the reason, the busy veil and bar on a locked row, the bulk select, the «Статус данных» block, and
+parent rows with expandable children — the same engine mechanism «Товары» uses for variable products.
+
+**Child rows** show the unit, its order, status, «ship again» mark and each requirement, plus «Перенести» for a movable unit and the
+adapter's seller actions with target `UNIT` (engine ids `unit-{id}`; the marking field of spec §6.4). ⚠ The records engine still
+refuses the GS separator (U+001D) in a text field, so a marking code that carries it is refused here; the order screen takes it.
+
+**Not built:** deleting a shipment, removing a cargo place, passes, auto-returns (D3); unit stickers are the label flow (WF7).
+
 ## The articles of new cards in the mapping form (#2038)
 
 Card #2038 of the Wildberries design (§5.5, `2.1.27`). A marketplace whose article is built from more than the SKU shows the

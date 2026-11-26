@@ -56,12 +56,13 @@ final class Schema {
 	 * 6: `sync_state.task_id`, `sync_state.refused_payload` and `sync_state.error_code`, a price the marketplace decides on later
 	 * (#1998).
 	 * 7: `seller_actions`, the actions sent to the marketplace for the units of orders, so none is sent twice (#2003).
+	 * 8: `shipments` and `shipment_units`, the shop's copy of the seller's shipments (#2006).
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var int
 	 */
-	public const REVISION = 7;
+	public const REVISION = 8;
 
 	/**
 	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
@@ -111,6 +112,8 @@ final class Schema {
 		'bulk_runs',
 		'cards',
 		'seller_actions',
+		'shipments',
+		'shipment_units',
 	];
 
 	/**
@@ -740,6 +743,81 @@ final class Schema {
 			PRIMARY KEY  (account_id,order_id,unit_key,action),
 			KEY claim_token (claim_token),
 			KEY account_expiry (account_id,claim_until)
+		) {$charset};";
+	}
+
+	/**
+	 * The shop's copy of the seller's shipments ({@see Wpdb_Shipment_Store}), one row per (account, shipment), so that the screen
+	 * never reads the marketplace. `shipment_key` is the MD5 of the marketplace's shipment id, which the screen's row ids carry.
+	 * `seen_run` is the generation of the full refresh that last listed it: a shipment the marketplace no longer lists goes after
+	 * the last page. `is_stale` marks a shipment whose units still have to be read. `lock_token` / `lock_until` hold a shipment
+	 * while an action on it is at the marketplace.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $table   Full table name.
+	 * @param string $charset Charset clause.
+	 * @return string
+	 */
+	private function shipments( string $table, string $charset ): string {
+		return "CREATE TABLE {$table} (
+			account_id bigint(20) unsigned NOT NULL,
+			shipment_key char(32) NOT NULL,
+			remote_id varchar(191) NOT NULL,
+			name varchar(191) NOT NULL DEFAULT '',
+			is_open tinyint(1) NOT NULL DEFAULT 0,
+			status_label varchar(191) NOT NULL DEFAULT '',
+			kind_label varchar(191) NOT NULL DEFAULT '',
+			shipping_label varchar(500) NOT NULL DEFAULT '',
+			created_at datetime NULL DEFAULT NULL,
+			closed_at datetime NULL DEFAULT NULL,
+			facts text NULL,
+			cargo longtext NULL,
+			unit_count int(10) unsigned NOT NULL DEFAULT 0,
+			blocking_count int(10) unsigned NOT NULL DEFAULT 0,
+			warning_count int(10) unsigned NOT NULL DEFAULT 0,
+			reship_count int(10) unsigned NOT NULL DEFAULT 0,
+			is_stale tinyint(1) NOT NULL DEFAULT 1,
+			read_at datetime NULL DEFAULT NULL,
+			seen_run int(10) unsigned NOT NULL DEFAULT 0,
+			lock_token char(32) NOT NULL DEFAULT '',
+			lock_until datetime NULL DEFAULT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (account_id,shipment_key),
+			KEY account_list (account_id,is_open,created_at),
+			KEY account_seen (account_id,seen_run),
+			KEY account_stale (account_id,is_stale)
+		) {$charset};";
+	}
+
+	/**
+	 * The units of each shipment ({@see Wpdb_Shipment_Store}), with what is missing on each (`requirements`, JSON) and the
+	 * WooCommerce order it belongs to (0 when the shop has none).
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $table   Full table name.
+	 * @param string $charset Charset clause.
+	 * @return string
+	 */
+	private function shipment_units( string $table, string $charset ): string {
+		return "CREATE TABLE {$table} (
+			account_id bigint(20) unsigned NOT NULL,
+			shipment_key char(32) NOT NULL,
+			unit_key char(32) NOT NULL,
+			unit_id varchar(191) NOT NULL,
+			posting_key varchar(191) NOT NULL DEFAULT '',
+			order_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			label varchar(500) NOT NULL DEFAULT '',
+			status_label varchar(191) NOT NULL DEFAULT '',
+			is_movable tinyint(1) NOT NULL DEFAULT 0,
+			needs_reshipment tinyint(1) NOT NULL DEFAULT 0,
+			requirements longtext NULL,
+			facts text NULL,
+			position int(10) unsigned NOT NULL DEFAULT 0,
+			PRIMARY KEY  (account_id,shipment_key,unit_key),
+			KEY account_unit (account_id,unit_key),
+			KEY account_order (account_id,order_id)
 		) {$charset};";
 	}
 }

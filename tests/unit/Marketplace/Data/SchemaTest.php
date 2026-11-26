@@ -48,6 +48,8 @@ final class SchemaTest extends TestCase {
 			'bulk_runs'     => [ 'account_id', 'run_id', 'state', 'cancel', 'tick', 'action', 'payload', 'filter', 'user_id', 'cursor', 'items', 'counts', 'report', 'started_at', 'finished_at' ],
 			'cards'         => [ 'account_id', 'card_key', 'offer_id', 'name', 'image', 'state', 'is_created', 'failed', 'archived', 'details_ok', 'status_text', 'price', 'stock', 'remote_ids', 'group_key', 'group_size', 'unit_card', 'unit_article', 'unit_data', 'position', 'seen_run', 'updated_at' ],
 			'seller_actions' => [ 'account_id', 'order_id', 'unit_key', 'action', 'identity', 'state', 'claim_token', 'claim_until' ],
+			'shipments'      => [ 'account_id', 'shipment_key', 'remote_id', 'name', 'is_open', 'status_label', 'kind_label', 'shipping_label', 'created_at', 'closed_at', 'facts', 'cargo', 'unit_count', 'blocking_count', 'warning_count', 'reship_count', 'is_stale', 'read_at', 'seen_run', 'lock_token', 'lock_until', 'updated_at' ],
+			'shipment_units' => [ 'account_id', 'shipment_key', 'unit_key', 'unit_id', 'posting_key', 'order_id', 'label', 'status_label', 'is_movable', 'needs_reshipment', 'requirements', 'facts', 'position' ],
 		];
 	}
 

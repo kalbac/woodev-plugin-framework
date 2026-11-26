@@ -32,6 +32,11 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
+use Woodev\Framework\Marketplace\Shipments\Shipment;
+use Woodev\Framework\Marketplace\Shipments\Shipment_Contents;
+use Woodev\Framework\Marketplace\Shipments\Shipment_Requirement;
+use Woodev\Framework\Marketplace\Shipments\Shipment_Unit;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Tests\Integration\TestCase;
@@ -80,7 +85,7 @@ class PersistenceTest extends TestCase {
 		$this->lifecycle()->create_tables();
 
 		$tables = $this->schema->table_names( $wpdb->prefix );
-		$this->assertCount( 19, $tables );
+		$this->assertCount( 21, $tables );
 
 		foreach ( $tables as $table ) {
 			$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
@@ -456,6 +461,85 @@ class PersistenceTest extends TestCase {
 		$store->forget_expired( 1 );
 
 		$this->assertSame( 0, $store->delete_account( 1, 10 ) );
+	}
+
+	/**
+	 * The shipment store's SQL on MySQL: a shipment with its units is written, found by an order of its units, held by one action at
+	 * a time, marked for re-shipment, swept when the marketplace no longer lists it and deleted with its account (#2006).
+	 */
+	public function test_the_shipment_store_on_mysql(): void {
+		global $wpdb;
+
+		$now   = 1795000000;
+		$store = new Wpdb_Shipment_Store(
+			$wpdb,
+			$this->schema->table_name( 'shipments', $wpdb->prefix ),
+			$this->schema->table_name( 'shipment_units', $wpdb->prefix ),
+			'woodev_shipment-test_',
+			static function () use ( &$now ): int {
+				return $now;
+			}
+		);
+		$key   = Wpdb_Shipment_Store::key( 'S-1' );
+		$run   = $store->begin_refresh( 1 );
+		$open  = new Shipment( 'S-1', 'Первая', true, [ 'created_at' => $now ] );
+
+		$store->save_header( 1, $open, $run );
+		$store->save_header( 1, new Shipment( 'S-2', 'Вторая', false ), $run );
+		$store->save_contents(
+			1,
+			new Shipment_Contents(
+				$open,
+				[ new Shipment_Unit( 'u-1', 'P-1', 'Футболка', [ 'requirements' => [ new Shipment_Requirement( 'Код', Shipment_Requirement::MISSING ) ] ] ) ]
+			),
+			[ 'P-1' => 101 ]
+		);
+
+		$found = $store->page(
+			1,
+			[
+				'search'   => '101',
+				'page'     => 1,
+				'per_page' => 20,
+			]
+		);
+
+		$this->assertSame( 1, $found['total'] );
+		$this->assertSame( '1', (string) $found['rows'][0]['blocking_count'] );
+		$this->assertSame( [ 'open' => 1, 'closed' => 1 ], $store->state_counts( 1, [] ) );
+
+		$store->save_header( 1, $open, $run ); // Listed again: an open shipment is read again.
+		$this->assertCount( 2, $store->stale( 1, 10 ) );
+
+		$token = $store->lock( 1, $key );
+
+		$this->assertNotNull( $token );
+		$this->assertNull( $store->lock( 1, $key ), 'One action at a time.' );
+		$this->assertCount( 1, $store->stale( 1, 10 ), 'A held shipment is not read by the job.' );
+
+		$store->unlock( (string) $token );
+
+		$this->assertNotNull( $store->lock( 1, $key ) );
+
+		$store->mark_reshipment( 1, [ 'S-1' => [ 'u-1' ] ] );
+
+		$this->assertSame( 1, $store->page( 1, [ 'reship' => true ] )['total'] );
+
+		$next = $store->begin_refresh( 1 );
+		$store->save_header( 1, $open, $next );
+		$store->finish_listing( 1, $next );
+
+		$this->assertNull( $store->find( 1, Wpdb_Shipment_Store::key( 'S-2' ) ), 'A shipment the listing did not see goes.' );
+		$this->assertNotNull( $store->find( 1, $key ) );
+
+		do {
+			$removed = $store->delete_account( 1, 1 );
+		} while ( $removed > 0 );
+
+		$this->assertSame( 0, $store->count_for_account( 1 ) );
+		$this->assertSame( [], $store->units( 1, $key ) );
+
+		$store->forget( 1 );
 	}
 
 	/**

@@ -28,7 +28,8 @@ defined( 'ABSPATH' ) || exit;
  * The orders a marketplace account brought to the shop, as a records provider: one row per remote order group that has a WooCommerce
  * order, on either order storage. It is the small coordinator: SQL is in {@see Site_Orders_Reader}, cells in {@see Site_Orders_Rows},
  * processes and locks in {@see Site_Orders_Activity}, labels in {@see Site_Orders_Labels}, the cancellation in
- * {@see Site_Orders_Cancel} and the adapter's seller actions in {@see Site_Orders_Seller}.
+ * {@see Site_Orders_Cancel}, the adapter's seller actions in {@see Site_Orders_Seller} and «add to a shipment» in
+ * {@see Site_Orders_Shipments}.
  *
  * Sorting, filtering and paging are done in SQL over the whole table, never over one page. Reading never calls the marketplace; it
  * is called only for the cancellation reasons of one order, when the merchant opens the cancel window, and by an applied action.
@@ -139,6 +140,13 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	private $seller;
 
 	/**
+	 * Null when the marketplace does not ship in shipments the screens manage.
+	 *
+	 * @var Site_Orders_Shipments|null
+	 */
+	private $shipments;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
@@ -158,8 +166,10 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param Posting_Action_Gate|null     $gate         Whether the write actions are on offer for a posting (since 2.1.17); when given it is used instead of `$availability`, and null offers every action to every account.
 	 * @param Posting_Noun|null            $noun         The marketplace's word for a posting (since 2.1.23); null for «отправление».
 	 * @param Site_Orders_Seller|null      $seller       The adapter's seller actions (since 2.1.27); null for an adapter that declares none.
+	 * @param Site_Orders_Shipments|null   $shipments    «Add to a shipment» (since 2.1.28); null for a marketplace without shipments.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?Site_Orders_Shipments $shipments = null ) {
+		$this->shipments   = $shipments;
 		$this->seller      = $seller;
 		$this->noun        = $noun ?? Posting_Noun::shipment();
 		$this->data_status = $data_status;
@@ -215,7 +225,9 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	public function get_definition( array $context ): array {
 		$warning = null === $this->cancel || $this->cancel->needs_reason() ? null : $this->cancel->warning();
 
-		return Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun, $this->seller, $warning );
+		$definition = Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun, $this->seller, $warning );
+
+		return null === $this->shipments ? $definition : $this->shipments->extend_definition( $definition );
 	}
 
 	/**
@@ -347,6 +359,10 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			return $this->seller->preview( $call['account'], $action, $this->orders_of_call( $call ), $payload );
 		}
 
+		if ( $this->is_shipment_action( $action ) ) {
+			return $this->shipments->preview( $call['account'], $this->orders_of_call( $call ), $payload );
+		}
+
 		if ( Site_Orders_Definition::CANCEL === $action ) {
 			return $this->cancel_plan( $call );
 		}
@@ -372,6 +388,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 
 		if ( $this->is_seller_action( $action ) ) {
 			$result = $this->seller->apply( $call['account'], $action, $this->orders_of_call( $call ), $payload );
+
+			return $result + [ 'rows' => $this->build_rows( $call['account'], $call['targets'] ) ];
+		}
+
+		if ( $this->is_shipment_action( $action ) ) {
+			$result = $this->shipments->apply( $call['account'], $this->orders_of_call( $call ), $payload );
 
 			return $result + [ 'rows' => $this->build_rows( $call['account'], $call['targets'] ) ];
 		}
@@ -439,6 +461,13 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		];
 		$account = $this->account( $context );
 
+		if ( null !== $account && $this->is_shipment_action( $action ) ) {
+			return [
+				'options'     => $this->shipments->field_options( $account, $field, $query['search'] ),
+				'next_cursor' => null,
+			];
+		}
+
 		if ( null !== $account && $this->is_seller_action( $action ) ) {
 			return [
 				'options'     => $this->seller->field_options( $account, $action, $field, $query['search'] ),
@@ -476,7 +505,9 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @throws Action_State_Exception When the action is not one this table runs, the account is gone or the order is not available.
 	 */
 	private function prepare( array $context, string $action, array $ids ): array {
-		if ( ( ! in_array( $action, $this->offered(), true ) && ! $this->is_seller_action( $action ) ) || Site_Orders_Definition::OPEN === $action ) {
+		$known = in_array( $action, $this->offered(), true ) || $this->is_seller_action( $action ) || $this->is_shipment_action( $action );
+
+		if ( ! $known || Site_Orders_Definition::OPEN === $action ) {
 			throw new Action_State_Exception( __( 'Это действие недоступно для заказов этого маркетплейса.', 'woodev-plugin-framework' ) );
 		}
 
@@ -604,6 +635,14 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 */
 	private function is_seller_action( string $action ): bool {
 		return null !== $this->seller && $this->seller->handles( $action );
+	}
+
+	/**
+	 * @param string $action Action id of a request.
+	 * @return bool Whether it is «add to a shipment».
+	 */
+	private function is_shipment_action( string $action ): bool {
+		return null !== $this->shipments && $this->shipments->handles( $action );
 	}
 
 	/**
@@ -879,12 +918,23 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 				$activity[ $item['order_id'] ],
 				$refusal,
 				( $states[ $item['external_key'] ]['document_id'] ?? 0 ) > 0,
-				null === $this->seller ? [] : $this->seller->row_states( $account, $order ),
-				null !== $this->seller && $this->seller->has_bulk()
+				$this->extra_states( $account, $order ),
+				null !== $this->shipments || ( null !== $this->seller && $this->seller->has_bulk() )
 			);
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * @param Account   $account Account.
+	 * @param \WC_Order $order   Order.
+	 * @return array<int,array{id:string,enabled:bool,reason:string}> The states of the seller actions and of «add to a shipment».
+	 */
+	private function extra_states( Account $account, \WC_Order $order ): array {
+		$states = null === $this->seller ? [] : $this->seller->row_states( $account, $order );
+
+		return null === $this->shipments ? $states : array_merge( $states, $this->shipments->row_states( $account, $order ) );
 	}
 
 	/**
