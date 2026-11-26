@@ -372,7 +372,8 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 			],
 			$importer,
 			$this->clock(),
-			null === $units ? null : new Remote_Cards_Units( $units, $rows, new Remote_Cards_Cells(), $this->importable )
+			null === $units ? null : new Remote_Cards_Units( $units, $rows, new Remote_Cards_Cells(), $this->importable ),
+			$this->link_notes
 		);
 	}
 

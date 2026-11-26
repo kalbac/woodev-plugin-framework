@@ -9478,6 +9478,12 @@ msgid "У товара нет категории, поэтому кнопка «
 msgstr ""
 
 #. translators: %s: marketplace name.
+#: marketplace/admin/product/class-panel-view.php:634
+#, php-format
+msgid "Замечание: %s"
+msgstr ""
+
+#. translators: %s: marketplace name.
 #: marketplace/admin/product/class-panel-view.php:531
 #, php-format
 msgid "Ответ: %s"

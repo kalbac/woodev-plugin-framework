@@ -9,6 +9,8 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Note;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Link_Notes;
 use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_Response;
 use Woodev\Framework\Admin\Records\Action_State_Exception;
@@ -544,6 +546,65 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 
 		$this->assertSame( 'Не связан', $row['cells']['state'][0]['value']['label'] );
 		$this->assertCount( 1, $row['cells']['state'], 'Unlinked: the badge alone, no synchronisation line.' );
+	}
+
+	/**
+	 * Makes the adapter keep a note about the links of some products.
+	 *
+	 * @param array<int,Link_Note> $by_product Notes by product id.
+	 * @return Fake_Link_Notes
+	 */
+	private function note( array $by_product ): Fake_Link_Notes {
+		$notes = new Fake_Link_Notes();
+
+		foreach ( $by_product as $product_id => $note ) {
+			$notes->notes[ (int) $this->link_of( $product_id )->link_id() ] = $note;
+		}
+
+		$this->link_notes = $notes;
+
+		return $notes;
+	}
+
+	public function test_a_note_about_a_link_opens_the_tooltip_of_its_state_badge_and_colours_it(): void {
+		$notes = $this->note( [ 10 => new Link_Note( 'Добавьте документы в кабинете.' ) ] );
+
+		$badge = $this->by_id( $this->list_body() )[ $this->row_id( 10 ) ]['cells']['state'][0]['value'];
+
+		$this->assertSame( 'Создан', $badge['label'] );
+		$this->assertSame( 'warning', $badge['tone'] );
+		$this->assertSame( "Добавьте документы в кабинете.\nСинхронизируются: остатки, цены", $badge['tooltip'] );
+		$this->assertCount( 1, $notes->asked, 'the plugin is asked once for the whole page' );
+		$this->assertSame( $this->account_id, $notes->asked[0][0] );
+		$this->assertEqualsCanonicalizing( [ (int) $this->link_of( 10 )->link_id(), (int) $this->link_of( 21 )->link_id() ], $notes->asked[0][1], 'only the products with a link' );
+	}
+
+	public function test_a_note_about_a_variation_is_said_at_the_badge_of_its_group_of_the_parent_row(): void {
+		$this->note( [ 21 => new Link_Note( 'Добавьте документы.', Link_Note::TONE_INFO ) ] );
+
+		$states = array_column( $this->by_id( $this->list_body() )[ $this->row_id( 20 ) ]['cells']['state'], 'value' );
+
+		$this->assertSame( [ 'Ошибка', 'Не связан' ], array_column( $states, 'label' ) );
+		$this->assertSame( "Добавьте документы.\nОшибка у 1 варианта", $states[0]['tooltip'] );
+		$this->assertSame( 'danger', $states[0]['tone'] );
+		$this->assertArrayNotHasKey( 'tooltip', $states[1] );
+	}
+
+	public function test_a_child_row_and_its_activity_refresh_say_the_note_too(): void {
+		$notes    = $this->note( [ 21 => new Link_Note( 'Отклонена модерацией.', Link_Note::TONE_ERROR ) ] );
+		$provider = $this->provider();
+
+		$children = $provider->get_children( $this->context(), $this->row_id( 20 ), [ 'page' => 1, 'per_page' => 20 ] );
+		$activity = $provider->get_activity( $this->context(), [ $this->row_id( 21 ) ] );
+
+		foreach ( [ $children['rows'][0], $activity['rows'][0] ] as $row ) {
+			$badge = $row['cells']['state'][0]['value'];
+
+			$this->assertStringStartsWith( "Отклонена модерацией.\n", $badge['tooltip'] );
+			$this->assertSame( 'danger', $badge['tone'] );
+		}
+
+		$this->assertCount( 2, $notes->asked, 'one question per read' );
 	}
 
 	public function test_the_table_id_is_the_page_table(): void {

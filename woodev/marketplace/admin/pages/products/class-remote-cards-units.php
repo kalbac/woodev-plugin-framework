@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Activity_Normalizer;
 use Woodev\Framework\Admin\Records\Row_Normalizer;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Note_Badge;
 use Woodev\Framework\Marketplace\Admin\Shared\Plain_Price;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Sellable_Units;
@@ -140,13 +141,15 @@ final class Remote_Cards_Units {
 	}
 
 	/**
-	 * One badge per state among the units, with how many are in it, the biggest group first.
+	 * One badge per state among the units, with how many are in it, the biggest group first. The notes the plugin keeps about the
+	 * units of a state are said at its badge.
 	 *
 	 * @param array<int,array<string,mixed>> $units Units.
 	 * @return array<int,array<string,mixed>>
 	 */
 	private function states( array $units ): array {
 		$badges = [];
+		$notes  = [];
 
 		foreach ( $units as $unit ) {
 			$badge = $this->rows->state_badge( $unit );
@@ -154,6 +157,7 @@ final class Remote_Cards_Units {
 
 			$badges[ $label ]          = $badges[ $label ] ?? $badge + [ 'count' => 0 ];
 			$badges[ $label ]['count'] += 1;
+			$notes[ $label ]           = array_merge( $notes[ $label ] ?? [], array_filter( [ $unit['link_note'] ?? null ] ) );
 		}
 
 		uasort(
@@ -166,12 +170,13 @@ final class Remote_Cards_Units {
 		$cell = [];
 
 		foreach ( array_slice( $badges, 0, Row_Normalizer::MAX_STACK_ITEMS ) as $badge ) {
+			$shown  = [
+				'label' => $badge['label'] . ' · ' . $badge['count'],
+				'tone'  => $badge['tone'],
+			];
 			$cell[] = [
 				'type'  => 'badge',
-				'value' => [
-					'label' => $badge['label'] . ' · ' . $badge['count'],
-					'tone'  => $badge['tone'],
-				],
+				'value' => Link_Note_Badge::add( $shown, $notes[ $badge['label'] ] ),
 			];
 		}
 

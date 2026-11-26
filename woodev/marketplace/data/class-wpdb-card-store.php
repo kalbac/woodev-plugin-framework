@@ -449,14 +449,14 @@ final class Wpdb_Card_Store {
 	 * @param string    $search     Text looked for in the article and the name; '' for none.
 	 * @param int       $page       Page, from 1.
 	 * @param int       $per_page   Cards per page.
-	 * @return array{cards:array<int,array<string,mixed>>,total:int} Cards with `wc_product_id` (0 when not on the site).
+	 * @return array{cards:array<int,array<string,mixed>>,total:int} Cards with `wc_product_id` and `link_id` (both 0 when not on the site).
 	 */
 	public function page( int $account_id, ?bool $on_site, string $search, int $page, int $per_page ): array {
 		$per_page = max( 1, $per_page );
 		$offset   = ( max( 1, $page ) - 1 ) * $per_page;
 		$where    = $this->where( $account_id, $on_site, $search );
 		$total    = (int) $this->db->get_var( 'SELECT COUNT(*) ' . $this->from() . $where ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Built of prepared parts.
-		$rows     = $this->select( 'c.*, l.wc_product_id', $where . $this->db->prepare( self::ORDER . ' LIMIT %d OFFSET %d', $per_page, $offset ) );
+		$rows     = $this->select( 'c.*, l.wc_product_id, l.link_id', $where . $this->db->prepare( self::ORDER . ' LIMIT %d OFFSET %d', $per_page, $offset ) );
 
 		return [
 			'cards' => array_map( [ $this, 'card' ], $rows ),
@@ -517,7 +517,7 @@ final class Wpdb_Card_Store {
 		$where = $this->db->prepare( " WHERE c.account_id = %d AND (c.unit_card IN ({$in}) OR (c.unit_card = '' AND c.card_key IN ({$in})))", array_merge( [ $account_id ], $refs, $refs ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- One placeholder per reference.
 		$cards = [];
 
-		foreach ( $this->select( 'c.*, l.wc_product_id', $where . self::ORDER ) as $row ) {
+		foreach ( $this->select( 'c.*, l.wc_product_id, l.link_id', $where . self::ORDER ) as $row ) {
 			$ref             = '' === (string) $row['unit_card'] ? (string) $row['card_key'] : (string) $row['unit_card'];
 			$cards[ $ref ][] = $this->card( $row );
 		}
@@ -667,7 +667,7 @@ final class Wpdb_Card_Store {
 		$where = $this->db->prepare( " WHERE c.account_id = %d AND c.card_key IN ({$in})", array_merge( [ $account_id ], $keys ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- One placeholder per key.
 		$cards = [];
 
-		foreach ( $this->select( 'c.*, l.wc_product_id', $where ) as $row ) {
+		foreach ( $this->select( 'c.*, l.wc_product_id, l.link_id', $where ) as $row ) {
 			$cards[ (string) $row['card_key'] ] = $this->card( $row );
 		}
 
@@ -852,9 +852,9 @@ final class Wpdb_Card_Store {
 	}
 
 	/**
-	 * A stored row as the card the screen and the import read: the list row's keys plus `wc_product_id`.
+	 * A stored row as the card the screen and the import read: the list row's keys plus `wc_product_id` and `link_id`.
 	 *
-	 * @param array<string,mixed> $row Row with the joined `wc_product_id`.
+	 * @param array<string,mixed> $row Row with the joined `wc_product_id` and `link_id`.
 	 * @return array<string,mixed>
 	 */
 	private function card( array $row ): array {
@@ -880,6 +880,7 @@ final class Wpdb_Card_Store {
 			],
 			'updated_at'    => (string) $row['updated_at'],
 			'wc_product_id' => (int) ( $row['wc_product_id'] ?? 0 ),
+			'link_id'       => (int) ( $row['link_id'] ?? 0 ),
 		];
 	}
 

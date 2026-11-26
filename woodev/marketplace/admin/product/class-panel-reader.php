@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Product;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Notes;
 use Woodev\Framework\Marketplace\Admin\Shared\Sync_Reason_Text;
 use Woodev\Framework\Marketplace\Catalog\Article_Policy;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
@@ -153,6 +154,13 @@ final class Panel_Reader {
 	private $articles;
 
 	/**
+	 * What the plugin says about a link; null when it keeps no notes.
+	 *
+	 * @var Link_Notes|null
+	 */
+	private $notes;
+
+	/**
 	 * Creates the reader.
 	 *
 	 * @since 2.1.2
@@ -172,8 +180,11 @@ final class Panel_Reader {
 	 * @param Product_Tab_Facts      $tab_facts      The marketplace-specific answers of the tab.
 	 * @param callable|null          $clock          `function (): int`; the system clock when null.
 	 * @param bool                   $renames_articles Whether the adapter changes the article of a sent card ({@see \Woodev\Framework\Marketplace\Flows\Offer_Id_Renamer}).
+	 * @param Article_Display|null   $articles       How an article is shown; as it is when null.
+	 * @param Link_Notes|null        $notes          What the plugin says about a link, shown at the product.
 	 */
-	public function __construct( Wpdb_Link_Store $links, Export_Context_Builder $contexts, Export_Facts $facts, Export_Validator $validator, Wpdb_Mapping_Store $mappings, Warehouse_Options $warehouses, Sync_State_Store $sync_state, Wpdb_Account_Store $accounts, License_Gate $license, Logging $logging, Pinned_Offer_Id $pinned, Article_Policy $article_policy, Product_Tab_Facts $tab_facts, ?callable $clock = null, bool $renames_articles = false, ?Article_Display $articles = null ) {
+	public function __construct( Wpdb_Link_Store $links, Export_Context_Builder $contexts, Export_Facts $facts, Export_Validator $validator, Wpdb_Mapping_Store $mappings, Warehouse_Options $warehouses, Sync_State_Store $sync_state, Wpdb_Account_Store $accounts, License_Gate $license, Logging $logging, Pinned_Offer_Id $pinned, Article_Policy $article_policy, Product_Tab_Facts $tab_facts, ?callable $clock = null, bool $renames_articles = false, ?Article_Display $articles = null, ?Link_Notes $notes = null ) {
+		$this->notes    = $notes;
 		$this->articles = $articles ?? new Article_Display();
 		$this->links          = $links;
 		$this->contexts       = $contexts;
@@ -225,6 +236,7 @@ final class Panel_Reader {
 			'link_id'     => $link_id,
 			'state'       => $state,
 			'badge'       => Card_State_Badge::of( $state ),
+			'note'        => $this->link_notes( $account, [ $link_id ] )[ $link_id ] ?? null,
 			'remote_error' => $link_id > 0 ? $this->links->last_error( $link_id )['text'] : '',
 			'ids'         => $this->identifiers( $account, $product, $record, $shown ),
 			'validation'  => $this->validation( $account, $product, $record ),
@@ -325,6 +337,19 @@ final class Panel_Reader {
 	 */
 	public function explains(): bool {
 		return $this->logging->is_enabled();
+	}
+
+	/**
+	 * Asks the plugin what it says about some links.
+	 *
+	 * @param Account $account  Account.
+	 * @param int[]   $link_ids Link ids; 0 stands for a product without a link row.
+	 * @return array<int,\Woodev\Framework\Marketplace\Admin\Shared\Link_Note> By link id.
+	 */
+	private function link_notes( Account $account, array $link_ids ): array {
+		$link_ids = array_values( array_filter( $link_ids ) );
+
+		return null === $this->notes || [] === $link_ids ? [] : $this->notes->link_notes( $account->id(), $link_ids );
 	}
 
 	/**
@@ -687,7 +712,14 @@ final class Panel_Reader {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private function variation_rows( Account $account, array $children, array $records, array $overview ): array {
-		$rows = [];
+		$rows     = [];
+		$link_ids = [];
+
+		foreach ( $records as $record ) {
+			$link_ids[] = null === $record ? 0 : (int) $record->link_id();
+		}
+
+		$notes = $this->link_notes( $account, $link_ids );
 
 		foreach ( $children as $child_id => $child ) {
 			$record = $records[ $child_id ];
@@ -705,6 +737,7 @@ final class Panel_Reader {
 				'site_price'  => (string) $child->get_price(),
 				'name'     => function_exists( 'wc_get_formatted_variation' ) && $child instanceof \WC_Product_Variation ? wp_strip_all_tags( (string) wc_get_formatted_variation( $child, true, false ) ) : '',
 				'badge'    => Card_State_Badge::of( $state ),
+				'note'     => null === $record ? null : ( $notes[ (int) $record->link_id() ] ?? null ),
 				'offer_id' => null === $record || null === $record->offer_id() ? $this->contexts->offer_id( $account, $child, $record ?? Link_Record::offer( $account->id(), $child_id, (int) $child->get_parent_id(), '' ) ) : $this->articles->of_link( $account->id(), (string) $record->offer_id() ),
 				'notice'   => $this->sku_notice( $account, $child ),
 				'planned'  => null === $record || null === $record->frozen_offer_id(),

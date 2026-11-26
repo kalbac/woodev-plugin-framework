@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Notes;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -268,7 +269,7 @@ final class Embedded_Screens {
 			$guard,
 			$accounts,
 			$links,
-			new Panel_Reader( $links, $contexts, $adapter->export_facts(), $validator, $mappings, $warehouses, $store, $accounts, $license, Logging::for_plugin( $plugin ), $pinned, $adapter->article_policy(), $facts, null, null !== $renames, new Article_Display( $adapter instanceof Sellable_Units ? $adapter : null, new Wpdb_Card_Store( $db, $table( 'cards' ), $table( 'links' ), Uninstaller::option_prefix( $plugin->get_id() ) ) ) ),
+			new Panel_Reader( $links, $contexts, $adapter->export_facts(), $validator, $mappings, $warehouses, $store, $accounts, $license, Logging::for_plugin( $plugin ), $pinned, $adapter->article_policy(), $facts, null, null !== $renames, new Article_Display( $adapter instanceof Sellable_Units ? $adapter : null, new Wpdb_Card_Store( $db, $table( 'cards' ), $table( 'links' ), Uninstaller::option_prefix( $plugin->get_id() ) ) ), $adapter instanceof Link_Notes ? $adapter : null ),
 			new Panel_View( $names, $facts->supports_oversize(), null !== $adapter->price_pusher(), null !== $renames ),
 			new Link_Settings_Writer( $links, $intents, $mappings, $warehouses, $stock, $pinned, $renames ),
 			new Link_Form_Input( $pinned ),

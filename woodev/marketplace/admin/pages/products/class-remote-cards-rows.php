@@ -11,6 +11,7 @@ use Woodev\Framework\Admin\Records\Activity_Normalizer;
 use Woodev\Framework\Admin\Records\Row_Normalizer;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
 use Woodev\Framework\Marketplace\Admin\Product\Card_State_Badge;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Note_Badge;
 use Woodev\Framework\Marketplace\Catalog\Offer_Id_Likeness;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Flows\Article_Display;
@@ -248,10 +249,11 @@ final class Remote_Cards_Rows {
 
 	/**
 	 * The state of the card on the marketplace as ONE badge, like the delivery page's. Everything else about the card's state is its
-	 * tooltip: the marketplace's reason for a declined card, the card's last import note and the marketplace's numbers of the card. A
-	 * card whose details did not come with the list has no state to show.
+	 * tooltip: the note the plugin keeps about its link ({@see Link_Note_Badge}), the marketplace's reason for a declined card, the
+	 * card's last import note and the marketplace's numbers of the card. A card whose details did not come with the list has no state
+	 * to show.
 	 *
-	 * @param array<string,mixed> $card  Card.
+	 * @param array<string,mixed> $card  Card, with `link_note` when the plugin keeps one.
 	 * @param string[]            $notes Lines of the card's import note.
 	 * @return array<int,array{type:string,value:mixed}>
 	 */
@@ -267,11 +269,12 @@ final class Remote_Cards_Rows {
 
 		$badge   = $this->state_badge( $card );
 		$tooltip = mb_substr( implode( "\n", $lines ), 0, Row_Normalizer::MAX_TOOLTIP_LENGTH );
+		$badge   = '' === $tooltip ? $badge : $badge + [ 'tooltip' => $tooltip ];
 
 		return [
 			[
 				'type'  => 'badge',
-				'value' => '' === $tooltip ? $badge : $badge + [ 'tooltip' => $tooltip ],
+				'value' => Link_Note_Badge::add( $badge, array_filter( [ $card['link_note'] ?? null ] ) ),
 			],
 		];
 	}
