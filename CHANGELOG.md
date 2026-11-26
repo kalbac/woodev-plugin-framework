@@ -1,6 +1,11 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.21] — 2026-11-26
+### Features
+- **marketplace**: Token-only marketplace accounts and the 4xx surcharge (WF5, #2002, merged via #2011).
+- **marketplace**: Grouped card export on a marketplace without task numbers (WF2, #1999, merged via #2012).
+
 ## [2.1.20] — 2026-11-25
 ### Bug Fixes
 - **shipping**: Key the rate cache by what prices a quote, not by every keystroke (#1985)
