@@ -17,8 +17,9 @@ parsing never reaches it.
 ❌ **Wrong** — debug a refusal from the framework log alone.
 
 ✅ **Correct** — from framework 2.1.28 (#1509) `get_sanitized_response_body()` logs the raw rejected body run through
-`redact_secret_request_body()` when no response was parsed, so no override is needed. Secret-named keys are masked;
-buyer personal data (e-mail, phone) echoed in a free-text refusal is NOT masked by that function. Plugins on an older
+`redact_secret_request_body()` when no response was parsed, so no override is needed. Secret-named keys are masked,
+and so are the request's own secret values wherever the refusal echoes them (`get_known_secret_values()`, a literal scrub
+also inside JSON strings). Buyer personal data (e-mail, phone) echoed in a free-text refusal is NOT masked. Plugins on an older
 framework still need the override from woodev-vkredit#36, which masks those too, until they update.
 
 ## Related

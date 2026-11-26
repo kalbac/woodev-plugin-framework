@@ -199,6 +199,16 @@ class Testable_Api_Base_For_Response_Body_Test extends \Woodev_API_Base {
 	}
 
 	/**
+	 * Seeds the outgoing request headers under test.
+	 *
+	 * @param array<string, string> $headers Request headers.
+	 * @return void
+	 */
+	public function set_request_headers_for_test( array $headers ): void {
+		$this->request_headers = $headers;
+	}
+
+	/**
 	 * Exposes the protected request-body sanitizer.
 	 *
 	 * @return string
@@ -668,5 +678,64 @@ final class ApiBaseSanitizedResponseBodyTest extends TestCase {
 			$broadcast['body'],
 			'only the broadcast (logging) payload may be redacted'
 		);
+	}
+
+	/**
+	 * A bank 400 that echoes the request's credentials inside its validation texts and errors[]:
+	 * the key walk cannot see a value under a non-secret key, so the literal scrub removes it,
+	 * while the ordinary refusal text stays readable.
+	 *
+	 * @return void
+	 */
+	public function test_unparsed_400_refusal_echoing_request_secrets_in_error_strings_is_scrubbed(): void {
+
+		$token    = 'example-token-value';
+		$password = 'example-password-value';
+
+		$api = new Testable_Api_Base_For_Response_Body_Test();
+		$api->set_request_for_test( new Testable_Oversized_Secret_Request( (string) json_encode( [ 'token' => $token, 'password' => $password ] ) ) );
+		$api->set_raw_response_body_for_test(
+			(string) json_encode(
+				[
+					'validations' => [ 'auth' => "Rejected token={$token}" ],
+					'errors'      => [ "Rejected password={$password}" ],
+				]
+			)
+		);
+
+		$body = $api->get_response_data_for_broadcast_for_test()['body'];
+
+		$this->assertStringNotContainsString( $token, $body );
+		$this->assertStringNotContainsString( $password, $body );
+		$this->assertStringContainsString( 'Rejected', $body, 'ordinary refusal text must stay readable' );
+	}
+
+	/**
+	 * A 500 that echoes the Authorization credential in errorMessage / errorReason: the header
+	 * value is a known secret of the request, so its token is scrubbed wherever it is echoed.
+	 *
+	 * @return void
+	 */
+	public function test_unparsed_500_refusal_echoing_the_authorization_credential_is_scrubbed(): void {
+
+		$credential = 'abcd-header-credential';
+
+		$api = new Testable_Api_Base_For_Response_Body_Test();
+		$api->set_request_headers_for_test( [ 'Authorization' => 'Bearer ' . $credential ] );
+		$api->set_request_for_test( new Testable_Oversized_Secret_Request( '{"amount":100}' ) );
+		$api->set_raw_response_body_for_test(
+			(string) json_encode(
+				[
+					'errorMessage' => "Rejected credential {$credential}",
+					'errorReason'  => 'Unknown token',
+				]
+			)
+		);
+
+		$body = $api->get_response_data_for_broadcast_for_test()['body'];
+
+		$this->assertStringNotContainsString( $credential, $body );
+		$this->assertStringContainsString( 'Rejected credential', $body );
+		$this->assertStringContainsString( 'Unknown token', $body );
 	}
 }

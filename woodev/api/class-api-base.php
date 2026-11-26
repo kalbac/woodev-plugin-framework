@@ -2838,6 +2838,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * needs (card #1509). A parsed response whose `to_string_safe()` is falsy still
 		 * logs as empty; the raw bytes are never a fallback for that case.
 		 *
+		 * The unparsed body can echo a credential inside a string value (an error message),
+		 * where the key walk cannot see it, so the request's own secret values are also
+		 * removed from it literally — see {@see self::get_known_secret_values()}.
+		 *
 		 * @since 2.0.2
 		 * @since 2.1.28 an unparsed response logs its redacted raw body (#1509).
 		 *
@@ -2848,12 +2852,143 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$response = $this->get_response();
 
 			if ( null === $response ) {
-				$body = (string) $this->get_raw_response_body();
-			} else {
-				$body = is_callable( [ $response, 'to_string_safe' ] ) ? (string) $response->to_string_safe() : '';
+				$body = self::redact_secret_request_body( (string) $this->get_raw_response_body(), $this->get_secret_param_names(), '', true === $this->masking_broadcast_for_log );
+
+				return self::redact_known_secret_values( $body, $this->get_known_secret_values() );
 			}
 
+			$body = is_callable( [ $response, 'to_string_safe' ] ) ? (string) $response->to_string_safe() : '';
+
 			return self::redact_secret_request_body( $body, $this->get_secret_param_names(), '', true === $this->masking_broadcast_for_log );
+		}
+
+		/**
+		 * Credential values the outgoing request carried, for a literal scrub of an unparsed response body.
+		 *
+		 * Collected from the request itself: the value of each secret-named request header (every
+		 * token of it, so `Bearer <token>` yields the token) and the value of each secret-named key
+		 * of a JSON request body, at any depth. Only values of at least 4 bytes count, because a
+		 * shorter one would mask ordinary words; the list is longest first, so a longer value is
+		 * replaced before a prefix of it.
+		 *
+		 * A credential that lives outside the request (a key kept in settings) is added by a subclass:
+		 * override and return `array_merge( parent::get_known_secret_values(), [ $key ] )`.
+		 *
+		 * @since 2.1.28
+		 *
+		 * @return array<int, string>
+		 */
+		protected function get_known_secret_values(): array {
+
+			$values = [];
+
+			$secret_headers = array_map( 'strtolower', $this->get_secret_header_names() );
+
+			foreach ( (array) $this->get_request_headers() as $name => $value ) {
+				if ( in_array( strtolower( (string) $name ), $secret_headers, true ) ) {
+					$values = array_merge( $values, self::credential_tokens( (string) $value ) );
+				}
+			}
+
+			$decoded = json_decode( (string) $this->get_request_body(), true );
+
+			if ( is_array( $decoded ) ) {
+				$canonical_names = array_map( [ self::class, 'canonicalize_secret_param_name' ], $this->get_secret_param_names() );
+				$values          = array_merge( $values, self::collect_secret_leaf_values( $decoded, $canonical_names ) );
+			}
+
+			$values = array_values(
+				array_unique(
+					array_filter(
+						$values,
+						static function ( string $value ): bool {
+							return strlen( $value ) >= 4;
+						}
+					)
+				)
+			);
+
+			usort(
+				$values,
+				static function ( string $a, string $b ): int {
+					return strlen( $b ) - strlen( $a );
+				}
+			);
+
+			return $values;
+		}
+
+		/**
+		 * Replaces each known secret value in an already redacted body with the full mask.
+		 *
+		 * A value is matched both as it is and as it sits inside a JSON string (quotes, slashes and
+		 * unicode escaped by `json_encode()`), because an unparsed body is JSON whenever a credential
+		 * is echoed inside one of its string values.
+		 *
+		 * @since 2.1.28
+		 *
+		 * @param string             $text          Body already run through {@see self::redact_secret_request_body()}.
+		 * @param array<int, string> $secret_values Values from {@see self::get_known_secret_values()}.
+		 * @return string
+		 */
+		protected static function redact_known_secret_values( string $text, array $secret_values ): string {
+
+			foreach ( $secret_values as $secret_value ) {
+				$encoded = (string) json_encode( $secret_value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
+				$escaped = (string) substr( $encoded, 1, -1 );
+				$search  = array_values( array_unique( array_filter( [ $secret_value, $escaped ], 'strlen' ) ) );
+
+				$text = str_replace( $search, self::FULL_SECRET_MASK, $text );
+			}
+
+			return $text;
+		}
+
+		/**
+		 * The credential tokens of one header value: the whole value and each whitespace-separated
+		 * part, except the scheme words `Bearer` and `Basic`.
+		 *
+		 * @since 2.1.28
+		 *
+		 * @param string $header_value Header value.
+		 * @return array<int, string>
+		 */
+		private static function credential_tokens( string $header_value ): array {
+
+			$value  = trim( $header_value );
+			$parts  = preg_split( '/\s+/', $value );
+			$tokens = array_filter(
+				is_array( $parts ) ? $parts : [],
+				static function ( string $part ): bool {
+					return ! in_array( strtolower( $part ), [ 'bearer', 'basic' ], true );
+				}
+			);
+
+			return array_merge( [ $value ], $tokens );
+		}
+
+		/**
+		 * The scalar values stored under a secret-named key, at any depth of a decoded JSON body.
+		 *
+		 * @since 2.1.28
+		 *
+		 * @param array<mixed, mixed> $node            Decoded body, or a part of it.
+		 * @param array<int, string>  $canonical_names Canonical secret names, from {@see self::canonicalize_secret_param_name()}.
+		 * @return array<int, string>
+		 */
+		private static function collect_secret_leaf_values( array $node, array $canonical_names ): array {
+
+			$values = [];
+
+			foreach ( $node as $key => $value ) {
+				if ( is_array( $value ) ) {
+					$values = array_merge( $values, self::collect_secret_leaf_values( $value, $canonical_names ) );
+				} elseif ( is_scalar( $value ) && in_array( self::canonicalize_secret_param_name( (string) $key ), $canonical_names, true ) ) {
+					$values[] = (string) $value;
+				}
+			}
+
+			return $values;
 		}
 
 		/**
