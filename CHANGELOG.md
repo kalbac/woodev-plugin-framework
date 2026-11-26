@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.27] — 2026-11-26
+### Features
+- **marketplace**: Show the articles of new cards in the mapping form (#2038) (#2045)
+
+- **marketplace**: Seller actions on an order (WF6a) (#2003) (#2046)
+
+
+
 ## [2.1.26] — 2026-11-26
 ### Bug Fixes
 - **marketplace**: Send what changed while a warehouse was switched off (#2042) (#2043)
