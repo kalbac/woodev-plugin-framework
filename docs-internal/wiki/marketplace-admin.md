@@ -1365,6 +1365,11 @@ both marks and the GTIN to the first variation.
 **Barcodes** go to `link_barcodes` (schema revision 5; one barcode names one unit of an account). `Catalog\Gtin` lets only a real
 GTIN into WooCommerce's field — restricted-circulation numbers (every barcode Wildberries generates) are excluded.
 
+**One weight and size per card.** A marketplace that takes dimensions per card adds `Catalog\Rules\Card_Dimensions_Rule` to its
+`export_rules()` with a `function ( $product, $mapping ): string` naming the card of a variation. Sibling variations of one card
+whose weight, length, width or height differ (own value, else parent's, else the profile fallback) are **all refused**, with the
+differing names — nothing is picked or averaged (the D7 pattern for prices). Ozon's rule list does not hold it.
+
 **Cards tab.** A cabinet card with several units is a parent row (the records engine's children, as «Товары сайта»); filters,
 pages and counts go by card, «Импортировать» on the parent takes all its units. The filter-wide import counts units.
 

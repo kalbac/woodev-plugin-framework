@@ -206,6 +206,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Catalog\\Offer_Id' => 'woodev/marketplace/catalog/class-offer-id.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Offer_Id_Likeness' => 'woodev/marketplace/catalog/class-offer-id-likeness.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Profile' => 'woodev/marketplace/catalog/class-profile.php',
+	'Woodev\\Framework\\Marketplace\\Catalog\\Rules\\Card_Dimensions_Rule' => 'woodev/marketplace/catalog/rules/class-card-dimensions-rule.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Rules\\Category_Exists_Rule' => 'woodev/marketplace/catalog/rules/class-category-exists-rule.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Rules\\Category_Mapped_Rule' => 'woodev/marketplace/catalog/rules/class-category-mapped-rule.php',
 	'Woodev\\Framework\\Marketplace\\Catalog\\Rules\\Currency_Rule' => 'woodev/marketplace/catalog/rules/class-currency-rule.php',
