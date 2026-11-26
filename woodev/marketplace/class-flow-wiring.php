@@ -45,7 +45,10 @@ use Woodev\Framework\Marketplace\Flows\Offer_Id_Renamer;
 use Woodev\Framework\Marketplace\Flows\Offer_Id_Renames;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
+use Woodev\Framework\Marketplace\Flows\Sellable_Units;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
+use Woodev\Framework\Marketplace\Flows\Unit_Product_Source;
+use Woodev\Framework\Marketplace\Flows\Unit_Products;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Intake;
 use Woodev\Framework\Marketplace\Intake\Notifications_Controller;
@@ -536,7 +539,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$adapter    = $this->adapter;
 			$classifier = $adapter->error_classifier();
 			$options    = Uninstaller::option_prefix( $this->plugin_id );
-			$shop       = new Shop_Sku_Source( $this->db );
+			$units      = $adapter instanceof Sellable_Units ? $adapter : null;
+			$shop       = null === $units ? new Shop_Sku_Source( $this->db ) : $this->unit_product_source();
 			$refresh    = new Refresh_Catalog_Scheduler( $this->names );
 			$scheduler  = new Link_Scheduler( $this->names );
 			$accounts   = $this->accounts;
@@ -564,13 +568,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 						},
 						$accounts->all( $adapter_id, true )
 					);
-				}
+				},
+				$units
 			) )->register();
 
 			( new Refresh_Catalog_Runner( $this->accounts, $adapter->id(), $this->gate, $adapter->catalog_refresher(), $refresh, $classifier, $this->ring, $this->log_error ) )->register();
 
 			add_action( 'action_scheduler_init', [ $refresh, 'ensure_weekly' ] );
 			add_action( 'action_scheduler_init', [ $scheduler, 'ensure_daily' ] );
+		}
+
+		/**
+		 * The shop's products as a marketplace that sells units compares them.
+		 *
+		 * @return Unit_Product_Source
+		 */
+		private function unit_product_source(): Unit_Product_Source {
+			$profiles = new Wpdb_Profile_Store( $this->db, $this->table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $this->adapter->id() ) );
+
+			return new Unit_Product_Source( $this->db, $profiles, $this->adapter->id() );
 		}
 
 		/**
@@ -625,13 +641,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$scheduler = new Import_Scheduler( $this->names );
 			$mappings   = new Wpdb_Mapping_Store( $this->db, $this->table( 'mappings' ), $this->table( 'mapping_terms' ) );
 			$categories = new Import_Category( $mappings );
+			$units      = $adapter instanceof Sellable_Units ? $adapter : null;
 			$writer     = new Product_Writer(
 				$categories,
 				new Wpdb_Profile_Store( $this->db, $this->table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
 				new Shop_Price_Writer( $this->contexts )
 			);
 			$mapping    = new Import_Mapping( $mappings, $categories, new Category_Finder( $adapter->catalog_schema() ), $adapter->settings_descriptor()->marketplace_name(), $adapter->export_facts() instanceof Dictionary_Label_Lookup );
-			$import     = new Card_Import( $this->links, $this->linker, $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links ), [ $writer, 'start' ], [ $writer, 'complete' ], $mapping );
+			$import     = new Card_Import( $this->links, $this->linker, $notes, Effective_Settings::for_adapter( $adapter->id() ), new Group_Assembler( $this->links, $units ), [ $writer, 'start' ], [ $writer, 'complete' ], $mapping, null === $units ? null : new Unit_Products( $units, $this->unit_product_source(), $this->links, $this->card_store() ) );
 
 			( new Import_Jobs( $this->gate, $adapter, $import, $notes, $scheduler, $adapter->error_classifier(), $this->ring, $this->log_error ) )->register();
 			( new Legacy_Order_Lines( $adapter->id() ) )->register();

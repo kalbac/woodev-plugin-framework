@@ -59,6 +59,10 @@ defined( 'ABSPATH' ) || exit;
  * is told apart by its article under the attribute «Вариант». The card's other characteristics are the product's attributes too,
  * not used for variations ({@see Card_Attributes}); a variation takes none of them ({@see self::variation_content()}).
  *
+ * For a marketplace that sells units ({@see Sellable_Units}) a card's article is a unit key: it is never written as a SKU and
+ * never shown (the attribute «Вариант» takes the adapter's words), and what the importer keeps on the product of a unit — the
+ * pending mark, the taken SKU — and the product's GTIN move to the first variation with the conversion.
+ *
  * @since 2.1.6
  */
 final class Group_Assembler {
@@ -92,14 +96,24 @@ final class Group_Assembler {
 	private $links;
 
 	/**
+	 * The adapter's unit rules, or null for a marketplace whose article is the SKU.
+	 *
+	 * @var Sellable_Units|null
+	 */
+	private $units;
+
+	/**
 	 * Creates the assembler.
 	 *
 	 * @since 2.1.6
+	 * @since 2.1.22 `$units`.
 	 *
-	 * @param Wpdb_Link_Store $links Links.
+	 * @param Wpdb_Link_Store     $links Links.
+	 * @param Sellable_Units|null $units The adapter, when it sells units.
 	 */
-	public function __construct( Wpdb_Link_Store $links ) {
+	public function __construct( Wpdb_Link_Store $links, ?Sellable_Units $units = null ) {
 		$this->links = $links;
+		$this->units = $units;
 	}
 
 	/**
@@ -203,7 +217,7 @@ final class Group_Assembler {
 		}
 
 		$product->update_meta_data( self::group_key( $account->adapter_id() ), $account->id() . ':' . $key );
-		$product->update_meta_data( self::variant_key( $account->adapter_id() ), [ 'aspects' => self::aspects( $content ) ] );
+		$product->update_meta_data( self::variant_key( $account->adapter_id() ), [ 'aspects' => $this->aspects( $content ) ] );
 	}
 
 	/**
@@ -313,7 +327,7 @@ final class Group_Assembler {
 			$account->adapter_id(),
 			function () use ( $account, $product, $pending, $fence ): \WC_Product {
 				$parent    = $this->as_variable( $account, $product, is_array( $pending ) ? $pending : [] );
-				$variation = $this->first_variation( $parent, (array) $parent->get_meta( self::variant_key( $account->adapter_id() ) ) );
+				$variation = $this->first_variation( $parent, (array) $parent->get_meta( self::variant_key( $account->adapter_id() ) ), $account->adapter_id() );
 
 				$this->move_links( $account, (int) $parent->get_id(), (int) $variation->get_id(), $fence );
 				$this->finish_parent( $account, $parent, (int) $variation->get_id() );
@@ -325,24 +339,33 @@ final class Group_Assembler {
 
 	/**
 	 * Makes the first save of a card that joins a variable product: a switched-off variation with the article as its SKU and the
-	 * import marker, both in one save, because a run that was cut short finds its variation again **by the SKU**.
+	 * import marker, both in one save, because a run that was cut short finds its variation again **by the SKU** (a unit's
+	 * variation by the pending mark `$prepare` sets).
 	 *
 	 * @since 2.1.6
+	 * @since 2.1.22 `$sku` and `$prepare`.
 	 *
-	 * @param Account      $account   Account.
-	 * @param int          $parent_id The variable product of the group.
-	 * @param Card_Content $content   The card.
+	 * @param Account       $account   Account.
+	 * @param int           $parent_id The variable product of the group.
+	 * @param Card_Content  $content   The card.
+	 * @param string|null   $sku       The SKU to write instead of the article, '' for none; null writes the article.
+	 * @param callable|null $prepare   `function ( \WC_Product $variation ): void`; called on the unsaved variation.
 	 * @return \WC_Product The saved variation.
 	 * @throws \WC_Data_Exception When another product already has the SKU.
 	 */
-	public function start_variation( Account $account, int $parent_id, Card_Content $content ): \WC_Product {
+	public function start_variation( Account $account, int $parent_id, Card_Content $content, ?string $sku = null, ?callable $prepare = null ): \WC_Product {
 		$variation = wc_get_product_object( 'variation' );
 
 		$variation->set_parent_id( $parent_id );
 		$variation->set_status( 'private' );
-		$variation->set_sku( (string) ( $content->card()['offer_id'] ?? '' ) );
-		$variation->set_attributes( self::variation_attributes( self::aspects( $content ) ) );
+		$variation->set_sku( $sku ?? (string) ( $content->card()['offer_id'] ?? '' ) );
+		$variation->set_attributes( self::variation_attributes( $this->aspects( $content ) ) );
 		$variation->update_meta_data( Product_Writer::marker_key( $account->adapter_id() ), '1' );
+
+		if ( null !== $prepare ) {
+			call_user_func( $prepare, $variation );
+		}
+
 		$variation->save();
 
 		return $variation;
@@ -366,7 +389,7 @@ final class Group_Assembler {
 			return;
 		}
 
-		$aspects_added = $this->add_aspects( $parent, self::aspects( $content ) ); // First: an aspect is then found, not made again as a plain attribute.
+		$aspects_added = $this->add_aspects( $parent, $this->aspects( $content ) ); // First: an aspect is then found, not made again as a plain attribute.
 		$others_added  = Card_Attributes::write( $parent, $content );
 
 		if ( $aspects_added || $others_added ) {
@@ -518,10 +541,15 @@ final class Group_Assembler {
 			[
 				'aspects' => $aspects,
 				'sku'     => $sku,
-				'props'   => self::variation_props( $product ),
+				'props'   => $this->variation_props( $product ),
 			]
 		);
 		$parent->set_sku( '' );
+
+		if ( $this->moves_gtin( $parent ) ) {
+			$parent->set_global_unique_id( '' ); // Its first variation takes it: two products may not hold one GTIN.
+		}
+
 		$this->add_aspects( $parent, $aspects );
 		$parent->save();
 
@@ -534,10 +562,11 @@ final class Group_Assembler {
 	 * @param \WC_Product $product The simple product.
 	 * @return array<string,mixed>
 	 */
-	private static function variation_props( \WC_Product $product ): array {
+	private function variation_props( \WC_Product $product ): array {
 		$props = [];
+		$names = $this->moves_gtin( $product ) ? array_merge( self::VARIATION_PROPS, [ 'global_unique_id' ] ) : self::VARIATION_PROPS;
 
-		foreach ( self::VARIATION_PROPS as $prop ) {
+		foreach ( $names as $prop ) {
 			$value          = $product->{'get_' . $prop}( 'edit' );
 			$props[ $prop ] = $value instanceof \DateTimeInterface ? $value->getTimestamp() : $value;
 		}
@@ -546,14 +575,26 @@ final class Group_Assembler {
 	}
 
 	/**
+	 * Whether the conversion moves the product's GTIN to its first variation: only for a marketplace whose import writes one, on a
+	 * WooCommerce that has the field.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return bool
+	 */
+	private function moves_gtin( \WC_Product $product ): bool {
+		return null !== $this->units && is_callable( [ $product, 'set_global_unique_id' ] );
+	}
+
+	/**
 	 * Step 2: the first variation takes the former SKU and what a variable product cannot hold itself. While a conversion is
 	 * open the product has no other variation, so a variation that is there already is the one an earlier run made.
 	 *
-	 * @param \WC_Product         $parent  The variable product.
-	 * @param array<string,mixed> $variant The aspects of the product's own card, its former SKU and the values it gave up.
+	 * @param \WC_Product         $parent         The variable product.
+	 * @param array<string,mixed> $variant        The aspects of the product's own card, its former SKU and the values it gave up.
+	 * @param string              $marketplace_id The adapter's id.
 	 * @return \WC_Product The saved variation.
 	 */
-	private function first_variation( \WC_Product $parent, array $variant ): \WC_Product {
+	private function first_variation( \WC_Product $parent, array $variant, string $marketplace_id ): \WC_Product {
 		$children = $parent->get_children();
 		$existing = [] === $children ? null : wc_get_product( (int) reset( $children ) );
 
@@ -567,11 +608,22 @@ final class Group_Assembler {
 		$variation->set_status( 'publish' );
 		$variation->set_attributes( self::variation_attributes( (array) ( $variant['aspects'] ?? [] ) ) );
 
-		foreach ( array_intersect_key( (array) ( $variant['props'] ?? [] ), array_flip( self::VARIATION_PROPS ) ) as $prop => $value ) {
+		$names = null === $this->units ? self::VARIATION_PROPS : array_merge( self::VARIATION_PROPS, [ 'global_unique_id' ] );
+
+		foreach ( array_intersect_key( (array) ( $variant['props'] ?? [] ), array_flip( $names ) ) as $prop => $value ) {
 			$variation->{'set_' . $prop}( $value );
 		}
 
 		$variation->set_sku( (string) ( $variant['sku'] ?? '' ) );
+
+		foreach ( $this->unit_meta_keys( $marketplace_id ) as $key ) {
+			$value = (string) $parent->get_meta( $key );
+
+			if ( '' !== $value ) {
+				$variation->update_meta_data( $key, $value );
+			}
+		}
+
 		$variation->save();
 
 		return $variation;
@@ -643,7 +695,23 @@ final class Group_Assembler {
 		$parent->set_manage_stock( false );
 		$parent->update_meta_data( self::first_variation_key( $account->adapter_id() ), $variation_id );
 		$parent->delete_meta_data( self::variant_key( $account->adapter_id() ) );
+
+		foreach ( $this->unit_meta_keys( $account->adapter_id() ) as $key ) {
+			$parent->delete_meta_data( $key ); // The first variation holds the unit now.
+		}
+
 		$parent->save();
+	}
+
+	/**
+	 * Names the product meta that belongs to a unit and so moves from a product to its first variation; none for a marketplace
+	 * whose article is the SKU.
+	 *
+	 * @param string $marketplace_id The adapter's id.
+	 * @return string[]
+	 */
+	private function unit_meta_keys( string $marketplace_id ): array {
+		return null === $this->units ? [] : [ Unit_Products::pending_key( $marketplace_id ), Unit_Products::sku_conflict_key( $marketplace_id ) ];
 	}
 
 	/**
@@ -724,8 +792,10 @@ final class Group_Assembler {
 	 * @param Card_Content $content The card.
 	 * @return array<string,string>
 	 */
-	private static function aspects( Card_Content $content ): array {
-		return self::clean( $content->group()['aspects'], (string) ( $content->card()['offer_id'] ?? '' ) );
+	private function aspects( Card_Content $content ): array {
+		$article = (string) ( $content->card()['offer_id'] ?? '' );
+
+		return self::clean( $content->group()['aspects'], ( new Article_Display( $this->units ) )->text( $article, $content->card() ) );
 	}
 
 	/**

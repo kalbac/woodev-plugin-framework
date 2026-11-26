@@ -63,6 +63,13 @@ final class Wpdb_Link_Store implements Link_Store {
 	private $ids_table;
 
 	/**
+	 * Full name of the barcodes table (`link_barcodes`), '' for a store built over tables of another layout.
+	 *
+	 * @var string
+	 */
+	private $barcodes_table;
+
+	/**
 	 * Returns the Unix time.
 	 *
 	 * @var callable
@@ -82,6 +89,10 @@ final class Wpdb_Link_Store implements Link_Store {
 		$this->table     = $table;
 		$this->ids_table = $ids_table;
 		$this->clock     = $clock ?? 'time';
+
+		// The barcodes table is the identifiers' sibling in every table set, so a caller need not name it.
+		$this->barcodes_table = (string) preg_replace( '/link_ids$/', 'link_barcodes', $ids_table, 1, $found );
+		$this->barcodes_table = 1 === $found ? $this->barcodes_table : '';
 	}
 
 	/**
@@ -94,6 +105,14 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @return int Rows deleted; 0 when the account has none left.
 	 */
 	public function delete_account( int $account_id, int $limit ): int {
+		if ( '' !== $this->barcodes_table ) {
+			$deleted = Account_Rows::delete( $this->db, $this->barcodes_table, $account_id, $limit );
+
+			if ( $deleted > 0 ) {
+				return $deleted;
+			}
+		}
+
 		$deleted = Account_Rows::delete( $this->db, $this->ids_table, $account_id, $limit );
 
 		return $deleted > 0 ? $deleted : Account_Rows::delete( $this->db, $this->table, $account_id, $limit );
@@ -172,7 +191,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * is never rewritten; with a fence the write also depends on the account claim.
 	 *
 	 * @param int                 $link_id Link id.
-	 * @param array<string,mixed> $card    `offer_id`, `remote_ids` (name => id), `state`, `is_created`, `error_text`; optionally `is_oversize`, and `sync_stock` / `sync_price` (bool, written together; absent keeps the row's switches).
+	 * @param array<string,mixed> $card    `offer_id`, `remote_ids` (name => id), `state`, `is_created`, `error_text`; optionally `is_oversize`, `barcodes` (string[], replaces the link's list), and `sync_stock` / `sync_price` (bool, written together; absent keeps the row's switches).
 	 * @param Claim_Fence|null    $fence   The account claim the run holds, or null for a request-time link.
 	 * @return bool True when the row now holds the card.
 	 */
@@ -210,6 +229,7 @@ final class Wpdb_Link_Store implements Link_Store {
 				}
 
 				$this->write_ids( $link_id, $this->account_of( $link_id ), (array) ( $card['remote_ids'] ?? [] ), false );
+				$this->write_barcodes( $link_id, $this->account_of( $link_id ), (array) ( $card['barcodes'] ?? [] ) );
 
 				return true;
 			}
@@ -293,20 +313,24 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @param Link_Record      $record     Row to insert; its link id is ignored.
 	 * @param string           $error_text The marketplace's text for a declined card, '' for none.
 	 * @param Claim_Fence|null $fence      The account claim the run holds, or null.
+	 * @param array<int,mixed> $barcodes   Every barcode of the card's unit, in order (2.1.22).
 	 * @return string {@see self::INSERTED}, {@see self::EXISTS} (a row for the product or the article is there) or {@see self::FENCED_OUT}.
 	 * @throws Persistence_Exception When the database refuses the insert.
 	 */
-	public function insert_card( Link_Record $record, string $error_text = '', ?Claim_Fence $fence = null ): string {
-		if ( [] === $record->remote_ids() ) {
+	public function insert_card( Link_Record $record, string $error_text = '', ?Claim_Fence $fence = null, array $barcodes = [] ): string {
+		if ( [] === $record->remote_ids() && [] === $barcodes ) {
 			return $this->insert_card_row( $record, $error_text, $fence );
 		}
 
 		return $this->atomically(
-			function () use ( $record, $error_text, $fence ): string {
+			function () use ( $record, $error_text, $fence, $barcodes ): string {
 				$outcome = $this->insert_card_row( $record, $error_text, $fence );
 
 				if ( self::INSERTED === $outcome ) {
-					$this->write_ids( (int) $this->db->insert_id, $record->account_id(), $record->remote_ids(), false );
+					$link_id = (int) $this->db->insert_id;
+
+					$this->write_ids( $link_id, $record->account_id(), $record->remote_ids(), false );
+					$this->write_barcodes( $link_id, $record->account_id(), $barcodes );
 				}
 
 				return $outcome;
@@ -838,14 +862,15 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @param int                 $link_id    Link id.
 	 * @param int                 $task_id    Task that must own the row.
 	 * @param string              $state      New card state.
-	 * @param array<string,mixed> $columns    Other columns to write (`is_created`, `last_error_code`, `last_error_text`, `last_task_id`) and, under `remote_ids`, identifiers to set (name => id).
+	 * @param array<string,mixed> $columns    Other columns to write (`is_created`, `last_error_code`, `last_error_text`, `last_task_id`) and, under `remote_ids`, identifiers to set (name => id) and, under `barcodes`, the whole barcode list the marketplace reports.
 	 * @param Claim_Fence|null    $fence      The account claim the run must still hold, or null.
 	 * @param string|null         $from_state The state the run read; the write happens only if the row still has it.
 	 * @return bool False when another task owns the row now, a reset took it back, the claim was lost or the state moved on.
 	 */
 	public function advance( int $link_id, int $task_id, string $state, array $columns = [], ?Claim_Fence $fence = null, ?string $from_state = null ): bool {
 		$remote_ids = (array) ( $columns['remote_ids'] ?? [] );
-		unset( $columns['remote_ids'] );
+		$barcodes   = (array) ( $columns['barcodes'] ?? [] );
+		unset( $columns['remote_ids'], $columns['barcodes'] );
 
 		$columns['card_state'] = $state;
 		$columns['updated_at'] = $this->format_time( $this->now() );
@@ -876,16 +901,80 @@ final class Wpdb_Link_Store implements Link_Store {
 		$sql = $this->db->prepare( 'UPDATE %i SET ' . implode( ', ', $set ) . ' WHERE ' . $where . $fence_sql, array_merge( $values, $fence_args ) ); // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 
 		return $this->atomically(
-			function () use ( $sql, $link_id, $remote_ids ): bool {
+			function () use ( $sql, $link_id, $remote_ids, $barcodes ): bool {
 				if ( 1 !== $this->affected( $sql ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
 					return false;
 				}
 
 				$this->write_ids( $link_id, $this->account_of( $link_id ), $remote_ids, false );
+				$this->write_barcodes( $link_id, $this->account_of( $link_id ), $barcodes );
 
 				return true;
 			}
 		);
+	}
+
+	/**
+	 * Returns every barcode of a link, byte for byte, in the marketplace's order.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param int $link_id Link id.
+	 * @return string[]
+	 */
+	public function barcodes_of( int $link_id ): array {
+		if ( '' === $this->barcodes_table ) {
+			return [];
+		}
+
+		return array_map( 'strval', (array) $this->db->get_col( $this->db->prepare( 'SELECT barcode FROM %i WHERE link_id = %d ORDER BY position ASC', $this->barcodes_table, $link_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+	}
+
+	/**
+	 * Names the tables that hold a link's values besides its own row.
+	 *
+	 * @return string[]
+	 */
+	private function link_value_tables(): array {
+		return '' === $this->barcodes_table ? [ $this->ids_table ] : [ $this->ids_table, $this->barcodes_table ];
+	}
+
+	/**
+	 * Replaces the barcode list of a link. An empty list is «the answer carries none» and keeps what is stored. A barcode longer
+	 * than the column is left out whole, never cut; one another link of the account holds stays with that link.
+	 *
+	 * @param int              $link_id    Link id.
+	 * @param int              $account_id Account id of the link.
+	 * @param array<int,mixed> $barcodes   Barcodes, in the marketplace's order.
+	 * @return void
+	 * @throws Persistence_Exception When the database refuses a write.
+	 */
+	private function write_barcodes( int $link_id, int $account_id, array $barcodes ): void {
+		$kept = [];
+
+		foreach ( $barcodes as $barcode ) {
+			if ( is_string( $barcode ) && '' !== $barcode && mb_strlen( $barcode, 'UTF-8' ) <= self::ID_VALUE_LENGTH && ! in_array( $barcode, $kept, true ) ) {
+				$kept[] = $barcode;
+			}
+		}
+
+		if ( [] === $kept || '' === $this->barcodes_table ) {
+			return;
+		}
+
+		$done = $this->db->query( $this->db->prepare( 'DELETE FROM %i WHERE link_id = %d', $this->barcodes_table, $link_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+
+		foreach ( $kept as $position => $barcode ) {
+			if ( false === $done ) {
+				break;
+			}
+
+			$done = $this->db->query( $this->db->prepare( 'INSERT IGNORE INTO %i (link_id, account_id, barcode, position) VALUES (%d, %d, %s, %d)', $this->barcodes_table, $link_id, $account_id, $barcode, $position ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+		}
+
+		if ( false === $done ) {
+			throw Persistence_Exception::database( 'the barcodes of link ' . $link_id, (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
 	}
 
 	/**
@@ -1068,7 +1157,9 @@ final class Wpdb_Link_Store implements Link_Store {
 					return false;
 				}
 
-				$this->db->query( $this->db->prepare( 'DELETE FROM %i WHERE link_id = %d', $this->ids_table, $link_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared here.
+				foreach ( $this->link_value_tables() as $table ) {
+					$this->db->query( $this->db->prepare( 'DELETE FROM %i WHERE link_id = %d', $table, $link_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared here.
+				}
 
 				return true;
 			}
@@ -1145,7 +1236,7 @@ final class Wpdb_Link_Store implements Link_Store {
 
 		$this->atomically(
 			function () use ( $link_ids, $in ): void {
-				foreach ( [ $this->ids_table, $this->table ] as $table ) {
+				foreach ( array_merge( $this->link_value_tables(), [ $this->table ] ) as $table ) {
 					$deleted = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
 						$this->db->prepare( 'DELETE FROM %i WHERE link_id IN (' . $in . ')', array_merge( [ $table ], $link_ids ) ) // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 					);

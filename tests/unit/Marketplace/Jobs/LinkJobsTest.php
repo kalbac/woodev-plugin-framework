@@ -17,6 +17,8 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Link_Resolve_Exception;
 use Woodev\Framework\Marketplace\Flows\Link_Resolver;
+use Woodev\Framework\Marketplace\Flows\Sellable_Units;
+use Woodev\Framework\Marketplace\Flows\Unit_Matcher;
 use Woodev\Framework\Marketplace\Jobs\Account_Job;
 use Woodev\Framework\Marketplace\Jobs\Backoff;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
@@ -26,6 +28,7 @@ use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Export_Test_Case;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Sellable_Units;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Paged_Link_Resolver;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Link_Resolver;
 
@@ -172,7 +175,7 @@ final class LinkJobsTest extends Export_Test_Case {
 	 * @param int[]              $accounts The enabled accounts the daily run sees.
 	 * @return Link_Jobs
 	 */
-	private function jobs( ?Card_Linker $linker = null, ?Link_Resolver $resolver = null, array $accounts = [] ): Link_Jobs {
+	private function jobs( ?Card_Linker $linker = null, ?Link_Resolver $resolver = null, array $accounts = [], ?Sellable_Units $units = null ): Link_Jobs {
 		return new Link_Jobs(
 			$this->job_gate(),
 			$this->links(),
@@ -194,8 +197,52 @@ final class LinkJobsTest extends Export_Test_Case {
 			$this->clock(),
 			static function () use ( $accounts ): array {
 				return $accounts;
-			}
+			},
+			$units
 		);
+	}
+
+	/**
+	 * A marketplace that sells units: the cards are linked by the adapter's keys with their barcodes, and a card several products
+	 * match is reported as a conflict, not guessed.
+	 *
+	 * @return void
+	 */
+	public function test_units_are_linked_by_the_match_keys_and_a_conflict_is_reported(): void {
+		$this->shop = [];
+
+		foreach ( [ 101 => [ 'x', [ '12345Ejf5' ] ], 102 => [ 'coat-L', [] ], 103 => [ 'coat_L', [] ] ] as $id => list( $sku, $barcodes ) ) {
+			$this->shop[] = $this->shop_product( $id, $sku ) + [
+				'barcodes'  => $barcodes,
+				'importing' => '',
+			];
+		}
+
+		$this->resolver->cards   = [
+			Fake_Sellable_Units::card( 'coat', 'M', [ '12345Ejf5', '2000000000001' ], 2 ),
+			Fake_Sellable_Units::card( 'coat', 'L', [], 2 ),
+		];
+		$this->resolver->details = array_column( $this->resolver->cards, null, 'offer_id' );
+
+		$this->jobs( null, null, [], new Fake_Sellable_Units() )->link_cards( $this->account_id );
+
+		$link = $this->links()->find_by_offer_id( $this->account_id, 'coat|M' );
+
+		$this->assertSame( 101, $link->wc_product_id() );
+		$this->assertSame( [ '12345Ejf5', '2000000000001' ], $this->links()->barcodes_of( (int) $link->link_id() ) );
+		$this->assertNull( $this->links()->find_by_offer_id( $this->account_id, 'coat|L' ) );
+		$this->assertSame(
+			[
+				[
+					'offer_id'    => 'coat|L',
+					'reason'      => Unit_Matcher::AMBIGUOUS,
+					'product_ids' => [ 102, 103 ],
+				],
+			],
+			$this->reports()->conflicts( $this->account_id )
+		);
+		$this->assertSame( 1, $this->reports()->last_run( $this->account_id )['ambiguous'] );
+		$this->assertSame( [], $this->reports()->near_matches( $this->account_id ) );
 	}
 
 	/**

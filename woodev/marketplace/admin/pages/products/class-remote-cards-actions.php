@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Flows\Article_Display;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Jobs\Import_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
@@ -114,6 +115,13 @@ final class Remote_Cards_Actions {
 	private $runs;
 
 	/**
+	 * How an article is shown.
+	 *
+	 * @var Article_Display
+	 */
+	private $articles;
+
+	/**
 	 * Creates the actions.
 	 *
 	 * @since 2.1.5
@@ -131,7 +139,8 @@ final class Remote_Cards_Actions {
 	 * @param Remote_Cards_Import_Plan|null $plan Sorts the cards of an import, null when the adapter cannot import cards.
 	 * @param Remote_Cards_Run_Actions|null $runs The import by filter and its account line, null when the adapter cannot import cards.
 	 */
-	public function __construct( Wpdb_Card_Store $cards, Wpdb_Link_Store $links, Link_Report_Store $reports, Card_Linker $linker, Link_Scheduler $scheduler, Site_Products_Bulk $bulk, License_Gate $license, Remote_Cards_Products $products, Remote_Cards_Rows $rows, ?Import_Scheduler $importer = null, ?Remote_Cards_Import_Plan $plan = null, ?Remote_Cards_Run_Actions $runs = null ) {
+	public function __construct( Wpdb_Card_Store $cards, Wpdb_Link_Store $links, Link_Report_Store $reports, Card_Linker $linker, Link_Scheduler $scheduler, Site_Products_Bulk $bulk, License_Gate $license, Remote_Cards_Products $products, Remote_Cards_Rows $rows, ?Import_Scheduler $importer = null, ?Remote_Cards_Import_Plan $plan = null, ?Remote_Cards_Run_Actions $runs = null, ?Article_Display $articles = null ) {
+		$this->articles = $articles ?? new Article_Display();
 		$this->cards     = $cards;
 		$this->links     = $links;
 		$this->reports   = $reports;
@@ -324,7 +333,7 @@ final class Remote_Cards_Actions {
 			'eligible'       => $eligible,
 			'skipped'        => $skipped,
 			'scope_sentence' => $this->import_sentence( $account, $plan ),
-			'groups'         => $this->import_groups( $plan ),
+			'groups'         => $this->import_groups( $account->id(), $plan ),
 		];
 	}
 
@@ -340,7 +349,7 @@ final class Remote_Cards_Actions {
 		$plan     = $this->import_plan( $account, $ids );
 		$offers   = array_merge( $plan[ Remote_Cards_Import_Plan::CREATE ], $plan[ Remote_Cards_Import_Plan::LINK ] );
 		$skipped  = $this->skipped_count( $plan );
-		$groups   = $this->import_groups( $plan );
+		$groups   = $this->import_groups( $account->id(), $plan );
 		$result   = [
 			'requested' => count( $offers ) + $skipped,
 			'accepted'  => 0,
@@ -380,7 +389,7 @@ final class Remote_Cards_Actions {
 	private function import_plan( Account $account, array $ids ): array {
 		$keys = [];
 
-		foreach ( array_values( array_unique( $ids ) ) as $row_id ) {
+		foreach ( array_values( array_unique( $this->unit_ids( $account, $ids ) ) ) as $row_id ) {
 			$keys[] = Remote_Cards_Ids::key_of( (string) $row_id, $account->id() );
 		}
 
@@ -392,6 +401,34 @@ final class Remote_Cards_Actions {
 		}
 
 		return $this->plan->build( $cards, Remote_Cards_Query::linked_offers( $this->links->identity_map( $account->id() ) ), $this->importer->pending_offer_ids( $account->id() ), $account->id() );
+	}
+
+	/**
+	 * Replaces the id of a card whose units are listed under it with the ids of its units: «Импортировать» on such a row takes the
+	 * whole card.
+	 *
+	 * @param Account  $account Account.
+	 * @param string[] $ids     Row ids.
+	 * @return string[]
+	 */
+	private function unit_ids( Account $account, array $ids ): array {
+		$expanded = [];
+
+		foreach ( $ids as $row_id ) {
+			$ref   = Remote_Cards_Ids::card_of( (string) $row_id, $account->id() );
+			$units = null === $ref ? [] : ( $this->cards->units_of( $account->id(), [ $ref ] )[ $ref ] ?? [] );
+
+			if ( [] === $units ) {
+				$expanded[] = (string) $row_id; // A unit's own row, or a card that has left the list: the plan says so.
+				continue;
+			}
+
+			foreach ( $units as $unit ) {
+				$expanded[] = Remote_Cards_Ids::row_id( $account->id(), (string) $unit['offer_id'] );
+			}
+		}
+
+		return $expanded;
 	}
 
 	/**
@@ -455,12 +492,13 @@ final class Remote_Cards_Actions {
 	 * @param array{create:string[],link:string[],skipped:array<string,string[]>,products:int,joined:int} $plan Plan.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private function import_groups( array $plan ): array {
+	private function import_groups( int $account_id, array $plan ): array {
 		$reasons = [
 			Remote_Cards_Import_Plan::ON_SITE         => __( 'Уже на сайте', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::IMPORTING       => __( 'Уже импортируется — дождитесь результата', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::GROUP_BUILDING  => __( 'Импорт другой карточки этой группы не завершён — сначала импортируйте её', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::VARIABLE_PARENT => __( 'Товар с таким артикулом — вариативный: выберите вариант через «Связать с…»', 'woodev-plugin-framework' ),
+			Remote_Cards_Import_Plan::AMBIGUOUS       => __( 'Подходят несколько товаров сайта — свяжите нужный через «Связать с…»', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::ARCHIVED        => __( 'Карточка в архиве — не импортируем', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::INCOMPLETE      => __( 'Нет полных данных — обновите список', 'woodev-plugin-framework' ),
 			Remote_Cards_Import_Plan::NOT_IN_LIST     => __( 'Нет в загруженном списке — обновите список', 'woodev-plugin-framework' ),
@@ -475,7 +513,12 @@ final class Remote_Cards_Actions {
 					'kind'     => 'skipped',
 					'reason'   => $reason,
 					'count'    => count( $offers ),
-					'examples' => array_slice( array_values( array_filter( $offers, 'strlen' ) ), 0, 3 ),
+					'examples' => array_map(
+						function ( string $offer_id ) use ( $account_id ): string {
+							return $this->articles->of_link( $account_id, $offer_id );
+						},
+						array_slice( array_values( array_filter( $offers, 'strlen' ) ), 0, 3 )
+					),
 				];
 			}
 		}
@@ -544,7 +587,7 @@ final class Remote_Cards_Actions {
 			'scope_sentence' => sprintf(
 				/* translators: 1: the card's article, 2: the card's name, 3: the product's name, 4: what linking does on the marketplace. */
 				__( 'Карточка %1$s «%2$s» будет связана с товаром «%3$s». %4$s', 'woodev-plugin-framework' ),
-				(string) $card['offer_id'],
+				$this->articles->text( (string) $card['offer_id'], $card ),
 				(string) ( $card['name'] ?? '' ),
 				$product['title'],
 				$this->linker->remote_effect( $account, $this->unchanged() )
@@ -683,7 +726,7 @@ final class Remote_Cards_Actions {
 			'scope_sentence' => sprintf(
 				/* translators: 1: the card's article, 2: the card's name, 3: the product's name, 4: what linking does on the marketplace. */
 				__( 'Карточка %1$s «%2$s» будет связана с товаром «%3$s». %4$s', 'woodev-plugin-framework' ),
-				(string) $card['offer_id'],
+				$this->articles->text( (string) $card['offer_id'], $card ),
 				(string) ( $card['name'] ?? '' ),
 				$product['title'],
 				$this->linker->remote_effect( $account, $this->unchanged() )
@@ -986,7 +1029,7 @@ final class Remote_Cards_Actions {
 			'kind'     => $kind,
 			'reason'   => $reason,
 			'count'    => 1,
-			'examples' => null === $card || '' === (string) ( $card['offer_id'] ?? '' ) ? [] : [ (string) $card['offer_id'] ],
+			'examples' => null === $card || '' === (string) ( $card['offer_id'] ?? '' ) ? [] : [ $this->articles->text( (string) $card['offer_id'], $card ) ],
 		];
 	}
 

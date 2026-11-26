@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Jobs;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Bulk_Run;
 use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
+use Woodev\Framework\Marketplace\Flows\Unit_Products;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -70,7 +71,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	private $entries;
 
 	/**
-	 * Names the articles whose shop product is half-made: `function ( string[] $articles ): string[]`.
+	 * Names the articles whose shop product is half-made: `function ( string[] $articles, int $account_id ): string[]`.
 	 *
 	 * @var callable
 	 */
@@ -130,6 +131,40 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 			}
 
 			return $marked;
+		};
+	}
+
+	/**
+	 * Returns the lookup of the half-made products of a marketplace that sells units: a unit's product is found by the pending
+	 * mark ({@see \Woodev\Framework\Marketplace\Flows\Unit_Products}), its unit key being no SKU.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param \wpdb  $db          Database.
+	 * @param string $pending_key Meta key of the pending mark (`Unit_Products::pending_key()`).
+	 * @return callable `function ( string[] $articles, int $account_id ): string[]`.
+	 */
+	public static function pending_in_database( \wpdb $db, string $pending_key ): callable {
+		return static function ( array $articles, int $account_id ) use ( $db, $pending_key ): array {
+			$prefix  = Unit_Products::pending_value( $account_id, '' );
+			$pending = [];
+
+			foreach ( array_chunk( array_values( $articles ), self::LOOKUP ) as $chunk ) {
+				$values = [];
+
+				foreach ( $chunk as $article ) {
+					$values[] = $prefix . $article;
+				}
+
+				$holders = implode( ', ', array_fill( 0, count( $values ), '%s' ) );
+				$found   = $db->get_col( $db->prepare( "SELECT meta_value FROM {$db->postmeta} WHERE meta_key = %s AND meta_value IN ( {$holders} )", array_merge( [ $pending_key ], $values ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQLPlaceholders.UnsupportedPlaceholder -- Core table; only placeholders are interpolated.
+
+				foreach ( (array) $found as $value ) {
+					$pending[] = substr( (string) $value, strlen( $prefix ) );
+				}
+			}
+
+			return $pending;
 		};
 	}
 
@@ -199,7 +234,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 
 		$this->listed = null;
 		$on_site      = $entries['on_site'];
-		$items        = $this->in_import_order( $entries['cards'] );
+		$items        = $this->in_import_order( $entries['cards'], $account->id() );
 
 		unset( $entries );
 
@@ -301,8 +336,8 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * @param array<int,array{0:string,1:string}> $cards Article and group key of each card, in the snapshot's order.
 	 * @return array<int,array{0:string,1:string}>
 	 */
-	private function in_import_order( array $cards ): array {
-		$resuming = array_flip( (array) call_user_func( $this->marked, array_column( $cards, 0 ) ) );
+	private function in_import_order( array $cards, int $account_id ): array {
+		$resuming = array_flip( (array) call_user_func( $this->marked, array_column( $cards, 0 ), $account_id ) );
 		$items    = [];
 		$next     = [];
 		$last     = [];

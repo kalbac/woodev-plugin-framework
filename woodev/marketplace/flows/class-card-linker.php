@@ -11,6 +11,7 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Claim_Fence;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Links\Unit_Key;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
@@ -28,6 +29,7 @@ defined( 'ABSPATH' ) || exit;
  * - a card whose article already belongs to a row, of this or another product, is not given to a second one
  *   ({@see self::CARD_LINKED}) — the unique `(account_id, offer_id)` index is the last guard;
  * - the configuration row of a variable product is not a card ({@see self::NOT_A_CARD});
+ * - an article longer than the link table holds is refused before any write ({@see self::KEY_TOO_LONG});
  * - a row an export holds right now is left alone ({@see self::BUSY}).
  * - a run whose account claim was taken over writes nothing ({@see self::CLAIM_LOST}): the claim is a condition of the new-row
  *   `INSERT` and of the adoption `UPDATE` themselves, and a declined card's text goes in the same statement.
@@ -47,6 +49,7 @@ final class Card_Linker {
 	public const NOT_A_CARD     = 'not_a_card';
 	public const BUSY           = 'busy';
 	public const CLAIM_LOST     = 'claim_lost';
+	public const KEY_TOO_LONG   = 'key_too_long';
 
 	/**
 	 * Links.
@@ -137,7 +140,7 @@ final class Card_Linker {
 	 * @param int                 $account_id    Account id.
 	 * @param int                 $wc_product_id Product or variation id.
 	 * @param int                 $wc_parent_id  Parent product id, 0 for a simple product.
-	 * @param array<string,mixed> $card          A {@see Link_Resolver} card: `offer_id`, `remote_ids` and, when known, `state`, `is_created`, `status_text`, `failed`, and `oversize` (bool; an absent key keeps the stored flag).
+	 * @param array<string,mixed> $card          A {@see Link_Resolver} card: `offer_id`, `remote_ids` and, when known, `state`, `is_created`, `status_text`, `failed`, `oversize` (bool; an absent key keeps the stored flag) and `barcodes` (string[], stored with the link).
 	 * @param Claim_Fence|null    $fence         The account claim of the run, or null at request time.
 	 * @param bool                $send_price    Whether the first send may include the price. False for a product the importer just made from the card: its price came from the card, so sending it back would be a no-op at best.
 	 * @return string One of the class constants; {@see self::CLAIM_LOST} tells the job to stop.
@@ -149,6 +152,10 @@ final class Card_Linker {
 
 		if ( '' === $offer_id || [] === $remote_ids ) {
 			return self::NOT_A_CARD;
+		}
+
+		if ( ! Unit_Key::fits( $offer_id ) ) {
+			return self::KEY_TOO_LONG;
 		}
 
 		$owner = $this->links->owner_of_article( $account_id, $offer_id );
@@ -233,6 +240,8 @@ final class Card_Linker {
 				return __( 'Эта карточка маркетплейса уже связана с другим товаром.', 'woodev-plugin-framework' );
 			case self::NOT_A_CARD:
 				return __( 'К этому товару нельзя привязать карточку. Для вариативного товара выберите один из его вариантов.', 'woodev-plugin-framework' );
+			case self::KEY_TOO_LONG:
+				return __( 'Артикул карточки вместе с размером длиннее 191 символа — связать её нельзя. Сократите артикул в кабинете маркетплейса.', 'woodev-plugin-framework' );
 			default:
 				return __( 'Товар сейчас обрабатывается (например, выгружается на маркетплейс). Повторите чуть позже.', 'woodev-plugin-framework' );
 		}
@@ -265,7 +274,7 @@ final class Card_Linker {
 			] + $this->oversize( $card ) + $sync
 		);
 
-		switch ( $this->links->insert_card( $record, $error, $fence ) ) {
+		switch ( $this->links->insert_card( $record, $error, $fence, (array) ( $card['barcodes'] ?? [] ) ) ) {
 			case Wpdb_Link_Store::INSERTED:
 				return self::LINKED;
 			case Wpdb_Link_Store::FENCED_OUT:
@@ -303,6 +312,7 @@ final class Card_Linker {
 			'state'      => $state,
 			'is_created' => ! empty( $card['is_created'] ),
 			'error_text' => $error,
+			'barcodes'   => (array) ( $card['barcodes'] ?? [] ),
 		] + $this->oversize( $card ) + $sync;
 	}
 

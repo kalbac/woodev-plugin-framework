@@ -87,8 +87,8 @@ final class Remote_Cards_Definition {
 	 * @param bool                                        $importable  Whether the adapter can import cards: only then the table offers «Импортировать» and selects rows.
 	 * @return array<string,mixed>
 	 */
-	public static function build( array $accounts, string $marketplace, bool $importable = false ): array {
-		return [
+	public static function build( array $accounts, string $marketplace, bool $importable = false, bool $grouped = false ): array {
+		$definition = [
 			'context'      => [
 				'label'   => __( 'Аккаунт', 'woodev-plugin-framework' ),
 				'options' => $accounts,
@@ -113,6 +113,31 @@ final class Remote_Cards_Definition {
 			],
 			'messages'     => self::messages( $marketplace ),
 			'analytics'    => null,
+		];
+
+		if ( $grouped ) {
+			$definition['children']  = [
+				'default_per_page' => 20,
+				'max_per_page'     => 100,
+			];
+			$definition['messages'] += self::unit_messages();
+		}
+
+		return $definition;
+	}
+
+	/**
+	 * The sentences of a table that lists the units of a card under it.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function unit_messages(): array {
+		return [
+			'expand_column'    => __( 'Варианты', 'woodev-plugin-framework' ),
+			'expand'           => __( 'Показать варианты', 'woodev-plugin-framework' ),
+			'collapse'         => __( 'Скрыть варианты', 'woodev-plugin-framework' ),
+			'children_loading' => __( 'Загружаем варианты…', 'woodev-plugin-framework' ),
+			'children_more'    => __( 'Показать ещё варианты', 'woodev-plugin-framework' ),
 		];
 	}
 

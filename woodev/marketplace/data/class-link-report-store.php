@@ -29,6 +29,7 @@ final class Link_Report_Store {
 	public const DISMISSED_OPTION    = 'near_dismissed_';
 	public const RUN_OPTION          = 'link_run_';
 	public const IMPORT_NOTES_OPTION = 'import_notes_';
+	public const CONFLICTS_OPTION    = 'link_conflicts_';
 
 	/**
 	 * Most entries a report keeps. A shop with more look-alike pairs than this has a systematic problem a list cannot fix; the
@@ -67,6 +68,64 @@ final class Link_Report_Store {
 		delete_option( $this->prefix . self::RUN_OPTION . $account_id );
 		delete_option( $this->prefix . self::DISMISSED_OPTION . $account_id );
 		delete_option( $this->prefix . self::IMPORT_NOTES_OPTION . $account_id );
+		delete_option( $this->prefix . self::CONFLICTS_OPTION . $account_id );
+	}
+
+	/**
+	 * Replaces the conflicts of the last «link by article» run: the cards whose match keys did not name one product. A run that
+	 * covered part of the shop keeps the conflicts it did not look at — those that name no product of the part and no card the
+	 * run decided.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param int                                                               $account_id Account id.
+	 * @param array<int,array{offer_id:string,reason:string,product_ids:int[]}> $entries    Conflicts of the run.
+	 * @param int[]|null                                                        $covered    Products the run looked at, or null for the whole shop.
+	 * @return void
+	 */
+	public function replace_conflicts( int $account_id, array $entries, ?array $covered = null ): void {
+		if ( null !== $covered ) {
+			$decided = array_column( $entries, 'offer_id' );
+
+			foreach ( $this->conflicts( $account_id ) as $old ) {
+				if ( ! in_array( $old['offer_id'], $decided, true ) && [] === array_intersect( $old['product_ids'], $covered ) ) {
+					$entries[] = $old;
+				}
+			}
+		}
+
+		if ( [] === $entries ) {
+			delete_option( $this->prefix . self::CONFLICTS_OPTION . $account_id );
+
+			return;
+		}
+
+		update_option( $this->prefix . self::CONFLICTS_OPTION . $account_id, array_slice( array_values( $entries ), 0, self::MAX_ENTRIES ), false );
+	}
+
+	/**
+	 * Returns the conflicts of an account.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param int $account_id Account id.
+	 * @return array<int,array{offer_id:string,reason:string,product_ids:int[]}>
+	 */
+	public function conflicts( int $account_id ): array {
+		$stored = get_option( $this->prefix . self::CONFLICTS_OPTION . $account_id, [] );
+		$found  = [];
+
+		foreach ( is_array( $stored ) ? $stored : [] as $entry ) {
+			if ( is_array( $entry ) && isset( $entry['offer_id'] ) ) {
+				$found[] = [
+					'offer_id'    => (string) $entry['offer_id'],
+					'reason'      => (string) ( $entry['reason'] ?? '' ),
+					'product_ids' => array_map( 'intval', (array) ( $entry['product_ids'] ?? [] ) ),
+				];
+			}
+		}
+
+		return $found;
 	}
 
 	/**

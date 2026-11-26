@@ -134,6 +134,45 @@ class CardStoreTest extends TestCase {
 		$this->assertSame( [ 'on_site' => 1, 'not_on_site' => 1 ], $this->store()->on_site_counts( self::ACCOUNT, '' ) );
 	}
 
+	/**
+	 * Units are paged by card with all their sizes (`GROUP BY` under the server's SQL mode), searched by the current article, and
+	 * their barcodes come back byte for byte.
+	 */
+	public function test_units_are_paged_by_card_and_keep_their_barcodes(): void {
+		$unit = function ( string $offer_id, string $card, string $article ): array {
+			return $this->row( $offer_id, 'Пальто' ) + [
+				'barcodes' => [ '12345Ejf5', '12345EJF5' ],
+				'unit'     => [
+					'card'    => $card,
+					'article' => $article,
+				],
+			];
+		};
+
+		$this->refresh( [ $unit( 'coat|M', '100', 'ПАЛЬТО-2' ), $this->row( 'alone', 'Кружка' ), $unit( 'coat|L', '100', 'ПАЛЬТО-2' ) ] );
+
+		$first = $this->store()->card_page( self::ACCOUNT, null, '', 1, 1 );
+
+		$this->assertSame( 2, $first['total'] );
+		$this->assertSame( [ 'coat|M', 'coat|L' ], array_column( array_values( $first['cards'] )[0], 'offer_id' ) );
+		$this->assertSame( [ '12345Ejf5', '12345EJF5' ], array_values( $first['cards'] )[0][0]['barcodes'] );
+		$this->assertSame( 1, $this->store()->card_page( self::ACCOUNT, null, 'пальто-2', 1, 20 )['total'] );
+		$this->assertSame(
+			[
+				'on_site'     => 0,
+				'not_on_site' => 2,
+			],
+			$this->store()->card_on_site_counts( self::ACCOUNT, '' )
+		);
+		$this->assertSame(
+			[
+				'cards'    => 2,
+				'archived' => 0,
+			],
+			$this->store()->card_totals( self::ACCOUNT )
+		);
+	}
+
 	public function test_the_sweep_removes_the_cards_the_last_refresh_did_not_see(): void {
 		$rows = [];
 

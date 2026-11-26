@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
+use Woodev\Framework\Marketplace\Flows\Unit_Products;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -22,6 +23,9 @@ defined( 'ABSPATH' ) || exit;
  * 3. a shop product has the article: a variable parent → {@see self::VARIABLE_PARENT}; a half-made product of an earlier import
  *    (it carries the import marker) → created again, resuming it; any other product → the card will be linked to it.
  * 4. no such product → the card will create one.
+ *
+ * For a marketplace that sells units the third and fourth rows are decided by {@see self::unit_lookup()} instead of the SKU:
+ * several products matching the adapter's keys leave the card out ({@see self::AMBIGUOUS}).
  *
  * Before those, a card the list does not hold, a card whose details did not agree with the list ({@see self::INCOMPLETE}) and a card
  * that is already being imported ({@see self::IMPORTING}) are left out.
@@ -60,6 +64,11 @@ final class Remote_Cards_Import_Plan {
 	public const GROUP_BUILDING = 'group_building';
 
 	/**
+	 * Several shop products match the unit: the merchant links it by hand.
+	 */
+	public const AMBIGUOUS = 'ambiguous';
+
+	/**
 	 * The card resumes its own half-made product. Inside the plan only: such a card is listed under {@see self::CREATE}, first.
 	 */
 	private const RESUME = 'resume';
@@ -85,6 +94,11 @@ final class Remote_Cards_Import_Plan {
 	public const SKU_PLAIN = 'plain';
 
 	/**
+	 * Kind of the shop products a unit matches: several.
+	 */
+	public const SKU_SEVERAL = 'several';
+
+	/**
 	 * Names the product that carries an article: `function ( string $sku ): string`, one of the `SKU_*` kinds.
 	 *
 	 * @var callable
@@ -100,16 +114,61 @@ final class Remote_Cards_Import_Plan {
 	private $group_state;
 
 	/**
+	 * Names the products of unit cards: `function ( int $account_id, array $cards ): array<string,string>`, a `SKU_*` kind by article; null for a marketplace whose article is the SKU.
+	 *
+	 * @var callable|null
+	 */
+	private $unit_kinds;
+
+	/**
+	 * The kinds of the cards of the plan being built.
+	 *
+	 * @var array<string,string>
+	 */
+	private $kinds = [];
+
+	/**
 	 * Creates the plan builder.
 	 *
 	 * @since 2.1.6
+	 * @since 2.1.22 `$unit_kinds`.
 	 *
-	 * @param callable $sku_kind    `function ( string $sku ): string`, one of the `SKU_*` kinds; {@see self::woocommerce_lookup()} in production.
-	 * @param callable $group_state `function ( int $account_id, string $key ): string`, what a group has on the site; {@see Group_Assembler::lookup()} in production.
+	 * @param callable      $sku_kind    `function ( string $sku ): string`, one of the `SKU_*` kinds; {@see self::woocommerce_lookup()} in production.
+	 * @param callable      $group_state `function ( int $account_id, string $key ): string`, what a group has on the site; {@see Group_Assembler::lookup()} in production.
+	 * @param callable|null $unit_kinds  {@see self::unit_lookup()}, for an adapter that sells units.
 	 */
-	public function __construct( callable $sku_kind, callable $group_state ) {
+	public function __construct( callable $sku_kind, callable $group_state, ?callable $unit_kinds = null ) {
 		$this->sku_kind    = $sku_kind;
 		$this->group_state = $group_state;
+		$this->unit_kinds  = $unit_kinds;
+	}
+
+	/**
+	 * Asks the importer's own decision about the products of unit cards ({@see Unit_Products::find()}). A read; nothing is written.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param Unit_Products $units      The importer's lookup.
+	 * @param string        $marker_key Meta key an import marks its half-made product with.
+	 * @return callable `function ( int $account_id, array $cards ): array<string,string>`.
+	 */
+	public static function unit_lookup( Unit_Products $units, string $marker_key ): callable {
+		return static function ( int $account_id, array $cards ) use ( $units, $marker_key ): array {
+			$kinds = [];
+
+			foreach ( $units->find( $account_id, $cards ) as $offer_id => $found ) {
+				if ( $found['pending'] > 0 ) {
+					$product            = wc_get_product( $found['pending'] );
+					$kinds[ $offer_id ] = $product && '' !== (string) $product->get_meta( $marker_key ) ? self::SKU_MARKED : self::SKU_PLAIN;
+				} elseif ( count( $found['matches'] ) > 1 ) {
+					$kinds[ $offer_id ] = self::SKU_SEVERAL;
+				} else {
+					$kinds[ $offer_id ] = [] === $found['matches'] ? self::SKU_NONE : self::SKU_PLAIN;
+				}
+			}
+
+			return $kinds;
+		};
 	}
 
 	/**
@@ -156,6 +215,8 @@ final class Remote_Cards_Import_Plan {
 		$seen    = [];
 		$resumed = [];
 		$fresh   = [];
+
+		$this->kinds = null === $this->unit_kinds ? [] : (array) call_user_func( $this->unit_kinds, $account_id, array_values( array_filter( $cards ) ) );
 
 		foreach ( $cards as $card ) {
 			$offer_id = null === $card ? '' : (string) $card['offer_id'];
@@ -276,7 +337,11 @@ final class Remote_Cards_Import_Plan {
 	 * @return string {@see self::CREATE}, {@see self::RESUME}, {@see self::LINK} or {@see self::VARIABLE_PARENT}.
 	 */
 	private function by_article( string $offer_id ): string {
-		switch ( call_user_func( $this->sku_kind, $offer_id ) ) {
+		$kind = null === $this->unit_kinds ? call_user_func( $this->sku_kind, $offer_id ) : ( $this->kinds[ $offer_id ] ?? self::SKU_NONE );
+
+		switch ( $kind ) {
+			case self::SKU_SEVERAL:
+				return self::AMBIGUOUS;
 			case self::SKU_VARIABLE:
 				return self::VARIABLE_PARENT;
 			case self::SKU_PLAIN:

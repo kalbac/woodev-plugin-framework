@@ -11,6 +11,10 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Cells;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Units;
+use Woodev\Framework\Marketplace\Flows\Article_Display;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Sellable_Units;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Actions;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Import_Plan;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Products;
@@ -80,6 +84,13 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 	protected $sku_kinds = [];
 
 	/**
+	 * Whether the provider is wired as for an adapter that sells units ({@see Fake_Sellable_Units}).
+	 *
+	 * @var bool
+	 */
+	protected $sells_units = false;
+
+	/**
 	 * What a group has on the site, by `{account id}:{group key}`: one of the `Group_Assembler` states; a group not listed has nothing.
 	 *
 	 * @var array<string,string>
@@ -93,6 +104,7 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 		$this->run_actions  = null;
 		$this->sku_kinds  = [];
 		$this->group_states = [];
+		$this->sells_units  = false;
 
 		// The queue as the import scheduler reads it: the pending and running actions of a hook, as objects with their arguments.
 		Functions\when( 'as_get_scheduled_actions' )->alias(
@@ -324,7 +336,9 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 			}
 		);
 		$importer = $this->importable ? $this->import_scheduler() : null;
-		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], $logging, $this->importable );
+		$units    = $this->sells_units ? new Fake_Sellable_Units() : null;
+		$articles = new Article_Display( $units );
+		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], $logging, $this->importable, null, $articles );
 		$license  = new License_Gate(
 			function (): bool {
 				return $this->licensed;
@@ -349,14 +363,16 @@ abstract class Remote_Cards_Test_Case extends Products_Test_Case {
 				$rows,
 				$importer,
 				null === $importer ? null : $this->import_plan(),
-				$this->run_actions
+				$this->run_actions,
+				$articles
 			),
 			[
 				'adapter_id'  => Sqlite_Tables::MARKETPLACE_ID,
 				'marketplace' => 'Тестмаркет',
 			],
 			$importer,
-			$this->clock()
+			$this->clock(),
+			null === $units ? null : new Remote_Cards_Units( $units, $rows, new Remote_Cards_Cells(), $this->importable )
 		);
 	}
 

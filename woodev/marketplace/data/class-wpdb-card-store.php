@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Data;
 
 use Woodev\Framework\Marketplace\Ledger\Account_Rows;
+use Woodev\Framework\Marketplace\Links\Unit_Key;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -23,6 +24,9 @@ defined( 'ABSPATH' ) || exit;
  * finished one), so a refresh that runs meanwhile does not sweep it.
  *
  * A card is *on the site* when a row of the link table carries its article; every read joins that table instead of guessing.
+ *
+ * A marketplace that sells units lists one row per unit; the units that name one card (`unit.card`) are read together under it
+ * ({@see self::card_page()}). A row whose article is longer than the link table holds is not stored: it could never be linked.
  *
  * Per account, one option (no autoload) under the plugin's option family keeps the generations, the time of the last finished
  * refresh, the «refreshing» mark and the text of the last failure; the uninstaller removes it with the family, the account
@@ -56,7 +60,12 @@ final class Wpdb_Card_Store {
 
 	private const ORDER = ' ORDER BY c.position ASC, c.card_key ASC';
 
-	private const COLUMNS = [ 'account_id', 'card_key', 'offer_id', 'name', 'image', 'state', 'is_created', 'failed', 'archived', 'details_ok', 'status_text', 'price', 'stock', 'remote_ids', 'group_key', 'group_size', 'position', 'seen_run', 'updated_at' ];
+	/**
+	 * The card a row belongs to: its units share the hash of the card's name, a row that stands alone is a card of its own.
+	 */
+	private const CARD_OF = "CASE WHEN c.unit_card = '' THEN c.card_key ELSE c.unit_card END";
+
+	private const COLUMNS = [ 'account_id', 'card_key', 'offer_id', 'name', 'image', 'state', 'is_created', 'failed', 'archived', 'details_ok', 'status_text', 'price', 'stock', 'remote_ids', 'group_key', 'group_size', 'unit_card', 'unit_article', 'unit_data', 'position', 'seen_run', 'updated_at' ];
 
 	/**
 	 * Database.
@@ -456,6 +465,108 @@ final class Wpdb_Card_Store {
 	}
 
 	/**
+	 * One page of the list by card, for a marketplace that sells units: each card with **all** its units, in the marketplace's
+	 * order. The filter and the search choose the cards (a card is listed when any of its units passes), never the units inside.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param int       $account_id Account id.
+	 * @param bool|null $on_site    True: cards with a unit a product carries; false: cards with a unit no product carries; null: all.
+	 * @param string    $search     Text looked for in the article and the name; '' for none.
+	 * @param int       $page       Page, from 1.
+	 * @param int       $per_page   Cards per page.
+	 * @return array{cards:array<string,array<int,array<string,mixed>>>,total:int} Units with `wc_product_id`, by card reference.
+	 */
+	public function card_page( int $account_id, ?bool $on_site, string $search, int $page, int $per_page ): array {
+		$per_page = max( 1, $per_page );
+		$offset   = ( max( 1, $page ) - 1 ) * $per_page;
+		$where    = $this->where( $account_id, $on_site, $search );
+		$total    = (int) $this->db->get_var( 'SELECT COUNT(DISTINCT ' . self::CARD_OF . ') ' . $this->from() . $where ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Built of prepared parts.
+		$rows     = $this->select( self::CARD_OF . ' AS card_ref, MIN(c.position) AS first_position', $where . ' GROUP BY card_ref' . $this->db->prepare( ' ORDER BY first_position ASC, card_ref ASC LIMIT %d OFFSET %d', $per_page, $offset ) );
+		$refs     = array_map( 'strval', array_column( $rows, 'card_ref' ) );
+		$units    = $this->units_of( $account_id, $refs );
+		$cards    = [];
+
+		foreach ( $refs as $ref ) {
+			$cards[ $ref ] = $units[ $ref ] ?? [];
+		}
+
+		return [
+			'cards' => $cards,
+			'total' => $total,
+		];
+	}
+
+	/**
+	 * Reads every unit of some cards.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param int      $account_id Account id.
+	 * @param string[] $refs       Card references: the keys of {@see self::card_page()}.
+	 * @return array<string,array<int,array<string,mixed>>> Units with `wc_product_id`, by card reference; a card the list does not hold is absent.
+	 */
+	public function units_of( int $account_id, array $refs ): array {
+		$refs = array_values( array_unique( array_filter( array_map( 'strval', $refs ), [ self::class, 'is_key' ] ) ) );
+
+		if ( [] === $refs ) {
+			return [];
+		}
+
+		$in    = implode( ',', array_fill( 0, count( $refs ), '%s' ) );
+		$where = $this->db->prepare( " WHERE c.account_id = %d AND (c.unit_card IN ({$in}) OR (c.unit_card = '' AND c.card_key IN ({$in})))", array_merge( [ $account_id ], $refs, $refs ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- One placeholder per reference.
+		$cards = [];
+
+		foreach ( $this->select( 'c.*, l.wc_product_id', $where . self::ORDER ) as $row ) {
+			$ref             = '' === (string) $row['unit_card'] ? (string) $row['card_key'] : (string) $row['unit_card'];
+			$cards[ $ref ][] = $this->card( $row );
+		}
+
+		return $cards;
+	}
+
+	/**
+	 * How many cards under the search text have a unit on the site and how many have a unit that is not.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $search     Search text; '' for none.
+	 * @return array{on_site:int,not_on_site:int}
+	 */
+	public function card_on_site_counts( int $account_id, string $search ): array {
+		$rows = $this->select(
+			'COUNT(DISTINCT CASE WHEN l.link_id IS NOT NULL THEN ' . self::CARD_OF . ' END) AS on_site, COUNT(DISTINCT CASE WHEN l.link_id IS NULL THEN ' . self::CARD_OF . ' END) AS not_on_site',
+			$this->where( $account_id, null, $search )
+		);
+
+		return [
+			'on_site'     => (int) ( $rows[0]['on_site'] ?? 0 ),
+			'not_on_site' => (int) ( $rows[0]['not_on_site'] ?? 0 ),
+		];
+	}
+
+	/**
+	 * How many cards the account's list holds, counting the units of one card once, and how many of them are in the archive.
+	 *
+	 * @since 2.1.22
+	 *
+	 * @param int $account_id Account id.
+	 * @return array{cards:int,archived:int}
+	 */
+	public function card_totals( int $account_id ): array {
+		$rows = $this->select(
+			'COUNT(DISTINCT ' . self::CARD_OF . ') AS cards, COUNT(DISTINCT CASE WHEN c.archived = 1 THEN ' . self::CARD_OF . ' END) AS archived',
+			$this->where( $account_id, null, '' )
+		);
+
+		return [
+			'cards'    => (int) ( $rows[0]['cards'] ?? 0 ),
+			'archived' => (int) ( $rows[0]['archived'] ?? 0 ),
+		];
+	}
+
+	/**
 	 * How many cards under the search text are on the site and how many are not.
 	 *
 	 * @since 2.1.13
@@ -599,7 +710,7 @@ final class Wpdb_Card_Store {
 
 		if ( '' !== $needle ) {
 			$like   = '%' . $this->db->esc_like( $needle ) . '%';
-			$where .= $this->db->prepare( ' AND (c.offer_id LIKE %s OR c.name LIKE %s)', $like, $like );
+			$where .= $this->db->prepare( ' AND (c.offer_id LIKE %s OR c.name LIKE %s OR c.unit_article LIKE %s)', $like, $like, $like );
 		}
 
 		return $where;
@@ -618,17 +729,20 @@ final class Wpdb_Card_Store {
 	private function row( int $account_id, array $card, int $run, int $position, string $updated ): ?string {
 		$offer_id = trim( (string) ( $card['offer_id'] ?? '' ) );
 
-		if ( '' === $offer_id ) {
-			return null;
+		if ( '' === $offer_id || ! Unit_Key::fits( $offer_id ) ) {
+			return null; // An article the link table cannot hold can never be linked, and one such row would refuse the whole batch.
 		}
 
+		$unit  = (array) ( $card['unit'] ?? [] );
+		$ref   = (string) ( $unit['card'] ?? '' );
+		$data  = $this->unit_data( $card );
 		$group = (array) ( $card['group'] ?? [] );
 		$ids   = wp_json_encode( array_filter( (array) ( $card['remote_ids'] ?? [] ), 'is_scalar' ) );
 		$price = $card['price'] ?? null;
 		$stock = $card['stock'] ?? null;
 
 		return $this->db->prepare(
-			'(%d,%s,%s,%s,%s,%s,%d,%d,%d,%d,%s,' . ( is_numeric( $price ) ? '%s' : 'NULL' ) . ',' . ( is_numeric( $stock ) ? '%d' : 'NULL' ) . ',%s,%s,%d,%d,%d,%s)', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- NULL takes no placeholder.
+			'(%d,%s,%s,%s,%s,%s,%d,%d,%d,%d,%s,' . ( is_numeric( $price ) ? '%s' : 'NULL' ) . ',' . ( is_numeric( $stock ) ? '%d' : 'NULL' ) . ',%s,%s,%d,%s,%s,' . ( '' === $data ? 'NULL' : '%s' ) . ',%d,%d,%s)', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- NULL takes no placeholder.
 			array_merge(
 				[
 					$account_id,
@@ -649,12 +763,34 @@ final class Wpdb_Card_Store {
 					false === $ids || strlen( $ids ) > self::IDS_LENGTH ? '' : $ids,
 					mb_substr( trim( (string) ( $group['key'] ?? '' ) ), 0, self::GROUP_LENGTH ),
 					max( 0, (int) ( $group['size'] ?? 0 ) ),
+					'' === $ref ? '' : self::key( $ref ),
+					mb_substr( (string) ( $unit['article'] ?? '' ), 0, Unit_Key::MAX_LENGTH ),
+				],
+				'' === $data ? [] : [ $data ],
+				[
 					$position,
 					max( 0, $run ),
 					$updated,
 				]
 			)
 		);
+	}
+
+	/**
+	 * What a unit card carries besides the list columns — its barcodes and its `unit` — as JSON.
+	 *
+	 * @param array<string,mixed> $card List row.
+	 * @return string '' for a card that carries neither.
+	 */
+	private function unit_data( array $card ): string {
+		$data = array_filter(
+			[
+				'barcodes' => array_values( array_filter( (array) ( $card['barcodes'] ?? [] ), 'is_string' ) ),
+				'unit'     => (array) ( $card['unit'] ?? [] ),
+			]
+		);
+
+		return [] === $data ? '' : (string) wp_json_encode( $data );
 	}
 
 	/**
@@ -694,9 +830,10 @@ final class Wpdb_Card_Store {
 	 * @return array<string,mixed>
 	 */
 	private function card( array $row ): array {
-		$ids = json_decode( (string) $row['remote_ids'], true );
+		$ids  = json_decode( (string) $row['remote_ids'], true );
+		$data = json_decode( (string) ( $row['unit_data'] ?? '' ), true );
 
-		return [
+		return ( is_array( $data ) ? array_intersect_key( $data, array_flip( [ 'barcodes', 'unit' ] ) ) : [] ) + [
 			'offer_id'      => (string) $row['offer_id'],
 			'remote_ids'    => is_array( $ids ) ? $ids : [],
 			'name'          => (string) $row['name'],

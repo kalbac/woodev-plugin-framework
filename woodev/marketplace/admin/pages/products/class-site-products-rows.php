@@ -56,18 +56,37 @@ final class Site_Products_Rows {
 	private $image_url;
 
 	/**
+	 * Turns a link's article into the text of the «Артикул» cell: `function ( string $offer_id ): string`.
+	 *
+	 * @var callable|null
+	 */
+	private $shown_article;
+
+	/**
+	 * What else there is to say about a product's article: `function ( int $product_id ): string`.
+	 *
+	 * @var callable|null
+	 */
+	private $article_notice;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.4
 	 * @since 2.1.13 `$image_url` adds the photo column.
+	 * @since 2.1.22 `$shown_article` and `$article_notice`.
 	 *
 	 * @param string               $marketplace Merchant-facing name of the marketplace.
 	 * @param array<string,string> $warehouses  Warehouse id => name of the account.
 	 * @param callable             $edit_url    `function ( int $product_id ): string`, '' when there is none.
 	 * @param callable|null        $image_url   `function ( int $product_id ): string`, '' when there is none; null leaves the photo cell empty.
+	 * @param callable|null        $shown_article `function ( string $offer_id ): string`, how a link's article is shown; as it is when null.
+	 * @param callable|null        $article_notice `function ( int $product_id ): string`, a sentence for the product's state badge about its article.
 	 */
-	public function __construct( string $marketplace, array $warehouses, callable $edit_url, ?callable $image_url = null ) {
-		$this->marketplace = $marketplace;
+	public function __construct( string $marketplace, array $warehouses, callable $edit_url, ?callable $image_url = null, ?callable $shown_article = null, ?callable $article_notice = null ) {
+		$this->shown_article  = $shown_article;
+		$this->article_notice = $article_notice;
+		$this->marketplace    = $marketplace;
 		$this->warehouses  = $warehouses;
 		$this->edit_url    = $edit_url;
 		$this->image_url   = $image_url;
@@ -258,7 +277,10 @@ final class Site_Products_Rows {
 	private function sku_cell( array $offer ): ?array {
 		$items = [];
 
-		foreach ( array_unique( array_filter( [ $offer['sku'], $offer['offer_id'] ], 'strlen' ) ) as $text ) {
+		$offer_id = (string) $offer['offer_id'];
+		$shown    = null === $this->shown_article || '' === $offer_id ? $offer_id : (string) call_user_func( $this->shown_article, $offer_id );
+
+		foreach ( array_unique( array_filter( [ $offer['sku'], $shown ], 'strlen' ) ) as $text ) {
 			$items[] = [
 				'type'  => 'text',
 				'value' => $this->clip( $text ),
@@ -316,6 +338,12 @@ final class Site_Products_Rows {
 		if ( '' !== $offer['error'] ) {
 			/* translators: %s: the marketplace's error text. */
 			$lines[] = sprintf( __( 'Ошибка: %s', 'woodev-plugin-framework' ), $offer['error'] );
+		}
+
+		$notice = null === $this->article_notice ? '' : (string) call_user_func( $this->article_notice, (int) $offer['product_id'] );
+
+		if ( '' !== $notice ) {
+			$lines[] = $notice;
 		}
 
 		return mb_substr( implode( "\n", $lines ), 0, Row_Normalizer::MAX_TOOLTIP_LENGTH );

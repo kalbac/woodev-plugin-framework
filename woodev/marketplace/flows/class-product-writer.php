@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Flows;
 
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Catalog\Card_Content;
+use Woodev\Framework\Marketplace\Catalog\Gtin;
 use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 use Woodev\Framework\Marketplace\Sync\Shop_Price_Writer;
@@ -17,6 +18,9 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Steps 1–4 of creating a product from a card (the importer's «row 5»); linking the product is the caller's step 5.
+ *
+ * A card that lists barcodes gives a product with no GTIN the first of them that is one ({@see Gtin}); any other barcode stays
+ * with the link only, because WooCommerce's setter would silently cut it down to its digits.
  *
  * 1. {@see self::start()}: the **first save** — a `draft` with the name, the SKU, the import marker and the categories, all in one
  *    save. The SKU and the marker go together because a run that was cut short is found again **by its SKU**; the categories go
@@ -115,16 +119,17 @@ final class Product_Writer {
 	 * @param Card_Content  $content           The card.
 	 * @param bool          $create_categories Whether a card with no mapping gets its category path created.
 	 * @param callable|null $prepare           `function ( \WC_Product $product ): void`; called on the unsaved product, so that what it sets is stored by the **same** first save as the SKU and the marker (the group of the card: {@see Group_Assembler::mark()}).
+	 * @param string|null   $sku               The SKU to write instead of the article, '' for none; null writes the article (2.1.22).
 	 * @return \WC_Product The saved draft: found by its SKU, carrying the marker and the categories.
 	 * @throws \WC_Data_Exception When another product already has the SKU.
 	 */
-	public function start( Account $account, Card_Content $content, bool $create_categories, ?callable $prepare = null ): \WC_Product {
+	public function start( Account $account, Card_Content $content, bool $create_categories, ?callable $prepare = null, ?string $sku = null ): \WC_Product {
 		$article = (string) ( $content->card()['offer_id'] ?? '' );
 		$product = new \WC_Product_Simple();
 
 		$product->set_name( '' !== $content->name() ? $content->name() : $article );
 		$product->set_status( 'draft' );
-		$product->set_sku( $article );
+		$product->set_sku( $sku ?? $article );
 		$product->update_meta_data( self::marker_key( $account->adapter_id() ), '1' );
 		$product->set_category_ids( $this->categories->term_ids( $content, $create_categories ) );
 
@@ -156,6 +161,7 @@ final class Product_Writer {
 		$warnings = [];
 
 		$this->fill( $content, $product, $profile );
+		$this->gtin( $content, $product );
 		$product->save();
 
 		$warning = $this->price( $account, $content, $product );
@@ -261,6 +267,29 @@ final class Product_Writer {
 			if ( null !== $millimetres && $millimetres > 0 ) {
 				$product->{'set_' . $name}( wc_format_decimal( wc_get_dimension( $millimetres, $this->unit( $units, 'dimension', 'woocommerce_dimension_unit' ), 'mm' ) ) );
 			}
+		}
+	}
+
+	/**
+	 * Gives a product that has no GTIN the first barcode of the card that is one. Only that one is tried: when another product
+	 * holds it WooCommerce refuses it and the field stays empty.
+	 *
+	 * @param Card_Content $content Card.
+	 * @param \WC_Product  $product Product.
+	 * @return void
+	 */
+	private function gtin( Card_Content $content, \WC_Product $product ): void {
+		$gtin = Gtin::first( (array) ( $content->card()['barcodes'] ?? [] ) );
+
+		// WooCommerce has the field since 9.2.
+		if ( '' === $gtin || ! is_callable( [ $product, 'set_global_unique_id' ] ) || '' !== (string) $product->get_global_unique_id( 'edit' ) ) {
+			return;
+		}
+
+		try {
+			$product->set_global_unique_id( $gtin );
+		} catch ( \WC_Data_Exception $e ) {
+			return; // Another product holds this GTIN. The barcode stays with the link.
 		}
 	}
 

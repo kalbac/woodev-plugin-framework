@@ -79,7 +79,7 @@ class PersistenceTest extends TestCase {
 		$this->lifecycle()->create_tables();
 
 		$tables = $this->schema->table_names( $wpdb->prefix );
-		$this->assertCount( 17, $tables );
+		$this->assertCount( 18, $tables );
 
 		foreach ( $tables as $table ) {
 			$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );

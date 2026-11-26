@@ -7,6 +7,7 @@
 
 namespace Woodev\Tests\Unit\Marketplace\Admin\Product;
 
+use Woodev\Framework\Marketplace\Flows\Article_Display;
 use Mockery;
 use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Account\Account;
@@ -103,6 +104,7 @@ final class PanelReaderArticleTest extends TestCase {
 		$policy = new Fake_Article_Policy();
 
 		$set( 'renames_articles', $renames );
+		$set( 'articles', new Article_Display() );
 		$set( 'pinned', new Pinned_Offer_Id( 'fake', $policy ) );
 		$set( 'article_policy', $policy );
 		$set(
