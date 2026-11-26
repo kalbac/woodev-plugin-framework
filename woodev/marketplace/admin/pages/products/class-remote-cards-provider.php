@@ -29,6 +29,9 @@ defined( 'ABSPATH' ) || exit;
  * {@see Remote_Cards_Rows}, the product picker in {@see Remote_Cards_Products} and the actions in {@see Remote_Cards_Actions}. The «Показать → Похожие артикулы» view lists the
  * near-match report of the last «Связать по артикулу» run instead of the cards ({@see Link_Report_Store}).
  *
+ * For a marketplace that sells units a card with several of them is one row that expands into its units
+ * ({@see Remote_Cards_Units}); filtering, paging and the counts then go by card.
+ *
  * **A read of this table never calls the marketplace.** It reads the stored list ({@see Wpdb_Card_Store}, which the refresh job, the
  * daily run and the card notifications fill) and our link table, one SQL page at a time; the way to a fresh list is the guarded job
  * «Обновить список».
@@ -100,21 +103,31 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	private $clock;
 
 	/**
+	 * Builds the card rows of a marketplace that sells units; null for any other.
+	 *
+	 * @var Remote_Cards_Units|null
+	 */
+	private $units;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
+	 * @since 2.1.23 `$units`.
 	 *
-	 * @param Wpdb_Account_Store    $accounts  Accounts.
-	 * @param Wpdb_Card_Store       $cards     The stored list of the cabinet's cards.
-	 * @param Link_Report_Store     $reports   The last link run's summary and near-match report.
-	 * @param Remote_Cards_Rows     $rows      Row builder.
-	 * @param Remote_Cards_Products $products  The shop's products.
-	 * @param Remote_Cards_Actions  $actions   The table's actions.
-	 * @param array<string,mixed>   $config    `adapter_id` and `marketplace`.
-	 * @param Import_Scheduler|null $importer  Reads the import queue; null when the adapter cannot import cards, and the table then offers no «Импортировать».
-	 * @param callable|null         $clock     Returns the Unix time; the system clock when null.
+	 * @param Wpdb_Account_Store      $accounts  Accounts.
+	 * @param Wpdb_Card_Store         $cards     The stored list of the cabinet's cards.
+	 * @param Link_Report_Store       $reports   The last link run's summary and near-match report.
+	 * @param Remote_Cards_Rows       $rows      Row builder.
+	 * @param Remote_Cards_Products   $products  The shop's products.
+	 * @param Remote_Cards_Actions    $actions   The table's actions.
+	 * @param array<string,mixed>     $config    `adapter_id` and `marketplace`.
+	 * @param Import_Scheduler|null   $importer  Reads the import queue; null when the adapter cannot import cards, and the table then offers no «Импортировать».
+	 * @param callable|null           $clock     Returns the Unix time; the system clock when null.
+	 * @param Remote_Cards_Units|null $units   Card rows over units, for an adapter that sells them.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Wpdb_Card_Store $cards, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null, ?callable $clock = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Wpdb_Card_Store $cards, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null, ?callable $clock = null, ?Remote_Cards_Units $units = null ) {
+		$this->units     = $units;
 		$this->accounts  = $accounts;
 		$this->cards     = $cards;
 		$this->reports   = $reports;
@@ -145,7 +158,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @return array<string,mixed>
 	 */
 	public function get_definition( array $context ): array {
-		return Remote_Cards_Definition::build( $this->account_options(), $this->config['marketplace'], null !== $this->importer );
+		return Remote_Cards_Definition::build( $this->account_options(), $this->config['marketplace'], null !== $this->importer, null !== $this->units );
 	}
 
 	/**
@@ -163,12 +176,16 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		$account_id = $this->account_id( $context );
 
 		foreach ( $ids as $id ) {
-			if ( null === Remote_Cards_Ids::key_of( (string) $id, $account_id ) && null === Remote_Cards_Ids::near_of( (string) $id, $account_id ) ) {
+			if ( null !== $this->units && null !== Remote_Cards_Ids::card_of( (string) $id, $account_id ) ) {
+				continue;
+			}
+
+			if ( 'children' === $operation || ( null === Remote_Cards_Ids::key_of( (string) $id, $account_id ) && null === Remote_Cards_Ids::near_of( (string) $id, $account_id ) ) ) {
 				return false;
 			}
 		}
 
-		return true;
+		return 'children' !== $operation || 1 === count( $ids );
 	}
 
 	/**
@@ -199,22 +216,21 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		$loaded = $this->cards->has_list( $account->id() );
 		$state  = $this->import_state( $account->id() );
 		$search = (string) ( $filters['q'] ?? $query['search'] ?? '' );
-		$page   = $loaded ? $this->cards->page( $account->id(), Remote_Cards_Query::on_site_flag( (string) ( $filters['on_site'] ?? '' ) ), $search, (int) $query['page'], (int) $query['per_page'] ) : [
-			'cards' => [],
+		$page   = $loaded ? $this->list_page( $account->id(), Remote_Cards_Query::on_site_flag( (string) ( $filters['on_site'] ?? '' ) ), $search, (int) $query['page'], (int) $query['per_page'], $state ) : [
+			'rows'  => [],
 			'total' => 0,
 		];
-		$counts = $loaded ? $this->cards->on_site_counts( $account->id(), $search ) : [
+		$counts = [
 			'on_site'     => 0,
 			'not_on_site' => 0,
 		];
 
+		if ( $loaded ) {
+			$counts = null === $this->units ? $this->cards->on_site_counts( $account->id(), $search ) : $this->cards->card_on_site_counts( $account->id(), $search );
+		}
+
 		return [
-			'rows'             => array_map(
-				function ( array $card ) use ( $account, $state ): array {
-					return $this->card_row( $account->id(), $card, $state );
-				},
-				$page['cards']
-			),
+			'rows'             => $page['rows'],
 			'total'            => $page['total'],
 			'facets'           => [ 'on_site' => $this->on_site_facets( $counts ) ],
 			'account_activity' => $this->account_activity( $account->id(), $state['importing'] ),
@@ -223,6 +239,63 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 				'summary_label' => Russian_Plural::pick( $page['total'], __( 'карточка', 'woodev-plugin-framework' ), __( 'карточки', 'woodev-plugin-framework' ), __( 'карточек', 'woodev-plugin-framework' ) ),
 			] + $this->refreshed_message( $account->id() ) + ( $loaded ? [ 'empty' => __( 'В кабинете нет ни одной карточки.', 'woodev-plugin-framework' ) ] : [] ),
 		];
+	}
+
+	/**
+	 * One page of the stored list as rows: by article, or by card for a marketplace that sells units.
+	 *
+	 * @param int                 $account_id Account id.
+	 * @param bool|null           $on_site    The «on the site» filter.
+	 * @param string              $search     Search text.
+	 * @param int                 $page       Page.
+	 * @param int                 $per_page   Rows per page.
+	 * @param array<string,mixed> $state      {@see self::import_state()}.
+	 * @return array{rows:array<int,array<string,mixed>>,total:int}
+	 */
+	private function list_page( int $account_id, ?bool $on_site, string $search, int $page, int $per_page, array $state ): array {
+		$rows = [];
+
+		if ( null === $this->units ) {
+			$found = $this->cards->page( $account_id, $on_site, $search, $page, $per_page );
+
+			foreach ( $found['cards'] as $card ) {
+				$rows[] = $this->card_row( $account_id, $card, $state );
+			}
+		} else {
+			$found = $this->cards->card_page( $account_id, $on_site, $search, $page, $per_page );
+
+			foreach ( $found['cards'] as $ref => $units ) {
+				$rows[] = $this->unit_card_row( $account_id, (string) $ref, $units, $state );
+			}
+		}
+
+		return [
+			'rows'  => $rows,
+			'total' => $found['total'],
+		];
+	}
+
+	/**
+	 * The row of a card of a marketplace that sells units: the unit's own row when the card has one, else the parent row.
+	 *
+	 * @param int                            $account_id Account id.
+	 * @param string                         $ref        Card reference.
+	 * @param array<int,array<string,mixed>> $units      Its units.
+	 * @param array<string,mixed>            $state      {@see self::import_state()}.
+	 * @return array<string,mixed>
+	 */
+	private function unit_card_row( int $account_id, string $ref, array $units, array $state ): array {
+		if ( 1 === count( $units ) ) {
+			return $this->card_row( $account_id, $units[0], $state );
+		}
+
+		$priced = [];
+
+		foreach ( $units as $unit ) {
+			$priced[] = $this->with_currency( $account_id, $unit );
+		}
+
+		return $this->units->parent_row( $account_id, $ref, $priced, $state['importing'] );
 	}
 
 	/**
@@ -247,7 +320,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	}
 
 	/**
-	 * The table has no children.
+	 * The units of a card, for a marketplace that sells them; the table of any other has no children.
 	 *
 	 * @since 2.1.5
 	 *
@@ -257,9 +330,28 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @return array<string,mixed>
 	 */
 	public function get_children( array $context, string $parent_id, array $query ): array {
+		$account = null === $this->units ? null : $this->account( $context );
+		$ref     = null === $account ? null : Remote_Cards_Ids::card_of( $parent_id, $account->id() );
+		$units   = null === $ref ? [] : ( $this->cards->units_of( $account->id(), [ $ref ] )[ $ref ] ?? [] );
+
+		if ( [] === $units ) {
+			return [
+				'rows'  => [],
+				'total' => 0,
+			];
+		}
+
+		$per_page = max( 1, (int) $query['per_page'] );
+		$state    = $this->import_state( $account->id() );
+		$rows     = [];
+
+		foreach ( array_slice( $units, ( max( 1, (int) $query['page'] ) - 1 ) * $per_page, $per_page ) as $unit ) {
+			$rows[] = $this->card_row( $account->id(), $unit, $state );
+		}
+
 		return [
-			'rows'  => [],
-			'total' => 0,
+			'rows'  => $rows,
+			'total' => count( $units ),
 		];
 	}
 
@@ -441,7 +533,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * What the rows need besides the card: the import notes of the account, by article, and the articles being imported.
 	 *
 	 * @param int $account_id Account id.
-	 * @return array{notes:array<string,array{offer_id:string,text:string,detail:string}>,importing:string[]}
+	 * @return array{notes:array<string,array{offer_id:string,text:string,detail:string}>,conflicts:array<string,array<string,mixed>>,importing:string[]}
 	 */
 	private function import_state( int $account_id ): array {
 		$notes = [];
@@ -452,6 +544,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 
 		return [
 			'notes'     => $notes,
+			'conflicts' => null === $this->units ? [] : array_column( $this->reports->conflicts( $account_id ), null, 'offer_id' ),
 			'importing' => null === $this->importer ? [] : $this->importer->pending_offer_ids( $account_id ),
 		];
 	}
@@ -460,7 +553,14 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		$offer_id = (string) $card['offer_id'];
 		$card     = $this->with_currency( $account_id, $card );
 
-		return $this->rows->row( $account_id, $card, $state['notes'][ $offer_id ] ?? null, in_array( $offer_id, $state['importing'], true ) );
+		$note     = $state['notes'][ $offer_id ] ?? null;
+
+		// What the last «link by article» run could not settle is said at the card while no product carries it.
+		if ( null === $note && isset( $state['conflicts'][ $offer_id ] ) && empty( $card['wc_product_id'] ) ) {
+			$note = $this->units->conflict_note( $state['conflicts'][ $offer_id ] );
+		}
+
+		return $this->rows->row( $account_id, $card, $note, in_array( $offer_id, $state['importing'], true ) );
 	}
 
 	private function with_currency( int $account_id, array $card ): array {
@@ -482,17 +582,27 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 */
 	private function current_rows( Account $account, array $ids, array $state ): array {
 		$keys = [];
+		$refs = [];
 
 		foreach ( $ids as $row_id ) {
 			$key = Remote_Cards_Ids::key_of( (string) $row_id, $account->id() );
+			$ref = null === $this->units ? null : Remote_Cards_Ids::card_of( (string) $row_id, $account->id() );
 
 			if ( null !== $key ) {
 				$keys[] = $key;
+			}
+
+			if ( null !== $ref ) {
+				$refs[] = $ref;
 			}
 		}
 
 		$found = $this->cards->find_many( $account->id(), $keys );
 		$rows  = [];
+
+		foreach ( [] === $refs ? [] : $this->cards->units_of( $account->id(), $refs ) as $ref => $units ) {
+			$rows[] = $this->unit_card_row( $account->id(), (string) $ref, $units, $state );
+		}
 
 		foreach ( $keys as $key ) {
 			if ( isset( $found[ $key ] ) ) {
@@ -521,8 +631,9 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		}
 
 		if ( $loaded ) {
-			$count       = $this->cards->count( $account_id );
-			$archived    = $this->cards->archived_count( $account_id );
+			$totals      = null === $this->units ? null : $this->cards->card_totals( $account_id );
+			$count       = null === $totals ? $this->cards->count( $account_id ) : $totals['cards'];
+			$archived    = null === $totals ? $this->cards->archived_count( $account_id ) : $totals['archived'];
 			$refreshed   = $this->refreshed_message( $account_id );
 			$sentences[] = $archived > 0
 				? sprintf(

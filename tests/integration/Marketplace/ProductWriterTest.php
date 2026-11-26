@@ -171,6 +171,37 @@ class ProductWriterTest extends TestCase {
 	}
 
 	/**
+	 * A card's barcodes against WooCommerce's own GTIN field: a free barcode and a restricted-circulation one leave it empty, the
+	 * first real GTIN is written, and a GTIN another product holds is left out without failing the import.
+	 */
+	public function test_only_a_free_real_gtin_reaches_the_woocommerce_field(): void {
+		$write = function ( string $article, array $barcodes ): \WC_Product {
+			$content = $this->card(
+				[
+					'offer_id' => $article,
+					'barcodes' => $barcodes,
+				]
+			);
+			$product = $this->writer->start( $this->account(), $content, false, null, 'SKU-' . $article );
+
+			$this->writer->complete( $this->account(), $content, $product, false, static function (): void {} );
+
+			return wc_get_product( $product->get_id() );
+		};
+
+		$free = $write( 'GTIN-1', [ '12345Ejf5', '2000000000008' ] );
+
+		if ( ! is_callable( [ $free, 'get_global_unique_id' ] ) ) {
+			$this->markTestSkipped( 'This WooCommerce has no GTIN field.' );
+		}
+
+		$this->assertSame( '', $free->get_global_unique_id() );
+		$this->assertSame( 'SKU-GTIN-1', $free->get_sku(), 'the SKU the importer chose, not the article' );
+		$this->assertSame( '4006381333931', $write( 'GTIN-2', [ '12345Ejf5', '4006381333931' ] )->get_global_unique_id() );
+		$this->assertSame( '', $write( 'GTIN-3', [ '4006381333931', '96385074' ] )->get_global_unique_id(), 'only the first real one is tried' );
+	}
+
+	/**
 	 * What `$prepare` sets on the unsaved product is stored by the same first save as the SKU and the marker: a run cut right
 	 * after that save has not lost it. The importer puts the group of the card there.
 	 */
@@ -612,13 +643,15 @@ class ProductWriterTest extends TestCase {
 	 */
 	private function card( array $fields = [] ): Card_Content {
 		$offer_id = (string) ( $fields['offer_id'] ?? 'ART-1' );
-		unset( $fields['offer_id'] );
+		$barcodes = (array) ( $fields['barcodes'] ?? [] );
+		unset( $fields['offer_id'], $fields['barcodes'] );
 
 		return new Card_Content(
 			[
 				'offer_id'   => $offer_id,
 				'remote_ids' => [ 'product_id' => '777' ],
 				'state'      => 'created',
+				'barcodes'   => $barcodes,
 			],
 			array_merge(
 				[

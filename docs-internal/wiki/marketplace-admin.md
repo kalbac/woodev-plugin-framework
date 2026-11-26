@@ -1332,6 +1332,49 @@ adapter that classifies the refusal as plain `FAIL` loses this: WP4 must map it.
 
 `Card_Lifecycle::card_id_name()` must differ between links: for sizes sharing a card it is the size's identifier.
 
+## A size inside a card as the sellable unit (#2000)
+
+Card WF3 of the Wildberries design (`2.1.23`). One **optional** adapter interface, `Flows\Sellable_Units`; an adapter without it
+behaves as before (Ozon needs no change: article = SKU, matched after `Article_Policy::normalise()`, written by the import).
+Separate interface for the same reason as above
+([gotcha](../gotchas/a-method-added-to-an-adapter-interface-fatals-released-plugins.md)).
+
+| Method | Contract |
+|---|---|
+| `match_keys( $card )` | ordered `Match_Key::barcode()` / `Match_Key::sku()`; the same keys in the same order for every card, empty values where one does not apply. Values are compared as raw strings |
+| `shown_article( $offer_id, $card = [] )` | what «Артикул» shows: the **current** article and the unit beside it (`Shown_Article`); `$card` is the stored list's row, `[]` when there is none |
+| `import_sku( $card )` | the SKU candidate the import writes, `''` for none |
+
+**The unit card.** Every card of `Link_Resolver`, `Card_List_Source` and `Card_Importer::read_cards()` also carries `barcodes`
+(all of them, byte for byte) and `unit` (`card`: the cabinet card the unit is listed under; `article`: its current seller
+article, searched by the cards list; anything else the keys need). `Card_Outcome` takes the barcodes of a created card.
+
+**The key.** `Links\Unit_Key::encode( article, unit, qualifier = '' )`, escaped, frozen at linking; over 191 characters it is
+refused before any write. A renamed article keeps the key: the adapter resolves a card by its remote identifiers
+(`Wpdb_Link_Store::by_remote_id()`) and answers with the stored key; a new card that takes a freed article gets the qualifier.
+
+**Matching** (`Unit_Matcher`): the first rank at which any product matches decides. One product → pair; several, or one product
+claimed by two cards → a conflict stored per link run (`Link_Report_Store::conflicts()`) and said at the card. Products with a
+link, and products the importer is making for another unit, are no candidates. No near matches.
+
+**Import** (`Unit_Products`): the unit's product is the one carrying the pending mark `_woodev_{id}_import_unit` (first save →
+link); else the one the importer made for it (`_woodev_{id}_unit`, kept for good, so «Снять связь» + import does not make a
+second product); else the single match. Marks are `{account}:{unit key}`; another account's pending product is nobody's
+candidate. A taken candidate SKU leaves the SKU empty; `_woodev_{id}_sku_conflict` keeps it, and the sentence
+shows in the card's note, the product tab and the «Товары сайта» tooltip while the product has no SKU. Group conversion moves
+the marks and the GTIN to the first variation.
+
+**Barcodes** go to `link_barcodes` (schema revision 5; one barcode names one unit of an account). `Catalog\Gtin` lets only a real
+GTIN into WooCommerce's field — restricted-circulation numbers (every barcode Wildberries generates) are excluded.
+
+**One weight and size per card.** A marketplace that takes dimensions per card adds `Catalog\Rules\Card_Dimensions_Rule` to its
+`export_rules()` with a `function ( $product, $mapping ): string` naming the card of a variation. Sibling variations of one card
+whose weight, length, width or height differ (own value, else parent's, else the profile fallback) are **all refused**, with the
+differing names — nothing is picked or averaged (the D7 pattern for prices). Ozon's rule list does not hold it.
+
+**Cards tab.** A cabinet card with several units is a parent row (the records engine's children, as «Товары сайта»); filters,
+pages and counts go by card, «Импортировать» on the parent takes all its units, and the filter-wide import counts cards.
+
 ## Changing the article after the export (framework 2.1.13, #1860)
 
 Before 2.1.13 the article (`offer_id`) was frozen once a card was sent. Operator decision 19.11.2026: it stays changeable, and the change goes to the marketplace by its own

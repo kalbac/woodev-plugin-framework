@@ -62,6 +62,36 @@ final class Remote_Cards_Ids {
 	}
 
 	/**
+	 * Builds the id of the parent row of a card whose units are listed under it.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $ref        Card reference ({@see Wpdb_Card_Store::card_page()}).
+	 * @return string
+	 */
+	public static function card_row_id( int $account_id, string $ref ): string {
+		return $account_id . ':u' . $ref;
+	}
+
+	/**
+	 * Reads the card reference out of a parent row id of the given account.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @param string $row_id     Row id.
+	 * @param int    $account_id Account the table is open for.
+	 * @return string|null Null for another account's id, any other row's id or a malformed one.
+	 */
+	public static function card_of( string $row_id, int $account_id ): ?string {
+		if ( 1 !== preg_match( '/^([1-9]\d{0,11}):u([0-9a-f]{32})$/D', $row_id, $parts ) ) {
+			return null;
+		}
+
+		return (int) $parts[1] === $account_id ? $parts[2] : null;
+	}
+
+	/**
 	 * Builds the id of a row of the near-match report: the id of the card's row and the product, because a card can look like
 	 * several products and a product like several cards.
 	 *

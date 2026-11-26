@@ -35,6 +35,10 @@ use Woodev\Framework\Marketplace\Flows\Group_Assembler;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
+use Woodev\Framework\Marketplace\Flows\Unit_Products;
+use Woodev\Framework\Marketplace\Flows\Unit_Product_Source;
+use Woodev\Framework\Marketplace\Flows\Sellable_Units;
+use Woodev\Framework\Marketplace\Flows\Article_Display;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
 use Woodev\Framework\Marketplace\Jobs\Bulk_Import_Feeder;
@@ -182,11 +186,14 @@ final class Site_Products_Module {
 		}
 
 		$matching = new Remote_Cards_Matching( self::card_store( $plugin, $adapter, $db ) );
+		$marked   = $adapter instanceof Sellable_Units
+			? Bulk_Import_Feeder::pending_in_database( $db, Unit_Products::pending_key( $adapter->id() ) )
+			: Bulk_Import_Feeder::marked_in_database( $db, Product_Writer::marker_key( $adapter->id() ) );
 		$feeder   = new Bulk_Import_Feeder(
 			$runs,
 			new Import_Scheduler( new Job_Names( $plugin->get_id() ) ),
 			[ $matching, 'entries' ],
-			Bulk_Import_Feeder::marked_in_database( $db, Product_Writer::marker_key( $adapter->id() ) )
+			$marked
 		);
 
 		return new Bulk_Run_Workers( $products, [ Remote_Cards_Definition::IMPORT_SELECTED => $feeder ] );
@@ -284,6 +291,7 @@ final class Site_Products_Module {
 				'adapter_id'  => $adapter->id(),
 				'marketplace' => $adapter->settings_descriptor()->marketplace_name(),
 				'withheld'    => $withheld,
+				'articles'    => $adapter instanceof Sellable_Units ? new Article_Display( $adapter, self::card_store( $plugin, $adapter, $db ) ) : null,
 			],
 			$runner,
 			$runs
@@ -359,11 +367,14 @@ final class Site_Products_Module {
 		$ledger   = new Wpdb_Task_Ledger( $db, $table( 'tasks' ), $table( 'task_items' ) );
 		$products = new Remote_Cards_Products( Remote_Cards_Products::woocommerce_search() );
 		$importer = $adapter instanceof Card_Importer && $adapter->supports( Capability::IMPORT_PRODUCTS ) ? new Import_Scheduler( new Job_Names( $plugin->get_id() ) ) : null;
-		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer, $adapter instanceof Remote_Card_Address ? [ $adapter, 'remote_card_url' ] : null );
+		$units    = $adapter instanceof Sellable_Units ? $adapter : null;
+		$articles = new Article_Display( $units, self::card_store( $plugin, $adapter, $db ) );
+		$rows     = new Remote_Cards_Rows( [ $products, 'describe' ], Logging::for_plugin( $plugin ), null !== $importer, $adapter instanceof Remote_Card_Address ? [ $adapter, 'remote_card_url' ] : null, $articles );
 		$options  = Uninstaller::option_prefix( $plugin->get_id() );
 		$store    = self::card_store( $plugin, $adapter, $db );
 		$reports  = new Link_Report_Store( $options );
-		$plan     = null === $importer ? null : new Remote_Cards_Import_Plan( Remote_Cards_Import_Plan::woocommerce_lookup( Product_Writer::marker_key( $adapter->id() ) ), Group_Assembler::lookup( $adapter->id() ) );
+		$lookup   = null === $units || null === $importer ? null : Remote_Cards_Import_Plan::unit_lookup( new Unit_Products( $units, self::unit_product_source( $adapter, $db, $table ), $links ), Product_Writer::marker_key( $adapter->id() ) );
+		$plan     = null === $importer ? null : new Remote_Cards_Import_Plan( Remote_Cards_Import_Plan::woocommerce_lookup( Product_Writer::marker_key( $adapter->id() ) ), Group_Assembler::lookup( $adapter->id() ), $lookup );
 		$license  = License_Gate::for_plugin( $plugin );
 		$runs     = null === $importer ? null : new Remote_Cards_Run_Actions( self::bulk_runner( $plugin, $accounts, $db ), new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ), new Remote_Cards_Matching( $store ), $license );
 		$actions  = new Remote_Cards_Actions(
@@ -378,7 +389,8 @@ final class Site_Products_Module {
 			$rows,
 			$importer,
 			$plan,
-			$runs
+			$runs,
+			$articles
 		);
 
 		return new Remote_Cards_Provider(
@@ -392,8 +404,22 @@ final class Site_Products_Module {
 				'adapter_id'  => $adapter->id(),
 				'marketplace' => $adapter->settings_descriptor()->marketplace_name(),
 			],
-			$importer
+			$importer,
+			null,
+			null === $units ? null : new Remote_Cards_Units( $units, $rows, new Remote_Cards_Cells( $adapter instanceof Remote_Card_Address ? [ $adapter, 'remote_card_url' ] : null ), null !== $importer )
 		);
+	}
+
+	/**
+	 * The shop's products as a marketplace that sells units compares them.
+	 *
+	 * @param Marketplace_Adapter $adapter Adapter.
+	 * @param \wpdb               $db      Database.
+	 * @param callable            $table   `function ( string $name ): string`, the full name of a table.
+	 * @return Unit_Product_Source
+	 */
+	private static function unit_product_source( Marketplace_Adapter $adapter, \wpdb $db, callable $table ): Unit_Product_Source {
+		return new Unit_Product_Source( $db, new Wpdb_Profile_Store( $db, $table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ), $adapter->id() );
 	}
 
 	/**
@@ -430,7 +456,7 @@ final class Site_Products_Module {
 		$log       = static function ( string $line ) use ( $plugin ): void {
 			$plugin->log_error( $line );
 		};
-		$shop      = new Shop_Sku_Source( $db );
+		$shop      = $adapter instanceof Sellable_Units ? self::unit_product_source( $adapter, $db, $table ) : new Shop_Sku_Source( $db );
 		$linker    = self::linker( $plugin, $adapter, $accounts, $db, $links, $ledger, $table );
 		$mappings_url = $plugin->get_marketplace_page_url( 'mappings' );
 
@@ -445,7 +471,7 @@ final class Site_Products_Module {
 			$ledger,
 			[
 				'link_candidates' => static function ( int $account_id, ?int $category = null ) use ( $shop, $links ): int {
-					return self::count_candidates( $shop->products( $category ), $links->identity_map( $account_id ) );
+					return self::count_candidates( $shop->products( $category, $account_id ), $links->identity_map( $account_id ) );
 				},
 				'link_effect'     => [ $linker, 'remote_effect' ],
 				'pull_prices'     => null === $adapter->price_reader() ? null : static function ( Account $account, array $offer_ids ) use ( $job_names ): int {

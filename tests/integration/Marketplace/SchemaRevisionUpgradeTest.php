@@ -255,6 +255,52 @@ class SchemaRevisionUpgradeTest extends TestCase {
 	}
 
 	/**
+	 * A site at revision 4 has neither the barcodes table nor the unit columns of the cards list (#2000): the first request adds
+	 * both, an existing card row stays, and a link then keeps its barcodes byte for byte — two that differ in case included.
+	 *
+	 * @return void
+	 */
+	public function test_the_first_request_adds_the_barcodes_and_the_unit_columns(): void {
+		foreach ( $this->schema->statements( $this->conn->prefix, $this->conn->get_charset_collate() ) as $name => $statement ) {
+			if ( $name === $this->table( 'link_barcodes' ) ) {
+				continue;
+			}
+
+			if ( $name === $this->table( 'cards' ) ) {
+				$statement = (string) preg_replace( '/^\s*(unit_card|unit_article|unit_data) .*\n|,\s*KEY account_unit \(account_id,unit_card\)/m', '', $statement );
+			}
+
+			$this->assertNotFalse( $this->conn->query( $statement ) );
+		}
+
+		$this->conn->insert(
+			$this->table( 'cards' ),
+			[
+				'account_id' => 1,
+				'card_key'   => str_repeat( 'a', 32 ),
+				'offer_id'   => 'OLD-1',
+				'updated_at' => '2026-11-20 10:00:00',
+			]
+		);
+		update_option( 'woodev_' . self::PLUGIN_ID . '_version', self::VERSION );
+		update_option( 'woodev_' . self::PLUGIN_ID . '_schema_revision', 4 );
+
+		( new Lifecycle( $this->plugin(), $this->schema ) )->bring_schema_up_to_date();
+
+		$columns = (array) $this->conn->get_col( 'SHOW COLUMNS FROM ' . $this->table( 'cards' ), 0 );
+
+		$this->assertSame( [ 'unit_card', 'unit_article', 'unit_data' ], array_values( array_intersect( [ 'unit_card', 'unit_article', 'unit_data' ], $columns ) ) );
+		$this->assertSame( (string) Schema::REVISION, (string) get_option( 'woodev_' . self::PLUGIN_ID . '_schema_revision' ) );
+		$this->assertSame( 'OLD-1', (string) $this->conn->get_var( 'SELECT offer_id FROM ' . $this->table( 'cards' ) ) );
+
+		$links = new Wpdb_Link_Store( $this->conn, $this->table( 'links' ), $this->table( 'link_ids' ) );
+
+		$links->insert_card( Link_Record::offer( 1, 10, 0, 'coat|M' ), '', null, [ '12345Ejf5', '12345EJF5' ] );
+
+		$this->assertSame( [ '12345Ejf5', '12345EJF5' ], $links->barcodes_of( (int) $links->find( 1, 10 )->link_id() ) );
+	}
+
+	/**
 	 * Every current table exists and only `sync_state.pending_source` is missing, and the database refuses exactly the `ALTER` that
 	 * would add it: `dbDelta` returns normally and the table names are all there, yet no revision may be stored (#1829). Once the
 	 * `ALTER` is allowed, the retry adds the column, stores the revision and leaves the queued rows as they were.

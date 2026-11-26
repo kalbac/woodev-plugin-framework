@@ -51,12 +51,14 @@ final class Schema {
 	 * 2: `cards`, the stored list of the marketplace's cards (#1863).
 	 * 3: `links.pending_offer_id`, `links.rename_error` and `links.rename_confirmed` (the article changed after export, #1860).
 	 * 4: `postings.processing_since`, when the marketplace says the posting entered processing (the stuck postings of the analytics, #1933).
+	 * 5: `link_barcodes`, the barcodes of a unit, and `cards.unit_card` / `cards.unit_article` / `cards.unit_data`, the card a unit
+	 * belongs to and its current article (#2000).
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var int
 	 */
-	public const REVISION = 4;
+	public const REVISION = 5;
 
 	/**
 	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
@@ -67,6 +69,7 @@ final class Schema {
 	 * 1: `sync_state.pending_source`.
 	 * 3: `links.pending_offer_id`, `links.rename_error`, `links.rename_confirmed`.
 	 * 4: `postings.processing_since`.
+	 * 5: `cards.unit_card`, `cards.unit_article`, `cards.unit_data`.
 	 *
 	 * @since 2.1.10
 	 *
@@ -76,6 +79,7 @@ final class Schema {
 		'sync_state' => [ 'pending_source' ],
 		'links'      => [ 'pending_offer_id', 'rename_error', 'rename_confirmed' ],
 		'postings'   => [ 'processing_since' ],
+		'cards'      => [ 'unit_card', 'unit_article', 'unit_data' ],
 	];
 
 	/**
@@ -87,6 +91,7 @@ final class Schema {
 		'accounts',
 		'links',
 		'link_ids',
+		'link_barcodes',
 		'tasks',
 		'task_items',
 		'events',
@@ -324,6 +329,28 @@ final class Schema {
 			id_type char(1) NOT NULL DEFAULT 's',
 			PRIMARY KEY  (link_id,id_name),
 			KEY account_lookup (account_id,id_name,id_value)
+		) {$charset};";
+	}
+
+	/**
+	 * The barcodes of a link whose marketplace gives a unit several (a size of a card): the whole list in the marketplace's order,
+	 * kept byte for byte (`utf8mb4_bin`) — a barcode is a free string, and only some are GTINs. A barcode names one unit of an
+	 * account, hence the primary key; `position` orders the list.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @param string $table   Full table name.
+	 * @param string $charset Charset clause.
+	 * @return string
+	 */
+	private function link_barcodes( string $table, string $charset ): string {
+		return "CREATE TABLE {$table} (
+			link_id bigint(20) unsigned NOT NULL,
+			account_id bigint(20) unsigned NOT NULL,
+			barcode varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+			position int(10) unsigned NOT NULL DEFAULT 0,
+			PRIMARY KEY  (account_id,barcode),
+			KEY link (link_id,position)
 		) {$charset};";
 	}
 
@@ -639,6 +666,10 @@ final class Schema {
 	 * screen never empties mid-refresh. `position` keeps the marketplace's order of the last full refresh. `remote_ids` is the JSON of the
 	 * card's identifiers, `price` and `stock` are null when the marketplace did not say.
 	 *
+	 * A marketplace that sells units lists one row per unit: `unit_card` is the hash of the card the unit belongs to ('' for a row
+	 * that stands alone), `unit_article` the card's seller article as it is now (`offer_id` keeps the key frozen at linking) and
+	 * `unit_data` the JSON of the unit's `barcodes` and `unit`, which the match keys read.
+	 *
 	 * @since 2.1.13
 	 *
 	 * @param string $table   Full table name.
@@ -663,13 +694,17 @@ final class Schema {
 			remote_ids varchar(255) NOT NULL DEFAULT '',
 			group_key varchar(64) NOT NULL DEFAULT '',
 			group_size int(10) unsigned NOT NULL DEFAULT 0,
+			unit_card varchar(32) NOT NULL DEFAULT '',
+			unit_article varchar(191) NOT NULL DEFAULT '',
+			unit_data text NULL,
 			position int(10) unsigned NOT NULL DEFAULT 0,
 			seen_run int(10) unsigned NOT NULL DEFAULT 0,
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (account_id,card_key),
 			KEY account_position (account_id,position),
 			KEY account_state (account_id,state),
-			KEY account_seen (account_id,seen_run)
+			KEY account_seen (account_id,seen_run),
+			KEY account_unit (account_id,unit_card)
 		) {$charset};";
 	}
 }
