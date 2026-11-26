@@ -147,6 +147,25 @@ final class SiteProductsBulkTest extends Products_Test_Case {
 		$this->assertSame( [ 'stock' => 5 ], $this->stock_row( $product, 33 )['pending_payload'], 'recorded by the retry' );
 	}
 
+	/**
+	 * The zero of a left warehouse is not a process of the product until it fails: one that waits for a switched-off warehouse
+	 * would otherwise stand in the table for good (#2042).
+	 *
+	 * @return void
+	 */
+	public function test_a_waiting_zero_of_a_left_warehouse_is_no_process(): void {
+		$product = $this->stock_product( 'W-2', 9002, 5 );
+		$link_id = (int) $this->link_of( $product )->link_id();
+		$offers  = [ $product => [ 'link_id' => $link_id, 'card_state' => Link_Record::STATE_CREATED ] ];
+		$this->intents()->record_vacate( $this->account_id, $link_id, 33 );
+
+		$this->assertSame( [], $this->activity()->for_offers( $this->account_id, $offers )[ $product ]['processes'] );
+
+		$this->db->query( 'UPDATE ' . Sqlite_Tables::table( 'sync_state' ) . " SET last_error = 'refused' WHERE warehouse_id = 33" );
+
+		$this->assertSame( 'failed', $this->activity()->for_offers( $this->account_id, $offers )[ $product ]['processes'][0]['state'] );
+	}
+
 	public function test_reset_returns_a_card_to_not_linked_and_skips_one_that_already_is(): void {
 		$sent = $this->add_product();
 		$this->add_link( $sent, Link_Record::STATE_CREATED );

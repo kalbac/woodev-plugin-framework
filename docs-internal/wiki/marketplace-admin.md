@@ -501,8 +501,12 @@ What the code settled, where the text above left it open:
   any stock (`Sync_State_Queue::due()` lists them first, the flusher sends them as their own group). A left warehouse is zeroed
   only when something replaces it: not while the CHOSEN warehouse is switched off by the marketplace (the link's due pairs wait,
   with the reason; the product tab says `warehouse_unavailable`) and not for a product without managed stock. With no warehouse
-  chosen the left one is zeroed. A LEFT warehouse the marketplace has switched off cannot be written to and is zeroed at the next
-  record after it is listed again. A warehouse flag the marketplace
+  chosen the left one is zeroed.
+- **A switched-off warehouse keeps its intents (#2042).** `Stock_Intents::record_stock()` and `Card_Created_Seeder` record for the
+  CHOSEN warehouse whether or not it is listed (`Stock_Warehouse::chosen()`, not `for_link()`), and zeros for left ones likewise;
+  the flusher holds such rows (`Sync_State_Queue::hold()`, 60 s, uncounted, to the back of the due list) and sends them once the
+  warehouse is listed again. Nothing has to notice the switch-on: the adapter writes the warehouse list, the framework only reads
+  it. A waiting zero is not shown in the products table until it fails. A warehouse flag the marketplace
   itself flips (oversize, from the card poll) is followed only at the product's next stock record.
 - **Notification types are switches.** The adapter declares them in `Push_Protocol::webhook_types()` (`Webhook_Type`: id = the
   decoder's event type, label, purpose, cabinet location, default). The framework registers one toggle per type

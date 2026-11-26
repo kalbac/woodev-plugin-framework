@@ -24,7 +24,8 @@ defined( 'ABSPATH' ) || exit;
  *   {@see Export_Context_Builder::payload()}) — when the account's `price_direction` is `to_marketplace` and the link's `sync_price`
  *   is on;
  * - **stock** `{stock}` — the WooCommerce stock quantity — when the account's `stock_mode` is `site`, the link's `sync_stock` is on,
- *   a warehouse resolves ({@see Stock_Warehouse}; none = nothing) and the product manages its stock. The quantity follows the
+ *   a warehouse is chosen ({@see Stock_Warehouse::chosen()}; none = nothing; since 2.1.26 a switched-off one too) and the
+ *   product manages its stock. The quantity follows the
  *   marketplace's {@see Stock_Policy}; no reservation is known yet, so the formula that adds it adds 0 too.
  *
  * The writes are idempotent ({@see Sync_State_Store::record()}); the poll calls this before it marks the link `created`, so a failed
@@ -146,7 +147,8 @@ final class Card_Created_Seeder {
 			];
 		}
 
-		$warehouse = Stock_Warehouse::for_link( $account, $link );
+		// Also a switched-off one: the sender holds the stock until the marketplace lists the warehouse again.
+		$warehouse = Stock_Warehouse::chosen( $account, $link );
 		$quantity  = $product->get_stock_quantity();
 		$reason    = null === $warehouse ? self::NO_WAREHOUSE : ( null === $quantity ? self::NO_STOCK : '' );
 

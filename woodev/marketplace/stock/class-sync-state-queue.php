@@ -96,8 +96,8 @@ final class Sync_State_Queue {
 	}
 
 	/**
-	 * Lists the rows of an account that have something to send and are not backing off: the zeros of left warehouses first (since
-	 * 2.1.25, so a limit never cuts one off behind the stock that replaces it), then the oldest intent first.
+	 * Lists the rows of an account that have something to send and are not backing off: the zeros of left warehouses that never
+	 * waited first (since 2.1.25, so a limit never cuts one off behind the stock that replaces it), then the oldest intent first.
 	 *
 	 * @since 2.0.29
 	 *
@@ -112,7 +112,7 @@ final class Sync_State_Queue {
 	public function due( int $account_id, string $kind, int $limit ): array {
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The flusher must read fresh.
 			$this->db->prepare(
-				'SELECT account_id, link_id, warehouse_id, kind, pending_payload, sent_payload, pending_rev, pending_since, in_flight_rev, sent_rev, attempts, last_error, remote_present FROM %i WHERE account_id = %d AND kind = %s AND pending_payload IS NOT NULL AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND attempts < %d AND (next_attempt_at IS NULL OR next_attempt_at <= %s) ORDER BY CASE WHEN pending_payload = %s THEN 0 ELSE 1 END, pending_since ASC, link_id ASC LIMIT %d',
+				'SELECT account_id, link_id, warehouse_id, kind, pending_payload, sent_payload, pending_rev, pending_since, in_flight_rev, sent_rev, attempts, last_error, remote_present FROM %i WHERE account_id = %d AND kind = %s AND pending_payload IS NOT NULL AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND attempts < %d AND (next_attempt_at IS NULL OR next_attempt_at <= %s) ORDER BY CASE WHEN pending_payload = %s AND next_attempt_at IS NULL THEN 0 ELSE 1 END, pending_since ASC, link_id ASC LIMIT %d',
 				$this->table,
 				$account_id,
 				$kind,
@@ -242,6 +242,22 @@ final class Sync_State_Queue {
 		}
 
 		return $this->fenced( $key, $token, $set, $args );
+	}
+
+	/**
+	 * Holds a row whose warehouse cannot be written to: it waits and goes to the back of the due list, so that many held rows
+	 * never keep the others out of a limited list. Not a failure.
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param array<string,mixed> $key     Row key.
+	 * @param int                 $seconds Seconds to wait.
+	 * @param string              $reason  Reason, shown in diagnostics; '' shows none.
+	 * @param string              $token   The flusher's account claim.
+	 * @return bool False when the claim was lost.
+	 */
+	public function hold( array $key, int $seconds, string $reason, string $token ): bool {
+		return $this->fenced( $key, $token, "next_attempt_at = %s, pending_since = %s, last_error = NULLIF(%s, '')", [ $this->time( max( 1, $seconds ) ), $this->time( 0 ), $reason ] );
 	}
 
 	/**

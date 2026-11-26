@@ -25,8 +25,11 @@ if ( Sync_State_Queue::may_hold_stock( $row ) ) {
 }
 ```
 
-Five traps come with that zero:
+Six traps come with that zero:
 
+- **«No warehouse» and «switched off» are different answers.** `Stock_Warehouse::for_link()` returns null for both, so an intent
+  gated on it is lost while the warehouse is off and nothing is left to send when it returns (#2042). Record for `chosen()` and
+  let the sender wait.
 - **Only when something replaces it.** If the chosen warehouse cannot be written to (switched off) or the stock is not managed,
   zeroing the old one stops the sales altogether — for the whole account when it is the default warehouse.
 - **Order it explicitly.** Equal `pending_since` and `link_id` leave the warehouse id to break the tie: a test passed only

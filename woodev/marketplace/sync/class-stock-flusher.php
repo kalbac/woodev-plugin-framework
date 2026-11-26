@@ -34,7 +34,8 @@ defined( 'ABSPATH' ) || exit;
  * a pair for a warehouse that is no longer selected is retired, and its payload moves to the selected one (none = «Не выбран
  * склад», no stock is sent); where the left warehouse may still hold units it is sent zero instead of being retired. While the
  * chosen warehouse is switched off by the marketplace nothing could take the stock over, so the link's pairs wait: no warehouse
- * is zeroed or retired. A run sends all its zeros before any stock; a zero the marketplace puts off or refuses item by item does
+ * is zeroed or retired. The zero of a switched-off left warehouse waits the same way. What waits goes out once the warehouse is
+ * listed again. A run sends all its zeros before any stock; a zero the marketplace puts off or refuses item by item does
  * not hold the stock back. Right before a request each pair's newest pending payload is frozen as in flight. Per item of the
  * answer ({@see Stock_Rules::verdict()}):
  *
@@ -70,6 +71,13 @@ final class Stock_Flusher {
 	 * Seconds a pair waits for its card to be created.
 	 */
 	public const NOT_READY_SECONDS = 300;
+
+	/**
+	 * Seconds a pair waits before a switched-off warehouse is looked up again; the sender runs once a minute.
+	 *
+	 * @since 2.1.26
+	 */
+	public const HOLD_SECONDS = 60;
 
 	/**
 	 * Code stored for a line the marketplace left out of its answer.
@@ -259,12 +267,11 @@ final class Stock_Flusher {
 
 			if ( ! $archives && null !== $chosen && ! Stock_Warehouse::is_available( $account, $chosen ) ) {
 				// Nothing can take the product's stock over, so no warehouse is zeroed or retired: the pair waits.
-				$run->write( $this->queue->defer( $key, self::NOT_READY_SECONDS, self::switched_off_text(), false, $run->token() ) );
-				++$result->waiting;
+				$this->hold( $run, $key, self::switched_off_text(), $result );
 				continue;
 			}
 
-			if ( ! $this->in_current_warehouse( $run, $key, $link, $row, $archives ) ) {
+			if ( ! $this->in_current_warehouse( $run, $key, $link, $row, $archives, $result ) ) {
 				continue;
 			}
 
@@ -302,14 +309,15 @@ final class Stock_Flusher {
 	 * @param Link_Record         $link     Link.
 	 * @param array<string,mixed> $row      The due row.
 	 * @param bool                $archives Whether the payload archives the card.
+	 * @param Stock_Flush_Result  $result   Result.
 	 * @return bool True when the pair is to be sent: the current one, or the zero of a left one.
 	 * @throws Claim_Lost When the claim was taken over.
 	 */
-	private function in_current_warehouse( Account_Run $run, array $key, Link_Record $link, array $row, bool $archives ): bool {
+	private function in_current_warehouse( Account_Run $run, array $key, Link_Record $link, array $row, bool $archives, Stock_Flush_Result $result ): bool {
 		$warehouse = (int) $key['warehouse_id'];
 
 		if ( self::vacates( $row['pending_payload'] ) ) {
-			return $this->still_vacates( $run, $key, $link, $warehouse );
+			return $this->still_vacates( $run, $key, $link, $warehouse, $result );
 		}
 
 		$current = Stock_Warehouse::for_link( $run->account(), $link );
@@ -327,8 +335,11 @@ final class Stock_Flusher {
 		if ( $this->must_vacate( $run, $link, $warehouse, $row ) ) {
 			$run->guard();
 
-			// A moved archive intent waits for the next run: this row's columns still describe the archive, not the zero.
-			return $this->intents->record_vacate( (int) $key['account_id'], (int) $key['link_id'], $warehouse ) && ! $archives;
+			$recorded = $this->intents->record_vacate( (int) $key['account_id'], (int) $key['link_id'], $warehouse );
+
+			// A moved archive intent waits for the next run: this row's columns still describe the archive, not the zero. So does
+			// the zero of a switched-off warehouse, which that run holds.
+			return $recorded && ! $archives && Stock_Warehouse::is_available( $run->account(), $warehouse );
 		}
 
 		$reason = null === $target
@@ -341,17 +352,18 @@ final class Stock_Flusher {
 	}
 
 	/**
-	 * Tells whether the zero of a left warehouse is still to be sent. It is cancelled once the link is back on that warehouse; one
-	 * the marketplace has switched off cannot be written to, so its zero is retired until the link's stock is recorded again.
+	 * Tells whether the zero of a left warehouse is to be sent now. It is cancelled once the link is back on that warehouse; one
+	 * for a warehouse the marketplace has switched off cannot be written to yet and is held.
 	 *
 	 * @param Account_Run         $run       The run.
 	 * @param array<string,mixed> $key       Row key.
 	 * @param Link_Record         $link      Link.
 	 * @param int                 $warehouse The pair's warehouse.
+	 * @param Stock_Flush_Result  $result    Result.
 	 * @return bool True when the zero is to be sent.
 	 * @throws Claim_Lost When the claim was taken over.
 	 */
-	private function still_vacates( Account_Run $run, array $key, Link_Record $link, int $warehouse ): bool {
+	private function still_vacates( Account_Run $run, array $key, Link_Record $link, int $warehouse, Stock_Flush_Result $result ): bool {
 		if ( Stock_Warehouse::chosen( $run->account(), $link ) === $warehouse ) {
 			$run->guard();
 			$this->queue->cancel_vacate( $key, $run->token() );
@@ -363,14 +375,30 @@ final class Stock_Flusher {
 			return true;
 		}
 
-		$run->write( $this->queue->drop( $key, __( 'Склад товара изменился.', 'woodev-plugin-framework' ), $run->token() ) );
+		$this->hold( $run, $key, '', $result );
 
 		return false;
 	}
 
 	/**
-	 * Tells whether the warehouse of an outdated pair has to be sent zero: the link has left it, the marketplace may hold units
-	 * there and still takes writes to it.
+	 * Holds a pair whose warehouse the marketplace has switched off: it waits, uncounted, and goes out once the warehouse is
+	 * listed again.
+	 *
+	 * @param Account_Run         $run    The run.
+	 * @param array<string,mixed> $key    Row key.
+	 * @param string              $reason What the pair says; '' for nothing.
+	 * @param Stock_Flush_Result  $result Result.
+	 * @return void
+	 * @throws Claim_Lost When the claim was taken over.
+	 */
+	private function hold( Account_Run $run, array $key, string $reason, Stock_Flush_Result $result ): void {
+		$run->write( $this->queue->hold( $key, self::HOLD_SECONDS, $reason, $run->token() ) );
+		++$result->waiting;
+	}
+
+	/**
+	 * Tells whether the warehouse of an outdated pair has to be sent zero: the link has left it and the marketplace may hold
+	 * units there.
 	 *
 	 * @param Account_Run         $run       The run.
 	 * @param Link_Record         $link      Link.
@@ -381,8 +409,7 @@ final class Stock_Flusher {
 	private function must_vacate( Account_Run $run, Link_Record $link, int $warehouse, array $row ): bool {
 		return $warehouse > 0
 			&& Sync_State_Queue::may_hold_stock( $row )
-			&& Stock_Warehouse::chosen( $run->account(), $link ) !== $warehouse
-			&& Stock_Warehouse::is_available( $run->account(), $warehouse );
+			&& Stock_Warehouse::chosen( $run->account(), $link ) !== $warehouse;
 	}
 
 	/**
