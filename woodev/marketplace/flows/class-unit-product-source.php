@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * {@see self::matching()} reads only the products some value of some card could find, so an import does not load the whole shop.
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Unit_Product_Source {
 	private const STATUSES = [ 'publish', 'draft', 'pending', 'private' ];
@@ -54,7 +54,7 @@ final class Unit_Product_Source {
 	/**
 	 * Creates the source.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param \wpdb              $db             Database.
 	 * @param Wpdb_Profile_Store $profiles       Export profiles.
@@ -69,7 +69,7 @@ final class Unit_Product_Source {
 	/**
 	 * Lists the whole shop, or one category with its subcategories.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int|null $category_id Product category (`product_cat` term id), or null for the whole shop.
 	 * @param int      $account_id  Account the cards belong to.
@@ -82,7 +82,7 @@ final class Unit_Product_Source {
 	/**
 	 * Lists the products that carry one of the values as a SKU or a barcode, or that are being imported for one of the units.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int      $account_id Account.
 	 * @param string[] $values     Values of the cards' match keys.

@@ -169,7 +169,7 @@ final class Link_Jobs {
 	 * Creates the jobs.
 	 *
 	 * @since 2.1.0
-	 * @since 2.1.22 `$units`.
+	 * @since 2.1.23 `$units`.
 	 *
 	 * @param Job_Gate            $gate       Job gate.
 	 * @param Wpdb_Link_Store     $links      Links.

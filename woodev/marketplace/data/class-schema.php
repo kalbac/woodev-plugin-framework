@@ -337,7 +337,7 @@ final class Schema {
 	 * kept byte for byte (`utf8mb4_bin`) — a barcode is a free string, and only some are GTINs. A barcode names one unit of an
 	 * account, hence the primary key; `position` orders the list.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $table   Full table name.
 	 * @param string $charset Charset clause.

@@ -1334,7 +1334,7 @@ adapter that classifies the refusal as plain `FAIL` loses this: WP4 must map it.
 
 ## A size inside a card as the sellable unit (#2000)
 
-Card WF3 of the Wildberries design (`2.1.22`). One **optional** adapter interface, `Flows\Sellable_Units`; an adapter without it
+Card WF3 of the Wildberries design (`2.1.23`). One **optional** adapter interface, `Flows\Sellable_Units`; an adapter without it
 behaves as before (Ozon needs no change: article = SKU, matched after `Article_Policy::normalise()`, written by the import).
 Separate interface for the same reason as above
 ([gotcha](../gotchas/a-method-added-to-an-adapter-interface-fatals-released-plugins.md)).

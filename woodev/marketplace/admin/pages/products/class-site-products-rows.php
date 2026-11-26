@@ -74,7 +74,7 @@ final class Site_Products_Rows {
 	 *
 	 * @since 2.1.4
 	 * @since 2.1.13 `$image_url` adds the photo column.
-	 * @since 2.1.22 `$shown_article` and `$article_notice`.
+	 * @since 2.1.23 `$shown_article` and `$article_notice`.
 	 *
 	 * @param string               $marketplace Merchant-facing name of the marketplace.
 	 * @param array<string,string> $warehouses  Warehouse id => name of the account.

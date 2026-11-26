@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * Which variations share a card is the marketplace's knowledge (a colour card holds the sizes of one colour), so the adapter
  * says it; only an adapter that puts the rule in its list has it. The siblings are the ones the context supplies.
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Card_Dimensions_Rule implements Validation_Rule {
 	public const CODE = 'card_dimensions_differ';
@@ -53,7 +53,7 @@ final class Card_Dimensions_Rule implements Validation_Rule {
 	/**
 	 * Creates the rule.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param callable $card_of `function ( \WC_Product $product, Mapping $mapping ): string` — variations of one parent that get the
 	 *                          same answer go into one card of the marketplace.
@@ -65,7 +65,7 @@ final class Card_Dimensions_Rule implements Validation_Rule {
 	/**
 	 * Checks the product against the other variations of its card.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param \WC_Product        $product Product or variation.
 	 * @param Mapping            $mapping Mapping.

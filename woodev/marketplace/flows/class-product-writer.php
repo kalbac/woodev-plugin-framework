@@ -119,7 +119,7 @@ final class Product_Writer {
 	 * @param Card_Content  $content           The card.
 	 * @param bool          $create_categories Whether a card with no mapping gets its category path created.
 	 * @param callable|null $prepare           `function ( \WC_Product $product ): void`; called on the unsaved product, so that what it sets is stored by the **same** first save as the SKU and the marker (the group of the card: {@see Group_Assembler::mark()}).
-	 * @param string|null   $sku               The SKU to write instead of the article, '' for none; null writes the article (2.1.22).
+	 * @param string|null   $sku               The SKU to write instead of the article, '' for none; null writes the article (2.1.23).
 	 * @return \WC_Product The saved draft: found by its SKU, carrying the marker and the categories.
 	 * @throws \WC_Data_Exception When another product already has the SKU.
 	 */

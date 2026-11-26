@@ -106,7 +106,7 @@ final class Group_Assembler {
 	 * Creates the assembler.
 	 *
 	 * @since 2.1.6
-	 * @since 2.1.22 `$units`.
+	 * @since 2.1.23 `$units`.
 	 *
 	 * @param Wpdb_Link_Store     $links Links.
 	 * @param Sellable_Units|null $units The adapter, when it sells units.
@@ -343,7 +343,7 @@ final class Group_Assembler {
 	 * variation by the pending mark `$prepare` sets).
 	 *
 	 * @since 2.1.6
-	 * @since 2.1.22 `$sku` and `$prepare`.
+	 * @since 2.1.23 `$sku` and `$prepare`.
 	 *
 	 * @param Account       $account   Account.
 	 * @param int           $parent_id The variable product of the group.

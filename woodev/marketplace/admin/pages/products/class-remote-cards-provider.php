@@ -113,7 +113,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
-	 * @since 2.1.22 `$units`.
+	 * @since 2.1.23 `$units`.
 	 *
 	 * @param Wpdb_Account_Store      $accounts  Accounts.
 	 * @param Wpdb_Card_Store         $cards     The stored list of the cabinet's cards.

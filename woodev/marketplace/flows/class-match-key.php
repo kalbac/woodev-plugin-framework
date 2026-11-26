@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * A match key is a kind of product field and the values of one card that a product may carry there. An adapter declares an ordered
  * list of them ({@see Sellable_Units::match_keys()}); {@see Unit_Matcher} compares the values **as raw strings**, byte for byte.
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Match_Key {
 	/**
@@ -62,7 +62,7 @@ final class Match_Key {
 	/**
 	 * A key compared with the product's SKU.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<int,mixed> $values SKUs the card's product may have; none when the key does not apply to the card.
 	 * @return self
@@ -74,7 +74,7 @@ final class Match_Key {
 	/**
 	 * A key compared with the product's barcodes.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<int,mixed> $values Barcodes of the unit; none when the key does not apply to the card.
 	 * @return self
@@ -86,7 +86,7 @@ final class Match_Key {
 	/**
 	 * Returns the kind.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @return string
 	 */
@@ -97,7 +97,7 @@ final class Match_Key {
 	/**
 	 * Returns the values.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @return string[]
 	 */

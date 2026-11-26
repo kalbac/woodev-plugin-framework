@@ -77,7 +77,7 @@ final class Card_Outcome {
 	 * @param string                   $status_text Status in the marketplace's words.
 	 * @param array<string,int|string> $remote_ids  Identifiers the card carries.
 	 * @param bool|null                $oversize    The marketplace's oversize flag, null when the answer does not carry one.
-	 * @param string[]                 $barcodes    Every barcode of the unit (those the marketplace generated included); none keeps the link's (2.1.22).
+	 * @param string[]                 $barcodes    Every barcode of the unit (those the marketplace generated included); none keeps the link's (2.1.23).
 	 */
 	public function __construct( string $state, bool $created, bool $failed, string $status_text, array $remote_ids = [], ?bool $oversize = null, array $barcodes = [] ) {
 		$this->state       = $state;
@@ -92,7 +92,7 @@ final class Card_Outcome {
 	/**
 	 * Returns the barcodes of the unit.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @return string[] None when the answer carries none.
 	 */

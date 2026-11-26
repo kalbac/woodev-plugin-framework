@@ -34,7 +34,7 @@ defined( 'ABSPATH' ) || exit;
  * Every card handed to the methods below holds at least `offer_id`, `remote_ids`, `barcodes` and `unit` as the adapter gave them.
  * The methods are asked while tables are drawn, so they read the card and nothing else: no request, no query.
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 interface Sellable_Units {
 	/**
@@ -44,7 +44,7 @@ interface Sellable_Units {
 	 * with no values. The first rank at which any product matches decides: one product is the card's, several are a conflict the
 	 * merchant is told about, and nothing is guessed.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<string,mixed> $card Unit card.
 	 * @return Match_Key[]
@@ -54,7 +54,7 @@ interface Sellable_Units {
 	/**
 	 * Says what «Артикул» shows for a unit: the card's article as it is now, which may differ from the one in the key.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string              $offer_id Unit key.
 	 * @param array<string,mixed> $card     The unit card as the stored list holds it; [] when the list does not, and the key is all there is.
@@ -66,7 +66,7 @@ interface Sellable_Units {
 	 * Says which SKU the import wants to write into the unit's product. It is a candidate: when another product holds it, the
 	 * product is created with an empty SKU and the merchant is told.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<string,mixed> $card Unit card.
 	 * @return string The SKU, '' for none.

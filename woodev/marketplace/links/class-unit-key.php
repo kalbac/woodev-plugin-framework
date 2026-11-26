@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * identifiers and answers with the stored key. When a **new** card then takes a freed article and size, its key would be the old
  * link's: the adapter appends a third component that tells them apart (the unit's own identifier), `article|size|qualifier`.
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Unit_Key {
 	/**
@@ -40,7 +40,7 @@ final class Unit_Key {
 	/**
 	 * Builds the key of a unit.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $article   The card's seller article, byte for byte.
 	 * @param string $unit      What names the unit inside the card (a size); '' for a unit without a name.
@@ -56,7 +56,7 @@ final class Unit_Key {
 	/**
 	 * Reads a key back into its components.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $key Unit key.
 	 * @return array{article:string,unit:string,qualifier:string}|null Null for a text that is not a key: no separator, more than two
@@ -102,7 +102,7 @@ final class Unit_Key {
 	/**
 	 * Tells whether a key (or any article) fits the link table.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $key Key.
 	 * @return bool

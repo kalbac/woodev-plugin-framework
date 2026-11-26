@@ -131,7 +131,7 @@ final class Remote_Cards_Import_Plan {
 	 * Creates the plan builder.
 	 *
 	 * @since 2.1.6
-	 * @since 2.1.22 `$unit_kinds`.
+	 * @since 2.1.23 `$unit_kinds`.
 	 *
 	 * @param callable      $sku_kind    `function ( string $sku ): string`, one of the `SKU_*` kinds; {@see self::woocommerce_lookup()} in production.
 	 * @param callable      $group_state `function ( int $account_id, string $key ): string`, what a group has on the site; {@see Group_Assembler::lookup()} in production.
@@ -146,7 +146,7 @@ final class Remote_Cards_Import_Plan {
 	/**
 	 * Asks the importer's own decision about the products of unit cards ({@see Unit_Products::find()}). A read; nothing is written.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param Unit_Products $units      The importer's lookup.
 	 * @param string        $marker_key Meta key an import marks its half-made product with.

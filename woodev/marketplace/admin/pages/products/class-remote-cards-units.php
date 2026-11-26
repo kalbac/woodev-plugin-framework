@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * It also words what the last «link by article» run could not settle ({@see self::conflict_note()}).
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Remote_Cards_Units {
 	/**
@@ -58,7 +58,7 @@ final class Remote_Cards_Units {
 	/**
 	 * Creates the builder.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param Sellable_Units     $units      The adapter's unit rules.
 	 * @param Remote_Cards_Rows  $rows       Row builder.
@@ -75,7 +75,7 @@ final class Remote_Cards_Units {
 	/**
 	 * Builds the parent row of a card.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int                            $account_id Account id.
 	 * @param string                         $ref        Card reference.
@@ -117,7 +117,7 @@ final class Remote_Cards_Units {
 	/**
 	 * Words a conflict of the last «link by article» run as the note of the card's state badge.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<string,mixed> $conflict `offer_id`, `reason`, `product_ids`.
 	 * @return array{offer_id:string,text:string,detail:string}

@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  * own goods, which names nothing outside it (https://www.gs1.org/prefixes), however correct its check digit. Every barcode is
  * kept byte for byte elsewhere ({@see \Woodev\Framework\Marketplace\Data\Wpdb_Link_Store}).
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Gtin {
 	private const LENGTHS = [ 8, 12, 13, 14 ];
@@ -24,7 +24,7 @@ final class Gtin {
 	/**
 	 * Tells whether a barcode is a GTIN.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $barcode Barcode, as the marketplace gave it.
 	 * @return bool
@@ -58,7 +58,7 @@ final class Gtin {
 	/**
 	 * Returns the first barcode of a list that is a GTIN.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<int,mixed> $barcodes Barcodes, in the marketplace's order.
 	 * @return string '' when none is.

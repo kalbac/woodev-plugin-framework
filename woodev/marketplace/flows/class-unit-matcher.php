@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Pure: it reads lists and returns lists.
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Unit_Matcher {
 	/**
@@ -40,7 +40,7 @@ final class Unit_Matcher {
 	/**
 	 * Pairs cards with products.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<int,array<string,mixed>>                                                       $cards    Unit cards.
 	 * @param array<int,array{id:int,parent_id:int,sku:string,barcodes:string[],importing:string}> $products Candidate products ({@see Unit_Product_Source}); `importing` is the unit key the importer is making the product for, '' otherwise.
@@ -141,7 +141,7 @@ final class Unit_Matcher {
 	 * Returns the products one card matches on its own: those of the first rank at which any matches. The decision of a single
 	 * import, where there is no other card to compete with.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<string,mixed>                                                                  $card     Unit card.
 	 * @param array<int,array{id:int,parent_id:int,sku:string,barcodes:string[],importing:string}> $products Candidate products, none of them linked.

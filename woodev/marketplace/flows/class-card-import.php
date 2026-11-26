@@ -147,7 +147,7 @@ final class Card_Import {
 	 * Creates the importer.
 	 *
 	 * @since 2.1.6
-	 * @since 2.1.22 `$units`.
+	 * @since 2.1.23 `$units`.
 	 *
 	 * @param Wpdb_Link_Store     $links    Links.
 	 * @param Card_Linker         $linker   Linker.
@@ -247,7 +247,7 @@ final class Card_Import {
 	/**
 	 * Says why a card that matches several products was not imported.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int[] $product_ids The matching products.
 	 * @return string

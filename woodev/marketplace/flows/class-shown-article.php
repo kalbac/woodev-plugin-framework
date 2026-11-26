@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * The key of a unit ({@see \Woodev\Framework\Marketplace\Links\Unit_Key}) is never shown to the merchant: the adapter says which
  * article the card has and what tells the unit apart inside it ({@see Sellable_Units::shown_article()}).
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Shown_Article {
 	/**
@@ -33,7 +33,7 @@ final class Shown_Article {
 	/**
 	 * Creates the value.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $article The article of the card.
 	 * @param string $unit    What tells the unit apart inside it, '' for none.
@@ -46,7 +46,7 @@ final class Shown_Article {
 	/**
 	 * Returns the article of the card.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @return string
 	 */
@@ -57,7 +57,7 @@ final class Shown_Article {
 	/**
 	 * Returns what tells the unit apart.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @return string '' for a unit without a name.
 	 */
@@ -68,7 +68,7 @@ final class Shown_Article {
 	/**
 	 * Returns the article with the unit beside it.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @return string e.g. `coat · M`.
 	 */

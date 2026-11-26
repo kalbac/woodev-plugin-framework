@@ -313,7 +313,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @param Link_Record      $record     Row to insert; its link id is ignored.
 	 * @param string           $error_text The marketplace's text for a declined card, '' for none.
 	 * @param Claim_Fence|null $fence      The account claim the run holds, or null.
-	 * @param array<int,mixed> $barcodes   Every barcode of the card's unit, in order (2.1.22).
+	 * @param array<int,mixed> $barcodes   Every barcode of the card's unit, in order (2.1.23).
 	 * @return string {@see self::INSERTED}, {@see self::EXISTS} (a row for the product or the article is there) or {@see self::FENCED_OUT}.
 	 * @throws Persistence_Exception When the database refuses the insert.
 	 */
@@ -917,7 +917,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	/**
 	 * Returns every barcode of a link, byte for byte, in the marketplace's order.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int $link_id Link id.
 	 * @return string[]

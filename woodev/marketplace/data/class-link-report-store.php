@@ -76,7 +76,7 @@ final class Link_Report_Store {
 	 * covered part of the shop keeps the conflicts it did not look at — those that name no product of the part and no card the
 	 * run decided.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int                                                               $account_id Account id.
 	 * @param array<int,array{offer_id:string,reason:string,product_ids:int[]}> $entries    Conflicts of the run.
@@ -106,7 +106,7 @@ final class Link_Report_Store {
 	/**
 	 * Returns the conflicts of an account.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int $account_id Account id.
 	 * @return array<int,array{offer_id:string,reason:string,product_ids:int[]}>

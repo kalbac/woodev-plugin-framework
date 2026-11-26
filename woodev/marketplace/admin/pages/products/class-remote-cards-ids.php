@@ -64,7 +64,7 @@ final class Remote_Cards_Ids {
 	/**
 	 * Builds the id of the parent row of a card whose units are listed under it.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int    $account_id Account id.
 	 * @param string $ref        Card reference ({@see Wpdb_Card_Store::card_page()}).
@@ -77,7 +77,7 @@ final class Remote_Cards_Ids {
 	/**
 	 * Reads the card reference out of a parent row id of the given account.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $row_id     Row id.
 	 * @param int    $account_id Account the table is open for.

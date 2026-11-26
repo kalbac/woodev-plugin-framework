@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * It also keeps what the merchant is told when the import could not give the product its SKU ({@see self::sku_conflict_text()}).
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Unit_Products {
 	/**
@@ -57,7 +57,7 @@ final class Unit_Products {
 	/**
 	 * Creates the lookup.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param Sellable_Units       $units  The adapter's unit rules.
 	 * @param Unit_Product_Source  $source Shop products.
@@ -74,7 +74,7 @@ final class Unit_Products {
 	/**
 	 * Returns what a message shows for the article of a unit.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int    $account_id Account.
 	 * @param string $offer_id   Unit key.
@@ -87,7 +87,7 @@ final class Unit_Products {
 	/**
 	 * Returns the meta key of a product whose import for a unit has not ended with a link.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $marketplace_id The adapter's id.
 	 * @return string
@@ -99,7 +99,7 @@ final class Unit_Products {
 	/**
 	 * Returns the value of {@see self::pending_key()} for a unit of an account.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int    $account_id Account id.
 	 * @param string $offer_id   Unit key.
@@ -112,7 +112,7 @@ final class Unit_Products {
 	/**
 	 * Returns the meta key that keeps the SKU another product held when the import created this one.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string $marketplace_id The adapter's id.
 	 * @return string
@@ -124,7 +124,7 @@ final class Unit_Products {
 	/**
 	 * Says why a product the import created has no SKU, for as long as it has none and another product holds the one it wanted.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string      $marketplace_id The adapter's id.
 	 * @param \WC_Product $product        Product or variation.
@@ -151,7 +151,7 @@ final class Unit_Products {
 	/**
 	 * Returns the adapter's unit rules.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @return Sellable_Units
 	 */
@@ -162,7 +162,7 @@ final class Unit_Products {
 	/**
 	 * Finds the products of unit cards.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int                            $account_id Account.
 	 * @param array<int,array<string,mixed>> $cards      Unit cards.

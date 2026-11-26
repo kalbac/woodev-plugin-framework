@@ -468,7 +468,7 @@ final class Wpdb_Card_Store {
 	 * One page of the list by card, for a marketplace that sells units: each card with **all** its units, in the marketplace's
 	 * order. The filter and the search choose the cards (a card is listed when any of its units passes), never the units inside.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int       $account_id Account id.
 	 * @param bool|null $on_site    True: cards with a unit a product carries; false: cards with a unit no product carries; null: all.
@@ -500,7 +500,7 @@ final class Wpdb_Card_Store {
 	/**
 	 * Reads every unit of some cards.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int      $account_id Account id.
 	 * @param string[] $refs       Card references: the keys of {@see self::card_page()}.
@@ -528,7 +528,7 @@ final class Wpdb_Card_Store {
 	/**
 	 * How many cards under the search text have a unit on the site and how many have a unit that is not.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int    $account_id Account id.
 	 * @param string $search     Search text; '' for none.
@@ -549,7 +549,7 @@ final class Wpdb_Card_Store {
 	/**
 	 * How many cards the account's list holds, counting the units of one card once, and how many of them are in the archive.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int $account_id Account id.
 	 * @return array{cards:int,archived:int}

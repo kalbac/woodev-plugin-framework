@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  * the `offer_id`, and the adapter's own words for one that sells units ({@see Sellable_Units}) — which follow the card as the
  * stored list holds it now, so an article renamed on the marketplace is shown renamed although the key is the old one.
  *
- * @since 2.1.22
+ * @since 2.1.23
  */
 final class Article_Display {
 	/**
@@ -43,7 +43,7 @@ final class Article_Display {
 	/**
 	 * Creates the display.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param Sellable_Units|null  $units The adapter, when it sells units.
 	 * @param Wpdb_Card_Store|null $cards The stored cards list {@see self::of_link()} reads.
@@ -56,7 +56,7 @@ final class Article_Display {
 	/**
 	 * Tells whether the marketplace sells units.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @return bool
 	 */
@@ -67,7 +67,7 @@ final class Article_Display {
 	/**
 	 * Returns the text of an article whose card the caller holds, or of the key alone.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param string              $offer_id The link's article.
 	 * @param array<string,mixed> $card     The card, [] when there is none at hand.
@@ -84,7 +84,7 @@ final class Article_Display {
 	/**
 	 * Returns the text of a link's article, looking its card up in the stored list. A local read, one per article.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param int    $account_id Account id.
 	 * @param string $offer_id   The link's article.

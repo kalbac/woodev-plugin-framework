@@ -76,7 +76,7 @@ final class Remote_Cards_Rows {
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
-	 * @since 2.1.22 `$articles`.
+	 * @since 2.1.23 `$articles`.
 	 *
 	 * @param callable             $describe   `function ( int $product_id ): array{title:string,url:string}`.
 	 * @param Logging|null         $logging    The «Логирование» switch, read when a row is built, so the technical tail of an import note follows it as it is now.
@@ -204,7 +204,7 @@ final class Remote_Cards_Rows {
 	}
 
 	/**
-	 * @since 2.1.22 Public: the parent row of a card with several units says it too.
+	 * @since 2.1.23 Public: the parent row of a card with several units says it too.
 	 *
 	 * @return string Why a card that is being imported takes no action.
 	 */
@@ -279,7 +279,7 @@ final class Remote_Cards_Rows {
 	/**
 	 * The state of a card as a badge: «Неизвестно» for a card whose details did not come with the list.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param array<string,mixed> $card Card.
 	 * @return array{label:string,tone:string}
@@ -368,7 +368,7 @@ final class Remote_Cards_Rows {
 	/**
 	 * «Открыть на {marketplace}»: the card in the seller's cabinet. Not offered when the adapter gives no address.
 	 *
-	 * @since 2.1.22 Public: the parent row of a card with several units offers it too.
+	 * @since 2.1.23 Public: the parent row of a card with several units offers it too.
 	 *
 	 * @param array<string,mixed> $card Card.
 	 * @return array<int,array{id:string,enabled:bool,reason:string,url:string}>
@@ -422,7 +422,7 @@ final class Remote_Cards_Rows {
 	/**
 	 * «Импортировать» is open for a card no product carries whose details are known and that is not archived; the other cards say why it is not.
 	 *
-	 * @since 2.1.22 Public: the parent row of a card with several units asks it of each unit.
+	 * @since 2.1.23 Public: the parent row of a card with several units asks it of each unit.
 	 *
 	 * @param array<string,mixed> $card   Card.
 	 * @param string              $locked Why the card is locked, or '' when it is not.

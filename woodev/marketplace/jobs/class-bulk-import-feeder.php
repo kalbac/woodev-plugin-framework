@@ -138,7 +138,7 @@ final class Bulk_Import_Feeder implements Bulk_Run_Worker {
 	 * Returns the lookup of the half-made products of a marketplace that sells units: a unit's product is found by the pending
 	 * mark ({@see \Woodev\Framework\Marketplace\Flows\Unit_Products}), its unit key being no SKU.
 	 *
-	 * @since 2.1.22
+	 * @since 2.1.23
 	 *
 	 * @param \wpdb  $db          Database.
 	 * @param string $pending_key Meta key of the pending mark (`Unit_Products::pending_key()`).
