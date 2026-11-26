@@ -23,7 +23,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * - {@see self::queue()}: expands variable products into their variations (those the marketplace does not sell, as
  *   {@see Export_Facts::is_exportable()} says, are skipped), finds or creates each offer row, validates it with the same inputs
- *   the job will build from, stores the report on a blocked link and queues the valid ones (`unlinked` → `queued`) in batches.
+ *   the job will build from, stores the report on a blocked link and queues the valid ones (`unlinked` → `queued`) in batches; a
+ *   group the adapter names ({@see Export_Grouping}) is never split between two batches.
  * - {@see self::reset()}: «Сбросить состояние», the link back to `unlinked` without touching the marketplace.
  *
  * @since 2.1.0
@@ -125,6 +126,7 @@ final class Export_Service {
 		$queued   = [];
 		$refused  = [];
 		$previous = [];
+		$groups   = [];
 
 		foreach ( $this->offers( $product_ids ) as $product ) {
 			$link    = $this->links->find( $account->id(), (int) $product->get_id() );
@@ -159,6 +161,10 @@ final class Export_Service {
 				$link_ids[]                          = (int) $link->link_id();
 				$queued[]                            = (int) $product->get_id();
 				$previous[ (int) $link->link_id() ] = $before;
+
+				if ( $this->facts instanceof Export_Grouping ) {
+					$groups[ (int) $link->link_id() ] = $this->facts->export_group( $link, $product );
+				}
 			} else {
 				$refused[ (int) $product->get_id() ] = $link->card_state();
 			}
@@ -166,7 +172,7 @@ final class Export_Service {
 
 		if ( [] !== $link_ids ) {
 			$this->guard( $guard );
-			$this->schedule( $account, $link_ids, $previous, $guard );
+			$this->schedule( $account, $link_ids, $groups, $previous, $guard );
 		}
 
 		return [
@@ -193,14 +199,15 @@ final class Export_Service {
 	 *
 	 * @param Account           $account  Account.
 	 * @param int[]             $link_ids Links just queued.
+	 * @param array<int,string> $groups   Link id => the group it is sent with.
 	 * @param array<int,string> $previous Link id => the card state before it was queued.
 	 * @param callable|null     $guard    Called before every rollback write.
 	 * @return void
 	 * @throws Export_Not_Scheduled After the rollback, when some batch was refused.
 	 */
-	private function schedule( Account $account, array $link_ids, array $previous, ?callable $guard = null ): void {
+	private function schedule( Account $account, array $link_ids, array $groups, array $previous, ?callable $guard = null ): void {
 		try {
-			$this->scheduler->queue_export( $account->id(), $link_ids );
+			$this->scheduler->queue_export( $account->id(), $link_ids, $groups );
 		} catch ( Export_Not_Scheduled $e ) {
 			foreach ( $e->link_ids() as $link_id ) {
 				$this->guard( $guard );

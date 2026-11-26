@@ -38,6 +38,20 @@ final class Export_Run {
 	public $sending = [];
 
 	/**
+	 * Links sent again although an earlier request may have created their card: the card list did not show it.
+	 *
+	 * @var int[]
+	 */
+	public $unconfirmed = [];
+
+	/**
+	 * Links found in the marketplace's card list instead of being sent again.
+	 *
+	 * @var int
+	 */
+	public $found = 0;
+
+	/**
 	 * Whether the run's outcome is already written (submitted, refused or failed), so recovery must not touch it.
 	 *
 	 * @var bool

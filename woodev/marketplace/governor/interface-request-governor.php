@@ -41,6 +41,19 @@ interface Request_Governor {
 	public function report_rate_limited( string $account_key, string $bucket, int $retry_after ): void;
 
 	/**
+	 * Charges a request the marketplace answered with a 4xx: `cost_4xx` tokens, one of which acquire() already took.
+	 *
+	 * The rest is drawn from the bucket after the fact, so the next request waits for it. Nothing is drawn when the cost is 1.
+	 *
+	 * @since 2.1.21
+	 *
+	 * @param string $account_key Account.
+	 * @param string $bucket      Bucket key.
+	 * @return bool False when the charge was lost (contention, or the database refused the write).
+	 */
+	public function report_client_error( string $account_key, string $bucket ): bool;
+
+	/**
 	 * Records that the marketplace retired the method behind a bucket, so it is not called again for a while.
 	 *
 	 * @since 2.0.29

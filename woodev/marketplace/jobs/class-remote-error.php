@@ -10,7 +10,7 @@ namespace Woodev\Framework\Marketplace\Jobs;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * What a job must do after a marketplace call failed as a whole. The adapter classifies its own exception into one of five
+ * What a job must do after a marketplace call failed as a whole. The adapter classifies its own exception into one of six
  * consequences ({@see Error_Classifier}); the runners act on the consequence and never on a marketplace's codes:
  *
  * | Consequence | Meaning | What a runner does |
@@ -20,6 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * | `RETRY` | the outcome is uncertain (timeout, server error): the call may have been applied | counts a failure, backs off |
  * | `FAIL` | the marketplace refused these items for good (a validation error) | counts a failure with the text |
  * | `API_CHANGED` | the marketplace no longer offers the method | counts a failure and stops the run |
+ * | `ARTICLE_TAKEN` | an import is refused because an article already belongs to a card | as `FAIL`; but the export waits for the card when an earlier, unconfirmed request may have created it |
  *
  * @since 2.1.0
  */
@@ -30,7 +31,14 @@ final class Remote_Error {
 	public const FAIL          = 'fail';
 	public const API_CHANGED   = 'api_changed';
 
-	private const CONSEQUENCES = [ self::PAUSE_ACCOUNT, self::THROTTLE, self::RETRY, self::FAIL, self::API_CHANGED ];
+	/**
+	 * Only for the import request of an {@see \Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle} adapter.
+	 *
+	 * @since 2.1.21
+	 */
+	public const ARTICLE_TAKEN = 'article_taken';
+
+	private const CONSEQUENCES = [ self::PAUSE_ACCOUNT, self::THROTTLE, self::RETRY, self::FAIL, self::API_CHANGED, self::ARTICLE_TAKEN ];
 
 	/**
 	 * Consequence.

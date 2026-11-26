@@ -4010,14 +4010,16 @@ msgstr ""
 msgid "Список карточек получен, но сохранить его не удалось: в нём слишком много товаров для просмотра на этой странице."
 msgstr ""
 
-#: marketplace/jobs/class-poll-task-runner.php:300
-msgid "Маркетплейс не вернул результат за сутки."
+#. translators: %d: number of hours.
+#: marketplace/jobs/class-poll-task-runner.php:306
+#, php-format
+msgid "Маркетплейс не вернул результат за %d ч."
 msgstr ""
 
-#. translators: %s: the marketplace's status of the card.
-#: marketplace/jobs/class-poll-task-runner.php:417
+#. translators: 1: number of hours, 2: the marketplace's status of the card.
+#: marketplace/jobs/class-poll-task-runner.php:458
 #, php-format
-msgid "Карточка не создана за 3 часа; статус маркетплейса: %s."
+msgid "Карточка не создана за %1$d ч.; статус маркетплейса: %2$s."
 msgstr ""
 
 #. translators: %s: the marketplace's status of the card.
@@ -4110,6 +4112,10 @@ msgstr ""
 
 #: marketplace/settings/class-accounts-sections.php:397
 msgid "Заполните все учётные данные аккаунта."
+msgstr ""
+
+#: marketplace/settings/class-accounts-sections.php
+msgid "Не удалось определить идентификатор аккаунта по этому токену. Проверьте токен."
 msgstr ""
 
 #: marketplace/settings/class-accounts-sections.php:445
