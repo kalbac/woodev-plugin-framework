@@ -1032,8 +1032,7 @@ as settled (decisions D12 and D13 for T6 and T7). T3–T5 stand as stated.
 
 No real order can be made before the release. These are the facts that only a real order — or a call phase 0 had no
 safe way to make — would prove; 1.0 ships with them stated, and the first real merchant orders are watched for them.
-**R1–R5 were accepted by the owner on 26.11.2026; R7 and R8 (the phase-0 report) were accepted by the owner on
-27.11.2026.** R6 is closed. Rows are updated with what phase 0 showed.
+**R1–R5 were accepted by the owner on 26.11.2026. R7 and R8 (phase 0) were reported to the owner on 26.11.2026; they are carried as known residual risks, not separately accepted.** R6 is closed. Rows are updated with what phase 0 showed.
 
 | # | Unproven | What phase 0 showed | What the design does about it | Where the merchant is told |
 |---|---|---|---|---|
@@ -1192,7 +1191,7 @@ No card is conditional: DBS stays in 1.0 (owner, 26.11.2026).
 | 26.11.2026 | After the critic review of PR #2018 (no owner decision, T6–T7 or R7–R8 changed): the card write record exists before an `nmID` does, keyed by account and article, so a refused create is matched to its send — §5.6, §11, WP4; the error-entry rule allows a clock margin — §5.6; the GTIN exclusion adds the GS1 prefix `0000000` — §5.2, WF3 |
 | 26.11.2026 | Second critic round of PR #2018: the clock-margin rule for error-list entries (previous row) is withdrawn — it could fail a successful create on a retained entry the plugin had never read. No entry finalizes a send; the card list decides, and what is still open fails at the task deadline — §5.6, §12.1, WP4 |
 | 26.11.2026 | Third critic round of PR #2018: a write no read ever shows is retired once none of its sizes waits for it (deadline, reset or a new send), keeping the newest `updatedAt` baseline, so a corrected update is not blocked — §5.6, §11, WP4; no framework change |
-| 27.11.2026 | The owner's answers to the last two tensions. **T6:** in 1.0 the article changes only in the Wildberries cabinet; the plugin follows it; a rename from the shop is card #2055 (decision D12) — §5.1, §13.3. **T7:** in 1.0 the relay extension is not passed to CDEK or Yandex; the manager sees the warning — §7.3, §13.3 (decision D13). **R7 and R8** accepted as residual risks (the phase-0 report) — §13.4 |
+| 27.11.2026 | The owner's answers to the last two tensions. **T6:** in 1.0 the article changes only in the Wildberries cabinet; the plugin follows it; a rename from the shop is card #2055 (decision D12) — §5.1, §13.3. **T7:** in 1.0 the relay extension is not passed to CDEK or Yandex; the manager sees the warning — §7.3, §13.3 (decision D13). **R7 and R8** (phase 0) were reported on 26.11.2026 and are carried as known residual risks, not separately accepted — §13.4 |
 
 ## Related
 
