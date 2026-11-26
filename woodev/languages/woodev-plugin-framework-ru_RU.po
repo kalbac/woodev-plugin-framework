@@ -7651,6 +7651,10 @@ msgstr ""
 msgid "Вариации"
 msgstr ""
 
+#: marketplace/admin/pages/mappings/class-view-config.php:226
+msgid "Среди уже проверенных товаров новые карточки не нужны. Нажмите «Показать ещё», чтобы проверить следующие."
+msgstr ""
+
 #. translators: %s: account names, each in quotes.
 #: marketplace/admin/pages/mappings/class-mapping-messages.php:306
 #, php-format

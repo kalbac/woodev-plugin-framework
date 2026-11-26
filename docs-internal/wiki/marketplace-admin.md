@@ -1549,27 +1549,36 @@ merchant, under a **saved** mapping, which article each product would get. One *
 | `preview_article( $product, $mapping, $profile )` | asked per sellable unit (a simple product or one variation) that has **no card**, once per enabled account; answers the article as the merchant knows it, not the unit key; `''` = cannot be worked out. The answer must be the one the export would send for that mapping and profile (`Export_Facts::offer_id_for()`). Reads the shop and stored facts only, **no request to the marketplace** |
 
 **Who is listed** (`Mapping_Article_Preview`): the products of the mapping's categories (`Mapping_Products`, as the product
-check), their variations when variable, minus what the marketplace does not export (`Export_Facts::is_exportable()`) and
-minus units whose article is kept on any account — a link with `frozen_offer_id()` or one a request already carried
-(`Task_Ledger::sent_offer_id()`).
+check) — a simple product, or each variation of a variable one (**a variable product without variations makes no card and is
+not listed**) — minus what the marketplace does not export (`Export_Facts::is_exportable()`) and minus units whose article is
+kept on any account: a link with `frozen_offer_id()` or one a request already carried (`Wpdb_Task_Ledger::sent_link_ids()`).
 
-**The product's own settings win, account by account** — the preview resolves each unit as the export does
-(`Export_Context_Builder`), so it never shows an article the product will not get:
+**The product's own settings win, account by account** — the preview resolves each unit by the export's own rules
+(`Link_Context_Resolver`, then `Export_Facts::offer_id_for()` as `Export_Context_Builder` calls it), so it never shows an
+article the product will not get; a unit test compares the two:
 
 | Own setting | What the line shows |
 |---|---|
 | another effective mapping: chosen at the product or its parent, or of a nearer category | `preview_article()` gets that mapping and its profile; the note names it |
 | values set at the product (`attribute_overrides`) | laid over the mapping the adapter gets; no note |
-| an article typed at the product | `Export_Context_Builder::offer_id()` (so the adapter's `offer_id_for()` decides whether it is taken), shown through `Sellable_Units::shown_article()`; noted only when it differs from the mapping's |
+| an article typed at the product | the adapter's `offer_id_for()` with it, which decides whether it is taken, shown through `Sellable_Units::shown_article()`; noted only when it differs from the mapping's |
 | a chosen mapping that no longer exists | a dash and the reason; the adapter is not asked |
 | accounts that disagree | a line for each article and reason, naming its accounts |
 
 With no enabled account the mapping on the screen answers.
 
-**Route:** `GET R/mappings/{id}/articles?offset=` → `{ products: [ { id, name, url, articles: [ { article, note, variations } ] } ],
-next_offset }`. At most 20 products per answer and 200 read per request; units that share an article and a note share a line. The
-view (`article-preview.tsx`) reads past stretches with nothing to show, reads again after a save, and offers «Показать ещё». It
-needs the account store, which `Marketplace_Plugin` hands `Mappings_Module::register()`.
+**Route:** `GET R/mappings/{id}/articles?offset=&skip=` → `{ products: [ { id, name, url, articles: [ { article, note,
+variations } ] } ], next: { offset, skip } | null }`; units that share an article and a note share a line. The view
+(`article-preview.tsx`) makes **one** read when it appears and after a save, and reads on only on «Показать ещё» — it never
+walks the shop by itself. It needs the account store, which `Marketplace_Plugin` hands `Mappings_Module::register()`.
+
+**Bounds of one request.** At most 100 units read (`UNITS`; a product without a unit counts as one) and 20 products listed
+(`PRODUCTS`). A product whose variations do not fit continues in the next request (`skip`), and the view adds them to its lines.
+The framework's reads do not grow with units or accounts: posts and meta are primed at once (`_prime_post_caches()`), link rows
+come from `Wpdb_Link_Store::rows_of_products()`, sent articles from one `sent_link_ids()`, and a chosen mapping, a profile and a
+mapping's name are each read once, and a typed article is read from the primed post meta (`Pinned_Offer_Id::of_primed()`).
+The adapter is asked once per unit for accounts that resolve alike. What its own methods read is not bounded here: an adapter
+whose article depends on a parent's other variations should read each parent once per request, priming their posts in one go.
 
 ## Changing the article after the export (framework 2.1.13, #1860)
 

@@ -25,7 +25,8 @@ use Woodev\Framework\Marketplace\Flows\Export_Facts;
 use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Sellable_Units;
 use Woodev\Framework\Marketplace\Flows\Shown_Article;
-use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
+use Woodev\Framework\Marketplace\Ledger\Async_Task;
+use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Article_Policy;
 use Woodev\Tests\Unit\TestCase;
@@ -65,6 +66,13 @@ final class Fake_Article_Preview implements Article_Preview {
 	public $prefixes = [];
 
 	/**
+	 * Answers instead of the table when a test sets it: `function ( \WC_Product, Mapping, Profile ): string`.
+	 *
+	 * @var callable|null
+	 */
+	public $answer;
+
+	/**
 	 * Returns the article.
 	 *
 	 * @param \WC_Product $product Product.
@@ -75,6 +83,10 @@ final class Fake_Article_Preview implements Article_Preview {
 	public function preview_article( \WC_Product $product, Mapping $mapping, Profile $profile ): string {
 		$this->asked[]    = [ $product->get_id(), (int) $mapping->id(), $profile->name() ];
 		$this->mappings[] = $mapping;
+
+		if ( null !== $this->answer ) {
+			return (string) call_user_func( $this->answer, $product, $mapping, $profile );
+		}
 
 		return ( $this->prefixes[ (int) $mapping->id() ] ?? '' ) . ( $this->articles[ $product->get_id() ] ?? '' );
 	}
@@ -114,11 +126,25 @@ final class MappingArticlePreviewTest extends TestCase {
 	private $shop = [];
 
 	/**
-	 * Article already sent, by link id.
+	 * Task ledger.
 	 *
-	 * @var array<int,string>
+	 * @var Wpdb_Task_Ledger
 	 */
-	private $sent = [];
+	private $ledger;
+
+	/**
+	 * Parent of each variation.
+	 *
+	 * @var array<int,int>
+	 */
+	private $parents = [];
+
+	/**
+	 * The id lists whose posts were read at once, in order.
+	 *
+	 * @var array<int,int[]>
+	 */
+	private $primed = [];
 
 	/**
 	 * Ids of products that become no card.
@@ -173,6 +199,18 @@ final class MappingArticlePreviewTest extends TestCase {
 		\WP_Query::$queries = [];
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( 'get_term_children' )->justReturn( [] );
+		Functions\when( 'get_post_meta' )->alias(
+			function ( $id, $key ) {
+				$this->assertContains( (int) $id, array_merge( ...$this->primed ), 'a product whose meta was not read at once costs a read of its own' );
+
+				return $this->typed_meta( (int) $id, $key );
+			}
+		);
+		Functions\when( '_prime_post_caches' )->alias(
+			function ( array $ids ): void {
+				$this->primed[] = array_values( $ids );
+			}
+		);
 		Functions\when( 'wc_get_product' )->alias(
 			function ( $id ) {
 				return $this->shop[ (int) $id ] ?? false;
@@ -192,6 +230,7 @@ final class MappingArticlePreviewTest extends TestCase {
 		$this->h          = new Mappings_Harness();
 		$this->articles   = new Fake_Article_Preview();
 		$this->links      = new Wpdb_Link_Store( $this->h->db, Sqlite_Tables::table( 'links' ), Sqlite_Tables::table( 'link_ids' ) );
+		$this->ledger     = new Wpdb_Task_Ledger( $this->h->db, Sqlite_Tables::table( 'tasks' ), Sqlite_Tables::table( 'task_items' ) );
 		$this->mapping_id = $this->h->mappings->create( 'Футболки', null, [], null, [] );
 		$this->h->mappings->link_term_if_absent( 5, $this->mapping_id );
 		$this->accounts = [ self::account( 1, 'Основной' ) ];
@@ -221,7 +260,8 @@ final class MappingArticlePreviewTest extends TestCase {
 		$this->shop[ $id ] = $this->wc_product( $id, $name, [] === $children ? 'simple' : 'variable', $children );
 
 		foreach ( $children as $child_id ) {
-			$this->shop[ $child_id ] = $this->wc_product( $child_id, 'Вариация ' . $child_id, 'variation', [] );
+			$this->parents[ $child_id ] = $id;
+			$this->shop[ $child_id ]    = $this->wc_product( $child_id, 'Вариация ' . $child_id, 'variation', [] );
 		}
 	}
 
@@ -240,18 +280,13 @@ final class MappingArticlePreviewTest extends TestCase {
 		$product->shouldReceive( 'get_name' )->andReturn( $name );
 		$product->shouldReceive( 'get_parent_id' )->andReturnUsing(
 			function () use ( $id ) {
-				foreach ( $this->shop as $parent ) {
-					if ( in_array( $id, $parent->get_children(), true ) ) {
-						return $parent->get_id();
-					}
-				}
-
-				return 0;
+				return $this->parents[ $id ] ?? 0;
 			}
 		);
+		// The export reads a typed article from the product; the preview from the primed post meta, the same stored value.
 		$product->shouldReceive( 'get_meta' )->andReturnUsing(
 			function ( $key ) use ( $id ) {
-				return $this->typed[ $id . ':' . substr( $key, strrpos( $key, '_' ) + 1 ) ] ?? '';
+				return $this->typed_meta( $id, $key );
 			}
 		);
 		$product->shouldReceive( 'get_children' )->andReturn( $children );
@@ -262,6 +297,17 @@ final class MappingArticlePreviewTest extends TestCase {
 		);
 
 		return $product;
+	}
+
+	/**
+	 * The stored typed article of a product, by its meta key.
+	 *
+	 * @param int    $id  Product or variation.
+	 * @param string $key Meta key, which ends with the account id.
+	 * @return string
+	 */
+	private function typed_meta( int $id, string $key ): string {
+		return $this->typed[ $id . ':' . substr( $key, strrpos( $key, '_' ) + 1 ) ] ?? '';
 	}
 
 	/**
@@ -280,59 +326,102 @@ final class MappingArticlePreviewTest extends TestCase {
 	}
 
 	/**
-	 * Builds the preview.
+	 * Builds the marketplace's facts.
 	 *
-	 * @param Sellable_Units|null $units Unit rules of the marketplace.
-	 * @return Mapping_Article_Preview
+	 * @return Export_Facts
 	 */
-	private function preview( ?Sellable_Units $units = null ): Mapping_Article_Preview {
-		$ledger = Mockery::mock( Task_Ledger::class );
-		$ledger->shouldReceive( 'sent_offer_id' )->andReturnUsing(
-			function ( $link_id ) {
-				return $this->sent[ $link_id ] ?? null;
-			}
-		);
+	private function facts(): Export_Facts {
 		$facts = Mockery::mock( Export_Facts::class );
 		$facts->shouldReceive( 'is_exportable' )->andReturnUsing(
 			function ( $product ) {
 				return ! in_array( $product->get_id(), $this->not_exportable, true );
 			}
 		);
-
-		$facts->shouldReceive( 'offer_id_for' )->andReturnUsing( $this->offer_id_for ?? static function ( $frozen ) {
-			return (string) $frozen;
-		} );
-		$policy   = new Fake_Article_Policy();
-		$pinned   = new Pinned_Offer_Id( 'fake', $policy );
-		$contexts = new Export_Context_Builder(
-			new Link_Context_Resolver( $this->links, $this->h->mappings ),
-			$this->h->profiles,
-			$this->links,
-			$facts,
-			$policy,
-			$pinned,
-			null,
-			function ( $product ) {
-				return [ $this->categories[ $product->get_id() ] ?? 5 ];
-			},
-			null,
-			$ledger
+		$facts->shouldReceive( 'offer_id_for' )->andReturnUsing(
+			$this->offer_id_for ?? static function ( $frozen ) {
+				return (string) $frozen;
+			}
 		);
 
+		return $facts;
+	}
+
+	/**
+	 * The category terms of a product, as the shop has them.
+	 *
+	 * @return callable
+	 */
+	private function term_ids(): callable {
+		return function ( $product ): array {
+			return [ $this->categories[ $product->get_id() ] ?? 5 ];
+		};
+	}
+
+	/**
+	 * Builds the preview.
+	 *
+	 * @param Sellable_Units|null $units Unit rules of the marketplace.
+	 * @return Mapping_Article_Preview
+	 */
+	private function preview( ?Sellable_Units $units = null ): Mapping_Article_Preview {
 		return new Mapping_Article_Preview(
 			$this->articles,
+			$this->facts(),
 			$this->h->mappings,
+			$this->h->profiles,
 			new Mapping_Products( [ $this->h->mappings, 'terms_by_mapping' ] ),
 			$this->links,
-			$ledger,
-			$facts,
-			$contexts,
-			$pinned,
+			$this->ledger,
+			new Pinned_Offer_Id( 'fake', new Fake_Article_Policy() ),
 			function (): array {
 				return $this->accounts;
 			},
-			$units
+			$units,
+			$this->term_ids()
 		);
+	}
+
+	/**
+	 * Records that a request carried a link's article.
+	 *
+	 * @param int $link_id Link id.
+	 * @return void
+	 */
+	private function mark_sent( int $link_id ): void {
+		$task_id = $this->ledger->open( new Async_Task( 1, Async_Task::KIND_IMPORT ), [ $link_id => 'sent-' . $link_id ] );
+		$this->ledger->mark_sending( $task_id, 'request-' . $task_id, [ $link_id ] );
+	}
+
+	/**
+	 * Reads the whole mapping, one request after another.
+	 *
+	 * @return array{requests:int,products:array<int,array<string,mixed>>,statements:int}
+	 *         The requests made, every product listed by them and the most SQL statements one of them ran.
+	 */
+	private function read_all(): array {
+		$preview    = $this->preview();
+		$next       = [
+			'offset' => 0,
+			'skip'   => 0,
+		];
+		$requests   = 0;
+		$products   = [];
+		$statements = 0;
+
+		while ( null !== $next && $requests < 100 ) {
+			$this->h->db->statements = [];
+			$answer                  = $preview->read( $this->mapping_id, $next['offset'], $next['skip'] );
+			$statements              = max( $statements, count( $this->h->db->statements ) );
+			$products                = array_merge( $products, $answer['products'] );
+			$next                    = $answer['next'];
+			++$requests;
+		}
+
+		return [
+			'requests'   => $requests,
+			'products'   => $products,
+			'statements' => $statements,
+		];
 	}
 
 	/**
@@ -386,7 +475,7 @@ final class MappingArticlePreviewTest extends TestCase {
 			],
 			$answer['products']
 		);
-		$this->assertSame( 0, $answer['next_offset'] );
+		$this->assertNull( $answer['next'] );
 		$this->assertSame( [ 11, $this->mapping_id, '' ], $this->articles->asked[0], 'a mapping without a profile gives an empty one' );
 	}
 
@@ -427,7 +516,7 @@ final class MappingArticlePreviewTest extends TestCase {
 		$this->product( 10, 'Футболка', [ 11, 12, 13 ] );
 		$this->product( 20, 'Кепка' );
 		$this->link( 11, 10, Link_Record::STATE_SUBMITTED );
-		$this->sent[ $this->link( 12, 10, Link_Record::STATE_UNLINKED ) ] = 'key-12';
+		$this->mark_sent( $this->link( 12, 10, Link_Record::STATE_UNLINKED ) );
 		$this->link( 13, 10, Link_Record::STATE_UNLINKED );
 		$this->link( 20, 0, Link_Record::STATE_SUBMITTED );
 
@@ -638,6 +727,24 @@ final class MappingArticlePreviewTest extends TestCase {
 	}
 
 	/**
+	 * A variable product without variations makes no card: it is not listed and its own SKU is never shown as an article.
+	 *
+	 * @return void
+	 */
+	public function test_a_variable_product_without_variations_shows_no_article(): void {
+		\WP_Query::$ids[]  = 10;
+		$this->shop[ 10 ]  = $this->wc_product( 10, 'Без вариаций', 'variable', [] );
+		$this->articles->articles = [ 10 => 'PARENT-SKU' ];
+		$this->product( 20, 'Кепка' );
+
+		$answer = $this->preview()->read( $this->mapping_id );
+
+		$this->assertSame( [ 20 ], array_column( $answer['products'], 'id' ) );
+		$this->assertSame( [ 20 ], array_column( $this->articles->asked, 0 ) );
+		$this->assertNull( $answer['next'] );
+	}
+
+	/**
 	 * One answer lists a page of products and says where the next one starts.
 	 *
 	 * @return void
@@ -648,31 +755,275 @@ final class MappingArticlePreviewTest extends TestCase {
 		}
 
 		$first = $this->preview()->read( $this->mapping_id );
-		$rest  = $this->preview()->read( $this->mapping_id, $first['next_offset'] );
+		$rest  = $this->preview()->read( $this->mapping_id, $first['next']['offset'], $first['next']['skip'] );
 
 		$this->assertCount( Mapping_Article_Preview::PRODUCTS, $first['products'] );
-		$this->assertSame( Mapping_Article_Preview::PRODUCTS, $first['next_offset'] );
+		$this->assertSame(
+			[
+				'offset' => Mapping_Article_Preview::PRODUCTS,
+				'skip'   => 0,
+			],
+			$first['next']
+		);
 		$this->assertSame( [ 21, 22, 23 ], array_column( $rest['products'], 'id' ) );
-		$this->assertSame( 0, $rest['next_offset'] );
+		$this->assertNull( $rest['next'] );
 	}
 
 	/**
-	 * One request reads a bounded number of products, however few of them need a card.
+	 * The units of one request are bounded across products: the product that does not fit continues in the next request, and every
+	 * variation is asked about exactly once.
 	 *
 	 * @return void
 	 */
-	public function test_one_request_reads_a_bounded_number_of_products(): void {
-		for ( $id = 1; $id <= Mapping_Article_Preview::SCAN + 1; $id++ ) {
-			$this->product( $id, 'Товар ' . $id );
-			$this->not_exportable[] = $id;
-		}
+	public function test_a_product_whose_variations_do_not_fit_continues_in_the_next_request(): void {
+		$this->product( 1, 'Первый', range( 1001, 1060 ) );
+		$this->product( 2, 'Второй', range( 2001, 2060 ) );
 
 		$first = $this->preview()->read( $this->mapping_id );
-		$rest  = $this->preview()->read( $this->mapping_id, $first['next_offset'] );
+		$asked = array_column( $this->articles->asked, 0 );
+		$rest  = $this->preview()->read( $this->mapping_id, $first['next']['offset'], $first['next']['skip'] );
+
+		$this->assertSame( array_merge( range( 1001, 1060 ), range( 2001, 2040 ) ), $asked );
+		$this->assertSame(
+			[
+				'offset' => 1,
+				'skip'   => 40,
+			],
+			$first['next']
+		);
+		$this->assertSame( [ 2 ], array_column( $rest['products'], 'id' ) );
+		$this->assertSame( range( 2041, 2060 ), array_slice( array_column( $this->articles->asked, 0 ), count( $asked ) ) );
+		$this->assertNull( $rest['next'] );
+	}
+
+	/**
+	 * A product with hundreds of variations and two accounts: each request reads a bounded number of them and runs the same few
+	 * statements, with no link rows or with a row for every variation on every account.
+	 *
+	 * @dataProvider provide_link_rows
+	 *
+	 * @param bool $with_rows Whether every variation has a link row on both accounts, some of them sent.
+	 * @return void
+	 */
+	public function test_a_large_product_costs_a_bounded_number_of_reads( bool $with_rows ): void {
+		$this->accounts = [ self::account( 1, 'Основной' ), self::account( 2, 'Второй' ) ];
+		$variations     = range( 1001, 1500 );
+		$this->product( 10, 'Футболка', $variations );
+		$expected = $variations;
+
+		if ( $with_rows ) {
+			foreach ( $variations as $variation_id ) {
+				$this->link( $variation_id, 10, Link_Record::STATE_UNLINKED );
+				$this->links->insert_if_absent( Link_Record::offer( 2, $variation_id, 10, 'second-' . $variation_id, [ 'card_state' => Link_Record::STATE_UNLINKED ] ) );
+			}
+
+			$this->mark_sent( (int) $this->links->find( 1, 1001 )->link_id() );
+			$expected = array_slice( $variations, 1 );
+		}
+
+		$this->primed            = [];
+		$this->h->db->statements = [];
+		$first                   = $this->preview()->read( $this->mapping_id );
+
+		$this->assertLessThanOrEqual( 12, count( $this->h->db->statements ) );
+		$this->assertLessThanOrEqual( Mapping_Article_Preview::UNITS, count( $this->articles->asked ), 'one question per variation, for two accounts that agree' );
+		$this->assertLessThanOrEqual( Mapping_Article_Preview::UNITS, max( array_map( 'count', $this->primed ) ) );
+		$this->assertSame(
+			[
+				'offset' => 0,
+				'skip'   => Mapping_Article_Preview::UNITS,
+			],
+			$first['next']
+		);
+
+		$this->articles->asked = [];
+		$all                   = $this->read_all();
+
+		$this->assertSame( 5, $all['requests'] );
+		$this->assertLessThanOrEqual( 12, $all['statements'] );
+		$this->assertSame( $expected, array_column( $this->articles->asked, 0 ) );
+	}
+
+	/**
+	 * Without and with link rows.
+	 *
+	 * @return array<string,array{0:bool}>
+	 */
+	public function provide_link_rows(): array {
+		return [
+			'no link rows'            => [ false ],
+			'a row for every variation' => [ true ],
+		];
+	}
+
+	/**
+	 * Variations that each hold their own values and name a mapping cost no read of their own: each mapping is read once.
+	 *
+	 * @return void
+	 */
+	public function test_values_and_mappings_set_at_each_variation_cost_no_reads_of_their_own(): void {
+		$this->accounts = [ self::account( 1, 'Основной' ), self::account( 2, 'Второй' ) ];
+		$profile_id     = $this->h->profiles->create( 'Особый', [] );
+		$other          = $this->h->mappings->create( 'Шапки', null, [], $profile_id, [] );
+		$variations     = range( 1001, 1000 + Mapping_Article_Preview::UNITS );
+		$this->product( 10, 'Футболка', $variations );
+
+		foreach ( $variations as $variation_id ) {
+			$this->link(
+				$variation_id,
+				10,
+				Link_Record::STATE_UNLINKED,
+				[
+					'mapping_id'          => $other,
+					'attribute_overrides' => wp_json_encode( [ '7' => [ [ 'value' => 'v' . $variation_id ] ] ] ),
+				]
+			);
+		}
+
+		$this->h->db->statements = [];
+		$this->preview()->read( $this->mapping_id );
+
+		$this->assertLessThanOrEqual( 14, count( $this->h->db->statements ) );
+
+		$seen = [];
+
+		foreach ( $this->articles->mappings as $position => $mapping ) {
+			$source = $mapping->source_for( '7' );
+
+			if ( null !== $source ) {
+				$seen[ $this->articles->asked[ $position ][0] ] = $source->value();
+			}
+		}
+
+		$this->assertCount( Mapping_Article_Preview::UNITS, $seen );
+		$this->assertSame( 'v1042', $seen[1042] );
+	}
+
+	/**
+	 * A large catalogue that already has its cards: one request reads a bounded number of products, lists none and says where to go
+	 * on, so nothing reads the whole shop by itself.
+	 *
+	 * @return void
+	 */
+	public function test_one_request_over_a_large_exported_catalogue_is_bounded(): void {
+		for ( $id = 1; $id <= 450; $id++ ) {
+			$this->product( $id, 'Товар ' . $id );
+			$this->link( $id, 0, Link_Record::STATE_SUBMITTED );
+		}
+
+		$loaded = [];
+		Functions\when( 'wc_get_product' )->alias(
+			function ( $id ) use ( &$loaded ) {
+				$loaded[] = (int) $id;
+
+				return $this->shop[ (int) $id ] ?? false;
+			}
+		);
+		$this->h->db->statements = [];
+		$first                   = $this->preview()->read( $this->mapping_id );
 
 		$this->assertSame( [], $first['products'] );
-		$this->assertSame( Mapping_Article_Preview::SCAN, $first['next_offset'] );
-		$this->assertSame( 0, $rest['next_offset'] );
+		$this->assertSame( range( 1, Mapping_Article_Preview::UNITS ), $loaded );
+		$this->assertLessThanOrEqual( 12, count( $this->h->db->statements ) );
+		$this->assertSame(
+			[
+				'offset' => Mapping_Article_Preview::UNITS,
+				'skip'   => 0,
+			],
+			$first['next']
+		);
+
+		$all = $this->read_all();
+
+		$this->assertSame( 5, $all['requests'] );
+		$this->assertSame( [], $all['products'] );
+		$this->assertLessThanOrEqual( 12, $all['statements'] );
+	}
+
+	/**
+	 * Products that share a category and have no settings of their own resolve one mapping, however many they are.
+	 *
+	 * @return void
+	 */
+	public function test_the_reads_do_not_grow_with_the_products(): void {
+		$this->product( 1, 'Товар 1' );
+		$this->h->db->statements = [];
+		$this->preview()->read( $this->mapping_id );
+		$one = count( $this->h->db->statements );
+
+		for ( $id = 2; $id <= Mapping_Article_Preview::PRODUCTS; $id++ ) {
+			$this->product( $id, 'Товар ' . $id );
+		}
+
+		$this->h->db->statements = [];
+		$this->preview()->read( $this->mapping_id );
+
+		$this->assertCount( $one, $this->h->db->statements );
+	}
+
+	/**
+	 * The preview resolves a unit for an account as the export does: the articles it shows are the ones the export builds.
+	 *
+	 * @return void
+	 */
+	public function test_the_preview_agrees_with_the_export(): void {
+		$this->accounts = [ self::account( 1, 'Основной' ), self::account( 2, 'Второй' ) ];
+		$profile_id     = $this->h->profiles->create( 'Особый', [] );
+		$other          = $this->h->mappings->create( 'Шапки', null, [], $profile_id, [] );
+		$this->h->mappings->link_term_if_absent( 9, $this->h->mappings->create( 'Носки', null, [], null, [] ) );
+		$this->product( 10, 'Футболка', [ 11, 12 ] );
+		$this->product( 20, 'Кепка' );
+		$this->product( 30, 'Носки' );
+		$this->links->insert_if_absent( Link_Record::parent_row( 2, 10, [ 'mapping_id' => $other ] ) );
+		$this->link( 20, 0, Link_Record::STATE_UNLINKED, [ 'mapping_id' => $other ] );
+		$this->categories = [ 30 => 9 ];
+		$this->typed      = [ '12:1' => 'TYPED' ];
+
+		$by_profile             = static function ( $product, Profile $profile ): string {
+			return $profile->name() . '-' . $product->get_id();
+		};
+		$this->offer_id_for     = static function ( $frozen, $product, Profile $profile ) use ( $by_profile ): string {
+			return $frozen ?? $by_profile( $product, $profile );
+		};
+		$this->articles->answer = static function ( $product, Mapping $mapping, Profile $profile ) use ( $by_profile ): string {
+			return $by_profile( $product, $profile );
+		};
+
+		$contexts = new Export_Context_Builder(
+			new Link_Context_Resolver( $this->links, $this->h->mappings ),
+			$this->h->profiles,
+			$this->links,
+			$this->facts(),
+			new Fake_Article_Policy(),
+			new Pinned_Offer_Id( 'fake', new Fake_Article_Policy() ),
+			null,
+			$this->term_ids(),
+			null,
+			$this->ledger
+		);
+		$sent     = [];
+
+		foreach ( [ 11, 12, 20, 30 ] as $unit_id ) {
+			foreach ( $this->accounts as $account ) {
+				$link   = $this->links->find( $account->id(), $unit_id ) ?? Link_Record::offer( $account->id(), $unit_id, $this->parents[ $unit_id ] ?? 0, '' );
+				$sent[] = $contexts->offer_id( $account, $this->shop[ $unit_id ], $link );
+			}
+		}
+
+		$shown = [];
+
+		foreach ( $this->preview()->read( $this->mapping_id )['products'] as $product ) {
+			$shown = array_merge( $shown, array_column( $product['articles'], 'article' ) );
+		}
+
+		$sent  = array_values( array_unique( $sent ) );
+		$shown = array_values( array_unique( $shown ) );
+		sort( $sent );
+		sort( $shown );
+
+		$this->assertSame( $sent, $shown );
+		$this->assertContains( 'TYPED', $shown );
+		$this->assertContains( 'Особый-20', $shown );
 	}
 
 	/**
@@ -737,6 +1088,30 @@ final class MappingArticlePreviewTest extends TestCase {
 	}
 
 	/**
+	 * The route reads from where the read before it ended: the product and the variation.
+	 *
+	 * @return void
+	 */
+	public function test_the_route_reads_from_the_cursor(): void {
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		$this->product( 5, 'Первый' );
+		$this->product( 10, 'Футболка', [ 11, 12 ] );
+		$request = $this->request(
+			$this->mapping_id,
+			[
+				'offset' => '1',
+				'skip'   => '1',
+			]
+		);
+
+		$data = $this->controller( $this->preview() )->get_articles( $request )->get_data();
+
+		$this->assertSame( [ 10 ], array_column( $data['products'], 'id' ) );
+		$this->assertSame( [ 12 ], array_column( $this->articles->asked, 0 ) );
+		$this->assertNull( $data['next'] );
+	}
+
+	/**
 	 * Builds a controller with a preview.
 	 *
 	 * @param Mapping_Article_Preview $preview Preview.
@@ -749,12 +1124,13 @@ final class MappingArticlePreviewTest extends TestCase {
 	/**
 	 * Builds the request of a mapping's articles.
 	 *
-	 * @param int $mapping_id Mapping.
+	 * @param int                  $mapping_id Mapping.
+	 * @param array<string,string> $query      Query parameters.
 	 * @return \WP_REST_Request
 	 */
-	private function request( int $mapping_id ): \WP_REST_Request {
+	private function request( int $mapping_id, array $query = [] ): \WP_REST_Request {
 		$request = Mockery::mock( \WP_REST_Request::class );
-		$request->shouldReceive( 'get_query_params' )->andReturn( [] );
+		$request->shouldReceive( 'get_query_params' )->andReturn( $query );
 		$request->shouldReceive( 'get_url_params' )->andReturn( [ 'id' => (string) $mapping_id ] );
 		$request->shouldReceive( 'get_param' )->andReturnUsing(
 			static function ( $name ) use ( $mapping_id ) {

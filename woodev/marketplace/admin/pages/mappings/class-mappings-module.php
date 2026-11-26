@@ -19,8 +19,6 @@ use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
-use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
-use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
 use Woodev\Framework\Marketplace\Flows\Sellable_Units;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
@@ -205,31 +203,16 @@ final class Mappings_Module {
 		};
 
 		$mappings = new Wpdb_Mapping_Store( $wpdb, $table( 'mappings' ), $table( 'mapping_terms' ) );
-		$links    = new Wpdb_Link_Store( $wpdb, $table( 'links' ), $table( 'link_ids' ) );
-		$ledger   = new Wpdb_Task_Ledger( $wpdb, $table( 'tasks' ), $table( 'task_items' ) );
-		$pinned   = new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() );
-		$contexts = new Export_Context_Builder(
-			new Link_Context_Resolver( $links, $mappings ),
-			new Wpdb_Profile_Store( $wpdb, $table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
-			$links,
-			$adapter->export_facts(),
-			$adapter->article_policy(),
-			$pinned,
-			$adapter->price_source(),
-			null,
-			null,
-			$ledger
-		);
 
 		return new Mapping_Article_Preview(
 			$adapter,
-			$mappings,
-			new Mapping_Products( [ $mappings, 'terms_by_mapping' ] ),
-			$links,
-			$ledger,
 			$adapter->export_facts(),
-			$contexts,
-			$pinned,
+			$mappings,
+			new Wpdb_Profile_Store( $wpdb, $table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
+			new Mapping_Products( [ $mappings, 'terms_by_mapping' ] ),
+			new Wpdb_Link_Store( $wpdb, $table( 'links' ), $table( 'link_ids' ) ),
+			new Wpdb_Task_Ledger( $wpdb, $table( 'tasks' ), $table( 'task_items' ) ),
+			new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() ),
 			static function () use ( $account_store, $adapter ): array {
 				return $account_store()->all( $adapter->id(), true );
 			},

@@ -223,6 +223,7 @@ final class View_Config {
 			'articlesLoading'     => __( 'Считаем артикулы…', 'woodev-plugin-framework' ),
 			'articlesEmpty'       => __( 'В этом сопоставлении нет товаров, которым нужна новая карточка.', 'woodev-plugin-framework' ),
 			'articlesMore'        => __( 'Показать ещё', 'woodev-plugin-framework' ),
+			'articlesNoneYet'     => __( 'Среди уже проверенных товаров новые карточки не нужны. Нажмите «Показать ещё», чтобы проверить следующие.', 'woodev-plugin-framework' ),
 			'columnProduct'       => __( 'Товар', 'woodev-plugin-framework' ),
 			'columnVariations'    => __( 'Вариации', 'woodev-plugin-framework' ),
 			'columnArticle'       => __( 'Артикул', 'woodev-plugin-framework' ),

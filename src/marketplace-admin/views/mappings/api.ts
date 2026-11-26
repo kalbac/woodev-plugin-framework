@@ -10,6 +10,7 @@
 
 import apiFetch from '@wordpress/api-fetch';
 import type {
+	ArticlesCursor,
 	ArticlesStep,
 	AttributeRow,
 	CategoryChoice,
@@ -83,8 +84,8 @@ export function createApi( pluginId: string ) {
 		deleteMapping: ( id: number ) => send< SaveResult >( 'DELETE', `/mappings/${ id }` ),
 		check: ( id: number, offset: number, run: string ) =>
 			send< CheckStep >( 'POST', `/mappings/${ id }/check`, { offset, run } ),
-		articles: ( id: number, offset: number ) =>
-			apiFetch< ArticlesStep >( { path: withQuery( `${ base }/mappings/${ id }/articles`, { offset } ) } ),
+		articles: ( id: number, from: ArticlesCursor ) =>
+			apiFetch< ArticlesStep >( { path: withQuery( `${ base }/mappings/${ id }/articles`, { ...from } ) } ),
 		profile: ( id: number ) => apiFetch< ProfileDetail >( { path: `${ base }/profiles/${ id }` } ),
 		saveProfile: ( id: number | null, body: Record< string, unknown > ) =>
 			send< SaveResult >( 'POST', id === null ? '/profiles' : `/profiles/${ id }`, body ),

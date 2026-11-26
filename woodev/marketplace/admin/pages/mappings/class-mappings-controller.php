@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * | `GET R/dictionary?category=&field=&search=` | searches the values of a dictionary attribute |
  * | `GET/POST/DELETE R/mappings[/{id}]` | mapping CRUD |
  * | `POST R/mappings/{id}/copy`, `POST R/mappings/{id}/check` | copy; one batch of the product check |
- * | `GET R/mappings/{id}/articles?offset=` | the articles new cards would get; only for an adapter with an article preview |
+ * | `GET R/mappings/{id}/articles?offset=&skip=` | the articles new cards would get; only for an adapter with an article preview |
  * | `GET/POST/DELETE R/profiles[/{id}]` | profile CRUD |
  *
  * Every route runs the same order: the capability (and, from WordPress core, the cookie nonce) before anything is
@@ -445,7 +445,8 @@ final class Mappings_Controller {
 	}
 
 	/**
-	 * `GET R/mappings/{id}/articles`: the next products of a saved mapping that would get a new card, with their articles.
+	 * `GET R/mappings/{id}/articles`: one bounded read of the products of a saved mapping that would get a new card, with their
+	 * articles. `offset` and `skip` are the `next` of the read before.
 	 *
 	 * The route exists only for an adapter with an article preview.
 	 *
@@ -455,7 +456,7 @@ final class Mappings_Controller {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function get_articles( \WP_REST_Request $request ) {
-		$unknown = $this->reject_unknown_query( $request, [ 'offset' ] );
+		$unknown = $this->reject_unknown_query( $request, [ 'offset', 'skip' ] );
 
 		if ( null !== $unknown ) {
 			return $unknown;
@@ -464,7 +465,8 @@ final class Mappings_Controller {
 		return $this->remote(
 			function () use ( $request ) {
 				$offset   = $this->query_int( $request, 'offset' ) ?? 0;
-				$articles = null === $this->articles ? null : $this->articles->read( $this->route_id( $request ), $offset );
+				$skip     = $this->query_int( $request, 'skip' ) ?? 0;
+				$articles = null === $this->articles ? null : $this->articles->read( $this->route_id( $request ), $offset, $skip );
 
 				if ( null === $articles ) {
 					return $this->error( 'woodev_mappings_not_found', Mapping_Messages::mapping_not_found(), 404 );

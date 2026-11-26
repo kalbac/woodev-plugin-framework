@@ -142,10 +142,17 @@ export interface ArticleProduct {
 	articles: Array< { article: string; note: string; variations: string } >;
 }
 
+/** Where a read of the articles starts: products read in full, and units already read of the one after them. */
+export interface ArticlesCursor {
+	offset: number;
+	skip: number;
+}
+
+/** One bounded read: its first product may be the last one of the read before, continued. */
 export interface ArticlesStep {
 	products: ArticleProduct[];
-	/** 0 once every product of the mapping has been read. */
-	next_offset: number;
+	/** Null once every product of the mapping has been read. */
+	next: ArticlesCursor | null;
 }
 
 export interface SaveResult {
