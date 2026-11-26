@@ -11734,6 +11734,10 @@ msgstr ""
 msgid "Синхронизация включена, но первую отправку записать не удалось. Повторите действие — оно запишет недостающее."
 msgstr ""
 
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1038
+msgid "Склад выбран, но отправку остатков записать не удалось. Повторите действие — оно запишет недостающее."
+msgstr ""
+
 #: marketplace/admin/pages/products/class-site-products-bulk.php:267
 msgid "загрузить цены с маркетплейса"
 msgstr ""

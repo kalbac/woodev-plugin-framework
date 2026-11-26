@@ -397,6 +397,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Jobs\\Remote_Error' => 'woodev/marketplace/jobs/class-remote-error.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Rename_Offer_Ids_Runner' => 'woodev/marketplace/jobs/class-rename-offer-ids-runner.php',
 	'Woodev\\Framework\\Marketplace\\Jobs\\Rename_Scheduler' => 'woodev/marketplace/jobs/class-rename-scheduler.php',
+	'Woodev\\Framework\\Marketplace\\Jobs\\Reseed_Stock_Runner' => 'woodev/marketplace/jobs/class-reseed-stock-runner.php',
 	'Woodev\\Framework\\Marketplace\\Ledger\\Account_Rows' => 'woodev/marketplace/ledger/class-account-rows.php',
 	'Woodev\\Framework\\Marketplace\\Ledger\\Async_Task' => 'woodev/marketplace/ledger/class-async-task.php',
 	'Woodev\\Framework\\Marketplace\\Ledger\\Claimable' => 'woodev/marketplace/ledger/trait-claimable.php',

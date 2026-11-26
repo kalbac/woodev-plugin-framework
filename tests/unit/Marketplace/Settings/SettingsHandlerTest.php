@@ -194,6 +194,8 @@ final class SettingsHandlerTest extends TestCase {
 		$handler->get_setting( "account_{$acc_id}_warehouse_id" )->set_value( '91' );
 		$handler->get_setting( "account_{$acc_id}_oversize_warehouse_id" )->set_value( '91' );
 		$handler->get_setting( "account_{$acc_id}_stock_mode" )->set_value( 'off' );
+		// Once for the default warehouse and once for the oversize one: the stock of the account's cards is recorded again.
+		Actions\expectDone( 'woodev_fake_mp_account_warehouse_changed' )->twice()->with( $acc_id );
 		$handler->save();
 
 		$reloaded = $store->get( $acc_id );

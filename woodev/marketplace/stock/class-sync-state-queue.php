@@ -105,12 +105,13 @@ final class Sync_State_Queue {
 	 * @param int    $limit      Most rows.
 	 * @return array<int,array<string,mixed>> Rows: the key columns, `pending_payload` and `sent_payload` (arrays; null when empty),
 	 *                                        `pending_rev`, `pending_since`, `in_flight_rev` (null when no send is unresolved),
-	 *                                        `sent_rev` (null when nothing was ever accepted), `attempts`, `last_error`.
+	 *                                        `sent_rev` (null when nothing was ever accepted), `attempts`, `last_error`,
+	 *                                        `remote_present` (null when never read nor sent; since 2.1.25).
 	 */
 	public function due( int $account_id, string $kind, int $limit ): array {
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The flusher must read fresh.
 			$this->db->prepare(
-				'SELECT account_id, link_id, warehouse_id, kind, pending_payload, sent_payload, pending_rev, pending_since, in_flight_rev, sent_rev, attempts, last_error FROM %i WHERE account_id = %d AND kind = %s AND pending_payload IS NOT NULL AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND attempts < %d AND (next_attempt_at IS NULL OR next_attempt_at <= %s) ORDER BY pending_since ASC, link_id ASC LIMIT %d',
+				'SELECT account_id, link_id, warehouse_id, kind, pending_payload, sent_payload, pending_rev, pending_since, in_flight_rev, sent_rev, attempts, last_error, remote_present FROM %i WHERE account_id = %d AND kind = %s AND pending_payload IS NOT NULL AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND attempts < %d AND (next_attempt_at IS NULL OR next_attempt_at <= %s) ORDER BY pending_since ASC, link_id ASC LIMIT %d',
 				$this->table,
 				$account_id,
 				$kind,
@@ -202,6 +203,21 @@ final class Sync_State_Queue {
 	}
 
 	/**
+	 * Arms a pair again only when it is failed; one that is still backing off keeps its wait.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param array<string,mixed> $key Row key.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function retry_failed( array $key ): void {
+		if ( (int) ( $this->row( $key, 'attempts' )['attempts'] ?? 0 ) >= $this->cadence->max_attempts() ) {
+			$this->retry( $key );
+		}
+	}
+
+	/**
 	 * Postpones a row. The in-flight snapshot is left as it is: after an uncertain outcome the next run sends the newest pending
 	 * payload, which with one sender per account and absolute writes is the last one the marketplace applies (spec 5.3).
 	 *
@@ -238,6 +254,22 @@ final class Sync_State_Queue {
 	 */
 	public function drop( array $key, string $error, string $token ): bool {
 		return $this->fenced( $key, $token, 'pending_payload = NULL, in_flight_payload = NULL, in_flight_rev = NULL, next_attempt_at = NULL, last_error = %s', [ $error ] );
+	}
+
+	/**
+	 * Drops a left warehouse's zero because the product is back there. Only while the zero is still what the row wants: a value
+	 * moved onto the row since the caller read it stays pending.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param array<string,mixed> $key   Row key.
+	 * @param string              $token The flusher's account claim.
+	 * @return bool True when the zero was dropped.
+	 */
+	public function cancel_vacate( array $key, string $token ): bool {
+		$vacate = (string) json_encode( Sync_State_Store::VACATE_PAYLOAD ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
+
+		return $this->fenced( $key, $token, 'pending_payload = NULL, next_attempt_at = NULL', [], $this->db->prepare( ' AND pending_payload = %s', $vacate ) );
 	}
 
 	/**
@@ -355,6 +387,63 @@ final class Sync_State_Queue {
 	 */
 	public function remember_sent( array $key, int $present, string $token ): bool {
 		return $this->fenced( $key, $token, 'remote_present = %d, remote_read_at = %s', [ $present, $this->time( 0 ) ] );
+	}
+
+	/**
+	 * Forgets what a warehouse held, once its zero was accepted: the screens read a link's newest readback, and a warehouse the
+	 * product has left must not stand for the product.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param array<string,mixed> $key   Row key.
+	 * @param string              $token The account claim of the run.
+	 * @return bool False when the claim was lost or the row does not exist.
+	 */
+	public function forget_remote( array $key, string $token ): bool {
+		return $this->fenced( $key, $token, 'remote_present = NULL, remote_reserved = NULL, remote_read_at = NULL', [] );
+	}
+
+	/**
+	 * Lists the warehouses where the marketplace may hold units of a link ({@see self::may_hold_stock()}).
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $link_id    Link id.
+	 * @return int[] Marketplace warehouse ids.
+	 */
+	public function warehouses_with_stock( int $account_id, int $link_id ): array {
+		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Read fresh.
+			$this->db->prepare( 'SELECT warehouse_id, sent_payload, in_flight_rev, remote_present FROM %i WHERE account_id = %d AND link_id = %d AND kind = %s AND warehouse_id > 0 ORDER BY warehouse_id ASC', $this->table, $account_id, $link_id, Sync_State_Store::KIND_STOCK ),
+			'ARRAY_A'
+		);
+
+		$warehouses = [];
+
+		foreach ( (array) $rows as $row ) {
+			$row['sent_payload'] = null === $row['sent_payload'] ? null : self::decode( $row['sent_payload'] );
+
+			if ( self::may_hold_stock( $row ) ) {
+				$warehouses[] = (int) $row['warehouse_id'];
+			}
+		}
+
+		return $warehouses;
+	}
+
+	/**
+	 * Tells whether the marketplace may hold units on a stock row's warehouse: a send is unresolved, or the last accepted or the
+	 * last read quantity is above zero. A value that was only wanted and never sent says nothing about the marketplace.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param array<string,mixed> $row Row with `sent_payload` (decoded), `in_flight_rev` and `remote_present`.
+	 * @return bool
+	 */
+	public static function may_hold_stock( array $row ): bool {
+		return null !== $row['in_flight_rev']
+			|| (int) ( $row['sent_payload']['stock'] ?? 0 ) > 0
+			|| (int) $row['remote_present'] > 0;
 	}
 
 	/**

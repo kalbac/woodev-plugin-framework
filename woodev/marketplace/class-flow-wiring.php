@@ -87,6 +87,7 @@ use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Runner;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Runner;
 use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Scheduler;
+use Woodev\Framework\Marketplace\Jobs\Reseed_Stock_Runner;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Links\Product_Link;
@@ -360,7 +361,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		}
 
 		/**
-		 * Stock flush and the price half in one sender, the stock and price recorders, the price recompute and refresh jobs.
+		 * Stock flush and the price half in one sender, the stock and price recorders, the stock reseed, the price
+		 * recompute and refresh jobs.
 		 *
 		 * @param Sync_State_Store $store Pending side of `sync_state`.
 		 * @return void
@@ -377,7 +379,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$price_queue = null;
 			$scheduler   = new Price_Scheduler( $this->names );
 
-			( new Stock_Intents( [ $this->accounts, 'get' ], $this->links, $store, $queue, $adapter->stock_policy() ) )->register();
+			$stock = new Stock_Intents( [ $this->accounts, 'get' ], $this->links, $store, $queue, $adapter->stock_policy() );
+			$stock->register();
+			( new Reseed_Stock_Runner( $this->names, $this->links, $stock, $this->log_error ) )->register();
 
 			if ( null !== $pusher ) {
 				$price_queue = new Price_Sync_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'links' ), $this->table( 'accounts' ), $adapter->price_cadence() );

@@ -24,6 +24,8 @@ defined( 'ABSPATH' ) || exit;
  *   write: the product form, an order's reduce or restore, our own writes) records `{stock}` for each offer link of the product
  *   in an account in `site` mode with `sync_stock` on and a warehouse ({@see Stock_Warehouse}). The quantity follows
  *   {@see Stock_Policy}. A variable product that manages its variations' stock records for every variation it manages.
+ * - **A changed warehouse**: recording a link's stock also wants zero on every other warehouse that may still hold its units
+ *   ({@see Sync_State_Store::record_vacate()}), so one product feeds one warehouse.
  * - **A product trashed or deleted** with a `created` link records `{stock: 0, archive: true}`; the flusher archives the card
  *   once the marketplace has accepted the zero. A pair without a warehouse is archived without the zero. Taking the product out
  *   of the trash records its stock again, which cancels an archive not yet done.
@@ -192,12 +194,14 @@ final class Stock_Intents {
 	}
 
 	/**
-	 * Records the current stock of one link when its account pushes stock.
+	 * Records the current stock of one link when its account pushes stock, and zero for every warehouse the link has left.
 	 *
 	 * @since 2.1.0
 	 *
+	 * @since 2.1.25 Zeroes the left warehouses.
+	 *
 	 * @param Link_Record $link Link.
-	 * @return bool True when an intent was recorded.
+	 * @return bool True when the current stock was recorded as an intent.
 	 */
 	public function record_stock( Link_Record $link ): bool {
 		$account = $this->account( $link->account_id() );
@@ -205,6 +209,9 @@ final class Stock_Intents {
 		if ( null === $account || null === $link->link_id() || ! $link->sync_stock() || ! Stock_Mode::is_site( $account ) ) {
 			return false;
 		}
+
+		// First: the zeros are the older intents, so they go out before the new warehouse starts selling.
+		$this->vacate_left_warehouses( $account, $link );
 
 		$warehouse = Stock_Warehouse::for_link( $account, $link );
 		$quantity  = self::managed_quantity( wc_get_product( $link->wc_product_id() ) );
@@ -217,6 +224,29 @@ final class Stock_Intents {
 		$reserved = Stock_Policy::FORMULA_PLUS_RESERVED === $this->policy->formula() ? $this->queue->remote_reserved( $key ) : null;
 
 		return $this->intents->record( $account->id(), (int) $link->link_id(), $warehouse, Sync_State_Store::KIND_STOCK, [ 'stock' => $this->policy->pushed_quantity( $quantity, $reserved ) ] );
+	}
+
+	/**
+	 * Wants zero on every warehouse that may still hold the link's units and is no longer the chosen one: the marketplace would go
+	 * on selling from it. A warehouse the marketplace no longer offers cannot be written to and is left until it is listed again.
+	 * A zero that was refused for good is tried again, as a new stock value would be.
+	 *
+	 * @param Account     $account Account.
+	 * @param Link_Record $link    Link with an id.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	private function vacate_left_warehouses( Account $account, Link_Record $link ): void {
+		$chosen = Stock_Warehouse::chosen( $account, $link );
+
+		foreach ( $this->queue->warehouses_with_stock( $account->id(), (int) $link->link_id() ) as $warehouse ) {
+			if ( $warehouse === $chosen || ! Stock_Warehouse::is_available( $account, $warehouse ) ) {
+				continue;
+			}
+
+			$this->intents->record_vacate( $account->id(), (int) $link->link_id(), $warehouse );
+			$this->queue->retry_failed( Sync_State_Queue::key( $account->id(), (int) $link->link_id(), $warehouse, Sync_State_Store::KIND_STOCK ) );
+		}
 	}
 
 	/**

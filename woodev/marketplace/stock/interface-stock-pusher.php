@@ -21,7 +21,8 @@ defined( 'ABSPATH' ) || exit;
  */
 interface Stock_Pusher {
 	/**
-	 * Sets stock for several links in one warehouse.
+	 * Sets stock for several links in one warehouse. The warehouse is not necessarily the one a link sells from now: a left
+	 * warehouse is sent zero (2.1.25).
 	 *
 	 * @since 2.0.29
 	 *
