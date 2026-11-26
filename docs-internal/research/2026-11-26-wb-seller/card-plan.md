@@ -4,7 +4,7 @@
 > **Superseded 26.11.2026** by the card list in
 > [the plugin design](../../specs/2026-11-26-wildberries-seller-plugin-design.md) (§14), written after
 > [the owner decisions](decisions.md): DBS is in 1.0, the supplies page is a framework card, and the live cabinet replaces
-> the sandbox as the measurement ground. Kept as the research estimate.
+> the sandbox for the catalogue, price and stock measurement, while order flows stay on the sandbox. Kept as the research estimate.
 
 Filing briefs for the coordinator, **not filed cards**. Written against the recommendations of
 [the owner questions](owner-questions.ru.md) (FBS only; link, import and create cards; supplies page; Chestny ZNAK

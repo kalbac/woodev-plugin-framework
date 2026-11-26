@@ -18,7 +18,7 @@ Nothing in this spec was measured: no request was sent to any Wildberries host.
 ## 0. How to read this spec
 
 §1 lists the binding decisions; nothing below reopens them. §2 is the product boundary. §3 is the phase-0 measurement
-(two cards), which runs **before** any implementation card. §4 maps every capability to its seam. §5 is the unit model (a size
+(two cards, run side by side on the first day), which comes **before** the implementation cards. §4 maps every capability to its seam. §5 is the unit model (a size
 inside a colour card), §6 the FBS flow with supplies and marking, §7 the DBS flow, §8 the framework extensions, §9 the
 plugin parts, §10 the admin pages, §11 the data model, §12 errors, limits and the test plan, §13 the registers
 (unverified facts, interpretations, tensions between decisions and the owner's answers to them, known residual risks), §14 the
@@ -262,9 +262,19 @@ reported conflict and never a guess:
 
 The importer builds one variable product from a group (`Group_Assembler`, importer spec §2.6.1). The Wildberries adapter
 presents **each size as a card** with group key `imtID` and two aspects, colour and size; a group with one colour and one
-unnamed size becomes a simple product. The variation SKU is `vendorCode` for a single-size card and
-`vendorCode-techSize` otherwise (unique in WooCommerce; the unit key is never written as a SKU — WF3 lets the
-adapter say what the import writes). Photos are per `nmID`: the colour's first photo becomes the image of each of its
+single size — named or not — becomes a simple product. The unit key is never written as a SKU; WF3 lets the adapter
+say what the import writes.
+
+**The SKU the import writes, and what happens when it is taken.** The candidate is `vendorCode` for a card with one
+size (named or unnamed) and `vendorCode-techSize` for a size of a multi-size card. The candidate is readable, **not
+unique**: the article `coat` with size `M` and the single-size article `coat-M` both give `coat-M`, and so do `coat` +
+`M-L` and `coat-M` + `L`. The module writes SKUs without a duplicate check, and current WooCommerce accepts a second
+identical SKU at that layer, so the rule is explicit (WF3): before writing, look the candidate up
+(`wc_get_product_id_by_sku()`); if another product that is not this unit's holds it, **the product is imported with an
+empty SKU and a conflict is reported at it** («артикул … уже занят товаром …») — the reporting of §5.3's ambiguous
+key. No suffix is invented: the merchant sees the clash and names the product himself. The link is unaffected, because
+it rests on the unit key and `chrtID`, not on the SKU. WF3 and WP3 pin both collision pairs and the
+single-named-size shape. Photos are per `nmID`: the colour's first photo becomes the image of each of its
 variations, the first colour's gallery the product gallery.
 
 ### 5.5 Create and update (D2 «create», «own fields only»)
@@ -404,7 +414,9 @@ prices and totals stay locked (they are Wildberries').
 order the rule is **seed, then leave alone**:
 
 - The Wildberries payload is the source data and is kept whole in order meta; it is refreshed there on every poll.
-- The order's own name, phone and shipping address are **seeded**: written when they are first known (the name and
+- The order's own name, phone and shipping address are **seeded**: written when they are first known and the order's
+  field is still empty — a field that already holds a value the writer did not write (a phone the manager typed before
+  Wildberries assigned the relay number) is never seeded over (the name and
   phone arrive later than the address, §7.3). With each seeded value the writer stores what it wrote. A later poll
   writes a field again only if the order still holds exactly that stored value — i.e. nobody edited it — and
   Wildberries now gives a different one. A field a manager changed, or the delivery wizard resolved, is the
@@ -643,7 +655,7 @@ Token bucket per seller account and method group; personal-token numbers (API §
 | FBS label identifiers — write | 1000 / min | 20 | 10 |
 | DBS label identifiers — read | 300 / min | 20 | 10 |
 | DBS label identifiers — write | **500 / min** | 20 | 10 |
-| FBS cancel | 100 / min | — | 10 |
+| FBS cancel | 100 / min | 20 | 10 |
 | DBS orders (read) | 300 / min | 20 | 10 |
 | DBS status changes | 1 / s | 10 | 10 |
 
@@ -779,8 +791,8 @@ delivery-untouched invariant except WD1. Every card that touches the live cabine
 | Id | Size · tier | Depends on | Scope · acceptance |
 |---|---|---|---|
 | M0a — Live measurement without orders | M · Sonnet 5.5 | — (tokens are in place, §3 rule 3) | §3.1. Accept: `measurement.md` with items 1–11a proven, refuted or open; the list of writes the cabinet refused; every write listed before it was sent; no `DELETE` in the request log; stock never above 0; no token in any file |
-| M0b — Order flows on the sandbox and from documentation | M · Sonnet 5.5 | — (runs beside M0a; `WB_TEST_TOKEN`) | §3.2 items 12–18. Accept: FBS and DBS flows run end to end on the sandbox; fixtures saved; for each of the two DBS checks and for marking — what was shown, from which source, and what stays unproven (matching §13.4); the carriers' phone validation run against the documented number formats; no live-cabinet call in this card |
-| S0 — Spec amendment | S · the coordinator | M0a, M0b | Fold the measurements into this spec; confirm or change the stock formula; update §13.4; re-estimate |
+| M0b — Order flows on the sandbox and from documentation | M · Sonnet 5.5 | — (phase 0, runs beside M0a from the first day; `WB_TEST_TOKEN`) | §3.2 items 12–18. Accept: FBS and DBS flows run end to end on the sandbox; fixtures saved; for each of the two DBS checks and for marking — what was shown, from which source, and what stays unproven (matching §13.4); the carriers' phone validation run against the documented number formats; no live-cabinet call in this card |
+| S0 — Spec amendment | S · the coordinator | M0a, M0b (both phase 0, both finish before it) | Fold the measurements into this spec; confirm or change the stock formula; update §13.4; re-estimate |
 
 ### Framework (`woodev-plugin-framework`)
 
@@ -795,13 +807,13 @@ for client cards, `src/marketplace-admin/**` with its built bundle.
 | WF4 — Price groups | M · Sonnet 5.5 | WF1 | `price/**`, `sync/**`, `diagnostics/**`, `admin/shared/**` | §8, D7. Accept: a whole group reaches the pusher; differing prices in a single-price group are not sent and each member shows the reason |
 | WF5 — Token-only account, 4xx surcharge | S · Haiku 5.5 | — | `account/**`, `settings/class-accounts-sections.php`, `governor/**` | §8. Accept: an account with one secret saves and is «configured»; a reported 4xx draws `cost_4xx` |
 | WF6a — Order actions | L · Sonnet 5.5 | — | `admin/order/**` (actions, cancel, gate), `admin/pages/orders/**` (actions), `admin/shared/**` | §8. Accept: an adapter-declared action appears in the table, the details box and bulk, and is refused server-side when its status does not allow it; an input schema is validated before any remote call; cancel without reasons; Ozon cancel with reasons unchanged. No file of `orders/**` or `flows/class-wc-order-store.php` changes |
-| WF6b — Order units and partial cancellation | M · Sonnet 5.5 | — (disjoint files from WF6a; the details-box unit list lands after WF6a if both touch `class-order-details-box.php`) | `orders/class-registry-order-writer.php`, `orders/class-order-group.php`, `flows/class-wc-order-store.php`, `flows/interface-order-meta-contract.php`, `admin/order/class-order-details-box.php` (unit list), `admin/pages/orders/class-site-orders-rows.php` (children) | §6.1, §8. Accept, on a fake grouped marketplace with stock-managed products, HPOS and legacy storage: order of units A and B → cancel A → **A's stock is back, B's is still taken**, A is shown as its own row «Отменено», the total is B's; three more polls with A still cancelled → stock and order unchanged; then cancel B → the order is cancelled and B's stock is back once; two units of the same size, one cancelled → exactly one unit restored; Ozon's whole-posting cancel unchanged |
+| WF6b — Order units and partial cancellation | M · Sonnet 5.5 | **WF6a** — the two cards share `admin/order/class-order-details-box.php` and `admin/pages/orders/class-site-orders-rows.php` (row actions are built there, the unit children are added there), so they are taken one after the other, never in parallel | `orders/class-registry-order-writer.php`, `orders/class-order-group.php`, `flows/class-wc-order-store.php`, `flows/interface-order-meta-contract.php`, `admin/order/class-order-details-box.php` (unit list), `admin/pages/orders/class-site-orders-rows.php` (children) | §6.1, §8. Accept, on a fake grouped marketplace with stock-managed products, HPOS and legacy storage: order of units A and B → cancel A → **A's stock is back, B's is still taken**, A is shown as its own row «Отменено», the total is B's; three more polls with A still cancelled → stock and order unchanged; then cancel B → the order is cancelled and B's stock is back once; two units of the same size, one cancelled → exactly one unit restored; Ozon's whole-posting cancel unchanged |
 | WF7 — Sticker documents | M · Sonnet 5.5 | WF6a | `flows/class-label-*`, `admin/order/class-label-button.php` | §8. Accept: several PNG → one printable sheet; ZPL and SVG downloaded under real names; Ozon PDF unchanged |
 | WF8 — Shipments page «Поставки» | L · Sonnet 5.5 | WF6a | new `shipments/**`, `admin/pages/shipments/**`, `data/**`, `jobs/**`, `class-marketplace-plugin.php` (page offer) | §6.2, §8. Accept: fake adapter runs create → add → options → missing list → close → document; a table read makes no remote call; no page without the capability; the «Заказы доставки» counterpart named and matched |
 | WF9 — Seller-delivered orders | M · Sonnet 5.5 | WF6a, WF6b (same order-store file) | `orders/**`, `flows/class-wc-order-store.php`, `admin/order/**`, `admin/pages/orders/**`, `deletion/**` | §7.2, §8. Accept: address, shipping line and paid mark written; address and phone editable, items locked; scheme filter; personal data exported and erased. **Ownership sequence:** import → the manager edits the phone and the address and a second shipping line is added by another writer → three marketplace polls, one of them with a changed Wildberries phone → the edited phone and address, the foreign shipping line and the order total are unchanged, the payload meta shows the new Wildberries value; an unedited field does follow a changed Wildberries value |
 | WF10 — Carrier bridge | S · Sonnet 5.5 | WF6a, WF9, WD1 | new `flows/class-carrier-bridge.php`, `class-flow-wiring.php` | §7.5. Accept: an exported carrier shipment triggers the mapped seller action once; a failed call is retried by the module's job; nothing happens for an order of another marketplace or a shop order |
 | WF11 — Neutral wording, contract cleanup | S · Haiku 5.5 | WF6a, WF6b, WF8 (shared files) | strings in `admin/**`, `deletion/**`, `settings/**`, `capabilities/**` | §8. Accept: a test pins «no marketplace name in a framework msgid»; nouns from the descriptor; Ozon change named |
-| WD1 — Delivery for an existing order | L · Sonnet 5.5 | — (owner's exception to «delivery code is not touched», 26.11.2026 — T2) | `woodev/shipping-method/admin/orders/**`, `src/shipping-orders-page/order-wizard/**` | §7.5. Accept: a foreign order gets a carrier line through the wizard and becomes a row; its items and totals are untouched; the marketplace's own shipping line is untouched and the carrier line adds 0 to the total; after a hand-over and three marketplace polls (run with WF9) the carrier line, the resolved address and the phone are still there; existing create and edit behave as before (their tests unchanged); classic and HPOS |
+| WD1 — Delivery for an existing order | L · Sonnet 5.5 | WF9 (its acceptance runs on a seller-delivered order; owner's exception to «delivery code is not touched», 26.11.2026 — T2) | `woodev/shipping-method/admin/orders/**`, `src/shipping-orders-page/order-wizard/**` | §7.5. Accept: a foreign order gets a carrier line through the wizard and becomes a row; its items and totals are untouched; the marketplace's own shipping line is untouched and the carrier line adds 0 to the total; after a hand-over and three marketplace polls (run with WF9) the carrier line, the resolved address and the phone are still there; existing create and edit behave as before (their tests unchanged); classic and HPOS |
 
 ### Plugin (`woocommerce-wildberries-seller`)
 
@@ -828,30 +840,31 @@ changes no owner decision and no scope — it sets the order in which cards are 
 
 | Wave | Cards | The merchant gets |
 |---|---|---|
-| 1 — products and stock | M0a, S0, WF5, WF3, WF2 → WP1, WP2, WP3, WP5, WP4 | connection, link and import of existing cards, stock sync, creation of cards from products |
+| 1 — products and stock | M0a, M0b, S0 (phase 0), WF5, WF3, WF2 → WP1, WP2, WP3, WP5, WP4 | connection, link and import of existing cards, stock sync, creation of cards from products |
 | 2 — prices | WF1, WF4 → WP6 | prices with honest results |
-| 3 — FBS orders | M0b, WF6a, WF6b, WF7, WF8, WF11 → WP7, WP8, WP9 | orders, supplies, stickers, marking |
+| 3 — FBS orders | WF6a, WF6b, WF7, WF8, WF11 → WP7, WP8, WP9 | orders, supplies, stickers, marking |
 | 4 — DBS | WF9, WD1, WF10 → WP10 | orders the seller delivers |
 | 5 | WP11 | acceptance and the release |
 
 Within wave 1 the first usable state is **WP1 + WP3 + WP5** (connect, link existing cards, sync stock). WP5 waits for
-no order measurement: its formula is settled in §9.4. Where readiness does wait: the acceptance of WP7–WP10 on M0b's
-sandbox fixtures. WF2 and WP4, the two hardest cards, follow on the one Fable 5.2 slot. Waves 2–4 have no dependency
+no order measurement: its formula is settled in §9.4. M0b is a phase-0 card, not a wave-3 one: it runs beside M0a on the first day, S0 follows both, and WP7–WP10 take its
+sandbox fixtures as their acceptance input. WF2 and WP4, the two hardest cards, follow on the one Fable 5.2 slot. Waves 2–4 have no dependency
 on wave 1's framework cards and start as soon as workers are free, but never ahead of a wave-1 card that is ready to
 be taken. Nothing in the plan waits for the owner any more. Whether wave 1 alone is released first is the owner's
 call; the plan only makes it possible.
 
 ```text
-M0a ──► S0 ──► WF5 ─► WP1 ─► WP2 ─────────────┐
-   │           WF3 ─► WP3 ─► WP5              ├─► WP4 (after WF2)
-   │           WF1 ─► WF4 ─► WP6              │
-   │           WF2 ───────────────────────────┘
-   │           WF6a ─► WF7 ─┐
-   │           WF6a ─► WF8 ─┼─► WP7 ─► WP8 ─► WP9
-   │           WF6b ────────┘
-               WF6a, WF6b, WF8 ─► WF11
-M0b (sandbox) ─► fixtures for WP7, WP8, WP9, WP10
-WF6a, WF6b ─► WF9 ─► WD1 ─► WF10 ─► WP10
+M0a ─┐
+M0b ─┴─► S0 ──► WF5 ─► WP1 ─► WP2 ─────────────┐
+                WF3 ─► WP3 ─► WP5              ├─► WP4 (after WF2)
+                WF1 ─► WF4 ─► WP6              │
+                WF2 ───────────────────────────┘
+                WF6a ─► WF7 ─┐
+                WF6a ─► WF8 ─┼─► WP7 ─► WP8 ─► WP9
+                WF6a ─► WF6b ┘
+                WF6a, WF6b, WF8 ─► WF11
+                WF6b ─► WF9 ─► WD1 ─► WF10 ─► WP10 (also after WP7)
+M0b's fixtures are the acceptance input of WP7, WP8, WP9 and WP10
                                                     all ─► WP11
 ```
 
@@ -871,6 +884,7 @@ No card is conditional: DBS stays in 1.0 (owner, 26.11.2026).
 | Date | Change |
 |---|---|
 | 26.11.2026 | After the critic review of PR #1992 (no owner decision and neither open tension T1 / T2 changed): (1) a cancelled unit is a stored snapshot shown as its own row, not a stock-holding line item — §6.1; (2) the unit key is one escaped two-component encoding, frozen at linking — §5.1; (3) the stock formula's dependency on an order measurement was made explicit (superseded the same day by the owner's answer, next row) — §3.2, §9.4, §14; (4) seed-then-leave-alone ownership of DBS order fields and two shipping lines with two owners — §7.2; (5) separate FBS and DBS label-identifier buckets, DBS writes 500 / min — §12.2; (6) WF6 split into WF6a (actions) and WF6b (units and partial cancellation) |
+| 26.11.2026 | After the second critic review (Qwen; no Must fix): the import SKU is a candidate checked before writing, a taken one leaves the SKU empty with a reported conflict — §5.4; M0b is stated once as a phase-0 card beside M0a, removed from wave 3, with the M0b → S0 edge drawn; WF6b depends on WF6a (two shared files named) and WD1 on WF9; FBS cancel burst 20; a field the writer did not write is never seeded over — §7.2 |
 | 26.11.2026 | The owner's answers. **T1:** no real order is possible; DBS stays in 1.0; the DBS checks and all FBS order flows are done from documentation, fixtures and the sandbox, with the unproven facts as stated residual risk (§13.4); the two real-order measurement cards became one sandbox card M0b; the stock formula is settled as `wc_only` without an order measurement (§9.4), which is how critic finding 3 is closed now; refused live writes are measured (M0a 11a). **T2:** approved — WD1 changes the shipping module as an owner's exception to «delivery code is not touched» |
 
 ## Related
