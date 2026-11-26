@@ -9,10 +9,8 @@ namespace Woodev\Tests\Unit\Marketplace\Jobs;
 
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
-use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Ledger\Item_Result;
 use Woodev\Framework\Marketplace\Price\Flush_Result;
-use Woodev\Framework\Marketplace\Price\Push_Receipt;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Price_Pusher;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
@@ -495,50 +493,6 @@ final class PriceFlushTest extends Sync_Test_Case {
 		$this->assertSame( [ [ 'kept' ] ], array_map( 'array_keys', $this->prices->requests ) );
 		$this->assertSame( [ 1, 1 ], [ $result->sent(), $result->failed() ] );
 		$this->assertSame( 'Товар или его связь с карточкой маркетплейса больше не существуют.', $this->price_row( $gone )['last_error'] );
-	}
-
-	/**
-	 * Asynchronous acceptance is not supported: nothing settles a price task later. A pending receipt therefore carries no
-	 * answer the sender can use, and its pairs are counted as unanswered — never parked as «waiting» and sent again without end.
-	 * The fifth such answer stops the retries of the revision; a changed payload is a new try.
-	 *
-	 * @return void
-	 */
-	public function test_a_pending_receipt_is_a_bounded_failure_not_an_endless_resend(): void {
-		$product = $this->priced( 'a' );
-		$this->want_price( $product );
-
-		$pending = function (): Push_Receipt {
-			return Push_Receipt::pending( new Async_Task( $this->account_id, Async_Task::KIND_PRICE, 'price-task-1', Async_Task::STATUS_POLLING, 1, new \DateTimeImmutable( '@' . $this->now ) ) );
-		};
-
-		$this->prices->script[] = $pending;
-		$first                  = $this->flush_now();
-		$row                    = $this->price_row( $product );
-
-		$this->assertSame( [ 0, 1, 0 ], [ $first->sent(), $first->failed(), $first->waiting() ], 'not sent, not waiting: refused' );
-		$this->assertSame( 1, (int) $row['attempts'] );
-		$this->assertSame( 'Маркетплейс не вернул ответ по этому товару.', $row['last_error'] );
-		$this->assertNotSame( [], preg_grep( '/pending receipt, which this sender does not settle/', $this->log ) );
-
-		// The run the critic's probe made: one price interval later the pair is due again and the receipt is pending again.
-		for ( $run = 0; $run < 8; $run++ ) {
-			$this->now           += 4000;
-			$this->prices->script = [ $pending ];
-			$this->flush_now();
-		}
-
-		$row = $this->price_row( $product );
-
-		$this->assertCount( 5, $this->prices->requests, 'the attempt cap ends the re-submission' );
-		$this->assertSame( 5, (int) $row['attempts'] );
-		$this->assertNull( $row['sent_payload'], 'nothing was ever reported as accepted' );
-
-		$this->prices->script = [];
-		$this->want_price( $product, [ 'price' => '120.00' ] );
-		$this->flush_now();
-
-		$this->assertCount( 6, $this->prices->requests, 'a changed payload is a new try' );
 	}
 
 	/**

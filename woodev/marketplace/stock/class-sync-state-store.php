@@ -269,7 +269,9 @@ final class Sync_State_Store {
 	 * @param int[] $link_ids   Link ids.
 	 * @return array<int,array{stock:array<string,mixed>|null,price:array<string,mixed>|null}> By link id; a link with no row is absent. `stock`:
 	 *         `present`, `reserved`, `read_at` (null until a readback), `last_error`, `next_attempt_at` (Unix time or null). `price`: `sent`
-	 *         (the payload the marketplace accepted, or null), `pending`, `last_error`, `next_attempt_at`.
+	 *         (the payload the marketplace accepted, or null), `pending`, `last_error`, `error_code` (2.1.24: a
+	 *         {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code when the error says why a price did not take effect, '' otherwise),
+	 *         `next_attempt_at`.
 	 */
 	public function overview( int $account_id, array $link_ids ): array {
 		$ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
@@ -278,7 +280,7 @@ final class Sync_State_Store {
 			return [];
 		}
 
-		$sql  = 'SELECT link_id, kind, remote_present, remote_reserved, remote_read_at, pending_payload, sent_payload, last_error, next_attempt_at FROM %i WHERE account_id = %d AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') ORDER BY remote_read_at ASC'; // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+		$sql  = 'SELECT link_id, kind, remote_present, remote_reserved, remote_read_at, pending_payload, sent_payload, last_error, error_code, next_attempt_at FROM %i WHERE account_id = %d AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') ORDER BY remote_read_at ASC'; // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 		$rows = $this->db->get_results( $this->db->prepare( $sql, array_merge( [ $this->table, $account_id ], $ids ) ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared here.
 		$out  = [];
 
@@ -302,6 +304,7 @@ final class Sync_State_Store {
 					'sent'            => self::decoded( $row['sent_payload'] ),
 					'pending'         => self::decoded( $row['pending_payload'] ),
 					'last_error'      => (string) $row['last_error'],
+					'error_code'      => (string) $row['error_code'],
 					'next_attempt_at' => self::timestamp( $row['next_attempt_at'] ),
 				];
 			}

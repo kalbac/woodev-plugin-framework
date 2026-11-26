@@ -22,12 +22,15 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Governor\Sync_Cadence;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
 use Woodev\Framework\Marketplace\Jobs\Account_Run;
+use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Flush_Sync_Runner;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Price_Flush_Runner;
+use Woodev\Framework\Marketplace\Jobs\Price_Task_Opener;
 use Woodev\Framework\Marketplace\Ledger\Item_Result;
+use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Framework\Marketplace\Orders\Order_DTO;
 use Woodev\Framework\Marketplace\Orders\Order_Line;
@@ -777,13 +780,24 @@ abstract class Sync_Test_Case extends TestCase {
 	}
 
 	/**
+	 * The task ledger over the test tables and the test clock.
+	 *
+	 * @return Wpdb_Task_Ledger
+	 */
+	protected function task_ledger(): Wpdb_Task_Ledger {
+		return new Wpdb_Task_Ledger( $this->db, Sqlite_Tables::table( 'tasks' ), Sqlite_Tables::table( 'task_items' ), $this->clock() );
+	}
+
+	/**
 	 * Builds the price half over a pusher.
 	 *
 	 * @param Price_Pusher $pusher Pusher.
 	 * @return Price_Flush_Runner
 	 */
 	protected function price_runner( Price_Pusher $pusher ): Price_Flush_Runner {
-		return new Price_Flush_Runner( $this->job_gate(), $this->accounts(), $this->price_queue(), $this->links(), $pusher, $this->limits(), $this->classifier, [ $this, 'log_line' ] );
+		$opener = new Price_Task_Opener( $this->task_ledger(), $this->price_queue(), $pusher, new Export_Scheduler( $this->names() ), [ $this, 'log_line' ] );
+
+		return new Price_Flush_Runner( $this->job_gate(), $this->accounts(), $this->price_queue(), $this->links(), $pusher, $this->limits(), $this->classifier, [ $this, 'log_line' ], $opener );
 	}
 
 	/**

@@ -13321,3 +13321,31 @@ msgstr ""
 #, php-format
 msgid "Артикул «%1$s» уже занят товаром «%2$s» (№%3$d), поэтому товар создан без артикула. Задайте ему свой артикул."
 msgstr ""
+
+#. translators: %s: marketplace name.
+#: marketplace/jobs/class-price-poll-runner.php:510
+#, php-format
+msgid "%s держит новую цену в карантине: она намного ниже текущей"
+msgstr ""
+
+#: marketplace/jobs/class-price-poll-runner.php:520
+msgid "Маркетплейс отклонил новую цену."
+msgstr ""
+
+#: marketplace/jobs/class-price-poll-runner.php:367
+msgid "Маркетплейс не сообщил, принял ли он новую цену. Чтобы отправить её снова, измените цену."
+msgstr ""
+
+#: marketplace/jobs/class-price-poll-runner.php:370
+msgid "Маркетплейс не сообщил, принял ли он новую цену. Она будет отправлена ещё раз."
+msgstr ""
+
+#. translators: %s: reason returned by the marketplace.
+#: marketplace/admin/shared/class-sync-reason-text.php:58
+#, php-format
+msgid "Маркетплейс не принял новую цену: %s"
+msgstr ""
+
+#: marketplace/admin/product/class-panel-view.php:633
+msgid "Новая цена"
+msgstr ""

@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Lists, in a fixed order, the reasons a link does not sync, each as a {@see Sync_Reason} (code and parameters). The order is the
- * order of §10.2: licence, account, key, card, switches, warehouse, rate limit, last error. The sentences are not written here: a
+ * order of §10.2: licence, account, key, card, switches, warehouse, rate limit, the price that did not take effect, last error. The sentences are not written here: a
  * shared admin mapper turns each code into translated text.
  *
  * Marketplace-specific reasons (an oversize product without an oversize warehouse) are appended by the adapter after this list.
@@ -32,7 +32,9 @@ final class Why_Not_Syncing {
 	 * @param Account             $account    Account of the link.
 	 * @param array<string,mixed> $sync_state Facts gathered by the caller: `license_ok` (bool, default true), `health`
 	 *                                        (`Health_Result` status, default ok), `default_warehouse_id` (int|null),
-	 *                                        `retry_after_seconds` (int|null), `last_error` (string|null).
+	 *                                        `retry_after_seconds` (int|null), `price_error_code` (a
+	 *                                        {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code, 2.1.24) with its
+	 *                                        `price_error` text, `last_error` (string|null) for any other trouble.
 	 * @return Sync_Reason[] Reasons, most fundamental first; empty when nothing blocks the sync.
 	 */
 	public static function reasons( Product_Link $link, Account $account, array $sync_state ): array {
@@ -57,6 +59,11 @@ final class Why_Not_Syncing {
 		$retry_after = (int) ( $sync_state['retry_after_seconds'] ?? 0 );
 		if ( $retry_after > 0 ) {
 			$reasons[] = new Sync_Reason( Sync_Reason::RATE_LIMITED, [ 'seconds' => $retry_after ] );
+		}
+
+		$price_code = (string) ( $sync_state['price_error_code'] ?? '' );
+		if ( '' !== $price_code ) {
+			$reasons[] = new Sync_Reason( $price_code, [ 'message' => (string) ( $sync_state['price_error'] ?? '' ) ] );
 		}
 
 		$last_error = (string) ( $sync_state['last_error'] ?? '' );

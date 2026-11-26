@@ -34,6 +34,7 @@ use Woodev\Framework\Marketplace\Orders\Order_Writer;
 use Woodev\Framework\Marketplace\Price\Money;
 use Woodev\Framework\Marketplace\Price\Price_Calculator;
 use Woodev\Framework\Marketplace\Price\Price_Line;
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
 use Woodev\Framework\Marketplace\Price\Price_Pusher;
 use Woodev\Framework\Marketplace\Price\Price_Rule;
 use Woodev\Framework\Marketplace\Price\Price_Currency;
@@ -309,7 +310,7 @@ final class FakeMarketplaceAdapterTest extends TestCase {
 		$results = $pusher->settle( $this->account, $receipt->pending_task() );
 
 		$this->assertFalse( $results[1]->is_ok() );
-		$this->assertSame( 'quarantine', $results[1]->code() );
+		$this->assertSame( Price_Refusal::QUARANTINED, $results[1]->code() );
 		$this->assertSame( 80000, $pusher->remote_price( '5000001' ), 'the old price is preserved' );
 	}
 

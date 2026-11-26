@@ -226,6 +226,7 @@ final class Panel_Reader {
 			'state'       => $state,
 			'badge'       => Card_State_Badge::of( $state ),
 			'remote_error' => $link_id > 0 ? $this->links->last_error( $link_id )['text'] : '',
+			'price_issue' => self::price_issue( $overview ),
 			'ids'         => $this->identifiers( $account, $product, $record, $shown ),
 			'validation'  => $this->validation( $account, $product, $record ),
 			'sync_stock'  => $shown->sync_stock(),
@@ -600,12 +601,16 @@ final class Panel_Reader {
 		$now     = (int) call_user_func( $this->clock );
 		$next    = max( (int) ( $overview['stock']['next_attempt_at'] ?? 0 ), (int) ( $overview['price']['next_attempt_at'] ?? 0 ) );
 		$error   = $this->links->last_error( (int) $record->link_id() )['text'];
+		$price   = self::price_trouble( $overview );
 		$facts   = [
 			'license_ok'           => $this->license->is_in_force(),
 			'health'               => null === $health ? Health_Result::OK : $health->status(),
 			'default_warehouse_id' => $account->setting( 'warehouse_id' ),
 			'retry_after_seconds'  => $next > $now ? $next - $now : null,
-			'last_error'           => self::first_filled( $error, (string) ( $overview['stock']['last_error'] ?? '' ), (string) ( $overview['price']['last_error'] ?? '' ) ),
+			'price_error_code'     => $price['code'],
+			'price_error'          => $price['message'],
+			// A price with a reason of its own is not repeated as «the last error».
+			'last_error'           => self::first_filled( $error, (string) ( $overview['stock']['last_error'] ?? '' ), '' === $price['code'] ? (string) ( $overview['price']['last_error'] ?? '' ) : '' ),
 		];
 		$reasons = Why_Not_Syncing::reasons( $link, $account, $facts );
 		$list    = Sync_Reason_Text::sentences( $reasons );
@@ -618,6 +623,34 @@ final class Panel_Reader {
 			'visible' => true,
 			'list'    => $list,
 		];
+	}
+
+	/**
+	 * Returns why the new price did not take effect, from the price row of a link.
+	 *
+	 * @param array<string,mixed>|null $overview `sync_state` facts of the link.
+	 * @return array{code:string,message:string} Both empty when the price row holds no such reason.
+	 */
+	private static function price_trouble( ?array $overview ): array {
+		$code = (string) ( $overview['price']['error_code'] ?? '' );
+
+		return [
+			'code'    => $code,
+			'message' => '' === $code ? '' : (string) ( $overview['price']['last_error'] ?? '' ),
+		];
+	}
+
+	/**
+	 * Returns the sentence about a price that did not take effect. It is part of the product's state, so it is shown whether or not
+	 * «Логирование» is on.
+	 *
+	 * @param array<string,mixed>|null $overview `sync_state` facts of the link.
+	 * @return string '' when there is nothing to say.
+	 */
+	private static function price_issue( ?array $overview ): string {
+		$price = self::price_trouble( $overview );
+
+		return '' === $price['code'] ? '' : Sync_Reason_Text::sentence( new Sync_Reason( $price['code'], [ 'message' => $price['message'] ] ) );
 	}
 
 	/**

@@ -251,6 +251,20 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( 'woodev-mp-badge--ok', $html );
 	}
 
+	public function test_a_price_that_did_not_take_effect_is_a_problem_whether_or_not_logging_is_on(): void {
+		$block                  = $this->block();
+		$block['link_id']       = 7;
+		$block['price_issue'] = 'Fake держит новую цену в карантине: она намного ниже текущей';
+		$block['reasons']       = [
+			'visible' => false,
+			'list'    => [],
+		];
+		$html                   = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( '<h3>Новая цена</h3><p class="woodev-mp-error">Fake держит новую цену в карантине: она намного ниже текущей</p>', $html );
+		$this->assertStringContainsString( 'data-tip="Есть проблемы (1) — нажмите, чтобы посмотреть"', $html );
+	}
+
 	public function test_one_account_shows_no_account_name_and_no_select(): void {
 		$html = $this->render_tab( [ $this->block() ], [] );
 
