@@ -479,11 +479,11 @@ final class StockRegressionTest extends Sync_Test_Case {
 
 		$this->assertSame(
 			[
-				99             => 3,
 				self::WAREHOUSE => 0,
+				99              => 3,
 			],
 			$sent,
-			'the older value of the retired warehouse does not come back: it is zeroed, and the new warehouse holds the newest value'
+			'the older value of the retired warehouse does not come back: it is zeroed first, then the new warehouse takes the newest value'
 		);
 	}
 

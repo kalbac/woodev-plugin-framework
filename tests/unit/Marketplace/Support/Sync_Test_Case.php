@@ -157,6 +157,13 @@ abstract class Sync_Test_Case extends TestCase {
 	protected $debug = [];
 
 	/**
+	 * Most stock lines one push request takes; a run lists ten requests' worth of due pairs.
+	 *
+	 * @var int
+	 */
+	protected $stock_batch;
+
+	/**
 	 * Most prices one request of the fake marketplace takes.
 	 *
 	 * @var int
@@ -216,6 +223,7 @@ abstract class Sync_Test_Case extends TestCase {
 		$this->log           = [];
 		$this->retries       = [];
 		$this->price_batch   = 1000;
+		$this->stock_batch   = 100;
 		$this->products      = [];
 		$this->post_status   = [];
 		$this->stock_hook    = null;
@@ -487,7 +495,7 @@ abstract class Sync_Test_Case extends TestCase {
 	 * @return Sync_Limits
 	 */
 	protected function limits(): Sync_Limits {
-		return new Sync_Limits( 100, $this->price_batch, 15.0 );
+		return new Sync_Limits( $this->stock_batch, $this->price_batch, 15.0 );
 	}
 
 	/**

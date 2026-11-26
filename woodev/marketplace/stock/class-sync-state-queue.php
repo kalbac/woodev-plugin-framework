@@ -135,6 +135,41 @@ final class Sync_State_Queue {
 	}
 
 	/**
+	 * Lists, for some links, the warehouses whose zero ({@see Sync_State_Store::record_vacate()}) has not had its first answer:
+	 * wanted, not accepted, and never refused or failed. A zero that waits counts, whatever it waits for and whether or not it is
+	 * due.
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param int   $account_id Account id.
+	 * @param int[] $link_ids   Link ids.
+	 * @return array<int,int[]> Link id => warehouse ids; a link without such a zero is absent.
+	 */
+	public function unanswered_vacates( int $account_id, array $link_ids ): array {
+		$ids = array_values( array_unique( array_map( 'intval', $link_ids ) ) );
+
+		if ( [] === $ids ) {
+			return [];
+		}
+
+		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The flusher must read fresh.
+			$this->db->prepare(
+				'SELECT link_id, warehouse_id FROM %i WHERE account_id = %d AND kind = %s AND pending_payload = %s AND (sent_payload IS NULL OR pending_payload <> sent_payload OR in_flight_rev IS NOT NULL) AND attempts = 0 AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge( [ $this->table, $account_id, Sync_State_Store::KIND_STOCK, self::vacate_json() ], $ids )
+			),
+			'ARRAY_A'
+		);
+
+		$warehouses = [];
+
+		foreach ( (array) $rows as $row ) {
+			$warehouses[ (int) $row['link_id'] ][] = (int) $row['warehouse_id'];
+		}
+
+		return $warehouses;
+	}
+
+	/**
 	 * Freezes the newest pending payload of a row as the one being sent (one statement, so a save in between cannot split it).
 	 *
 	 * @since 2.0.29

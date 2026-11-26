@@ -34,6 +34,9 @@ Six traps come with that zero:
   zeroing the old one stops the sales altogether — for the whole account when it is the default warehouse.
 - **Order it explicitly.** Equal `pending_since` and `link_id` leave the warehouse id to break the tie: a test passed only
   because the left id was the lower one.
+- **Order is not enough over a limited list.** With more rows than one run takes (and holds that reshuffle them) the stock can
+  be listed while its zero is not. Guard the send itself (`unanswered_vacates()`), and test with a batch smaller than the rows —
+  with the clock moved between recording and sending, or equal timestamps hide it.
 - **It is not the product's stock.** Do not write it to the link's last pushed stock, and clear the row's readback:
   `Sync_State_Store::overview()` takes a link's newest readback across warehouses (Ozon's storefront buy button reads it).
 - **The due list is a snapshot.** While one pair is settled, a value may be moved onto another row already read. Cancel a zero

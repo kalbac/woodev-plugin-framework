@@ -498,7 +498,9 @@ What the code settled, where the text above left it open:
   sends it although the warehouse is not the link's, then clears the row's readback; it never touches the link's last pushed stock.
   A changed default or oversize warehouse fires `woodev_{plugin id}_account_warehouse_changed`, and `Reseed_Stock_Runner` records
   every created card again; the bulk «Выбрать склад» and the product tab record their own cards. A run sends all its zeros before
-  any stock (`Sync_State_Queue::due()` lists them first, the flusher sends them as their own group). A left warehouse is zeroed
+  any stock (`Sync_State_Queue::due()` lists them first, the flusher sends them as their own group), and — because the due list is
+  limited — holds a link's stock while a zero of another listed warehouse still awaits its first answer
+  (`Sync_State_Queue::unanswered_vacates()`, whether that zero is due or not). A refused or failed zero holds nothing back. A left warehouse is zeroed
   only when something replaces it: not while the CHOSEN warehouse is switched off by the marketplace (the link's due pairs wait,
   with the reason; the product tab says `warehouse_unavailable`) and not for a product without managed stock. With no warehouse
   chosen the left one is zeroed.

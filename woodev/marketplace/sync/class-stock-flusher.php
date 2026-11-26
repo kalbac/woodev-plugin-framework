@@ -35,9 +35,10 @@ defined( 'ABSPATH' ) || exit;
  * склад», no stock is sent); where the left warehouse may still hold units it is sent zero instead of being retired. While the
  * chosen warehouse is switched off by the marketplace nothing could take the stock over, so the link's pairs wait: no warehouse
  * is zeroed or retired. The zero of a switched-off left warehouse waits the same way. What waits goes out once the warehouse is
- * listed again. A run sends all its zeros before any stock; a zero the marketplace puts off or refuses item by item does
- * not hold the stock back. Right before a request each pair's newest pending payload is frozen as in flight. Per item of the
- * answer ({@see Stock_Rules::verdict()}):
+ * listed again. A run sends all its zeros before any stock, and a link's stock is not sent while a zero of another warehouse
+ * that takes writes still awaits its first answer, whether that zero fell outside the run's due list, waits, or was put off. A
+ * refused or failed zero does not hold the stock back. Right before a request each pair's newest pending payload is frozen as
+ * in flight. Per item of the answer ({@see Stock_Rules::verdict()}):
  *
  * | The marketplace says | The pair |
  * |---|---|
@@ -208,17 +209,90 @@ final class Stock_Flusher {
 	private function flush_due( Account_Run $run, Stock_Flush_Result $result ): void {
 		$batches = $this->batches( $run, $result );
 
-		foreach ( $batches['push'] as $warehouses ) {
-			foreach ( $warehouses as $warehouse_id => $pairs ) {
-				foreach ( array_chunk( $pairs, $this->limits->stock_batch() ) as $chunk ) {
-					if ( ! $run->can_request() || ! $this->send( $run, (int) $warehouse_id, $chunk, $result ) ) {
-						return;
-					}
+		list( $zeros, $stock ) = $batches['push'];
+
+		// The stock is looked at only after the zeros of this run have their answers.
+		if ( ! $this->push( $run, $zeros, $result ) || ! $this->push( $run, $this->cleared_to_sell( $run, $stock, $result ), $result ) ) {
+			return;
+		}
+
+		$this->archive( $run, $batches['archive'], $result );
+	}
+
+	/**
+	 * Sends pairs, one warehouse after another, a request's worth at a time.
+	 *
+	 * @param Account_Run                               $run        The run.
+	 * @param array<int,array<int,array<string,mixed>>> $warehouses Pairs by warehouse.
+	 * @param Stock_Flush_Result                        $result     Result.
+	 * @return bool False when the run must stop.
+	 * @throws Claim_Lost When the claim was taken over.
+	 */
+	private function push( Account_Run $run, array $warehouses, Stock_Flush_Result $result ): bool {
+		foreach ( $warehouses as $warehouse_id => $pairs ) {
+			foreach ( array_chunk( $pairs, $this->limits->stock_batch() ) as $chunk ) {
+				if ( ! $run->can_request() || ! $this->send( $run, (int) $warehouse_id, $chunk, $result ) ) {
+					return false;
 				}
 			}
 		}
 
-		$this->archive( $run, $batches['archive'], $result );
+		return true;
+	}
+
+	/**
+	 * Holds back the stock of a link that another warehouse may still be selling: one the marketplace takes writes to, whose zero
+	 * has not had its first answer. The run's due list is limited, so such a zero need not be among this run's pairs, or due at
+	 * all. A zero that was refused or failed holds nothing back: the product must not stop selling for good.
+	 *
+	 * @param Account_Run                               $run        The run.
+	 * @param array<int,array<int,array<string,mixed>>> $warehouses Stock pairs by warehouse.
+	 * @param Stock_Flush_Result                        $result     Result.
+	 * @return array<int,array<int,array<string,mixed>>> The pairs that may go.
+	 * @throws Claim_Lost When the claim was taken over.
+	 */
+	private function cleared_to_sell( Account_Run $run, array $warehouses, Stock_Flush_Result $result ): array {
+		$link_ids = [];
+
+		foreach ( $warehouses as $pairs ) {
+			foreach ( $pairs as $pair ) {
+				$link_ids[] = (int) $pair['link']->link_id();
+			}
+		}
+
+		$zeros   = $this->queue->unanswered_vacates( $run->account()->id(), $link_ids );
+		$cleared = [];
+
+		foreach ( $warehouses as $warehouse_id => $pairs ) {
+			foreach ( $pairs as $pair ) {
+				if ( $this->still_selling_elsewhere( $run, $pair['link'], $zeros[ (int) $pair['link']->link_id() ] ?? [] ) ) {
+					$this->hold( $run, $pair['key'], '', $result );
+					continue;
+				}
+
+				$cleared[ $warehouse_id ][] = $pair;
+			}
+		}
+
+		return $cleared;
+	}
+
+	/**
+	 * Tells whether one of the warehouses that await a link's zero is a left one the marketplace takes writes to.
+	 *
+	 * @param Account_Run $run        The run.
+	 * @param Link_Record $link       Link.
+	 * @param int[]       $warehouses Warehouses whose zero awaits its first answer.
+	 * @return bool
+	 */
+	private function still_selling_elsewhere( Account_Run $run, Link_Record $link, array $warehouses ): bool {
+		foreach ( $warehouses as $warehouse ) {
+			if ( Stock_Warehouse::chosen( $run->account(), $link ) !== $warehouse && Stock_Warehouse::is_available( $run->account(), $warehouse ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
