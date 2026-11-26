@@ -70,7 +70,8 @@ Personal-token limits of the methods a plugin needs (Base in brackets where it d
 | `POST /content/v2/cards/error/list` | 8 / min | 5 |
 | Prices and discounts (all) | 10 / 6 s (Base: 4 / h) | 5 |
 | Stocks, seller warehouses | 300 / min (delete stocks 10 / min) | 20 (2) |
-| FBS orders, supplies, stickers | 300 / min; cancel 100 / min; order metadata 1000 / min | 20 |
+| FBS orders, supplies, stickers | 300 / min; cancel 100 / min | 20 |
+| Label identifiers (marking codes) — **FBS**: read and delete 300 / min, write 1000 / min. **DBS**: read 300 / min, write 500 / min, delete 150 / min | see left | 20 |
 | `POST /api/marketplace/v3/dbs/orders/status/confirm` | 1 / s | 10 |
 | `POST /api/analytics/v1/order-feed` | 1 / min (Base: 1 / 3 h) | 1 |
 | `GET /api/v1/supplier/orders`, `…/sales` | 1 / min (Base: 1 / 3 h, 1 / 2 h) | 10 / 1 |
