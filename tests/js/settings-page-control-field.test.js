@@ -475,6 +475,49 @@ test( 'a server-supplied schema.serverError is shown even when nothing was touch
 	expect( screen.getByText( 'Неверный токен.' ) ).toBeInTheDocument();
 } );
 
+// #2016: the sensitive branch drew no error at all, so a refused token said nothing at its field.
+describe( 'a sensitive field shows schema.serverError (#2016)', () => {
+	const renderSecret = ( extra = {} ) =>
+		render(
+			createElement( ControlField, {
+				settingId: 'api_token',
+				schema: {
+					type: 'string',
+					name: 'API-токен',
+					controlType: 'password',
+					sensitive: true,
+					serverError: 'Неверный токен.',
+					...extra.schema,
+				},
+				value: '',
+				onChange: () => {},
+				onRevert: () => {},
+				showErrors: false,
+				...extra.props,
+			} )
+		);
+
+	test( 'under the masked input', () => {
+		const { container } = renderSecret( { props: { value: 'typed' } } );
+
+		expect( screen.getByText( 'Неверный токен.' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.woodev-field' ) ).toHaveClass( 'woodev-field--error' );
+	} );
+
+	test( 'under the pending-clear notice of a stored secret', () => {
+		renderSecret( { schema: { is_set: true }, props: { hasEdit: true } } );
+
+		expect( screen.getByText( 'Неверный токен.' ) ).toBeInTheDocument();
+	} );
+
+	// The client-side rules stay out of the sensitive branch: only the server's word is drawn there.
+	test( 'with no serverError an empty required secret draws no error', () => {
+		const { container } = renderSecret( { schema: { serverError: undefined, required: true }, props: { showErrors: true } } );
+
+		expect( container.querySelector( '.woodev-field__error' ) ).toBeNull();
+	} );
+} );
+
 test( 'schema.serverError takes precedence over a client-side validation message', () => {
 	render(
 		createElement( ControlField, {
