@@ -233,6 +233,7 @@ abstract class Shipments_Test_Case extends Sync_Test_Case {
 			function ( int $account_id ): void {
 				$this->shipment_jobs()->queue_refresh( $account_id );
 			},
+			new Wpdb_Seller_Action_Store( $this->db, Sqlite_Tables::table( 'seller_actions' ), $this->clock() ),
 			[ $this, 'log_line' ]
 		);
 	}

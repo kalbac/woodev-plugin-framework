@@ -48,6 +48,11 @@ final class Shipments_Provider implements Records_Provider, Provides_Field_Optio
 	private const EDIT = 'edit_shop_orders';
 
 	/**
+	 * Most cargo places the dialog takes: a typing mistake beyond it is refused.
+	 */
+	private const MAX_CARGO_TOTAL = 1000;
+
+	/**
 	 * @var Wpdb_Account_Store
 	 */
 	private $accounts;
@@ -525,9 +530,7 @@ final class Shipments_Provider implements Records_Provider, Provides_Field_Optio
 		}
 
 		if ( Shipments_Definition::CARGO === $action ) {
-			$this->count_of( $payload );
-
-			return $this->service->cargo_reason( $contents );
+			return $this->service->cargo_total_reason( $contents, $this->total_of( $payload ) );
 		}
 
 		if ( Shipments_Definition::SHIPPING !== $action ) {
@@ -561,6 +564,7 @@ final class Shipments_Provider implements Records_Provider, Provides_Field_Optio
 			throw new Action_State_Exception( $refusal ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
+		$this->store->retry_failed_reads( $account->id() );
 		call_user_func( $this->queue_refresh, $account->id() );
 
 		return [ 'queued' => true ] + self::one_done();
@@ -595,17 +599,22 @@ final class Shipments_Provider implements Records_Provider, Provides_Field_Optio
 			] + self::one_done();
 		}
 
+		$result = self::one_done();
+
 		if ( Shipments_Definition::SHIPPING === $action ) {
 			$this->service->choose_shipping( $account, $key, $this->shipping_values( $account, $payload ) );
 		} elseif ( Shipments_Definition::CARGO === $action ) {
-			$this->service->add_cargo_places( $account, $key, $this->count_of( $payload ) );
+			if ( 0 === $this->service->fill_cargo_places( $account, $key, $this->total_of( $payload ) ) ) {
+				/* translators: %s: the marketplace's word for cargo places, «грузовых мест». */
+				$result['messages'] = [ 'action_status_done' => sprintf( __( 'Нужное количество %s уже есть: ничего не отправлено.', 'woodev-plugin-framework' ), $this->noun->of_places() ) ];
+			}
 		} elseif ( Shipments_Definition::HAND_OVER === $action ) {
 			$this->service->hand_over( $account, $key );
 		} else {
 			throw new Action_State_Exception( __( 'Это действие здесь недоступно.', 'woodev-plugin-framework' ) );
 		}
 
-		return [ 'rows' => $this->current_rows( $account, [ $ids[0] ] ) ] + self::one_done();
+		return [ 'rows' => $this->current_rows( $account, [ $ids[0] ] ) ] + $result;
 	}
 
 	/**
@@ -922,20 +931,19 @@ final class Shipments_Provider implements Records_Provider, Provides_Field_Optio
 
 	/**
 	 * @param array<string,mixed> $payload Fields.
-	 * @return int How many cargo places to add.
-	 * @throws Action_Input_Exception When the number is out of range.
+	 * @return int How many cargo places there must be in all.
+	 * @throws Action_Input_Exception When it is not a whole number in range.
 	 */
-	private function count_of( array $payload ): int {
-		$max   = $this->marketplace->max_cargo_places();
-		$value = $payload[ Shipments_Definition::FIELD_COUNT ] ?? 0;
-		$count = is_numeric( $value ) && (float) (int) $value === (float) $value ? (int) $value : 0;
+	private function total_of( array $payload ): int {
+		$value = $payload[ Shipments_Definition::FIELD_TOTAL ] ?? 0;
+		$total = is_numeric( $value ) && (float) (int) $value === (float) $value ? (int) $value : 0;
 
-		if ( $count < 1 || $count > $max ) {
-			/* translators: %d: most places per request. */
-			throw new Action_Input_Exception( [ Shipments_Definition::FIELD_COUNT => sprintf( __( 'Введите целое число от 1 до %d.', 'woodev-plugin-framework' ), $max ) ] ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		if ( $total < 1 || $total > self::MAX_CARGO_TOTAL ) {
+			/* translators: %d: largest number accepted. */
+			throw new Action_Input_Exception( [ Shipments_Definition::FIELD_TOTAL => sprintf( __( 'Введите целое число от 1 до %d.', 'woodev-plugin-framework' ), self::MAX_CARGO_TOTAL ) ] ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
-		return $count;
+		return $total;
 	}
 
 	/**

@@ -1636,7 +1636,27 @@ only them. `Jobs\Shipment_Jobs`: `poll_shipments` per account every 15 minutes a
 список», continuations: 10 list pages and 20 shipment reads a run). A full listing sweeps what the marketplace no longer lists after
 its last page. Only a throttle answer re-queues; any other failure waits for the next poll. Deleting an account removes the rows.
 
+**A failed read is never forgotten.** A shipment that cannot be read stays marked and is put off
+(`read_attempts`, `retry_at`): 10 minutes, doubled after every further failure, at most 6 hours. «Обновить список» tries it at
+once. «Статус данных» says the copy is incomplete until it is read. A read that fails after an action marks the shipment too.
+
 **Locks.** An action holds its shipment (`lock_until`, 300 s at most); a second action is refused and the row shows the busy marker.
+
+**A change is sent once.** The lock covers only overlapping requests, so every change is also claimed in WF6a's `seller_actions`
+table before it is sent, with the same states and periods (`Wpdb_Seller_Action_Store`; action names `shipment.*` hold a dot, which
+no seller action id can). The same identity is refused while the claim holds — accepted or unanswered: 1 hour; on its way: 10
+minutes. A refused, throttled or never-sent request frees it. Identity = what is meant:
+
+| Change | Claimed on | Identity (a different one is a new change) |
+|---|---|---|
+| create | the name | the name |
+| add, move | each unit | from which shipment to which (the claim remembers the last, so a unit can go back) |
+| pickup point and date | the shipment | the chosen values |
+| cargo places | the shipment | the **total** wanted |
+| hand over | the shipment | — |
+
+**Cargo places are a total, not an increment.** The dialog asks how many there must be in all; the framework reads the shipment and
+passes the adapter's `add_cargo_places()` only the missing number. Asking for the number already there sends nothing.
 
 **Counterpart in «Заказы доставки»** (reference only; no delivery code changed): the view row of states with counts, icon row actions
 that stay visible and off with the reason, the busy veil and bar on a locked row, the bulk select, the «Статус данных» block, and

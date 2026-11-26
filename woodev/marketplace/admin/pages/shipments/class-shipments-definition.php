@@ -47,9 +47,9 @@ final class Shipments_Definition {
 	public const FIELD_NAME = 'name';
 
 	/**
-	 * Field of new cargo places: how many.
+	 * Field of cargo places: how many there must be in all.
 	 */
-	public const FIELD_COUNT = 'count';
+	public const FIELD_TOTAL = 'total';
 
 	/**
 	 * Capability the actions ask for.
@@ -224,11 +224,12 @@ final class Shipments_Definition {
 				'archive',
 				[
 					[
-						'id'       => self::FIELD_COUNT,
+						'id'       => self::FIELD_TOTAL,
 						/* translators: %s: «of cargo places», «грузовых мест». */
-						'label'    => sprintf( __( 'Сколько %s добавить', 'woodev-plugin-framework' ), $noun->of_places() ),
+						'label'    => sprintf( __( 'Сколько %s должно быть всего', 'woodev-plugin-framework' ), $noun->of_places() ),
 						'type'     => 'number',
 						'required' => true,
+						'help'     => __( 'Будут добавлены только недостающие.', 'woodev-plugin-framework' ),
 					],
 				],
 				''

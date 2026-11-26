@@ -24,7 +24,8 @@ defined( 'ABSPATH' ) || exit;
  * with it, and only after the last page sweeps the shipments it did not see ({@see self::finish_listing()}). A shipment written by
  * an action meanwhile gets the generation in progress, so the refresh does not sweep it. A shipment whose units must be read is
  * marked stale — an open one, a new one, one whose state changed, one the marketplace is still working on, and one that holds units
- * to ship again — and reading them ({@see self::save_contents()}) clears the mark.
+ * to ship again — and reading them ({@see self::save_contents()}) clears the mark. A shipment that could not be read keeps it
+ * and is tried again after a growing pause ({@see self::postpone_reading()}).
  *
  * **One action at a time per shipment.** {@see self::lock()} holds a shipment while an action on it is at the marketplace, so a
  * second tab or manager cannot send the same one twice.
@@ -50,6 +51,17 @@ final class Wpdb_Shipment_Store {
 	 * Most open shipments a list of choices offers.
 	 */
 	public const CHOICES = 100;
+
+	/**
+	 * Seconds before a shipment that could not be read is tried again, doubled after every further failure. Shorter than the
+	 * pause between two polls, so the next one tries it.
+	 */
+	public const RETRY_FIRST = 600;
+
+	/**
+	 * Longest pause between two tries.
+	 */
+	public const RETRY_MAX = 21600;
 
 	/**
 	 * Shipments one statement of the sweep removes.
@@ -133,7 +145,7 @@ final class Wpdb_Shipment_Store {
 	}
 
 	/**
-	 * Marks a refresh as queued and forgets the last failure.
+	 * Marks a refresh as queued. The text of the last failure stays until a refresh ends.
 	 *
 	 * @since 2.1.28
 	 *
@@ -143,7 +155,6 @@ final class Wpdb_Shipment_Store {
 	public function mark_refreshing( int $account_id ): void {
 		$meta                  = $this->meta( $account_id );
 		$meta['refreshing_at'] = $this->now();
-		$meta['error']         = '';
 
 		$this->save_meta( $account_id, $meta );
 	}
@@ -189,7 +200,6 @@ final class Wpdb_Shipment_Store {
 		$meta                  = $this->meta( $account_id );
 		$meta['running']       = max( $meta['generation'], $meta['running'] ) + 1;
 		$meta['cursor']        = '';
-		$meta['partial']       = '';
 		$meta['refreshing_at'] = $this->now();
 
 		$this->save_meta( $account_id, $meta );
@@ -261,34 +271,19 @@ final class Wpdb_Shipment_Store {
 	}
 
 	/**
-	 * Notes that the refresh in progress could not read some shipment: {@see self::finish_refresh()} keeps the text as the error.
-	 *
-	 * @since 2.1.28
-	 *
-	 * @param int    $account_id Account.
-	 * @param string $text       Text for the merchant.
-	 * @return void
-	 */
-	public function flag_partial( int $account_id, string $text ): void {
-		$meta            = $this->meta( $account_id );
-		$meta['partial'] = $text;
-
-		$this->save_meta( $account_id, $meta );
-	}
-
-	/**
 	 * Ends a refresh that went through everything it had to.
 	 *
 	 * @since 2.1.28
 	 *
-	 * @param int $account_id Account.
+	 * @param int    $account_id Account.
+	 * @param string $warning    What the merchant should know about it, e.g. that something could not be read; empty for nothing.
 	 * @return void
 	 */
-	public function finish_refresh( int $account_id ): void {
+	public function finish_refresh( int $account_id, string $warning = '' ): void {
 		$meta                  = $this->meta( $account_id );
 		$meta['refreshed_at']  = $this->now();
 		$meta['refreshing_at'] = 0;
-		$meta['error']         = $meta['partial'];
+		$meta['error']         = $warning;
 
 		$this->save_meta( $account_id, $meta );
 	}
@@ -454,9 +449,11 @@ final class Wpdb_Shipment_Store {
 
 		$this->update(
 			$counts + [
-				'cargo'    => (string) wp_json_encode( $cargo ),
-				'is_stale' => 0,
-				'read_at'  => $this->at( 0 ),
+				'cargo'         => (string) wp_json_encode( $cargo ),
+				'is_stale'      => 0,
+				'read_attempts' => 0,
+				'retry_at'      => null,
+				'read_at'       => $this->at( 0 ),
 			],
 			$account_id,
 			$key
@@ -464,7 +461,8 @@ final class Wpdb_Shipment_Store {
 	}
 
 	/**
-	 * Takes a shipment off the list of those to read, when reading it failed for good: the next listing marks it again.
+	 * Puts off a shipment that could not be read: it stays marked and is listed again after a pause that doubles with every
+	 * failure, from {@see self::RETRY_FIRST} up to {@see self::RETRY_MAX} seconds.
 	 *
 	 * @since 2.1.28
 	 *
@@ -473,8 +471,57 @@ final class Wpdb_Shipment_Store {
 	 * @return void
 	 * @throws Persistence_Exception When the database refuses the write.
 	 */
-	public function skip_reading( int $account_id, string $key ): void {
-		$this->update( [ 'is_stale' => 0 ], $account_id, $key );
+	public function postpone_reading( int $account_id, string $key ): void {
+		$row      = $this->find( $account_id, $key );
+		$attempts = min( 100, 1 + (int) ( $row['read_attempts'] ?? 0 ) );
+		$pause    = (int) min( self::RETRY_MAX, self::RETRY_FIRST * ( 2 ** min( 20, $attempts - 1 ) ) );
+
+		$this->update(
+			[
+				'is_stale'      => 1,
+				'read_attempts' => $attempts,
+				'retry_at'      => $this->at( $pause ),
+			],
+			$account_id,
+			$key
+		);
+	}
+
+	/**
+	 * Marks a shipment for reading.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param int    $account_id Account.
+	 * @param string $key        Shipment key.
+	 * @return void
+	 * @throws Persistence_Exception When the database refuses the write.
+	 */
+	public function mark_unread( int $account_id, string $key ): void {
+		$this->update( [ 'is_stale' => 1 ], $account_id, $key );
+	}
+
+	/**
+	 * Lets the shipments that are put off be read at once: the merchant asked for a refresh.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param int $account_id Account.
+	 * @return void
+	 * @throws Persistence_Exception When the database refuses the write.
+	 */
+	public function retry_failed_reads( int $account_id ): void {
+		$this->query( 'UPDATE %i SET retry_at = NULL WHERE account_id = %d AND retry_at IS NOT NULL', [ $this->table, $account_id ] );
+	}
+
+	/**
+	 * @since 2.1.28
+	 *
+	 * @param int $account_id Account.
+	 * @return bool Whether a shipment of the account still waits to be read after a failure.
+	 */
+	public function has_failed_reads( int $account_id ): bool {
+		return null !== $this->db->get_var( $this->db->prepare( 'SELECT 1 FROM %i WHERE account_id = %d AND read_attempts > 0 LIMIT 1', $this->table, $account_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Our own table, prepared.
 	}
 
 	/**
@@ -491,7 +538,8 @@ final class Wpdb_Shipment_Store {
 	}
 
 	/**
-	 * Lists the shipments whose units have to be read, open ones first. One an action holds is not listed: the action reads it.
+	 * Lists the shipments whose units have to be read now, open ones first. One an action holds is not listed (the action reads it),
+	 * nor one put off after a failure.
 	 *
 	 * @since 2.1.28
 	 *
@@ -500,7 +548,9 @@ final class Wpdb_Shipment_Store {
 	 * @return array<int,array<string,mixed>> Rows.
 	 */
 	public function stale( int $account_id, int $limit ): array {
-		return (array) $this->db->get_results( $this->db->prepare( 'SELECT * FROM %i WHERE account_id = %d AND is_stale = 1 AND (lock_until IS NULL OR lock_until <= %s) ORDER BY is_open DESC, created_at DESC, shipment_key ASC LIMIT %d', $this->table, $account_id, $this->at( 0 ), $limit ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Our own table, prepared.
+		$now = $this->at( 0 );
+
+		return (array) $this->db->get_results( $this->db->prepare( 'SELECT * FROM %i WHERE account_id = %d AND is_stale = 1 AND (lock_until IS NULL OR lock_until <= %s) AND (retry_at IS NULL OR retry_at <= %s) ORDER BY is_open DESC, created_at DESC, shipment_key ASC LIMIT %d', $this->table, $account_id, $now, $now, $limit ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Our own table, prepared.
 	}
 
 	/**
@@ -979,7 +1029,7 @@ final class Wpdb_Shipment_Store {
 
 	/**
 	 * @param int $account_id Account.
-	 * @return array{generation:int,running:int,cursor:string,refreshed_at:int,refreshing_at:int,error:string,partial:string,reship:array<string,string[]>}
+	 * @return array{generation:int,running:int,cursor:string,refreshed_at:int,refreshing_at:int,error:string,reship:array<string,string[]>}
 	 */
 	private function meta( int $account_id ): array {
 		$stored = get_option( $this->prefix . self::META . $account_id, [] );
@@ -992,7 +1042,6 @@ final class Wpdb_Shipment_Store {
 			'refreshed_at'  => max( 0, (int) ( $stored['refreshed_at'] ?? 0 ) ),
 			'refreshing_at' => max( 0, (int) ( $stored['refreshing_at'] ?? 0 ) ),
 			'error'         => (string) ( $stored['error'] ?? '' ),
-			'partial'       => (string) ( $stored['partial'] ?? '' ),
 			'reship'        => (array) ( $stored['reship'] ?? [] ),
 		];
 	}

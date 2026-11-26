@@ -496,7 +496,8 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			$this->classifier,
 			$this->pause(),
 			Shipment_Noun::dispatch(),
-			static function (): void {}
+			static function (): void {},
+			new Wpdb_Seller_Action_Store( $this->db, Sqlite_Tables::table( 'seller_actions' ), $this->clock() )
 		);
 		$this->shipments = new Site_Orders_Shipments( $service, $store, Shipment_Noun::dispatch() );
 

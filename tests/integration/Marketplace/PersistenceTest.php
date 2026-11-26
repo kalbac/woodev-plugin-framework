@@ -521,6 +521,21 @@ class PersistenceTest extends TestCase {
 
 		$this->assertNotNull( $store->lock( 1, $key ) );
 
+		$closed = Wpdb_Shipment_Store::key( 'S-2' );
+		$store->postpone_reading( 1, $closed );
+
+		$this->assertTrue( $store->has_failed_reads( 1 ) );
+		$this->assertCount( 0, $store->stale( 1, 10 ), 'Put off, and the other one is held.' );
+
+		$now += Wpdb_Shipment_Store::RETRY_FIRST;
+
+		$this->assertSame( [ $closed ], array_column( $store->stale( 1, 10 ), 'shipment_key' ) );
+
+		$store->postpone_reading( 1, $closed );
+		$store->retry_failed_reads( 1 );
+
+		$this->assertSame( [ $closed ], array_column( $store->stale( 1, 10 ), 'shipment_key' ) );
+
 		$store->mark_reshipment( 1, [ 'S-1' => [ 'u-1' ] ] );
 
 		$this->assertSame( 1, $store->page( 1, [ 'reship' => true ] )['total'] );

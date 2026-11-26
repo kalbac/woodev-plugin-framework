@@ -220,7 +220,10 @@ final class Shipment_Jobs {
 			}
 
 			$this->snapshot->mark_reshipment( $account );
-			$this->store->finish_refresh( $account_id );
+			$this->store->finish_refresh(
+				$account_id,
+				$this->store->has_failed_reads( $account_id ) ? __( 'Не всё удалось прочитать с маркетплейса: повторим позже.', 'woodev-plugin-framework' ) : ''
+			);
 		} catch ( \Throwable $e ) {
 			$delay = $this->settle( $account, $e );
 
@@ -310,8 +313,8 @@ final class Shipment_Jobs {
 	}
 
 	/**
-	 * Reads the shipments marked for reading, within the run's budget. One that cannot be read is logged and left for the next
-	 * refresh, so it never holds up the others; the refresh then says that it is incomplete.
+	 * Reads the shipments marked for reading, within the run's budget. One that cannot be read is logged and put off
+	 * ({@see Wpdb_Shipment_Store::postpone_reading()}), so it neither holds up the others nor is forgotten.
 	 *
 	 * @param Account $account Account.
 	 * @return bool Whether nothing is left for another run.
@@ -331,8 +334,7 @@ final class Shipment_Jobs {
 				}
 
 				$this->write_log( sprintf( 'Reading the shipment %s failed: %s', $row['remote_id'], $e->getMessage() ) );
-				$this->store->skip_reading( $account->id(), (string) $row['shipment_key'] );
-				$this->store->flag_partial( $account->id(), __( 'Не всё удалось прочитать с маркетплейса: повторим при следующем обновлении.', 'woodev-plugin-framework' ) );
+				$this->store->postpone_reading( $account->id(), (string) $row['shipment_key'] );
 			}
 		}
 

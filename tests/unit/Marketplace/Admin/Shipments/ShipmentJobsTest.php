@@ -154,14 +154,78 @@ final class ShipmentJobsTest extends Shipments_Test_Case {
 		$this->marketplace->failures = [ 'read_shipment' => Fake_Remote_Exception::of( Remote_Error::RETRY, 'bad shipment' ) ];
 		$this->run_pending();
 
-		$this->assertSame( [], $this->shop_store()->stale( $this->account_id, 10 ) );
+		$this->assertSame( [], $this->shop_store()->stale( $this->account_id, 10 ), 'Put off: no run takes it again at once.' );
 		$this->assertSame( self::NOW, $this->shop_store()->refreshed_at( $this->account_id ) );
 		$this->assertStringContainsString( 'Не всё удалось прочитать', $this->shop_store()->last_error( $this->account_id ) );
 		$this->assertStringContainsString( 'bad shipment', implode( ' ', $this->log ) );
+	}
+
+	/**
+	 * A handed-over shipment whose first read failed is read by a later refresh, and the error stays until then.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_read_of_a_closed_shipment_is_tried_again(): void {
+		$this->give( 'S-1', 'u101', 'P-101' );
+		$this->marketplace->shipments['S-1']['open']  = false;
+		$this->marketplace->failures['read_shipment'] = new \RuntimeException( 'network' );
+		$this->refresh();
 
 		$this->marketplace->failures = [];
+		$this->marketplace->remote   = [];
+		$this->now                  += 60;
 		$this->refresh();
-		$this->assertSame( '', $this->shop_store()->last_error( $this->account_id ), 'A complete refresh clears the error.' );
+
+		$this->assertNotContains( 'read_shipment', $this->marketplace->remote, 'Not before the pause is over.' );
+		$this->assertStringContainsString( 'Не всё удалось прочитать', $this->shop_store()->last_error( $this->account_id ), 'Nothing was read: the refresh is not complete.' );
+
+		$this->now += Shipment_Jobs::POLL_MINUTES * 60;
+		$this->refresh();
+
+		$row = $this->shop_store()->find( $this->account_id, Wpdb_Shipment_Store::key( 'S-1' ) );
+		$this->assertNotNull( $row['read_at'] );
+		$this->assertSame( '1', (string) $row['unit_count'] );
+		$this->assertSame( '', $this->shop_store()->last_error( $this->account_id ), 'Read at last: the error goes.' );
+	}
+
+	/**
+	 * Every further failure doubles the pause, up to its ceiling, and the shipment is never given up.
+	 *
+	 * @return void
+	 */
+	public function test_the_pause_after_a_failed_read_grows_and_is_bounded(): void {
+		$this->give( 'S-1', 'u101', 'P-101' );
+		$this->marketplace->shipments['S-1']['open']  = false;
+		$this->marketplace->failures['read_shipment'] = new \RuntimeException( 'always' );
+		$key                                          = Wpdb_Shipment_Store::key( 'S-1' );
+		$pauses                                       = [];
+
+		for ( $attempt = 0; $attempt < 9; $attempt++ ) {
+			$this->refresh();
+
+			$row       = $this->shop_store()->find( $this->account_id, $key );
+			$pauses[]  = strtotime( $row['retry_at'] . ' UTC' ) - $this->now;
+			$this->now = strtotime( $row['retry_at'] . ' UTC' );
+		}
+
+		$this->assertSame( [ 600, 1200, 2400, 4800, 9600, 19200, 21600, 21600, 21600 ], $pauses );
+		$this->assertSame( 9, count( array_keys( $this->marketplace->remote, 'read_shipment', true ) ), 'One try per due refresh.' );
+	}
+
+	/**
+	 * A shipment whose read after an action failed is read by the next refresh, a handed-over one included.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_read_after_an_action_is_made_up_for(): void {
+		$this->give( 'S-1', 'u101', 'P-101' );
+		$this->marketplace->shipments['S-1']['open'] = false;
+		$this->refresh();
+
+		$this->marketplace->failures['read_shipment'] = new \RuntimeException( 'network' );
+		$this->shipment_service()->reread( $this->account(), Wpdb_Shipment_Store::key( 'S-1' ) );
+
+		$this->assertCount( 1, $this->shop_store()->stale( $this->account_id, 10 ) );
 	}
 
 	/**

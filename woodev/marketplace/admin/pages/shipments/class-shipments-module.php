@@ -221,6 +221,7 @@ final class Shipments_Module {
 			Account_Pause::over( $accounts, $classifier ),
 			Shipment_Noun::for_descriptor( $adapter->settings_descriptor() ),
 			self::queue_refresh( $plugin, $accounts, $db ),
+			self::claims( $plugin, $db ),
 			self::log( $plugin )
 		);
 	}
@@ -293,9 +294,18 @@ final class Shipments_Module {
 			return null;
 		}
 
-		$sent = new Wpdb_Seller_Action_Store( $db, ( new Schema( $adapter->id() ) )->table_name( 'seller_actions', $db->prefix ) );
+		return new Seller_Action_Runner( $adapter, Posting_Action_Gate::for_adapter( $adapter, $write_gate ), License_Gate::for_plugin( $plugin ), $adapter->settings_descriptor()->marketplace_name(), self::claims( $plugin, $db ), self::log( $plugin ) );
+	}
 
-		return new Seller_Action_Runner( $adapter, Posting_Action_Gate::for_adapter( $adapter, $write_gate ), License_Gate::for_plugin( $plugin ), $adapter->settings_descriptor()->marketplace_name(), $sent, self::log( $plugin ) );
+	/**
+	 * @param Marketplace_Plugin $plugin Plugin.
+	 * @param \wpdb              $db     Database.
+	 * @return Wpdb_Seller_Action_Store The claims of what was sent to the marketplace.
+	 */
+	private static function claims( Marketplace_Plugin $plugin, \wpdb $db ): Wpdb_Seller_Action_Store {
+		$schema = new Schema( $plugin->get_marketplace_adapter()->id() );
+
+		return new Wpdb_Seller_Action_Store( $db, $schema->table_name( 'seller_actions', $db->prefix ) );
 	}
 
 	/**

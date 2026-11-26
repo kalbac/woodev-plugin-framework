@@ -56,7 +56,8 @@ final class Schema {
 	 * 6: `sync_state.task_id`, `sync_state.refused_payload` and `sync_state.error_code`, a price the marketplace decides on later
 	 * (#1998).
 	 * 7: `seller_actions`, the actions sent to the marketplace for the units of orders, so none is sent twice (#2003).
-	 * 8: `shipments` and `shipment_units`, the shop's copy of the seller's shipments (#2006).
+	 * 8: `shipments` and `shipment_units`, the shop's copy of the seller's shipments (#2006); the changes of shipments are
+	 * claimed in `seller_actions`.
 	 *
 	 * @since 2.1.10
 	 *
@@ -750,7 +751,8 @@ final class Schema {
 	 * The shop's copy of the seller's shipments ({@see Wpdb_Shipment_Store}), one row per (account, shipment), so that the screen
 	 * never reads the marketplace. `shipment_key` is the MD5 of the marketplace's shipment id, which the screen's row ids carry.
 	 * `seen_run` is the generation of the full refresh that last listed it: a shipment the marketplace no longer lists goes after
-	 * the last page. `is_stale` marks a shipment whose units still have to be read. `lock_token` / `lock_until` hold a shipment
+	 * the last page. `is_stale` marks a shipment whose units still have to be read; `read_attempts` / `retry_at` put off one that
+	 * could not be read. `lock_token` / `lock_until` hold a shipment
 	 * while an action on it is at the marketplace.
 	 *
 	 * @since 2.1.28
@@ -778,6 +780,8 @@ final class Schema {
 			warning_count int(10) unsigned NOT NULL DEFAULT 0,
 			reship_count int(10) unsigned NOT NULL DEFAULT 0,
 			is_stale tinyint(1) NOT NULL DEFAULT 1,
+			read_attempts smallint(5) unsigned NOT NULL DEFAULT 0,
+			retry_at datetime NULL DEFAULT NULL,
 			read_at datetime NULL DEFAULT NULL,
 			seen_run int(10) unsigned NOT NULL DEFAULT 0,
 			lock_token char(32) NOT NULL DEFAULT '',

@@ -144,7 +144,7 @@ final class ShipmentsPageTest extends Shipments_Test_Case {
 		$this->list_body( [ 'filters' => [ 'state' => 'open', 'reship' => true ] ] );
 		$this->child_rows( 'S-1' );
 		$provider->get_activity( $this->context(), [ $this->row_id( 'S-1' ), $this->row_id( 'S-1', 'u101' ) ] );
-		$provider->preview( $this->context(), 'cargo', [ $this->row_id( 'S-2' ) ], [ 'count' => 1 ] );
+		$provider->preview( $this->context(), 'cargo', [ $this->row_id( 'S-2' ) ], [ 'total' => 1 ] );
 		$this->orders_action()->row_states( $this->account(), $this->wc_orders[102] );
 
 		$this->assertSame( [], $this->marketplace->remote );
@@ -313,7 +313,7 @@ final class ShipmentsPageTest extends Shipments_Test_Case {
 			$seen['activity'] = $this->list_body( [ 'search' => 'S-1' ] )['rows'][0]['activity'];
 
 			try {
-				$this->provider()->apply( $this->context(), 'cargo', [ $this->row_id( 'S-1' ) ], [ 'count' => 1 ] );
+				$this->provider()->apply( $this->context(), 'cargo', [ $this->row_id( 'S-1' ) ], [ 'total' => 1 ] );
 			} catch ( Action_State_Exception $e ) {
 				$seen['refused'] = $e->getMessage();
 			}
@@ -339,7 +339,7 @@ final class ShipmentsPageTest extends Shipments_Test_Case {
 		$this->marketplace->failures['add_cargo_places'] = new Shipment_Refused( 'Поставка не на пункт выдачи.' );
 
 		try {
-			$this->provider()->apply( $this->context(), 'cargo', $id, [ 'count' => 2 ] );
+			$this->provider()->apply( $this->context(), 'cargo', $id, [ 'total' => 2 ] );
 			$this->fail( 'Refused.' );
 		} catch ( Action_State_Exception $e ) {
 			$this->assertSame( 'Поставка не на пункт выдачи.', $e->getMessage() );
@@ -348,7 +348,7 @@ final class ShipmentsPageTest extends Shipments_Test_Case {
 		$this->marketplace->failures['add_cargo_places'] = Fake_Remote_Exception::of( Remote_Error::RETRY, 'timeout' );
 
 		try {
-			$this->provider()->apply( $this->context(), 'cargo', $id, [ 'count' => 2 ] );
+			$this->provider()->apply( $this->context(), 'cargo', $id, [ 'total' => 2 ] );
 			$this->fail( 'Unanswered.' );
 		} catch ( Action_State_Exception $e ) {
 			$this->assertStringContainsString( 'действие могло выполниться', $e->getMessage() );
@@ -366,7 +366,7 @@ final class ShipmentsPageTest extends Shipments_Test_Case {
 		$this->stocked();
 		$this->marketplace->remote = [];
 
-		foreach ( [ [ 'create', [], [ 'name' => ' ' ] ], [ 'cargo', [ $this->row_id( 'S-1' ) ], [ 'count' => 11 ] ], [ 'cargo', [ $this->row_id( 'S-1' ) ], [ 'count' => 1.5 ] ], [ 'bulk-move', [ $this->row_id( 'S-1', 'u101' ) ], [ 'target' => 'nonsense' ] ] ] as list( $id, $ids, $payload ) ) {
+		foreach ( [ [ 'create', [], [ 'name' => ' ' ] ], [ 'cargo', [ $this->row_id( 'S-1' ) ], [ 'total' => 0 ] ], [ 'cargo', [ $this->row_id( 'S-1' ) ], [ 'total' => 1.5 ] ], [ 'bulk-move', [ $this->row_id( 'S-1', 'u101' ) ], [ 'target' => 'nonsense' ] ] ] as list( $id, $ids, $payload ) ) {
 			try {
 				$this->provider()->apply( $this->context(), $id, $ids, $payload );
 				$this->fail( $id . ' must be refused.' );

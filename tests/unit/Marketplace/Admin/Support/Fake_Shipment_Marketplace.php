@@ -75,6 +75,13 @@ final class Fake_Shipment_Marketplace implements Shipment_Batches {
 	public $places = 10;
 
 	/**
+	 * Thrown after a change was made, per method: the marketplace did it and the answer was lost.
+	 *
+	 * @var array<string,\Throwable>
+	 */
+	public $lost = [];
+
+	/**
 	 * Thrown by the next remote call instead of an answer, per method.
 	 *
 	 * @var array<string,\Throwable>
@@ -245,6 +252,8 @@ final class Fake_Shipment_Marketplace implements Shipment_Batches {
 
 		$this->shipments[ $id ] = self::remote_shipment( $name );
 
+		$this->lose_answer( 'create_shipment' );
+
 		return $this->header( $id );
 	}
 
@@ -275,6 +284,8 @@ final class Fake_Shipment_Marketplace implements Shipment_Batches {
 			$results[] = Shipment_Result::done( $unit_id );
 		}
 
+		$this->lose_answer( 'add_units' );
+
 		return $results;
 	}
 
@@ -294,6 +305,8 @@ final class Fake_Shipment_Marketplace implements Shipment_Batches {
 			$results[] = Shipment_Result::done( $unit->id() );
 		}
 
+		$this->lose_answer( 'move_units' );
+
 		return $results;
 	}
 
@@ -306,22 +319,28 @@ final class Fake_Shipment_Marketplace implements Shipment_Batches {
 	public function choose_shipping( Account $account, Shipment $shipment, array $values ): void {
 		$this->called( 'choose_shipping' );
 
-		$this->chosen                                 = $values;
+		$this->chosen                                   = $values;
 		$this->shipments[ $shipment->id() ]['shipping'] = 'Склад на Лесной, 28 ноября';
+
+		$this->lose_answer( 'choose_shipping' );
 	}
 
 	public function add_cargo_places( Account $account, Shipment $shipment, int $count ): void {
 		$this->called( 'add_cargo_places' );
 
-		for ( $i = 1; $i <= $count; $i++ ) {
-			$this->shipments[ $shipment->id() ]['places'][] = 'BOX-' . $i;
+		for ( $i = 0; $i < $count; $i++ ) {
+			$this->shipments[ $shipment->id() ]['places'][] = 'BOX-' . ( count( $this->shipments[ $shipment->id() ]['places'] ) + 1 );
 		}
+
+		$this->lose_answer( 'add_cargo_places' );
 	}
 
 	public function hand_over( Account $account, Shipment $shipment ): void {
 		$this->called( 'hand_over' );
 
 		$this->shipments[ $shipment->id() ]['open'] = false;
+
+		$this->lose_answer( 'hand_over' );
 	}
 
 	public function shipment_document( Account $account, Shipment $shipment, string $document_id ): Shipment_File {
@@ -371,6 +390,18 @@ final class Fake_Shipment_Marketplace implements Shipment_Batches {
 				'still_changing' => $shipment['changing'] ?? false,
 			]
 		);
+	}
+
+	/**
+	 * Throws what the test scripted for a change that was made but not answered.
+	 *
+	 * @param string $method Method.
+	 * @return void
+	 */
+	private function lose_answer( string $method ): void {
+		if ( isset( $this->lost[ $method ] ) ) {
+			throw $this->lost[ $method ];
+		}
 	}
 
 	/**
