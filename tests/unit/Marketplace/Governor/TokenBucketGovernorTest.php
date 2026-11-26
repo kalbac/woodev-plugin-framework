@@ -268,6 +268,30 @@ final class TokenBucketGovernorTest extends TestCase {
 	}
 
 	/**
+	 * Repeated 4xx answers drive the bucket below zero, and the next request waits for the whole deficit.
+	 *
+	 * @return void
+	 */
+	public function test_the_wait_grows_with_the_deficit_below_zero(): void {
+		$governor = new Token_Bucket_Governor(
+			$this->store,
+			array( new Bucket_Spec( 'marketplace', 300, 60, 20, Bucket_Spec::COST_REQUEST, 10 ) ),
+			function (): float {
+				return $this->now;
+			}
+		);
+
+		$this->assertSame( 0, $governor->acquire( '7', 'marketplace' ) ); // 19 left.
+		$this->assertTrue( $governor->report_client_error( '7', 'marketplace' ) ); // 10.
+		$this->assertTrue( $governor->report_client_error( '7', 'marketplace' ) ); // 1.
+		$this->assertTrue( $governor->report_client_error( '7', 'marketplace' ) ); // -8.
+		$this->assertSame( 2, $governor->acquire( '7', 'marketplace' ), 'nine tokens short at five a second: two seconds' );
+
+		$this->now += 2.0; // Ten tokens earned: two left.
+		$this->assertSame( 0, $governor->acquire( '7', 'marketplace' ) );
+	}
+
+	/**
 	 * A client error on a key without a description is refused, as acquire() refuses it.
 	 *
 	 * @return void

@@ -667,6 +667,69 @@ final class SettingsHandlerTest extends TestCase {
 		$this->assertArrayHasKey( 'account_new_access_token', $duplicate, 'the same token again is a duplicate of the derived identifier' );
 	}
 
+	/**
+	 * WF5 review fixes: an edited token moves the derived identifier with it, a token that already belongs to another account
+	 * is refused, and a token that derives no identifier is refused with a message instead of a silent no-op.
+	 *
+	 * @return void
+	 */
+	public function test_an_edited_token_moves_the_derived_identifier_and_bad_tokens_are_refused(): void {
+		$fields     = new Credential_Fields(
+			'sid',
+			[ 'access_token' ],
+			static function ( array $secrets ): string {
+				if ( 0 === strpos( $secrets['access_token'], 'bad' ) ) {
+					return '';
+				}
+
+				return 'seller-' . substr( $secrets['access_token'], 0, 5 );
+			}
+		);
+		$descriptor = new Fake_Settings_Descriptor(
+			$fields,
+			'Acme',
+			[
+				'sid'          => new Credential_Field_Spec( 'Код продавца', '' ),
+				'access_token' => new Credential_Field_Spec( 'Токен доступа', 'Основной токен' ),
+			]
+		);
+		$adapter    = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => [],
+				'credential_fields'   => $fields,
+				'settings_descriptor' => $descriptor,
+			]
+		);
+		$store      = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-1' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+		$acc_a      = $store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop A', true, [ 'sid' => 'seller-token', 'access_token' => 'token-abcdef' ] ) );
+		$store->save( new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Shop B', true, [ 'sid' => 'seller-bravo', 'access_token' => 'bravo-123456' ] ) );
+		$handler    = $this->build_handler( $adapter, $store );
+		$token_a    = "account_{$acc_a}_access_token";
+
+		$this->assertArrayHasKey( $token_a, $handler->validate_values( [ $token_a => 'bravo-999999' ] ), 'another account already holds this identifier' );
+		$this->assertArrayHasKey( $token_a, $handler->validate_values( [ $token_a => 'bad-999999' ] ), 'a token that derives nothing is refused on an edit' );
+		$this->assertSame( [], $handler->validate_values( [ $token_a => 'other-999999' ] ) );
+
+		$handler->get_setting( $token_a )->set_value( 'other-999999' );
+		$handler->save();
+
+		$this->assertSame( 'seller-other', $store->get( $acc_a )->credentials()['sid'], 'the identifier follows the new token' );
+		$this->assertNull( $store->find_by_identifier( 'seller-token' ), 'the old identifier is gone' );
+
+		$new = $handler->validate_values( [ 'account_new_name' => 'Shop C', 'account_new_access_token' => 'bad-123456' ] );
+		$this->assertArrayHasKey( 'account_new_access_token', $new, 'a new block whose token derives nothing is refused, not saved as nothing' );
+	}
+
 	public function test_the_price_example_closes_the_price_card_and_no_longer_heads_the_tab(): void {
 		Functions\when( 'wc_price' )->alias(
 			static function ( $amount, array $args = [] ): string {

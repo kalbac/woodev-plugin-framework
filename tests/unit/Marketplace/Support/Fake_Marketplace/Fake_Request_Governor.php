@@ -103,6 +103,10 @@ final class Fake_Request_Governor implements Request_Governor {
 	 * @return bool Always true: the fake never loses a write.
 	 */
 	public function report_client_error( string $account_key, string $bucket ): bool {
+		if ( ! isset( $this->specs[ $bucket ] ) ) {
+			throw new \InvalidArgumentException( 'No description for bucket ' . $bucket . '.' ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- A developer message, as in the real governor.
+		}
+
 		$spec  = $this->specs[ $bucket ];
 		$state = $this->state_of( $account_key, $bucket, $spec );
 
