@@ -17,6 +17,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Order_Canceller;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Reasonless_Canceller;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Json_Answer;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Account_Store;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
@@ -324,6 +325,21 @@ final class CancelAjaxTest extends TestCase {
 		$this->canceller->reasons = [];
 
 		$this->assertSame( 502, $this->call( 'handle_reasons' )->status );
+	}
+
+	public function test_a_cancellation_that_takes_no_reason_ignores_the_request_s_reason_and_writes_a_note_without_one(): void {
+		$this->canceller    = new Fake_Reasonless_Canceller();
+		$_POST['reason_id'] = '9';
+		$_POST['message']   = 'Склад закрыт';
+
+		$reasons = $this->call( 'handle_reasons' );
+		$cancel  = $this->call( 'handle_cancel' );
+
+		$this->assertSame( [], $reasons->data['reasons'] );
+		$this->assertTrue( $cancel->success );
+		$this->assertSame( 0, $this->canceller->reason_calls );
+		$this->assertSame( [ [ 1, 'P-100', 0, '' ] ], $this->canceller->cancelled );
+		$this->assertSame( [ 'Отправление P-100 отменено: Fake, из WooCommerce.' ], $this->notes );
 	}
 
 	/**

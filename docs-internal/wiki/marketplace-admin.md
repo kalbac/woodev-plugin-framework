@@ -1537,6 +1537,72 @@ successful empty read means a link stands alone.
 cell of the variants table (any price reason, encoded twice because it may quote the marketplace), «Товары сайта» (tooltip,
 parent's error count, «only errors») and the count of held prices in the diagnostics report.
 
+## Seller actions on an order (#2003)
+
+Card WF6a of the Wildberries design (`2.1.27`). An adapter declares what the seller may do with an order **once**; the «Заказы»
+table, the order details box and the server read that declaration. Ozon Seller 2.0.0 needs no change: everything is optional.
+
+| Seam (`Admin\Order`) | Who implements it | Without it |
+|---|---|---|
+| `Seller_Actions` | the adapter | no seller actions |
+| `Seller_Action_Options` | the adapter, for a list field read from stored data (a supply) | such a field lists nothing |
+| `Reasonless_Canceller extends Order_Canceller` | the adapter whose cancellation takes no reason | the reason list is asked, an empty one means «try later» |
+
+**Declaration** (`Seller_Action`): id, label, targets, unit statuses it is offered in (empty = any), up to 10
+`Seller_Action_Field`s (`text`, `textarea`, `code`, `select`), confirmation sentence, tone, icon.
+
+| Target | Where | Applies to |
+|---|---|---|
+| `UNIT` | a button beside the goods in the details box | that unit |
+| `ORDER` | the table row and the details box | every unit of the order that takes it |
+| `BULK` | «Массовые действия» of the table | every unit of the ticked orders that takes it |
+
+**Units.** `posting_units( $order )` returns `Posting_Unit`s from stored data (id never shown, label, status code, status label,
+optionally the ids of the actions that exist for it). An action outside that list is not drawn; two units of one label are
+numbered.
+
+**One server path** — `Seller_Action_Runner`, asked by the table (`Site_Orders_Seller`) and by the order screen
+(`Seller_Action_Ajax`, `wp_ajax_woodev_{adapter}_seller_action` / `_seller_options`):
+
+1. account enabled, receiving orders, able to write; licence;
+2. per unit: the action exists, `Posting_Action_Gate::seller_reason()` (status, then `seller_action_refusal()`);
+3. input: declared shape (`Seller_Action_Input`), then `check_seller_input()` — local only;
+4. each unit is claimed (below), then `run_seller_action()` **once** with every unit taken; the adapter batches within the
+   marketplace's limits.
+
+**Never sent twice** (`Data\Wpdb_Seller_Action_Store`, table `seller_actions`, schema revision 7). A request reads stored unit
+state that only the later refresh moves, so every unit is written down **before** it is sent: key (account, order, unit,
+action), identity = the unit's status and the typed values. Claiming is atomic (`INSERT IGNORE`, else a compare-and-set
+`UPDATE`).
+
+| Row | Holds | Until |
+|---|---|---|
+| `sending` | the unit and action, whatever the input | the answer; 10 minutes if the request died |
+| `sent` (accepted) | the same identity | 1 hour |
+| `unknown` (not mentioned, or the answer was lost) | the same identity | 1 hour |
+| refused by the marketplace, or the whole call refused | nothing: the row is removed | — |
+
+A held unit is left out of the plan and the report with its own sentence, so a retry of a partly accepted batch sends the rest
+only. Another identity — the status moved on, or other input — is a new action. If the database cannot hold the claim, nothing is
+sent. The one case held wrongly: a unit that returns to the same status with the same input within the hour.
+
+**Answers are per unit.** `Seller_Unit_Result::done()` / `refused( $target, $text )`; a unit the answer does not mention is
+**failed**, never done. `Seller_Action_Refused` means nothing was done; any other throwable means «may have happened». The runner
+writes an order note and calls `refresh_after_action()`; it changes no order and nothing in the order storage.
+
+**Table.** Engine ids are `act-{id}` (row) and `bulk-{id}` (the engine has one id space). Plan and report count **units**, not
+orders; every refusal is a group with its own sentence and «№ order: goods» examples. A refused action stays visible, off, with
+the reason (the «Заказы доставки» mechanism). Rows can be ticked only when a bulk action exists.
+
+**Limits of this card.** Unit actions have no place in the table until the unit child rows (WF6b). A `code` field keeps the GS
+separator (U+001D) on the order screen only: the records engine refuses control characters, so a table or supply entry of a
+marking code needs an engine change first.
+
+**Cancellation without reasons.** For a `Reasonless_Canceller` neither screen asks `reasons()`; both show a confirmation with
+`cancel_warning()` and call `cancel()` with `0` and `''`; an empty returned `title` gives a note without a reason. A marketplace
+that cancels **per unit** (Wildberries) declares its cancellation as a seller action instead — `cancel()` answers for the whole
+posting only. Implementing both puts two cancel buttons on a row.
+
 ## The articles of new cards in the mapping form (#2038)
 
 Card #2038 of the Wildberries design (§5.5, `2.1.27`). A marketplace whose article is built from more than the SKU shows the

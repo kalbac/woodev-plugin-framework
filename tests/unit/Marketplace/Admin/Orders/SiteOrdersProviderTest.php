@@ -23,15 +23,22 @@ use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Ids;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Reader;
+use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Refused;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Rows;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Seller;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Order_Canceller;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Reasonless_Canceller;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Seller_Adapter;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Flows\Label_Test_Case;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
@@ -45,6 +52,8 @@ require_once dirname( __DIR__, 3 ) . '/Shipping/Rest_Api/wp-rest-controller-stub
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Activity
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Cancel
+ * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Seller
+ * @covers \Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner
  */
 final class SiteOrdersProviderTest extends Label_Test_Case {
 	/**
@@ -130,6 +139,20 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	 */
 	private $options = [];
 
+	/**
+	 * The adapter's seller actions; null for a table without them.
+	 *
+	 * @var Fake_Seller_Adapter|null
+	 */
+	private $seller;
+
+	/**
+	 * Order id => its units, `[ id, label, status, action ids or null ]`.
+	 *
+	 * @var array<int,array<int,array<int,mixed>>>
+	 */
+	private $units = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -138,6 +161,8 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->data_status = null;
 		$this->forbidden   = [];
 		$this->notes     = [];
+		$this->seller    = null;
+		$this->units     = [];
 		$this->logged    = [];
 		$this->meta      = new Fake_Order_Meta();
 		$this->canceller = new Fake_Order_Canceller();
@@ -156,6 +181,8 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			}
 		);
 		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\when( 'sanitize_textarea_field' )->returnArg();
 		Functions\when( 'wp_parse_url' )->alias( 'parse_url' );
 		Functions\when( 'wp_timezone' )->alias(
 			static function (): \DateTimeZone {
@@ -257,7 +284,11 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$order->shouldReceive( 'get_currency' )->andReturn( 'RUB' );
 		$order->shouldReceive( 'get_formatted_billing_full_name' )->andReturn( $name );
 		$order->shouldReceive( 'get_meta' )->andReturnUsing(
-			static function ( $key ) use ( $meta ) {
+			function ( $key ) use ( $meta, $id ) {
+				if ( Fake_Seller_Adapter::META_UNITS === $key ) {
+					return $this->units[ $id ] ?? [];
+				}
+
 				return $meta[ $key ] ?? '';
 			}
 		);
@@ -286,7 +317,19 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$can    = function ( int $order_id ): bool {
 			return ! in_array( $order_id, $this->forbidden, true );
 		};
-		$gate   = new Posting_Action_Gate( new Label_Availability( $this->readiness ), $this->allowed_actions(), $this->write_gate );
+		$gate   = new Posting_Action_Gate( new Label_Availability( $this->readiness ), $this->allowed_actions(), $this->write_gate, null, $this->seller );
+		$seller = null === $this->seller ? null : new Site_Orders_Seller(
+			new Seller_Action_Runner(
+				$this->seller,
+				$gate,
+				$this->license(),
+				'Фейк',
+				new Wpdb_Seller_Action_Store( $this->db, Sqlite_Tables::table( 'seller_actions' ), $this->clock() ),
+				function ( string $line ): void {
+					$this->logged[] = $line;
+				}
+			)
+		);
 
 		return new Site_Orders_Provider(
 			$this->accounts(),
@@ -311,7 +354,9 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			},
 			$this->data_status,
 			null,
-			$gate
+			$gate,
+			null,
+			$seller
 		);
 	}
 
@@ -1316,5 +1361,304 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	 */
 	private function provider_calls(): array {
 		return $this->provider->calls;
+	}
+
+	/**
+	 * Orders 101 (two goods, new), 102 (handed to delivery) and 104 (one good, new) with the seller actions on.
+	 *
+	 * @return void
+	 */
+	private function stock_with_seller_actions(): void {
+		$this->stock( false );
+		$this->seller = new Fake_Seller_Adapter();
+		$this->units  = [
+			101 => [
+				[ 'u-1', 'Футболка, M', 'new' ],
+				[ 'u-2', 'Кепка', 'new' ],
+			],
+			102 => [
+				[ 'u-3', 'Носки', 'deliver' ],
+			],
+			104 => [
+				[ 'u-4', 'Худи, L', 'new' ],
+			],
+		];
+	}
+
+	/**
+	 * @param string              $action Action id.
+	 * @param int[]               $ids    Order ids.
+	 * @param array<string,mixed> $payload Fields.
+	 * @return array<string,mixed> The apply answer as the engine would send it.
+	 */
+	private function seller_apply( string $action, array $ids, array $payload = [] ): array {
+		$definition = $this->definition();
+		$result     = $this->provider()->apply( $this->context(), $action, array_map( [ $this, 'row_id' ], $ids ), $payload );
+		$body       = Action_Response::apply( $definition, $definition->get_action( $action ), $result );
+
+		$this->assertIsArray( $body, 'The engine accepts the report.' );
+
+		return $body;
+	}
+
+	public function test_declared_seller_actions_are_row_and_bulk_actions_of_the_table(): void {
+		$this->stock_with_seller_actions();
+
+		$definition = $this->definition();
+
+		$this->assertSame( [ 'open', 'label', 'act-confirm', 'act-receive', 'cancel' ], $definition->get_row_action_ids(), 'The marking code is offered on a unit only.' );
+		$this->assertSame( 'primary', $definition->get_action( 'bulk-confirm' )['tone'] );
+		$this->assertSame( 'После этого покупатель не сможет отменить заказ.', $definition->get_action( 'act-confirm' )['scope_sentence'] );
+		$this->assertSame( [ 'batch' ], array_column( $definition->get_action( 'bulk-supply' )['fields'], 'id' ) );
+		$this->assertNull( $definition->get_action( 'act-supply' ), 'A bulk-only action has no row button.' );
+		$this->assertNull( $definition->get_action( 'bulk-receive' ) );
+		$this->assertSame( 'Выберите действие', $definition->to_array()['messages']['bulk_placeholder'] );
+	}
+
+	public function test_a_table_without_seller_actions_has_no_bulk_actions_and_rows_that_cannot_be_ticked(): void {
+		$this->stock( false );
+
+		$this->assertSame( [], $this->definition()->to_array()['bulk_actions'] );
+		$this->assertFalse( $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['selectable'] );
+	}
+
+	public function test_a_row_shows_a_seller_action_off_with_the_reason_in_a_status_that_does_not_allow_it(): void {
+		$this->stock_with_seller_actions();
+
+		$rows = $this->by_id( $this->list_body() );
+		$row  = array_column( $rows[ $this->row_id( 102 ) ]['actions'], null, 'id' );
+
+		$this->assertTrue( $rows[ $this->row_id( 102 ) ]['selectable'] );
+		$this->assertSame( [ 'open', 'label', 'act-confirm', 'act-receive' ], array_keys( $row ), 'A finished posting has no cancellation.' );
+		$this->assertFalse( $row['act-confirm']['enabled'] );
+		$this->assertSame( 'В статусе «Статус deliver» это действие недоступно.', $row['act-confirm']['reason'] );
+		$this->assertTrue( $row['act-receive']['enabled'] );
+	}
+
+	public function test_a_row_shows_the_marketplaces_own_objection_and_leaves_out_an_action_that_does_not_exist_for_its_goods(): void {
+		$this->stock_with_seller_actions();
+		$this->units[104]               = [ [ 'u-4', 'Худи, L', 'new', [ 'confirm' ] ] ];
+		$this->seller                   = new Fake_Seller_Adapter();
+		$this->seller->objections['u-4'] = 'Покупатель ещё может отменить заказ.';
+
+		$row = array_column( $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'], null, 'id' );
+
+		$this->assertSame( [ 'open', 'label', 'act-confirm', 'cancel' ], array_keys( $row ) );
+		$this->assertSame( 'Покупатель ещё может отменить заказ.', $row['act-confirm']['reason'] );
+	}
+
+	public function test_a_very_long_objection_of_the_marketplace_is_shortened_not_a_broken_table(): void {
+		$this->stock_with_seller_actions();
+		$this->seller                    = new Fake_Seller_Adapter();
+		$this->seller->objections['u-4'] = str_repeat( 'Причина. ', 100 );
+
+		$row = array_column( $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ]['actions'], null, 'id' );
+
+		$this->assertSame( 500, mb_strlen( $row['act-confirm']['reason'] ) );
+	}
+
+	public function test_a_user_who_may_not_edit_the_order_sees_its_seller_actions_off_and_cannot_tick_it(): void {
+		$this->stock_with_seller_actions();
+		$this->forbidden = [ 104 ];
+
+		$row = $this->by_id( $this->list_body() )[ $this->row_id( 104 ) ];
+
+		$this->assertFalse( $row['selectable'] );
+		$this->assertSame( 'Нет права изменять этот заказ.', array_column( $row['actions'], null, 'id' )['act-confirm']['reason'] );
+	}
+
+	public function test_a_bulk_action_applies_every_unit_that_takes_it_and_shows_the_refused_ones_with_their_own_text(): void {
+		$this->stock_with_seller_actions();
+		$this->seller->refusals['u-2'] = 'Товар уже отменён покупателем.';
+
+		$body = $this->seller_apply( 'bulk-confirm', [ 101, 102, 104 ] );
+
+		$this->assertSame( [ 'u-1', 'u-2', 'u-4' ], Fake_Seller_Adapter::unit_ids( $this->seller->calls[0] ), 'One call, only the units that take the action.' );
+		$this->assertSame( [ 'partial', 4, 2, 1, 1 ], [ $body['status'], $body['requested'], $body['accepted'], $body['failed'], $body['skipped'] ] );
+		$this->assertSame( [ 'failed', 'Товар уже отменён покупателем.', 1, [ '№ 101: Кепка' ] ], [ $body['groups'][0]['kind'], $body['groups'][0]['reason'], $body['groups'][0]['count'], $body['groups'][0]['examples'] ] );
+		$this->assertSame( [ 'skipped', 'В статусе «Статус deliver» это действие недоступно.', [ '№ 102: Носки' ] ], [ $body['groups'][1]['kind'], $body['groups'][1]['reason'], $body['groups'][1]['examples'] ] );
+		$this->assertSame( [ 101, 104 ], $this->seller->refreshed, 'The skipped order was not sent, so it is not refreshed.' );
+		$this->assertSame( [ 'Фейк: действие «Принять в работу», из WooCommerce. Выполнено: Футболка, M. Не выполнено: Кепка — Товар уже отменён покупателем.' ], $this->notes[101] );
+		$this->assertArrayNotHasKey( 102, $this->notes );
+		$this->assertCount( 3, $body['rows'] );
+	}
+
+	public function test_a_retry_of_a_partly_accepted_batch_sends_only_what_did_not_go(): void {
+		$this->stock_with_seller_actions();
+		$this->seller->refusals['u-2'] = 'Склад не готов.';
+		$this->seller_apply( 'bulk-confirm', [ 101, 104 ] );
+
+		// The queued refresh has not run: the stored orders still say «new».
+		$this->seller->refusals = [];
+		$plan                   = $this->provider()->preview( $this->context(), 'bulk-confirm', [ $this->row_id( 101 ), $this->row_id( 104 ) ], [] );
+		$body                   = $this->seller_apply( 'bulk-confirm', [ 101, 104 ] );
+
+		$this->assertSame( [ 3, 1, 2 ], [ $plan['requested'], $plan['eligible'], $plan['skipped'] ] );
+		$this->assertCount( 2, $this->seller->calls );
+		$this->assertSame( [ 'u-2' ], Fake_Seller_Adapter::unit_ids( $this->seller->calls[1] ), 'The accepted units are not sent again.' );
+		$this->assertSame( [ 'partial', 1, 2, 0 ], [ $body['status'], $body['accepted'], $body['skipped'], $body['failed'] ] );
+		$this->assertSame( 'Это действие уже отправлено для этой позиции. Дождитесь, пока заказ обновится.', $body['groups'][0]['reason'] );
+		$this->assertSame( [ '№ 101: Футболка, M', '№ 104: Худи, L' ], $body['groups'][0]['examples'] );
+		$this->assertCount( 2, $this->notes[101], 'One note per sending: nothing was repeated.' );
+		$this->assertCount( 1, $this->notes[104] );
+
+		$third = $this->seller_apply( 'bulk-confirm', [ 101, 104 ] );
+
+		$this->assertSame( [ 'failed', 0, 3 ], [ $third['status'], $third['accepted'], $third['skipped'] ] );
+		$this->assertCount( 2, $this->seller->calls );
+	}
+
+	public function test_a_preview_counts_the_goods_and_calls_no_marketplace(): void {
+		$this->stock_with_seller_actions();
+
+		$plan = Action_Response::preview( $this->definition()->get_action( 'bulk-confirm' ), $this->provider()->preview( $this->context(), 'bulk-confirm', [ $this->row_id( 101 ), $this->row_id( 102 ) ], [] ) );
+
+		$this->assertSame( [ 3, 2, 1, true ], [ $plan['requested'], $plan['eligible'], $plan['skipped'], $plan['can_apply'] ] );
+		$this->assertSame( [], $this->seller->calls );
+	}
+
+	public function test_a_seller_action_the_status_does_not_allow_is_refused_by_the_server_without_a_remote_call(): void {
+		$this->stock_with_seller_actions();
+
+		$plan = $this->provider()->preview( $this->context(), 'act-receive', [ $this->row_id( 104 ) ], [] );
+		$body = $this->seller_apply( 'act-receive', [ 104 ] );
+
+		$this->assertSame( 0, $plan['eligible'] );
+		$this->assertSame( [ 'failed', 0, 1 ], [ $body['status'], $body['accepted'], $body['skipped'] ] );
+		$this->assertSame( [], $this->seller->calls );
+		$this->assertSame( [], $this->seller->checked );
+		$this->assertSame( [], $this->notes );
+	}
+
+	public function test_a_unit_the_marketplace_does_not_mention_is_failed_never_done(): void {
+		$this->stock_with_seller_actions();
+		$this->seller->unanswered = [ 'u-2' ];
+
+		$body = $this->seller_apply( 'act-confirm', [ 101 ] );
+
+		$this->assertSame( [ 1, 1 ], [ $body['accepted'], $body['failed'] ] );
+		$this->assertStringContainsString( 'не ответил по этой позиции', $body['groups'][0]['reason'] );
+	}
+
+	public function test_the_input_is_checked_by_the_marketplace_before_anything_is_sent(): void {
+		$this->stock_with_seller_actions();
+		$this->seller->input_errors = [ 'batch' => 'Эта поставка уже передана в доставку.' ];
+
+		foreach ( [ 'preview', 'apply' ] as $method ) {
+			try {
+				$this->provider()->$method( $this->context(), 'bulk-supply', [ $this->row_id( 101 ) ], [ 'batch' => 'WB-1' ] );
+				$this->fail( $method . ' accepted a refused input.' );
+			} catch ( Action_Input_Exception $e ) {
+				$this->assertSame( [ 'batch' => 'Эта поставка уже передана в доставку.' ], $e->get_errors() );
+			}
+		}
+
+		$this->assertSame( 'WB-1', $this->seller->checked[0]->value( 'batch' ) );
+		$this->assertSame( [], $this->seller->calls );
+	}
+
+	public function test_a_required_field_left_empty_never_reaches_the_marketplace(): void {
+		$this->stock_with_seller_actions();
+
+		$this->expectException( Action_Input_Exception::class );
+
+		try {
+			$this->provider()->apply( $this->context(), 'bulk-supply', [ $this->row_id( 101 ) ], [] );
+		} finally {
+			$this->assertSame( [], $this->seller->checked );
+			$this->assertSame( [], $this->seller->calls );
+		}
+	}
+
+	public function test_a_refusal_of_the_whole_call_is_the_sentence_of_the_dialog(): void {
+		$this->stock_with_seller_actions();
+		$this->seller->failure = new Seller_Action_Refused( 'Кабинет заблокирован за долг.', 502 );
+
+		try {
+			$this->seller_apply( 'act-confirm', [ 101 ] );
+			$this->fail( 'A refused call is not a report.' );
+		} catch ( Action_State_Exception $e ) {
+			$this->assertSame( 'Кабинет заблокирован за долг.', $e->getMessage() );
+		}
+
+		$this->assertSame( [], $this->seller->refreshed, 'Nothing was done.' );
+		$this->assertSame( [], $this->notes );
+	}
+
+	public function test_a_lost_answer_says_the_action_may_have_happened_refreshes_the_orders_and_is_logged(): void {
+		$this->stock_with_seller_actions();
+		$this->seller->failure = new \RuntimeException( 'HTTP 503' );
+
+		try {
+			$this->seller_apply( 'act-confirm', [ 101 ] );
+			$this->fail( 'A lost answer is not a report.' );
+		} catch ( Action_State_Exception $e ) {
+			$this->assertStringContainsString( 'действие могло выполниться', $e->getMessage() );
+		}
+
+		$this->assertSame( [ 101 ], $this->seller->refreshed );
+		$this->assertStringContainsString( 'HTTP 503', $this->logged[0] );
+	}
+
+	public function test_without_a_licence_or_a_key_that_can_write_a_seller_action_never_reaches_the_marketplace(): void {
+		$this->stock_with_seller_actions();
+		$this->licensed = false;
+
+		try {
+			$this->provider()->apply( $this->context(), 'act-confirm', [ $this->row_id( 101 ) ], [] );
+			$this->fail( 'No licence, no action.' );
+		} catch ( Action_State_Exception $e ) {
+			$this->assertStringContainsString( 'выполнить действие «Принять в работу» на маркетплейсе', $e->getMessage() );
+		}
+
+		$row = array_column( $this->by_id( $this->list_body() )[ $this->row_id( 101 ) ]['actions'], null, 'id' );
+
+		$this->assertFalse( $row['act-confirm']['enabled'] );
+
+		$this->licensed   = true;
+		$this->write_gate = '__return_false';
+
+		try {
+			$this->provider()->apply( $this->context(), 'bulk-confirm', [ $this->row_id( 101 ) ], [] );
+			$this->fail( 'A read-only key writes nothing.' );
+		} catch ( Action_State_Exception $e ) {
+			$this->assertStringContainsString( 'не позволяет менять данные', $e->getMessage() );
+		}
+
+		$this->assertSame( [], $this->seller->calls );
+	}
+
+	public function test_the_choices_of_a_seller_field_come_from_the_adapter(): void {
+		$this->stock_with_seller_actions();
+
+		$options = $this->provider()->get_field_options( $this->context(), 'bulk-supply', 'batch', [ 'row_id' => '', 'search' => '', 'cursor' => '' ] );
+
+		$this->assertSame( [ [ 'value' => 'WB-1', 'label' => 'Поставка от 26.11' ] ], $options['options'] );
+	}
+
+	public function test_a_cancellation_that_takes_no_reason_asks_for_none_and_writes_a_note_without_one(): void {
+		$this->stock( false );
+		$this->canceller = new Fake_Reasonless_Canceller();
+
+		$action = $this->definition()->get_action( 'cancel' );
+
+		$this->assertSame( [], $action['fields'] );
+		$this->assertStringContainsString( 'За отмену по вине продавца начисляется штраф.', $action['scope_sentence'] );
+
+		$body = Action_Response::apply( $this->definition(), $action, $this->provider()->apply( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [] ) );
+
+		$this->assertSame( 'done', $body['status'] );
+		$this->assertSame( [ [ $this->account_id, 'P-104', 0, '' ] ], $this->canceller->cancelled );
+		$this->assertSame( 0, $this->canceller->reason_calls );
+		$this->assertSame( [ 'Отправление P-104 отменено: Фейк, из WooCommerce.' ], $this->notes[104] );
+	}
+
+	public function test_a_cancellation_with_reasons_still_asks_for_one(): void {
+		$this->stock( false );
+
+		$this->assertSame( [ 'reason', 'message' ], array_column( $this->definition()->get_action( 'cancel' )['fields'], 'id' ) );
+
+		$this->expectException( Action_Input_Exception::class );
+		$this->provider()->apply( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [] );
 	}
 }

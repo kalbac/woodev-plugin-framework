@@ -27,11 +27,11 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The orders a marketplace account brought to the shop, as a records provider: one row per remote order group that has a WooCommerce
  * order, on either order storage. It is the small coordinator: SQL is in {@see Site_Orders_Reader}, cells in {@see Site_Orders_Rows},
- * processes and locks in {@see Site_Orders_Activity}, labels in {@see Site_Orders_Labels} and the cancellation in
- * {@see Site_Orders_Cancel}.
+ * processes and locks in {@see Site_Orders_Activity}, labels in {@see Site_Orders_Labels}, the cancellation in
+ * {@see Site_Orders_Cancel} and the adapter's seller actions in {@see Site_Orders_Seller}.
  *
- * Sorting, filtering and paging are done in SQL over the whole table, never over one page. Reading never calls the marketplace; the
- * only remote reads are the cancellation reasons of one order, when the merchant opens the cancel window, and the two actions.
+ * Sorting, filtering and paging are done in SQL over the whole table, never over one page. Reading never calls the marketplace; it
+ * is called only for the cancellation reasons of one order, when the merchant opens the cancel window, and by an applied action.
  *
  * Every row is `{account id}:{order id}`. An action may touch an order only when it is a registry row of the account, carries the
  * account's owner stamp (the check the label download makes too) and the user may edit it.
@@ -132,6 +132,13 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	private $noun;
 
 	/**
+	 * Null when the adapter declares no seller actions.
+	 *
+	 * @var Site_Orders_Seller|null
+	 */
+	private $seller;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
@@ -150,8 +157,10 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param Label_Availability|null      $availability Whether a label can be asked for a posting (since 2.1.13); null for an adapter that says nothing.
 	 * @param Posting_Action_Gate|null     $gate         Whether the write actions are on offer for a posting (since 2.1.17); when given it is used instead of `$availability`, and null offers every action to every account.
 	 * @param Posting_Noun|null            $noun         The marketplace's word for a posting (since 2.1.23); null for «отправление».
+	 * @param Site_Orders_Seller|null      $seller       The adapter's seller actions (since 2.1.27); null for an adapter that declares none.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null ) {
+		$this->seller      = $seller;
 		$this->noun        = $noun ?? Posting_Noun::shipment();
 		$this->data_status = $data_status;
 		$this->gate        = $gate ?? new Posting_Action_Gate( $availability ?? new Label_Availability( null, $this->noun ), null, null, $this->noun );
@@ -204,7 +213,9 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @return array<string,mixed>
 	 */
 	public function get_definition( array $context ): array {
-		return Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun );
+		$warning = null === $this->cancel || $this->cancel->needs_reason() ? null : $this->cancel->warning();
+
+		return Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun, $this->seller, $warning );
 	}
 
 	/**
@@ -332,6 +343,10 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	public function preview( array $context, string $action, array $ids, array $payload ): array {
 		$call = $this->prepare( $context, $action, $ids );
 
+		if ( $this->is_seller_action( $action ) ) {
+			return $this->seller->preview( $call['account'], $action, $this->orders_of_call( $call ), $payload );
+		}
+
 		if ( Site_Orders_Definition::CANCEL === $action ) {
 			return $this->cancel_plan( $call );
 		}
@@ -354,6 +369,12 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 */
 	public function apply( array $context, string $action, array $ids, array $payload ): array {
 		$call = $this->prepare( $context, $action, $ids );
+
+		if ( $this->is_seller_action( $action ) ) {
+			$result = $this->seller->apply( $call['account'], $action, $this->orders_of_call( $call ), $payload );
+
+			return $result + [ 'rows' => $this->build_rows( $call['account'], $call['targets'] ) ];
+		}
 
 		if ( Site_Orders_Definition::CANCEL === $action ) {
 			return $this->cancel_apply( $call, $payload );
@@ -417,6 +438,14 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			'next_cursor' => null,
 		];
 		$account = $this->account( $context );
+
+		if ( null !== $account && $this->is_seller_action( $action ) ) {
+			return [
+				'options'     => $this->seller->field_options( $account, $action, $field, $query['search'] ),
+				'next_cursor' => null,
+			];
+		}
+
 		$target  = null === $account || null === $this->cancel || Site_Orders_Definition::CANCEL !== $action || 'reason' !== $field ? null : $this->target_of_row( $account, $query['row_id'] );
 		$order   = null === $target ? null : $this->order( $target['order_id'] );
 
@@ -447,7 +476,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @throws Action_State_Exception When the action is not one this table runs, the account is gone or the order is not available.
 	 */
 	private function prepare( array $context, string $action, array $ids ): array {
-		if ( ! in_array( $action, $this->offered(), true ) || Site_Orders_Definition::OPEN === $action ) {
+		if ( ( ! in_array( $action, $this->offered(), true ) && ! $this->is_seller_action( $action ) ) || Site_Orders_Definition::OPEN === $action ) {
 			throw new Action_State_Exception( __( 'Это действие недоступно для заказов этого маркетплейса.', 'woodev-plugin-framework' ) );
 		}
 
@@ -522,16 +551,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			return $this->refused_result( $not_allowed, $call['targets'][0]['external_key'] ); // No remote call for a posting the marketplace does not let cancel.
 		}
 
-		$reason_id = (int) ( $payload['reason'] ?? 0 );
-		$message   = trim( (string) ( $payload['message'] ?? '' ) );
-
-		if ( $reason_id < 1 ) {
-			throw new Action_Input_Exception( [ 'reason' => __( 'Выберите причину отмены.', 'woodev-plugin-framework' ) ] );
-		}
-
-		if ( '' === $message && $this->cancel->needs_message( $reason_id ) ) {
-			throw new Action_Input_Exception( [ 'message' => __( 'Опишите причину отмены.', 'woodev-plugin-framework' ) ] );
-		}
+		list( $reason_id, $message ) = $this->cancel_reason_of( $payload );
 
 		try {
 			$this->cancel->cancel( $call['account'], $order, $reason_id, $message );
@@ -550,6 +570,62 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
 			'messages'  => [ 'action_status_done' => sprintf( __( '%s отменено. Заказ обновится в течение нескольких минут.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $this->noun->one() ) ) ],
 		];
+	}
+
+	/**
+	 * The reason a cancellation request carries; none for a marketplace whose cancellation takes no reason.
+	 *
+	 * @param array<string,mixed> $payload Validated fields.
+	 * @return array{0:int,1:string} Reason id and free text.
+	 * @throws Action_Input_Exception When a required reason or its explanation is missing.
+	 */
+	private function cancel_reason_of( array $payload ): array {
+		if ( ! $this->cancel->needs_reason() ) {
+			return [ 0, '' ];
+		}
+
+		$reason_id = (int) ( $payload['reason'] ?? 0 );
+		$message   = trim( (string) ( $payload['message'] ?? '' ) );
+
+		if ( $reason_id < 1 ) {
+			throw new Action_Input_Exception( [ 'reason' => __( 'Выберите причину отмены.', 'woodev-plugin-framework' ) ] );
+		}
+
+		if ( '' === $message && $this->cancel->needs_message( $reason_id ) ) {
+			throw new Action_Input_Exception( [ 'message' => __( 'Опишите причину отмены.', 'woodev-plugin-framework' ) ] );
+		}
+
+		return [ $reason_id, $message ];
+	}
+
+	/**
+	 * @param string $action Action id of a request.
+	 * @return bool Whether it is one of the adapter's seller actions.
+	 */
+	private function is_seller_action( string $action ): bool {
+		return null !== $this->seller && $this->seller->handles( $action );
+	}
+
+	/**
+	 * The WooCommerce orders of the asked postings, in the order asked.
+	 *
+	 * @param array{account:Account,targets:array<int,array<string,mixed>>} $call Resolved call.
+	 * @return \WC_Order[]
+	 * @throws Action_State_Exception When one of them cannot be loaded.
+	 */
+	private function orders_of_call( array $call ): array {
+		$found  = $this->orders( array_column( $call['targets'], 'order_id' ) );
+		$orders = [];
+
+		foreach ( $call['targets'] as $target ) {
+			if ( ! isset( $found[ $target['order_id'] ] ) ) {
+				throw new Action_State_Exception( __( 'Заказ не найден. Обновите страницу.', 'woodev-plugin-framework' ) );
+			}
+
+			$orders[] = $found[ $target['order_id'] ];
+		}
+
+		return $orders;
 	}
 
 	/**
@@ -791,9 +867,21 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		$rows     = [];
 
 		foreach ( $items as $item ) {
-			if ( isset( $orders[ $item['order_id'] ] ) ) {
-				$rows[] = $this->rows->row( $account->id(), $item, $orders[ $item['order_id'] ], $activity[ $item['order_id'] ], $refusal, ( $states[ $item['external_key'] ]['document_id'] ?? 0 ) > 0 );
+			if ( ! isset( $orders[ $item['order_id'] ] ) ) {
+				continue;
 			}
+
+			$order  = $orders[ $item['order_id'] ];
+			$rows[] = $this->rows->row(
+				$account->id(),
+				$item,
+				$order,
+				$activity[ $item['order_id'] ],
+				$refusal,
+				( $states[ $item['external_key'] ]['document_id'] ?? 0 ) > 0,
+				null === $this->seller ? [] : $this->seller->row_states( $account, $order ),
+				null !== $this->seller && $this->seller->has_bulk()
+			);
 		}
 
 		return $rows;

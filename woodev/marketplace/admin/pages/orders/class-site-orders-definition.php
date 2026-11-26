@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Standard_Messages;
 use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
@@ -44,14 +45,19 @@ final class Site_Orders_Definition {
 	 * Builds the definition.
 	 *
 	 * @since 2.1.5
+	 * @since 2.1.27 Takes the seller actions and a cancellation that asks for no reason.
 	 *
-	 * @param array<int,array{value:string,label:string}> $accounts   Accounts the user may open: the account selector's options.
-	 * @param array<int,array{value:string,label:string}> $statuses   WooCommerce order statuses for the filter.
-	 * @param string[]                                    $offered    Row action ids the adapter can serve: `open`, and `label` and `cancel` when it has them.
+	 * @param array<int,array{value:string,label:string}> $accounts       Accounts the user may open: the account selector's options.
+	 * @param array<int,array{value:string,label:string}> $statuses       WooCommerce order statuses for the filter.
+	 * @param string[]                                    $offered        Row action ids the adapter can serve: `open`, and `label` and `cancel` when it has them.
+	 * @param Posting_Noun|null                           $noun           The marketplace's word for a posting; null for «отправление».
+	 * @param Site_Orders_Seller|null                     $seller         The adapter's seller actions; null for an adapter that declares none.
+	 * @param string|null                                 $cancel_warning Null for a cancellation that asks for a reason; otherwise what the merchant should know before confirming one that asks for none (empty for nothing).
 	 * @return array<string,mixed>
 	 */
-	public static function build( array $accounts, array $statuses, array $offered, ?Posting_Noun $noun = null ): array {
+	public static function build( array $accounts, array $statuses, array $offered, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?string $cancel_warning = null ): array {
 		$noun = $noun ?? Posting_Noun::shipment();
+		$bulk = null === $seller ? [] : $seller->bulk_definitions( self::EDIT );
 
 		return [
 			'context'     => [
@@ -74,16 +80,37 @@ final class Site_Orders_Definition {
 				'max_per_page'     => 100,
 				'max_selection'    => 100,
 			],
-			'row_actions' => self::row_actions( $offered, $noun ),
+			'row_actions' => self::with_seller_actions( self::row_actions( $offered, $noun, $cancel_warning ), $seller ),
+			'bulk_actions' => $bulk,
 			'activity'    => [
 				'refresh_ms'     => 5000,
 				'max_refresh_ms' => 60000,
 				'stale_after_ms' => 30000,
 				'id_limit'       => 100,
 			],
-			'messages'    => self::messages(),
+			'messages'    => array_merge( self::messages(), [] === $bulk ? [] : Standard_Messages::bulk() ),
 			'analytics'   => null,
 		];
+	}
+
+	/**
+	 * Puts the seller actions between the label and the cancellation, so the destructive built-in action stays last.
+	 *
+	 * @param array<int,array<string,mixed>> $actions Built-in row actions.
+	 * @param Site_Orders_Seller|null        $seller  Seller actions.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function with_seller_actions( array $actions, ?Site_Orders_Seller $seller ): array {
+		if ( null === $seller ) {
+			return $actions;
+		}
+
+		$ids = array_column( $actions, 'id' );
+		$at  = array_search( self::CANCEL, $ids, true );
+
+		array_splice( $actions, false === $at ? count( $actions ) : $at, 0, $seller->row_definitions( self::EDIT ) );
+
+		return $actions;
 	}
 
 	/**
@@ -198,16 +225,7 @@ final class Site_Orders_Definition {
 		return $filters;
 	}
 
-	/**
-	 * The row actions the adapter earns, in the order the row shows them.
-	 *
-	 * @param string[] $offered Action ids to declare.
-	 * @return array<int,array<string,mixed>>
-	 */
-	private static function row_actions( array $offered, Posting_Noun $noun ): array {
-		/* translators: %s: the marketplace's word for a posting, «отправление». */
-		$cancel = sprintf( __( 'Отменить %s', 'woodev-plugin-framework' ), $noun->one() );
-
+	private static function row_actions( array $offered, Posting_Noun $noun, ?string $cancel_warning ): array {
 		$actions = [
 			self::OPEN   => [
 				'id'          => self::OPEN,
@@ -227,37 +245,59 @@ final class Site_Orders_Definition {
 				'capability'   => self::EDIT,
 				'skip_preview' => true,
 			],
-			self::CANCEL => [
-				'id'             => self::CANCEL,
-				'label'          => $cancel,
-				'short_label'    => __( 'Отменить', 'woodev-plugin-framework' ),
-				'icon'           => 'remove',
-				'tone'           => 'danger',
-				'effect'         => 'mutate',
-				'interaction'    => 'dialog',
-				'capability'     => self::EDIT,
-				/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
-				'scope_sentence' => sprintf( __( '%s будет отменено на маркетплейсе. Заказ на сайте обновится в течение нескольких минут.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $noun->one() ) ),
-				'confirm_label'  => $cancel,
-				'fields'         => [
-					[
-						'id'             => 'reason',
-						'label'          => __( 'Причина отмены', 'woodev-plugin-framework' ),
-						'type'           => 'select',
-						'required'       => true,
-						'options_source' => true,
-					],
-					[
-						'id'    => 'message',
-						'label' => __( 'Пояснение', 'woodev-plugin-framework' ),
-						'type'  => 'textarea',
-						'help'  => __( 'Нужно, если маркетплейс просит пояснить выбранную причину.', 'woodev-plugin-framework' ),
-					],
-				],
-			],
+			self::CANCEL => self::cancel_action( $noun, $cancel_warning ),
 		];
 
 		return array_values( array_intersect_key( $actions, array_flip( $offered ) ) );
+	}
+
+	/**
+	 * The cancellation: with the reason list and its explanation, or, for a marketplace that takes no reason, a confirmation only.
+	 *
+	 * @param Posting_Noun $noun           The marketplace's word for a posting.
+	 * @param string|null  $cancel_warning Null when a reason is asked; otherwise the warning of the confirmation.
+	 * @return array<string,mixed>
+	 */
+	private static function cancel_action( Posting_Noun $noun, ?string $cancel_warning ): array {
+		/* translators: %s: the marketplace's word for a posting, «отправление». */
+		$cancel = sprintf( __( 'Отменить %s', 'woodev-plugin-framework' ), $noun->one() );
+		/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
+		$scope  = sprintf( __( '%s будет отменено на маркетплейсе. Заказ на сайте обновится в течение нескольких минут.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $noun->one() ) );
+
+		return [
+			'id'             => self::CANCEL,
+			'label'          => $cancel,
+			'short_label'    => __( 'Отменить', 'woodev-plugin-framework' ),
+			'icon'           => 'remove',
+			'tone'           => 'danger',
+			'effect'         => 'mutate',
+			'interaction'    => 'dialog',
+			'capability'     => self::EDIT,
+			'scope_sentence' => mb_substr( trim( $scope . ' ' . $cancel_warning ), 0, Records_Definition::MAX_STRING_LENGTH ),
+			'confirm_label'  => $cancel,
+			'fields'         => null === $cancel_warning ? self::cancel_fields() : [],
+		];
+	}
+
+	/**
+	 * @return array<int,array<string,mixed>> The reason of a cancellation and its explanation.
+	 */
+	private static function cancel_fields(): array {
+		return [
+			[
+				'id'             => 'reason',
+				'label'          => __( 'Причина отмены', 'woodev-plugin-framework' ),
+				'type'           => 'select',
+				'required'       => true,
+				'options_source' => true,
+			],
+			[
+				'id'    => 'message',
+				'label' => __( 'Пояснение', 'woodev-plugin-framework' ),
+				'type'  => 'textarea',
+				'help'  => __( 'Нужно, если маркетплейс просит пояснить выбранную причину.', 'woodev-plugin-framework' ),
+			],
+		];
 	}
 
 	/**

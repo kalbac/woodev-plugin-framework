@@ -55,12 +55,13 @@ final class Schema {
 	 * belongs to and its current article (#2000).
 	 * 6: `sync_state.task_id`, `sync_state.refused_payload` and `sync_state.error_code`, a price the marketplace decides on later
 	 * (#1998).
+	 * 7: `seller_actions`, the actions sent to the marketplace for the units of orders, so none is sent twice (#2003).
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var int
 	 */
-	public const REVISION = 6;
+	public const REVISION = 7;
 
 	/**
 	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
@@ -109,6 +110,7 @@ final class Schema {
 		'catalog_cache',
 		'bulk_runs',
 		'cards',
+		'seller_actions',
 	];
 
 	/**
@@ -711,6 +713,33 @@ final class Schema {
 			KEY account_state (account_id,state),
 			KEY account_seen (account_id,seen_run),
 			KEY account_unit (account_id,unit_card)
+		) {$charset};";
+	}
+
+	/**
+	 * One row per action sent to the marketplace for a unit of an order ({@see Wpdb_Seller_Action_Store}): the identity of what
+	 * was sent, its state, and until when it keeps the same action from being sent again. `unit_key` is the MD5 of the
+	 * marketplace's unit id.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param string $table   Full table name.
+	 * @param string $charset Charset clause.
+	 * @return string
+	 */
+	private function seller_actions( string $table, string $charset ): string {
+		return "CREATE TABLE {$table} (
+			account_id bigint(20) unsigned NOT NULL,
+			order_id bigint(20) unsigned NOT NULL,
+			unit_key char(32) NOT NULL,
+			action varchar(32) NOT NULL,
+			identity char(32) NOT NULL,
+			state varchar(8) NOT NULL,
+			claim_token char(32) NOT NULL,
+			claim_until datetime NOT NULL,
+			PRIMARY KEY  (account_id,order_id,unit_key,action),
+			KEY claim_token (claim_token),
+			KEY account_expiry (account_id,claim_until)
 		) {$charset};";
 	}
 }

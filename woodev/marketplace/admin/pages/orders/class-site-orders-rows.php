@@ -126,26 +126,28 @@ final class Site_Orders_Rows {
 	 *
 	 * @since 2.1.5
 	 *
-	 * @param int                 $account_id Account.
-	 * @param array<string,mixed> $item       The registry item.
-	 * @param \WC_Order           $order      Its WooCommerce order.
-	 * @param array<string,mixed> $activity   Activity of the row.
-	 * @param string              $write_refusal Why the account cannot write to the marketplace (since 2.1.17); empty when it can.
-	 * @param bool                $label_stored  Whether a ready label document already covers the posting (since 2.1.17): its download is a read, so the label action stays on.
+	 * @param int                                                    $account_id Account.
+	 * @param array<string,mixed>                                    $item       The registry item.
+	 * @param \WC_Order                                              $order      Its WooCommerce order.
+	 * @param array<string,mixed>                                    $activity   Activity of the row.
+	 * @param string                                                 $write_refusal Why the account cannot write to the marketplace (since 2.1.17); empty when it can.
+	 * @param bool                                                   $label_stored  Whether a ready label document already covers the posting (since 2.1.17): its download is a read, so the label action stays on.
+	 * @param array<int,array{id:string,enabled:bool,reason:string}> $seller_actions The states of the order's seller actions (since 2.1.27).
+	 * @param bool                                                   $bulk          Whether the table has bulk actions (since 2.1.27): the row of an order the user may edit can then be ticked.
 	 * @return array<string,mixed>
 	 */
-	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '', bool $label_stored = false ): array {
+	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '', bool $label_stored = false, array $seller_actions = [], bool $bulk = false ): array {
 		$editable = true === call_user_func( $this->can_edit, $item['order_id'] );
 		$url      = $editable ? (string) $order->get_edit_order_url() : '';
 		$cells    = $this->cells( $item, $order, $url );
-		$actions  = $this->actions( $item, $order, $editable, $url, $write_refusal, $label_stored );
+		$actions  = $this->with_seller_actions( $this->actions( $item, $order, $editable, $url, $write_refusal, $label_stored ), $seller_actions, $editable );
 
 		return [
 			'id'           => Site_Orders_Ids::row_id( $account_id, $item['order_id'] ),
 			'revision'     => substr( md5( (string) wp_json_encode( [ $cells, $activity['processes'], $actions ] ) ), 0, 16 ), // The actions count: a posting the marketplace stops allowing a cancel for must redraw its row.
 			'cells'        => $cells,
 			'actions'      => $actions,
-			'selectable'   => false,
+			'selectable'   => $bulk && $editable,
 			'has_children' => false,
 			'activity'     => $activity,
 		];
@@ -320,6 +322,35 @@ final class Site_Orders_Rows {
 			'enabled' => '' === $reason,
 			'reason'  => $reason,
 		];
+	}
+
+	/**
+	 * Puts the seller actions before the cancellation. A user who may not edit the order sees them off, like the built-in ones.
+	 *
+	 * @param array<int,array<string,mixed>>                         $actions  Built-in actions of the row.
+	 * @param array<int,array{id:string,enabled:bool,reason:string}> $seller   Seller action states.
+	 * @param bool                                                   $editable Whether the user may edit the order.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function with_seller_actions( array $actions, array $seller, bool $editable ): array {
+		if ( ! $editable ) {
+			$seller = array_map(
+				static function ( array $state ): array {
+					return [
+						'id'      => $state['id'],
+						'enabled' => false,
+						'reason'  => __( 'Нет права изменять этот заказ.', 'woodev-plugin-framework' ),
+					];
+				},
+				$seller
+			);
+		}
+
+		$at = array_search( Site_Orders_Definition::CANCEL, array_column( $actions, 'id' ), true );
+
+		array_splice( $actions, false === $at ? count( $actions ) : $at, 0, $seller );
+
+		return $actions;
 	}
 
 	/**

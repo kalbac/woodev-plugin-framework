@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
@@ -46,7 +47,7 @@ defined( 'ABSPATH' ) || exit;
  * The steps run in this order; each deletes what is left of the account and the account row goes after the last:
  *
  * `queue` (its queued jobs) · `links` (their remote ids first) · `sync_state` (after the links: a stock or price change writes a row for every link left) · `tasks` (their items first) · `postings` ·
- * `documents` · `throttle` · `api_errors` · `options` (progress and report options, snapshot transients, cached catalogue rows) ·
+ * `documents` · `throttle` · `api_errors` · `bulk_runs` · `cards` · `seller_actions` · `options` (progress and report options, snapshot transients, cached catalogue rows) ·
  * `product_meta` (pinned articles) · `events` · and the adapter's own, `plugin`.
  *
  * @since 2.1.5
@@ -192,6 +193,7 @@ final class Deletion_Module {
 			'api_errors' => new Api_Error_Ring( $db, $table( 'api_errors' ) ),
 			'bulk_runs'  => new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ),
 			'cards'      => new Wpdb_Card_Store( $db, $table( 'cards' ), $table( 'links' ), $options ),
+			'seller_actions' => new Wpdb_Seller_Action_Store( $db, $table( 'seller_actions' ) ),
 		];
 	}
 

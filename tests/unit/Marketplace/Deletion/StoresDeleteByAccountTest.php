@@ -12,6 +12,7 @@ use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Deletion\Deletion_Module;
 use Woodev\Framework\Marketplace\Deletion\Pinned_Offer_Eraser;
@@ -80,7 +81,7 @@ final class StoresDeleteByAccountTest extends TestCase {
 	public function test_sync_state_is_deleted_after_the_links(): void {
 		$names = array_keys( Deletion_Module::stores( $this->db, Sqlite_Tables::schema(), 'woodev_test_' ) );
 
-		$this->assertSame( [ 'links', 'sync_state', 'tasks', 'postings', 'documents', 'throttle', 'api_errors', 'bulk_runs', 'cards' ], $names );
+		$this->assertSame( [ 'links', 'sync_state', 'tasks', 'postings', 'documents', 'throttle', 'api_errors', 'bulk_runs', 'cards', 'seller_actions' ], $names );
 		$this->assertGreaterThan( array_search( 'links', $names, true ), array_search( 'sync_state', $names, true ) );
 	}
 
@@ -151,6 +152,8 @@ final class StoresDeleteByAccountTest extends TestCase {
 			'throttle'   => new Wpdb_Throttle_Store( $this->db, Sqlite_Tables::table( 'throttle' ) ),
 			'api_errors' => new Api_Error_Ring( $this->db, Sqlite_Tables::table( 'api_errors' ) ),
 			'events'     => new Wpdb_Event_Ledger( $this->db, Sqlite_Tables::table( 'events' ) ),
+
+			'seller_actions' => new Wpdb_Seller_Action_Store( $this->db, Sqlite_Tables::table( 'seller_actions' ) ),
 		];
 
 		foreach ( $stores as $table => $store ) {
@@ -255,6 +258,7 @@ final class StoresDeleteByAccountTest extends TestCase {
 			$this->db->insert( Sqlite_Tables::table( 'throttle' ), [ 'account_id' => $account, 'bucket' => "b{$i}" ] );
 			$this->db->insert( Sqlite_Tables::table( 'api_errors' ), [ 'account_id' => $account, 'occurred_at' => self::NOW ] );
 			$this->db->insert( Sqlite_Tables::table( 'events' ), [ 'account_id' => $account, 'type' => 't', 'dedup_key' => "k{$i}", 'received_at' => self::NOW ] );
+			$this->db->insert( Sqlite_Tables::table( 'seller_actions' ), [ 'account_id' => $account, 'order_id' => $i, 'unit_key' => md5( 'u' ), 'action' => 'a', 'identity' => md5( 'i' ), 'state' => 'sent', 'claim_token' => md5( 't' ), 'claim_until' => self::NOW ] );
 		}
 
 		$this->db->insert( Sqlite_Tables::table( 'documents' ), [ 'account_id' => $account, 'created_at' => self::NOW ] );

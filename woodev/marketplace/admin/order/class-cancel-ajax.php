@@ -139,14 +139,25 @@ final class Cancel_Ajax {
 	 * @return void
 	 */
 	public function handle_reasons(): void {
+		$reasonless = $this->canceller instanceof Reasonless_Canceller;
+
 		try {
 			list( , $account, $posting_number ) = $this->authorised_order();
 
-			$reasons = $this->canceller->reasons( $account, $posting_number );
+			$reasons = $reasonless ? [] : $this->canceller->reasons( $account, $posting_number );
 		} catch ( Cancel_Refused $e ) {
 			wp_send_json_error( [ 'message' => $e->getMessage() ], $e->status() );
 		} catch ( \Throwable $e ) {
 			$this->fail_unexpectedly( $e );
+		}
+
+		if ( $reasonless ) {
+			wp_send_json_success(
+				[
+					'reasons'      => [],
+					'other_reason' => 0,
+				]
+			);
 		}
 
 		if ( [] === $reasons ) {
@@ -177,11 +188,12 @@ final class Cancel_Ajax {
 
 			$this->require_open( $order );
 
-			$reason = $this->canceller->cancel(
+			$reasonless = $this->canceller instanceof Reasonless_Canceller;
+			$reason     = $this->canceller->cancel(
 				$account,
 				$posting_number,
-				self::positive_int( self::field( 'reason_id' ) ),
-				self::text( self::field( 'message' ) )
+				$reasonless ? 0 : self::positive_int( self::field( 'reason_id' ) ),
+				$reasonless ? '' : self::text( self::field( 'message' ) )
 			);
 		} catch ( Cancel_Refused $e ) {
 			wp_send_json_error( [ 'message' => $e->getMessage() ], $e->status() );
@@ -191,8 +203,7 @@ final class Cancel_Ajax {
 
 		$noun = Posting_Noun::capitalised( $this->names->posting_noun()->one() );
 
-		/* translators: 1: the marketplace's word for a posting, capitalised: «Отправление», 2: posting number, 3: marketplace name, 4: cancellation reason. */
-		$order->add_order_note( sprintf( __( '%1$s %2$s отменено: %3$s, из WooCommerce. Причина: %4$s.', 'woodev-plugin-framework' ), $noun, $posting_number, $this->names->name(), $reason['title'] ) );
+		$order->add_order_note( Cancel_Note::text( $noun, $posting_number, $this->names->name(), (string) $reason['title'] ) );
 		$this->queue_refresh( $account, $posting_number );
 
 		/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */

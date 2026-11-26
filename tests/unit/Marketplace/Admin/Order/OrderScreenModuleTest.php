@@ -12,8 +12,11 @@ use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Marketplace\Account\Credential_Fields;
+use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Screen_Module;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Actions;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Settings_Descriptor;
@@ -57,13 +60,24 @@ final class OrderScreenModuleTest extends TestCase {
 		Order_Screen_Module::register( $plugin, new Sqlite_Wpdb() );
 	}
 
+	public function test_an_adapter_with_seller_actions_gets_their_ajax(): void {
+		Actions\expectAdded( 'wp_ajax_woodev_fake_seller_action' )->once();
+		Actions\expectAdded( 'wp_ajax_woodev_fake_seller_options' )->once();
+
+		$db       = new Sqlite_Wpdb();
+		$accounts = new Wpdb_Account_Store( $db, 'wp_woodev_fake_accounts', new Secret_Cipher( 'test-salt' ), 'fake', new Credential_Fields( 'cabinet_ref', [ 'api_token' ] ) );
+
+		Order_Screen_Module::register( $this->plugin( Seller_Actions::class ), $db, $accounts );
+	}
+
 	/**
-	 * Builds a plugin over an adapter that offers nothing optional.
+	 * Builds a plugin over an adapter that offers nothing optional, or one more contract.
 	 *
+	 * @param string ...$contracts Further contracts the adapter implements.
 	 * @return Marketplace_Plugin
 	 */
-	private function plugin(): Marketplace_Plugin {
-		$adapter = Mockery::mock( Marketplace_Adapter::class );
+	private function plugin( string ...$contracts ): Marketplace_Plugin {
+		$adapter = Mockery::mock( Marketplace_Adapter::class, ...$contracts );
 		$adapter->shouldReceive( 'id' )->andReturn( 'fake' );
 		$adapter->shouldReceive( 'settings_descriptor' )->andReturn( new Fake_Settings_Descriptor( new Credential_Fields( 'cabinet_ref', [ 'api_token' ] ) ) );
 		$adapter->shouldReceive( 'order_meta' )->andReturn( new Fake_Order_Meta() );

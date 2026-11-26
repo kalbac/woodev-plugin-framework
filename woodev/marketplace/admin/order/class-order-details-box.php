@@ -77,19 +77,28 @@ final class Order_Details_Box {
 	private $version;
 
 	/**
+	 * The seller action buttons, when the adapter declares actions.
+	 *
+	 * @var Seller_Action_Buttons|null
+	 */
+	private $seller;
+
+	/**
 	 * Creates the box.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.27 Takes the seller action buttons.
 	 *
-	 * @param Screen_Names        $names         Names.
-	 * @param Marketplace_Adapter $adapter       The adapter.
-	 * @param callable            $remote_status `function ( int $order_id ): string`, the marketplace's status of an order, '' for none.
-	 * @param Cancel_Modal|null   $modal         The cancel button, when the adapter can cancel.
-	 * @param Label_Button|null   $label_button  The label button, when the adapter has label calls.
-	 * @param string              $assets_url    Folder URL of the module's assets, with a trailing slash.
-	 * @param string              $version       Plugin version.
+	 * @param Screen_Names               $names         Names.
+	 * @param Marketplace_Adapter        $adapter       The adapter.
+	 * @param callable                   $remote_status `function ( int $order_id ): string`, the marketplace's status of an order, '' for none.
+	 * @param Cancel_Modal|null          $modal         The cancel button, when the adapter can cancel.
+	 * @param Label_Button|null          $label_button  The label button, when the adapter has label calls.
+	 * @param string                     $assets_url    Folder URL of the module's assets, with a trailing slash.
+	 * @param string                     $version       Plugin version.
+	 * @param Seller_Action_Buttons|null $seller        The seller action buttons, when the adapter declares actions.
 	 */
-	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version ) {
+	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version, ?Seller_Action_Buttons $seller = null ) {
 		$this->names         = $names;
 		$this->adapter       = $adapter;
 		$this->remote_status = $remote_status;
@@ -97,6 +106,7 @@ final class Order_Details_Box {
 		$this->label_button  = $label_button;
 		$this->assets_url    = $assets_url;
 		$this->version       = $version;
+		$this->seller        = $seller;
 	}
 
 	/**
@@ -138,6 +148,7 @@ final class Order_Details_Box {
 		$this->column( __( 'Основное', 'woodev-plugin-framework' ), $this->general_rows( $order ) );
 		$this->column( __( 'Суммы', 'woodev-plugin-framework' ), $this->amount_rows( $order ) );
 		echo '</div><div class="clear"></div>';
+		echo null === $this->seller ? '' : $this->seller->unit_list( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo $this->actions( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo '</div></div>';
 	}
@@ -228,13 +239,16 @@ final class Order_Details_Box {
 	 * @return string HTML, escaped; empty when the marketplace offers no action.
 	 */
 	private function actions( \WC_Order $order ): string {
-		$html = null === $this->modal ? '' : $this->modal->button( $order );
+		$cancel = null === $this->modal ? '' : $this->modal->button( $order );
 
-		if ( '' === $html && $this->adapter instanceof Order_Canceller && $this->adapter->is_finished( $order ) ) {
+		if ( '' === $cancel && $this->adapter instanceof Order_Canceller && $this->adapter->is_finished( $order ) ) {
 			/* translators: %s: the marketplace's word for a posting, capitalised: «Отправление». */
-			$text = sprintf( __( '%s завершено или отменено — отменить его нельзя.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $this->names->posting_noun()->one() ) );
-			$html = '<span class="description">' . esc_html( $text ) . '</span>';
+			$text   = sprintf( __( '%s завершено или отменено — отменить его нельзя.', 'woodev-plugin-framework' ), Posting_Noun::capitalised( $this->names->posting_noun()->one() ) );
+			$cancel = '<span class="description">' . esc_html( $text ) . '</span>';
 		}
+
+		$html = null === $this->seller ? '' : $this->seller->order_buttons( $order ) . ' ';
+		$html .= $cancel;
 
 		if ( null !== $this->label_button ) {
 			$html .= ' ' . $this->label_button->button( $order );
