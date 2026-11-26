@@ -4112,6 +4112,10 @@ msgstr ""
 msgid "Заполните все учётные данные аккаунта."
 msgstr ""
 
+#: marketplace/settings/class-accounts-sections.php
+msgid "Не удалось определить идентификатор аккаунта по этому токену. Проверьте токен."
+msgstr ""
+
 #: marketplace/settings/class-accounts-sections.php:445
 msgid "Проверка подключения не прошла."
 msgstr ""
