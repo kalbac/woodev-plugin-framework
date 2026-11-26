@@ -1350,7 +1350,10 @@ adapter that classifies the refusal as plain `FAIL` loses this: WP4 must map it.
 task's item stays `pending`, and both products-table locks (`Site_Products_Activity`, `Site_Products_Bulk::without_open_tasks()`)
 read pending items. So «Экспортировать» waits until the task closes the item — at the latest at the task deadline. A fourth
 optional interface, the marker `Releases_Reset_Imports` on the `Card_Lifecycle`, says the adapter forgets what it waited for at
-its next `submit()`: `Export_Service::reset_links()` then settles the link's open import items as `skipped`. The older task stops
+its next `submit()`: `Export_Service::reset_links()` then settles the link's open import items as `skipped`, in one transaction
+with the reset (`Wpdb_Link_Store::reset_state()` runs the release first). The release is a single `UPDATE` that finds the open
+items itself (`Wpdb_Task_Ledger::skip_open_items()`), so no failed read can pass for «nothing open»; a write the database refuses
+rolls both back, and the table reports the cards as not reset, to be run again. The older task stops
 asking for that article and ends by itself (`done_with_errors`, since a skipped item is not an imported one). Without the
 interface nothing changes (Ozon). A task still being built counts as open too; the batch runner already drops a link reset before
 the request.

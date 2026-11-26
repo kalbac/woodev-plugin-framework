@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Ledger;
 
+use Woodev\Framework\Marketplace\Data\Persistence_Exception;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -574,6 +576,37 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 				'link_id' => $link_id,
 			]
 		);
+	}
+
+	/**
+	 * Marks the open import items of links `skipped`: the ones {@see self::open_items()} lists, found and written by one
+	 * statement, so there is no read whose failure could pass for «nothing open».
+	 *
+	 * @since 2.1.26
+	 *
+	 * @param int   $account_id Account id.
+	 * @param int[] $link_ids   Link ids.
+	 * @return void
+	 * @throws Persistence_Exception When the database refuses the write.
+	 */
+	public function skip_open_items( int $account_id, array $link_ids ): void {
+		$link_ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
+
+		if ( [] === $link_ids ) {
+			return;
+		}
+
+		$written = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own tables.
+			$this->db->prepare(
+				'UPDATE %i SET status = %s WHERE status = %s AND link_id IN (' . implode( ', ', array_fill( 0, count( $link_ids ), '%d' ) ) . ')' // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				. ' AND task_id IN (SELECT task_id FROM %i WHERE account_id = %d AND kind = %s AND status IN (%s, %s))',
+				array_merge( [ $this->items, self::ITEM_SKIPPED, self::ITEM_PENDING ], $link_ids, [ $this->tasks, $account_id, Async_Task::KIND_IMPORT, Async_Task::STATUS_SUBMITTED, Async_Task::STATUS_POLLING ] )
+			)
+		);
+
+		if ( false === $written ) {
+			throw Persistence_Exception::database( 'the open import items of links', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
 	}
 
 	/**

@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
 use Woodev\Framework\Marketplace\Catalog\Bulk_Validation_Report;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Flows\Export_Service;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
@@ -1005,6 +1006,8 @@ final class Site_Products_Bulk {
 				return $this->run_archive( $plan['targets'] );
 			case self::DETACH:
 				return $this->run_detach( $account, $plan['targets'] );
+			case self::RESET:
+				return $this->run_reset( $account, $plan['targets'] );
 			case self::RESET_PRICE:
 				return $this->run_reset_price( $account, $plan['targets'] );
 			case self::PULL_PRICES:
@@ -1018,7 +1021,7 @@ final class Site_Products_Bulk {
 	}
 
 	/**
-	 * Applies a flag, warehouse or reset change. Switching a flag on also records the first send of the cards it reached (#1795, D1),
+	 * Applies a flag or warehouse change. Switching a flag on also records the first send of the cards it reached (#1795, D1),
 	 * and choosing a warehouse records their stock for it.
 	 *
 	 * @param Account       $account   Account.
@@ -1051,11 +1054,8 @@ final class Site_Products_Bulk {
 			case self::SYNC_PRICE_OFF:
 				$changed = $this->links->set_sync_flag( $account->id(), $link_ids, 'sync_price', self::SYNC_PRICE_ON === $action );
 				break;
-			case self::SET_WAREHOUSE:
+			default: // self::SET_WAREHOUSE, the one action left.
 				$changed = $this->links->set_warehouse( $account->id(), $link_ids, (int) $warehouse > 0 ? (int) $warehouse : null );
-				break;
-			default:
-				return $this->export->reset_links( $account, $link_ids );
 		}
 
 		if ( in_array( $action, [ self::SYNC_STOCK_ON, self::SYNC_PRICE_ON, self::SET_WAREHOUSE ], true ) ) {
@@ -1063,6 +1063,39 @@ final class Site_Products_Bulk {
 		}
 
 		return $changed;
+	}
+
+	/**
+	 * Puts cards back to «Не связан». A reset the database refused changes nothing, so the merchant can run it again.
+	 *
+	 * @param Account       $account Account.
+	 * @param Link_Record[] $targets Rows.
+	 * @return array{done:int,groups:array<int,array<string,mixed>>}
+	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before the write.
+	 */
+	private function run_reset( Account $account, array $targets ): array {
+		$link_ids = array_map(
+			static function ( Link_Record $record ): int {
+				return (int) $record->link_id();
+			},
+			$targets
+		);
+
+		$this->guard();
+
+		try {
+			return [
+				'done'   => $this->export->reset_links( $account, $link_ids ),
+				'groups' => [],
+			];
+		} catch ( Persistence_Exception $e ) {
+			$ids = array_map( [ $this, 'product_of' ], $targets );
+
+			return [
+				'done'   => 0,
+				'groups' => [ $this->group( __( 'состояние не сброшено: изменения не записались в базу данных — повторите действие', 'woodev-plugin-framework' ), $ids ) ],
+			];
+		}
 	}
 
 	/**

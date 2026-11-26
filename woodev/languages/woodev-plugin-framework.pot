@@ -2810,6 +2810,10 @@ msgstr ""
 msgid "на маркетплейсе нет созданной карточки этого товара"
 msgstr ""
 
+#: marketplace/admin/pages/products/class-site-products-bulk.php:1096
+msgid "состояние не сброшено: изменения не записались в базу данных — повторите действие"
+msgstr ""
+
 #: marketplace/admin/pages/products/class-site-products-bulk.php:593
 msgid "состояние и так «Не связан», ошибок нет"
 msgstr ""

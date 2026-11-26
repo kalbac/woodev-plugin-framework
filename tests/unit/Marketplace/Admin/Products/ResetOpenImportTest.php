@@ -100,6 +100,69 @@ final class ResetOpenImportTest extends Products_Test_Case {
 	}
 
 	/**
+	 * A write the database loses during the reset: the one that looks up and skips the open items, the reset of the links, the
+	 * start of their transaction.
+	 *
+	 * @return array<string,array{0:string}> Pattern of the statement.
+	 */
+	public function lost_statements(): array {
+		return [
+			'the lookup and release of the open items' => [ '/^UPDATE \S*task_items/' ],
+			'the reset of the links'                   => [ '/^UPDATE \S*_links\S* SET card_state/' ],
+			'the start of the transaction'             => [ '/^START TRANSACTION$/' ],
+		];
+	}
+
+	/**
+	 * @dataProvider lost_statements
+	 *
+	 * @param string $lost Pattern of the statement that fails.
+	 * @return void
+	 */
+	public function test_a_reset_the_database_refuses_changes_nothing_says_so_and_can_be_retried( string $lost ): void {
+		$this->releasing_marketplace();
+		list( $reset ) = $this->sent( 'NB-1' );
+
+		$failures             = 0;
+		$this->db->fail_query = static function ( string $query ) use ( $lost, &$failures ): bool {
+			$fails     = 0 === $failures && 1 === preg_match( $lost, $query );
+			$failures += (int) $fails;
+
+			return $fails;
+		};
+
+		$result = $this->apply( Site_Products_Bulk::RESET, [ $reset ] );
+
+		$this->assertSame( 1, $failures, 'The fault was injected.' );
+		$this->assertSame( 0, $result['accepted'] );
+		$this->assertSame( 1, $result['failed'] );
+		$this->assertSame( 'failed', $result['groups'][0]['kind'] );
+		$this->assertSame( 'состояние не сброшено: изменения не записались в базу данных — повторите действие', $result['groups'][0]['reason'] );
+		$this->assertSame( Link_Record::STATE_SUBMITTED, $this->link_of( $reset )->card_state() );
+		$this->assertSame( Task_Ledger::ITEM_PENDING, $this->item_status( 1, $reset ) );
+
+		$this->assertSame( 1, $this->apply( Site_Products_Bulk::RESET, [ $reset ] )['accepted'] );
+		$this->assertSame( Link_Record::STATE_UNLINKED, $this->link_of( $reset )->card_state() );
+		$this->assertSame( Task_Ledger::ITEM_SKIPPED, $this->item_status( 1, $reset ) );
+		$this->assertSame( 1, $this->preview( Site_Products_Bulk::EXPORT, [ $reset ] )['eligible'] );
+	}
+
+	public function test_the_release_does_not_depend_on_a_read_of_the_ledger(): void {
+		$this->releasing_marketplace();
+		list( $reset ) = $this->sent( 'NB-1' );
+
+		$this->db->fail_read = static function ( string $query ): bool {
+			return false !== strpos( $query, 'task_items' );
+		};
+
+		$this->assertSame( 1, $this->apply( Site_Products_Bulk::RESET, [ $reset ] )['accepted'] );
+
+		$this->db->fail_read = null;
+
+		$this->assertSame( Task_Ledger::ITEM_SKIPPED, $this->item_status( 1, $reset ) );
+	}
+
+	/**
 	 * Makes the fake marketplace one without task numbers whose reset cards leave their open tasks.
 	 *
 	 * @return void

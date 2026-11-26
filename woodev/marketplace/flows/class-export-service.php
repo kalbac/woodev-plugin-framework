@@ -14,7 +14,7 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Jobs\Export_Not_Scheduled;
 use Woodev\Framework\Marketplace\Jobs\Export_Scheduler;
-use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
+use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -70,7 +70,7 @@ final class Export_Service {
 	/**
 	 * Closes the open import items of a reset card; null when the marketplace keeps them ({@see Releases_Reset_Imports}).
 	 *
-	 * @var Task_Ledger|null
+	 * @var Wpdb_Task_Ledger|null
 	 */
 	private $released;
 
@@ -85,10 +85,10 @@ final class Export_Service {
 	 * @param Export_Scheduler       $scheduler Scheduler.
 	 * @param Export_Facts           $facts     The marketplace's facts.
 	 * @param Export_Validator       $validator Validator with the marketplace's rules.
-	 * @param Task_Ledger|null       $released  The task ledger, when a reset also closes the card's open import items
+	 * @param Wpdb_Task_Ledger|null  $released  The task ledger, when a reset also closes the card's open import items
 	 *                                          ({@see Releases_Reset_Imports}); null when they stay open.
 	 */
-	public function __construct( Wpdb_Link_Store $links, Export_Context_Builder $contexts, Export_Scheduler $scheduler, Export_Facts $facts, Export_Validator $validator, ?Task_Ledger $released = null ) {
+	public function __construct( Wpdb_Link_Store $links, Export_Context_Builder $contexts, Export_Scheduler $scheduler, Export_Facts $facts, Export_Validator $validator, ?Wpdb_Task_Ledger $released = null ) {
 		$this->links     = $links;
 		$this->contexts  = $contexts;
 		$this->scheduler = $scheduler;
@@ -265,6 +265,7 @@ final class Export_Service {
 	 * @param Account $account     Account.
 	 * @param int[]   $product_ids Products or variations; a variable product stands for its variations.
 	 * @return int Links reset.
+	 * @throws \Woodev\Framework\Marketplace\Data\Persistence_Exception As {@see self::reset_links()}.
 	 */
 	public function reset( Account $account, array $product_ids ): int {
 		$link_ids = [];
@@ -283,25 +284,23 @@ final class Export_Service {
 	/**
 	 * «Сбросить состояние» for offer rows already known by their link id.
 	 *
+	 * For a {@see Releases_Reset_Imports} marketplace the open import items of the links are skipped in the same transaction.
+	 *
 	 * @since 2.1.26
 	 *
 	 * @param Account $account  Account.
 	 * @param int[]   $link_ids Link ids.
 	 * @return int Links reset.
+	 * @throws \Woodev\Framework\Marketplace\Data\Persistence_Exception For such a marketplace, when the database refuses a write:
+	 *                                                                  nothing is reset or skipped then.
 	 */
 	public function reset_links( Account $account, array $link_ids ): int {
-		$reset = $this->links->reset_state( $account->id(), $link_ids );
+		$ledger  = $this->released;
+		$release = null === $ledger ? null : static function () use ( $ledger, $account, $link_ids ): void {
+			$ledger->skip_open_items( $account->id(), $link_ids );
+		};
 
-		// Nothing reset (a refused write included) keeps the items: they are what still moves a link that stayed `submitted`.
-		if ( $reset > 0 && null !== $this->released ) {
-			foreach ( $this->released->open_items( $account->id(), $link_ids ) as $link_id => $items ) {
-				foreach ( $items as $item ) {
-					$this->released->settle_item( $item['task_id'], $link_id, Task_Ledger::ITEM_SKIPPED );
-				}
-			}
-		}
-
-		return $reset;
+		return $this->links->reset_state( $account->id(), $link_ids, $release );
 	}
 
 	/**

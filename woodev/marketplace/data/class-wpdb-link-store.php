@@ -999,11 +999,18 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * stay, so a later export updates the same card; the task fence and the error are cleared, so a poll still running for an old
 	 * task changes nothing.
 	 *
-	 * @param int   $account_id Account id.
-	 * @param int[] $link_ids   Link ids.
+	 * With `$release`, it and the reset are one transaction: both land or neither does. It runs first, so a transaction lost with
+	 * the connection leaves the card as it was before the release rather than a `submitted` row no task item speaks for.
+	 *
+	 * @since 2.1.26 Added `$release`.
+	 *
+	 * @param int           $account_id Account id.
+	 * @param int[]         $link_ids   Link ids.
+	 * @param callable|null $release    `function (): void`, the writes that must land together with the reset; throws on failure.
 	 * @return int Rows reset.
+	 * @throws Persistence_Exception With `$release`, when the database refuses the reset or the commit.
 	 */
-	public function reset_state( int $account_id, array $link_ids ): int {
+	public function reset_state( int $account_id, array $link_ids, ?callable $release = null ): int {
 		$ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
 
 		if ( [] === $ids ) {
@@ -1015,7 +1022,23 @@ final class Wpdb_Link_Store implements Link_Store {
 			array_merge( [ $this->table, Link_Record::STATE_UNLINKED, $this->format_time( $this->now() ), $account_id, Link_Record::KIND_OFFER ], $ids )
 		);
 
-		return $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		if ( null === $release ) {
+			return $this->affected( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		}
+
+		return $this->atomically(
+			function () use ( $sql, $release ): int {
+				$release();
+
+				$reset = $this->db->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
+
+				if ( false === $reset ) {
+					throw Persistence_Exception::database( 'the reset of links', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+				}
+
+				return (int) $reset;
+			}
+		);
 	}
 
 	/**
@@ -1729,14 +1752,16 @@ final class Wpdb_Link_Store implements Link_Store {
 	private const ID_VALUE_LENGTH = 191;
 
 	/**
-	 * Runs a write that touches the link and its identifiers as one unit: both land or neither does.
+	 * Runs a write that touches the link and the rows that belong to it as one unit: both land or neither does.
 	 *
 	 * @param callable $work The writes; whatever it returns is returned. An exception rolls back and goes up.
 	 * @return mixed
-	 * @throws Persistence_Exception When the commit fails.
+	 * @throws Persistence_Exception When the transaction cannot begin (nothing is written then) or the commit fails.
 	 */
 	private function atomically( callable $work ) {
-		$this->db->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
+		if ( false === $this->db->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
+			throw Persistence_Exception::database( 'a link in a transaction', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
 
 		try {
 			$result = $work();
@@ -1747,7 +1772,7 @@ final class Wpdb_Link_Store implements Link_Store {
 		}
 
 		if ( false === $this->db->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
-			throw Persistence_Exception::database( 'the identifiers of a link', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+			throw Persistence_Exception::database( 'the rows of a link', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
 		return $result;
