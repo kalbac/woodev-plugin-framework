@@ -28,6 +28,7 @@ B-white).
 | W13 | `PUT /api/v3/stocks/{warehouseId}` — the wrong-field-name probe: `chrtID` instead of `chrtId`, `amount: 0` | nothing beyond W12 (amount is 0 either way) |
 | W14 | `POST /api/v3/supplies` — one supply named as a test, no orders added, never delivered | one empty supply that cannot be removed under the rules |
 | W15 | added after W9 was refused as more than twice lower, listed before sending: `POST /api/v2/upload/task` — the same card, 1000 → 600 (1.67 times lower), to observe the quarantine itself | the card in price quarantine until W10, or the low price |
+| W16 | added after W13 could not tell a no-op from an accepted write, listed before sending: `PUT /api/v3/stocks/{warehouseId}` — the second warehouse, which holds no record for the test sizes, one size, `chrtID` instead of `chrtId`, `amount: 0` | a stock record with amount 0, if the name is accepted; nothing if it is ignored |
 
 ## Related
 
