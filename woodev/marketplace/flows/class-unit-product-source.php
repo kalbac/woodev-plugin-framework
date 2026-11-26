@@ -14,8 +14,10 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Reads what {@see Unit_Matcher} compares: of every product that can carry a card (simple products and variations, never a
  * variable parent) its SKU, its barcodes — WooCommerce's GTIN field and the custom fields the export profiles read the barcode
- * from — and the unit the importer is making it for. Plain SQL over the SKU lookup table and the post meta, not one
- * `get_post_meta()` call per product. A product with none of the three is not returned: no key could find it.
+ * from — and the units of this account the importer is making it for or has made it for. Plain SQL over the SKU lookup table and
+ * the post meta, not one `get_post_meta()` call per product. A product with none of these is not returned: nothing could find it.
+ * A product **another account's** unfinished import is making is not returned either: it is nobody's candidate until that
+ * import ends.
  *
  * {@see self::matching()} reads only the products some value of some card could find, so an import does not load the whole shop.
  *
@@ -52,6 +54,13 @@ final class Unit_Product_Source {
 	private $pending_key;
 
 	/**
+	 * Meta key that names the unit the importer made a product for.
+	 *
+	 * @var string
+	 */
+	private $made_for_key;
+
+	/**
 	 * Creates the source.
 	 *
 	 * @since 2.1.23
@@ -61,9 +70,10 @@ final class Unit_Product_Source {
 	 * @param string             $marketplace_id The adapter's id.
 	 */
 	public function __construct( \wpdb $db, Wpdb_Profile_Store $profiles, string $marketplace_id ) {
-		$this->db          = $db;
-		$this->profiles    = $profiles;
-		$this->pending_key = Unit_Products::pending_key( $marketplace_id );
+		$this->db           = $db;
+		$this->profiles     = $profiles;
+		$this->pending_key  = Unit_Products::pending_key( $marketplace_id );
+		$this->made_for_key = Unit_Products::made_for_key( $marketplace_id );
 	}
 
 	/**
@@ -73,21 +83,21 @@ final class Unit_Product_Source {
 	 *
 	 * @param int|null $category_id Product category (`product_cat` term id), or null for the whole shop.
 	 * @param int      $account_id  Account the cards belong to.
-	 * @return array<int,array{id:int,parent_id:int,sku:string,barcodes:string[],importing:string}> In product id order.
+	 * @return array<int,array{id:int,parent_id:int,sku:string,barcodes:string[],importing:string,made_for:string}> In product id order.
 	 */
 	public function products( ?int $category_id, int $account_id ): array {
 		return $this->read( $account_id, $category_id, null );
 	}
 
 	/**
-	 * Lists the products that carry one of the values as a SKU or a barcode, or that are being imported for one of the units.
+	 * Lists the products that carry one of the values as a SKU or a barcode, or that the importer makes or made for one of the units.
 	 *
 	 * @since 2.1.23
 	 *
 	 * @param int      $account_id Account.
 	 * @param string[] $values     Values of the cards' match keys.
 	 * @param string[] $offer_ids  Unit keys of the cards.
-	 * @return array<int,array{id:int,parent_id:int,sku:string,barcodes:string[],importing:string}>
+	 * @return array<int,array{id:int,parent_id:int,sku:string,barcodes:string[],importing:string,made_for:string}>
 	 */
 	public function matching( int $account_id, array $values, array $offer_ids ): array {
 		$ids  = [];
@@ -101,13 +111,13 @@ final class Unit_Product_Source {
 			);
 		}
 
-		$pending = [];
+		$marks = [];
 		foreach ( $offer_ids as $offer_id ) {
-			$pending[] = Unit_Products::pending_value( $account_id, $offer_id );
+			$marks[] = Unit_Products::mark_value( $account_id, $offer_id );
 		}
 
-		foreach ( array_chunk( $pending, self::CHUNK ) as $chunk ) {
-			$ids = array_merge( $ids, $this->column( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value IN (' . self::holders( $chunk ) . ')', array_merge( [ $this->db->postmeta, $this->pending_key ], $chunk ) ) );
+		foreach ( array_chunk( $marks, self::CHUNK ) as $chunk ) {
+			$ids = array_merge( $ids, $this->column( 'SELECT post_id FROM %i WHERE meta_key IN (%s, %s) AND meta_value IN (' . self::holders( $chunk ) . ')', array_merge( [ $this->db->postmeta, $this->pending_key, $this->made_for_key ], $chunk ) ) );
 		}
 
 		$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );
@@ -121,7 +131,7 @@ final class Unit_Product_Source {
 	 * @param int        $account_id  Account.
 	 * @param int|null   $category_id Category subtree, or null.
 	 * @param int[]|null $ids         Only these products, or null for all.
-	 * @return array<int,array{id:int,parent_id:int,sku:string,barcodes:string[],importing:string}>
+	 * @return array<int,array{id:int,parent_id:int,sku:string,barcodes:string[],importing:string,made_for:string}>
 	 */
 	private function read( int $account_id, ?int $category_id, ?array $ids ): array {
 		$sql  = 'SELECT p.ID AS id, p.post_parent AS parent_id, l.sku AS sku FROM %i AS p LEFT JOIN %i AS l ON l.product_id = p.ID'
@@ -149,9 +159,15 @@ final class Unit_Product_Source {
 			$id        = (int) $row['id'];
 			$sku       = (string) $row['sku'];
 			$barcodes  = $meta[ $id ]['barcodes'] ?? [];
-			$importing = $this->importing( $meta[ $id ]['pending'] ?? '', $account_id );
+			$pending   = $meta[ $id ]['pending'] ?? '';
+			$importing = self::own_unit( $pending, $account_id );
+			$made_for  = self::own_unit( $meta[ $id ]['made_for'] ?? '', $account_id );
 
-			if ( '' === $sku && [] === $barcodes && '' === $importing ) {
+			if ( '' !== $pending && '' === $importing ) {
+				continue; // Another account's import is still making it.
+			}
+
+			if ( '' === $sku && [] === $barcodes && '' === $importing && '' === $made_for ) {
 				continue;
 			}
 
@@ -161,6 +177,7 @@ final class Unit_Product_Source {
 				'sku'       => $sku,
 				'barcodes'  => $barcodes,
 				'importing' => $importing,
+				'made_for'  => $made_for,
 			];
 		}
 
@@ -168,13 +185,13 @@ final class Unit_Product_Source {
 	}
 
 	/**
-	 * Reads the barcodes and the pending-import mark of products.
+	 * Reads the barcodes and the unit marks of products.
 	 *
 	 * @param int[]|null $ids Products, or null for all of them.
-	 * @return array<int,array{barcodes:string[],pending:string}>
+	 * @return array<int,array{barcodes:string[],pending:string,made_for:string}>
 	 */
 	private function meta( ?array $ids ): array {
-		$keys   = array_merge( $this->barcode_keys(), [ $this->pending_key ] );
+		$keys   = array_merge( $this->barcode_keys(), [ $this->pending_key, $this->made_for_key ] );
 		$sql    = 'SELECT post_id, meta_key, meta_value FROM %i WHERE meta_key IN (' . self::holders( $keys ) . ") AND meta_value <> ''";
 		$chunks = null === $ids ? [ null ] : array_chunk( $ids, self::CHUNK );
 		$meta   = [];
@@ -188,10 +205,13 @@ final class Unit_Product_Source {
 				$meta[ $id ] = $meta[ $id ] ?? [
 					'barcodes' => [],
 					'pending'  => '',
+					'made_for' => '',
 				];
 
 				if ( $this->pending_key === $row['meta_key'] ) {
 					$meta[ $id ]['pending'] = (string) $row['meta_value'];
+				} elseif ( $this->made_for_key === $row['meta_key'] ) {
+					$meta[ $id ]['made_for'] = (string) $row['meta_value'];
 				} else {
 					$meta[ $id ]['barcodes'][] = (string) $row['meta_value'];
 				}
@@ -202,17 +222,17 @@ final class Unit_Product_Source {
 	}
 
 	/**
-	 * Returns the unit an unfinished import makes a product for: the unit key for this account, the whole mark for another one,
-	 * so that it never equals a card of this account.
+	 * Returns the unit key a mark names for this account. Another account's mark gives nothing: it is never handed on as a text,
+	 * because a text that starts with an account number can be a unit key too (the article `99:coat`).
 	 *
 	 * @param string $mark       Stored mark, `{account}:{unit key}`, or ''.
 	 * @param int    $account_id Account.
-	 * @return string
+	 * @return string '' for no mark and for another account's.
 	 */
-	private function importing( string $mark, int $account_id ): string {
-		$own = Unit_Products::pending_value( $account_id, '' );
+	private static function own_unit( string $mark, int $account_id ): string {
+		$own = Unit_Products::mark_value( $account_id, '' );
 
-		return 0 === strpos( $mark, $own ) ? substr( $mark, strlen( $own ) ) : $mark;
+		return 0 === strpos( $mark, $own ) ? substr( $mark, strlen( $own ) ) : '';
 	}
 
 	/**

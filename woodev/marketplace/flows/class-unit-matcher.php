@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * Nothing is guessed: a conflict is reported and a lower key is not tried for that card. Values are compared as raw strings.
  *
  * A product that already has an identity (an article or a marketplace identifier), and a product the importer is making for
- * another unit, are never candidates. A card whose article already belongs to a row is left out.
+ * another unit, are never candidates ({@see Unit_Product_Source} leaves out what another account's import is making). A card whose article already belongs to a row is left out.
  *
  * Pure: it reads lists and returns lists.
  *

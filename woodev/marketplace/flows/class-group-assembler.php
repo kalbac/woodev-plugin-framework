@@ -711,7 +711,7 @@ final class Group_Assembler {
 	 * @return string[]
 	 */
 	private function unit_meta_keys( string $marketplace_id ): array {
-		return null === $this->units ? [] : [ Unit_Products::pending_key( $marketplace_id ), Unit_Products::sku_conflict_key( $marketplace_id ) ];
+		return null === $this->units ? [] : [ Unit_Products::pending_key( $marketplace_id ), Unit_Products::made_for_key( $marketplace_id ), Unit_Products::sku_conflict_key( $marketplace_id ) ];
 	}
 
 	/**

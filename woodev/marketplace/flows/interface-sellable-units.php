@@ -19,7 +19,8 @@ defined( 'ABSPATH' ) || exit;
  * carries, where the marketplace has them:
  *
  * - `barcodes` (string[]): every barcode of the unit, byte for byte, in the marketplace's order. The link stores the whole list;
- *   the import writes the first one that is a GTIN into WooCommerce's GTIN field.
+ *   the import writes the first one that is a GTIN into WooCommerce's GTIN field. An empty list
+ *   reads as «the answer carries none» and keeps what the link has.
  * - `unit` (array): `card` (string) names the card of the marketplace the unit belongs to — the units of one card are listed under
  *   it; '' stands for a unit that is listed alone. `article` (string) is the card's seller article **as it is now**, which
  *   «Поиск по артикулу» looks in. Any other scalar the adapter wants back in {@see self::match_keys()} or

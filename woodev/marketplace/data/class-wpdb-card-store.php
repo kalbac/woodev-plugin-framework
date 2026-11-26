@@ -481,7 +481,7 @@ final class Wpdb_Card_Store {
 		$per_page = max( 1, $per_page );
 		$offset   = ( max( 1, $page ) - 1 ) * $per_page;
 		$where    = $this->where( $account_id, $on_site, $search );
-		$total    = (int) $this->db->get_var( 'SELECT COUNT(DISTINCT ' . self::CARD_OF . ') ' . $this->from() . $where ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Built of prepared parts.
+		$total    = $this->card_count( $account_id, $on_site, $search );
 		$rows     = $this->select( self::CARD_OF . ' AS card_ref, MIN(c.position) AS first_position', $where . ' GROUP BY card_ref' . $this->db->prepare( ' ORDER BY first_position ASC, card_ref ASC LIMIT %d OFFSET %d', $per_page, $offset ) );
 		$refs     = array_map( 'strval', array_column( $rows, 'card_ref' ) );
 		$units    = $this->units_of( $account_id, $refs );
@@ -585,36 +585,64 @@ final class Wpdb_Card_Store {
 	}
 
 	/**
+	 * How many cards the filter reaches, the units of one card counted once.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @param int       $account_id Account id.
+	 * @param bool|null $on_site    The «on the site» filter, as in {@see self::card_page()}.
+	 * @param string    $search     Search text; '' for none.
+	 * @return int
+	 */
+	public function card_count( int $account_id, ?bool $on_site, string $search ): int {
+		return (int) $this->db->get_var( 'SELECT COUNT(DISTINCT ' . self::CARD_OF . ') ' . $this->from() . $this->where( $account_id, $on_site, $search ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Built of prepared parts.
+	}
+
+	/**
 	 * Every card the filter reaches, as the bulk import needs it: the article and group key of each card no product carries, and
 	 * the articles of the ones a product carries. Two short columns per card, in the marketplace's order.
+	 *
+	 * For a marketplace that sells units the cards to import are still listed unit by unit, each naming its card as a third
+	 * element, while `on_site` holds one entry — the card's current article — for each **card** none of whose units is left to
+	 * import, so that what is counted is cards.
 	 *
 	 * @since 2.1.13
 	 *
 	 * @param int       $account_id Account id.
 	 * @param bool|null $on_site    The «on the site» filter, as in {@see self::page()}.
 	 * @param string    $search     Search text; '' for none.
-	 * @return array{cards:array<int,array{0:string,1:string}>,on_site:string[]}
+	 * @return array{cards:array<int,array<int,string>>,on_site:string[]}
 	 */
 	public function entries( int $account_id, ?bool $on_site, string $search ): array {
-		$rows  = $this->select( 'c.offer_id, c.group_key, l.link_id', $this->where( $account_id, $on_site, $search ) . self::ORDER );
+		$rows  = $this->select( 'c.offer_id, c.group_key, c.unit_card, c.unit_article, l.link_id', $this->where( $account_id, $on_site, $search ) . self::ORDER );
 		$found = [
 			'cards'   => [],
 			'on_site' => [],
 		];
 
+		$importable = []; // Cards with a unit to import, by card reference.
+		$linked     = []; // Cards with a unit on the site, by card reference.
+
 		foreach ( $rows as $row ) {
 			$offer_id = (string) $row['offer_id'];
+			$ref      = (string) $row['unit_card'];
 
 			if ( '' === $offer_id ) {
 				continue;
 			}
 
-			if ( null !== $row['link_id'] ) {
+			if ( null === $row['link_id'] ) {
+				$entry              = [ $offer_id, trim( (string) $row['group_key'] ) ];
+				$found['cards'][]   = '' === $ref ? $entry : array_merge( $entry, [ $ref ] );
+				$importable[ $ref ] = true;
+			} elseif ( '' === $ref ) {
 				$found['on_site'][] = $offer_id;
 			} else {
-				$found['cards'][] = [ $offer_id, trim( (string) $row['group_key'] ) ];
+				$linked[ $ref ] = '' === (string) $row['unit_article'] ? $offer_id : (string) $row['unit_article'];
 			}
 		}
+
+		$found['on_site'] = array_merge( $found['on_site'], array_values( array_diff_key( $linked, $importable ) ) );
 
 		return $found;
 	}

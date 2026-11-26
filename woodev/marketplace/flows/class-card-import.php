@@ -317,7 +317,10 @@ final class Card_Import {
 		return [
 			$taken ? '' : $wanted,
 			static function ( \WC_Product $unsaved ) use ( $account, $article, $wanted, $taken, $name ): void {
-				$unsaved->update_meta_data( Unit_Products::pending_key( $account->adapter_id() ), Unit_Products::pending_value( $account->id(), $article ) );
+				$mark = Unit_Products::mark_value( $account->id(), $article );
+
+				$unsaved->update_meta_data( Unit_Products::pending_key( $account->adapter_id() ), $mark );
+				$unsaved->update_meta_data( Unit_Products::made_for_key( $account->adapter_id() ), $mark );
 
 				if ( $taken ) {
 					$unsaved->update_meta_data( Unit_Products::sku_conflict_key( $account->adapter_id() ), $wanted );
@@ -435,7 +438,7 @@ final class Card_Import {
 		}
 
 		$mark   = (string) $product->get_meta( Unit_Products::pending_key( $account->adapter_id() ) );
-		$prefix = Unit_Products::pending_value( $account->id(), '' );
+		$prefix = Unit_Products::mark_value( $account->id(), '' );
 
 		return 0 === strpos( $mark, $prefix ) ? substr( $mark, strlen( $prefix ) ) : '';
 	}

@@ -31,6 +31,7 @@ use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Worker;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Scripted_Bulk_Run_Lock;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Sellable_Units;
 
 /**
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Run_Actions
@@ -385,6 +386,52 @@ final class RemoteCardsBulkImportTest extends Remote_Cards_Test_Case {
 		$this->assertStringContainsString( 'Картинки загружаются по одной', $answer['scope_sentence'] );
 		$this->assertSame( [], $this->lookups, 'No lookup of the shop at preview time.' );
 		$this->assertSame( [], $this->scheduler->of( self::IMPORT_HOOK ), 'Nothing is queued by a preview.' );
+	}
+
+	/**
+	 * A marketplace that sells units lists sizes, and the run over the filter counts cards, as the table does: in the preview, in
+	 * the total and in what it queued and skipped — also when one card's sizes are fed in two parts.
+	 */
+	public function test_the_run_over_a_marketplace_of_units_counts_cards_not_sizes(): void {
+		$this->sells_units = true;
+
+		$unit  = function ( string $article, string $size, int $sizes ): array {
+			$card = Fake_Sellable_Units::card( $article, $size, [], $sizes );
+
+			return $this->card( $card['offer_id'], '', $card );
+		};
+		$cards = [
+			$unit( 'coat', 'M', 2 ),
+			$unit( 'sock', 'S', 2 ),
+			$unit( 'belt', 'S', 2 ),
+			$unit( 'mug', '', 1 ),
+		];
+
+		for ( $size = 1; $size <= 150; $size++ ) {
+			$cards[] = $unit( 'ring', (string) $size, 150 );
+		}
+
+		$this->put_cards( array_merge( $cards, [ $unit( 'coat', 'L', 2 ), $unit( 'sock', 'M', 2 ), $unit( 'belt', 'M', 2 ) ] ) );
+		$this->put_on_site( 'sock|S', 41 );
+		$this->put_on_site( 'sock|M', 42 );
+		$this->put_on_site( 'belt|S', 43 );
+
+		$preview = function ( array $filters ): array {
+			return $this->matching_provider()->preview_matching( $this->context(), Remote_Cards_Definition::IMPORT_SELECTED, $this->query( $filters ), [] );
+		};
+
+		$this->assertSame( 4, $preview( [ 'on_site' => 'no' ] )['requested'], 'coat, ring, mug and the half-linked belt' );
+		$this->assertSame( 2, $preview( [ 'on_site' => 'yes' ] )['requested'], 'sock and belt' );
+		$this->assertStringContainsString( '5 карточек', $preview( [] )['scope_sentence'] );
+
+		$run    = $this->drive( $this->start_run( $this->query() ) );
+		$counts = $run->counts();
+
+		$this->assertSame( 5, $counts['products_total'] );
+		$this->assertSame( 4, $counts['offers_accepted'], 'cards queued, each once' );
+		$this->assertSame( 1, $counts['offers_skipped'], 'only the card with every size on the site' );
+		$this->assertCount( 154, $this->queued_articles(), 'every size that is not on the site is imported' );
+		$this->assertSame( [ 'sock' ], $run->report()[0]['examples'], 'a card is named by its article, never by a unit key' );
 	}
 
 	public function test_the_preview_takes_the_genitive_after_do_for_every_count(): void {

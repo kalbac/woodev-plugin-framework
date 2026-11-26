@@ -19,6 +19,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * - while its import is not finished the product carries {@see self::pending_key()} (`{account id}:{unit key}`), written with the
  *   importer's first save and removed once the card is linked;
+ * - a product the importer made keeps {@see self::made_for_key()} (the same value) for good, so the card whose link was removed
+ *   is imported into the product it already has, SKU or no SKU, and not into a second one;
  * - otherwise the adapter's match keys find it among the products that have no link ({@see Unit_Matcher::products_of()}).
  *
  * It also keeps what the merchant is told when the import could not give the product its SKU ({@see self::sku_conflict_text()}).
@@ -97,7 +99,19 @@ final class Unit_Products {
 	}
 
 	/**
-	 * Returns the value of {@see self::pending_key()} for a unit of an account.
+	 * Returns the meta key that names, for good, the unit the importer made a product for.
+	 *
+	 * @since 2.1.23
+	 *
+	 * @param string $marketplace_id The adapter's id.
+	 * @return string
+	 */
+	public static function made_for_key( string $marketplace_id ): string {
+		return '_woodev_' . $marketplace_id . '_unit';
+	}
+
+	/**
+	 * Returns the value of {@see self::pending_key()} and {@see self::made_for_key()} for a unit of an account.
 	 *
 	 * @since 2.1.23
 	 *
@@ -105,7 +119,7 @@ final class Unit_Products {
 	 * @param string $offer_id   Unit key.
 	 * @return string
 	 */
-	public static function pending_value( int $account_id, string $offer_id ): string {
+	public static function mark_value( int $account_id, string $offer_id ): string {
 		return $account_id . ':' . $offer_id;
 	}
 
@@ -167,8 +181,9 @@ final class Unit_Products {
 	 * @param int                            $account_id Account.
 	 * @param array<int,array<string,mixed>> $cards      Unit cards.
 	 * @return array<string,array{pending:int,matches:int[]}> By unit key: `pending` is the product an unfinished import of the
-	 *                                                       card made (0 for none); otherwise `matches` are the products the match keys
-	 *                                                       find among those with no link — one is the card's, several are a conflict.
+	 *                                                       card made (0 for none); otherwise `matches` are, among the products with
+	 *                                                       no link, those the importer made for the card, else those the match keys
+	 *                                                       find — one is the card's, several are a conflict.
 	 */
 	public function find( int $account_id, array $cards ): array {
 		$values = [];
@@ -198,21 +213,40 @@ final class Unit_Products {
 
 		foreach ( $cards as $card ) {
 			$offer_id = (string) $card['offer_id'];
-			$pending  = 0;
+			$pending  = self::marked( $free, 'importing', $offer_id );
+			$matches  = [];
 
-			foreach ( $free as $product ) {
-				if ( $product['importing'] === $offer_id ) {
-					$pending = $product['id'];
-					break;
-				}
+			if ( [] === $pending ) {
+				$made    = self::marked( $free, 'made_for', $offer_id );
+				$matches = [] === $made ? Unit_Matcher::products_of( $card, $free, $this->units ) : $made;
 			}
 
 			$found[ $offer_id ] = [
-				'pending' => $pending,
-				'matches' => $pending > 0 ? [] : Unit_Matcher::products_of( $card, $free, $this->units ),
+				'pending' => $pending[0] ?? 0,
+				'matches' => $matches,
 			];
 		}
 
 		return $found;
+	}
+
+	/**
+	 * Returns the products whose mark of one kind names a unit.
+	 *
+	 * @param array<int,array<string,mixed>> $products Products of the source.
+	 * @param string                         $mark     `importing` or `made_for`.
+	 * @param string                         $offer_id Unit key.
+	 * @return int[] Product ids.
+	 */
+	private static function marked( array $products, string $mark, string $offer_id ): array {
+		$ids = [];
+
+		foreach ( $products as $product ) {
+			if ( $product[ $mark ] === $offer_id ) {
+				$ids[] = $product['id'];
+			}
+		}
+
+		return $ids;
 	}
 }

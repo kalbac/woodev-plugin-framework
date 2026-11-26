@@ -483,6 +483,109 @@ final class UnitImportTest extends Export_Test_Case {
 	}
 
 	/**
+	 * «Снять связь» on the product of a card.
+	 *
+	 * @param string $article Article.
+	 * @param string $size    Size.
+	 * @return int The product that carried the card.
+	 */
+	private function unlink( string $article, string $size ): int {
+		$link = $this->links()->find_by_offer_id( $this->account_id, Unit_Key::encode( $article, $size ) );
+
+		$this->assertTrue( $this->links()->detach( $this->account_id, (int) $link->link_id() ) );
+
+		return $link->wc_product_id();
+	}
+
+	/**
+	 * A unit imported without a SKU has nothing a key could find, yet importing it again after «Снять связь» goes into the same
+	 * product.
+	 *
+	 * @return void
+	 */
+	public function test_importing_an_unlinked_unit_without_a_sku_does_not_make_a_second_product(): void {
+		$this->import( $this->card( 'coat', 'M', [], 2 ) );
+		$this->import( $this->card( 'coat-M', '', [ '12345Ejf5' ] ) );
+
+		$product = $this->unlink( 'coat-M', '' );
+		$lookup  = Remote_Cards_Import_Plan::unit_lookup( $this->unit_products(), Product_Writer::marker_key( Sqlite_Tables::MARKETPLACE_ID ) );
+
+		$this->assertSame( [ 'coat-M|' => Remote_Cards_Import_Plan::SKU_PLAIN ], $lookup( $this->account_id, [ Fake_Sellable_Units::card( 'coat-M', '', [ '12345Ejf5' ] ) ] ), 'the preview says «link», like the job' );
+		$this->assertSame( Card_Import::LINKED_EXISTING, $this->import( $this->card( 'coat-M', '', [ '12345Ejf5' ] ) ) );
+		$this->assertCount( 2, $this->shop->stored );
+		$this->assertSame( $product, $this->links()->find_by_offer_id( $this->account_id, 'coat-M|' )->wc_product_id() );
+		$this->assertStringContainsString( 'уже занят товаром', $this->note( 'coat-M', '' ) );
+	}
+
+	/**
+	 * The same for a size that became a variation, the first of its group — which was a simple product when it was made — and a
+	 * later one.
+	 *
+	 * @return void
+	 */
+	public function test_an_unlinked_variation_is_found_again_after_the_conversion_of_its_group(): void {
+		$this->merchant_product( 'coat-M', 'Занял M' );
+		$this->merchant_product( 'coat-L', 'Занял L' );
+
+		// The merchant's products are linked to other cards, so the sizes cannot be them and get no SKU.
+		( new Card_Linker( $this->links() ) )->link( $this->account_id, 900, 0, Fake_Sellable_Units::card( 'other', 'M' ) );
+		( new Card_Linker( $this->links() ) )->link( $this->account_id, 901, 0, Fake_Sellable_Units::card( 'other', 'L' ) );
+
+		$this->import( $this->card( 'coat', 'M', [], 2, 'g1', 2 ) );
+		$this->import( $this->card( 'coat', 'L', [], 2, 'g1', 2 ) );
+
+		$products = count( $this->shop->stored );
+
+		foreach ( [ 'M', 'L' ] as $size ) {
+			$variation = $this->unlink( 'coat', $size );
+
+			$this->assertSame( '', $this->shop->stored[ $variation ]['props']['sku'] );
+			$this->assertSame( Card_Import::LINKED_EXISTING, $this->import( $this->card( 'coat', $size, [], 2, 'g1', 2 ) ), $size );
+			$this->assertSame( $variation, $this->links()->find_by_offer_id( $this->account_id, 'coat|' . $size )->wc_product_id() );
+		}
+
+		$this->assertCount( $products, $this->shop->stored );
+	}
+
+	/**
+	 * A copy of an imported product (WooCommerce copies the meta) is not guessed between.
+	 *
+	 * @return void
+	 */
+	public function test_two_products_made_for_one_unit_are_a_conflict(): void {
+		$this->import( $this->card( 'coat', '' ) );
+		$original = $this->unlink( 'coat', '' );
+		$this->merchant_product( '', 'Копия', [ Unit_Products::made_for_key( Sqlite_Tables::MARKETPLACE_ID ) => $this->shop->stored[ $original ]['meta'][ Unit_Products::made_for_key( Sqlite_Tables::MARKETPLACE_ID ) ] ] );
+
+		$this->assertSame( Card_Import::SKIPPED, $this->import( $this->card( 'coat', '' ) ) );
+		$this->assertCount( 2, $this->shop->stored );
+	}
+
+	/**
+	 * Another account's half-made product is never adopted, even when its mark `{account}:{unit key}` reads like a unit key of
+	 * this account: account 99 importing `coat|M`, and this account's article `99:coat` with size `M`.
+	 *
+	 * @return void
+	 */
+	public function test_another_accounts_half_made_product_is_never_adopted(): void {
+		$mark    = Unit_Products::mark_value( 99, 'coat|M' );
+		$foreign = $this->merchant_product(
+			'99:coat-M',
+			'Чужой черновик',
+			[
+				Unit_Products::pending_key( Sqlite_Tables::MARKETPLACE_ID )  => $mark,
+				Unit_Products::made_for_key( Sqlite_Tables::MARKETPLACE_ID ) => $mark,
+				Product_Writer::marker_key( Sqlite_Tables::MARKETPLACE_ID )  => '1',
+			]
+		);
+
+		$this->assertSame( $mark, Unit_Key::encode( '99:coat', 'M' ), 'the two texts are the same' );
+		$this->assertSame( Card_Import::CREATED, $this->import( $this->card( '99:coat', 'M', [], 2 ) ) );
+		$this->assertNotSame( $foreign, $this->links()->find_by_offer_id( $this->account_id, '99:coat|M' )->wc_product_id() );
+		$this->assertSame( $mark, $this->shop->stored[ $foreign ]['meta'][ Unit_Products::pending_key( Sqlite_Tables::MARKETPLACE_ID ) ], 'left as it was' );
+	}
+
+	/**
 	 * A key longer than the link table holds is refused before any write.
 	 *
 	 * @return void

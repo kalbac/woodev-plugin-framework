@@ -40,7 +40,8 @@ final class UnitProductSourceTest extends Export_Test_Case {
 			[ 5, 0, 'product', 'trash', 'TRASHED' ],
 			[ 6, 0, 'product', 'publish', '' ],
 			[ 7, 0, 'product', 'draft', '' ],
-			[ 8, 0, 'product', 'draft', '' ],
+			[ 8, 0, 'product', 'draft', 'FOREIGN' ],
+			[ 9, 0, 'product', 'draft', '' ],
 		];
 
 		foreach ( $posts as list( $id, $parent, $type, $status, $sku ) ) {
@@ -54,6 +55,8 @@ final class UnitProductSourceTest extends Export_Test_Case {
 			[ 4, '_another_field', 'not a barcode' ],
 			[ 7, '_woodev_fake_import_unit', $this->account_id . ':coat|M' ],
 			[ 8, '_woodev_fake_import_unit', '99:coat|M' ],
+			[ 9, '_woodev_fake_unit', $this->account_id . ':coat|L' ],
+			[ 1, '_woodev_fake_unit', '99:coat|L' ],
 		];
 
 		foreach ( $meta as list( $id, $key, $value ) ) {
@@ -71,20 +74,21 @@ final class UnitProductSourceTest extends Export_Test_Case {
 	}
 
 	/**
-	 * Products with a SKU, a GTIN, a profile's barcode field or a pending import; never a variable parent, a trashed or an empty one.
-	 * Another account's pending import is marked so that no card of this one equals it.
+	 * Products with a SKU, a GTIN, a profile's barcode field, or a unit of this account being or been imported into them; never a
+	 * variable parent, a trashed or an empty one, nor one another account's import is still making.
 	 *
 	 * @return void
 	 */
 	public function test_the_whole_shop_lists_what_a_key_could_find(): void {
 		$products = array_column( $this->source()->products( null, $this->account_id ), null, 'id' );
 
-		$this->assertSame( [ 1, 3, 4, 7, 8 ], array_keys( $products ) );
+		$this->assertSame( [ 1, 3, 4, 7, 9 ], array_keys( $products ) );
+		$this->assertSame( 'coat|L', $products[9]['made_for'] );
+		$this->assertSame( '', $products[1]['made_for'], 'another account made it: an ordinary product here' );
 		$this->assertSame( [ '4006381333931' ], $products[3]['barcodes'] );
 		$this->assertSame( 2, $products[3]['parent_id'] );
 		$this->assertSame( [ '12345Ejf5' ], $products[4]['barcodes'] );
 		$this->assertSame( 'coat|M', $products[7]['importing'] );
-		$this->assertSame( '99:coat|M', $products[8]['importing'] );
 	}
 
 	/**
@@ -99,6 +103,8 @@ final class UnitProductSourceTest extends Export_Test_Case {
 
 		$this->assertSame( [ 1, 4 ], $ids( $this->source()->matching( $this->account_id, [ 'A', '12345Ejf5', 'TRASHED', 'not a barcode', '' ], [] ) ) );
 		$this->assertSame( [ 3, 7 ], $ids( $this->source()->matching( $this->account_id, [ '4006381333931' ], [ 'coat|M' ] ) ) );
+		$this->assertSame( [ 9 ], $ids( $this->source()->matching( $this->account_id, [], [ 'coat|L' ] ) ) );
+		$this->assertSame( [], $this->source()->matching( $this->account_id, [ 'FOREIGN' ], [] ), 'half-made by another account: not even by its SKU' );
 		$this->assertSame( [], $this->source()->matching( $this->account_id, [], [] ) );
 	}
 }
