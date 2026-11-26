@@ -41,6 +41,18 @@ final class Wpdb_Label_Store {
 	public const RESULT_MESSAGE = 'message';
 
 	/**
+	 * Key of the task `result` that holds the label format the task was asked in; absent for a marketplace with one format.
+	 *
+	 * @since 2.1.28
+	 */
+	public const RESULT_FORMAT = 'format';
+
+	/**
+	 * Starts the parameter of a stored content type that says which label format the document was made in.
+	 */
+	private const FORMAT_PARAMETER = '; format=';
+
+	/**
 	 * Database.
 	 *
 	 * @var \wpdb
@@ -114,11 +126,18 @@ final class Wpdb_Label_Store {
 	 * @param int      $account_id     Account id.
 	 * @param string   $remote_task_id The marketplace's task id.
 	 * @param string[] $external_keys       Remote-order keys the task was made for.
+	 * @param string   $format         Label format the task was asked in (since 2.1.28); '' for a marketplace with one format.
 	 * @return int Local task id.
 	 * @throws Persistence_Exception When the row could not be written.
 	 */
-	public function add_task( int $account_id, string $remote_task_id, array $external_keys ): int {
+	public function add_task( int $account_id, string $remote_task_id, array $external_keys, string $format = '' ): int {
 		$external_keys = array_values( $external_keys );
+		$result        = [ self::RESULT_EXTERNAL_KEYS => $external_keys ];
+
+		if ( '' !== $format ) {
+			$result[ self::RESULT_FORMAT ] = $format;
+		}
+
 		$inserted = $this->db->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
 			$this->tasks,
 			[
@@ -129,7 +148,7 @@ final class Wpdb_Label_Store {
 				'submitted_at'   => $this->stamp( $this->now() ),
 				'item_count'     => count( $external_keys ),
 				'request_hash'   => sha1( implode( ',', $external_keys ) ),
-				'result'         => (string) wp_json_encode( [ self::RESULT_EXTERNAL_KEYS => $external_keys ] ),
+				'result'         => (string) wp_json_encode( $result ),
 			]
 		);
 
@@ -382,6 +401,31 @@ final class Wpdb_Label_Store {
 		if ( '' !== (string) $this->db->last_error ) {
 			throw Persistence_Exception::database( $what, (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
+	}
+
+	/**
+	 * Returns what the content type of a document ends with when it was made in a label format. The format is part of the content
+	 * type, so a document of another format is told apart without a column of its own.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $format Label format; '' for a marketplace with one format.
+	 * @return string The parameter, a digest of the format so any text fits the column; '' for ''.
+	 */
+	public static function format_suffix( string $format ): string {
+		return '' === $format ? '' : self::FORMAT_PARAMETER . substr( md5( $format ), 0, 12 );
+	}
+
+	/**
+	 * Returns a stored content type without its label format.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $content_type Content type of a document.
+	 * @return string
+	 */
+	public static function media_type( string $content_type ): string {
+		return explode( self::FORMAT_PARAMETER, $content_type, 2 )[0];
 	}
 
 	/**

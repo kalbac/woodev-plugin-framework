@@ -1616,6 +1616,7 @@ change.
 | `Label_Answer::files( Label_File[] $files, array $raw )` | one set of several files; an empty list is a refusal | `file()`: one file |
 | `Label_File( name, media type, bytes, width_mm, height_mm )` | the real file name; the printed size of a PNG sticker | — |
 | `Immediate_Label_Provider extends Label_Provider` | `labels_now()` answers with the labels; `request()` / `fetch()` are never called | a task, polled for 15 minutes |
+| `Selectable_Label_Format extends Label_Provider` | `label_format( account )` names the sticker size and file type the account asks for now (a local read) | one format; a stored document is reused for 7 days |
 
 An immediate answer is stored at once (`documents.task_id` is NULL), `{plugin}_label_ready` fires with `task_id` 0, no poll is
 queued, and the «Этикетки» click that asked gets the download. A refusal is a `Label_Exception` or a `broken()` answer.
@@ -1632,15 +1633,20 @@ before. Its content type says how it is handed over:
 
 Files of a set are never shown inline: an SVG from a marketplace must not run on the site's origin.
 
+**Format.** A document remembers the format it was asked in: a `; format={digest}` parameter at the end of its content type
+(`Wpdb_Label_Store::format_suffix()`, no column), taken from the task row for a polled answer. `Site_Orders_Labels` counts only
+documents of the account's current format, so after a change the row, the order screen and the click all ask for new labels —
+under the usual gates, so a posting that can no longer have a label gets none in the new format. Changing back finds the old
+document again. `media_type()` strips the parameter before anything is sent.
+
 **The page.** A sticker with a size is printed at that size; on a sheet they flow side by side, uncut by page breaks (58×40 mm:
 18 per A4 with 10 mm margins). On paper up to 80 mm wide each sticker starts a page — one per label with the print dialog's
-margins off. Measured in Chrome 158 print-to-PDF with the sandbox stickers; no paper printer or barcode scanner was tried.
+margins off, which the page says under its print button. Measured in Chrome 158 print-to-PDF with the sandbox stickers; no paper
+printer or barcode scanner was tried.
 
 **Screens.** The records engine's `download` answer takes `open: true` for a page. The order screen's button saves a file by
-itself and, for a page, shows a link that opens it in a new tab (a tab asked for after a wait is blocked). The «Заказы» table
-keeps its result dialog: its link leads to the page in the same tab.
-
-A stored document is handed over again for 7 days, whatever the account's sticker format is by then.
+itself and, for a page, shows a link that opens it in a new tab (a tab asked for after a wait is blocked). The link in the
+«Заказы» table's result dialog opens a page in a new tab too, so the table stays.
 
 ## The articles of new cards in the mapping form (#2038)
 

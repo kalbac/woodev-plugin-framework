@@ -9,14 +9,20 @@ namespace Woodev\Tests\Unit\Marketplace\Flows;
 
 use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
+use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels;
 use Woodev\Framework\Marketplace\Flows\Label_Answer;
 use Woodev\Framework\Marketplace\Flows\Label_Bundle;
 use Woodev\Framework\Marketplace\Flows\Label_Download;
 use Woodev\Framework\Marketplace\Flows\Label_Exception;
 use Woodev\Framework\Marketplace\Flows\Label_File;
+use Woodev\Framework\Marketplace\Flows\Label_Provider;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
 use Woodev\Framework\Marketplace\Flows\Label_Sheet;
 use Woodev\Framework\Marketplace\Jobs\Label_Jobs;
+use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Formatted_Task_Label_Provider;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Immediate_Formatted_Label_Provider;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Immediate_Label_Provider;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
 
@@ -152,6 +158,10 @@ final class LabelFilesTest extends Label_Test_Case {
 		);
 	}
 
+	public function test_the_page_tells_a_label_printer_which_print_settings_to_choose(): void {
+		$this->assertStringContainsString( 'поля «Нет» и масштаб 100 %', Label_Sheet::html( [ new Label_File( 'a.png', 'image/png', self::PNG_A ) ] ) );
+	}
+
 	public function test_the_page_shows_every_sticker_at_its_size_and_escapes_the_names(): void {
 		$html = Label_Sheet::html(
 			[
@@ -240,6 +250,71 @@ final class LabelFilesTest extends Label_Test_Case {
 		}
 	}
 
+	public function test_a_page_made_in_another_format_is_not_handed_over_again(): void {
+		$provider = new Fake_Immediate_Formatted_Label_Provider( Label_Answer::files( [ new Label_File( 'a.png', 'image/png', self::PNG_A ) ] ) );
+		$service  = $this->immediate_service( $provider );
+		$stored   = $this->stored_labels( $provider );
+
+		$service->create( $this->account(), [ '0001-1' ] );
+
+		$first = $stored->covering( $this->account_id, [ '0001-1' ] );
+
+		$this->assertSame( 1, $first );
+		$this->assertTrue( $stored->is_page( $first ) );
+
+		$provider->format = 'png-40x30';
+
+		$this->assertSame( 0, $stored->covering( $this->account_id, [ '0001-1' ] ), 'Another size: the old page does not count.' );
+		$this->assertSame( 0, $stored->states( $this->account_id, [ '0001-1' ] )['0001-1']['document_id'] );
+
+		$service->create( $this->account(), [ '0001-1' ] );
+
+		$this->assertSame( 2, $stored->covering( $this->account_id, [ '0001-1' ] ) );
+
+		$provider->format = 'png-58x40';
+
+		$this->assertSame( 1, $stored->covering( $this->account_id, [ '0001-1' ] ), 'Back to the first size: its page is the right one again.' );
+
+		$page = $this->download()->response( $this->labels->document( 1 ) );
+
+		$this->assertSame( 'text/html; charset=utf-8', $page['content_type'] );
+	}
+
+	public function test_a_polled_document_keeps_the_format_it_was_asked_in(): void {
+		$provider = new Fake_Formatted_Task_Label_Provider( Label_Answer::file( self::PDF, 'application/pdf' ) );
+		$service  = new Label_Service( $provider, $this->labels, $this->license(), $this->adapter->error_classifier(), $this->names() );
+		$task_id  = $service->create( $this->account(), [ '0001-1' ] );
+
+		$provider->format = 'png-40x30'; // Changed while the marketplace was making the label.
+
+		$this->assertSame( Label_Service::COLLECTED, $service->collect( $this->account(), $task_id ) );
+		$this->assertSame( 0, $this->stored_labels( $provider )->covering( $this->account_id, [ '0001-1' ] ) );
+
+		$provider->format = 'png-58x40';
+
+		$document_id = $this->stored_labels( $provider )->covering( $this->account_id, [ '0001-1' ] );
+
+		$this->assertSame( (int) $this->labels->document_of_task( $task_id ), $document_id );
+		$this->assertSame( 'application/pdf', $this->download()->response( $this->labels->document( $document_id ) )['content_type'], 'The format is never sent to the browser.' );
+	}
+
+	public function test_a_marketplace_with_one_format_stores_the_plain_content_type_and_asks_no_account(): void {
+		$this->assertNull(
+			Label_Service::format_lookup(
+				$this->provider,
+				function (): void {
+					$this->fail( 'No account is read.' );
+				}
+			)
+		);
+
+		$task_id                = $this->task( [ '0001-1' ] );
+		$this->provider->answer = $this->file_answer();
+		$this->service()->collect( $this->account(), $task_id );
+
+		$this->assertSame( 'application/pdf', $this->labels->document( 1 )['content_type'] );
+	}
+
 	public function test_a_stored_pdf_is_answered_as_before(): void {
 		$this->assertSame(
 			[
@@ -280,10 +355,31 @@ final class LabelFilesTest extends Label_Test_Case {
 	}
 
 	/**
-	 * @param Fake_Immediate_Label_Provider $provider Provider.
+	 * @param Label_Provider $provider Provider.
+	 * @return Site_Orders_Labels The reader of stored documents, as the screens build it.
+	 */
+	private function stored_labels( Label_Provider $provider ): Site_Orders_Labels {
+		return new Site_Orders_Labels(
+			$this->db,
+			Sqlite_Tables::table( 'tasks' ),
+			Sqlite_Tables::table( 'documents' ),
+			'__return_empty_string',
+			'__return_zero',
+			$this->clock(),
+			Label_Service::format_lookup(
+				$provider,
+				function (): Account {
+					return $this->account();
+				}
+			)
+		);
+	}
+
+	/**
+	 * @param Label_Provider $provider Provider.
 	 * @return Label_Service
 	 */
-	private function immediate_service( Fake_Immediate_Label_Provider $provider ): Label_Service {
+	private function immediate_service( Label_Provider $provider ): Label_Service {
 		return new Label_Service( $provider, $this->labels, $this->license(), $this->adapter->error_classifier(), $this->names() );
 	}
 

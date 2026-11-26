@@ -309,7 +309,7 @@ final class Label_Download {
 	 * @throws Label_Exception With a sentence for the merchant when the stored set cannot be handed over.
 	 */
 	public function response( array $document ): array {
-		$type = (string) $document['content_type'];
+		$type = Wpdb_Label_Store::media_type( (string) $document['content_type'] );
 		$body = (string) $document['body'];
 		$base = sanitize_file_name( $this->adapter_id ) . '-labels-' . (int) $document['document_id'];
 

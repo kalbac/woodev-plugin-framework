@@ -14,7 +14,7 @@ use Woodev\Framework\Marketplace\Flows\Label_Answer;
 /**
  * `labels_now()` gives the answer in `$answer` (or throws the throwable). The task calls are never expected.
  */
-final class Fake_Immediate_Label_Provider implements Immediate_Label_Provider {
+class Fake_Immediate_Label_Provider implements Immediate_Label_Provider {
 	/**
 	 * Answer of `labels_now()`, or the throwable it throws.
 	 *

@@ -82,6 +82,13 @@ final class Site_Orders_Labels {
 	private $clock;
 
 	/**
+	 * The label format of an account: `function ( int $account_id ): string`; null for a marketplace with one format.
+	 *
+	 * @var callable|null
+	 */
+	private $format_of;
+
+	/**
 	 * Creates the labels part.
 	 *
 	 * @since 2.1.5
@@ -92,14 +99,17 @@ final class Site_Orders_Labels {
 	 * @param callable      $url       `function ( int $document_id ): string`, the address a document is downloaded from.
 	 * @param callable      $request   `function ( Account $account, string[] $keys ): int`, asks for labels and returns the task id.
 	 * @param callable|null $clock     Returns the Unix time; the system clock when null.
+	 * @param callable|null $format_of `function ( int $account_id ): string`, the format the account's labels are made in now (since
+	 *                                 2.1.28): a document of another one does not count. Null counts every document.
 	 */
-	public function __construct( \wpdb $db, string $tasks, string $documents, callable $url, callable $request, ?callable $clock = null ) {
+	public function __construct( \wpdb $db, string $tasks, string $documents, callable $url, callable $request, ?callable $clock = null, ?callable $format_of = null ) {
 		$this->db        = $db;
 		$this->tasks     = $tasks;
 		$this->documents = $documents;
 		$this->url       = $url;
 		$this->request   = $request;
 		$this->clock     = $clock ?? 'time';
+		$this->format_of = $format_of;
 	}
 
 	/**
@@ -183,9 +193,11 @@ final class Site_Orders_Labels {
 	 * @return bool
 	 */
 	public function is_page( int $document_id ): bool {
-		return Label_Bundle::SHEET_TYPE === (string) $this->db->get_var(
+		$type = (string) $this->db->get_var(
 			$this->db->prepare( 'SELECT content_type FROM %i WHERE document_id = %d', $this->documents, $document_id ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table, read fresh.
 		);
+
+		return Label_Bundle::SHEET_TYPE === Wpdb_Label_Store::media_type( $type );
 	}
 
 	/**
@@ -236,7 +248,7 @@ final class Site_Orders_Labels {
 	}
 
 	/**
-	 * Ready documents of the account that name any of the posting numbers, newest first.
+	 * Ready documents of the account that name any of the posting numbers and are in the format it asks for now, newest first.
 	 *
 	 * @param int      $account_id Account.
 	 * @param string[] $keys       Posting numbers.
@@ -247,19 +259,20 @@ final class Site_Orders_Labels {
 			return [];
 		}
 
-		$names = $this->naming( 'external_keys', $keys );
-		$rows  = $this->db->get_results(
+		$names  = $this->naming( 'external_keys', $keys );
+		$suffix = null === $this->format_of ? '' : Wpdb_Label_Store::format_suffix( (string) call_user_func( $this->format_of, $account_id ) );
+		$rows   = $this->db->get_results(
 			$this->db->prepare(
-				'SELECT document_id, external_keys FROM %i WHERE account_id = %d AND created_at >= %s AND (' . $names['sql'] . ') ORDER BY document_id DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Placeholders only.
+				'SELECT document_id, external_keys FROM %i WHERE account_id = %d AND created_at >= %s AND content_type LIKE %s AND (' . $names['sql'] . ') ORDER BY document_id DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Placeholders only.
 				...array_merge(
-					[ $this->documents, $account_id, $this->stamp( $this->now() - Wpdb_Label_Store::KEEP_DAYS * DAY_IN_SECONDS ) ],
+					[ $this->documents, $account_id, $this->stamp( $this->now() - Wpdb_Label_Store::KEEP_DAYS * DAY_IN_SECONDS ), '%' . $this->db->esc_like( $suffix ) ],
 					$names['args'],
 					[ self::LIMIT ]
 				)
 			), // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table, read fresh.
 			'ARRAY_A'
 		);
-		$out   = [];
+		$out    = [];
 
 		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
 			$out[] = [

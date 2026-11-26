@@ -157,8 +157,10 @@ final class Label_Service {
 			throw new Label_Exception( $text ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
+		$format = self::format_of( $this->provider, $account ); // Read before the call: the labels are made in this one.
+
 		if ( $this->provider instanceof Immediate_Label_Provider ) {
-			$this->publish_now( $account, $keys, $this->provider->labels_now( $account, $keys ) );
+			$this->publish_now( $account, $keys, $this->provider->labels_now( $account, $keys ), $format );
 
 			return 0;
 		}
@@ -169,7 +171,41 @@ final class Label_Service {
 			throw new Label_Exception( __( 'Маркетплейс не принял задание на печать этикеток. Попробуйте ещё раз через минуту.', 'woodev-plugin-framework' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
-		return $this->store->add_task( $account->id(), $remote, $keys );
+		return $this->store->add_task( $account->id(), $remote, $keys, $format );
+	}
+
+	/**
+	 * Returns the format an account's labels are made in now.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param Label_Provider $provider The marketplace's label calls.
+	 * @param Account        $account  Account.
+	 * @return string '' unless the provider is a {@see Selectable_Label_Format}.
+	 */
+	public static function format_of( Label_Provider $provider, Account $account ): string {
+		return $provider instanceof Selectable_Label_Format ? $provider->label_format( $account ) : '';
+	}
+
+	/**
+	 * Returns {@see self::format_of()} by account id, for a reader of stored documents.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param Label_Provider $provider   The marketplace's label calls.
+	 * @param callable       $account_of `function ( int $account_id ): ?Account`.
+	 * @return callable|null `function ( int $account_id ): string`; null for a marketplace with one format, so nothing is asked.
+	 */
+	public static function format_lookup( Label_Provider $provider, callable $account_of ): ?callable {
+		if ( ! $provider instanceof Selectable_Label_Format ) {
+			return null;
+		}
+
+		return static function ( int $account_id ) use ( $provider, $account_of ): string {
+			$account = call_user_func( $account_of, $account_id );
+
+			return $account instanceof Account ? self::format_of( $provider, $account ) : '';
+		};
 	}
 
 	/**
@@ -257,6 +293,8 @@ final class Label_Service {
 
 		$kept[ Wpdb_Label_Store::RESULT_ANSWER ] = $answer->raw();
 
+		$type .= Wpdb_Label_Store::format_suffix( (string) ( $task['result'][ Wpdb_Label_Store::RESULT_FORMAT ] ?? '' ) );
+
 		// The document and the end of the task are one transaction: a poll that lost the status fence publishes nothing.
 		$document_id = $this->store->publish_document( $task['task_id'], $task['account_id'], $task['result'][ Wpdb_Label_Store::RESULT_EXTERNAL_KEYS ] ?? [], $type, $body, $kept );
 
@@ -275,11 +313,12 @@ final class Label_Service {
 	 * @param Account      $account Account the orders belong to.
 	 * @param string[]     $keys    Remote-order keys.
 	 * @param Label_Answer $answer  Answer.
+	 * @param string       $format  Label format asked for; '' for a marketplace with one format.
 	 * @return void
 	 * @throws Label_Exception With the marketplace's sentence when the answer holds no labels.
 	 * @throws \Woodev\Framework\Marketplace\Data\Persistence_Exception When the document could not be written.
 	 */
-	private function publish_now( Account $account, array $keys, Label_Answer $answer ): void {
+	private function publish_now( Account $account, array $keys, Label_Answer $answer, string $format ): void {
 		if ( ! in_array( $answer->kind(), [ Label_Answer::FILE, Label_Answer::FILES ], true ) ) {
 			$text = trim( $answer->message() );
 
@@ -288,7 +327,9 @@ final class Label_Service {
 
 		list( $type, $body ) = self::document_of( $answer );
 
-		$this->announce_ready( $this->store->add_document( $account->id(), null, $keys, $type, $body ), 0, $account->id() );
+		$document_id = $this->store->add_document( $account->id(), null, $keys, $type . Wpdb_Label_Store::format_suffix( $format ), $body );
+
+		$this->announce_ready( $document_id, 0, $account->id() );
 	}
 
 	/**

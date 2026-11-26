@@ -335,6 +335,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Flows\\Product_Writer' => 'woodev/marketplace/flows/class-product-writer.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Refresh_Result' => 'woodev/marketplace/flows/class-refresh-result.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Releases_Reset_Imports' => 'woodev/marketplace/flows/interface-releases-reset-imports.php',
+	'Woodev\\Framework\\Marketplace\\Flows\\Selectable_Label_Format' => 'woodev/marketplace/flows/interface-selectable-label-format.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Sellable_Units' => 'woodev/marketplace/flows/interface-sellable-units.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Shop_Sku_Source' => 'woodev/marketplace/flows/class-shop-sku-source.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Shown_Article' => 'woodev/marketplace/flows/class-shown-article.php',

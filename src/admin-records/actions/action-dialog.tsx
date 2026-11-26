@@ -67,7 +67,12 @@ function ResultView( { result, messages }: { result: ApplyResponse; messages: Me
 			<Groups groups={ result.groups } messages={ messages } />
 			{ download && allowed && (
 				<p>
-					<a href={ download.url } download={ download.filename === '' ? undefined : download.filename }>
+					<a
+						href={ download.url }
+						download={ download.filename === '' ? undefined : download.filename }
+						target={ download.open ? '_blank' : undefined }
+						rel={ download.open ? 'noopener' : undefined }
+					>
 						{ actionMessage( messages, ACTION_MESSAGE_KEYS.download ) || download.filename }
 					</a>
 				</p>

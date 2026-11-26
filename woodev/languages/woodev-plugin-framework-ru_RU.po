@@ -13586,10 +13586,14 @@ msgstr ""
 msgid "Сохранённые этикетки не читаются. Напишите в поддержку плагина."
 msgstr ""
 
-#: marketplace/flows/class-label-sheet.php:55
+#: marketplace/flows/class-label-sheet.php:56
 msgid "Этикетки для печати"
 msgstr ""
 
-#: marketplace/flows/class-label-sheet.php:57
+#: marketplace/flows/class-label-sheet.php:58
 msgid "Напечатать"
+msgstr ""
+
+#: marketplace/flows/class-label-sheet.php:59
+msgid "Для принтера этикеток: в окне печати выберите поля «Нет» и масштаб 100 %."
 msgstr ""
