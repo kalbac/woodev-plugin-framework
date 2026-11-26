@@ -145,7 +145,10 @@ final class Account_Status {
 			return \Woodev_Connection_Result::failure( $gone );
 		}
 
-		return \Woodev_Connection_Result::success( $this->connected_detail( $account, $expires_at, $now ) );
+		// The OK detail the adapter stored with its last check (redacted); empty when it stored none.
+		$stored_ok = trim( Report_Redactor::redact_text( trim( $health->message() ), $secret_fields, $secret_vals ) );
+
+		return \Woodev_Connection_Result::success( $this->connected_detail( $account, $expires_at, $now, $stored_ok ) );
 	}
 
 	/**
@@ -259,14 +262,21 @@ final class Account_Status {
 	}
 
 	/**
-	 * Builds the connected detail line (currency, expiry date and switch state).
+	 * Builds the connected detail line. A stored OK detail (already redacted) is shown as it is; without one: currency, expiry date and switch state.
 	 *
 	 * @param Account                 $account    Account.
 	 * @param \DateTimeImmutable|null $expires_at Expiry timestamp, or null.
 	 * @param \DateTimeImmutable      $now        Current timestamp.
+	 * @param string                  $stored     Redacted OK detail the adapter stored, or empty.
 	 * @return string
 	 */
-	private function connected_detail( Account $account, ?\DateTimeImmutable $expires_at, \DateTimeImmutable $now ): string {
+	private function connected_detail( Account $account, ?\DateTimeImmutable $expires_at, \DateTimeImmutable $now, string $stored = '' ): string {
+		if ( '' !== $stored ) {
+			$text = preg_match( '/[.!?]$/u', $stored ) ? $stored : $stored . '.';
+
+			return $account->is_enabled() ? $text : $text . ' ' . __( 'Аккаунт выключен.', 'woodev-plugin-framework' );
+		}
+
 		$parts = [ __( 'Подключено', 'woodev-plugin-framework' ) ];
 
 		$currency = trim( (string) $account->setting( 'currency', '' ) );
