@@ -1008,7 +1008,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @param int[]         $link_ids   Link ids.
 	 * @param callable|null $release    `function (): void`, the writes that must land together with the reset; throws on failure.
 	 * @return int Rows reset.
-	 * @throws Persistence_Exception With `$release`, when the database refuses the reset or the commit.
+	 * @throws Persistence_Exception With `$release`, when the database refuses the transaction, the reset or the commit.
 	 */
 	public function reset_state( int $account_id, array $link_ids, ?callable $release = null ): int {
 		$ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
@@ -1037,7 +1037,8 @@ final class Wpdb_Link_Store implements Link_Store {
 				}
 
 				return (int) $reset;
-			}
+			},
+			true
 		);
 	}
 
@@ -1752,14 +1753,18 @@ final class Wpdb_Link_Store implements Link_Store {
 	private const ID_VALUE_LENGTH = 191;
 
 	/**
-	 * Runs a write that touches the link and the rows that belong to it as one unit: both land or neither does.
+	 * Runs a write that touches the link and its identifiers as one unit: both land or neither does.
 	 *
-	 * @param callable $work The writes; whatever it returns is returned. An exception rolls back and goes up.
+	 * A refused `START TRANSACTION` is ignored and the writes go on one by one: the jobs that move a link from state to state must
+	 * not stop half way for it. A caller whose writes are only safe together passes `$must_begin`.
+	 *
+	 * @param callable $work       The writes; whatever it returns is returned. An exception rolls back and goes up.
+	 * @param bool     $must_begin Whether a transaction that cannot begin stops the writes.
 	 * @return mixed
-	 * @throws Persistence_Exception When the transaction cannot begin (nothing is written then) or the commit fails.
+	 * @throws Persistence_Exception When the commit fails, or with `$must_begin` when the transaction cannot begin.
 	 */
-	private function atomically( callable $work ) {
-		if ( false === $this->db->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
+	private function atomically( callable $work, bool $must_begin = false ) {
+		if ( false === $this->db->query( 'START TRANSACTION' ) && $must_begin ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
 			throw Persistence_Exception::database( 'a link in a transaction', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
@@ -1772,7 +1777,7 @@ final class Wpdb_Link_Store implements Link_Store {
 		}
 
 		if ( false === $this->db->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables.
-			throw Persistence_Exception::database( 'the rows of a link', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+			throw Persistence_Exception::database( 'the identifiers of a link', (string) $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
 		return $result;

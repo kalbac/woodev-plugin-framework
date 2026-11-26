@@ -194,6 +194,11 @@ final class Sqlite_Wpdb extends \wpdb {
 			$changed         = null === $table ? $changed : $this->rows_changed( $before, $this->rows_of( $table ) );
 			$this->insert_id = (int) $this->pdo->lastInsertId();
 		} catch ( \PDOException $e ) {
+			// MySQL accepts a COMMIT or ROLLBACK with no transaction open (after a refused START); SQLite calls it an error.
+			if ( false !== strpos( $e->getMessage(), 'no transaction is active' ) ) {
+				return 0;
+			}
+
 			// The real `wpdb` never throws: it records the error and returns false.
 			$this->last_error = $e->getMessage();
 
