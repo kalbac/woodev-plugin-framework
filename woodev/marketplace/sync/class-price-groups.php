@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Sync_Reason_Text;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Sync_Reason;
+use Woodev\Framework\Marketplace\Jobs\Price_Poll_Runner;
 use Woodev\Framework\Marketplace\Price\Flush_Result;
 use Woodev\Framework\Marketplace\Price\Price_Grouping;
 use Woodev\Framework\Marketplace\Price\Price_Intent;
@@ -118,7 +119,7 @@ final class Price_Groups {
 		}
 
 		$this->queue->hold( $account->id(), array_values( array_diff( $conflicting, $held ) ), self::differs_sentence(), $token );
-		$this->queue->unhold( $account->id(), array_values( array_diff( $held, $conflicting ) ), self::turned_down_sentence(), $token );
+		$this->queue->unhold( $account->id(), array_values( array_diff( $held, $conflicting ) ), self::turned_down_sentence(), Price_Poll_Runner::resend_sentence(), $token );
 
 		$still_held = count( $this->queue->held( $account->id() ) );
 
@@ -315,6 +316,7 @@ final class Price_Groups {
 	 * @param Account $account  Account.
 	 * @param int[]   $link_ids Link ids.
 	 * @return array<string,array<int,Link_Record>> Members by link id, per group.
+	 * @throws \RuntimeException When the groups cannot be read.
 	 */
 	private function groups_of( Account $account, array $link_ids ): array {
 		$name   = $this->grouping->price_group_id_name();

@@ -33,7 +33,8 @@ defined( 'ABSPATH' ) || exit;
  *   task expired is due whatever it was changed to: what the marketplace holds is unknown.
  * - **held** (2.1.25): the pairs of a price group the marketplace cannot take ({@see Price_Grouping}) carry the reason code
  *   {@see Sync_Reason::PRICE_GROUP_DIFFERS} ({@see self::hold()}) and are not due while they do. The sender looks at the held
- *   pairs again on every run and frees them ({@see self::unhold()}) once their group may be sent.
+ *   pairs again on every run and frees them ({@see self::unhold()}) once their group may be sent. A pair whose task expired keeps
+ *   its in-flight snapshot while held — the only held pair that has one — and is an expired pair again once freed.
  * - **fenced**: every write names the account claim token and changes nothing unless that claim is still held (spec 3.5 rule 1), so
  *   a sender whose claim expired and was taken over cannot settle, back off or disturb the current sender's rows. A write that
  *   was refused for that reason returns false.
@@ -274,11 +275,12 @@ final class Price_Sync_Queue {
 		// previous attempt before `in_flight_rev` moves, and the text of a price reason is cleared before its code.
 		$changed = $this->write(
 			'UPDATE %i SET attempts = CASE WHEN in_flight_rev IS NOT NULL AND in_flight_rev = pending_rev THEN attempts ELSE 0 END,'
-			. ' last_error = CASE WHEN error_code IS NOT NULL AND ( in_flight_rev IS NULL OR in_flight_rev <> pending_rev ) THEN NULL ELSE last_error END,'
-			. ' error_code = CASE WHEN in_flight_rev IS NOT NULL AND in_flight_rev = pending_rev THEN error_code ELSE NULL END,'
+			. ' last_error = CASE WHEN error_code IS NOT NULL AND ( error_code = %s OR in_flight_rev IS NULL OR in_flight_rev <> pending_rev ) THEN NULL ELSE last_error END,'
+			// A held pair taken into a request stops being held; the snapshot it kept says its upload had expired.
+			. ' error_code = CASE WHEN in_flight_rev IS NULL OR in_flight_rev <> pending_rev THEN NULL WHEN error_code = %s THEN %s ELSE error_code END,'
 			. ' in_flight_rev = pending_rev, in_flight_payload = pending_payload'
 			. ' WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND pending_rev = %d',
-			[ $this->table, $account_id, $intent->link_id(), self::KIND, $intent->revision() ],
+			[ $this->table, Sync_Reason::PRICE_GROUP_DIFFERS, Sync_Reason::PRICE_GROUP_DIFFERS, Price_Refusal::EXPIRED, $account_id, $intent->link_id(), self::KIND, $intent->revision() ],
 			$token
 		);
 
@@ -645,7 +647,8 @@ final class Price_Sync_Queue {
 
 	/**
 	 * Holds the pairs of a price group that cannot be sent: each carries the reason and is not due until it is freed. An earlier
-	 * uncertain or put-off send of such a pair is forgotten; its deadline stays.
+	 * failed or put-off send of such a pair is forgotten; its deadline stays. An upload that expired undecided is not
+	 * forgotten: its snapshot stays, so that {@see self::unhold()} can tell.
 	 *
 	 * Two kinds of pair are left as they are, because what they say is still true: one that waits for a price task, and one
 	 * whose pending price is turned down already (it keeps the marketplace's reason and is not sent anyway).
@@ -664,41 +667,47 @@ final class Price_Sync_Queue {
 			return 0;
 		}
 
-		// `attempts` and the condition on it are read before `in_flight_rev` is cleared.
+		// The order of the assignments matters (MySQL reads the values already assigned): the CASEs read the code of an expired
+		// or already held pair before the group's reason replaces it.
 		return $this->write(
-			'UPDATE %i SET error_code = %s, last_error = %s, attempts = 0, in_flight_rev = NULL, in_flight_payload = NULL'
+			'UPDATE %i SET in_flight_payload = CASE WHEN error_code IN ( %s, %s ) THEN in_flight_payload ELSE NULL END,'
+			. ' in_flight_rev = CASE WHEN error_code IN ( %s, %s ) THEN in_flight_rev ELSE NULL END,'
+			. ' attempts = 0, error_code = %s, last_error = %s'
 			. ' WHERE account_id = %d AND kind = %s AND warehouse_id = 0 AND pending_payload IS NOT NULL AND task_id IS NULL'
 			. ' AND ( refused_payload IS NULL OR refused_payload <> pending_payload )'
 			. ' AND ( attempts < %d OR pending_rev > COALESCE( in_flight_rev, 0 ) )'
 			. ' AND link_id IN (' . self::placeholders( $link_ids ) . ')',
-			array_merge( [ $this->table, Sync_Reason::PRICE_GROUP_DIFFERS, $message, $account_id, self::KIND, $this->cadence->max_attempts() ], $link_ids ),
+			array_merge( [ $this->table, Price_Refusal::EXPIRED, Sync_Reason::PRICE_GROUP_DIFFERS, Price_Refusal::EXPIRED, Sync_Reason::PRICE_GROUP_DIFFERS, Sync_Reason::PRICE_GROUP_DIFFERS, $message, $account_id, self::KIND, $this->cadence->max_attempts() ], $link_ids ),
 			$token
 		);
 	}
 
 	/**
 	 * Frees held pairs: the group reason is removed and a pair with something left to send is due again. A pair whose pending
-	 * price is the one a task refused earlier stays refused and says so. A pair that is not held is left alone.
+	 * price is the one a task refused earlier stays refused and says so. A pair whose upload had expired undecided is expired
+	 * again: it is due whatever it was changed to, and a second expiry of the same revision still stops it. A pair that is not
+	 * held is left alone.
 	 *
 	 * @since 2.1.25
 	 *
 	 * @param int    $account_id Account id.
 	 * @param int[]  $link_ids   Links to free.
 	 * @param string $refused    The sentence of a pair that stays refused.
+	 * @param string $expired    The sentence of a pair whose upload expired.
 	 * @param string $token      Account claim token.
 	 * @return int Rows changed; 0 also when the claim is not held.
 	 * @throws \RuntimeException When the database refuses the statement.
 	 */
-	public function unhold( int $account_id, array $link_ids, string $refused, string $token ): int {
+	public function unhold( int $account_id, array $link_ids, string $refused, string $expired, string $token ): int {
 		if ( [] === $link_ids ) {
 			return 0;
 		}
 
 		return $this->write(
-			'UPDATE %i SET error_code = CASE WHEN refused_payload = pending_payload THEN %s ELSE NULL END,'
-			. ' last_error = CASE WHEN refused_payload = pending_payload THEN %s ELSE NULL END'
+			'UPDATE %i SET error_code = CASE WHEN refused_payload = pending_payload THEN %s WHEN in_flight_rev IS NOT NULL THEN %s ELSE NULL END,'
+			. ' last_error = CASE WHEN refused_payload = pending_payload THEN %s WHEN in_flight_rev IS NOT NULL THEN %s ELSE NULL END'
 			. ' WHERE account_id = %d AND kind = %s AND warehouse_id = 0 AND error_code = %s AND link_id IN (' . self::placeholders( $link_ids ) . ')',
-			array_merge( [ $this->table, Price_Refusal::REFUSED, $refused, $account_id, self::KIND, Sync_Reason::PRICE_GROUP_DIFFERS ], $link_ids ),
+			array_merge( [ $this->table, Price_Refusal::REFUSED, Price_Refusal::EXPIRED, $refused, $expired, $account_id, self::KIND, Sync_Reason::PRICE_GROUP_DIFFERS ], $link_ids ),
 			$token
 		);
 	}

@@ -1057,6 +1057,7 @@ final class Wpdb_Link_Store implements Link_Store {
 	 * @param string $id_name    Remote identifier that ties a group.
 	 * @param int[]  $link_ids   Links whose groups are wanted.
 	 * @return Link_Record[] Every member of those groups, by link id.
+	 * @throws \RuntimeException When the members or their identifiers cannot be read.
 	 */
 	public function price_group_members( int $account_id, string $id_name, array $link_ids ): array {
 		$ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
@@ -1080,7 +1081,26 @@ final class Wpdb_Link_Store implements Link_Store {
 			'ARRAY_A'
 		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
 
-		return $this->with_ids( is_array( $rows ) ? $rows : [] );
+		$this->require_group_read( $rows );
+
+		$members = $this->with_ids( $rows );
+		$this->require_group_read( $members );
+
+		return $members;
+	}
+
+	/**
+	 * Stops when the last read of a price group failed. A lost read is not «these links stand alone»: a price would be sent over
+	 * a card whose sizes differ.
+	 *
+	 * @param mixed $found What the read gave.
+	 * @return void
+	 * @throws \RuntimeException When the read failed.
+	 */
+	private function require_group_read( $found ): void {
+		if ( ! is_array( $found ) || '' !== (string) $this->db->last_error ) {
+			throw new \RuntimeException( 'The price groups could not be read: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
 	}
 
 	/**

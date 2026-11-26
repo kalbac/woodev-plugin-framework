@@ -546,6 +546,181 @@ final class PriceGroupFlushTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * A group whose members cannot be read is not «links that stand alone»: nothing is sent. The same holds when only the
+	 * identifiers of the members cannot be read, and for the look at the held groups.
+	 *
+	 * @dataProvider group_reads
+	 *
+	 * @param string $read A fragment of the lost read.
+	 * @return void
+	 */
+	public function test_nothing_is_sent_when_the_group_cannot_be_read( string $read ): void {
+		$this->price_batch = 1;
+
+		$small = $this->size( 'coat|S', 1 );
+		$large = $this->size( 'coat|L', 1 );
+		$this->want_price( $small );
+		$this->want_price( $large, [ 'price' => '120.00' ] );
+		$this->lose_one_read( $read );
+
+		try {
+			$this->flush_now();
+			$this->fail( 'a lost read of the group must stop the sender' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'price groups could not be read', $e->getMessage() );
+		}
+
+		$this->assertNull( $this->db->fail_read, 'the read was lost' );
+		$this->assertSame( [], $this->prices->inner->requests );
+
+		$this->flush_now(); // The read works again: the group is held as a whole.
+		$this->lose_one_read( $read );
+
+		try {
+			$this->flush_now();
+			$this->fail( 'a lost read of a held group must stop the sender' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'price groups could not be read', $e->getMessage() );
+		}
+
+		$this->assertSame( [], $this->prices->inner->requests );
+		$this->assertSame( self::HELD, $this->price_row( $small )['error_code'], 'what was held stays held' );
+		$this->assertSame( self::HELD, $this->price_row( $large )['error_code'] );
+	}
+
+	/**
+	 * The reads that form a group.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function group_reads(): array {
+		return [
+			'members'     => [ 'AS asked INNER JOIN' ],
+			'identifiers' => [ 'SELECT link_id, id_name, id_value, id_type' ],
+		];
+	}
+
+	/**
+	 * An upload that expired undecided may have taken effect: a conflict keeps that in mind, and the group that agrees again
+	 * on the old price sends it, although the shop holds it as accepted.
+	 *
+	 * @return void
+	 */
+	public function test_a_conflict_keeps_an_expired_upload_and_the_old_price_is_sent_again(): void {
+		$small = $this->size( 'coat|S', 1 );
+		$large = $this->size( 'coat|L', 1 );
+		$this->want_price( $small );
+		$this->want_price( $large );
+		$this->flush_now();
+
+		$this->now += 400;
+		$this->want_price( $small, [ 'price' => '120.00' ] );
+		$this->want_price( $large, [ 'price' => '120.00' ] );
+		$this->flush_pending();
+
+		$this->want_price( $large ); // Back to the accepted price while the upload is still open.
+		$this->expire_price_task();
+
+		$this->assertSame( 2, $this->flush_now()->failed() );
+		$this->assertSame( self::HELD, $this->price_row( $small )['error_code'] );
+		$this->assertSame( self::HELD, $this->price_row( $large )['error_code'], 'the size that expired says why it waits' );
+		$this->assertSame( '120.00', $this->price_row( $large )['in_flight_payload']['price'] );
+
+		$this->now += 4000;
+		$this->assertSame( 2, $this->flush_now()->failed(), 'looking again keeps what is known about the upload' );
+		$this->assertCount( 2, $this->prices->inner->requests );
+
+		$this->want_price( $small );
+		$result = $this->flush_now();
+
+		$this->assertSame( 'Отправлено: 2', $result->message() );
+		$this->assertSame( [ 'coat|S', 'coat|L' ], $this->sent_articles()[2] );
+		$this->assertSame( '100.00', $this->price_row( $small )['sent_payload']['price'] );
+		$this->assertNull( $this->price_row( $small )['error_code'] );
+		$this->assertNull( $this->price_row( $large )['error_code'] );
+		$this->assertNull( $this->price_row( $large )['in_flight_payload'] );
+	}
+
+	/**
+	 * A price that expired once and expires again stays unsent, also when its group conflicted in between.
+	 *
+	 * @return void
+	 */
+	public function test_a_conflict_does_not_restart_the_count_of_expiries(): void {
+		$small = $this->size( 'coat|S', 1 );
+		$this->want_price( $small );
+		$this->flush_pending();
+		$this->expire_price_task();
+
+		$large = $this->size( 'coat|L', 1 );
+		$this->want_price( $large, [ 'price' => '120.00' ] );
+		$this->flush_now();
+
+		$this->assertSame( self::HELD, $this->price_row( $small )['error_code'] );
+
+		$this->want_price( $large );
+		$this->prices->inner->script[] = $this->pending_answer( 'upload-2' );
+		$this->flush_now();
+
+		$this->assertSame( [ 'coat|S', 'coat|L' ], $this->sent_articles()[1] );
+		$this->assertSame( Price_Refusal::EXPIRED, $this->price_row( $small )['error_code'] );
+
+		$this->expire_price_task( 2 );
+
+		$this->assertSame( Price_Refusal::EXPIRED, $this->price_row( $small )['error_code'] );
+		$this->assertStringContainsString( 'измените цену', $this->price_row( $small )['last_error'] );
+
+		$this->now += 4000;
+		$this->flush_now();
+
+		$this->assertCount( 2, $this->prices->inner->requests, 'the same price is not uploaded a third time' );
+	}
+
+	/**
+	 * A size that leaves a conflict with its price unchanged says again that its upload expired.
+	 *
+	 * @return void
+	 */
+	public function test_a_size_that_leaves_a_conflict_says_its_upload_expired(): void {
+		$small = $this->size( 'coat|S', 1 );
+		$this->want_price( $small );
+		$this->flush_pending();
+		$this->expire_price_task();
+		$expired = $this->price_row( $small )['last_error'];
+
+		$large = $this->size( 'coat|L', 1 );
+		$this->want_price( $large, [ 'price' => '120.00' ] );
+		$this->flush_now();
+
+		$this->links()->set_sync_flag( $this->account_id, [ $this->link_id( $large ) ], 'sync_price', false );
+		$this->release_without_sending();
+
+		$this->assertSame( Price_Refusal::EXPIRED, $this->price_row( $small )['error_code'] );
+		$this->assertSame( $expired, $this->price_row( $small )['last_error'] );
+		$this->assertStringContainsString( 'будет отправлена ещё раз', $expired );
+	}
+
+	/**
+	 * A held price that is taken into a request carries its expiry with it, not the reason of the conflict.
+	 *
+	 * @return void
+	 */
+	public function test_a_held_price_that_is_begun_keeps_its_expiry(): void {
+		$small = $this->size( 'coat|S', 1 );
+		$this->want_price( $small );
+		$this->flush_pending();
+		$this->expire_price_task();
+
+		$token  = (string) $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL );
+		$intent = $this->price_queue()->due( $this->account_id, 10 )[0];
+		$this->price_queue()->hold( $this->account_id, [ $intent->link_id() ], 'held', $token );
+
+		$this->assertTrue( $this->price_queue()->begin( $this->account_id, $intent, $token ) );
+		$this->assertSame( Price_Refusal::EXPIRED, $this->price_row( $small )['error_code'] );
+		$this->assertNull( $this->price_row( $small )['last_error'] );
+	}
+
+	/**
 	 * Creates a size: a product with a created card, price sync on and, unless null, the identifier of its card.
 	 *
 	 * @param string   $offer Article.
@@ -587,19 +762,71 @@ final class PriceGroupFlushTest extends Sync_Test_Case {
 	 * @return void
 	 */
 	private function flush_pending(): void {
-		$this->prices->inner->script[] = function ( array $lines ): Push_Receipt {
-			return Push_Receipt::pending( new Async_Task( $this->account_id, Async_Task::KIND_PRICE, 'upload-1', Async_Task::STATUS_POLLING, count( $lines ) ) );
-		};
+		$this->prices->inner->script[] = $this->pending_answer( 'upload-1' );
 
 		$this->flush_now();
 	}
 
 	/**
-	 * Reads the one price task and settles what the pusher has decided.
+	 * Scripts the answer of a request the marketplace takes for processing.
+	 *
+	 * @param string $upload The marketplace's id of the upload.
+	 * @return \Closure
+	 */
+	private function pending_answer( string $upload ): \Closure {
+		return function ( array $lines ) use ( $upload ): Push_Receipt {
+			return Push_Receipt::pending( new Async_Task( $this->account_id, Async_Task::KIND_PRICE, $upload, Async_Task::STATUS_POLLING, count( $lines ) ) );
+		};
+	}
+
+	/**
+	 * Lets a price task pass its deadline undecided.
+	 *
+	 * @param int $task_id Id of the task.
+	 * @return void
+	 */
+	private function expire_price_task( int $task_id = 1 ): void {
+		$this->prices->decisions = [];
+		$this->now              += Price_Poll_Runner::TASK_DEADLINE + 1;
+		$this->poll_price_task( $task_id );
+	}
+
+	/**
+	 * Runs a flush with no request left: the held prices are looked at again and nothing is sent.
 	 *
 	 * @return void
 	 */
-	private function poll_price_task(): void {
+	private function release_without_sending(): void {
+		$token = (string) $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL );
+		$this->price_runner( $this->prices )->flush_under_claim( $this->account_id, $token, 0 );
+		$this->accounts()->release_claim( $this->account_id, $token );
+	}
+
+	/**
+	 * Loses the next read whose text holds a fragment.
+	 *
+	 * @param string $fragment Part of the statement.
+	 * @return void
+	 */
+	private function lose_one_read( string $fragment ): void {
+		$this->db->fail_read = function ( string $query ) use ( $fragment ): bool {
+			if ( false === strpos( $query, $fragment ) ) {
+				return false;
+			}
+
+			$this->db->fail_read = null;
+
+			return true;
+		};
+	}
+
+	/**
+	 * Reads a price task and settles what the pusher has decided.
+	 *
+	 * @param int $task_id Id of the task.
+	 * @return void
+	 */
+	private function poll_price_task( int $task_id = 1 ): void {
 		$runner = new Price_Poll_Runner(
 			$this->job_gate(),
 			$this->task_ledger(),
@@ -613,7 +840,7 @@ final class PriceGroupFlushTest extends Sync_Test_Case {
 			$this->clock()
 		);
 
-		$runner->run( 1, 0 );
+		$runner->run( $task_id, 0 );
 	}
 
 	/**

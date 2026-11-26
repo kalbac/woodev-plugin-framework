@@ -1495,6 +1495,14 @@ as the price cadence allows — counted failures, a server error among them, so 
 down, is left as it is. No schema change beyond revision 6. Every price run first looks at the held rows again and frees the
 groups that now agree, now allow member prices, or lost the link; no request is sent for that.
 
+An **upload that expired undecided** survives a hold: the row keeps its in-flight snapshot (the only held row that has one),
+and freeing it makes it `price_expired` again — due even when its price equals the accepted one, and still stopped by a second
+expiry. Leaving such a row unmarked instead does not work: unlike a waiting or refused row it stays due, and nothing would say
+why its group is not sent. «Товары сайта» does not show a held row as being sent.
+
+**A lost read stops the run.** `price_group_members()` throws when the members or their identifiers cannot be read; only a
+successful empty read means a link stands alone.
+
 **Shown** through the price reason of #1998: the product tab («Новая цена», or the sync reasons list), the tooltip in the price
 cell of the variants table (any price reason, encoded twice because it may quote the marketplace), «Товары сайта» (tooltip,
 parent's error count, «only errors») and the count of held prices in the diagnostics report.

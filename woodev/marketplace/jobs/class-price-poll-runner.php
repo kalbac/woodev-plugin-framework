@@ -369,7 +369,7 @@ final class Price_Poll_Runner {
 				$message = __( 'Маркетплейс не сообщил, принял ли он новую цену. Чтобы отправить её снова, измените цену.', 'woodev-plugin-framework' );
 				$this->written( $this->queue->refuse( $account->id(), $pair['intent'], Price_Refusal::EXPIRED, $message, $fence->token() ) );
 			} else {
-				$message = __( 'Маркетплейс не сообщил, принял ли он новую цену. Она будет отправлена ещё раз.', 'woodev-plugin-framework' );
+				$message = self::resend_sentence();
 				$this->written( $this->queue->expire( $account->id(), $pair['intent'], $message, $fence->token() ) );
 			}
 
@@ -378,6 +378,17 @@ final class Price_Poll_Runner {
 
 		$this->hold( $account->id(), $fence );
 		$this->ledger->record_poll( $task_id, Async_Task::STATUS_EXPIRED );
+	}
+
+	/**
+	 * Returns the sentence of a price whose task expired once and which is sent again.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @return string
+	 */
+	public static function resend_sentence(): string {
+		return __( 'Маркетплейс не сообщил, принял ли он новую цену. Она будет отправлена ещё раз.', 'woodev-plugin-framework' );
 	}
 
 	/**

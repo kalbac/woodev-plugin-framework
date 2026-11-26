@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Admin\Shared\Link_Note;
+use Woodev\Framework\Marketplace\Diagnostics\Sync_Reason;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Link_Notes;
 use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_Response;
@@ -514,6 +515,29 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertSame( [], $activity['blocked_actions'] );
 		$this->assertSame( 'Отправка остатков', $activity['processes'][0]['label'] );
 		$this->assertSame( 'queued', $activity['processes'][0]['state'] );
+	}
+
+	/**
+	 * A price held with its group keeps the snapshot of an expired upload: the row does not say it is being sent.
+	 */
+	public function test_a_held_price_with_a_kept_snapshot_does_not_show_as_being_sent(): void {
+		$link_id = (int) $this->link_of( 10 )->link_id();
+		$this->intents()->record( $this->account_id, $link_id, 0, Sync_State_Store::KIND_PRICE, [ 'price' => '120.00' ] );
+		$this->db->query(
+			$this->db->prepare(
+				'UPDATE %i SET in_flight_rev = pending_rev, in_flight_payload = pending_payload, error_code = %s, last_error = %s WHERE link_id = %d AND kind = %s',
+				Sqlite_Tables::table( 'sync_state' ),
+				Sync_Reason::PRICE_GROUP_DIFFERS,
+				'held',
+				$link_id,
+				Sync_State_Store::KIND_PRICE
+			)
+		);
+
+		$process = $this->by_id( $this->list_body() )[ $this->row_id( 10 ) ]['activity']['processes'][0];
+
+		$this->assertSame( 'Отправка цены', $process['label'] );
+		$this->assertSame( 'failed', $process['state'] );
 	}
 
 	public function test_the_account_line_blocks_detach_while_another_holder_has_the_claim(): void {
