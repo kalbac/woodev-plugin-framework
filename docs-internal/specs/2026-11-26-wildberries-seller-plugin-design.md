@@ -395,14 +395,27 @@ The rules of an update:
 
 - writes to one card are serialised;
 - an update is never built from a read older than the newest `updatedAt` seen for the card;
-- while no read has shown the last write, the next update of that card waits;
+- while the last write is pending — shown by no read and not retired (below) — the next update of that card waits;
 - one read that shows a change does not prove that the next read will;
 - «wait» is answered through the existing contract: `submit()` fails the batch with a retryable `Remote_Error` marked as
   not sent, so the export job retries it on its ladder (1, 3, 7, 15 minutes) and gives up at its fifth attempt with a
   reason at the product. The whole batch waits; no framework change.
 
-The gate protects against what the plugin has seen. A cabinet edit that no read has returned yet can still be undone —
-residual risk R7.
+**A write nobody waits for any more is retired.** An update Wildberries refuses, or silently drops (a retired
+characteristic, §5.5), is never shown; left pending, it would block every later update of the card. So a write is
+pending only while a size that carried it is still waiting for its result:
+
+- a size stops waiting, and the record drops it for good, when its task fails it (at the deadline, or after the polls
+  keep failing), when the merchant resets it («Сбросить состояние»), or when it reaches `submit()` again — the module
+  queues no link that is still `submitted`;
+- neither the deadline nor the reset calls the adapter (READ `jobs/class-poll-task-runner.php`,
+  `data/class-wpdb-link-store.php`), so the adapter judges this at its next `submit()`: a carried link that is in the new
+  batch, whose row is no longer `submitted`, or that is gone, is released; when none is left, the write is retired;
+- retiring keeps the newest `updatedAt` seen: the next update is still never built from an older read;
+- while another size of the card is still waiting, the write stays pending until that size is released too.
+
+The gate protects against what the plugin has seen. A cabinet edit that no read has returned yet — made before or after
+a retired write — can still be undone, residual risk R7; the plugin's own fields are sent again from the shop.
 
 **Results.** A new card was listed 25–64 seconds after the request (MEASURED; Wildberries says up to 30 minutes). A
 refusal appears in the error list within seconds, with the request's time as `updatedAt` — and **stays there after a
@@ -422,7 +435,7 @@ at 01:16:17, the card listed at 01:17:00. So:
   speaks of, and short enough that a refused create does not hang for a day;
 - the module does not queue a submitted link again (READ `data/class-wpdb-link-store.php`), so a merchant who has
   corrected the product before that uses the «Товары сайта» action «Сбросить состояние» and exports again; a re-send of
-  a create looks for the card first.
+  a create looks for the card first, and a corrected update goes through because the unshown write is retired.
 
 A card is found by its full article: a `textSearch` for a prefix returned nothing (MEASURED).
 
@@ -836,9 +849,9 @@ marketplace (they arrive with the framework cards and reach Ozon Seller as empty
 
 **Plugin-owned storage** (not the module's tables): the card write record of §5.6, one row per card, in the table
 `woodev_wildberries_card_writes` — the account, the `vendorCode` as last sent, the `nmID` (empty until the card is
-listed), the two send times of §5.6, what was last sent, the newest `updatedAt` seen, the latest error-list text and the
-current verdict. An `nmID` is unique per account; the adapter keeps at most one row without an `nmID` per account and
-article (**interpretation**; removed with its account, WP4).
+listed), the two send times of §5.6, what was last sent and the links still waiting for its result, the newest
+`updatedAt` seen, the latest error-list text and the current verdict. An `nmID` is unique per account; the adapter keeps
+at most one row without an `nmID` per account and article (**interpretation**; removed with its account, WP4).
 
 Link `remote_ids`: `nmID`, `imtID`, `chrtID`. Order meta (through the adapter's `Order_Meta_Contract`): the group key,
 the unit ids per line, per unit `rid`, statuses and label-identifier states; for DBS the delivery date and time,
@@ -917,7 +930,8 @@ read-merge-write (a cabinet-only field survives), unit key and escaping, barcode
 GTIN left empty), match keys with conflicts, percent rounding table, status composition for every documented pair,
 grouping in every arrival order, marking code normalisation and every documented `sgtin*` state, the documented 409
 refusals **from fixtures**, DBS address and phone mapping, the freshness gate against an older read, an error-list
-entry that finalizes nothing, a refused create that has no `nmID`, restricted-circulation barcodes kept out of GTIN, a renamed card and a reused article, the two price
+entry that finalizes nothing, a refused create that has no `nmID`, an unshown update retired after a reset and after
+the deadline, restricted-circulation barcodes kept out of GTIN, a renamed card and a reused article, the two price
 refusals, a refusal inside a 200. The phase-0 pairs in `fixtures/m0a/` and `fixtures/m0b/` are the samples; where the
 sandbox differs from the documented shape (measurement.md, fidelity gaps), the documented shape wins. Jest for the React changes; phpcs, phpstan, `lint:i18n`,
 `lint:docs`.
@@ -992,7 +1006,7 @@ evidence is in [measurement.md](../research/2026-11-26-wb-seller/measurement.md)
 | I10 | Sticker format and size are an account setting | §6.3 |
 | I11 | `techSize: "0"` with an empty `wbSize` is the unnamed size | §5.1 |
 | I12 | The article follows the cabinet (resolve by `chrtID`, third key component on a reused article); 1.0 does not change it from the shop | §5.1 |
-| I13 | The freshness gate and the plugin-owned write record, keyed by the article until an `nmID` exists; a waiting update rides the export job's retry ladder. No error-list entry finalizes a send — chosen over a pre-send read of the list or a clock offset, at the price of a late failure | §5.6, §11 |
+| I13 | The freshness gate and the plugin-owned write record, keyed by the article until an `nmID` exists; a waiting update rides the export job's retry ladder. No error-list entry finalizes a send — chosen over a pre-send read of the list or a clock offset, at the price of a late failure. A write no read shows is retired once no size is waiting for it | §5.6, §11 |
 | I14 | A unit counts as marked goods when its card has `needKiz` and the order lists `sgtin`; for those an optional code warns without blocking | §6.4 |
 | I15 | A refused or quarantined price is final until the shop price changes: sending it again cannot succeed by itself | §8 WF1, §9.5 |
 
@@ -1102,7 +1116,7 @@ for client cards, `src/marketplace-admin/**` with its built bundle.
 | WP1 — Skeleton and connection | M · Sonnet 5.5 | WF5 | §9.1. Accept: a Base token, a read-only token and each missing category explained in plain words; the token never in a log or the diagnostics report |
 | WP2 — Catalogue, mappings, validation | M · Sonnet 5.5 | WP1 | §9.2. Accept: subject search, required and limited characteristics, every rule with its merchant reason |
 | WP3 — Cabinet cards: list, link, import | L · Sonnet 5.5 | WP1, WF3 | §5.1, §5.3–5.4, §9.3. Accept on the live cabinet (read-only): the dormant catalogue lists, links and imports; a colour × size group → one variable product. On fixtures: a sizeless card → a simple product; a renamed card stays linked; a freed article on a new card gets its own key |
-| WP4 — Create and update cards, media | L · Fable 5.2 | WP2, WP3, WF2, WF12 | §5.5–5.6, §9.3. Two pull requests: create and media, then update. Accept: create on the test cards; photos confirmed by read-back, a lost job retried; an update keeps every cabinet-only field (read-back diff empty); an update from an older read waits and gives up at the cap (replayed from the M0a pairs); no error-list entry finalizes a send — from an empty record, with the retained entry listed and the card appearing later (replayed `w02-error-list`, `w03-card-upload`, `w03-poll-a-miss-011617`, `w03-poll-a-first-seen-011700`) the create stays open and ends imported; a refused create that never gets an `nmID` (replayed `w02-card-upload-invalid` and `w02-error-list`) has its record before the request, shows Wildberries' text at the product and fails at the task deadline; a listed card attaches its `nmID` to that same record, and a card older than the first send is not attached; an update is imported only when a read shows it; the verdict shows at the product; no delete call exists in the client |
+| WP4 — Create and update cards, media | L · Fable 5.2 | WP2, WP3, WF2, WF12 | §5.5–5.6, §9.3. Two pull requests: create and media, then update. Accept: create on the test cards; photos confirmed by read-back, a lost job retried; an update keeps every cabinet-only field (read-back diff empty); an update from an older read waits and gives up at the cap (replayed from the M0a pairs); no error-list entry finalizes a send — from an empty record, with the retained entry listed and the card appearing later (replayed `w02-error-list`, `w03-card-upload`, `w03-poll-a-miss-011617`, `w03-poll-a-first-seen-011700`) the create stays open and ends imported; a refused create that never gets an `nmID` (replayed `w02-card-upload-invalid` and `w02-error-list`) has its record before the request, shows Wildberries' text at the product and fails at the task deadline; **recovery of an update that is never shown** — Wildberries refuses it (an error-list entry, shown as the note) or silently drops a retired characteristic (200, no entry): the task stays open and a corrected update waits; then, once after «Сбросить состояние» and once after the deadline, the next export retires the unshown write, still refuses a read older than the newest `updatedAt` seen, reaches Wildberries and settles as imported; with a second size of the card still waiting the write stays pending until it is released; a listed card attaches its `nmID` to that same record, and a card older than the first send is not attached; an update is imported only when a read shows it; the verdict shows at the product; no delete call exists in the client |
 | WP5 — Stock and warehouses | M · Sonnet 5.5 | WP3 | §9.4. Accept: the payload contract test; both formulas covered by unit tests, `wc_only` in force; absent is not read as 0; a not-ready refusal waits; on the live cabinet a push of 0 and its read-back; on the sandbox a non-zero push, an emulated order and the stock after ingest |
 | WP6 — Prices | M · Sonnet 5.5 | WP3, WF1, WF4 | §9.5. Accept: price and discount on a test card settle through WF1; the rounding table in kopecks; quarantine and the plain refusal shown with their own sentences; a not-yet-listed card waits; size prices on fixtures (no live card allows them) |
 | WP7 — FBS orders | L · Sonnet 5.5 | WP3, WF6a, WF6b; M0b for its fixtures | §6.1. Accept: grouping in every arrival order, both status axes, unit cancel with the stock check of WF6b, both order storages; fixtures from M0b 12–13 and an end-to-end run on the sandbox; no live-cabinet order |
@@ -1175,6 +1189,7 @@ No card is conditional: DBS stays in 1.0 (owner, 26.11.2026).
 | 26.11.2026 | **S0 (#1997): phase 0 folded in** (§3.4). No owner decision changed; `wc_only` confirmed. New §5.6 (freshness gate, result matching); unit key follows a cabinet rename (§5.1); GTIN excludes restricted-circulation codes (§5.2); stock re-sent after a cancellation (§9.4); price rounding and two refusal outcomes (§9.5); `+7` relay form and per-unit DBS results (§7); two marking levels (§6.4); §13.1 carries a result for every item, with U14–U17 new; interpretations I11–I15, tensions T6–T7, risks R7–R8 (not yet put to the owner), R6 closed; new card WF12; re-estimate (§14) |
 | 26.11.2026 | After the critic review of PR #2018 (no owner decision, T6–T7 or R7–R8 changed): the card write record exists before an `nmID` does, keyed by account and article, so a refused create is matched to its send — §5.6, §11, WP4; the error-entry rule allows a clock margin — §5.6; the GTIN exclusion adds the GS1 prefix `0000000` — §5.2, WF3 |
 | 26.11.2026 | Second critic round of PR #2018: the clock-margin rule for error-list entries (previous row) is withdrawn — it could fail a successful create on a retained entry the plugin had never read. No entry finalizes a send; the card list decides, and what is still open fails at the task deadline — §5.6, §12.1, WP4 |
+| 26.11.2026 | Third critic round of PR #2018: a write no read ever shows is retired once none of its sizes waits for it (deadline, reset or a new send), keeping the newest `updatedAt` baseline, so a corrected update is not blocked — §5.6, §11, WP4; no framework change |
 
 ## Related
 
