@@ -9,9 +9,12 @@ namespace Woodev\Tests\Unit\Marketplace\Flows;
 
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
+use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Stock_Policy;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
+use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Export_Test_Case;
 
 /**
@@ -147,6 +150,25 @@ final class CardCreatedSeederTest extends Export_Test_Case {
 		$another = $this->add_link( $this->stocked(), Link_Record::STATE_PRICE_SENT );
 
 		$this->assertSame( Card_Created_Seeder::NO_WAREHOUSE, $this->seeder()->intent( $this->account_now(), $another, Sync_State_Store::KIND_STOCK )['reason'] );
+	}
+
+	/**
+	 * A warehouse the marketplace has switched off takes the first stock all the same: the sender holds it until the warehouse is
+	 * listed again (#2042).
+	 *
+	 * @return void
+	 */
+	public function test_a_switched_off_warehouse_still_gets_the_first_stock(): void {
+		$link  = $this->add_link( $this->stocked(), Link_Record::STATE_PRICE_SENT );
+		$cache = new Wpdb_Catalog_Cache( $this->db, Sqlite_Tables::table( 'catalog_cache' ) );
+		$cache->put( Warehouse_Options::key_for( $this->account_id ), [ 'warehouses' => [ [ 'warehouse_id' => 99 ] ] ] );
+		$GLOBALS['wpdb'] = $this->db;
+
+		try {
+			$this->assertSame( [ Sync_State_Store::KIND_STOCK ], $this->seeder()->seed( $this->account_now(), $link, [ Sync_State_Store::KIND_STOCK ] ) );
+		} finally {
+			unset( $GLOBALS['wpdb'] );
+		}
 	}
 
 	/**

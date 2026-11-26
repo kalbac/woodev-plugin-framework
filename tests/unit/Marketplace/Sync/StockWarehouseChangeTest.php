@@ -8,10 +8,12 @@
 namespace Woodev\Tests\Unit\Marketplace\Sync;
 
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
+use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Reseed_Stock_Runner;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
+use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Stock_Flusher;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
@@ -244,23 +246,230 @@ final class StockWarehouseChangeTest extends Sync_Test_Case {
 	}
 
 	/**
-	 * A left warehouse the marketplace no longer offers cannot be written to.
+	 * A left warehouse the marketplace has switched off cannot be written to: its zero waits, shows nothing in the products
+	 * table, and goes out once the warehouse is listed again.
 	 *
 	 * @return void
 	 */
-	public function test_a_switched_off_left_warehouse_is_not_written_to(): void {
-		$this->synced_product( 'a', 1001, 7 );
+	public function test_the_zero_of_a_switched_off_left_warehouse_goes_out_when_it_is_listed_again(): void {
+		$product = $this->synced_product( 'a', 1001, 7 );
 
 		$this->with_listed_warehouses(
 			[ self::OTHER ],
-			function (): void {
+			function () use ( $product ): void {
 				$this->set_account( [ 'warehouse_id' => self::OTHER ] );
 				$this->reseed()->run( $this->account_id );
+				$this->flush();
+				$this->now += Stock_Flusher::HOLD_SECONDS;
+				$this->flush();
+
+				$this->assertSame( [ [ self::OTHER, [ 'a' => 7 ] ] ], $this->pushes() );
+				$this->assertSame( 0, $this->stock_row( $product )['pending_payload']['stock'] );
+				$this->assertNull( $this->stock_row( $product )['last_error'] );
+				$this->assertSame( 0, (int) $this->stock_row( $product )['attempts'] );
+			}
+		);
+
+		$this->now += Stock_Flusher::HOLD_SECONDS;
+		$this->with_listed_warehouses(
+			[ self::WAREHOUSE, self::OTHER ],
+			function (): void {
 				$this->flush();
 			}
 		);
 
-		$this->assertSame( [ [ self::OTHER, [ 'a' => 7 ] ] ], $this->pushes() );
+		$this->assertSame(
+			[
+				[ self::OTHER, [ 'a' => 7 ] ],
+				[ self::WAREHOUSE, [ 'a' => 0 ] ],
+			],
+			$this->pushes()
+		);
+	}
+
+	/**
+	 * A pair still due for a left warehouse that is switched off becomes its waiting zero.
+	 *
+	 * @return void
+	 */
+	public function test_a_due_pair_of_a_switched_off_left_warehouse_becomes_its_waiting_zero(): void {
+		$product = $this->synced_product( 'a', 1001, 7 );
+		$this->set_stock( $product, 5 );
+		$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+
+		$this->with_listed_warehouses(
+			[ self::OTHER ],
+			function (): void {
+				$this->flush();
+				$this->flush();
+				$this->now += 31;
+				$this->flush();
+
+				$this->assertSame( [ [ self::OTHER, [ 'a' => 5 ] ] ], $this->pushes() );
+			}
+		);
+
+		$this->now += Stock_Flusher::HOLD_SECONDS;
+		$this->flush();
+
+		$this->assertSame( 0, $this->present_in( self::WAREHOUSE ) );
+	}
+
+	/**
+	 * Stock that changes while the chosen warehouse is switched off goes out, newest value, once it is listed again (#2042).
+	 *
+	 * @return void
+	 */
+	public function test_stock_changed_while_switched_off_is_sent_when_listed_again(): void {
+		$product = $this->synced_product( 'a', 1001, 7 );
+
+		$this->with_listed_warehouses(
+			[ self::OTHER ],
+			function () use ( $product ): void {
+				$this->set_stock( $product, 4 );
+				$this->flush();
+				$this->set_stock( $product, 2 );
+				$this->now += Stock_Flusher::HOLD_SECONDS;
+				$this->flush();
+
+				$this->assertSame( [], $this->pushes() );
+				$this->assertFalse( $this->stock->record_stock( $this->link_of( $product ) ), 'nothing can be sent now' );
+			}
+		);
+
+		$this->now += Stock_Flusher::HOLD_SECONDS;
+		$this->with_listed_warehouses(
+			[ self::WAREHOUSE, self::OTHER ],
+			function (): void {
+				$this->flush();
+			}
+		);
+
+		$this->assertSame( [ [ self::WAREHOUSE, [ 'a' => 2 ] ] ], $this->pushes() );
+	}
+
+	/**
+	 * More moved pairs than one run lists: no product's stock reaches the new warehouse before its old one got zero. Ten moved
+	 * products fill a run's due list with held zeros, so after the warehouse is listed again their stock is what comes up next —
+	 * with the zeros due again or still waiting.
+	 *
+	 * @dataProvider seconds_until_the_first_run
+	 *
+	 * @param int $seconds Seconds between the held run and the first run after the warehouse is listed again.
+	 * @return void
+	 */
+	public function test_no_stock_goes_before_its_zero_across_due_pages( int $seconds ): void {
+		$this->stock_batch = 1; // A run lists ten due pairs.
+		$offers            = [];
+
+		for ( $number = 1; $number <= 10; $number++ ) {
+			$offers[] = 'p' . $number;
+			$this->synced_product( 'p' . $number, 1000 + $number, 7 );
+		}
+
+		$this->with_listed_warehouses(
+			[ self::WAREHOUSE ],
+			function (): void {
+				$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+				$this->reseed()->run( $this->account_id );
+				++$this->now; // The hold moves the zeros behind the stock recorded a second earlier.
+				$this->flush();
+
+				$this->assertSame( [], $this->pushes() );
+			}
+		);
+
+		$this->now += $seconds;
+		$this->with_listed_warehouses(
+			[ self::WAREHOUSE, self::OTHER ],
+			function (): void {
+				for ( $run = 0; $run < 20; $run++ ) {
+					$this->flush();
+					$this->now += Stock_Flusher::HOLD_SECONDS;
+				}
+			}
+		);
+
+		$zeroed = [];
+		$moved  = [];
+
+		foreach ( $this->pushes() as list( $warehouse, $lines ) ) {
+			foreach ( $lines as $offer => $quantity ) {
+				if ( self::WAREHOUSE === $warehouse ) {
+					$zeroed[ $offer ] = $quantity;
+				} else {
+					$this->assertArrayHasKey( $offer, $zeroed, $offer . ' was sent to the new warehouse before its zero' );
+					$moved[ $offer ] = $quantity;
+				}
+			}
+		}
+
+		$this->assertEquals( array_fill_keys( $offers, 0 ), $zeroed );
+		$this->assertEquals( array_fill_keys( $offers, 7 ), $moved );
+	}
+
+	/**
+	 * @return array<string,array{0:int}>
+	 */
+	public function seconds_until_the_first_run(): array {
+		return [
+			'the held zeros still wait' => [ 1 ],
+			'the held zeros are due'    => [ Stock_Flusher::HOLD_SECONDS ],
+		];
+	}
+
+	/**
+	 * A zero the marketplace puts off holds the product's stock back; a refused one does not.
+	 *
+	 * @return void
+	 */
+	public function test_a_zero_put_off_holds_the_stock_back_and_a_refused_one_does_not(): void {
+		$throttled = $this->synced_product( 'throttled', 1001, 7 );
+		$refused   = $this->synced_product( 'refused', 1002, 3 );
+		$this->set_account( [ 'warehouse_id' => self::OTHER ] );
+		$this->reseed()->run( $this->account_id );
+		$this->market->script = [
+			function () use ( $throttled, $refused ): array {
+				return $this->refused( $throttled, Scripted_Stock_Pusher::CODE_SLOW_DOWN, 'too fast' ) + $this->refused( $refused, 'fake_bad_item', 'invalid item' );
+			},
+		];
+
+		$this->flush();
+
+		$this->assertSame( [ self::OTHER, [ 'refused' => 3 ] ], $this->pushes()[1], 'only the product whose zero had its answer' );
+		$this->assertCount( 2, $this->pushes() );
+
+		$this->now += Stock_Flusher::HOLD_SECONDS;
+		$this->flush();
+
+		$this->assertContains( [ self::OTHER, [ 'throttled' => 7 ] ], $this->pushes() );
+		$this->assertSame( 0, $this->present_in_for( self::WAREHOUSE, 'throttled' ) );
+	}
+
+	/**
+	 * A held pair goes to the back of the due list, so more held pairs than one run lists do not keep the others out for good.
+	 *
+	 * @return void
+	 */
+	public function test_held_pairs_do_not_starve_the_others(): void {
+		$held    = [ $this->synced_product( 'held-1', 1001, 7 ), $this->synced_product( 'held-2', 1002, 7 ) ];
+		$healthy = $this->synced_product( 'healthy', 1003, 7 );
+		$this->set_stock( $held[0], 3 );
+		$this->set_stock( $held[1], 3 );
+		++$this->now;
+		$this->set_stock( $healthy, 3 );
+
+		++$this->now;
+		$token = (string) $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL );
+
+		foreach ( $this->queue()->due( $this->account_id, Sync_State_Store::KIND_STOCK, 2 ) as $row ) {
+			$key = Sync_State_Queue::key( $this->account_id, (int) $row['link_id'], (int) $row['warehouse_id'], Sync_State_Store::KIND_STOCK );
+			$this->assertTrue( $this->queue()->hold( $key, Stock_Flusher::HOLD_SECONDS, '', $token ) );
+		}
+
+		$this->now += Stock_Flusher::HOLD_SECONDS;
+
+		$this->assertSame( $this->link_id( $healthy ), (int) $this->queue()->due( $this->account_id, Sync_State_Store::KIND_STOCK, 1 )[0]['link_id'] );
 	}
 
 	/**
@@ -311,8 +520,9 @@ final class StockWarehouseChangeTest extends Sync_Test_Case {
 
 				$this->assertSame( [], $this->pushes(), 'nothing is zeroed and nothing is sent' );
 				$this->assertSame( [ 'stock' => 7 ], $this->stock_row( $product )['sent_payload'] );
-				$this->assertNull( $this->stock_row( $product, self::OTHER ) );
+				$this->assertSame( [ 'stock' => 7 ], $this->stock_row( $product, self::OTHER )['pending_payload'], 'kept for later' );
 
+				$this->now += Stock_Flusher::HOLD_SECONDS;
 				$this->set_account( [ 'warehouse_id' => self::THIRD ] );
 				$this->reseed()->run( $this->account_id );
 				$this->flush();
@@ -355,13 +565,13 @@ final class StockWarehouseChangeTest extends Sync_Test_Case {
 			}
 		);
 
-		$this->now += Stock_Flusher::NOT_READY_SECONDS;
+		$this->now += Stock_Flusher::HOLD_SECONDS;
 		$this->with_listed_warehouses(
 			[ self::WAREHOUSE, self::OTHER ],
 			function (): void {
 				$this->flush();
 
-				$this->assertSame(
+				$this->assertEquals(
 					[
 						[
 							self::WAREHOUSE,
@@ -579,6 +789,25 @@ final class StockWarehouseChangeTest extends Sync_Test_Case {
 		$this->reseed( $failing )->run( $this->account_id );
 
 		$this->assertSame( [ [ $this->account_id, 0, 1 ] ], array_column( $this->scheduler->of( 'woodev_fake_seller_reseed_stock' ), 'args' ) );
+	}
+
+	/**
+	 * The last quantity a warehouse was sent for an article.
+	 *
+	 * @param int    $warehouse Warehouse.
+	 * @param string $offer     Article.
+	 * @return int|null Null when it was sent nothing.
+	 */
+	private function present_in_for( int $warehouse, string $offer ): ?int {
+		$present = null;
+
+		foreach ( $this->pushes() as list( $to, $lines ) ) {
+			if ( $to === $warehouse && isset( $lines[ $offer ] ) ) {
+				$present = $lines[ $offer ];
+			}
+		}
+
+		return $present;
 	}
 
 	/**
