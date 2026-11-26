@@ -12,6 +12,8 @@ use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Actions;
+use Woodev\Framework\Marketplace\Admin\Order\Unit_Orders;
+use Woodev\Framework\Marketplace\Admin\Shared\Order_Unit_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -130,6 +132,8 @@ final class Site_Orders_Module {
 			return current_user_can( 'edit_shop_order', $order_id );
 		};
 		$gate     = Posting_Action_Gate::for_adapter( $adapter, $write_gate );
+		$seller   = self::seller( $plugin, $adapter, $gate, $license, new Wpdb_Seller_Action_Store( $db, $table( 'seller_actions' ) ) );
+		$units    = $adapter instanceof Unit_Orders ? new Site_Orders_Units( Order_Unit_Text::for_adapter( $adapter, $db, $plugin->get_id() ), $seller ) : null;
 
 		return new Site_Orders_Provider(
 			$accounts,
@@ -156,7 +160,8 @@ final class Site_Orders_Module {
 			null,
 			$gate,
 			$noun,
-			self::seller( $plugin, $adapter, $gate, $license, new Wpdb_Seller_Action_Store( $db, $table( 'seller_actions' ) ) )
+			$seller,
+			$units
 		);
 	}
 

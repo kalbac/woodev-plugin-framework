@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Order_Unit_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -82,7 +83,8 @@ final class Order_Screen_Module {
 			return null === $accounts ? null : $accounts->get( $account_id );
 		};
 		$seller     = self::seller_actions( $plugin, $adapter, $registry, $names, $assets, $gate, $account_of, $accounts, $db );
-		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of, $db ), $assets, $plugin->get_version(), $seller );
+		$units      = self::unit_list( $plugin, $adapter, $registry, $seller, $db );
+		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of, $db ), $assets, $plugin->get_version(), $seller, $units );
 
 		( new Order_Screen( $adapter->order_meta(), $box ) )->register();
 	}
@@ -121,6 +123,26 @@ final class Order_Screen_Module {
 		};
 
 		return new Seller_Action_Buttons( $names, $runner, $account_of_order, $assets, $plugin->get_version() );
+	}
+
+	/**
+	 * Builds the list of the units a grouped order keeps.
+	 *
+	 * @param \Woodev\Framework\Marketplace\Marketplace_Plugin $plugin   Plugin.
+	 * @param Marketplace_Adapter                              $adapter  Adapter.
+	 * @param Order_Registry                                   $registry The postings registry.
+	 * @param Seller_Action_Buttons|null                       $seller   The seller action buttons.
+	 * @param \wpdb                                            $db       Database.
+	 * @return Order_Unit_List
+	 */
+	private static function unit_list( $plugin, Marketplace_Adapter $adapter, Order_Registry $registry, ?Seller_Action_Buttons $seller, \wpdb $db ): Order_Unit_List {
+		$account_of_order = static function ( int $order_id ) use ( $registry ): int {
+			$posting = $registry->posting_of_order( $order_id );
+
+			return null === $posting ? 0 : (int) $posting['account_id'];
+		};
+
+		return new Order_Unit_List( Order_Unit_Text::for_adapter( $adapter, $db, $plugin->get_id() ), $account_of_order, $seller );
 	}
 
 	/**

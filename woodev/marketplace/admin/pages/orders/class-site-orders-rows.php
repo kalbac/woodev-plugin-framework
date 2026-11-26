@@ -134,9 +134,10 @@ final class Site_Orders_Rows {
 	 * @param bool                                                   $label_stored  Whether a ready label document already covers the posting (since 2.1.17): its download is a read, so the label action stays on.
 	 * @param array<int,array{id:string,enabled:bool,reason:string}> $seller_actions The states of the order's seller actions (since 2.1.27).
 	 * @param bool                                                   $bulk          Whether the table has bulk actions (since 2.1.27): the row of an order the user may edit can then be ticked.
+	 * @param bool                                                   $has_units     Whether the row can be opened into the order's units (since 2.1.28).
 	 * @return array<string,mixed>
 	 */
-	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '', bool $label_stored = false, array $seller_actions = [], bool $bulk = false ): array {
+	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '', bool $label_stored = false, array $seller_actions = [], bool $bulk = false, bool $has_units = false ): array {
 		$editable = true === call_user_func( $this->can_edit, $item['order_id'] );
 		$url      = $editable ? (string) $order->get_edit_order_url() : '';
 		$cells    = $this->cells( $item, $order, $url );
@@ -148,7 +149,7 @@ final class Site_Orders_Rows {
 			'cells'        => $cells,
 			'actions'      => $actions,
 			'selectable'   => $bulk && $editable,
-			'has_children' => false,
+			'has_children' => $has_units,
 			'activity'     => $activity,
 		];
 	}

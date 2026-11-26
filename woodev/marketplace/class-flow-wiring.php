@@ -49,6 +49,7 @@ use Woodev\Framework\Marketplace\Flows\Sellable_Units;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Flows\Unit_Product_Source;
 use Woodev\Framework\Marketplace\Flows\Unit_Products;
+use Woodev\Framework\Marketplace\Flows\Wc_Order_Store;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Intake;
 use Woodev\Framework\Marketplace\Intake\Notifications_Controller;
@@ -270,6 +271,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		private $imports;
 
 		/**
+		 * The hooked stock recorder, which also sends again the stock of cancelled order units.
+		 *
+		 * @var Stock_Intents
+		 */
+		private $stock;
+
+		/**
 		 * Creates the wiring of one plugin.
 		 *
 		 * @since 2.1.0
@@ -386,6 +394,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$stock = new Stock_Intents( [ $this->accounts, 'get' ], $this->links, $store, $queue, $adapter->stock_policy() );
 			$stock->register();
 			( new Reseed_Stock_Runner( $this->names, $this->links, $stock, $this->log_error ) )->register();
+			$this->stock = $stock;
 
 			if ( null !== $pusher ) {
 				$price_queue = new Price_Sync_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'links' ), $this->table( 'accounts' ), $adapter->price_cadence() );
@@ -737,7 +746,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		}
 
 		/**
-		 * The posting refresh and the recurring poll of postings.
+		 * The posting refresh and the recurring poll of postings, and the stock sent again for the cancelled units of an order.
 		 *
 		 * @return void
 		 */
@@ -749,6 +758,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			}
 
 			( new Posting_Jobs( $this->gate, $this->accounts, $handler, $this->adapter->error_classifier(), $this->names, $this->adapter->id(), Posting_Jobs::option_key( $this->plugin_id ), new Posting_Poll_Times( $this->plugin_id ), new Posting_History_Cutoffs( $this->plugin_id ) ) )->register();
+
+			add_action( Wc_Order_Store::units_cancelled_hook( $this->adapter->order_meta()->created_via() ), [ $this->stock, 'on_units_cancelled' ], 10, 2 );
 		}
 
 		/**

@@ -107,7 +107,8 @@ final class Seller_Action_Buttons {
 	}
 
 	/**
-	 * Returns the list of the order's goods with the buttons offered on one of them.
+	 * Returns the list of the order's goods with the buttons offered on one of them, for an order whose units the shop does not
+	 * keep itself ({@see Order_Unit_List} lists the ones it does).
 	 *
 	 * @since 2.1.27
 	 *
@@ -115,30 +116,14 @@ final class Seller_Action_Buttons {
 	 * @return string HTML, escaped; empty when no action is offered on a unit.
 	 */
 	public function unit_list( \WC_Order $order ): string {
-		$account = $this->account( $order );
-		$actions = $this->runner->actions_for( Seller_Action::UNIT );
-
-		if ( null === $account || [] === $actions ) {
-			return '';
-		}
-
 		$rows = '';
 
-		foreach ( $this->runner->units( $order ) as $unit ) {
-			$buttons = '';
-
-			foreach ( $actions as $action ) {
-				if ( $unit->has_action( $action->id() ) ) {
-					$reason   = $this->own_reason( $order, $this->runner->unit_reason( $account, $action, $order, $unit ) );
-					$buttons .= ' ' . $this->button( $order, $action, $unit->id(), $reason );
-				}
-			}
-
+		foreach ( $this->unit_buttons( $order ) as $row ) {
 			$rows .= sprintf(
 				'<tr><td>%1$s</td><td>%2$s</td><td class="woodev-mp-units__actions">%3$s</td></tr>',
-				esc_html( $unit->label() ),
-				esc_html( $unit->status_label() ),
-				$buttons
+				esc_html( $row['unit']->label() ),
+				esc_html( $row['unit']->status_label() ),
+				$row['buttons']
 			);
 		}
 
@@ -155,6 +140,43 @@ final class Seller_Action_Buttons {
 			esc_html__( 'Действия', 'woodev-plugin-framework' ),
 			$rows
 		);
+	}
+
+	/**
+	 * Returns the units the marketplace lists for the order, each with the buttons offered on it.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return array<int,array{unit:Posting_Unit,buttons:string}> Buttons as escaped HTML; empty when no action is offered on a unit.
+	 */
+	public function unit_buttons( \WC_Order $order ): array {
+		$account = $this->account( $order );
+		$actions = $this->runner->actions_for( Seller_Action::UNIT );
+
+		if ( null === $account || [] === $actions ) {
+			return [];
+		}
+
+		$rows = [];
+
+		foreach ( $this->runner->units( $order ) as $unit ) {
+			$buttons = '';
+
+			foreach ( $actions as $action ) {
+				if ( $unit->has_action( $action->id() ) ) {
+					$reason   = $this->own_reason( $order, $this->runner->unit_reason( $account, $action, $order, $unit ) );
+					$buttons .= ' ' . $this->button( $order, $action, $unit->id(), $reason );
+				}
+			}
+
+			$rows[] = [
+				'unit'    => $unit,
+				'buttons' => $buttons,
+			];
+		}
+
+		return $rows;
 	}
 
 	/**
@@ -295,9 +317,13 @@ final class Seller_Action_Buttons {
 	}
 
 	/**
+	 * Enqueues the stylesheet of the buttons and of the lists they stand in.
+	 *
+	 * @since 2.1.28 Public.
+	 *
 	 * @return void
 	 */
-	private function enqueue_style(): void {
+	public function enqueue_style(): void {
 		wp_enqueue_style( self::ASSET_HANDLE, $this->assets_url . 'css/admin/order-actions' . \Woodev_Plugin::get_assets_suffix() . '.css', [], $this->version );
 	}
 }

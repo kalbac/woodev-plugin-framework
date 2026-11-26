@@ -1,16 +1,5 @@
-/* The seller actions of a marketplace order on the order screens: the list of goods and the dialog's fields; the dialog's frame,
-   header and footer are the shared `.woodev-dialog`. */
-.woodev-mp-units {
-	margin-top: 16px;
-}
-
-.woodev-mp-details .woodev-mp-units th,
-.woodev-mp-details .woodev-mp-units td {
-	width: auto;
-	padding: 8px 10px;
-	vertical-align: middle;
-}
-
+/* The seller actions of a marketplace order on the order screens: the buttons beside the goods and the dialog's fields; the list of
+   goods is styled with the details box, the dialog's frame, header and footer are the shared `.woodev-dialog`. */
 .woodev-mp-units__actions .button {
 	margin: 2px 4px 2px 0;
 }

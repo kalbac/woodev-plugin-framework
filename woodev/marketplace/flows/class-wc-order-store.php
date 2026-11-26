@@ -22,6 +22,10 @@ defined( 'ABSPATH' ) || exit;
  * (`wc_increase_stock_levels()`), then the new lines are reduced, so the order never holds stock twice. Both paths honour
  * WooCommerce's `woocommerce_can_reduce_order_stock` / `woocommerce_can_restore_order_stock` filters.
  *
+ * A grouped order (one remote order per unit) has one item per live unit, tied to it by {@see self::ITEM_UNIT}; a cancelled unit
+ * leaves the items through that same swap, stays with the order as a record ({@see Order_Units}) and is announced
+ * ({@see self::units_cancelled_hook()}).
+ *
  * Everything the marketplace decides — the meta that identifies its order, the product of a line, what an order is created
  * via — is the {@see Order_Meta_Contract} the adapter supplies.
  *
@@ -43,6 +47,11 @@ final class Wc_Order_Store implements Order_Store {
 	 * order's stock-holding state across the swap whatever its status (a custom status included), and across a process death.
 	 */
 	public const META_STOCK_PENDING = '_woodev_mp_stock_pending';
+
+	/**
+	 * Item meta of a line of a grouped order: the unit (member) it is.
+	 */
+	public const ITEM_UNIT = '_woodev_mp_unit';
 
 	/**
 	 * Status of an order before its registration won: WooCommerce takes no stock in it.
@@ -226,8 +235,92 @@ final class Wc_Order_Store implements Order_Store {
 
 		$wc_order->save();
 		$this->take_stock_if_due( $wc_order );
+		$this->record_units( $wc_order, $order );
 
 		$this->contract->after_save( $wc_order, $order, $created );
+	}
+
+	/**
+	 * Returns the action a unit's cancellation fires: `do_action( $hook, int $account_id, string[] $offer_ids, \WC_Order $order )`,
+	 * once per refresh that finds units newly cancelled (a unit first seen already cancelled included), after the order's stock
+	 * was settled. The marketplace's stock sender listens: the marketplace may not have given such a unit back, so its pair is
+	 * sent again although the number may not have changed ({@see \Woodev\Framework\Marketplace\Sync\Stock_Intents}).
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $created_via The marketplace's {@see Order_Meta_Contract::created_via()}.
+	 * @return string
+	 */
+	public static function units_cancelled_hook( string $created_via ): string {
+		return 'woodev_marketplace_' . $created_via . '_units_cancelled';
+	}
+
+	/**
+	 * Keeps the unit records of a grouped order and announces the units that turned cancelled. The records are stored after the
+	 * announcement, so a death in between is repaired by the next refresh, which announces them again.
+	 *
+	 * @param \WC_Order $wc_order The order, saved.
+	 * @param Order_DTO $order    Whole order.
+	 * @return void
+	 */
+	private function record_units( \WC_Order $wc_order, Order_DTO $order ): void {
+		if ( [] === $order->units() ) {
+			return;
+		}
+
+		$before = Order_Units::of( $wc_order );
+		$after  = Order_Units::refreshed(
+			$before,
+			$order,
+			function ( Order_Line $line ) use ( $order ): int {
+				$product = $this->contract->product_for( $order, $line );
+
+				return null === $product ? 0 : $product->get_id();
+			}
+		);
+
+		$cancelled = Order_Units::newly_cancelled( $before, $after );
+
+		if ( [] !== $cancelled ) {
+			do_action( // phpcs:ignore WordPress.NamingConventions.ValidHookName.NotLowercase -- Built from the marketplace's id.
+				self::units_cancelled_hook( $this->contract->created_via() ),
+				$order->account_id(),
+				self::offer_ids( $cancelled ),
+				$wc_order
+			);
+		}
+
+		$records = array_map(
+			static function ( Order_Unit $unit ): array {
+				return $unit->to_array();
+			},
+			$after
+		);
+
+		if ( $wc_order->get_meta( Order_Units::META ) !== $records ) {
+			$wc_order->update_meta_data( Order_Units::META, $records );
+			$wc_order->save_meta_data();
+		}
+	}
+
+	/**
+	 * Returns the distinct seller article keys of some units.
+	 *
+	 * @param Order_Unit[] $units Units.
+	 * @return string[]
+	 */
+	private static function offer_ids( array $units ): array {
+		$ids = [];
+
+		foreach ( $units as $unit ) {
+			foreach ( $unit->lines() as $line ) {
+				if ( '' !== $line['offer_id'] ) {
+					$ids[] = $line['offer_id'];
+				}
+			}
+		}
+
+		return array_values( array_unique( $ids ) );
 	}
 
 	/**
@@ -291,7 +384,7 @@ final class Wc_Order_Store implements Order_Store {
 	}
 
 	/**
-	 * Finds the first unused item that is the line.
+	 * Finds the first unused item that is the line: of the same unit, and the same for the marketplace.
 	 *
 	 * @param array<int,\WC_Order_Item_Product> $items Items not matched yet.
 	 * @param Order_Line                        $line  Line.
@@ -299,7 +392,7 @@ final class Wc_Order_Store implements Order_Store {
 	 */
 	private function matching_item( array $items, Order_Line $line ): ?int {
 		foreach ( $items as $index => $item ) {
-			if ( $this->contract->matches( $item, $line ) ) {
+			if ( (string) $item->get_meta( self::ITEM_UNIT ) === $line->unit_id() && $this->contract->matches( $item, $line ) ) {
 				return $index;
 			}
 		}
@@ -435,6 +528,10 @@ final class Wc_Order_Store implements Order_Store {
 		$item->set_total( $total );
 
 		$this->contract->write_line_meta( $item, $order, $line );
+
+		if ( '' !== $line->unit_id() ) {
+			$item->update_meta_data( self::ITEM_UNIT, $line->unit_id() );
+		}
 
 		return [
 			'item'     => $item,

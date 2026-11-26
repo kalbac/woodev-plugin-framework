@@ -175,6 +175,21 @@ For a marketplace whose price belongs to a card and not to a size; the full desi
 - A refused or quarantined price is not sent again until it changes: with one price per group the framework also turns down the
   same price of the group's other links; with size prices it leaves the refused link out of the call. Do not expect it back.
 
+## A marketplace adapter: grouped orders and their units
+
+For a marketplace where one cart is several remote orders (one per piece of goods); the full design is
+`docs-internal/wiki/marketplace-admin.md`, «Order units and partial cancellation» (#2004).
+
+- Write every remote order with `Order_Writer::upsert_member()` (`woodev/marketplace/orders/class-registry-order-writer.php`),
+  one line per order, a cancelled one included: the framework keeps one item per live unit, takes a cancelled unit out, returns
+  its stock once, records it on the order and sends its stock again. Do none of this yourself.
+- Declare the marker `Admin\Order\Unit_Orders` on the adapter (`woodev/marketplace/admin/order/interface-unit-orders.php`),
+  or the «Заказы» table cannot open an order into its units.
+- Give each `Posting_Unit` the member's external id; read the stored units with `Flows\Order_Units::of()`. Another id and the
+  buttons appear on a row of their own, away from the goods.
+- A unit sold by a key the merchant must not see needs `Flows\Sellable_Units` on the adapter: the screens read the article
+  through it.
+
 ## Subclassing traps that fatal at declaration time
 
 - A base constructor that ASSIGNS a property the subclass set BEFORE calling `parent::__construct()`

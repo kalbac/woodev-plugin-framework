@@ -328,7 +328,8 @@ final class Registry_Order_Writer implements Order_Writer {
 	}
 
 	/**
-	 * Folds the live members of a group into the one DTO of the WooCommerce order. A cancelled member contributes no line.
+	 * Folds the live members of a group into the one DTO of the WooCommerce order. A cancelled member contributes no line; every
+	 * line names the member (unit) it belongs to, and the DTO lists all members for the unit records of the order.
 	 *
 	 * @param Order_Group $group  Group after the member was applied.
 	 * @param Order_DTO   $member The member being written.
@@ -347,8 +348,12 @@ final class Registry_Order_Writer implements Order_Writer {
 				$raw = $one->status_raw();
 			}
 
-			if ( ! $one->is_cancelled() ) {
-				$lines = array_merge( $lines, $one->lines() );
+			if ( $one->is_cancelled() ) {
+				continue;
+			}
+
+			foreach ( $one->lines() as $line ) {
+				$lines[] = $line->with_unit( $one->external_id() );
 			}
 		}
 
@@ -365,7 +370,7 @@ final class Registry_Order_Writer implements Order_Writer {
 			$dates['processing_since'] = $member->dates()['processing_since'];
 		}
 
-		return new Order_DTO(
+		$order = new Order_DTO(
 			$member->account_id(),
 			$group->group_key(),
 			$group->group_key(),
@@ -378,6 +383,8 @@ final class Registry_Order_Writer implements Order_Writer {
 			$member->shipment(),
 			[ 'members' => array_keys( $members ) ]
 		);
+
+		return $order->with_units( $members );
 	}
 
 	/**

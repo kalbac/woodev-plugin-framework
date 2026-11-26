@@ -101,6 +101,13 @@ final class Order_DTO {
 	private $raw;
 
 	/**
+	 * Every unit of a grouped order, cancelled ones included; empty for a one-order posting.
+	 *
+	 * @var Order_DTO[]
+	 */
+	private $units = [];
+
+	/**
 	 * Creates an order DTO.
 	 *
 	 * @since 2.0.29
@@ -155,6 +162,33 @@ final class Order_DTO {
 		$this->dates            = $dates;
 		$this->shipment         = $shipment;
 		$this->raw              = $raw;
+	}
+
+	/**
+	 * Returns a copy that lists the units of a grouped order: the member snapshots the writer folded into this order, the
+	 * cancelled ones included, which have no line in it.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param Order_DTO[] $units Members of the group.
+	 * @return self
+	 */
+	public function with_units( array $units ): self {
+		$order        = clone $this;
+		$order->units = array_values( $units );
+
+		return $order;
+	}
+
+	/**
+	 * Returns every unit of a grouped order, cancelled ones included.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @return Order_DTO[] Empty for a one-order posting.
+	 */
+	public function units(): array {
+		return $this->units;
 	}
 
 	/**

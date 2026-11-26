@@ -84,10 +84,18 @@ final class Order_Details_Box {
 	private $seller;
 
 	/**
+	 * The unit list of a grouped order.
+	 *
+	 * @var Order_Unit_List|null
+	 */
+	private $units;
+
+	/**
 	 * Creates the box.
 	 *
 	 * @since 2.1.13
 	 * @since 2.1.27 Takes the seller action buttons.
+	 * @since 2.1.28 Takes the unit list.
 	 *
 	 * @param Screen_Names               $names         Names.
 	 * @param Marketplace_Adapter        $adapter       The adapter.
@@ -97,8 +105,10 @@ final class Order_Details_Box {
 	 * @param string                     $assets_url    Folder URL of the module's assets, with a trailing slash.
 	 * @param string                     $version       Plugin version.
 	 * @param Seller_Action_Buttons|null $seller        The seller action buttons, when the adapter declares actions.
+	 * @param Order_Unit_List|null       $units         The unit list of a grouped order.
 	 */
-	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version, ?Seller_Action_Buttons $seller = null ) {
+	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version, ?Seller_Action_Buttons $seller = null, ?Order_Unit_List $units = null ) {
+		$this->units         = $units;
 		$this->names         = $names;
 		$this->adapter       = $adapter;
 		$this->remote_status = $remote_status;
@@ -148,9 +158,25 @@ final class Order_Details_Box {
 		$this->column( __( 'Основное', 'woodev-plugin-framework' ), $this->general_rows( $order ) );
 		$this->column( __( 'Суммы', 'woodev-plugin-framework' ), $this->amount_rows( $order ) );
 		echo '</div><div class="clear"></div>';
-		echo null === $this->seller ? '' : $this->seller->unit_list( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
+		echo $this->unit_list( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo $this->actions( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo '</div></div>';
+	}
+
+	/**
+	 * Builds the list of the order's goods: the units the order keeps, else the ones the marketplace offers actions on.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return string HTML, escaped; empty when there is none to show.
+	 */
+	private function unit_list( \WC_Order $order ): string {
+		$kept = null === $this->units ? '' : $this->units->render( $order );
+
+		if ( '' !== $kept || null === $this->seller ) {
+			return $kept;
+		}
+
+		return $this->seller->unit_list( $order );
 	}
 
 	/**

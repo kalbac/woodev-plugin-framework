@@ -3149,6 +3149,28 @@ msgstr ""
 msgid "Показать варианты"
 msgstr ""
 
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:116
+msgid "Показать товары заказа"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:117
+msgid "Скрыть товары заказа"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:118
+msgid "Загружаем товары…"
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:119
+msgid "Показать ещё товары"
+msgstr ""
+
+#. translators: %s: the seller article, with the size beside it.
+#: marketplace/admin/pages/orders/class-site-orders-units.php:128
+#, php-format
+msgid "Артикул: %s"
+msgstr ""
+
 #: marketplace/admin/pages/products/class-site-products-definition.php:302
 msgid "Скрыть варианты"
 msgstr ""

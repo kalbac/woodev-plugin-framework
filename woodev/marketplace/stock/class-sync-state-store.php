@@ -180,6 +180,32 @@ final class Sync_State_Store {
 	}
 
 	/**
+	 * Makes a stock pair due again although its pending value may equal the sent one: what the marketplace holds can differ from
+	 * what was last accepted (a cancelled order it did not give back).
+	 *
+	 * Written without the account claim, unlike the flusher's writes: it only forgets the sent value and the frozen in-flight one,
+	 * so a send that is on its way acknowledges nothing as sent and the pair goes out once more. The backoff and the failure count
+	 * stay.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param int $account_id   Account id.
+	 * @param int $link_id      Link id.
+	 * @param int $warehouse_id Warehouse.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function request_resend( int $account_id, int $link_id, int $warehouse_id ): void {
+		$changed = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
+			$this->db->prepare( 'UPDATE %i SET sent_payload = NULL, in_flight_payload = NULL WHERE account_id = %d AND link_id = %d AND warehouse_id = %d AND kind = %s', $this->table, $account_id, $link_id, $warehouse_id, self::KIND_STOCK )
+		);
+
+		if ( false === $changed ) {
+			throw new \RuntimeException( 'The pair could not be made due again: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+	}
+
+	/**
 	 * Moves a pending payload from a retired pair (another warehouse) into this pair, unless this pair already holds a pending payload
 	 * that is newer: an intent recorded here after the source one is never overwritten (critic PR #53 round 2, finding 11). The
 	 * order is the pending revision, not `pending_since` (one second): {@see self::record()} numbers the intents of a link across

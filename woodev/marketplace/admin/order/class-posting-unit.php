@@ -57,7 +57,8 @@ final class Posting_Unit {
 	 *
 	 * @since 2.1.27
 	 *
-	 * @param string        $id           The marketplace's id, unique within the order.
+	 * @param string        $id           The marketplace's id, unique within the order; for a grouped order the member's external id,
+	 *                                    so the unit's buttons stand beside its record ({@see \Woodev\Framework\Marketplace\Flows\Order_Units}).
 	 * @param string        $label        The goods and their size, in the merchant's words.
 	 * @param string        $status       The status code compared with {@see Seller_Action::statuses()}.
 	 * @param string        $status_label The status in Russian; shown when an action is not offered in it.
