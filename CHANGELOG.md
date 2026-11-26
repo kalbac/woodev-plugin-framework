@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.21] — 2026-11-26
+### Documentation
+- **research**: Wildberries Seller plugin — API map, gap map, card plan (#1990)
+
+- **research**: Pay delivery on receipt — carriers, WooCommerce, design (#1475) (#1993)
+
+- **specs**: Wildberries Seller 1.0 — owner decisions and plugin design (#1992)
+
+- **research**: Avito plugin — API map, gap map, owner inputs, card plan (#1994)
+
+
+### Features
+- **marketplace**: Token-only accounts and the 4xx surcharge (WF5) (#2011)
+
+- **marketplace**: Export grouped cards on a marketplace without task numbers (#1999) (#2012)
+
+
+
 ## [2.1.20] — 2026-11-25
 ### Bug Fixes
 - **shipping**: Key the rate cache by what prices a quote, not by every keystroke (#1985)

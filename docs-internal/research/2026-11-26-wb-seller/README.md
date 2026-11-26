@@ -19,7 +19,7 @@ measurement cards did — the sandbox (M0b, #1996) and live-cabinet (M0a, #1995)
 | [decisions.md](decisions.md) | The owner's answers of 26.11.2026 (D1–D11) — final; they win over every recommendation here |
 | [measurement.md](measurement.md) | Phase-0 measurement log: M0b sandbox (#1996, done 26.11.2026) — flows, checks, fidelity gaps, write ledger; M0a live cabinet (#1995, done 26.11.2026) |
 | [fixtures/m0a/](fixtures/m0a/) | Live-cabinet request/response pairs of our own test objects (ids masked, token redacted) and the request log |
-| [fixtures/m0b/](fixtures/m0b/) | 85 sandbox request/response pairs (test data only, token redacted) — samples for the plugin's tests |
+| [fixtures/m0b/](fixtures/m0b/) | 93 sandbox request/response pairs (test data only, token redacted) — samples for the plugin's tests |
 | [sandbox-environment-2026-11-26.json](sandbox-environment-2026-11-26.json) | The official sandbox OpenAPI spec, extracted from the portal page (no yaml download exists); sha256 in measurement.md |
 
 ## Outcome

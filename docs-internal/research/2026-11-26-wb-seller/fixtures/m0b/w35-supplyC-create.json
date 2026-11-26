@@ -1,0 +1,25 @@
+{
+  "label": "w35-supplyC-create",
+  "recorded_at": "2026-11-26T02:13:23+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/supplies",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "name": "M0b test supply C (codeless)"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "id": "WB-GI-SAND-192408"
+    }
+  }
+}
