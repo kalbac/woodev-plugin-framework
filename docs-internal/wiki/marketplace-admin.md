@@ -1425,7 +1425,14 @@ answer. `open_items()` lists card imports only — a price task locks nothing.
 
 «Changes» is the whole payload: the same payload written again (a new revision from another shop state) is not sent, a different
 one is — also the last accepted one, which is what releases a quarantine. The pair that expired is due whatever it changed to. The
-reason shows on the product tab with or without «Логирование», and in the sync reasons (`Sync_Reason::PRICE_*`).
+reason shows on the product tab with or without «Логирование», in the sync reasons (`Sync_Reason::PRICE_*`) and in «Товары
+сайта» (the state badge's tooltip, the parent's error count and the «only errors» filter; stored rows only, no remote call).
+An expiry also ends an earlier refusal.
+
+**«Отправить цены» on a held price** (`Site_Products_Bulk`, `Price_Intents::held()`) writes nothing and leaves the product out of
+the plan with the reason and the advice — ticked rows, «all by filter» and the variations tab alike. A refusal quotes at most 110
+characters of the marketplace's text, so the bulk run's 200-character reason keeps the advice; past 40 distinct reasons the
+smallest fold into «Другие причины».
 
 ## Changing the article after the export (framework 2.1.13, #1860)
 

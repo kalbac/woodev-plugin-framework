@@ -13373,3 +13373,19 @@ msgstr ""
 #: marketplace/admin/product/class-panel-view.php:633
 msgid "Новая цена"
 msgstr ""
+
+#. translators: %s: the sentence about the quarantine, which names the marketplace.
+#: marketplace/admin/pages/products/class-site-products-bulk.php:949
+#, php-format
+msgid "%s. Не отправится, пока вы не измените цену; карантин снимается и в кабинете маркетплейса"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-bulk.php:957
+msgid "маркетплейс уже не принял эту цену — измените её, чтобы отправить"
+msgstr ""
+
+#. translators: %s: the marketplace's reason.
+#: marketplace/admin/pages/products/class-site-products-bulk.php:965
+#, php-format
+msgid "маркетплейс не принял эту цену — измените её, чтобы отправить: %s"
+msgstr ""

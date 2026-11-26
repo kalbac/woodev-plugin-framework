@@ -238,6 +238,44 @@ final class Sync_State_Store {
 	}
 
 	/**
+	 * Tells whether recording this price would send nothing: it is the one a price task refused for good (a refusal, a quarantine or
+	 * a second expiry) and no newer upload of the link is awaited. A price sent now would go out only after it changes.
+	 *
+	 * @since 2.1.24
+	 *
+	 * @param int                 $account_id Account id.
+	 * @param int                 $link_id    Link id.
+	 * @param array<string,mixed> $payload    The price payload that would be recorded.
+	 * @return array{code:string,message:string}|null Null when the price would be sent. `code` is a
+	 *                                                 {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code with its text as
+	 *                                                 `message`; both '' when a later send replaced the text and was not decided.
+	 */
+	public function held_price( int $account_id, int $link_id, array $payload ): ?array {
+		$row = $this->db->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+			$this->db->prepare(
+				'SELECT error_code, last_error FROM %i WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND task_id IS NULL AND refused_payload = %s',
+				$this->table,
+				$account_id,
+				$link_id,
+				self::KIND_PRICE,
+				(string) json_encode( $payload ) // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
+			),
+			'ARRAY_A'
+		);
+
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+
+		$code = (string) $row['error_code'];
+
+		return [
+			'code'    => $code,
+			'message' => '' === $code ? '' : (string) $row['last_error'],
+		];
+	}
+
+	/**
 	 * Returns the highest pending revision among all rows (warehouses) of a link and kind.
 	 *
 	 * A new intent takes the next number after it, so revisions order the intents of one link across its warehouse rows, which

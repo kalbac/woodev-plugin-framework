@@ -8,6 +8,8 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Row_Normalizer;
+use Woodev\Framework\Marketplace\Admin\Shared\Sync_Reason_Text;
+use Woodev\Framework\Marketplace\Diagnostics\Sync_Reason;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -223,7 +225,12 @@ final class Site_Products_Rows {
 	 * @return array<string,mixed>
 	 */
 	private function parent_cells( array $product, array $offers ): array {
-		$errors = array_filter( array_column( $offers, 'error' ) );
+		$errors = array_filter(
+			$offers,
+			static function ( array $offer ): bool {
+				return '' !== $offer['error'] || '' !== (string) ( $offer['price_error_code'] ?? '' );
+			}
+		);
 		$badges = $this->state_badges( $offers, Row_Normalizer::MAX_STACK_ITEMS );
 
 		// The errors of the variations are said once, in the tooltip of the first (biggest) group's badge.
@@ -303,8 +310,8 @@ final class Site_Products_Rows {
 	}
 
 	/**
-	 * What the badge explains on hover: what is synchronised, the warehouse when the product has one of its own, and the error the
-	 * marketplace gave. One sentence a line; empty when there is nothing to add.
+	 * What the badge explains on hover: what is synchronised, the warehouse when the product has one of its own, the error the
+	 * marketplace gave and why its new price did not take effect. One sentence a line; empty when there is nothing to add.
 	 *
 	 * @param array<string,mixed> $offer  Offer.
 	 * @param bool                $linked Whether the offer has a card link (an unlinked product synchronises nothing).
@@ -338,6 +345,12 @@ final class Site_Products_Rows {
 		if ( '' !== $offer['error'] ) {
 			/* translators: %s: the marketplace's error text. */
 			$lines[] = sprintf( __( 'Ошибка: %s', 'woodev-plugin-framework' ), $offer['error'] );
+		}
+
+		$price_code = (string) ( $offer['price_error_code'] ?? '' );
+
+		if ( '' !== $price_code ) {
+			$lines[] = Sync_Reason_Text::sentence( new Sync_Reason( $price_code, [ 'message' => (string) ( $offer['price_error'] ?? '' ) ] ) );
 		}
 
 		$notice = null === $this->article_notice ? '' : (string) call_user_func( $this->article_notice, (int) $offer['product_id'] );

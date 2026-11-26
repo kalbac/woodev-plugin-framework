@@ -100,6 +100,40 @@ final class SiteProductsReaderTest extends TestCase {
 		$this->assertSame( [ 10 ], $this->ids( [ 'filters' => [ 'q' => 'OZ-10' ] ] ), 'The article on the marketplace is searched too.' );
 	}
 
+	/**
+	 * A price the marketplace did not take is an error of its row: the offer carries the stored reason, «only errors» finds the
+	 * product, and an ordinary send error without a reason code is neither.
+	 *
+	 * @return void
+	 */
+	public function test_a_price_that_did_not_take_effect_is_read_with_its_reason_and_counts_as_an_error(): void {
+		$dress = (int) $this->shop->links->find( Products_Shop::ACCOUNT, 10 )->link_id();
+
+		$this->assertSame( [ '', '' ], $this->price_issue_of( 10 ) );
+
+		$this->shop->price_issue( $dress, 'price_quarantined', 'Тестмаркет держит новую цену в карантине: она намного ниже текущей' );
+
+		$this->assertSame( [ 'price_quarantined', 'Тестмаркет держит новую цену в карантине: она намного ниже текущей' ], $this->price_issue_of( 10 ) );
+		$this->assertSame( [ 20, 10 ], $this->ids( [ 'filters' => [ 'only_errors' => true ] ] ) );
+
+		$this->shop->db->query( 'UPDATE ' . Sqlite_Tables::table( 'sync_state' ) . ' SET error_code = NULL' );
+
+		$this->assertSame( [ '', '' ], $this->price_issue_of( 10 ) );
+		$this->assertSame( [ 20 ], $this->ids( [ 'filters' => [ 'only_errors' => true ] ] ) );
+	}
+
+	/**
+	 * Reads the price reason of a simple product's offer.
+	 *
+	 * @param int $product_id Product id.
+	 * @return string[] Code and text.
+	 */
+	private function price_issue_of( int $product_id ): array {
+		$offer = $this->reader->rows( Products_Shop::ACCOUNT, [ $product_id ] )[0]['offers'][0];
+
+		return [ $offer['price_error_code'], $offer['price_error'] ];
+	}
+
 	public function test_a_draft_is_listed_and_a_trashed_product_is_not(): void {
 		$this->shop->product( 40, 'Шарф', 'F-40', 1, '10', 'simple', [], 'draft' );
 		$this->shop->product( 41, 'Шапка', 'H-41', 1, '10', 'simple', [], 'trash' );

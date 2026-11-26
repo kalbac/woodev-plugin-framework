@@ -316,6 +316,45 @@ final class PriceSettlementTest extends Sync_Test_Case {
 	}
 
 	/**
+	 * An expiry makes an earlier refusal obsolete: the refused price is a changed one again and is sent. While the refusal stands,
+	 * the queue names it for the merchant's «send»; afterwards there is nothing to name.
+	 *
+	 * @return void
+	 */
+	public function test_an_expiry_ends_an_earlier_refusal(): void {
+		$product = $this->card( 'a', 100000 );
+		$this->want_price( $product, [ 'price' => '50.00' ] );
+		$this->flush_now();
+		$this->poll();
+
+		$refused = $this->price_row( $product )['pending_payload'];
+		$link_id = $this->link_id( $product );
+
+		$this->assertSame(
+			[
+				'code'    => Price_Refusal::REFUSED,
+				'message' => Fake_Price_Pusher::REFUSAL_TEXT,
+			],
+			$this->intents()->held_price( $this->account_id, $link_id, $refused )
+		);
+
+		$this->want_price( $product, [ 'price' => '900.00' ] );
+		$this->flush_now();
+		$this->assertNull( $this->intents()->held_price( $this->account_id, $link_id, $refused ), 'while a newer upload is awaited, the old price is only queued behind it' );
+
+		$this->prices->undecided = true;
+		$this->now             += Fake_Price_Pusher::DEADLINE + 1;
+		$this->poll( 2 );
+
+		$this->assertNull( $this->intents()->held_price( $this->account_id, $link_id, $refused ) );
+
+		$this->want_price( $product, [ 'price' => '50.00' ] );
+		$this->flush_now();
+
+		$this->assertCount( 3, $this->all_tasks() );
+	}
+
+	/**
 	 * A last read past the deadline still decides: nothing the marketplace answered expires.
 	 *
 	 * @return void

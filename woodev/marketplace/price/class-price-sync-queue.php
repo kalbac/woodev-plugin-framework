@@ -501,7 +501,8 @@ final class Price_Sync_Queue {
 	 */
 	public function expire( int $account_id, Price_Intent $intent, string $message, string $token ): bool {
 		return 1 === $this->write(
-			'UPDATE %i SET task_id = NULL, next_attempt_at = NULL, error_code = %s, last_error = %s WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND in_flight_rev = %d',
+			// An earlier refusal says nothing any more: what the marketplace holds now is unknown.
+			'UPDATE %i SET task_id = NULL, next_attempt_at = NULL, refused_payload = NULL, error_code = %s, last_error = %s WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND in_flight_rev = %d',
 			[ $this->table, Price_Refusal::EXPIRED, $message, $account_id, $intent->link_id(), self::KIND, $intent->revision() ],
 			$token
 		);
