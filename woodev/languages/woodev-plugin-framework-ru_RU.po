@@ -9084,12 +9084,6 @@ msgstr ""
 msgid "Это %s уже завершено или отменено, отменить его нельзя."
 msgstr ""
 
-#. translators: %s: posting number.
-#: marketplace/admin/order/class-cancel-metabox.php:114
-#, php-format
-msgid "Отправление: %s"
-msgstr ""
-
 #. translators: %s: the marketplace's word for a posting, capitalised: «Отправление».
 #: marketplace/admin/order/class-order-details-box.php:235
 #, php-format
@@ -12694,10 +12688,12 @@ msgid "час"
 msgstr ""
 
 #: marketplace/admin/shared/class-russian-age.php:50
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:393
 msgid "часа"
 msgstr ""
 
 #: marketplace/admin/shared/class-russian-age.php:50
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:393
 msgid "часов"
 msgstr ""
 
@@ -13260,14 +13256,11 @@ msgstr ""
 msgid "Отменённые — заказы со статусом «Отменён»; они входят в число заказов. Выручка — сумма заказов без отменённых и возвращённых; средний чек и товары в заказе считаются по ним же."
 msgstr ""
 
-#. translators: 1: the marketplace's word for several postings, capitalised: «Отправления», 2: hours.
-#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:394
+#. translators: 1: the marketplace's word for several postings, capitalised: «Отправления», 2: hours, 3: the word «час» in the form that goes with the number.
+#: marketplace/admin/pages/orders/class-orders-analytics-controller.php:397
 #, php-format
-msgid "%1$s, которые ждут упаковки или отгрузки дольше %2$d часа с момента, когда они поступили в обработку."
-msgid_plural "%1$s, которые ждут упаковки или отгрузки дольше %2$d часов с момента, когда они поступили в обработку."
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgid "%1$s, которые ждут упаковки или отгрузки дольше %2$d %3$s с момента, когда они поступили в обработку."
+msgstr ""
 
 #: marketplace/admin/pages/orders/class-orders-analytics-controller.php:392
 #, php-format

@@ -23,7 +23,7 @@ final class WordingNeutralityTest extends TestCase {
 	 * @return void
 	 */
 	public function test_no_string_of_the_marketplace_module_names_a_marketplace(): void {
-		$this->assertSame( [], $this->strings_matching( '/ozon|wildberries|yandex|aliexpress|sbermegamarket|озон|вайлдберриз|яндекс\s*маркет|мегамаркет|алиэкспресс/iu' ) );
+		$this->assertSame( [], $this->strings_matching( '/ozon|wildberries|yandex|aliexpress|sbermegamarket|\bwb\b|озон|ва?[ий]лдберр?и[зс]|\bвб\b|яндекс[.\s]*маркет|мегамаркет|алиэкспресс/iu' ) );
 	}
 
 	/**

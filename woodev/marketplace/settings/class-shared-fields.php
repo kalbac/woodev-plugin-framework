@@ -58,7 +58,8 @@ final class Shared_Fields {
 	 * @since 2.1.5
 	 *
 	 * @param Marketplace_Adapter $adapter Adapter.
-	 * @return string[] `orders_enabled` and `import_enabled` when supported, then `sync_on_link` (every adapter pushes stock).
+	 * @return string[] `orders_enabled` when supported, `import_enabled` when a new card of the marketplace is announced, then
+	 *                  `sync_on_link` (every adapter pushes stock).
 	 */
 	public static function exchange_field_names( Marketplace_Adapter $adapter ): array {
 		$names = [];

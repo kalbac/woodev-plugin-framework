@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Controller;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Groups;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Sets;
+use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
@@ -388,16 +389,15 @@ final class Orders_Analytics_Controller {
 	public static function stuck_hint( int $hours, ?Posting_Noun $noun = null ): string {
 		$noun = $noun ?? Posting_Noun::shipment();
 
+		// «Дольше» takes the genitive: 1 and 21 «часа», every other number «часов».
+		$word = Russian_Plural::pick( $hours, __( 'часа', 'woodev-plugin-framework' ), __( 'часов', 'woodev-plugin-framework' ), __( 'часов', 'woodev-plugin-framework' ) );
+
 		return sprintf(
-			/* translators: 1: the marketplace's word for several postings, capitalised: «Отправления», 2: hours. */
-			_n(
-				'%1$s, которые ждут упаковки или отгрузки дольше %2$d часа с момента, когда они поступили в обработку.',
-				'%1$s, которые ждут упаковки или отгрузки дольше %2$d часов с момента, когда они поступили в обработку.',
-				$hours,
-				'woodev-plugin-framework'
-			),
+			/* translators: 1: the marketplace's word for several postings, capitalised: «Отправления», 2: hours, 3: the word «час» in the form that goes with the number. */
+			__( '%1$s, которые ждут упаковки или отгрузки дольше %2$d %3$s с момента, когда они поступили в обработку.', 'woodev-plugin-framework' ),
 			Posting_Noun::capitalised( $noun->many() ),
-			$hours
+			$hours,
+			$word
 		);
 	}
 
