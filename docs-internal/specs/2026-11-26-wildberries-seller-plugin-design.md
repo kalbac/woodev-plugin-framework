@@ -728,6 +728,25 @@ for client cards, `src/marketplace-admin/**` with its built bundle.
 
 ### Order and parallelism
 
+**Demand orders the work (coordinator, 26.11.2026).** Support counted direct requests in all 4444 tickets: Wildberries
+was asked for by 4 customers in 5 requests, and every one of them asked for **product export and stock
+synchronisation**; nobody asked for orders or prices. One of them offered his live Wildberries account for tests. This
+changes no owner decision and no scope — it sets the order in which cards are taken:
+
+| Wave | Cards | The merchant gets |
+|---|---|---|
+| 1 — products and stock | M0a, S0, WF5, WF3, WF2 → WP1, WP2, WP3, WP5, WP4 | connection, link and import of existing cards, stock sync, creation of cards from products |
+| 2 — prices | WF1, WF4 → WP6 | prices with honest results |
+| 3 — FBS orders | WF6, WF7, WF8, WF11 → WP7, WP8, WP9 | orders, supplies, stickers, marking |
+| 4 — DBS (behind the gate) | M0b, WF9, WD1, WF10 → WP10 | orders the seller delivers |
+| 5 | WP11 | acceptance and the release |
+
+Within wave 1 the first usable state is **WP1 + WP3 + WP5** (link existing cards and sync stock); WF2 and WP4, the two
+hardest cards, follow on the one Fable 5.2 slot. Waves 2 and 3 have no dependency on wave 1's framework cards and start
+as soon as workers are free, but never ahead of a wave-1 card that is ready to be taken. M0b is asked of the owner
+early, because its answer needs his time, not ours. Whether wave 1 alone is released first is the owner's call; the
+plan only makes it possible.
+
 ```text
 M0a ──► S0 ──► WF5 ─► WP1 ─► WP2 ─────────────┐
    │           WF3 ─► WP3 ─► WP5              ├─► WP4 (after WF2)
