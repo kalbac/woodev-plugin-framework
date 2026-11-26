@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
+use Woodev\Framework\Marketplace\Flows\Label_Bundle;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 
 defined( 'ABSPATH' ) || exit;
@@ -66,7 +67,8 @@ final class Site_Orders_Labels {
 	private $url;
 
 	/**
-	 * Asks the marketplace for labels and queues the poll: `function ( Account $account, string[] $keys ): int`, the local task id.
+	 * Asks the marketplace for labels and queues the poll: `function ( Account $account, string[] $keys ): int`, the local task id (0
+	 * when the labels came at once).
 	 *
 	 * @var callable
 	 */
@@ -173,13 +175,27 @@ final class Site_Orders_Labels {
 	}
 
 	/**
+	 * Whether a document is a page the browser shows (a sheet of stickers to print) rather than a file it saves.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param int $document_id Document id.
+	 * @return bool
+	 */
+	public function is_page( int $document_id ): bool {
+		return Label_Bundle::SHEET_TYPE === (string) $this->db->get_var(
+			$this->db->prepare( 'SELECT content_type FROM %i WHERE document_id = %d', $this->documents, $document_id ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table, read fresh.
+		);
+	}
+
+	/**
 	 * Asks the marketplace for the labels of postings and queues the poll that collects them.
 	 *
 	 * @since 2.1.5
 	 *
 	 * @param Account  $account Account the postings belong to.
 	 * @param string[] $keys    Posting numbers.
-	 * @return int Local task id.
+	 * @return int Local task id; 0 when the labels came at once and their document is stored.
 	 * @throws \Woodev\Framework\Marketplace\Flows\Label_Exception With a sentence for the merchant.
 	 * @throws \Throwable When the marketplace failed in another way.
 	 */

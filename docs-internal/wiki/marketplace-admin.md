@@ -1603,6 +1603,45 @@ marking code needs an engine change first.
 that cancels **per unit** (Wildberries) declares its cancellation as a seller action instead — `cancel()` answers for the whole
 posting only. Implementing both puts two cancel buttons on a row.
 
+## Sticker documents (#2005)
+
+Card WF7 of the Wildberries design (`2.1.28`). A label answer may hold several files, and a marketplace may answer without a
+task. Everything is additive: Ozon Seller 2.0.0 keeps `Label_Answer::file()` and its PDF is stored and sent as before. No schema
+change.
+
+**Adapter side** (`Flows`):
+
+| Seam | Use | Without it |
+|---|---|---|
+| `Label_Answer::files( Label_File[] $files, array $raw )` | one set of several files; an empty list is a refusal | `file()`: one file |
+| `Label_File( name, media type, bytes, width_mm, height_mm )` | the real file name; the printed size of a PNG sticker | — |
+| `Immediate_Label_Provider extends Label_Provider` | `labels_now()` answers with the labels; `request()` / `fetch()` are never called | a task, polled for 15 minutes |
+
+An immediate answer is stored at once (`documents.task_id` is NULL), `{plugin}_label_ready` fires with `task_id` 0, no poll is
+queued, and the «Этикетки» click that asked gets the download. A refusal is a `Label_Exception` or a `broken()` answer.
+
+**Storage.** A set is one `documents` row (`Label_Bundle`: JSON with base64 files), so `covering()` and the 7-day prune work as
+before. Its content type says how it is handed over:
+
+| The files | Stored as | The download |
+|---|---|---|
+| all `image/png` | `SHEET_TYPE` | an HTML page (`Label_Sheet`) with a print button, shown in the browser |
+| one other file | `FILES_TYPE` | the file under its own name, as an attachment |
+| several, every media type containing `zpl` | `FILES_TYPE` | one `{marketplace}-labels-{id}.zpl`, joined label after label |
+| several of any other kind | `FILES_TYPE` | a ZIP that keeps every name (a repeated one gets `-2`); needs PHP `zip` |
+
+Files of a set are never shown inline: an SVG from a marketplace must not run on the site's origin.
+
+**The page.** A sticker with a size is printed at that size; on a sheet they flow side by side, uncut by page breaks (58×40 mm:
+18 per A4 with 10 mm margins). On paper up to 80 mm wide each sticker starts a page — one per label with the print dialog's
+margins off. Measured in Chrome 158 print-to-PDF with the sandbox stickers; no paper printer or barcode scanner was tried.
+
+**Screens.** The records engine's `download` answer takes `open: true` for a page. The order screen's button saves a file by
+itself and, for a page, shows a link that opens it in a new tab (a tab asked for after a wait is blocked). The «Заказы» table
+keeps its result dialog: its link leads to the page in the same tab.
+
+A stored document is handed over again for 7 days, whatever the account's sticker format is by then.
+
 ## The articles of new cards in the mapping form (#2038)
 
 Card #2038 of the Wildberries design (§5.5, `2.1.27`). A marketplace whose article is built from more than the SKU shows the

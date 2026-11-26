@@ -13573,3 +13573,23 @@ msgstr ""
 #: marketplace/admin/order/class-seller-action-runner.php:606
 msgid "Это действие уже отправляется для этой позиции. Дождитесь ответа."
 msgstr ""
+
+#: marketplace/admin/order/class-label-button.php:139
+msgid "Открыть этикетки для печати"
+msgstr ""
+
+#: marketplace/flows/class-label-bundle.php:172
+msgid "Не удалось собрать этикетки в архив. Попросите хостинг включить расширение PHP «zip» и проверить папку временных файлов."
+msgstr ""
+
+#: marketplace/flows/class-label-download.php:330
+msgid "Сохранённые этикетки не читаются. Напишите в поддержку плагина."
+msgstr ""
+
+#: marketplace/flows/class-label-sheet.php:55
+msgid "Этикетки для печати"
+msgstr ""
+
+#: marketplace/flows/class-label-sheet.php:57
+msgid "Напечатать"
+msgstr ""

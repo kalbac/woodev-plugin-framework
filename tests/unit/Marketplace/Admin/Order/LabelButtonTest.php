@@ -70,6 +70,7 @@ final class LabelButtonTest extends TestCase {
 		$this->assertStringContainsString( 'data-row="3:700"', $html );
 		$this->assertStringContainsString( 'data-nonce="rest-nonce"', $html );
 		$this->assertStringContainsString( '>Этикетка</button>', $html );
+		$this->assertStringContainsString( 'data-open="Открыть этикетки для печати"', $html );
 		$this->assertStringContainsString( 'aria-disabled="false"', $html );
 		$this->assertStringStartsWith( 'https://example.test/assets/js/admin/order-label', $this->scripts['woodev-marketplace-order-label'] );
 	}

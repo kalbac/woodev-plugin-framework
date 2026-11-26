@@ -16,8 +16,9 @@ use Woodev\Framework\Marketplace\Jobs\License_Gate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * `admin-post.php?action={plugin id}_label&document_id=…&_wpnonce=…` (spec 5.5 step 5). The body of the document is streamed by
- * PHP only after every check of spec 5.5 step 5 and 8.5 has passed:
+ * `admin-post.php?action={plugin id}_label&document_id=…&_wpnonce=…` (spec 5.5 step 5). The document is answered by PHP — a
+ * single file as it was stored, a {@see Label_Bundle} as a page to print or a file to save ({@see self::response()}) — only
+ * after every check of spec 5.5 step 5 and 8.5 has passed:
  *
  * 1. a logged-in user (the `nopriv` hook is registered on purpose so an anonymous visitor gets a 403, not WordPress's 400);
  * 2. the nonce of this document (`check_admin_referer`);
@@ -200,12 +201,14 @@ final class Label_Download {
 		$document_id = isset( $_GET['document_id'] ) ? absint( wp_unslash( $_GET['document_id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- authorise() checks the nonce first.
 
 		try {
-			$document = $this->authorise( $document_id );
+			$response = $this->response( $this->authorise( $document_id ) );
 		} catch ( Label_Access_Exception $e ) {
 			wp_die( esc_html( $e->getMessage() ), '', [ 'response' => (int) $e->getCode() ] );
+		} catch ( Label_Exception $e ) {
+			wp_die( esc_html( $e->getMessage() ), '', [ 'response' => 500 ] );
 		}
 
-		$this->stream( $document );
+		$this->stream( $response );
 	}
 
 	/**
@@ -295,22 +298,71 @@ final class Label_Download {
 	}
 
 	/**
-	 * Sends the body with headers that keep it out of caches and make the browser treat it as the type it is.
+	 * Builds what a download of a document sends. A single file keeps its content type and is shown by the browser if it can; a
+	 * page of stickers ({@see Label_Sheet}) is shown; a file of a set is saved under its name, so nothing the marketplace sent is
+	 * ever run as part of the site.
+	 *
+	 * @since 2.1.28
 	 *
 	 * @param array<string,mixed> $document Document.
+	 * @return array{content_type:string,disposition:string,filename:string,body:string}
+	 * @throws Label_Exception With a sentence for the merchant when the stored set cannot be handed over.
+	 */
+	public function response( array $document ): array {
+		$type = (string) $document['content_type'];
+		$body = (string) $document['body'];
+		$base = sanitize_file_name( $this->adapter_id ) . '-labels-' . (int) $document['document_id'];
+
+		if ( Label_Bundle::SHEET_TYPE !== $type && Label_Bundle::FILES_TYPE !== $type ) {
+			$ext = false !== strpos( $type, 'pdf' ) ? 'pdf' : ( false !== strpos( $type, 'json' ) ? 'json' : 'bin' );
+
+			return [
+				'content_type' => $type,
+				'disposition'  => 'inline',
+				'filename'     => $base . '.' . $ext,
+				'body'         => $body,
+			];
+		}
+
+		$bundle = Label_Bundle::from_body( $body );
+
+		if ( null === $bundle ) {
+			throw new Label_Exception( __( 'Сохранённые этикетки не читаются. Напишите в поддержку плагина.', 'woodev-plugin-framework' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		if ( Label_Bundle::SHEET_TYPE === $type ) {
+			return [
+				'content_type' => 'text/html; charset=utf-8',
+				'disposition'  => 'inline',
+				'filename'     => $base . '.html',
+				'body'         => Label_Sheet::html( $bundle->files() ),
+			];
+		}
+
+		$file = $bundle->download( $base );
+
+		return [
+			'content_type' => '' === $file->content_type() ? 'application/octet-stream' : $file->content_type(),
+			'disposition'  => 'attachment',
+			'filename'     => sanitize_file_name( $file->name() ),
+			'body'         => $file->body(),
+		];
+	}
+
+	/**
+	 * Sends the response with headers that keep it out of caches and make the browser treat it as the type it is.
+	 *
+	 * @param array{content_type:string,disposition:string,filename:string,body:string} $response What {@see self::response()} built.
 	 * @return void
 	 */
-	private function stream( array $document ): void {
-		$type = (string) $document['content_type'];
-		$ext  = false !== strpos( $type, 'pdf' ) ? 'pdf' : ( false !== strpos( $type, 'json' ) ? 'json' : 'bin' );
-
+	private function stream( array $response ): void {
 		nocache_headers();
-		header( 'Content-Type: ' . $type );
-		header( 'Content-Disposition: inline; filename="' . sanitize_file_name( $this->adapter_id ) . '-labels-' . (int) $document['document_id'] . '.' . $ext . '"' );
-		header( 'Content-Length: ' . strlen( (string) $document['body'] ) );
+		header( 'Content-Type: ' . $response['content_type'] );
+		header( 'Content-Disposition: ' . $response['disposition'] . '; filename="' . $response['filename'] . '"' );
+		header( 'Content-Length: ' . strlen( $response['body'] ) );
 		header( 'X-Content-Type-Options: nosniff' );
 
-		echo $document['body']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- A binary document, not markup.
+		echo $response['body']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- A binary document or an escaped page.
 		exit;
 	}
 }

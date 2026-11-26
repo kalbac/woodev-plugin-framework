@@ -19,14 +19,15 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Spec 5.5 step 5. `create()` asks the marketplace for a label task through the adapter's {@see Label_Provider} and stores the
- * task row; `collect()` is one poll of such a task and stores the body in the documents table when the marketplace has it.
+ * task row; `collect()` is one poll of such a task and stores the body in the documents table when the marketplace has it. An
+ * {@see Immediate_Label_Provider} answers `create()` with the labels themselves: the document is stored at once, with no task.
  *
- * The shape of the marketplace's answer is the provider's to read. A file becomes the document with its content type; an answer
- * of another shape is stored as it came, as JSON, so nothing is lost. Whatever the marketplace answered is also kept in the task
- * row, minus the file itself.
+ * The shape of the marketplace's answer is the provider's to read. A file becomes the document with its content type, several
+ * files one {@see Label_Bundle}; an answer of another shape to a poll is stored as it came, as JSON, so nothing is lost.
+ * Whatever the marketplace answered to a poll is also kept in the task row, minus the files themselves.
  *
- * `{plugin id}_label_ready( document_id, task_id, account_id )` fires when a document is stored and
- * `{plugin id}_label_failed( task_id, account_id, message )` when a task ends without one.
+ * `{plugin id}_label_ready( document_id, task_id, account_id )` fires when a document is stored (`task_id` 0 for a document made
+ * without a task) and `{plugin id}_label_failed( task_id, account_id, message )` when a task ends without one.
  *
  * @since 2.1.0
  */
@@ -128,15 +129,16 @@ final class Label_Service {
 	}
 
 	/**
-	 * Asks the marketplace for the labels of remote orders and stores the task.
+	 * Asks the marketplace for the labels of remote orders and stores the task, or, for an {@see Immediate_Label_Provider}, the
+	 * document itself.
 	 *
-	 * The caller queues the first poll ({@see \Woodev\Framework\Marketplace\Jobs\Label_Jobs::queue_poll()}).
+	 * The caller queues the first poll of a task ({@see \Woodev\Framework\Marketplace\Jobs\Label_Jobs::queue_poll()}).
 	 *
 	 * @since 2.1.0
 	 *
 	 * @param Account  $account       Account the orders belong to.
 	 * @param string[] $external_keys Remote-order keys.
-	 * @return int Local task id.
+	 * @return int Local task id; 0 when the labels came at once and their document is stored.
 	 * @throws Label_Exception With a merchant-readable sentence when the request cannot be made.
 	 */
 	public function create( Account $account, array $external_keys ): int {
@@ -153,6 +155,12 @@ final class Label_Service {
 			$text = sprintf( __( 'За один раз можно распечатать этикетки не более чем для %d заказов.', 'woodev-plugin-framework' ), $this->provider->max_keys() );
 
 			throw new Label_Exception( $text ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		if ( $this->provider instanceof Immediate_Label_Provider ) {
+			$this->publish_now( $account, $keys, $this->provider->labels_now( $account, $keys ) );
+
+			return 0;
 		}
 
 		$remote = $this->provider->request( $account, $keys );
@@ -243,10 +251,9 @@ final class Label_Service {
 			return $this->end( $task, Async_Task::STATUS_FAILED, '' === $text ? __( 'Маркетплейс не смог подготовить этикетки.', 'woodev-plugin-framework' ) : $text, $answer->raw() );
 		}
 
-		$is_file = Label_Answer::FILE === $answer->kind();
-		$type    = $is_file ? $answer->content_type() : 'application/json';
-		$body    = $is_file ? $answer->body() : (string) wp_json_encode( $answer->raw() );
-		$kept    = $task['result'];
+		list( $type, $body ) = self::document_of( $answer );
+
+		$kept = $task['result'];
 
 		$kept[ Wpdb_Label_Store::RESULT_ANSWER ] = $answer->raw();
 
@@ -257,18 +264,72 @@ final class Label_Service {
 			return self::ENDED;
 		}
 
+		$this->announce_ready( $document_id, $task['task_id'], $task['account_id'] );
+
+		return self::COLLECTED;
+	}
+
+	/**
+	 * Stores the labels a marketplace answered at once.
+	 *
+	 * @param Account      $account Account the orders belong to.
+	 * @param string[]     $keys    Remote-order keys.
+	 * @param Label_Answer $answer  Answer.
+	 * @return void
+	 * @throws Label_Exception With the marketplace's sentence when the answer holds no labels.
+	 * @throws \Woodev\Framework\Marketplace\Data\Persistence_Exception When the document could not be written.
+	 */
+	private function publish_now( Account $account, array $keys, Label_Answer $answer ): void {
+		if ( ! in_array( $answer->kind(), [ Label_Answer::FILE, Label_Answer::FILES ], true ) ) {
+			$text = trim( $answer->message() );
+
+			throw new Label_Exception( '' === $text ? __( 'Маркетплейс не смог подготовить этикетки.', 'woodev-plugin-framework' ) : $text ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		list( $type, $body ) = self::document_of( $answer );
+
+		$this->announce_ready( $this->store->add_document( $account->id(), null, $keys, $type, $body ), 0, $account->id() );
+	}
+
+	/**
+	 * Fires the action of a stored document.
+	 *
+	 * @param int $document_id Document id.
+	 * @param int $task_id     Local task id; 0 for a document made without a task.
+	 * @param int $account_id  Account id.
+	 * @return void
+	 */
+	private function announce_ready( int $document_id, int $task_id, int $account_id ): void {
 		/**
 		 * A label document is stored.
 		 *
 		 * @since 2.1.0
 		 *
 		 * @param int $document_id Document id; the download link is {@see Label_Download::url()}.
-		 * @param int $task_id     Local task id.
+		 * @param int $task_id     Local task id; 0 for a document made without a task (since 2.1.28).
 		 * @param int $account_id  Account id.
 		 */
-		do_action( $this->ready_hook(), $document_id, $task['task_id'], $task['account_id'] );
+		do_action( $this->ready_hook(), $document_id, $task_id, $account_id );
+	}
 
-		return self::COLLECTED;
+	/**
+	 * The content type and the body an answer is stored with.
+	 *
+	 * @param Label_Answer $answer A `FILE`, `FILES` or `OTHER` answer.
+	 * @return array{0:string,1:string}
+	 */
+	private static function document_of( Label_Answer $answer ): array {
+		if ( Label_Answer::FILE === $answer->kind() ) {
+			return [ $answer->content_type(), $answer->body() ];
+		}
+
+		if ( Label_Answer::FILES === $answer->kind() ) {
+			$bundle = new Label_Bundle( $answer->file_list() );
+
+			return [ $bundle->content_type(), $bundle->encode() ];
+		}
+
+		return [ 'application/json', (string) wp_json_encode( $answer->raw() ) ];
 	}
 
 	/**

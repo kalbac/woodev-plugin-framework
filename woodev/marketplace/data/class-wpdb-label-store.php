@@ -232,14 +232,14 @@ final class Wpdb_Label_Store {
 	 * Stores a label body.
 	 *
 	 * @param int      $account_id   Account id.
-	 * @param int      $task_id      Local task id.
+	 * @param int|null $task_id      Local task id; null for a document made without a task (since 2.1.28).
 	 * @param string[] $external_keys     Remote-order keys the body covers.
 	 * @param string   $content_type Content type to stream it with.
 	 * @param string   $body         The bytes.
 	 * @return int Document id.
 	 * @throws Persistence_Exception When the row could not be written.
 	 */
-	public function add_document( int $account_id, int $task_id, array $external_keys, string $content_type, string $body ): int {
+	public function add_document( int $account_id, ?int $task_id, array $external_keys, string $content_type, string $body ): int {
 		$inserted = $this->db->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
 			$this->documents,
 			[
