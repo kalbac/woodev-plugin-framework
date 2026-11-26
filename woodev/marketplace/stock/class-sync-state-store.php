@@ -25,6 +25,23 @@ final class Sync_State_Store {
 	public const KIND_PRICE = 'price';
 
 	/**
+	 * Marks a pending payload that takes the stock away from a warehouse the product has left.
+	 *
+	 * @since 2.1.25
+	 */
+	public const VACATE_FLAG = 'vacate';
+
+	/**
+	 * The pending payload of a left warehouse.
+	 *
+	 * @since 2.1.25
+	 */
+	public const VACATE_PAYLOAD = [
+		'stock'           => 0,
+		self::VACATE_FLAG => true,
+	];
+
+	/**
 	 * Database.
 	 *
 	 * @var \wpdb
@@ -147,11 +164,28 @@ final class Sync_State_Store {
 	}
 
 	/**
+	 * Wants zero on a warehouse the product has left, so that the marketplace stops selling it from there. Recording the warehouse's
+	 * stock again ({@see self::record()}) cancels a zero not yet sent.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param int $account_id   Account id.
+	 * @param int $link_id      Link id.
+	 * @param int $warehouse_id The left warehouse.
+	 * @return bool See {@see self::record()}.
+	 * @throws \RuntimeException When the database refuses the write.
+	 */
+	public function record_vacate( int $account_id, int $link_id, int $warehouse_id ): bool {
+		return $this->record( $account_id, $link_id, $warehouse_id, self::KIND_STOCK, self::VACATE_PAYLOAD );
+	}
+
+	/**
 	 * Moves a pending payload from a retired pair (another warehouse) into this pair, unless this pair already holds a pending payload
 	 * that is newer: an intent recorded here after the source one is never overwritten (critic PR #53 round 2, finding 11). The
 	 * order is the pending revision, not `pending_since` (one second): {@see self::record()} numbers the intents of a link across
 	 * its warehouse rows, so the source replaces the destination only when its revision is the higher one, whether or not either
-	 * was already sent (card #55, PR #57 critic finding 1). One
+	 * was already sent (card #55, PR #57 critic finding 1). A zero still wanted here from when the product had left this warehouse
+	 * ({@see self::record_vacate()}) is replaced whatever its revision: the warehouse is the product's again. One
 	 * statement each for the insert and the conditional update, so a save in between cannot be lost. Called before the source is
 	 * retired, so a death between the two leaves the payload in both places, never in none (finding 12); repeating it is a no-op.
 	 *
@@ -185,7 +219,7 @@ final class Sync_State_Store {
 
 		$updated = 1 === $inserted ? 0 : $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
 			$this->db->prepare(
-				'UPDATE %i SET pending_payload = %s, pending_rev = CASE WHEN pending_rev + 1 > %d THEN pending_rev + 1 ELSE %d END, pending_since = %s, attempts = 0 WHERE account_id = %d AND link_id = %d AND warehouse_id = %d AND kind = %s AND (pending_payload IS NULL OR pending_rev < %d)',
+				'UPDATE %i SET pending_payload = %s, pending_rev = CASE WHEN pending_rev + 1 > %d THEN pending_rev + 1 ELSE %d END, pending_since = %s, attempts = 0 WHERE account_id = %d AND link_id = %d AND warehouse_id = %d AND kind = %s AND (pending_payload IS NULL OR pending_rev < %d OR pending_payload = %s)',
 				$this->table,
 				$json,
 				$rev,
@@ -195,7 +229,8 @@ final class Sync_State_Store {
 				$link_id,
 				$warehouse_id,
 				$kind,
-				$rev
+				$rev,
+				(string) json_encode( self::VACATE_PAYLOAD ) // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- As above.
 			)
 		);
 

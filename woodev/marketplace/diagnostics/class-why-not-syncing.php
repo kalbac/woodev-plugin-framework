@@ -32,6 +32,7 @@ final class Why_Not_Syncing {
 	 * @param Account             $account    Account of the link.
 	 * @param array<string,mixed> $sync_state Facts gathered by the caller: `license_ok` (bool, default true), `health`
 	 *                                        (`Health_Result` status, default ok), `default_warehouse_id` (int|null),
+	 *                                        `warehouse_unavailable` (bool, default false: the chosen warehouse is switched off; 2.1.25),
 	 *                                        `retry_after_seconds` (int|null), `price_error_code` (a
 	 *                                        {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code, 2.1.25) with its
 	 *                                        `price_error` text, `last_error` (string|null) for any other trouble.
@@ -54,6 +55,10 @@ final class Why_Not_Syncing {
 
 		if ( null === $link->warehouse_id() && empty( $sync_state['default_warehouse_id'] ) ) {
 			$reasons[] = new Sync_Reason( Sync_Reason::NO_WAREHOUSE );
+		}
+
+		if ( true === ( $sync_state['warehouse_unavailable'] ?? false ) ) {
+			$reasons[] = new Sync_Reason( Sync_Reason::WAREHOUSE_UNAVAILABLE );
 		}
 
 		$retry_after = (int) ( $sync_state['retry_after_seconds'] ?? 0 );

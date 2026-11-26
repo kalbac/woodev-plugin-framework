@@ -179,7 +179,7 @@ final class Account_Status {
 		}
 
 		/* translators: %s: saved warehouse ids, for example «#123». */
-		return sprintf( __( 'Склад %s отключён в маркетплейсе — остатки на него не отправляются. Выберите другой склад в настройках аккаунта.', 'woodev-plugin-framework' ), implode( ', ', $gone ) );
+		return sprintf( __( 'Склад %s отключён в маркетплейсе — остатки на него не отправляются, на прежних складах остаётся последнее отправленное количество. Выберите другой склад в настройках аккаунта.', 'woodev-plugin-framework' ), implode( ', ', $gone ) );
 	}
 
 	/**

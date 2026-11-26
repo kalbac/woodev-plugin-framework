@@ -27,6 +27,7 @@ use Woodev\Framework\Marketplace\Flows\Export_Facts;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
+use Woodev\Framework\Marketplace\Sync\Stock_Warehouse;
 use Woodev\Framework\Marketplace\Flows\Article_Display;
 use Woodev\Framework\Marketplace\Flows\Unit_Products;
 
@@ -628,14 +629,15 @@ final class Panel_Reader {
 		$error   = $this->links->last_error( (int) $record->link_id() )['text'];
 		$price   = self::price_trouble( $overview );
 		$facts   = [
-			'license_ok'           => $this->license->is_in_force(),
-			'health'               => null === $health ? Health_Result::OK : $health->status(),
-			'default_warehouse_id' => $account->setting( 'warehouse_id' ),
-			'retry_after_seconds'  => $next > $now ? $next - $now : null,
-			'price_error_code'     => $price['code'],
-			'price_error'          => $price['message'],
+			'license_ok'            => $this->license->is_in_force(),
+			'health'                => null === $health ? Health_Result::OK : $health->status(),
+			'default_warehouse_id'  => $account->setting( 'warehouse_id' ),
+			'warehouse_unavailable' => $this->warehouses->is_unavailable( $account->id(), (int) Stock_Warehouse::chosen( $account, $record ) ),
+			'retry_after_seconds'   => $next > $now ? $next - $now : null,
+			'price_error_code'      => $price['code'],
+			'price_error'           => $price['message'],
 			// A price with a reason of its own is not repeated as «the last error».
-			'last_error'           => self::first_filled( $error, (string) ( $overview['stock']['last_error'] ?? '' ), '' === $price['code'] ? (string) ( $overview['price']['last_error'] ?? '' ) : '' ),
+			'last_error'            => self::first_filled( $error, (string) ( $overview['stock']['last_error'] ?? '' ), '' === $price['code'] ? (string) ( $overview['price']['last_error'] ?? '' ) : '' ),
 		];
 		$reasons = Why_Not_Syncing::reasons( $link, $account, $facts );
 		$list    = Sync_Reason_Text::sentences( $reasons );

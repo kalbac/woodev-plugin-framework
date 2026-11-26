@@ -47,19 +47,36 @@ final class Stock_Warehouse {
 			return null;
 		}
 
+		return self::is_available( $account, $id, $warehouses ) ? $id : null;
+	}
+
+	/**
+	 * Tells whether a warehouse may be sent to: false only when the cached list of the account's available warehouses is a current
+	 * one and lacks it.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param Account                $account      Account.
+	 * @param int                    $warehouse_id Marketplace warehouse id.
+	 * @param Warehouse_Options|null $warehouses   Cached warehouse lists; the account's own catalogue cache when null.
+	 * @return bool
+	 */
+	public static function is_available( Account $account, int $warehouse_id, ?Warehouse_Options $warehouses = null ): bool {
 		$warehouses = $warehouses ?? self::options_of( $account );
 
-		return null !== $warehouses && $warehouses->is_unavailable( $account->id(), $id ) ? null : $id;
+		return null === $warehouses || ! $warehouses->is_unavailable( $account->id(), $warehouse_id );
 	}
 
 	/**
 	 * The warehouse the merchant chose for a link, whether or not the marketplace still offers it.
 	 *
+	 * @since 2.1.25 Public.
+	 *
 	 * @param Account     $account Account.
 	 * @param Link_Record $link    Link.
 	 * @return int|null
 	 */
-	private static function chosen( Account $account, Link_Record $link ): ?int {
+	public static function chosen( Account $account, Link_Record $link ): ?int {
 		$own = (int) $link->warehouse_id();
 
 		if ( $own > 0 ) {

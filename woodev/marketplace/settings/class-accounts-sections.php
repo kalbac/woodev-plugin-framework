@@ -17,6 +17,7 @@ use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Controller;
 use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Progress;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
+use Woodev\Framework\Marketplace\Jobs\Reseed_Stock_Runner;
 use Woodev\Framework\Marketplace\Price\Money;
 use Woodev\Framework\Marketplace\Price\Price_Calculator;
 use Woodev\Framework\Marketplace\Price\Price_Rule;
@@ -36,6 +37,8 @@ defined( 'ABSPATH' ) || exit;
  *   are gated by D2: unsupported features are omitted from the UI rather than greyed out.
  * - Price-rule changes run inside `Wpdb_Account_Store::update_settings()` compare-and-swap and fire
  *   `woodev_{plugin_id}_account_price_rules_changed`, which `Flow_Wiring` listens to and queues a recompute for.
+ * - A changed default or oversize warehouse fires `woodev_{plugin_id}_account_warehouse_changed`
+ *   ({@see Reseed_Stock_Runner}).
  *
  * @since 2.1.2
  */
@@ -130,6 +133,13 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	private $account_saved_hook;
 
 	/**
+	 * Action fired with an account id after its default or oversize warehouse changed (`Reseed_Stock_Runner::CHANGE`).
+	 *
+	 * @var string
+	 */
+	private $warehouse_changed_hook;
+
+	/**
 	 * Plugin id, the owner in the deletion route.
 	 *
 	 * @var string
@@ -196,6 +206,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		$this->on_connected             = $on_connected;
 		$this->account_connected_hook   = ( new Job_Names( $plugin_id ) )->hook( 'account_connected' );
 		$this->account_saved_hook       = ( new Job_Names( $plugin_id ) )->hook( Posting_Jobs::ACCOUNT_SAVED );
+		$this->warehouse_changed_hook   = ( new Job_Names( $plugin_id ) )->hook( Reseed_Stock_Runner::CHANGE );
 	}
 
 	/**
@@ -1233,6 +1244,16 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 	}
 
 	/**
+	 * Tells the plugin that an account sells from another warehouse now, so the stock of its cards has to be recorded again.
+	 *
+	 * @param int $id Account id.
+	 * @return void
+	 */
+	private function announce_warehouse_changed( int $id ): void {
+		do_action( $this->warehouse_changed_hook, $id ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Built by Job_Names (`woodev_{plugin_id}_account_warehouse_changed`).
+	}
+
+	/**
 	 * Persists a single changed field of an existing account.
 	 *
 	 * @param int    $id    Account id.
@@ -1338,9 +1359,11 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 			case 'warehouse_id':
 				$wh = (int) $text;
 				$this->store->update_fields( $id, [ 'warehouse_id' => $wh > 0 ? $wh : null ] );
+				$this->announce_warehouse_changed( $id );
 				return;
 			case 'oversize_warehouse_id':
 				$this->save_oversize_warehouse( $id, (int) $text );
+				$this->announce_warehouse_changed( $id );
 				return;
 			case 'stock_mode':
 				if ( $this->accepts_stock_mode( $text ) ) {
