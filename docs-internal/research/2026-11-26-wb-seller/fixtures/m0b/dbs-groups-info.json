@@ -1,0 +1,41 @@
+{
+  "label": "dbs-groups-info",
+  "recorded_at": "2026-11-26T01:24:56+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/dbs/groups/info",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "groups": [
+        "01a21574-7068-782d-af87-b8026598b1bd",
+        "01a21574-748c-7207-b950-9bb23466a2e6"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": [
+      {
+        "groupID": "01a21574-7068-782d-af87-b8026598b1bd",
+        "deliveryCost": 100,
+        "convertedDeliveryCost": 100,
+        "currencyCode": 643,
+        "convertedCurrencyCode": 643
+      },
+      {
+        "groupID": "01a21574-748c-7207-b950-9bb23466a2e6",
+        "deliveryCost": 100,
+        "convertedDeliveryCost": 100,
+        "currencyCode": 643,
+        "convertedCurrencyCode": 643
+      }
+    ]
+  }
+}

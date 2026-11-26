@@ -1,0 +1,29 @@
+{
+  "label": "w32-dbs-stickers-probe",
+  "recorded_at": "2026-11-26T01:25:44+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/dbs/orders/stickers",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "orders": [
+        192406
+      ]
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "body": {
+      "detail": "Please consult the https://dev.wildberries.ru/openapi/api-information",
+      "origin": "ag-marketplace-sandbox",
+      "status": 404,
+      "statusText": "Not Found",
+      "title": "path not found"
+    }
+  }
+}

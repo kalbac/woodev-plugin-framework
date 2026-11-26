@@ -1,0 +1,48 @@
+{
+  "label": "w25-dbs-deliver",
+  "recorded_at": "2026-11-26T01:25:11+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/dbs/orders/status/deliver",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "ordersIds": [
+        192400,
+        192401,
+        192402,
+        192403
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "requestId": "400ba31e-8a75-47ff-8f72-a5f0fef5132f",
+      "results": [
+        {
+          "orderId": 192400,
+          "isError": false
+        },
+        {
+          "orderId": 192401,
+          "isError": false
+        },
+        {
+          "orderId": 192402,
+          "isError": false
+        },
+        {
+          "orderId": 192403,
+          "isError": false
+        }
+      ]
+    }
+  }
+}

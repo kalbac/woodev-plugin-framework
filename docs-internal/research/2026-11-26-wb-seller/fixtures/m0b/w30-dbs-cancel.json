@@ -1,0 +1,33 @@
+{
+  "label": "w30-dbs-cancel",
+  "recorded_at": "2026-11-26T01:25:27+00:00",
+  "request": {
+    "method": "POST",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/marketplace/v3/dbs/orders/status/cancel",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": {
+      "ordersIds": [
+        192404
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "requestId": "0bcdb55b-4d7e-468f-bce5-edd728982a34",
+      "results": [
+        {
+          "orderId": 192404,
+          "isError": false
+        }
+      ]
+    }
+  }
+}

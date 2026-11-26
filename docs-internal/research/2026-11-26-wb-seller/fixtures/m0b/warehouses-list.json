@@ -1,0 +1,29 @@
+{
+  "label": "warehouses-list",
+  "recorded_at": "2026-11-26T01:17:34+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/warehouses",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": [
+      {
+        "name": "OW Test FBS",
+        "officeId": 1,
+        "id": 179667,
+        "cargoType": 1,
+        "deliveryType": 1
+      }
+    ]
+  }
+}

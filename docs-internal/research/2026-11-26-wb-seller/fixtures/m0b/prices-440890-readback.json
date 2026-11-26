@@ -1,0 +1,25 @@
+{
+  "label": "prices-440890-readback",
+  "recorded_at": "2026-11-26T01:21:05+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://discounts-prices-api-sandbox.wildberries.ru/api/v2/list/goods/filter?filterNmID=440890",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "data": null,
+      "error": true,
+      "errorText": "required query parameter is missing: query.limit"
+    }
+  }
+}

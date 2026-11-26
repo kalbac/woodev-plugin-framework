@@ -1,0 +1,17 @@
+{
+  "label": "ping-common",
+  "recorded_at": "2026-11-26T01:15:55+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://common-api-sandbox.wildberries.ru/ping",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 0,
+    "headers": {},
+    "body": "<urlopen error [Errno 8] nodename nor servname provided, or not known>"
+  }
+}

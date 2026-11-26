@@ -1,0 +1,28 @@
+{
+  "label": "fbs-reshipment-list",
+  "recorded_at": "2026-11-26T01:22:53+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://marketplace-api-sandbox.wildberries.ru/api/v3/supplies/orders/reshipment",
+    "headers": {
+      "Authorization": "[REDACTED test token]"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Ratelimit-Limit": "1",
+      "X-Ratelimit-Remaining": "0"
+    },
+    "body": {
+      "orders": [
+        {
+          "supplyID": "WB-GI-SAND-192394",
+          "orderID": 192393
+        }
+      ]
+    }
+  }
+}
