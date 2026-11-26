@@ -385,7 +385,7 @@ final class SettingsHandlerTest extends TestCase {
 		$stored_status = $handler->get_connection_status( "account_connection_{$acc_id}" );
 		$this->assertNotNull( $stored_status );
 		$this->assertTrue( $stored_status->is_success() );
-		$this->assertStringContainsString( 'KZT', $stored_status->get_message() );
+		$this->assertSame( 'OK leaked [скрыто].', $stored_status->get_message(), 'the stored OK detail is shown, redacted' );
 
 		// Saving a price rule change fires `woodev_fake_mp_account_price_rules_changed`.
 		Actions\expectDone( 'woodev_fake_mp_account_price_rules_changed' )->once()->with( $acc_id );
@@ -547,6 +547,36 @@ final class SettingsHandlerTest extends TestCase {
 		return function (): int {
 			return self::NOW + $this->clock_shift;
 		};
+	}
+
+	public function test_a_stored_ok_detail_is_shown_after_a_reload_and_a_secret_in_it_is_masked(): void {
+		[ , $store, $acc_id ] = $this->stock_mode_handler( [] );
+		$store->set_health( $acc_id, new Health_Result( Health_Result::OK, 'Подключено. Роль: Admin. Токен token-1 принят.' ) );
+		$adapter = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                  => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'        => [],
+				'credential_fields'   => new Credential_Fields( 'merchant_uid', [ 'access_token' ] ),
+				'settings_descriptor' => new Fake_Settings_Descriptor( new Credential_Fields( 'merchant_uid', [ 'access_token' ] ), 'Acme', [] ),
+			]
+		);
+		$status  = new Account_Status(
+			$store,
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+
+		// `$store->get()` reads the row back from the database, so this is the saved-and-reloaded status.
+		$result = $status->for_account( $store->get( $acc_id ) );
+		$this->assertTrue( $result->is_success() );
+		$this->assertSame( 'Подключено. Роль: Admin. Токен [скрыто] принят.', $result->get_message(), 'the stored OK detail is shown, with the token masked' );
+
+		$store->set_health( $acc_id, new Health_Result( Health_Result::OK ) );
+		$result = $status->for_account( $store->get( $acc_id ) );
+		$this->assertSame( 'Подключено.', $result->get_message(), 'without a stored detail the generic text stays' );
 	}
 
 	public function test_a_stale_warehouse_list_does_not_count(): void {
