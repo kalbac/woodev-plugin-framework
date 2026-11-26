@@ -26,7 +26,9 @@ measurement cards did — the sandbox (M0b, #1996) and live-cabinet (M0a, #1995)
 
 The owner answered the questions on 26.11.2026: [decisions](decisions.md). The plugin is new and its first release is
 **1.0.0**; FBS and DBS are both in it. Design:
-[Wildberries Seller 1.0 plugin design](../../specs/2026-11-26-wildberries-seller-plugin-design.md).
+[Wildberries Seller 1.0 plugin design](../../specs/2026-11-26-wildberries-seller-plugin-design.md). The design was
+amended after the two measurement cards (S0, #1997); where a research file and the amended design differ, the design is
+newer.
 
 ## Verdict
 
