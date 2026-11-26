@@ -176,7 +176,13 @@ final class Label_Bundle {
 		}
 
 		$path = wp_tempnam( 'woodev-labels' );
-		$zip  = new \ZipArchive();
+
+		// A host with no usable temporary folder gets no file: ZipArchive would throw on an empty path.
+		if ( ! $path || ! wp_is_writable( $path ) ) {
+			throw new Label_Exception( $refusal ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		$zip = new \ZipArchive();
 
 		if ( true !== $zip->open( $path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) ) {
 			wp_delete_file( $path );

@@ -57,6 +57,7 @@ final class LabelFilesTest extends Label_Test_Case {
 				return (string) tempnam( sys_get_temp_dir(), 'labels' );
 			}
 		);
+		Functions\when( 'wp_is_writable' )->alias( 'is_writable' );
 		Functions\when( 'wp_delete_file' )->alias(
 			static function ( string $path ): void {
 				unlink( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- A test double.
@@ -156,6 +157,32 @@ final class LabelFilesTest extends Label_Test_Case {
 			],
 			$contents
 		);
+	}
+
+	/**
+	 * @dataProvider unusable_temporary_files
+	 *
+	 * @param mixed $path What `wp_tempnam()` gives back.
+	 * @return void
+	 */
+	public function test_an_archive_without_a_temporary_file_asks_for_the_hosting( $path ): void {
+		Functions\when( 'wp_tempnam' )->justReturn( $path );
+
+		$bundle = new Label_Bundle( [ new Label_File( 'a.svg', 'image/svg+xml', '<svg/>' ), new Label_File( 'b.svg', 'image/svg+xml', '<svg/>' ) ] );
+
+		$this->expectException( Label_Exception::class );
+		$this->expectExceptionMessage( 'Попросите хостинг включить расширение PHP «zip» и проверить папку временных файлов.' );
+
+		$bundle->download( 'fake-labels-1' );
+	}
+
+	/** @return array<string,array{0:mixed}> */
+	public function unusable_temporary_files(): array {
+		return [
+			'none was made'           => [ false ],
+			'an empty path'           => [ '' ],
+			'a path nobody can write' => [ '/nonexistent/woodev-labels.tmp' ],
+		];
 	}
 
 	public function test_the_page_tells_a_label_printer_which_print_settings_to_choose(): void {
