@@ -1,7 +1,7 @@
 # Wildberries Seller 1.0 Plugin Design
 
 **Date:** 2026-11-26  
-**Status:** draft — written before the phase-0 measurement (§3); §7 (DBS) is conditional on its two gate checks. Amended 26.11.2026 after the critic review of PR #1992 (revision log at the end).  
+**Status:** draft — written before the phase-0 measurement (§3). Amended 26.11.2026 twice: after the critic review of PR #1992, and after the owner's answers on T1 and T2 (revision log at the end).  
 **Target:** the first release, **1.0.0**, of a NEW plugin for WooCommerce shops that sell on Wildberries, built on the
 framework module `woodev/marketplace/` the way Ozon Seller 2.0.0 is. Card
 [#1670](https://github.com/kalbac/woodev-plugin-framework/issues/1670).  
@@ -18,10 +18,10 @@ Nothing in this spec was measured: no request was sent to any Wildberries host.
 ## 0. How to read this spec
 
 §1 lists the binding decisions; nothing below reopens them. §2 is the product boundary. §3 is the phase-0 measurement
-card, which runs **before** any implementation card. §4 maps every capability to its seam. §5 is the unit model (a size
+(two cards), which runs **before** any implementation card. §4 maps every capability to its seam. §5 is the unit model (a size
 inside a colour card), §6 the FBS flow with supplies and marking, §7 the DBS flow, §8 the framework extensions, §9 the
 plugin parts, §10 the admin pages, §11 the data model, §12 errors, limits and the test plan, §13 the registers
-(unverified facts, interpretations, **tensions between decisions that the coordinator must hear about**), §14 the
+(unverified facts, interpretations, tensions between decisions and the owner's answers to them, known residual risks), §14 the
 implementation card list, then the revision log.
 
 **Three facts the reader must know.**
@@ -44,12 +44,12 @@ disagrees, that file wins.
 | Id | Decision (short) | Where it lands |
 |---|---|---|
 | — | New plugin, first release **1.0.0** | §2 |
-| D1 | FBS **and DBS** in 1.0; a DBS order is an ordinary WooCommerce order with a shipping address that CDEK / Yandex can ship; two phase-0 gate checks (relay phone, confirmation code); if either fails DBS moves to the next release. No DBW, in-store pickup, FBW | §3.3, §7 |
+| D1 | FBS **and DBS** in 1.0; a DBS order is an ordinary WooCommerce order with a shipping address that CDEK / Yandex can ship. **Owner, 26.11.2026 (answer to T1): DBS stays in 1.0.** No real order can be made, so the two checks (relay phone, confirmation code) are done from the API documentation, simulated requests, fixtures and the sandbox, and what stays unproven is a stated residual risk — not the move-to-the-next-release fallback. No DBW, in-store pickup, FBW | §3.2–3.3, §7, §13.4 |
 | D2 | Link, import Wildberries → WooCommerce, create cards from products; an edit changes only the plugin's own fields (read first); no delete, no trash | §5, §9.3 |
 | D3 | Page «Поставки»: create, add orders, stickers, pickup point and date, cargo places, hand over, QR. No passes, no auto-returns | §6, §8 WF8 |
 | D4 | «Честный знак» code field in the order (typed or scanned) and a «what is missing» list in the supply; other code kinds named, not entered; phase 0 checks the cabinet route | §3.2, §6.4 |
 | D5 | The seller's personal token; no question to Wildberries support | §9.1 |
-| D6 | The live cabinet is the test ground, writes included; never delete anything; stocks stay 0 except short checks on the owner's word; the tokens live in the plugin folder's `.env` (§3 rule 3) and are never printed | §3, §12.4 |
+| D6 | The live cabinet is the test ground, writes included; never delete anything; stocks stay 0; the tokens live in the plugin folder's `.env` (§3 rule 3) and are never printed. **Owner, 26.11.2026: no real orders on the live cabinet at all** — order and supply flows, FBS and DBS, are exercised with the sandbox token; the cabinet's standing with Wildberries may make it refuse some writes, and phase 0 measures which | §3, §12.4 |
 | D7 | Per-size prices where Wildberries allows; otherwise, when the sizes' shop prices differ — do not send, show the reason at the product | §8 WF4, §9.5 |
 | D8 | Default warehouse per account, own warehouse per product, one product → one warehouse; a warehouse serves one scheme | §9.4 |
 | D9 | Menu: Товары, Заказы (FBS and DBS, filter by scheme), Поставки, Сопоставление, Инструменты, Диагностика, Настройки; shared «Аналитика» as it is | §10 |
@@ -79,7 +79,7 @@ written into this public repository or its tracker.
 **In 1.0.** Connection by personal token · catalogue (subjects, characteristics, directories), mappings and profiles ·
 cabinet cards: list, link, import into WooCommerce, create from products, update of own fields · stock per size per
 seller warehouse · prices with discount, per size where allowed, with asynchronous results and quarantine shown · FBS
-orders, supplies and stickers · «Честный знак» codes · DBS orders with the carrier bridge (behind the gate of §3.3) ·
+orders, supplies and stickers · «Честный знак» codes · DBS orders with the carrier bridge ·
 diagnostics, tools, the shared analytics.
 
 **Not in 1.0.** DBW, in-store pickup, FBW (D1) · returns and buyer claims (D11, #1991) · reviews, questions, buyer
@@ -94,7 +94,7 @@ terms in the cabinet.
 
 ## 3. Phase 0 — measure before design is final
 
-Three measurement cards: M0a needs no order, M0b needs one real FBS order, M0c needs one real DBS order. They run against the live cabinet under D6. It produces
+Two measurement cards: **M0a** on the live cabinet, without orders; **M0b** on the sandbox and from documentation, for everything that involves an order. No real order is made anywhere (owner, 26.11.2026). Together they produce
 `docs-internal/research/2026-11-26-wb-seller/measurement.md`, in which every UNVERIFIED item of this spec and of the
 research is marked **proven**, **refuted** or **still open**, each with the request shape and the answer (no token, no
 seller name, no buyer data in the file).
@@ -104,7 +104,8 @@ seller name, no buyer data in the file).
 1. Never delete anything in the cabinet: no `DELETE` request of any kind, no «move to trash», no supply removal, no
    stock-record removal, no label-identifier removal.
 2. Stocks on the live cabinet stay 0. A non-zero stock is set only for a short check, only after the owner's explicit
-   word for that check, and is returned to 0 in the same session.
+   word for that check, and is returned to 0 in the same session. No such check is planned: no real order is possible
+   on this cabinet (§3.2).
 3. The tokens live in `/Users/maksimmartirosov/Projects/woocommerce-wildberries-seller/.env` (the plugin's
    folder; `.env` is gitignored there): `WB_LIVE_TOKEN` is the live personal token, `WB_TEST_TOKEN` the sandbox one
    (coordinator, 26.11.2026 — this replaces the earlier place, the owner's project `open-warehouse-saas`). A brief names
@@ -120,52 +121,45 @@ seller name, no buyer data in the file).
 |---|---|---|
 | 1 | Decode the token locally: type, categories, read-only bit, expiry. `GET /ping` per host, `seller-info` | §9.1; whether the stored token can write to Content, Prices and Marketplace at all |
 | 2 | Read the release notes, the sandbox guide and the knowledge-base pages on DBS and marking in a browser (the portal refused the automated fetch) | webhooks (API §11), replaced methods (API §12), assembly deadlines |
-| 2a | **Sandbox pass** with `WB_TEST_TOKEN` and the sandbox's buyer-emulation methods: FBS order → supply → stickers → hand over → QR; DBS order → client, date, paid delivery → `confirm` → `deliver` → `receive` with and without `code` → `reject`; the label-identifier calls | the request and answer shapes for §6 and §7 and fixtures for the plugin's tests. **Proves plumbing only:** marking is optional in the sandbox and its phone and code behaviour is not the production one — nothing of the DBS gate or of marking blocking is marked proven from it |
 | 3 | `cards/list` over the dormant catalogue: real `vendorCode`, sizes, `skus`, `imtID` groups, `needKiz`, `editableSizePrice` | §5; how many cards are single-size |
 | 4 | Create **at most three** test cards (one single-size, one two colours × two sizes, one in a subject with size prices if the token's catalogue has one), named so that a human sees they are tests; time to `nmID` / `chrtID`; `cards/error/list` after a deliberately invalid field **validated locally first where possible** | G 11, G 10; barcode formats generated |
 | 5 | `cards/update` on a test card: change one own field, confirm by read-back that cabinet-only fields survive; try `vendorCode` change | D2; `RENAME_SKU` (API §4 UNVERIFIED) |
 | 6 | `media/save` on a test card; read back | §9.3 media job |
 | 7 | Price task on a test card: status history, time to «done», integer and percent rounding of `discountedPrice`, a sharp drop → quarantine, per-size price where allowed | G 18–19, D7, §9.5 |
 | 8 | `PUT /stocks` with amount **0** and read-back; the «unvalidated parameter name» trap | G 15; rule 2 keeps this the only stock write |
-| 9 | Warehouses and offices list; which `deliveryType` values exist in this cabinet | D8; whether a DBS warehouse exists for M0b |
+| 9 | Warehouses and offices list; which `deliveryType` values exist in this cabinet | D8 |
 | 10 | Create one supply, read its shipping points, leave it empty | D3; whether an empty supply expires by itself (it cannot be deleted — rule 1) |
 | 11 | 429 and 4xx accounting: read `X-Ratelimit-*` on ordinary calls; **do not** provoke a 429 | §12.2 |
+| 11a | **Refused writes.** The test cabinet may not be in good standing with Wildberries (owner, 26.11.2026), so a write may be refused (402 or a business refusal). Each write of items 4–10 is tried once; a refusal is recorded with its status and text and **not retried** (a refusal costs ten requests). The measurement file lists which writes the cabinet accepts | which of WP4–WP6's live acceptance steps are possible on this cabinet; the rest move to the sandbox |
 
-### 3.2 M0b and M0c — what needs a real order (needs the owner's word)
+### 3.2 M0b — orders, without a real order
 
-A dormant shop with zero stock receives no orders, so every order fact needs a short stock window (rule 2) **and a real
-purchase**. Whether Wildberries allows a seller, or someone asked by him, to buy his own item for a test is UNVERIFIED
-(Ozon forbids it; operator, 24.11.2026) — the owner decides how the test order is made before these cards start. See
-§13.3 T1.
+Self-purchases are forbidden by Wildberries and the test cabinet cannot receive orders at all (owner, 26.11.2026). So
+nothing below is a live order. The sources, in the order of trust: Wildberries' OpenAPI text and knowledge base;
+the **sandbox** with `WB_TEST_TOKEN` and its buyer-emulation methods; the carriers' own API documentation and our
+delivery plugins' code; fixtures built from those. The sandbox proves request and answer shapes only — marking is
+optional there, and its phones and codes are test data (API §3).
 
-**M0b — one real FBS order (items 12–14, 17).** It is not part of the DBS gate and is **not dropped when DBS is**:
-item 12 is the only source of the stock formula, so stock synchronisation with a non-zero amount (WP5) and the FBS
-order fixtures (WP7) wait for it.
+| # | Measure | How | Settles |
+|---|---|---|---|
+| 12 | An FBS order: fields, `requiredMeta` / `optionalMeta`, both status axes; whether the seller-warehouse stock goes down by itself | sandbox: set stock on a sandbox card, emulate an order, read the stock back | §6.1; a hint for the stock formula (§9.4) — the sandbox's answer is not proof of production |
+| 13 | Order → supply → sticker (formats) → shipping method → hand over → QR | sandbox | §6.2–6.3; fixtures for WP7, WP8 |
+| 14 | **Marking (D4):** write a «Честный знак» code, read its validation state; the refusal of a hand-over with a code missing; whether the cabinet lets a human enter each code kind | sandbox for the calls; documentation and the knowledge base for the refusal and for the cabinet route | §6.4; fixtures for WP9. The production refusal and the cabinet route stay unproven (§13.4 R3) |
+| 15 | **DBS check 1 — relay phone (D1):** which of `replacementPhone`, `phone` + `phoneCode`, `additionalPhones` come back and when; whether CDEK and Yandex accept such a number as the recipient | sandbox DBS order for the shapes; the carriers' API documentation and the phone validation in our CDEK and Yandex plugins, run against the documented number formats | §7.3. Whether a carrier's SMS and courier call reach the buyer through the relay cannot be shown without a real order (§13.4 R1) |
+| 16 | **DBS check 2 — confirmation code (D1):** `receive` with a code, without one, with a wrong one; where the buyer sees the code | sandbox emulation; documentation | §7.4. Whether production requires the code stays unproven (§13.4 R2) |
+| 17 | The first-hour buyer cancellation of an unconfirmed order | sandbox emulation, if it offers one | §6.1 |
+| 18 | Sandbox request / answer pairs saved as fixtures, test data only | — | the plugin's tests |
 
-**M0c — one real DBS order, the DBS gate (items 15–16).** It needs a DBS warehouse in the cabinet and real CDEK and
-Yandex shipments to the test buyer.
+### 3.3 DBS stays in 1.0; what the checks are for
 
-| # | Measure | Settles |
-|---|---|---|
-| 12 | One FBS order: fields, `requiredMeta` / `optionalMeta`, statuses on both axes, whether the seller-warehouse stock went down by itself | §6.1; the stock formula (API §6 UNVERIFIED) |
-| 13 | Order → supply → sticker (formats) → shipping method → hand over → QR | §6.2–6.3 |
-| 14 | **Marking (D4):** on an order of a marked item — write a «Честный знак» code from the shop side, read its validation state; try to hand the supply over with a code missing and record the refusal; then open the same order in the cabinet and record **whether the cabinet lets a human enter each code kind** (sgtin, UIN, IMEI, GTIN, expiration, customs declaration) | §6.4; the sentence for the plugin description |
-| 15 | **DBS gate 1 — relay phone (D1):** one DBS order; record which of `replacementPhone`, `phone` + `phoneCode`, `additionalPhones` come back and when; create a real CDEK and a real Yandex shipment for it with that number as the recipient; record whether each carrier accepts the number, and whether its SMS and its courier's call reach the buyer's handset | §7.3 |
-| 16 | **DBS gate 2 — confirmation code (D1):** hand the DBS parcel to the buyer through the carrier; record whether `receive` succeeds without `code`, what it answers when the code is absent or wrong, where the buyer sees the code, and whether the carrier's delivered status can stand in for it | §7.4 |
-| 17 | The first-hour buyer cancellation on an unconfirmed order, if the test buyer agrees | §6.1 |
+The owner's first decision made DBS conditional on two checks with a real order. His answer of 26.11.2026 replaces
+that: **DBS is in 1.0 whatever M0b shows**; no card leaves the plan. The checks are still made (items 15–16), because
+their result shapes §7.3 and §7.4, and what they cannot show is carried as a stated residual risk (§13.4) and said in
+the plugin description and the merchant docs. The design of §7 is therefore written to work in **both** outcomes of
+each check, not to depend on one.
 
-### 3.3 The DBS gate
-
-After M0c the coordinator records one line in the measurement file: **DBS in 1.0: yes / no**.
-
-- **Both checks pass** → §7 is implemented as written, amended by the measured facts.
-- **Either check fails, or the owner decides that no real DBS order can be made** → **DBS moves to the next release**
-  (the fallback stated in D1). Cards WF9, WF10, WD1 and WP10 leave the 1.0 list; nothing else changes, because WF6a
-  (order actions) and WF6b (order units) are needed by FBS anyway and are designed so that DBS adds actions, not a
-  mechanism. **M0b stays**: it is an FBS measurement.
-
-The FBS half of 1.0 does not wait for the gate. M0a alone unblocks the catalogue and price cards and the stock
-plumbing; a non-zero stock push and the FBS order cards also need M0b 12.
+M0a unblocks the catalogue, price and stock cards; M0b unblocks the order cards' acceptance. Neither waits for the
+owner.
 
 ## 4. Capability → seam map
 
@@ -200,7 +194,7 @@ Wildberries-only code. Rows follow the gap map, re-read for DBS being in scope.
 | Stickers: one PNG / SVG / ZPL per unit | one PDF per task (G 27) | extend (M) | WF7 |
 | Buyer and address on a DBS order | `Wc_Order_Store::set_buyer()` copies name, phone, city, region only (READ `flows/class-wc-order-store.php:444-477`) | extend (M) | WF9 |
 | A marketplace order that the merchant must be able to ship | `Order_Screen` makes every marketplace order read-only (READ `admin/order/class-order-screen.php`) | extend | WF9 |
-| Handing an existing order to a carrier | the delivery editor answers 404 for an order that is not a row of «Заказы доставки» (READ `woodev/shipping-method/admin/orders/class-order-editor.php:500-512`) | **extend in the shipping module** — §13.3 T2 | WD1 |
+| Handing an existing order to a carrier | the delivery editor answers 404 for an order that is not a row of «Заказы доставки» (READ `woodev/shipping-method/admin/orders/class-order-editor.php:500-512`) | **extend in the shipping module** — owner's exception, §13.3 T2 | WD1 |
 | Carrier events → seller actions | actions `woodev_shipping_order_exported`, `woodev_shipping_delivery_status_changed` exist (READ) | extend (S) | WF10 |
 | «Ozon» and «отправление» in merchant strings | A1, A2 of the gap map | extend (S) | WF11 |
 | Licence gate, diagnostics, deletion, bulk runs, tools, analytics | G 33 | fits | — |
@@ -318,9 +312,8 @@ the plugin deletes or trashes a card.
   characters). The adapter maps the pair to the module's canonical statuses and supplies its own status names and
   groups; the WooCommerce status follows real transitions only (module rule, #1920).
 - **Cancel.** Per unit, no reason, `PATCH /api/v3/orders/{id}/cancel`, only while `isCancellable` (WF6a); what the order then shows and what happens to stock is WF6b.
-- **Stock.** Whether Wildberries lowers the seller-warehouse amount on an order is UNVERIFIED (M0b 12); it picks the
-  adapter's stock formula (`wc_only` or `wc_plus_reserved`). Until M0b 12 is in, the formula is unset and the adapter
-  pushes nothing but 0 — no guessed formula ships (§9.4).
+- **Stock.** Whether Wildberries lowers the seller-warehouse amount on an order cannot be measured on a real order
+  (§3.2); the formula and why it is safe either way are in §9.4.
 
 ### 6.2 Supplies — the page «Поставки» (D3)
 
@@ -364,11 +357,12 @@ required and absent has no sticker (409 `CustomsDeclarationIsRequired`): the but
 - **«Чего не хватает».** The supply shows, per unit, each required identifier with its state: filled and valid,
   waiting for validation (`pending`), refused with Wildberries' reason translated (`sgtinNotFound`, `sgtinRetired`, …),
   or **missing**. For the kinds the plugin does not enter in 1.0 (UIN, IMEI, GTIN, expiration date, customs
-  declaration) the line names the kind and says where to enter it — the cabinet, if M0b 14 shows the cabinet allows it.
-- **If the cabinet does not allow it** (M0b 14): such goods cannot be shipped through the plugin in 1.0, and the plugin
+  declaration) the line names the kind and says where to enter it — the cabinet.
+- **Whether the cabinet accepts those codes for an order run from the shop is not proven** (M0b 14 reads the
+  documentation; no real order exists to try it — §13.4 R3). If it turns out that it does not, such goods cannot be shipped through the plugin in 1.0, and the plugin
   description and the merchant docs say so in plain words (D4).
 
-## 7. DBS: orders the seller delivers (conditional on §3.3)
+## 7. DBS: orders the seller delivers
 
 ### 7.1 What arrives
 
@@ -425,7 +419,7 @@ order the rule is **seed, then leave alone**:
 Buyer data is personal data: it is covered by WordPress' export
 and erase tools and removed by the module's account deletion.
 
-### 7.3 The phone (gate 1)
+### 7.3 The phone (check 1)
 
 `replacementPhone` is a relay number for the buyer; `phone` is a backup relay number that needs the extension
 `phoneCode`; there are additional numbers and codes; an empty value means «not assigned yet» (SOURCED). So a relay
@@ -434,10 +428,15 @@ number **without** an extension may exist. The design:
 - the order's phone is `replacementPhone` when present; the backup number and its extension are shown in the details
   box as «запасной номер, добавочный …» and never concatenated into the phone field;
 - the client call is repeated on the status poll while the number is empty;
-- **M0c 15 decides** whether this number works for CDEK and Yandex (accepted as the recipient; SMS and calls reach the
-  buyer). If only the number with an extension is ever given, or a carrier's messages do not arrive, gate 1 fails.
+- when only the backup number with an extension exists, the phone field gets that number and the order shows «для
+  связи нужен добавочный …» — a carrier cannot dial an extension from an SMS gateway, and the manager sees that before
+  he hands the order over;
+- M0b 15 checks that the number formats Wildberries documents pass CDEK's and Yandex's recipient validation. **Not
+  provable without a real order:** that the carrier's SMS and the courier's call reach the buyer through the relay
+  (§13.4 R1). The merchant docs say it, and the order's delivery date, address and comment are passed to the carrier so
+  that a delivery does not hang on one call.
 
-### 7.4 Statuses and actions (gate 2)
+### 7.4 Statuses and actions (check 2)
 
 `new` → `confirm` → `deliver` → `receive` or `reject`; `cancel` from `new` or `confirm` only; Wildberries itself sets
 `cancel_missed_call` (SOURCED). The status calls are batch calls with per-unit results and a limit of 1 request per
@@ -452,10 +451,16 @@ second.
 | «Отказ при получении» | `status/reject` | `deliver` |
 | «Отменить» | `status/cancel` | `new`, `confirm`; no reason |
 
-**M0c 16 decides** the last mile: if `receive` works without a code, the carrier's «delivered» status sends it
-automatically; if a code is always required and only the buyer knows it, a carrier cannot supply it, and unless the
-measurement shows a workable route (the buyer tells the code to the seller; Wildberries closes the order by itself),
-gate 2 fails.
+**The last mile works in both outcomes of check 2** (whether production demands the buyer's code is not provable
+without a real order — §13.4 R2):
+
+- When the carrier reports «delivered» (WF10), the module sends `receive` without a code, **once**.
+- If Wildberries accepts it, the order is closed with no work for the merchant.
+- If it refuses, the order shows «Подтвердите вручение: нужен код покупателя» and waits for the manager's «Вручён»
+  with the code, which the buyer sees in the Wildberries app and tells the seller or the courier. The refused attempt is
+  not repeated (a refusal costs ten requests); the account remembers that this cabinet needs codes and stops the
+  automatic attempt for later orders.
+- Wildberries' own closing of the order (`sold` on the WB status axis) is picked up by the status poll in either case.
 
 ### 7.5 Shipping a DBS order with CDEK or Yandex
 
@@ -473,12 +478,14 @@ pickup point ([#710 design](2026-09-27-710-create-edit-order-design.md), O3, O12
   registry in the shipping module, so that the marketplace module asks for it without the shipping module knowing any
   marketplace.
 - **WF10 (marketplace module).** Listens to `woodev_shipping_order_exported` → sends `deliver`;
-  `woodev_shipping_delivery_status_changed` → on «delivered» sends `receive` (if gate 2 allows) or raises «подтвердите
-  вручение»; on «returned / refused» offers `reject`. A failed call is retried by the module's job, never by the
+  `woodev_shipping_delivery_status_changed` → on «delivered» sends `receive` once and, if refused, raises «подтвердите
+  вручение» (§7.4); on «returned / refused» offers `reject`. A failed call is retried by the module's job, never by the
   carrier's code. The carrier's tracking number is shown in the order details box.
 - A merchant who delivers by his own courier, or with a carrier that is not ours, uses the buttons of §7.4 alone.
 
-WD1 changes delivery code, which the marketplace round ruled out (B3). It needs the owner's word — §13.3 T2.
+WD1 changes delivery code, which the marketplace round ruled out (B3; the s224 rule «delivery code is not touched»).
+**The owner approved it on 26.11.2026 as an exception to that rule, for this card only** (§13.3 T2): the entry is added;
+how existing rows are created, edited and exported does not change.
 
 ## 8. Framework extensions
 
@@ -543,9 +550,15 @@ per account, as in Ozon Seller (**interpretation** of D8's «FBS and DBS have th
 warehouses to choose from; a second default would have no consumer while one product feeds one warehouse — §13.2 I4).
 A warehouse that is being processed or deleted (`isProcessing`, `isDeleting`) defers the push.
 
-**The stock formula waits for M0b 12.** WP5 builds and proves the plumbing after M0a (payload, warehouses, a push of 0
-and its read-back); the formula is one adapter value that S0 sets from the measurement. Stock synchronisation is not
-called ready, and is not released to a merchant, before that.
+**The stock formula is `wc_only`, and it does not depend on the unmeasurable fact.** The push is absolute and the
+WooCommerce order that the plugin creates for a Wildberries order takes the unit from WooCommerce stock. So after the
+order is ingested the plugin pushes «shop stock, already without that unit» — the right number whether Wildberries
+lowered its own figure at the order or not. `wc_plus_reserved` would be right only if Wildberries subtracted open
+orders from the pushed amount again; nothing in its OpenAPI text says so (the stock read returns `amount` only, no
+reserved quantity), and M0b 12 looks for it in the sandbox. The window that remains is the time between the order at
+Wildberries and its ingest (up to the 10-minute poll), the same as for Ozon Seller, which also runs `wc_only`. This is
+residual risk R4 (§13.4): if a real shop shows double subtraction, the formula is one adapter value to change. WP5 is
+therefore **not blocked by any measurement that needs an order**; its live acceptance is a push of 0 (D6).
 
 ### 9.5 Prices (D7)
 
@@ -676,13 +689,15 @@ Acceptance and measurement run on the live cabinet under the four rules of §3, 
   existing card — an update, a price, photos — is made only on the test cards, unless the owner names a card.
 - **Prices** are written on test cards; a price changed on any other card is restored in the same session from the
   value read first.
-- **Stock**: the only standing write is 0. The link, stock and order acceptance that needs a sellable item is batched
-  into the short windows the owner allows (rule 2) — M0b and M0c, then one acceptance window near the end (WP11).
-- **Orders, supplies with units, marking, DBS** can be accepted on the live cabinet only inside such a window and with
-  a real purchase (§3.2). Outside it they are covered by fixtures and by the sandbox (`WB_TEST_TOKEN`) with emulated
-  buyer actions — which proves the request plumbing only: marking is optional in the sandbox and a sandbox delivery is
-  never evidence of the production refusal (API §3). The rules «never delete» and «stock 0» are the live cabinet's; the
-  sandbox holds test data only.
+- **Stock**: the only write is 0. No stock window is planned: no real order is possible on this cabinet (owner,
+  26.11.2026).
+- **Refused writes.** The cabinet may refuse some writes because of its standing with Wildberries; M0a 11a records
+  which. A step the cabinet refuses is accepted on the sandbox instead and the acceptance report says so.
+- **Orders, supplies with units, stickers, marking, DBS are never exercised on the live cabinet.** They are accepted
+  on the sandbox (`WB_TEST_TOKEN`) with emulated buyer actions and on fixtures. That proves the request plumbing
+  only: marking is optional in the sandbox and a sandbox delivery is never evidence of the production refusal
+  (API §3). What this leaves unproven is listed in §13.4 and goes into the release notes for the owner. The rules
+  «never delete» and «stock 0» are the live cabinet's; the sandbox holds test data only.
 - The rig that talks to the live cabinet keeps the module's first-remote-write confirmation on, and no agent runs
   «все по фильтру» against it.
 
@@ -696,15 +711,15 @@ near the end.
 | # | Item | Card |
 |---|---|---|
 | U1 | The stored token's type, categories and write access | M0a 1 |
-| U2 | Webhooks do not exist; which methods are being replaced; how faithful the sandbox is | M0a 2, 2a |
+| U2 | Webhooks do not exist; which methods are being replaced; how faithful the sandbox is | M0a 2, M0b |
 | U3 | Card creation: time to ids, error-list behaviour, generated barcode format, `vendorCode` change | M0a 4–5 |
 | U4 | Price task timing, rounding of the discounted price, quarantine threshold, size-price categories | M0a 7 |
 | U5 | An empty supply's lifetime | M0a 10 |
-| U6 | Wildberries lowers seller-warehouse stock on an order | M0b 12 |
-| U7 | The production refusal for a missing code; code validation timing; the cabinet's manual entry per code kind | M0b 14 |
-| U8 | DBS relay phone: what is given, when, and whether CDEK / Yandex messages reach the buyer | M0c 15 |
-| U9 | DBS `receive`: whether the confirmation code is required and who can know it | M0c 16 |
-| U10 | Whether a seller's own test purchase is allowed by Wildberries | owner, before M0b and M0c |
+| U6 | Wildberries lowers seller-warehouse stock on an order | M0b 12 (sandbox hint); production: §13.4 R4 |
+| U7 | The production refusal for a missing code; code validation timing; the cabinet's manual entry per code kind | M0b 14 (documentation); production: §13.4 R3 |
+| U8 | DBS relay phone: what is given, when, and whether CDEK / Yandex messages reach the buyer | M0b 15 (shapes, validation); delivery of messages: §13.4 R1 |
+| U9 | DBS `receive`: whether the confirmation code is required and who can know it | M0b 16 (sandbox); production: §13.4 R2 |
+| U10 | Which live writes the test cabinet refuses | M0a 11a |
 | U11 | `refresh()` of a grouped order can find its member ids (G 22) | WP7 |
 | U12 | Which separator substitutes real scanners send for GS | WP9 |
 | U13 | Assembly deadlines and penalties (not in the OpenAPI files) | M0a 2 (knowledge base) |
@@ -726,16 +741,31 @@ near the end.
 
 ### 13.3 Tensions the coordinator must hear about
 
-Nothing in the decisions was changed. These are the places where two decisions, or a decision and a standing rule,
-pull against each other; each has the reading this spec took and what would settle it.
+These are the places where two decisions, or a decision and a standing rule, pull against each other; each has the
+reading this spec took and what would settle it. T1 and T2 were answered by the owner on 26.11.2026 and are recorded
+as settled; T3–T5 stand as stated.
 
 | # | Tension | This spec's reading | Needs |
 |---|---|---|---|
-| T1 | **D1's gate checks need a real DBS order; D6 keeps stock at 0.** A dormant shop receives no orders, so M0c needs a short stock window, a DBS warehouse in that cabinet, a real buyer, and real CDEK / Yandex shipments to that buyer. Whether a seller-arranged test purchase is allowed on Wildberries is unverified (U10) | M0 is split: M0a runs at once and unblocks the work that needs no order; M0b (one FBS order, the stock formula) and M0c (the DBS gate) wait for the owner's word. If no real DBS order can be made, the gate cannot be measured and D1's own fallback applies (DBS → next release) | the owner's word on how the test order is made |
-| T2 | **D1 «our delivery plugins ship DBS orders» against the rule «delivery code is not touched» (B3).** An existing order cannot be given a carrier's method without a new entry in the delivery wizard; the marketplace order screen is read-only | Card WD1 changes the shipping module, as one stated exception, without changing how existing rows behave | the owner's word that WD1 may touch the shipping module; without it DBS has only the manual buttons and D1's purpose is not met |
+| T1 | **D1's checks needed a real DBS order; D6 keeps stock at 0.** | **Settled by the owner, 26.11.2026.** No real test order is possible: Wildberries forbids self-purchases and the test cabinet cannot take orders. **DBS stays in 1.0.** The two checks are made from the API documentation, simulated requests, fixtures and the sandbox; the same holds for the FBS order and supply flows. What cannot be shown that way is known residual risk (§13.4), not a reason to move DBS | — |
+| T2 | **D1 «our delivery plugins ship DBS orders» against the rule «delivery code is not touched» (B3, s224).** An existing order cannot be given a carrier's method without a new entry in the delivery wizard | **Settled by the owner, 26.11.2026: approved.** Card WD1 changes the shipping module — the «Оформить доставку» entry for an existing order — as an owner's exception to that rule. The exception is this card's only; every other card keeps the delivery-untouched invariant | — |
 | T3 | **D4 «a code field in the order» against Wildberries' rule** that a code is accepted only in `confirm`, i.e. for FBS only after the unit is in a supply | The field exists in the order and in the supply, and is active from `confirm`; before that it says why | nothing; stated so nobody builds an always-active field |
 | T4 | **D6 «never delete» against test leftovers.** Test cards and an empty test supply stay in the friend's cabinet for good | Counted and named in advance (§12.4) | the owner knows the cabinet keeps up to three test cards and one empty supply |
 | T5 | **D6 «never delete» and product functions that are deletions** (remove a cargo place, clear a wrong label identifier) | They may exist in the product if a card needs them, but are never exercised on the test cabinet; they are covered by fixtures | nothing |
+
+### 13.4 Known residual risks (accepted by the owner, 26.11.2026)
+
+No real order can be made before the release. These are the facts that only a real order would prove; 1.0 ships with
+them stated, the design works in either outcome, and the first real merchant orders are watched for them.
+
+| # | Unproven | What the design does about it | Where the merchant is told |
+|---|---|---|---|
+| R1 | A carrier's SMS and courier call reach a DBS buyer through Wildberries' relay number | The relay number is used as the recipient's phone; a number that needs an extension is flagged before hand-over; address, date and comment go to the carrier (§7.3) | merchant docs, DBS section |
+| R2 | Production accepts «received» without the buyer's confirmation code when a carrier delivers | One automatic attempt without a code; on refusal the manager enters the code; the account remembers (§7.4) | merchant docs, DBS section |
+| R3 | Production refuses a hand-over with a required code missing exactly as documented; the cabinet accepts the code kinds 1.0 does not enter, for an order run from the shop | The «what is missing» list is built from Wildberries' own per-unit states, and the documented refusals are handled from fixtures (§6.4) | plugin description (D4) |
+| R4 | Wildberries does not subtract open orders from the pushed stock a second time | `wc_only`, right in both cases the documentation allows; one adapter value to change (§9.4) | — |
+| R5 | The sandbox behaves like production for orders, supplies and stickers | Every order flow is also covered by fixtures from the OpenAPI text; refusals are never inferred from a sandbox success | — |
+| R6 | The live test cabinet accepts the writes the acceptance needs | M0a 11a measures it; refused steps are accepted on the sandbox | — |
 
 ## 14. Implementation card plan
 
@@ -748,10 +778,9 @@ delivery-untouched invariant except WD1. Every card that touches the live cabine
 
 | Id | Size · tier | Depends on | Scope · acceptance |
 |---|---|---|---|
-| M0a — Live measurement without orders, sandbox pass | M · Sonnet 5.5 | — (tokens are in place, §3 rule 3) | §3.1. Accept: `measurement.md` with items 1–11 and 2a proven, refuted or open; sandbox request / answer pairs saved as fixtures with buyer data removed; every write listed before it was sent; no `DELETE` in the request log; stock never above 0; no token in any file |
-| M0b — Live measurement with one FBS order | M · Sonnet 5.5 | M0a; the owner's word for the stock window and the test purchase (T1) | §3.2 items 12–14 and 17. Accept: whether Wildberries lowered the seller-warehouse stock, stated as the formula WP5 must use; order, supply, sticker and marking facts with fixtures (buyer data removed); stock back at 0. **Stays in the plan whatever the DBS gate says** |
-| M0c — Live measurement with one DBS order, the DBS gate | M · Sonnet 5.5 | M0a; the owner's word (T1); a DBS warehouse in the cabinet | §3.2 items 15–16. Accept: the gate line «DBS in 1.0: yes / no» with its evidence; stock back at 0 |
-| S0 — Spec amendment | S · the coordinator | M0a (first pass), M0b (second), M0c (third) | Fold the measurements into this spec; set the stock formula; drop or keep the DBS cards; re-estimate |
+| M0a — Live measurement without orders | M · Sonnet 5.5 | — (tokens are in place, §3 rule 3) | §3.1. Accept: `measurement.md` with items 1–11a proven, refuted or open; the list of writes the cabinet refused; every write listed before it was sent; no `DELETE` in the request log; stock never above 0; no token in any file |
+| M0b — Order flows on the sandbox and from documentation | M · Sonnet 5.5 | — (runs beside M0a; `WB_TEST_TOKEN`) | §3.2 items 12–18. Accept: FBS and DBS flows run end to end on the sandbox; fixtures saved; for each of the two DBS checks and for marking — what was shown, from which source, and what stays unproven (matching §13.4); the carriers' phone validation run against the documented number formats; no live-cabinet call in this card |
+| S0 — Spec amendment | S · the coordinator | M0a, M0b | Fold the measurements into this spec; confirm or change the stock formula; update §13.4; re-estimate |
 
 ### Framework (`woodev-plugin-framework`)
 
@@ -769,10 +798,10 @@ for client cards, `src/marketplace-admin/**` with its built bundle.
 | WF6b — Order units and partial cancellation | M · Sonnet 5.5 | — (disjoint files from WF6a; the details-box unit list lands after WF6a if both touch `class-order-details-box.php`) | `orders/class-registry-order-writer.php`, `orders/class-order-group.php`, `flows/class-wc-order-store.php`, `flows/interface-order-meta-contract.php`, `admin/order/class-order-details-box.php` (unit list), `admin/pages/orders/class-site-orders-rows.php` (children) | §6.1, §8. Accept, on a fake grouped marketplace with stock-managed products, HPOS and legacy storage: order of units A and B → cancel A → **A's stock is back, B's is still taken**, A is shown as its own row «Отменено», the total is B's; three more polls with A still cancelled → stock and order unchanged; then cancel B → the order is cancelled and B's stock is back once; two units of the same size, one cancelled → exactly one unit restored; Ozon's whole-posting cancel unchanged |
 | WF7 — Sticker documents | M · Sonnet 5.5 | WF6a | `flows/class-label-*`, `admin/order/class-label-button.php` | §8. Accept: several PNG → one printable sheet; ZPL and SVG downloaded under real names; Ozon PDF unchanged |
 | WF8 — Shipments page «Поставки» | L · Sonnet 5.5 | WF6a | new `shipments/**`, `admin/pages/shipments/**`, `data/**`, `jobs/**`, `class-marketplace-plugin.php` (page offer) | §6.2, §8. Accept: fake adapter runs create → add → options → missing list → close → document; a table read makes no remote call; no page without the capability; the «Заказы доставки» counterpart named and matched |
-| WF9 — Seller-delivered orders | M · Sonnet 5.5 | WF6a, WF6b (same order-store file); the DBS gate | `orders/**`, `flows/class-wc-order-store.php`, `admin/order/**`, `admin/pages/orders/**`, `deletion/**` | §7.2, §8. Accept: address, shipping line and paid mark written; address and phone editable, items locked; scheme filter; personal data exported and erased. **Ownership sequence:** import → the manager edits the phone and the address and a second shipping line is added by another writer → three marketplace polls, one of them with a changed Wildberries phone → the edited phone and address, the foreign shipping line and the order total are unchanged, the payload meta shows the new Wildberries value; an unedited field does follow a changed Wildberries value |
+| WF9 — Seller-delivered orders | M · Sonnet 5.5 | WF6a, WF6b (same order-store file) | `orders/**`, `flows/class-wc-order-store.php`, `admin/order/**`, `admin/pages/orders/**`, `deletion/**` | §7.2, §8. Accept: address, shipping line and paid mark written; address and phone editable, items locked; scheme filter; personal data exported and erased. **Ownership sequence:** import → the manager edits the phone and the address and a second shipping line is added by another writer → three marketplace polls, one of them with a changed Wildberries phone → the edited phone and address, the foreign shipping line and the order total are unchanged, the payload meta shows the new Wildberries value; an unedited field does follow a changed Wildberries value |
 | WF10 — Carrier bridge | S · Sonnet 5.5 | WF6a, WF9, WD1 | new `flows/class-carrier-bridge.php`, `class-flow-wiring.php` | §7.5. Accept: an exported carrier shipment triggers the mapped seller action once; a failed call is retried by the module's job; nothing happens for an order of another marketplace or a shop order |
 | WF11 — Neutral wording, contract cleanup | S · Haiku 5.5 | WF6a, WF6b, WF8 (shared files) | strings in `admin/**`, `deletion/**`, `settings/**`, `capabilities/**` | §8. Accept: a test pins «no marketplace name in a framework msgid»; nouns from the descriptor; Ozon change named |
-| WD1 — Delivery for an existing order | L · Sonnet 5.5 | the owner's word (T2); the DBS gate | `woodev/shipping-method/admin/orders/**`, `src/shipping-orders-page/order-wizard/**` | §7.5. Accept: a foreign order gets a carrier line through the wizard and becomes a row; its items and totals are untouched; the marketplace's own shipping line is untouched and the carrier line adds 0 to the total; after a hand-over and three marketplace polls (run with WF9) the carrier line, the resolved address and the phone are still there; existing create and edit behave as before (their tests unchanged); classic and HPOS |
+| WD1 — Delivery for an existing order | L · Sonnet 5.5 | — (owner's exception to «delivery code is not touched», 26.11.2026 — T2) | `woodev/shipping-method/admin/orders/**`, `src/shipping-orders-page/order-wizard/**` | §7.5. Accept: a foreign order gets a carrier line through the wizard and becomes a row; its items and totals are untouched; the marketplace's own shipping line is untouched and the carrier line adds 0 to the total; after a hand-over and three marketplace polls (run with WF9) the carrier line, the resolved address and the phone are still there; existing create and edit behave as before (their tests unchanged); classic and HPOS |
 
 ### Plugin (`woocommerce-wildberries-seller`)
 
@@ -782,13 +811,13 @@ for client cards, `src/marketplace-admin/**` with its built bundle.
 | WP2 — Catalogue, mappings, validation | M · Sonnet 5.5 | WP1 | §9.2. Accept: subject search, required and limited characteristics, every rule with its merchant reason |
 | WP3 — Cabinet cards: list, link, import | L · Sonnet 5.5 | WP1, WF3 | §5.3–5.4, §9.3. Accept on the live cabinet (read-only): the dormant catalogue lists, links and imports; a colour × size group → one variable product |
 | WP4 — Create and update cards, media | L · Fable 5.2 | WP2, WP3, WF2 | §5.5, §9.3. Accept: create on the test cards; photos confirmed by read-back, a lost job retried; an update keeps every cabinet-only field (read-back diff empty); no delete call exists in the client |
-| WP5 — Stock and warehouses | M · Sonnet 5.5 | WP3 to start; **M0b 12 to be accepted** | §9.4. Accept in two steps: (1) after M0a — the payload contract test, on the live cabinet a push of 0 and its read-back, both formulas covered by unit tests; (2) after M0b 12 — the measured formula set, and only then a non-zero push in the owner's window. The card is not closed and stock sync is not called ready after step 1 |
+| WP5 — Stock and warehouses | M · Sonnet 5.5 | WP3 | §9.4. Accept: the payload contract test; both formulas covered by unit tests, `wc_only` in force; on the live cabinet a push of 0 and its read-back (or, if M0a 11a shows the cabinet refuses it, on the sandbox); on the sandbox a non-zero push, an emulated order and the stock after ingest |
 | WP6 — Prices | M · Sonnet 5.5 | WP3, WF1, WF4 | §9.5. Accept: price and discount on a test card settle through WF1; quarantine shown; the size-price path where allowed |
-| WP7 — FBS orders | L · Sonnet 5.5 | WP3, WF6a, WF6b; **M0b** for its measured fixtures | §6.1. Accept: grouping in every arrival order, both status axes, unit cancel with the stock check of WF6b, both order storages; fixtures from M0b 12–13 (it may start on the sandbox fixtures of M0a 2a, and is not accepted on them alone) |
+| WP7 — FBS orders | L · Sonnet 5.5 | WP3, WF6a, WF6b; M0b for its fixtures | §6.1. Accept: grouping in every arrival order, both status axes, unit cancel with the stock check of WF6b, both order storages; fixtures from M0b 12–13 and an end-to-end run on the sandbox; no live-cabinet order |
 | WP8 — Supplies and stickers | M · Sonnet 5.5 | WP7, WF7, WF8 | §6.2–6.3. Accept: the `Shipment_Batches` half against fixtures; mixed cargo types refused locally; sticker sheet printed in a real browser |
 | WP9 — Marking codes | M · Sonnet 5.5 | WP7, WP8 | §6.4. Accept: scanner input normalised; every `sgtin*` state has a Russian sentence; the «чего не хватает» list names the kinds 1.0 does not enter; documented refusals from fixtures — a sandbox delivery is not evidence |
-| WP10 — DBS orders | L · Sonnet 5.5 | WP7, WF9, WF10; the DBS gate | §7. Accept: the first payload stored before any action; phone rule of §7.3; every action of §7.4 with its status gate; a carrier export moves the order to `deliver` |
-| WP11 — Acceptance and release materials | M · Haiku 5.5 | all | Rig and live-cabinet acceptance in the owner's window; wiki; merchant docs for a WordPress novice; the release materials package. The plugin description states what marking kinds are not entered (D4) and anything still unproven |
+| WP10 — DBS orders | L · Sonnet 5.5 | WP7, WF9, WF10; M0b for its fixtures | §7. Accept: the first payload stored before any action; phone rule of §7.3 incl. the extension-only case; every action of §7.4 with its status gate; both outcomes of the automatic `receive` (accepted; refused → code asked, no second attempt); a carrier export moves the order to `deliver`; end to end on the sandbox |
+| WP11 — Acceptance and release materials | M · Haiku 5.5 | all | Rig acceptance; live-cabinet acceptance of the card, price and zero-stock paths; sandbox acceptance of every order flow; the residual risks of §13.4 written into the release notes for the owner; wiki; merchant docs for a WordPress novice; the release materials package. The plugin description states what marking kinds are not entered (D4) and anything still unproven |
 
 ### Order and parallelism
 
@@ -799,32 +828,30 @@ changes no owner decision and no scope — it sets the order in which cards are 
 
 | Wave | Cards | The merchant gets |
 |---|---|---|
-| 1 — products and stock | M0a, **M0b**, S0, WF5, WF3, WF2 → WP1, WP2, WP3, WP5, WP4 | connection, link and import of existing cards, creation of cards from products; stock sync once M0b 12 is in |
+| 1 — products and stock | M0a, S0, WF5, WF3, WF2 → WP1, WP2, WP3, WP5, WP4 | connection, link and import of existing cards, stock sync, creation of cards from products |
 | 2 — prices | WF1, WF4 → WP6 | prices with honest results |
-| 3 — FBS orders | WF6a, WF6b, WF7, WF8, WF11 → WP7, WP8, WP9 | orders, supplies, stickers, marking |
-| 4 — DBS (behind the gate) | M0c, WF9, WD1, WF10 → WP10 | orders the seller delivers |
+| 3 — FBS orders | M0b, WF6a, WF6b, WF7, WF8, WF11 → WP7, WP8, WP9 | orders, supplies, stickers, marking |
+| 4 — DBS | WF9, WD1, WF10 → WP10 | orders the seller delivers |
 | 5 | WP11 | acceptance and the release |
 
-Within wave 1 the first usable state is **WP1 + WP3** (connect, link and import existing cards). **Stock sync becomes
-usable only when M0b 12 is in**: WP5's plumbing is built right after WP3, but the stock formula comes from one real FBS
-order, and without it the adapter pushes nothing but 0 (§9.4). Where readiness waits: WP5's acceptance and WP7's
-acceptance on M0b; WP10 and the DBS cards on M0c. WF2 and WP4, the two hardest cards, follow on the one Fable 5.2
-slot. Waves 2 and 3 have no dependency on wave 1's framework cards and start as soon as workers are free, but never
-ahead of a wave-1 card that is ready to be taken. M0b and M0c are asked of the owner on the first day, because the
-answer needs his time, not ours — and M0b first, since the feature every requester asked for waits on it. Whether wave 1 alone is released first is the owner's call; the
-plan only makes it possible.
+Within wave 1 the first usable state is **WP1 + WP3 + WP5** (connect, link existing cards, sync stock). WP5 waits for
+no order measurement: its formula is settled in §9.4. Where readiness does wait: the acceptance of WP7–WP10 on M0b's
+sandbox fixtures. WF2 and WP4, the two hardest cards, follow on the one Fable 5.2 slot. Waves 2–4 have no dependency
+on wave 1's framework cards and start as soon as workers are free, but never ahead of a wave-1 card that is ready to
+be taken. Nothing in the plan waits for the owner any more. Whether wave 1 alone is released first is the owner's
+call; the plan only makes it possible.
 
 ```text
 M0a ──► S0 ──► WF5 ─► WP1 ─► WP2 ─────────────┐
-   │           WF3 ─► WP3 ─► WP5 (plumbing)   ├─► WP4 (after WF2)
+   │           WF3 ─► WP3 ─► WP5              ├─► WP4 (after WF2)
    │           WF1 ─► WF4 ─► WP6              │
    │           WF2 ───────────────────────────┘
    │           WF6a ─► WF7 ─┐
    │           WF6a ─► WF8 ─┼─► WP7 ─► WP8 ─► WP9
    │           WF6b ────────┘
-   │           WF6a, WF6b, WF8 ─► WF11
-   ├─► M0b (owner's word) ─► S0 ─► WP5 accepted (stock formula) ; WP7 accepted (measured fixtures)
-   └─► M0c (owner's word) ─► S0 ─► gate ─► WF9 ─► WD1 ─► WF10 ─► WP10
+               WF6a, WF6b, WF8 ─► WF11
+M0b (sandbox) ─► fixtures for WP7, WP8, WP9, WP10
+WF6a, WF6b ─► WF9 ─► WD1 ─► WF10 ─► WP10
                                                     all ─► WP11
 ```
 
@@ -833,18 +860,18 @@ WF11 (FBS orders), after WF9–WF10 and WD1 (DBS). **Totals:**
 
 | | L | M | S | Cards |
 |---|---|---|---|---|
-| Phase 0 (M0a, M0b, M0c, S0) | — | 3 | 1 | 4 |
+| Phase 0 (M0a, M0b, S0) | — | 2 | 1 | 3 |
 | Framework (WF1–WF11 with WF6a and WF6b, WD1) | 5 | 5 | 3 | 13 |
 | Plugin (WP1–WP11) | 4 | 7 | — | 11 |
 
-If the DBS gate closes: WF9, WF10, WD1 and WP10 leave (2 L, 1 M, 1 S), and 1.0 ships as FBS with 10 framework and 10
-plugin cards. M0b does not leave with them.
+No card is conditional: DBS stays in 1.0 (owner, 26.11.2026).
 
 ## Revision log
 
 | Date | Change |
 |---|---|
-| 26.11.2026 | After the critic review of PR #1992 (no owner decision and neither open tension T1 / T2 changed): (1) a cancelled unit is a stored snapshot shown as its own row, not a stock-holding line item — §6.1; (2) the unit key is one escaped two-component encoding, frozen at linking — §5.1; (3) the FBS order measurement is its own card M0b, a stated prerequisite of WP5's and WP7's acceptance, apart from the DBS gate M0c — §3.2, §9.4, §14; (4) seed-then-leave-alone ownership of DBS order fields and two shipping lines with two owners — §7.2; (5) separate FBS and DBS label-identifier buckets, DBS writes 500 / min — §12.2; (6) WF6 split into WF6a (actions) and WF6b (units and partial cancellation) |
+| 26.11.2026 | After the critic review of PR #1992 (no owner decision and neither open tension T1 / T2 changed): (1) a cancelled unit is a stored snapshot shown as its own row, not a stock-holding line item — §6.1; (2) the unit key is one escaped two-component encoding, frozen at linking — §5.1; (3) the stock formula's dependency on an order measurement was made explicit (superseded the same day by the owner's answer, next row) — §3.2, §9.4, §14; (4) seed-then-leave-alone ownership of DBS order fields and two shipping lines with two owners — §7.2; (5) separate FBS and DBS label-identifier buckets, DBS writes 500 / min — §12.2; (6) WF6 split into WF6a (actions) and WF6b (units and partial cancellation) |
+| 26.11.2026 | The owner's answers. **T1:** no real order is possible; DBS stays in 1.0; the DBS checks and all FBS order flows are done from documentation, fixtures and the sandbox, with the unproven facts as stated residual risk (§13.4); the two real-order measurement cards became one sandbox card M0b; the stock formula is settled as `wc_only` without an order measurement (§9.4), which is how critic finding 3 is closed now; refused live writes are measured (M0a 11a). **T2:** approved — WD1 changes the shipping module as an owner's exception to «delivery code is not touched» |
 
 ## Related
 
