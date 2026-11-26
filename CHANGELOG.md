@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.25] — 2026-11-26
+### Bug Fixes
+- **marketplace**: Zero the left warehouse when a product changes warehouse (#2034) (#2037)
+
+
+### Features
+- **marketplace**: Settle prices the marketplace decides on later (WF1) (#2033)
+
+
+
 ## [2.1.24] — 2026-11-26
 ### Features
 - **marketplace**: A note on a card, at the product (WF12) (#2032)
