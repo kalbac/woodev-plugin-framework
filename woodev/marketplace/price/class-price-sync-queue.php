@@ -24,10 +24,10 @@ defined( 'ABSPATH' ) || exit;
  * - **in flight**: {@see self::begin()} copies `pending_payload / pending_rev` into the immutable `in_flight_*` snapshot; the
  *   acknowledgement of that exact revision ({@see self::accept()}) makes it the sent payload and leaves a newer `pending_rev`
  *   pending for the next run.
- * - **waiting** (2.1.24): a marketplace that decides later leaves the pair in flight with the id of its price task
+ * - **waiting** (2.1.25): a marketplace that decides later leaves the pair in flight with the id of its price task
  *   ({@see self::await()}); it is not due until the task decides ({@see self::accept()}, {@see self::refuse()}) or lets it go
  *   ({@see self::release()}, {@see self::expire()}).
- * - **refused** (2.1.24): a price a task refused for good ({@see self::refuse()}) is kept beside the pair and not sent again; a
+ * - **refused** (2.1.25): a price a task refused for good ({@see self::refuse()}) is kept beside the pair and not sent again; a
  *   different pending price is due, also one equal to the sent payload — it is what releases a quarantined price. A pair whose
  *   task expired is due whatever it was changed to: what the marketplace holds is unknown.
  * - **fenced**: every write names the account claim token and changes nothing unless that claim is still held (spec 3.5 rule 1), so
@@ -378,7 +378,7 @@ final class Price_Sync_Queue {
 	/**
 	 * Makes a pair in flight wait for a price task: the marketplace decides later, and nothing is sent for the pair meanwhile.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int          $account_id Account id.
 	 * @param Price_Intent $intent     The pair that was sent.
@@ -401,7 +401,7 @@ final class Price_Sync_Queue {
 	 * Lists the pairs that wait for a price task, each as the price that was sent. A pair that was pulled from the marketplace or
 	 * detached meanwhile no longer waits and is not listed.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int $account_id Account id.
 	 * @param int $task_id    Id of the price task.
@@ -445,7 +445,7 @@ final class Price_Sync_Queue {
 	 * Records that the sent price will not take effect and is not to be sent again: it is kept as the refused one until a price is
 	 * accepted or pulled, and only a different pending price is due.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int          $account_id Account id.
 	 * @param Price_Intent $intent     The pair that was sent.
@@ -469,7 +469,7 @@ final class Price_Sync_Queue {
 	/**
 	 * Lets a waiting pair go undecided: the marketplace asked to wait, so it is sent again after the delay, with no attempt counted.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int          $account_id Account id.
 	 * @param Price_Intent $intent     The pair that was sent.
@@ -490,7 +490,7 @@ final class Price_Sync_Queue {
 	 * Lets a waiting pair go because its task's deadline passed: it is due again at once, marked as expired once, so that a second
 	 * expiry of the same revision can be told apart.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int          $account_id Account id.
 	 * @param Price_Intent $intent     The pair that was sent.

@@ -31,17 +31,17 @@ final class Sync_Reason {
 	public const LAST_ERROR       = 'last_error';
 
 	/**
-	 * The marketplace refused the new price (2.1.24).
+	 * The marketplace refused the new price (2.1.25).
 	 */
 	public const PRICE_REFUSED = Price_Refusal::REFUSED;
 
 	/**
-	 * The marketplace holds the new price in quarantine (2.1.24).
+	 * The marketplace holds the new price in quarantine (2.1.25).
 	 */
 	public const PRICE_QUARANTINED = Price_Refusal::QUARANTINED;
 
 	/**
-	 * The marketplace gave no answer about the new price in time (2.1.24).
+	 * The marketplace gave no answer about the new price in time (2.1.25).
 	 */
 	public const PRICE_EXPIRED = Price_Refusal::EXPIRED;
 

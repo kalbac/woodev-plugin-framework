@@ -222,7 +222,7 @@ final class Price_Intents {
 	 * Tells whether sending a link's current price would send nothing because the marketplace already turned exactly that price down.
 	 * It writes nothing.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param Account     $account Account.
 	 * @param Link_Record $link    Offer row.

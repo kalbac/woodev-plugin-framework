@@ -25,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  * The result payload of the pending receipt's task is stored with the task, so the pusher finds there what it needs to read the
  * answers.
  *
- * @since 2.1.24
+ * @since 2.1.25
  */
 final class Price_Task_Opener {
 	/**
@@ -66,7 +66,7 @@ final class Price_Task_Opener {
 	/**
 	 * Creates the opener.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param Task_Ledger      $ledger    Task ledger.
 	 * @param Price_Sync_Queue $queue     Price queue.
@@ -85,7 +85,7 @@ final class Price_Task_Opener {
 	/**
 	 * Records the upload of some prices and makes them wait for its result.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int                                           $account_id Account id.
 	 * @param Push_Receipt                                  $receipt    A pending or duplicate receipt.

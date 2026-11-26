@@ -99,7 +99,7 @@ final class Flush_Result {
 	/**
 	 * Counts prices the marketplace took and will decide on later.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int $count How many.
 	 * @return void
@@ -156,7 +156,7 @@ final class Flush_Result {
 	/**
 	 * Returns the count of prices the marketplace has not decided on yet.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @return int
 	 */

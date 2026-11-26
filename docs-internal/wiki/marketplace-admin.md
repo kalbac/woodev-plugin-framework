@@ -1402,7 +1402,7 @@ a `\LogicException` from both.
 
 ## Prices the marketplace decides on later (#1998)
 
-Card WF1 of the Wildberries design (`2.1.24`). A pusher that answers `Push_Receipt::pending()` or `::duplicate()` needs nothing but
+Card WF1 of the Wildberries design (`2.1.25`). A pusher that answers `Push_Receipt::pending()` or `::duplicate()` needs nothing but
 `Price_Pusher::settle()`; Ozon answers at once and is unchanged. Timing is the **optional** `Price\Price_Task_Schedule` on the
 pusher (`price_task_deadline()`, `price_poll_interval()`; 1 h and 60 s without it).
 

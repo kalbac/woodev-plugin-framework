@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  * answers {@see Price_Pusher::settle()} with a failed {@see \Woodev\Framework\Marketplace\Ledger\Item_Result}; the framework reads
  * its code only to tell a quarantine from every other refusal, and stores one of these codes beside the price.
  *
- * @since 2.1.24
+ * @since 2.1.25
  */
 final class Price_Refusal {
 	/**

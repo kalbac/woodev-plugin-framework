@@ -40,7 +40,7 @@ defined( 'ABSPATH' ) || exit;
  * `poll_task( 0 )` is the recovery sweep: an open price task nobody has looked at for {@see self::STALE_AFTER} (or two intervals,
  * whichever is longer) is polled again.
  *
- * @since 2.1.24
+ * @since 2.1.25
  */
 final class Price_Poll_Runner {
 	public const TASK_DEADLINE = 3600;
@@ -124,7 +124,7 @@ final class Price_Poll_Runner {
 	/**
 	 * Creates the runner.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param Job_Gate         $gate             Job gate.
 	 * @param Task_Ledger      $ledger           Task ledger.
@@ -153,7 +153,7 @@ final class Price_Poll_Runner {
 	/**
 	 * Returns the seconds between two reads of a pusher's price task.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param Price_Pusher $pusher Pusher.
 	 * @return int
@@ -165,7 +165,7 @@ final class Price_Poll_Runner {
 	/**
 	 * Returns the seconds a pusher's price result is waited for.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param Price_Pusher $pusher Pusher.
 	 * @return int
@@ -177,7 +177,7 @@ final class Price_Poll_Runner {
 	/**
 	 * Hooks the job and its recovery sweep.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @return void
 	 */
@@ -189,7 +189,7 @@ final class Price_Poll_Runner {
 	/**
 	 * Runs the job. Tasks of another kind share the hook and are left to their own runners.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param mixed $task_id Task id; 0 runs the recovery sweep.
 	 * @param mixed $attempt Failed reads in a row.

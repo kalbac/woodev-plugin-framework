@@ -241,7 +241,7 @@ final class Sync_State_Store {
 	 * Tells whether recording this price would send nothing: it is the one a price task refused for good (a refusal, a quarantine or
 	 * a second expiry) and no newer upload of the link is awaited. A price sent now would go out only after it changes.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int                 $account_id Account id.
 	 * @param int                 $link_id    Link id.
@@ -307,7 +307,7 @@ final class Sync_State_Store {
 	 * @param int[] $link_ids   Link ids.
 	 * @return array<int,array{stock:array<string,mixed>|null,price:array<string,mixed>|null}> By link id; a link with no row is absent. `stock`:
 	 *         `present`, `reserved`, `read_at` (null until a readback), `last_error`, `next_attempt_at` (Unix time or null). `price`: `sent`
-	 *         (the payload the marketplace accepted, or null), `pending`, `last_error`, `error_code` (2.1.24: a
+	 *         (the payload the marketplace accepted, or null), `pending`, `last_error`, `error_code` (2.1.25: a
 	 *         {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code when the error says why a price did not take effect, '' otherwise),
 	 *         `next_attempt_at`.
 	 */

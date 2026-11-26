@@ -441,7 +441,7 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int    $account_id     Account id.
 	 * @param string $kind           Task kind.
@@ -467,7 +467,7 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int                 $task_id Task id.
 	 * @param array<string,mixed> $entries Result entries.

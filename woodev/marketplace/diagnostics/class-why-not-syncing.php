@@ -33,7 +33,7 @@ final class Why_Not_Syncing {
 	 * @param array<string,mixed> $sync_state Facts gathered by the caller: `license_ok` (bool, default true), `health`
 	 *                                        (`Health_Result` status, default ok), `default_warehouse_id` (int|null),
 	 *                                        `retry_after_seconds` (int|null), `price_error_code` (a
-	 *                                        {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code, 2.1.24) with its
+	 *                                        {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code, 2.1.25) with its
 	 *                                        `price_error` text, `last_error` (string|null) for any other trouble.
 	 * @return Sync_Reason[] Reasons, most fundamental first; empty when nothing blocks the sync.
 	 */

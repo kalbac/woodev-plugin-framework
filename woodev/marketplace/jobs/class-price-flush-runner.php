@@ -45,7 +45,7 @@ defined( 'ABSPATH' ) || exit;
  * - The caller's budget is in requests: the half sends at most `$remaining_budget` requests and returns how many it used. The
  *   time budget is the caller's {@see Account_Run}: the half checks its deadline before every round and starts no request
  *   after it.
- * - **Asynchronous acceptance** (2.1.24): the lines of a pending or duplicate receipt that have no immediate answer open a price
+ * - **Asynchronous acceptance** (2.1.25): the lines of a pending or duplicate receipt that have no immediate answer open a price
  *   task ({@see Price_Task_Opener}) and wait for it; nothing sends them meanwhile, and {@see Price_Poll_Runner} settles them. Lines
  *   the receipt answers at once are settled as above.
  *
@@ -120,7 +120,7 @@ final class Price_Flush_Runner {
 	 *
 	 * @since 2.1.0
 	 *
-	 * @since 2.1.24 `$tasks`.
+	 * @since 2.1.25 `$tasks`.
 	 *
 	 * @param Job_Gate           $gate       Job gate (the pause and the write gate).
 	 * @param Wpdb_Account_Store $accounts   Accounts.

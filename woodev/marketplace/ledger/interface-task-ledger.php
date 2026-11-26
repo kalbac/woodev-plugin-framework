@@ -181,7 +181,7 @@ interface Task_Ledger {
 	 * Finds the unfinished task of an account that carries a marketplace task id, so that a marketplace that answers «this task
 	 * already exists» does not get a second one.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int    $account_id     Account id.
 	 * @param string $kind           `Async_Task::KIND_*`.
@@ -193,7 +193,7 @@ interface Task_Ledger {
 	/**
 	 * Adds entries to a task's result payload; entries it already holds under the same keys are replaced.
 	 *
-	 * @since 2.1.24
+	 * @since 2.1.25
 	 *
 	 * @param int                 $task_id Task id.
 	 * @param array<string,mixed> $entries Result entries.
