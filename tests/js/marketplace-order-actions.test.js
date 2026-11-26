@@ -60,7 +60,9 @@ beforeAll( () => {
 	global.fetch = jest.fn( ( url, options ) => {
 		sent.push( Object.fromEntries( options.body.entries() ) );
 
-		return Promise.resolve( { json: () => Promise.resolve( answers.shift() ) } );
+		const answer = answers.shift();
+
+		return Promise.resolve( { json: () => Promise.resolve( answer ) } );
 	} );
 	require( SCRIPT );
 } );
@@ -109,6 +111,73 @@ describe( 'seller action dialog', () => {
 		expect( lines[ 0 ].querySelector( 'b' ) ).toBeNull();
 		expect( document.getElementById( 'woodev-mp-action-confirm' ).hidden ).toBe( true );
 		expect( document.getElementById( 'woodev-mp-action-close' ).textContent ).toBe( 'Close' );
+	} );
+
+	test( 'a late answer of a closed dialog changes nothing in the dialog opened for another unit', async () => {
+		const status = () => document.getElementById( 'woodev-mp-action-status' ).textContent;
+		const confirm = document.getElementById( 'woodev-mp-action-confirm' );
+		const open = ( unit ) => {
+			const opener = button( CONFIG );
+
+			opener.setAttribute( 'data-unit', unit );
+			opener.click();
+			document.querySelector( '[data-field="sgtin"]' ).value = unit + ' code';
+		};
+		const deferred = () => {
+			let settleWith;
+			let breakWith;
+			const promise = new Promise( ( resolve, reject ) => {
+				settleWith = resolve;
+				breakWith = reject;
+			} );
+
+			answers.push( promise );
+
+			return { answer: settleWith, fail: breakWith };
+		};
+
+		// Unit A is sent, the dialog is closed, unit B is opened and sent before A answers.
+		open( 'a' );
+		const first = deferred();
+		confirm.click();
+		open( 'b' );
+		const second = deferred();
+		confirm.click();
+
+		first.answer( { success: false, data: { message: 'A refused', errors: { sgtin: 'A field error' } } } );
+		await settle();
+
+		expect( status() ).toBe( 'Sending' );
+		expect( document.querySelector( '[data-error="sgtin"]' ).textContent ).toBe( '' );
+		expect( confirm.disabled ).toBe( true );
+
+		confirm.click();
+
+		expect( sent.map( ( request ) => request.unit ) ).toEqual( [ 'a', 'b' ] );
+
+		second.answer( { success: false, data: { message: 'B refused' } } );
+		await settle();
+
+		expect( status() ).toBe( 'B refused' );
+		expect( confirm.disabled ).toBe( false );
+
+		// A lost late answer and a late report say nothing either.
+		open( 'c' );
+		const lost = deferred();
+		confirm.click();
+		open( 'd' );
+		const report = deferred();
+		confirm.click();
+		open( 'e' );
+
+		lost.fail( new Error( 'offline' ) );
+		report.answer( { success: true, data: { message: 'D partly done', lines: [ 'D line' ], changed: false } } );
+		await settle();
+
+		expect( status() ).toBe( '' );
+		expect( document.querySelectorAll( '#woodev-mp-action-lines li' ) ).toHaveLength( 0 );
+		expect( confirm.hidden ).toBe( false );
+		expect( confirm.disabled ).toBe( false );
 	} );
 
 	test( 'a list whose choices come from the shop asks for them', async () => {

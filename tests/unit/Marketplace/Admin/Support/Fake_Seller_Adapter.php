@@ -69,6 +69,20 @@ class Fake_Seller_Adapter implements Seller_Actions, Seller_Action_Options {
 	public $failure;
 
 	/**
+	 * Runs while a call is at the marketplace, before it answers: another request arriving meanwhile.
+	 *
+	 * @var callable|null
+	 */
+	public $meanwhile;
+
+	/**
+	 * Runs during the input check, once: another request arriving between a request's first look and its claim.
+	 *
+	 * @var callable|null
+	 */
+	public $during_check;
+
+	/**
 	 * Errors the input check answers with.
 	 *
 	 * @var array<string,string>
@@ -149,6 +163,13 @@ class Fake_Seller_Adapter implements Seller_Actions, Seller_Action_Options {
 	public function check_seller_input( Account $account, Seller_Action_Call $call ): array {
 		$this->checked[] = $call;
 
+		if ( null !== $this->during_check ) {
+			$during             = $this->during_check;
+			$this->during_check = null;
+
+			$during();
+		}
+
 		return $this->input_errors;
 	}
 
@@ -160,6 +181,13 @@ class Fake_Seller_Adapter implements Seller_Actions, Seller_Action_Options {
 	 */
 	public function run_seller_action( Account $account, Seller_Action_Call $call ): array {
 		$this->calls[] = $call;
+
+		if ( null !== $this->meanwhile ) {
+			$meanwhile       = $this->meanwhile;
+			$this->meanwhile = null;
+
+			$meanwhile();
+		}
 
 		if ( null !== $this->failure ) {
 			throw $this->failure;

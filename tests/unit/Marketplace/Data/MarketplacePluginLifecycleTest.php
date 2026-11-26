@@ -129,7 +129,7 @@ final class MarketplacePluginLifecycleTest extends TestCase {
 		$plugin->get_lifecycle_handler()->create_tables();
 
 		$this->assertCount( 1, $this->batches );
-		$this->assertCount( 18, $this->batches[0] );
+		$this->assertCount( 19, $this->batches[0] );
 		$this->assertStringStartsWith( 'CREATE TABLE wp_woodev_fake_wildberries_accounts ', $this->batches[0][0] );
 	}
 }

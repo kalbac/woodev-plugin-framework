@@ -5,6 +5,9 @@
  * the unit (empty for the whole order) and the action's declaration in `data-config`: the name, the sentence to confirm and the
  * fields. Plain DOM calls only (`textContent`, never `innerHTML`). After a run with nothing left to say the page is read again;
  * otherwise the dialog lists every unit that was not done, and the page is read again when it is closed.
+ *
+ * Each opening of the dialog is its own request token (`current`): an answer to a request made from an earlier opening changes
+ * nothing on screen, which by then may belong to another order or unit.
  */
 ( function () {
 	'use strict';
@@ -95,7 +98,9 @@
 
 			fill( select, answer.data.options );
 		} ).catch( function () {
-			say( dialog.getAttribute( 'data-failed' ) );
+			if ( asked === current ) {
+				say( dialog.getAttribute( 'data-failed' ) );
+			}
 		} );
 	}
 
@@ -212,6 +217,20 @@
 		closer.textContent = dialog.getAttribute( 'data-close' );
 	}
 
+	// An answer from an earlier opening of the dialog: nothing on screen is its business. When it changed something, the page is
+	// read again, at once if no dialog is in the way, else when the dialog is closed.
+	function late( data ) {
+		if ( ! data || ! data.changed ) {
+			return;
+		}
+
+		reload = true;
+
+		if ( ! dialog.open ) {
+			window.location.reload();
+		}
+	}
+
 	function send() {
 		if ( confirm.disabled || confirm.hidden ) {
 			return;
@@ -230,6 +249,11 @@
 		say( dialog.getAttribute( 'data-sending' ) );
 
 		post( asked.runAction, extra ).then( function ( answer ) {
+			if ( asked !== current ) {
+				late( answer && answer.success ? answer.data : null );
+				return;
+			}
+
 			if ( answer && answer.success ) {
 				report( answer.data );
 				return;
@@ -238,6 +262,10 @@
 			failure( answer );
 			confirm.disabled = false;
 		} ).catch( function () {
+			if ( asked !== current ) {
+				return;
+			}
+
 			say( dialog.getAttribute( 'data-failed' ) );
 			confirm.disabled = false;
 		} );

@@ -13505,3 +13505,19 @@ msgstr ""
 #, php-format
 msgid "В статусе «%s» это действие недоступно."
 msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:431
+msgid "Не удалось записать действие в базе данных сайта, поэтому на маркетплейс ничего не отправлено. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:602
+msgid "Это действие уже отправлено для этой позиции. Дождитесь, пока заказ обновится."
+msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:604
+msgid "Это действие уже отправлялось, но ответа не было: оно могло выполниться. Проверьте заказ в кабинете; повторить можно через час."
+msgstr ""
+
+#: marketplace/admin/order/class-seller-action-runner.php:606
+msgid "Это действие уже отправляется для этой позиции. Дождитесь ответа."
+msgstr ""

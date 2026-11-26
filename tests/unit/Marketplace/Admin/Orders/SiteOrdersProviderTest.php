@@ -32,6 +32,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Readiness;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
@@ -323,6 +324,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 				$gate,
 				$this->license(),
 				'Фейк',
+				new Wpdb_Seller_Action_Store( $this->db, Sqlite_Tables::table( 'seller_actions' ), $this->clock() ),
 				function ( string $line ): void {
 					$this->logged[] = $line;
 				}
@@ -1479,6 +1481,31 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( [ 'Фейк: действие «Принять в работу», из WooCommerce. Выполнено: Футболка, M. Не выполнено: Кепка — Товар уже отменён покупателем.' ], $this->notes[101] );
 		$this->assertArrayNotHasKey( 102, $this->notes );
 		$this->assertCount( 3, $body['rows'] );
+	}
+
+	public function test_a_retry_of_a_partly_accepted_batch_sends_only_what_did_not_go(): void {
+		$this->stock_with_seller_actions();
+		$this->seller->refusals['u-2'] = 'Склад не готов.';
+		$this->seller_apply( 'bulk-confirm', [ 101, 104 ] );
+
+		// The queued refresh has not run: the stored orders still say «new».
+		$this->seller->refusals = [];
+		$plan                   = $this->provider()->preview( $this->context(), 'bulk-confirm', [ $this->row_id( 101 ), $this->row_id( 104 ) ], [] );
+		$body                   = $this->seller_apply( 'bulk-confirm', [ 101, 104 ] );
+
+		$this->assertSame( [ 3, 1, 2 ], [ $plan['requested'], $plan['eligible'], $plan['skipped'] ] );
+		$this->assertCount( 2, $this->seller->calls );
+		$this->assertSame( [ 'u-2' ], Fake_Seller_Adapter::unit_ids( $this->seller->calls[1] ), 'The accepted units are not sent again.' );
+		$this->assertSame( [ 'partial', 1, 2, 0 ], [ $body['status'], $body['accepted'], $body['skipped'], $body['failed'] ] );
+		$this->assertSame( 'Это действие уже отправлено для этой позиции. Дождитесь, пока заказ обновится.', $body['groups'][0]['reason'] );
+		$this->assertSame( [ '№ 101: Футболка, M', '№ 104: Худи, L' ], $body['groups'][0]['examples'] );
+		$this->assertCount( 2, $this->notes[101], 'One note per sending: nothing was repeated.' );
+		$this->assertCount( 1, $this->notes[104] );
+
+		$third = $this->seller_apply( 'bulk-confirm', [ 101, 104 ] );
+
+		$this->assertSame( [ 'failed', 0, 3 ], [ $third['status'], $third['accepted'], $third['skipped'] ] );
+		$this->assertCount( 2, $this->seller->calls );
 	}
 
 	public function test_a_preview_counts_the_goods_and_calls_no_marketplace(): void {

@@ -1567,11 +1567,28 @@ numbered.
 1. account enabled, receiving orders, able to write; licence;
 2. per unit: the action exists, `Posting_Action_Gate::seller_reason()` (status, then `seller_action_refusal()`);
 3. input: declared shape (`Seller_Action_Input`), then `check_seller_input()` — local only;
-4. `run_seller_action()` **once** with every unit left; the adapter batches within the marketplace's limits.
+4. each unit is claimed (below), then `run_seller_action()` **once** with every unit taken; the adapter batches within the
+   marketplace's limits.
+
+**Never sent twice** (`Data\Wpdb_Seller_Action_Store`, table `seller_actions`, schema revision 7). A request reads stored unit
+state that only the later refresh moves, so every unit is written down **before** it is sent: key (account, order, unit,
+action), identity = the unit's status and the typed values. Claiming is atomic (`INSERT IGNORE`, else a compare-and-set
+`UPDATE`).
+
+| Row | Holds | Until |
+|---|---|---|
+| `sending` | the unit and action, whatever the input | the answer; 10 minutes if the request died |
+| `sent` (accepted) | the same identity | 1 hour |
+| `unknown` (not mentioned, or the answer was lost) | the same identity | 1 hour |
+| refused by the marketplace, or the whole call refused | nothing: the row is removed | — |
+
+A held unit is left out of the plan and the report with its own sentence, so a retry of a partly accepted batch sends the rest
+only. Another identity — the status moved on, or other input — is a new action. If the database cannot hold the claim, nothing is
+sent. The one case held wrongly: a unit that returns to the same status with the same input within the hour.
 
 **Answers are per unit.** `Seller_Unit_Result::done()` / `refused( $target, $text )`; a unit the answer does not mention is
 **failed**, never done. `Seller_Action_Refused` means nothing was done; any other throwable means «may have happened». The runner
-writes an order note and calls `refresh_after_action()`; it changes no order and no storage.
+writes an order note and calls `refresh_after_action()`; it changes no order and nothing in the order storage.
 
 **Table.** Engine ids are `act-{id}` (row) and `bulk-{id}` (the engine has one id space). Plan and report count **units**, not
 orders; every refusal is a group with its own sentence and «№ order: goods» examples. A refused action stays visible, off, with

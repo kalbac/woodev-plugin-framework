@@ -19,6 +19,7 @@ use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Flows\Label_Download;
 use Woodev\Framework\Marketplace\Flows\Label_Service;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
@@ -155,20 +156,21 @@ final class Site_Orders_Module {
 			null,
 			$gate,
 			$noun,
-			self::seller( $plugin, $adapter, $gate, $license )
+			self::seller( $plugin, $adapter, $gate, $license, new Wpdb_Seller_Action_Store( $db, $table( 'seller_actions' ) ) )
 		);
 	}
 
 	/**
 	 * The seller actions of an adapter that declares them.
 	 *
-	 * @param Marketplace_Plugin  $plugin  Plugin.
-	 * @param Marketplace_Adapter $adapter Adapter.
-	 * @param Posting_Action_Gate $gate    The write rule.
-	 * @param License_Gate        $license Licence gate.
+	 * @param Marketplace_Plugin       $plugin  Plugin.
+	 * @param Marketplace_Adapter      $adapter Adapter.
+	 * @param Posting_Action_Gate      $gate    The write rule.
+	 * @param License_Gate             $license Licence gate.
+	 * @param Wpdb_Seller_Action_Store $sent    What was sent for which unit.
 	 * @return Site_Orders_Seller|null
 	 */
-	private static function seller( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, Posting_Action_Gate $gate, License_Gate $license ): ?Site_Orders_Seller {
+	private static function seller( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, Posting_Action_Gate $gate, License_Gate $license, Wpdb_Seller_Action_Store $sent ): ?Site_Orders_Seller {
 		if ( ! $adapter instanceof Seller_Actions ) {
 			return null;
 		}
@@ -177,7 +179,7 @@ final class Site_Orders_Module {
 			$plugin->log_error( $line );
 		};
 
-		return new Site_Orders_Seller( new Seller_Action_Runner( $adapter, $gate, $license, $adapter->settings_descriptor()->marketplace_name(), $log ) );
+		return new Site_Orders_Seller( new Seller_Action_Runner( $adapter, $gate, $license, $adapter->settings_descriptor()->marketplace_name(), $sent, $log ) );
 	}
 
 	/**

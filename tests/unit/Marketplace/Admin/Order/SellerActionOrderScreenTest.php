@@ -12,13 +12,17 @@ use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Ajax;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Buttons;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Refused;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Seller_Adapter;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Json_Answer;
+use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Account_Store;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
 use Woodev\Tests\Unit\TestCase;
@@ -28,6 +32,7 @@ use Woodev\Tests\Unit\TestCase;
  * @covers \Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Buttons
  * @covers \Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner
  * @covers \Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Input
+ * @covers \Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store
  */
 final class SellerActionOrderScreenTest extends TestCase {
 	private const ORDER_ID = 5501;
@@ -36,6 +41,20 @@ final class SellerActionOrderScreenTest extends TestCase {
 	 * A marking code with its group separators, a percent sequence and an angle bracket: all must arrive untouched.
 	 */
 	private const MARKING_CODE = "010460043993125621ab%2f<x\x1D91EE06\x1D92dGVzdA==";
+
+	/**
+	 * Database of what was sent.
+	 *
+	 * @var Sqlite_Wpdb
+	 */
+	private $db;
+
+	/**
+	 * Unix time of the claims.
+	 *
+	 * @var int
+	 */
+	private $now = 1795000000;
 
 	/**
 	 * @var Fake_Account_Store
@@ -88,8 +107,11 @@ final class SellerActionOrderScreenTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
+		$this->db       = new Sqlite_Wpdb();
+		$this->now      = 1795000000;
 		$this->notes    = [];
 		$this->owner    = 'cabinet-1';
+		Sqlite_Tables::install( $this->db );
 		$this->licensed = true;
 		$this->units    = [
 			[ 'u-1', 'Футболка, M', 'confirm' ],
@@ -172,6 +194,114 @@ final class SellerActionOrderScreenTest extends TestCase {
 		$this->assertSame( [ self::ORDER_ID ], $this->adapter->refreshed );
 		$this->assertStringContainsString( 'Футболка, M №1', $this->notes[0], 'Two goods of one name are numbered.' );
 		$this->assertStringNotContainsString( 'u-1', $this->notes[0] );
+	}
+
+	public function test_the_same_request_sent_twice_reaches_the_marketplace_once(): void {
+		$this->call( 'handle_run' );
+		$again = $this->call( 'handle_run' );
+
+		$this->assertCount( 1, $this->adapter->calls );
+		$this->assertCount( 1, $this->notes );
+		$this->assertTrue( $again->success );
+		$this->assertFalse( $again->data['changed'] );
+		$this->assertSame( [ 'Футболка, M №1 — Это действие уже отправлено для этой позиции. Дождитесь, пока заказ обновится.' ], $again->data['lines'] );
+	}
+
+	public function test_a_second_request_while_the_first_is_at_the_marketplace_sends_nothing(): void {
+		$second                   = null;
+		$this->adapter->meanwhile = function () use ( &$second ): void {
+			$_POST['fields'] = [ 'sgtin' => 'another code' ]; // Even another input waits for the answer.
+			$second          = $this->call( 'handle_run' );
+		};
+
+		$first = $this->call( 'handle_run' );
+
+		$this->assertTrue( $first->data['changed'] );
+		$this->assertSame( [ 'Футболка, M №1 — Это действие уже отправляется для этой позиции. Дождитесь ответа.' ], $second->data['lines'] );
+		$this->assertCount( 1, $this->adapter->calls );
+	}
+
+	public function test_of_two_requests_that_both_found_the_unit_free_only_one_sends_it(): void {
+		$second                      = null;
+		$this->adapter->during_check = function () use ( &$second ): void {
+			$second = $this->call( 'handle_run' ); // Runs to the end before the first request claims the unit.
+		};
+
+		$first = $this->call( 'handle_run' );
+
+		$this->assertTrue( $second->data['changed'] );
+		$this->assertFalse( $first->data['changed'] );
+		$this->assertStringContainsString( 'уже отправлено', $first->data['lines'][0] );
+		$this->assertCount( 1, $this->adapter->calls );
+		$this->assertCount( 1, $this->notes );
+	}
+
+	public function test_new_input_is_a_new_action_and_so_is_going_back_to_the_first_one(): void {
+		$this->call( 'handle_run' );
+		$_POST['fields'] = [ 'sgtin' => 'second code' ];
+		$this->call( 'handle_run' );
+		$_POST['fields'] = [ 'sgtin' => self::MARKING_CODE ];
+		$this->call( 'handle_run' );
+
+		$this->assertCount( 3, $this->adapter->calls );
+	}
+
+	public function test_a_unit_the_marketplace_refused_can_be_sent_again_at_once(): void {
+		$this->adapter->refusals['u-1'] = 'Код не прошёл проверку.';
+		$this->call( 'handle_run' );
+		$this->adapter->refusals = [];
+
+		$this->assertTrue( $this->call( 'handle_run' )->data['changed'] );
+		$this->assertCount( 2, $this->adapter->calls );
+	}
+
+	public function test_a_call_refused_as_a_whole_can_be_sent_again_at_once(): void {
+		$this->adapter->failure = new Seller_Action_Refused( 'Кабинет заблокирован.', 502 );
+		$this->assertSame( 502, $this->call( 'handle_run' )->status );
+		$this->adapter->failure = null;
+
+		$this->assertTrue( $this->call( 'handle_run' )->data['changed'] );
+		$this->assertCount( 2, $this->adapter->calls );
+	}
+
+	public function test_an_unanswered_action_is_not_repeated_until_an_hour_has_passed(): void {
+		foreach ( [ 'lost answer', 'unit not mentioned' ] as $case ) {
+			$this->db              = new Sqlite_Wpdb();
+			$this->adapter         = new Fake_Seller_Adapter();
+			$this->now             = 1795000000;
+			Sqlite_Tables::install( $this->db );
+
+			if ( 'lost answer' === $case ) {
+				$this->adapter->failure = new \RuntimeException( 'timeout' );
+			} else {
+				$this->adapter->unanswered = [ 'u-1' ];
+			}
+
+			$this->call( 'handle_run' );
+			$this->adapter->failure    = null;
+			$this->adapter->unanswered = [];
+			$this->now                += Wpdb_Seller_Action_Store::KEPT_TTL - 1;
+
+			$blocked = $this->call( 'handle_run' );
+
+			$this->assertStringContainsString( 'оно могло выполниться', $blocked->data['lines'][0], $case );
+			$this->assertCount( 1, $this->adapter->calls, $case );
+
+			$this->now += 2;
+
+			$this->assertTrue( $this->call( 'handle_run' )->data['changed'], $case );
+			$this->assertCount( 2, $this->adapter->calls, $case );
+		}
+	}
+
+	public function test_nothing_is_sent_when_the_shop_cannot_write_down_what_it_sends(): void {
+		$this->db->query( 'DROP TABLE ' . Sqlite_Tables::table( 'seller_actions' ) );
+
+		$answer = $this->call( 'handle_run' );
+
+		$this->assertSame( 500, $answer->status );
+		$this->assertStringContainsString( 'ничего не отправлено', $answer->data['message'] );
+		$this->assertSame( [], $this->adapter->calls );
 	}
 
 	public function test_a_refused_unit_shows_the_marketplaces_text(): void {
@@ -292,7 +422,14 @@ final class SellerActionOrderScreenTest extends TestCase {
 					return $this->licensed;
 				}
 			),
-			'Фейк'
+			'Фейк',
+			new Wpdb_Seller_Action_Store(
+				$this->db,
+				Sqlite_Tables::table( 'seller_actions' ),
+				function (): int {
+					return $this->now;
+				}
+			)
 		);
 	}
 

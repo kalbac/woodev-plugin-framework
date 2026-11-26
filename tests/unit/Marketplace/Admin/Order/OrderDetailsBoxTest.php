@@ -17,12 +17,14 @@ use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Details_Box;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Buttons;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Seller_Adapter;
+use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 use Woodev\Tests\Unit\TestCase;
 
 /**
@@ -288,7 +290,8 @@ final class OrderDetailsBoxTest extends TestCase {
 			$adapter,
 			new Posting_Action_Gate( new Label_Availability( null ), null, null, null, $adapter ),
 			new License_Gate( '__return_true' ),
-			'Fake'
+			'Fake',
+			new Wpdb_Seller_Action_Store( new Sqlite_Wpdb(), 'wp_woodev_fake_seller_actions' )
 		);
 		$buttons = new Seller_Action_Buttons(
 			new Screen_Names( 'fake', 'Fake' ),

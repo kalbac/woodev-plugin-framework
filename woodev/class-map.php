@@ -262,6 +262,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Data\\Wpdb_Link_Store' => 'woodev/marketplace/data/class-wpdb-link-store.php',
 	'Woodev\\Framework\\Marketplace\\Data\\Wpdb_Mapping_Store' => 'woodev/marketplace/data/class-wpdb-mapping-store.php',
 	'Woodev\\Framework\\Marketplace\\Data\\Wpdb_Profile_Store' => 'woodev/marketplace/data/class-wpdb-profile-store.php',
+	'Woodev\\Framework\\Marketplace\\Data\\Wpdb_Seller_Action_Store' => 'woodev/marketplace/data/class-wpdb-seller-action-store.php',
 	'Woodev\\Framework\\Marketplace\\Deletion\\Account_Data_Cleaner' => 'woodev/marketplace/deletion/interface-account-data-cleaner.php',
 	'Woodev\\Framework\\Marketplace\\Deletion\\Account_Deletion' => 'woodev/marketplace/deletion/class-account-deletion.php',
 	'Woodev\\Framework\\Marketplace\\Deletion\\Account_Deletion_Controller' => 'woodev/marketplace/deletion/class-account-deletion-controller.php',

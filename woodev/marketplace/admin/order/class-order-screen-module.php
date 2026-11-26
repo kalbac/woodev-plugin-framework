@@ -19,6 +19,7 @@ use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Marketplace\Settings\Posting_Noun;
@@ -80,7 +81,7 @@ final class Order_Screen_Module {
 		$account_of = static function ( int $account_id ) use ( $accounts ): ?Account {
 			return null === $accounts ? null : $accounts->get( $account_id );
 		};
-		$seller     = self::seller_actions( $plugin, $adapter, $registry, $names, $assets, $gate, $account_of, $accounts );
+		$seller     = self::seller_actions( $plugin, $adapter, $registry, $names, $assets, $gate, $account_of, $accounts, $db );
 		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of, $db ), $assets, $plugin->get_version(), $seller );
 
 		( new Order_Screen( $adapter->order_meta(), $box ) )->register();
@@ -97,9 +98,10 @@ final class Order_Screen_Module {
 	 * @param Posting_Action_Gate                              $gate       The write rule.
 	 * @param callable                                         $account_of `function ( int $account_id ): ?Account`.
 	 * @param Wpdb_Account_Store|null                          $accounts   Accounts; null offers no seller action.
+	 * @param \wpdb                                            $db         Database.
 	 * @return Seller_Action_Buttons|null
 	 */
-	private static function seller_actions( $plugin, Marketplace_Adapter $adapter, Order_Registry $registry, Screen_Names $names, string $assets, Posting_Action_Gate $gate, callable $account_of, ?Wpdb_Account_Store $accounts ): ?Seller_Action_Buttons {
+	private static function seller_actions( $plugin, Marketplace_Adapter $adapter, Order_Registry $registry, Screen_Names $names, string $assets, Posting_Action_Gate $gate, callable $account_of, ?Wpdb_Account_Store $accounts, \wpdb $db ): ?Seller_Action_Buttons {
 		if ( ! $adapter instanceof Seller_Actions || null === $accounts ) {
 			return null;
 		}
@@ -107,7 +109,8 @@ final class Order_Screen_Module {
 		$log    = static function ( string $line ) use ( $plugin ): void {
 			$plugin->log_error( $line );
 		};
-		$runner = new Seller_Action_Runner( $adapter, $gate, License_Gate::for_plugin( $plugin ), $names->name(), $log );
+		$sent   = new Wpdb_Seller_Action_Store( $db, ( new Schema( $adapter->id() ) )->table_name( 'seller_actions', $db->prefix ) );
+		$runner = new Seller_Action_Runner( $adapter, $gate, License_Gate::for_plugin( $plugin ), $names->name(), $sent, $log );
 
 		( new Seller_Action_Ajax( Admin_Guard::for_store( $accounts, $adapter->id() ), $accounts, $adapter->order_meta(), $runner, $names, [ $registry, 'posting_of_order' ] ) )->register();
 

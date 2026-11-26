@@ -11,6 +11,7 @@ use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 
@@ -20,7 +21,12 @@ defined( 'ABSPATH' ) || exit;
  * Everything the «Заказы» table and the order screen ask about the declared actions ({@see Seller_Actions}): which units take
  * one, why one is off, and the run itself. A request is judged here whatever the screen showed, in this order: the account
  * (switched on, receiving orders, able to write) and the licence; the units (the action exists for them, their status allows it,
- * the marketplace has no stored objection); the typed input; only then the marketplace is called, once, with every unit left.
+ * the marketplace has no stored objection, and the same action is not already sent or on its way); the typed input; only then the
+ * marketplace is called, once, with every unit left.
+ *
+ * Every unit is written down before it is sent ({@see Wpdb_Seller_Action_Store}), so a repeated request (a second click, a
+ * second tab, a second manager, a retry of a batch that went through in part) sends only what has not gone yet and reports the
+ * rest as left out.
  *
  * The WooCommerce order is not changed beyond a note: the adapter queues a refresh, and the order writer applies what the
  * marketplace then reports.
@@ -51,6 +57,13 @@ final class Seller_Action_Runner {
 	private $marketplace;
 
 	/**
+	 * What was sent for which unit.
+	 *
+	 * @var Wpdb_Seller_Action_Store
+	 */
+	private $sent;
+
+	/**
 	 * Writes a line to the plugin's log: `function ( string $line ): void`.
 	 *
 	 * @var callable|null
@@ -67,17 +80,19 @@ final class Seller_Action_Runner {
 	/**
 	 * @since 2.1.27
 	 *
-	 * @param Seller_Actions      $adapter     The marketplace's actions.
-	 * @param Posting_Action_Gate $gate        The write rule.
-	 * @param License_Gate        $license     Licence: no licence in force, no remote call.
-	 * @param string              $marketplace Merchant-facing marketplace name.
-	 * @param callable|null       $log_error   `function ( string $line ): void`, for failures that are not a refusal.
+	 * @param Seller_Actions           $adapter     The marketplace's actions.
+	 * @param Posting_Action_Gate      $gate        The write rule.
+	 * @param License_Gate             $license     Licence: no licence in force, no remote call.
+	 * @param string                   $marketplace Merchant-facing marketplace name.
+	 * @param Wpdb_Seller_Action_Store $sent        What was sent for which unit.
+	 * @param callable|null            $log_error   `function ( string $line ): void`, for failures that are not a refusal.
 	 */
-	public function __construct( Seller_Actions $adapter, Posting_Action_Gate $gate, License_Gate $license, string $marketplace, ?callable $log_error = null ) {
+	public function __construct( Seller_Actions $adapter, Posting_Action_Gate $gate, License_Gate $license, string $marketplace, Wpdb_Seller_Action_Store $sent, ?callable $log_error = null ) {
 		$this->adapter     = $adapter;
 		$this->gate        = $gate;
 		$this->license     = $license;
 		$this->marketplace = $marketplace;
+		$this->sent        = $sent;
 		$this->log_error   = $log_error;
 	}
 
@@ -287,21 +302,32 @@ final class Seller_Action_Runner {
 			return new Seller_Action_Report( [], $plan->skipped() );
 		}
 
+		list( $targets, $tokens, $taken ) = $this->claim( $account, $action, $plan->targets(), $values );
+
+		$skipped = array_merge( $plan->skipped(), $taken );
+
+		if ( [] === $targets ) {
+			return new Seller_Action_Report( [], $skipped );
+		}
+
 		try {
-			$answers = $this->adapter->run_seller_action( $account, new Seller_Action_Call( $action->id(), $plan->targets(), $values ) );
+			$answers = $this->adapter->run_seller_action( $account, new Seller_Action_Call( $action->id(), $targets, $values ) );
 		} catch ( Seller_Action_Refused $e ) {
+			$this->settle( $tokens, null ); // Nothing was done: every unit can be sent again.
+
 			throw $e;
 		} catch ( \Throwable $e ) {
 			$this->log( 'Running the seller action ' . $action->id() . ' failed', $e );
-			$this->refresh( $account, $plan->targets() ); // The answer was lost: the action may have gone through.
+			$this->settle( $tokens, Wpdb_Seller_Action_Store::UNKNOWN ); // The answer was lost: the action may have gone through.
+			$this->refresh( $account, $targets );
 
 			throw new Seller_Action_Refused( __( 'Маркетплейс не ответил: действие могло выполниться. Проверьте состояние заказа, прежде чем повторять.', 'woodev-plugin-framework' ), 502 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
-		$report = new Seller_Action_Report( $this->answered( $plan->targets(), $answers ), $plan->skipped() );
+		$report = new Seller_Action_Report( $this->answered( $targets, $answers, $tokens ), $skipped );
 
 		$this->add_notes( $action, $report );
-		$this->refresh( $account, $plan->targets() );
+		$this->refresh( $account, $targets );
 
 		return $report;
 	}
@@ -330,10 +356,104 @@ final class Seller_Action_Runner {
 		}
 
 		$values = Seller_Action_Input::read( $action, $input );
+		$plan   = $this->without_sent( $account, $action, $plan, $values );
 
-		$this->require_accepted_input( $account, $action, new Seller_Action_Call( $action->id(), $plan->targets(), $values ) );
+		if ( [] !== $plan->targets() ) {
+			$this->require_accepted_input( $account, $action, new Seller_Action_Call( $action->id(), $plan->targets(), $values ) );
+		}
 
 		return [ $plan, $values ];
+	}
+
+	/**
+	 * Leaves out of a plan the units this very action was already sent for, or is on its way for.
+	 *
+	 * @param Account              $account Account.
+	 * @param Seller_Action        $action  Action.
+	 * @param Seller_Action_Plan   $plan    Plan.
+	 * @param array<string,string> $values  Checked values.
+	 * @return Seller_Action_Plan
+	 */
+	private function without_sent( Account $account, Seller_Action $action, Seller_Action_Plan $plan, array $values ): Seller_Action_Plan {
+		$targets = [];
+		$skipped = $plan->skipped();
+
+		foreach ( $plan->targets() as $target ) {
+			$state = $this->sent->blocking_state( $account->id(), $target->order()->get_id(), $target->unit()->id(), $action->id(), self::identity( $target, $values ) );
+
+			if ( '' === $state ) {
+				$targets[] = $target;
+			} else {
+				$skipped[] = self::held( $target, $state );
+			}
+		}
+
+		return new Seller_Action_Plan( $targets, $skipped );
+	}
+
+	/**
+	 * Writes every unit down as on its way. A unit another request took meanwhile is left out.
+	 *
+	 * @param Account                $account Account.
+	 * @param Seller_Action          $action  Action.
+	 * @param Seller_Action_Target[] $targets Units to send.
+	 * @param array<string,string>   $values  Checked values.
+	 * @return array{0:Seller_Action_Target[],1:array<string,string>,2:array<int,array{order:\WC_Order,unit:string,reason:string}>}
+	 *                The units taken, their claim tokens by target key, and the units left out.
+	 * @throws Seller_Action_Refused When the database cannot hold the claims; nothing is sent.
+	 */
+	private function claim( Account $account, Seller_Action $action, array $targets, array $values ): array {
+		$taken   = [];
+		$tokens  = [];
+		$skipped = [];
+
+		try {
+			$this->sent->forget_expired( $account->id() );
+
+			foreach ( $targets as $target ) {
+				$identity = self::identity( $target, $values );
+				$order_id = $target->order()->get_id();
+				$unit_id  = $target->unit()->id();
+				$token    = $this->sent->claim( $account->id(), $order_id, $unit_id, $action->id(), $identity );
+
+				if ( null === $token ) {
+					$state     = $this->sent->blocking_state( $account->id(), $order_id, $unit_id, $action->id(), $identity );
+					$skipped[] = self::held( $target, '' === $state ? Wpdb_Seller_Action_Store::SENDING : $state );
+				} else {
+					$taken[]                  = $target;
+					$tokens[ $target->key() ] = $token;
+				}
+			}
+		} catch ( \RuntimeException $e ) {
+			$this->log( 'Claiming the units of the seller action ' . $action->id() . ' failed', $e );
+			$this->settle( $tokens, null );
+
+			throw new Seller_Action_Refused( __( 'Не удалось записать действие в базе данных сайта, поэтому на маркетплейс ничего не отправлено. Повторите чуть позже.', 'woodev-plugin-framework' ), 500 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		return [ $taken, $tokens, $skipped ];
+	}
+
+	/**
+	 * Closes claims: keeps the units under a state, or frees them. A write the database refuses here is only logged: the
+	 * marketplace has already answered, and the claim runs out by itself.
+	 *
+	 * @param array<int|string,string> $tokens Claim tokens.
+	 * @param string|null              $state  {@see Wpdb_Seller_Action_Store::SENT} or {@see Wpdb_Seller_Action_Store::UNKNOWN}; null to free the units.
+	 * @return void
+	 */
+	private function settle( array $tokens, ?string $state ): void {
+		try {
+			foreach ( $tokens as $token ) {
+				if ( null === $state ) {
+					$this->sent->release( $token );
+				} else {
+					$this->sent->keep( $token, $state );
+				}
+			}
+		} catch ( \RuntimeException $e ) {
+			$this->log( 'Recording the outcome of a seller action failed', $e );
+		}
 	}
 
 	/**
@@ -414,14 +534,15 @@ final class Seller_Action_Runner {
 	}
 
 	/**
-	 * Gives every sent unit exactly one answer. A unit the marketplace did not mention is failed, never done; of two answers for
-	 * one unit the refusal wins.
+	 * Gives every sent unit exactly one answer and records it: an accepted unit is kept as sent, a refused one is freed, and one
+	 * the marketplace did not mention is failed (never done) and kept as unknown. Of two answers for one unit the refusal wins.
 	 *
 	 * @param Seller_Action_Target[] $targets Units sent.
 	 * @param array<mixed>           $answers What the adapter returned.
+	 * @param array<string,string>   $tokens  Claim tokens by target key.
 	 * @return Seller_Unit_Result[] In the order of the targets.
 	 */
-	private function answered( array $targets, array $answers ): array {
+	private function answered( array $targets, array $answers, array $tokens ): array {
 		$by_unit = [];
 
 		foreach ( $answers as $answer ) {
@@ -439,15 +560,66 @@ final class Seller_Action_Runner {
 		$results = [];
 
 		foreach ( $targets as $target ) {
-			$results[] = $by_unit[ $target->key() ] ?? Seller_Unit_Result::refused(
-				$target,
-				__( 'Маркетплейс не ответил по этой позиции. Проверьте её состояние в кабинете, прежде чем повторять.', 'woodev-plugin-framework' )
-			);
+			$answer = $by_unit[ $target->key() ] ?? null;
+
+			if ( null === $answer ) {
+				$state  = Wpdb_Seller_Action_Store::UNKNOWN;
+				$answer = Seller_Unit_Result::refused( $target, __( 'Маркетплейс не ответил по этой позиции. Проверьте её состояние в кабинете, прежде чем повторять.', 'woodev-plugin-framework' ) );
+			} else {
+				$state = $answer->is_done() ? Wpdb_Seller_Action_Store::SENT : null;
+			}
+
+			$this->settle( [ $tokens[ $target->key() ] ], $state );
+
+			$results[] = $answer;
 		}
 
 		return $results;
 	}
 
+	/**
+	 * What makes one sending of an action differ from another: the status the unit was in and what was typed.
+	 *
+	 * @param Seller_Action_Target $target Unit.
+	 * @param array<string,string> $values Checked values.
+	 * @return string 32 characters.
+	 */
+	private static function identity( Seller_Action_Target $target, array $values ): string {
+		ksort( $values );
+
+		return md5( serialize( [ $target->unit()->status(), $values ] ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- Hashed, never stored or read back; a code may hold bytes JSON refuses.
+	}
+
+	/**
+	 * A unit left out because the action was already sent for it, or is on its way.
+	 *
+	 * @param Seller_Action_Target $target Unit.
+	 * @param string               $state  State of the stored claim.
+	 * @return array{order:\WC_Order,unit:string,reason:string}
+	 */
+	private static function held( Seller_Action_Target $target, string $state ): array {
+		if ( Wpdb_Seller_Action_Store::SENT === $state ) {
+			$reason = __( 'Это действие уже отправлено для этой позиции. Дождитесь, пока заказ обновится.', 'woodev-plugin-framework' );
+		} elseif ( Wpdb_Seller_Action_Store::UNKNOWN === $state ) {
+			$reason = __( 'Это действие уже отправлялось, но ответа не было: оно могло выполниться. Проверьте заказ в кабинете; повторить можно через час.', 'woodev-plugin-framework' );
+		} else {
+			$reason = __( 'Это действие уже отправляется для этой позиции. Дождитесь ответа.', 'woodev-plugin-framework' );
+		}
+
+		return [
+			'order'  => $target->order(),
+			'unit'   => $target->unit()->label(),
+			'reason' => $reason,
+		];
+	}
+
+	/**
+	 * Writes on every order what was asked of the marketplace and what it answered.
+	 *
+	 * @param Seller_Action        $action Action.
+	 * @param Seller_Action_Report $report Report.
+	 * @return void
+	 */
 	private function add_notes( Seller_Action $action, Seller_Action_Report $report ): void {
 		$done   = [];
 		$failed = [];
