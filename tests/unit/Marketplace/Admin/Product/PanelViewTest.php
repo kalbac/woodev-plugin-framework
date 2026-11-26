@@ -266,6 +266,34 @@ final class PanelViewTest extends TestCase {
 		$this->assertStringContainsString( 'data-tip="Есть проблемы (1) — нажмите, чтобы посмотреть"', $html );
 	}
 
+	public function test_the_variants_table_says_at_the_price_why_it_did_not_take_effect(): void {
+		$parent         = $this->block();
+		$parent['kind'] = 'parent';
+		$parent        += [
+			'counts'      => [],
+			'any_created' => true,
+			'any_linked'  => true,
+			'any_unsent'  => false,
+		];
+		$parent['rows'] = [
+			[
+				'id'          => 5,
+				'name'        => 'S',
+				'badge'       => Card_State_Badge::of( Link_Record::STATE_CREATED ),
+				'offer_id'    => 'ART-S',
+				'planned'     => false,
+				'stock'       => '',
+				'price'       => '100',
+				'currency'    => 'RUB',
+				'price_issue' => 'Цена не отправлена <img src=x onerror=alert(1)>',
+			],
+		];
+		$html           = $this->render_tab( [ $parent ], [] );
+
+		$this->assertMatchesRegularExpression( '#<td class="woodev-mp-variations__price"[^>]*>— / 100<span class="woocommerce-help-tip"#u', $html );
+		$this->assertStringContainsString( 'data-tip="Цена не отправлена &amp;lt;img', $html, 'WooCommerce draws the tooltip as HTML: the text is encoded twice' );
+	}
+
 	public function test_one_account_shows_no_account_name_and_no_select(): void {
 		$html = $this->render_tab( [ $this->block() ], [] );
 

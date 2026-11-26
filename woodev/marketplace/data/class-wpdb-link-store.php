@@ -1045,6 +1045,45 @@ final class Wpdb_Link_Store implements Link_Store {
 	}
 
 	/**
+	 * Lists the members of the price groups some links belong to. A price group is the offers of one account that hold the same
+	 * value of one remote identifier; only an offer whose price the shop sends — a created card with price synchronisation on —
+	 * is a member.
+	 *
+	 * A given link that is not a member, or holds no value of the identifier, brings nothing by itself.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $id_name    Remote identifier that ties a group.
+	 * @param int[]  $link_ids   Links whose groups are wanted.
+	 * @return Link_Record[] Every member of those groups, by link id.
+	 */
+	public function price_group_members( int $account_id, string $id_name, array $link_ids ): array {
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
+
+		if ( '' === $id_name || [] === $ids ) {
+			return [];
+		}
+
+		$in   = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+		$rows = $this->db->get_results(
+			$this->db->prepare(
+				'SELECT * FROM %i WHERE account_id = %d AND kind = %s AND card_state = %s AND sync_price = 1 AND link_id IN ('
+				. 'SELECT member.link_id FROM %i AS asked INNER JOIN %i AS member ON member.account_id = asked.account_id AND member.id_name = asked.id_name AND member.id_value = asked.id_value'
+				. ' WHERE asked.account_id = %d AND asked.id_name = %s AND asked.id_value NOT IN (%s, %s) AND asked.link_id IN (' . $in . ')'
+				. ') ORDER BY link_id ASC', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge(
+					[ $this->table, $account_id, Link_Record::KIND_OFFER, Link_Record::STATE_CREATED, $this->ids_table, $this->ids_table, $account_id, $id_name, '', '0' ],
+					$ids
+				)
+			),
+			'ARRAY_A'
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+
+		return $this->with_ids( is_array( $rows ) ? $rows : [] );
+	}
+
+	/**
 	 * Switches the stock or the price synchronisation of offer rows.
 	 *
 	 * @param int    $account_id Account id.

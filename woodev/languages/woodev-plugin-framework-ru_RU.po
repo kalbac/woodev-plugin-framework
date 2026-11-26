@@ -8417,6 +8417,20 @@ msgstr ""
 msgid "Открыть настройки"
 msgstr ""
 
+#: marketplace/admin/diagnostics/class-report-builder.php:690
+msgid "Цены не отправляются: у размеров разные цены"
+msgstr ""
+
+#: marketplace/sync/class-price-groups.php:393
+msgid "чтобы отправить её снова, измените цену"
+msgstr ""
+
+#: marketplace/admin/shared/class-sync-reason-text.php:64
+msgid ""
+"Цена не отправлена: у размеров разные цены, маркетплейс принимает одну. "
+"Задайте всем размерам одну цену."
+msgstr ""
+
 #: marketplace/admin/shared/class-sync-reason-text.php:37
 #: marketplace/settings/class-notifications-section.php:445
 msgid "Лицензия не действует — продлите её на странице лицензии Woodev."

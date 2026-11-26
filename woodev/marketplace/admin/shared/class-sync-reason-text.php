@@ -60,6 +60,8 @@ final class Sync_Reason_Text {
 			case Sync_Reason::PRICE_EXPIRED:
 				// The stored text is already the whole sentence: it names the marketplace or says what happens next.
 				return (string) ( $params['message'] ?? '' );
+			case Sync_Reason::PRICE_GROUP_DIFFERS:
+				return __( 'Цена не отправлена: у размеров разные цены, маркетплейс принимает одну. Задайте всем размерам одну цену.', 'woodev-plugin-framework' );
 			case Sync_Reason::LAST_ERROR:
 				/* translators: %s: error text returned by the marketplace. */
 				return sprintf( __( 'Последняя ошибка маркетплейса: %s', 'woodev-plugin-framework' ), (string) ( $params['message'] ?? '' ) );

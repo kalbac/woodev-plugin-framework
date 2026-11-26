@@ -1458,6 +1458,47 @@ marketplace**. The plugin writes notes from its jobs, and drops one by no longer
 A parent row (a variable product, a card with several sizes) says each distinct sentence once, at the badge of the state its member
 is in. A cabinet card no product carries has no link and so no note.
 
+## One price for several links: price groups (#2001)
+
+Card WF4 of the Wildberries design (`2.1.25`), owner decision D7. One **optional** interface, `Price\Price_Grouping`, implemented
+by the **price pusher** — not by the adapter ([gotcha](../gotchas/a-method-added-to-an-adapter-interface-fatals-released-plugins.md)).
+A pusher without it keeps one group per link (Ozon needs no change).
+
+| Method | Contract |
+|---|---|
+| `price_group_id_name()` | the remote identifier whose value ties links into one group (`nmID`); a link without a value stands alone |
+| `allows_member_prices( $account, $members )` | asked about a group whose computed prices differ, or one holding a refused or repeatedly failed price; `false` = one price per group. Stored facts only, no request |
+
+**Members** are the offers that hold the value, with a `created` card, `sync_price` on and a pending price
+(`Wpdb_Link_Store::price_group_members()`). A link outside that set is neither compared nor sent, although a group-wide price
+reaches it on the marketplace.
+
+**Sending** (`Sync\Price_Groups`, used by `Price_Flush_Runner`). One due price takes the whole group into the call, absent
+siblings included, also those already accepted. A group is never split between requests; one larger than `price_batch()` goes
+whole, so the pusher splits it if its endpoint needs that. The pusher answers **every** line, or leaves the whole upload to one
+price task. A group with a due price is decided in this order:
+
+| Condition | What happens |
+|---|---|
+| computed prices (price, old price, minimum price) differ, one price per group | **held**: nothing is sent |
+| a member waits for a price task | the due members are put off by the task's poll interval |
+| one price per group, and a member's pending price is refused | the due members are turned down with the same `error_code` and text; nothing is sent |
+| a price to send has a deadline or the minimum interval ahead | the due members are put off until then |
+| otherwise | sent. With member prices allowed, refused and exhausted members are left out; with one price, an exhausted one goes with the group |
+
+«Refused» is a pending price equal to `refused_payload` (refusal, quarantine, second expiry): not sent until it changes, as
+outside a group ([#1998](#prices-the-marketplace-decides-on-later-1998)). «Exhausted» is a revision whose sends failed as often
+as the price cadence allows — counted failures, a server error among them, so it never turns a sibling down.
+
+**Held.** The rows get `error_code = Sync_Reason::PRICE_GROUP_DIFFERS` and its sentence in `last_error`;
+`Price_Sync_Queue::due()` excludes the code. A row that waits for a price task, or that already says why its price is turned
+down, is left as it is. No schema change beyond revision 6. Every price run first looks at the held rows again and frees the
+groups that now agree, now allow member prices, or lost the link; no request is sent for that.
+
+**Shown** through the price reason of #1998: the product tab («Новая цена», or the sync reasons list), the tooltip in the price
+cell of the variants table (any price reason, encoded twice because it may quote the marketplace), «Товары сайта» (tooltip,
+parent's error count, «only errors») and the count of held prices in the diagnostics report.
+
 ## Changing the article after the export (framework 2.1.13, #1860)
 
 Before 2.1.13 the article (`offer_id`) was frozen once a card was sent. Operator decision 19.11.2026: it stays changeable, and the change goes to the marketplace by its own

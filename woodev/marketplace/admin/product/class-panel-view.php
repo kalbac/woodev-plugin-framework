@@ -411,7 +411,7 @@ final class Panel_View {
 		$cells .= '<td class="woodev-mp-variations__state">' . $this->noted_badge( $row['badge'], $row['note'] ?? null ) . '</td>';
 		$cells .= '<td class="woodev-mp-variations__article" data-label="' . esc_attr__( 'Артикул', 'woodev-plugin-framework' ) . '">' . esc_html( $row['offer_id'] ) . ( $row['planned'] ? $this->help_tip( __( 'Артикул будет отправлен на маркетплейс вместе с карточкой.', 'woodev-plugin-framework' ) ) : '' ) . $this->article_note( $row ) . ( '' !== (string) ( $row['notice'] ?? '' ) ? $this->help_tip( $row['notice'] ) : '' ) . '</td>';
 		$cells .= '<td class="woodev-mp-variations__stock" data-label="' . esc_attr__( 'Остаток', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_stock'] ?? '' ), (string) $row['stock'] ) ) . '</td>';
-		$cells .= '<td class="woodev-mp-variations__price" data-label="' . esc_attr__( 'Цена', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_price'] ?? '' ), (string) $row['price'] ) ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__price" data-label="' . esc_attr__( 'Цена', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_price'] ?? '' ), (string) $row['price'] ) ) . ( '' !== (string) ( $row['price_issue'] ?? '' ) ? $this->quoted_help_tip( $row['price_issue'] ) : '' ) . '</td>';
 
 		if ( null !== $facts ) {
 			$group  = $this->button_group(
@@ -461,6 +461,19 @@ final class Panel_View {
 	 */
 	private function help_tip( string $tip ): string {
 		return sprintf( '<span class="woocommerce-help-tip" tabindex="0" aria-label="%1$s" data-tip="%1$s"></span>', esc_attr( $tip ) );
+	}
+
+	/**
+	 * Builds the «?» of a text that may quote the marketplace: WooCommerce draws `data-tip` as HTML, so the text is encoded
+	 * twice for it.
+	 *
+	 * @param string $tip Text of the tooltip.
+	 * @return string Escaped markup.
+	 */
+	private function quoted_help_tip( string $tip ): string {
+		$drawn = htmlspecialchars( htmlspecialchars( $tip, ENT_QUOTES, 'UTF-8' ), ENT_QUOTES, 'UTF-8' );
+
+		return sprintf( '<span class="woocommerce-help-tip" tabindex="0" aria-label="%1$s" data-tip="%2$s"></span>', esc_attr( $tip ), $drawn );
 	}
 
 	private function renamable_article( array $ids, string $base, string $id ): void {

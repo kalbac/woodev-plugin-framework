@@ -25,6 +25,8 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Admin\Pages\Diagnostics\Diagnostics_Payload;
 use Woodev\Framework\Marketplace\Diagnostics\Report_Section;
+use Woodev\Framework\Marketplace\Diagnostics\Sync_Reason;
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
 use Woodev\Framework\Marketplace\Intake\Last_Notification_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Jobs\Job_Names;
@@ -380,6 +382,29 @@ final class ReportBuilderTest extends TestCase {
 			$counts,
 			'products waiting for export are counted, the parent row and another account are not'
 		);
+	}
+
+	public function test_the_backlog_counts_the_prices_held_because_the_sizes_differ(): void {
+		$table = $this->schema->table_name( 'sync_state', Sqlite_Tables::PREFIX );
+
+		foreach ( [ 1 => Sync_Reason::PRICE_GROUP_DIFFERS, 2 => Sync_Reason::PRICE_GROUP_DIFFERS, 3 => Price_Refusal::REFUSED ] as $link_id => $error ) {
+			$this->db->insert(
+				$table,
+				[
+					'account_id'   => 1,
+					'link_id'      => $link_id,
+					'warehouse_id' => 0,
+					'kind'         => 'price',
+					'error_code'   => $error,
+					'last_error'   => 'text',
+				]
+			);
+		}
+
+		$backlog = ( new Diagnostics_Reader( $this->db, $this->schema ) )->sync_backlog( 1 );
+
+		$this->assertSame( 3, $backlog['price_errors'] );
+		$this->assertSame( 2, $backlog['price_held'] );
 	}
 
 	public function test_quota_snapshot_is_ignored_after_identifier_rotation_and_push_sections_respect_capability(): void {
