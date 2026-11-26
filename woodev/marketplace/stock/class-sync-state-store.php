@@ -238,6 +238,44 @@ final class Sync_State_Store {
 	}
 
 	/**
+	 * Tells whether recording this price would send nothing: it is the one a price task refused for good (a refusal, a quarantine or
+	 * a second expiry) and no newer upload of the link is awaited. A price sent now would go out only after it changes.
+	 *
+	 * @since 2.1.25
+	 *
+	 * @param int                 $account_id Account id.
+	 * @param int                 $link_id    Link id.
+	 * @param array<string,mixed> $payload    The price payload that would be recorded.
+	 * @return array{code:string,message:string}|null Null when the price would be sent. `code` is a
+	 *                                                 {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code with its text as
+	 *                                                 `message`; both '' when a later send replaced the text and was not decided.
+	 */
+	public function held_price( int $account_id, int $link_id, array $payload ): ?array {
+		$row = $this->db->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Own table.
+			$this->db->prepare(
+				'SELECT error_code, last_error FROM %i WHERE account_id = %d AND link_id = %d AND warehouse_id = 0 AND kind = %s AND task_id IS NULL AND refused_payload = %s',
+				$this->table,
+				$account_id,
+				$link_id,
+				self::KIND_PRICE,
+				(string) json_encode( $payload ) // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The marketplace layer calls no WordPress function.
+			),
+			'ARRAY_A'
+		);
+
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+
+		$code = (string) $row['error_code'];
+
+		return [
+			'code'    => $code,
+			'message' => '' === $code ? '' : (string) $row['last_error'],
+		];
+	}
+
+	/**
 	 * Returns the highest pending revision among all rows (warehouses) of a link and kind.
 	 *
 	 * A new intent takes the next number after it, so revisions order the intents of one link across its warehouse rows, which
@@ -269,7 +307,9 @@ final class Sync_State_Store {
 	 * @param int[] $link_ids   Link ids.
 	 * @return array<int,array{stock:array<string,mixed>|null,price:array<string,mixed>|null}> By link id; a link with no row is absent. `stock`:
 	 *         `present`, `reserved`, `read_at` (null until a readback), `last_error`, `next_attempt_at` (Unix time or null). `price`: `sent`
-	 *         (the payload the marketplace accepted, or null), `pending`, `last_error`, `next_attempt_at`.
+	 *         (the payload the marketplace accepted, or null), `pending`, `last_error`, `error_code` (2.1.25: a
+	 *         {@see \Woodev\Framework\Marketplace\Price\Price_Refusal} code when the error says why a price did not take effect, '' otherwise),
+	 *         `next_attempt_at`.
 	 */
 	public function overview( int $account_id, array $link_ids ): array {
 		$ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
@@ -278,7 +318,7 @@ final class Sync_State_Store {
 			return [];
 		}
 
-		$sql  = 'SELECT link_id, kind, remote_present, remote_reserved, remote_read_at, pending_payload, sent_payload, last_error, next_attempt_at FROM %i WHERE account_id = %d AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') ORDER BY remote_read_at ASC'; // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+		$sql  = 'SELECT link_id, kind, remote_present, remote_reserved, remote_read_at, pending_payload, sent_payload, last_error, error_code, next_attempt_at FROM %i WHERE account_id = %d AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ') ORDER BY remote_read_at ASC'; // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
 		$rows = $this->db->get_results( $this->db->prepare( $sql, array_merge( [ $this->table, $account_id ], $ids ) ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared here.
 		$out  = [];
 
@@ -302,6 +342,7 @@ final class Sync_State_Store {
 					'sent'            => self::decoded( $row['sent_payload'] ),
 					'pending'         => self::decoded( $row['pending_payload'] ),
 					'last_error'      => (string) $row['last_error'],
+					'error_code'      => (string) $row['error_code'],
 					'next_attempt_at' => self::timestamp( $row['next_attempt_at'] ),
 				];
 			}

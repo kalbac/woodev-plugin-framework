@@ -13,19 +13,63 @@ use Woodev\Framework\Marketplace\Ledger\Item_Result;
 use Woodev\Framework\Marketplace\Price\Price_Line;
 use Woodev\Framework\Marketplace\Price\Price_Pair;
 use Woodev\Framework\Marketplace\Price\Price_Pusher;
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
+use Woodev\Framework\Marketplace\Price\Price_Task_Schedule;
 use Woodev\Framework\Marketplace\Price\Push_Receipt;
 
 /**
  * Wildberries prices: `POST /api/v2/upload/task` takes `nmID`, an integer `price` and an integer `discount` percent and
  * answers with a task id (a second identical upload while the first is queued is HTTP 208 and reuses that task). The
- * result is learned later: a price whose discounted value falls below a third of the current one is put in quarantine
- * and the old remote price stays.
+ * result is learned later: a price whose discounted value falls below a third of the current one is put in quarantine,
+ * one below a tenth is refused outright, and either way the old remote price stays. The result is waited for ten minutes and
+ * asked every thirty seconds.
  */
-final class Fake_Price_Pusher implements Price_Pusher {
+final class Fake_Price_Pusher implements Price_Pusher, Price_Task_Schedule {
+	public const DEADLINE = 600;
+	public const INTERVAL = 30;
+
 	/**
 	 * A discounted price below this share of the current one is quarantined.
 	 */
 	private const QUARANTINE_DIVISOR = 3;
+
+	/**
+	 * A discounted price below this share of the current one is refused.
+	 */
+	private const REFUSAL_DIVISOR = 10;
+
+	/**
+	 * The refusal of a price far below the current one, in the marketplace's words.
+	 */
+	public const REFUSAL_TEXT = 'New prices are more than twice lower than the current ones. Please lower them gradually';
+
+	/**
+	 * Whether the marketplace has not decided yet: a read then answers nothing.
+	 *
+	 * @var bool
+	 */
+	public $undecided = false;
+
+	/**
+	 * What the next read throws instead of answering, or null.
+	 *
+	 * @var \Throwable|null
+	 */
+	public $failure;
+
+	/**
+	 * Seconds the next read asks every item to wait, or null.
+	 *
+	 * @var int|null
+	 */
+	public $retry_after;
+
+	/**
+	 * Tasks read so far.
+	 *
+	 * @var Async_Task[]
+	 */
+	public $reads = array();
 
 	/**
 	 * Clock.
@@ -139,8 +183,17 @@ final class Fake_Price_Pusher implements Price_Pusher {
 	 * @return Item_Result[]
 	 */
 	public function settle( Account $account, Async_Task $task ): array {
+		$this->reads[] = $task;
+
+		if ( null !== $this->failure ) {
+			$failure       = $this->failure;
+			$this->failure = null;
+
+			throw $failure;
+		}
+
 		$remote_id = (string) $task->remote_task_id();
-		if ( ! isset( $this->tasks[ $remote_id ] ) ) {
+		if ( $this->undecided || ! isset( $this->tasks[ $remote_id ] ) ) {
 			return array();
 		}
 
@@ -148,8 +201,18 @@ final class Fake_Price_Pusher implements Price_Pusher {
 		foreach ( $this->tasks[ $remote_id ]['items'] as $link_id => $item ) {
 			$final   = $item['price'] * ( 100 - $item['discount'] );
 			$current = $this->remote_prices[ $item['nm'] ] ?? null;
+			if ( null !== $this->retry_after ) {
+				$results[ $link_id ] = Item_Result::failure( $link_id, 'not_ready', 'The card is not ready yet.', $this->retry_after );
+				continue;
+			}
+
+			if ( null !== $current && $final * self::REFUSAL_DIVISOR < $current ) {
+				$results[ $link_id ] = Item_Result::failure( $link_id, 'price_error', self::REFUSAL_TEXT );
+				continue;
+			}
+
 			if ( null !== $current && $final * self::QUARANTINE_DIVISOR < $current ) {
-				$results[ $link_id ] = Item_Result::failure( $link_id, 'quarantine', 'Цена слишком сильно снижена и попала в карантин; прежняя цена сохранена.' );
+				$results[ $link_id ] = Item_Result::failure( $link_id, Price_Refusal::QUARANTINED, 'Item has been moved to Price Quarantine' );
 				continue;
 			}
 
@@ -160,6 +223,24 @@ final class Fake_Price_Pusher implements Price_Pusher {
 		unset( $this->tasks[ $remote_id ] );
 
 		return $results;
+	}
+
+	/**
+	 * Returns how long a result is waited for.
+	 *
+	 * @return int
+	 */
+	public function price_task_deadline(): int {
+		return self::DEADLINE;
+	}
+
+	/**
+	 * Returns the time between two reads.
+	 *
+	 * @return int
+	 */
+	public function price_poll_interval(): int {
+		return self::INTERVAL;
 	}
 
 	/**

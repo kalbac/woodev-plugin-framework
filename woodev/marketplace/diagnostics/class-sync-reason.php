@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Marketplace\Diagnostics;
 
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -29,6 +31,21 @@ final class Sync_Reason {
 	public const LAST_ERROR       = 'last_error';
 
 	/**
+	 * The marketplace refused the new price (2.1.25).
+	 */
+	public const PRICE_REFUSED = Price_Refusal::REFUSED;
+
+	/**
+	 * The marketplace holds the new price in quarantine (2.1.25).
+	 */
+	public const PRICE_QUARANTINED = Price_Refusal::QUARANTINED;
+
+	/**
+	 * The marketplace gave no answer about the new price in time (2.1.25).
+	 */
+	public const PRICE_EXPIRED = Price_Refusal::EXPIRED;
+
+	/**
 	 * Reason code.
 	 *
 	 * @var string
@@ -49,7 +66,7 @@ final class Sync_Reason {
 	 *
 	 * @param string               $code   One of the class constants.
 	 * @param array<string,scalar> $params Parameters of the sentence: `state` for a pending card, `seconds` for a rate limit, `message`
-	 *                                     for the last marketplace error.
+	 *                                     for the last marketplace error and for a price that did not take effect.
 	 */
 	public function __construct( string $code, array $params = [] ) {
 		$this->code   = $code;

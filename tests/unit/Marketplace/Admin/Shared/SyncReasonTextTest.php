@@ -67,6 +67,37 @@ final class SyncReasonTextTest extends TestCase {
 		}
 	}
 
+	/**
+	 * A price that did not take effect has a reason of its own, in the place of «the last error»: a refusal quotes the marketplace, a
+	 * quarantine and an expiry are shown as stored.
+	 *
+	 * @return void
+	 */
+	public function test_a_price_that_did_not_take_effect_has_its_own_reason(): void {
+		$link    = new Product_Link( 1, 10, 0, 'SKU-10', [], Product_Link::STATE_CREATED, [ 'sync_stock' => true ] );
+		$account = new Account( 1, 'fake', 'Shop', true );
+		$facts   = [ 'default_warehouse_id' => 5 ];
+		$cases   = [
+			Sync_Reason::PRICE_REFUSED     => [ 'Too low', 'Маркетплейс не принял новую цену: Too low' ],
+			Sync_Reason::PRICE_QUARANTINED => [ 'Площадка держит новую цену в карантине: она намного ниже текущей', 'Площадка держит новую цену в карантине: она намного ниже текущей' ],
+			Sync_Reason::PRICE_EXPIRED     => [ 'Маркетплейс не сообщил, принял ли он новую цену. Она будет отправлена ещё раз.', 'Маркетплейс не сообщил, принял ли он новую цену. Она будет отправлена ещё раз.' ],
+		];
+
+		foreach ( $cases as $code => list( $stored, $sentence ) ) {
+			$reasons = Why_Not_Syncing::reasons(
+				$link,
+				$account,
+				$facts + [
+					'price_error_code' => $code,
+					'price_error'      => $stored,
+				]
+			);
+
+			$this->assertSame( [ $code ], [ $reasons[0]->code() ] );
+			$this->assertSame( [ $sentence ], Sync_Reason_Text::sentences( $reasons ) );
+		}
+	}
+
 	public function test_falls_back_to_code_for_unknown_future_reason(): void {
 		$reason = new Sync_Reason( 'future_custom_reason' );
 

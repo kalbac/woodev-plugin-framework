@@ -78,10 +78,13 @@ use Woodev\Framework\Marketplace\Jobs\Posting_History_Cutoffs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Jobs\Price_Flush_Runner;
+use Woodev\Framework\Marketplace\Jobs\Price_Poll_Runner;
+use Woodev\Framework\Marketplace\Jobs\Price_Refusal_Writer;
 use Woodev\Framework\Marketplace\Jobs\Price_Recompute_Runner;
 use Woodev\Framework\Marketplace\Jobs\Rename_Offer_Ids_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Refresh_Runner;
 use Woodev\Framework\Marketplace\Jobs\Price_Scheduler;
+use Woodev\Framework\Marketplace\Jobs\Price_Task_Opener;
 use Woodev\Framework\Marketplace\Jobs\Rename_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Runner;
 use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
@@ -91,6 +94,7 @@ use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
+use Woodev\Framework\Marketplace\Price\Price_Pusher;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
@@ -381,7 +385,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 
 			if ( null !== $pusher ) {
 				$price_queue = new Price_Sync_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'links' ), $this->table( 'accounts' ), $adapter->price_cadence() );
-				$price_half  = [ new Price_Flush_Runner( $this->gate, $this->accounts, $price_queue, $this->links, $pusher, $limits, $classifier, $this->log_error ), 'flush_under_claim' ];
+				$price_half  = [ $this->price_sender( $price_queue, $pusher ), 'flush_under_claim' ];
 
 				$intents     = new Price_Intents( $this->accounts, $adapter->id(), $this->links, $this->contexts, $store, $this->log_error );
 
@@ -402,6 +406,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			( new Flush_Sync_Runner( $this->names, $this->gate, $flusher, $this->accounts, $adapter->id(), $limits, $this->log_error, $price_half ) )->register();
 
 			$this->reconcile_stock( $store, $queue );
+		}
+
+		/**
+		 * The price half of the flush, with the task of an upload the marketplace decides on later: opened by the sender, settled by
+		 * the poll job.
+		 *
+		 * @param Price_Sync_Queue $queue  Price queue.
+		 * @param Price_Pusher     $pusher Pusher.
+		 * @return Price_Flush_Runner The sender, whose seam the outer flush runs.
+		 */
+		private function price_sender( Price_Sync_Queue $queue, Price_Pusher $pusher ): Price_Flush_Runner {
+			$adapter    = $this->adapter;
+			$classifier = $adapter->error_classifier();
+			$ledger     = new Wpdb_Task_Ledger( $this->db, $this->table( 'tasks' ), $this->table( 'task_items' ) );
+			$scheduler  = new Export_Scheduler( $this->names );
+			$refusals   = new Price_Refusal_Writer(
+				$queue,
+				static function () use ( $adapter ): string {
+					return $adapter->settings_descriptor()->marketplace_name();
+				}
+			);
+
+			( new Price_Poll_Runner( $this->gate, $ledger, $queue, $pusher, $scheduler, $classifier, $refusals, $this->ring, $this->log_error ) )->register();
+
+			$opener = new Price_Task_Opener( $ledger, $queue, $pusher, $scheduler, $this->log_error );
+
+			return new Price_Flush_Runner( $this->gate, $this->accounts, $queue, $this->links, $pusher, $adapter->sync_limits(), $classifier, $this->log_error, $opener, $refusals );
 		}
 
 		/**

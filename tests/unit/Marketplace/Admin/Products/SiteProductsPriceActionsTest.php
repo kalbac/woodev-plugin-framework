@@ -13,6 +13,9 @@ use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Run_Line;
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Jobs\Bulk_Run_Report;
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
+use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 
 /**
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk
@@ -151,6 +154,99 @@ final class SiteProductsPriceActionsTest extends Products_Test_Case {
 		$this->expectExceptionMessageMatches( '/Action Scheduler/' );
 
 		$this->apply( Site_Products_Bulk::PULL_PRICES, [ $id ] );
+	}
+
+	/**
+	 * «Отправить цены» sends nothing for a price the marketplace refused or holds in quarantine, says so in the preview and in the
+	 * answer with what to do, and takes the product again as soon as its price changes.
+	 *
+	 * @return void
+	 */
+	public function test_send_price_names_a_held_price_instead_of_marking_it(): void {
+		$refused     = $this->held( Price_Refusal::REFUSED, 'New prices are more than twice lower' );
+		$quarantined = $this->held( Price_Refusal::QUARANTINED, 'Тестмаркет держит новую цену в карантине: она намного ниже текущей' );
+		$expired     = $this->held( Price_Refusal::EXPIRED, 'Маркетплейс не сообщил, принял ли он новую цену. Чтобы отправить её снова, измените цену.' );
+		$ordinary    = $this->linked( false );
+		$ids         = [ $refused, $quarantined, $expired, $ordinary ];
+
+		$plan = $this->bulk()->preview( $this->account_now(), Site_Products_Bulk::SEND_PRICE, $ids, array_combine( $ids, $ids ) ?: [] );
+
+		$this->assertSame( [ 4, 1, 3 ], [ $plan['requested'], $plan['eligible'], $plan['skipped'] ] );
+
+		$result  = $this->apply( Site_Products_Bulk::SEND_PRICE, $ids );
+		$reasons = array_column( $result['groups'], 'reason' );
+
+		$this->assertSame( [ 1, 3, 0 ], [ $result['accepted'], $result['skipped'], $result['failed'] ] );
+		$this->assertContains( 'маркетплейс не принял эту цену — измените её, чтобы отправить: New prices are more than twice lower', $reasons );
+		$this->assertContains( 'Тестмаркет держит новую цену в карантине: она намного ниже текущей. Не отправится, пока вы не измените цену; карантин снимается и в кабинете маркетплейса', $reasons );
+		$this->assertContains( 'Маркетплейс не сообщил, принял ли он новую цену. Чтобы отправить её снова, измените цену.', $reasons );
+		$this->assertSame( 1, (int) $this->stored_price( $refused )['pending_rev'], 'Nothing was written for a held price.' );
+
+		$this->links()->set_price_override( (int) $this->link_of( $refused )->link_id(), self::OVERRIDE ); // The price changes.
+		$result = $this->apply( Site_Products_Bulk::SEND_PRICE, [ $refused ] );
+
+		$this->assertSame( [ 1, 0 ], [ $result['accepted'], $result['skipped'] ] );
+		$this->assertSame( 2, (int) $this->stored_price( $refused )['pending_rev'] );
+	}
+
+	/**
+	 * A long marketplace text is cut so that the advice before it survives the report of a bulk run, and very many different texts
+	 * fold into the «other reasons» group with the counts adding up.
+	 *
+	 * @return void
+	 */
+	public function test_the_reasons_of_held_prices_stay_within_what_a_report_carries(): void {
+		$ids = [];
+
+		for ( $index = 0; $index < 45; $index++ ) {
+			$ids[] = $this->held( Price_Refusal::REFUSED, $index . ' ' . str_repeat( 'очень длинное объяснение ', 20 ) );
+		}
+
+		$result = $this->apply( Site_Products_Bulk::SEND_PRICE, $ids );
+
+		$this->assertCount( 40, $result['groups'] );
+		$this->assertSame( 45, array_sum( array_column( $result['groups'], 'count' ) ) );
+		$this->assertSame( 'Другие причины', $result['groups'][39]['reason'] );
+
+		foreach ( $result['groups'] as $group ) {
+			$this->assertLessThanOrEqual( Bulk_Run_Report::REASON_LENGTH, mb_strlen( $group['reason'] ) );
+		}
+	}
+
+	/**
+	 * A created card whose current price a price task turned down.
+	 *
+	 * @param string $code    `Price_Refusal` code.
+	 * @param string $message Stored text.
+	 * @return int Product id.
+	 */
+	private function held( string $code, string $message ): int {
+		$id      = $this->linked( false );
+		$link_id = (int) $this->link_of( $id )->link_id();
+
+		$this->apply( Site_Products_Bulk::SEND_PRICE, [ $id ] );
+		$this->db->query(
+			$this->db->prepare(
+				'UPDATE %i SET refused_payload = pending_payload, error_code = %s, last_error = %s WHERE link_id = %d AND kind = %s',
+				Sqlite_Tables::table( 'sync_state' ),
+				$code,
+				$message,
+				$link_id,
+				'price'
+			)
+		);
+
+		return $id;
+	}
+
+	/**
+	 * Reads the price row of a product's link.
+	 *
+	 * @param int $product_id Product id.
+	 * @return array<string,mixed>
+	 */
+	private function stored_price( int $product_id ): array {
+		return (array) $this->db->get_row( $this->db->prepare( 'SELECT * FROM %i WHERE link_id = %d AND kind = %s', Sqlite_Tables::table( 'sync_state' ), (int) $this->link_of( $product_id )->link_id(), 'price' ), 'ARRAY_A' );
 	}
 
 	/**

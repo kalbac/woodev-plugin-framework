@@ -639,6 +639,11 @@ final class Panel_View {
 			$html .= '<h3>' . esc_html( sprintf( /* translators: %s: marketplace name. */ __( 'Ответ: %s', 'woodev-plugin-framework' ), $this->names->name() ) ) . '</h3><p class="woodev-mp-error">' . nl2br( esc_html( $block['remote_error'] ) ) . '</p>';
 		}
 
+		if ( '' !== (string) ( $block['price_issue'] ?? '' ) ) {
+			++$count;
+			$html .= '<h3>' . esc_html__( 'Новая цена', 'woodev-plugin-framework' ) . '</h3><p class="woodev-mp-error">' . nl2br( esc_html( $block['price_issue'] ) ) . '</p>';
+		}
+
 		// «Почему не синхронизируется» is a diagnostics list: it exists only while «Логирование» is on (a merchant who has not turned it on is not shown it).
 		if ( $block['link_id'] > 0 && $block['reasons']['visible'] && [] !== $block['reasons']['list'] ) {
 			$items = '';

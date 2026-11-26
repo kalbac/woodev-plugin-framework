@@ -53,12 +53,14 @@ final class Schema {
 	 * 4: `postings.processing_since`, when the marketplace says the posting entered processing (the stuck postings of the analytics, #1933).
 	 * 5: `link_barcodes`, the barcodes of a unit, and `cards.unit_card` / `cards.unit_article` / `cards.unit_data`, the card a unit
 	 * belongs to and its current article (#2000).
+	 * 6: `sync_state.task_id`, `sync_state.refused_payload` and `sync_state.error_code`, a price the marketplace decides on later
+	 * (#1998).
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var int
 	 */
-	public const REVISION = 5;
+	public const REVISION = 6;
 
 	/**
 	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
@@ -70,13 +72,14 @@ final class Schema {
 	 * 3: `links.pending_offer_id`, `links.rename_error`, `links.rename_confirmed`.
 	 * 4: `postings.processing_since`.
 	 * 5: `cards.unit_card`, `cards.unit_article`, `cards.unit_data`.
+	 * 6: `sync_state.task_id`, `sync_state.refused_payload`, `sync_state.error_code`.
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var array<string,string[]>
 	 */
 	private const REQUIRED_COLUMNS = [
-		'sync_state' => [ 'pending_source' ],
+		'sync_state' => [ 'pending_source', 'task_id', 'refused_payload', 'error_code' ],
 		'links'      => [ 'pending_offer_id', 'rename_error', 'rename_confirmed' ],
 		'postings'   => [ 'processing_since' ],
 		'cards'      => [ 'unit_card', 'unit_article', 'unit_data' ],
@@ -458,6 +461,9 @@ final class Schema {
 			remote_present int(11) NULL DEFAULT NULL,
 			remote_reserved int(11) NULL DEFAULT NULL,
 			remote_read_at datetime NULL DEFAULT NULL,
+			task_id bigint(20) unsigned NULL DEFAULT NULL,
+			refused_payload longtext NULL,
+			error_code varchar(32) NULL DEFAULT NULL,
 			PRIMARY KEY  (account_id,link_id,warehouse_id,kind),
 			KEY account_due (account_id,kind,next_attempt_at)
 		) {$charset};";

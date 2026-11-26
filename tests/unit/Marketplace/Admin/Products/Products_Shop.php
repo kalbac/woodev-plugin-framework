@@ -163,6 +163,28 @@ final class Products_Shop {
 	}
 
 	/**
+	 * Stores the price row of a link whose new price did not take effect.
+	 *
+	 * @param int    $link_id Link id.
+	 * @param string $code    `Price_Refusal` code.
+	 * @param string $message Stored text.
+	 * @return void
+	 */
+	public function price_issue( int $link_id, string $code, string $message ): void {
+		$this->db->insert(
+			Sqlite_Tables::table( 'sync_state' ),
+			[
+				'account_id'   => $this->account,
+				'link_id'      => $link_id,
+				'warehouse_id' => 0,
+				'kind'         => 'price',
+				'error_code'   => $code,
+				'last_error'   => $message,
+			]
+		);
+	}
+
+	/**
 	 * Stores what the last stock readback saw.
 	 *
 	 * @param int $link_id  Link id.

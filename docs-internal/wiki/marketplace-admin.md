@@ -1400,6 +1400,45 @@ of the `ordersPage` manifest.
 **`order_source()` and `card_exporter()`** are `@deprecated`, not removed: released adapters implement them. A new adapter may throw
 a `\LogicException` from both.
 
+## Prices the marketplace decides on later (#1998)
+
+Card WF1 of the Wildberries design (`2.1.25`). A pusher that answers `Push_Receipt::pending()` or `::duplicate()` needs nothing but
+`Price_Pusher::settle()`; Ozon answers at once and is unchanged. Timing is the **optional** `Price\Price_Task_Schedule` on the
+pusher (`price_task_deadline()`, `price_poll_interval()`; 1 h and 60 s without it).
+
+**The task.** `Jobs\Price_Task_Opener` opens one ledger task of kind `price` per upload: the marketplace's task id, one item per
+link, and the pending task's result payload plus `revisions` (link id → revision sent). `settle()` gets that stored task, so the
+adapter keeps there whatever it needs to map the answers to links. A duplicate receipt joins the open task of the same id.
+
+**Waiting.** `sync_state` (schema revision 6) holds `task_id`: the pair is not due while it is set, so a newer price waits for the
+answer. `open_items()` lists card imports only — a price task locks nothing. Because the pair is pinned to the task, a task is
+closed only when no item is pending **and** no pair waits for it; `Task_Ledger::items()` throws on a failed read (an empty answer
+used to read as «finished»), and a poll that fails on our own tables is rescheduled on the ladder.
+
+**Answers at once.** In a pending or duplicate receipt, an immediate failure without `retry_after` is as final as the task's would
+be (`Jobs\Price_Refusal_Writer`, shared with the poll). A receipt that answers everything at once (Ozon) keeps the retry ladder.
+
+**Outcomes** (`Jobs\Price_Poll_Runner`, on the shared `poll_task` hook, under the account claim):
+
+| `settle()` says | Price | Reason code (`error_code`) and text |
+|---|---|---|
+| ok | accepted | — |
+| failure with `retry_after` | sent again after the wait, no attempt counted | — |
+| failure, code `Price_Refusal::QUARANTINED` | kept as `refused_payload`, not sent until the price changes | `price_quarantined`, «{marketplace} держит новую цену в карантине: она намного ниже текущей» |
+| any other failure | the same | `price_refused`, the marketplace's words |
+| nothing, deadline passed | sent once more; after a second expiry kept as refused | `price_expired` |
+
+«Changes» is the whole payload: the same payload written again (a new revision from another shop state) is not sent, a different
+one is — also the last accepted one, which is what releases a quarantine. The pair that expired is due whatever it changed to. The
+reason shows on the product tab with or without «Логирование», in the sync reasons (`Sync_Reason::PRICE_*`) and in «Товары
+сайта» (the state badge's tooltip, the parent's error count and the «only errors» filter; stored rows only, no remote call).
+An expiry also ends an earlier refusal.
+
+**«Отправить цены» on a held price** (`Site_Products_Bulk`, `Price_Intents::held()`) writes nothing and leaves the product out of
+the plan with the reason and the advice — ticked rows, «all by filter» and the variations tab alike. A refusal quotes at most 110
+characters of the marketplace's text, so the bulk run's 200-character reason keeps the advice; past 40 distinct reasons the
+smallest fold into «Другие причины».
+
 ## A note on a card, at the product (#2017)
 
 Card WF12 of the Wildberries design (`2.1.24`). A marketplace may accept a card and still say something about it (a verdict, an

@@ -30,6 +30,7 @@ use Woodev\Framework\Marketplace\Links\Product_Link;
 use Woodev\Framework\Marketplace\Price\Money;
 use Woodev\Framework\Marketplace\Price\Price_Currency;
 use Woodev\Framework\Marketplace\Price\Price_Pair;
+use Woodev\Framework\Marketplace\Price\Price_Refusal;
 use Woodev\Framework\Marketplace\Price\Price_Rule;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
@@ -278,5 +279,51 @@ class PricePullSettleTest extends TestCase {
 		$this->assertSame( [], $this->queue()->due( $this->account_id, 10 ), 'Both pairs are settled.' );
 
 		$this->accounts()->release_claim( $this->account_id, $token );
+	}
+
+	/**
+	 * A price task's refusal and the next send read columns they also assign: MySQL evaluates the assignments left to right, so the
+	 * refused payload is taken from the snapshot before it is cleared, and a new revision drops the old reason and its text.
+	 *
+	 * @return void
+	 */
+	public function test_a_refused_price_and_the_next_send_keep_their_order_of_assignment(): void {
+		list( , $link_id ) = $this->queued( 'a', '150.00' );
+		$token             = (string) $this->accounts()->claim( $this->account_id, Job_Gate::CLAIM_TTL );
+		$queue             = $this->queue();
+		$sent              = $queue->due( $this->account_id, 10 )[0];
+
+		$this->assertTrue( $queue->begin( $this->account_id, $sent, $token ) );
+		$this->assertTrue( $queue->await( $this->account_id, $sent, 41, $token ) );
+		$this->assertTrue( $queue->await( $this->account_id, $sent, 41, $token ), 'The identical second mark changes no row and stands.' );
+		$this->assertSame( [], $queue->due( $this->account_id, 10 ), 'A waiting pair is not due.' );
+		$this->assertSame( [ $link_id ], array_keys( $queue->awaiting( $this->account_id, 41 ) ) );
+
+		$this->assertTrue( $queue->refuse( $this->account_id, $sent, Price_Refusal::QUARANTINED, 'held', $token ) );
+		$row = $this->price_row( $link_id );
+		$this->assertSame( $row['pending_payload'], $row['refused_payload'] );
+		$this->assertNull( $row['in_flight_payload'] );
+		$this->assertSame( [], $queue->due( $this->account_id, 10 ), 'The refused price is not due.' );
+
+		$this->store()->record( $this->account_id, $link_id, 0, Sync_State_Store::KIND_PRICE, $this->payload( '140.00' ) );
+		$next = $queue->due( $this->account_id, 10 )[0];
+		$this->assertTrue( $queue->begin( $this->account_id, $next, $token ) );
+
+		$row = $this->price_row( $link_id );
+		$this->assertNull( $row['error_code'] );
+		$this->assertNull( $row['last_error'] );
+		$this->assertSame( 2, (int) $row['in_flight_rev'] );
+
+		$this->accounts()->release_claim( $this->account_id, $token );
+	}
+
+	/**
+	 * Reads the price row of a link.
+	 *
+	 * @param int $link_id Link id.
+	 * @return array<string,mixed>
+	 */
+	private function price_row( int $link_id ): array {
+		return (array) $this->conn->get_row( $this->conn->prepare( 'SELECT * FROM %i WHERE link_id = %d AND kind = %s', $this->table( 'sync_state' ), $link_id, 'price' ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- The test's own table.
 	}
 }

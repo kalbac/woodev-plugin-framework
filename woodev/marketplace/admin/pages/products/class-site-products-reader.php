@@ -392,7 +392,9 @@ final class Site_Products_Reader {
 		}
 
 		if ( $filter->only_errors() ) {
-			$parts[] = $this->member( $account, "AND l.last_error_text IS NOT NULL AND l.last_error_text <> ''" );
+			// What a row calls an error: the card's own, or a price the marketplace did not take.
+			$price   = $this->db->prepare( "EXISTS (SELECT 1 FROM %i AS s WHERE s.account_id = l.account_id AND s.link_id = l.link_id AND s.kind = 'price' AND s.error_code IS NOT NULL)", $this->sync_table ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared here.
+			$parts[] = $this->member( $account, "AND ((l.last_error_text IS NOT NULL AND l.last_error_text <> '') OR " . $price . ')' );
 		}
 
 		if ( $filter->category() > 0 ) {
@@ -599,10 +601,12 @@ final class Site_Products_Reader {
 		$labels  = $this->variation_labels( array_keys( $variations ) );
 		$links   = $this->links( $account_id, array_keys( $members ) );
 		$stock   = $this->stock_readbacks( $account_id, array_column( $links, 'link_id' ) );
+		$prices  = $this->price_issues( $account_id, array_column( $links, 'link_id' ) );
 		$offers  = [];
 
 		foreach ( $members as $id => $member ) {
-			$offers[ $id ] = $this->offer( $member, $links[ $id ] ?? null, $stock, $labels[ $id ] ?? '' );
+			$offer         = $this->offer( $member, $links[ $id ] ?? null, $stock, $labels[ $id ] ?? '' );
+			$offers[ $id ] = array_merge( $offer, $prices[ (int) $offer['link_id'] ] ?? [] );
 		}
 
 		return $offers;
@@ -668,6 +672,39 @@ final class Site_Products_Reader {
 	}
 
 	/**
+	 * Reads why the new price of links did not take effect, from the stored price rows.
+	 *
+	 * @param int   $account_id Account.
+	 * @param int[] $link_ids   Link ids.
+	 * @return array<int,array{price_error_code:string,price_error:string}> By link id; a link with nothing to say is absent.
+	 */
+	private function price_issues( int $account_id, array $link_ids ): array {
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
+
+		if ( [] === $ids ) {
+			return [];
+		}
+
+		$found = $this->db->get_results(
+			$this->db->prepare(
+				'SELECT link_id, error_code, last_error FROM %i WHERE account_id = %d AND kind = %s AND error_code IS NOT NULL AND link_id IN (' . implode( ', ', array_fill( 0, count( $ids ), '%d' ) ) . ')', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge( [ $this->sync_table, $account_id, 'price' ], $ids )
+			),
+			'ARRAY_A'
+		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- Prepared above.
+		$issues = [];
+
+		foreach ( is_array( $found ) ? $found : [] as $row ) {
+			$issues[ (int) $row['link_id'] ] = [
+				'price_error_code' => (string) $row['error_code'],
+				'price_error'      => (string) $row['last_error'],
+			];
+		}
+
+		return $issues;
+	}
+
+	/**
 	 * Joins one product to its link and readbacks.
 	 *
 	 * @param array<string,mixed>                                          $product Product or variation.
@@ -682,23 +719,26 @@ final class Site_Products_Reader {
 		$state   = null === $link ? '' : (string) $link['card_state'];
 
 		return [
-			'product_id'      => (int) $product['id'],
-			'label'           => $label,
-			'sku'             => (string) $product['sku'],
-			'offer_id'        => null === $link ? '' : (string) $link['offer_id'],
-			'link_id'         => $link_id,
-			'card_state'      => $state,
-			'group'           => State_Groups::group_of( $state ),
-			'error'           => null === $link ? '' : trim( (string) $link['last_error_text'] ),
-			'site_stock'      => $product['stock'],
-			'stock_pool'      => $product['stock_pool'] ?? null,
-			'remote_stock'    => null === $read ? null : (int) $read['present'] - (int) $read['reserved'],
-			'remote_stock_at' => null === $read ? null : $read['read_at'],
-			'site_price'      => $product['price'],
-			'remote_price'    => null === $link || null === $link['last_pushed_price'] ? null : (string) $link['last_pushed_price'],
-			'warehouse_id'    => null === $link || null === $link['warehouse_id'] ? null : (int) $link['warehouse_id'],
-			'sync_stock'      => null === $link ? null : 1 === (int) $link['sync_stock'],
-			'sync_price'      => null === $link ? null : 1 === (int) $link['sync_price'],
+			'product_id'       => (int) $product['id'],
+			'label'            => $label,
+			'sku'              => (string) $product['sku'],
+			'offer_id'         => null === $link ? '' : (string) $link['offer_id'],
+			'link_id'          => $link_id,
+			'card_state'       => $state,
+			'group'            => State_Groups::group_of( $state ),
+			'error'            => null === $link ? '' : trim( (string) $link['last_error_text'] ),
+			// Filled from the price row when it says why a new price did not take effect.
+			'price_error_code' => '',
+			'price_error'      => '',
+			'site_stock'       => $product['stock'],
+			'stock_pool'       => $product['stock_pool'] ?? null,
+			'remote_stock'     => null === $read ? null : (int) $read['present'] - (int) $read['reserved'],
+			'remote_stock_at'  => null === $read ? null : $read['read_at'],
+			'site_price'       => $product['price'],
+			'remote_price'     => null === $link || null === $link['last_pushed_price'] ? null : (string) $link['last_pushed_price'],
+			'warehouse_id'     => null === $link || null === $link['warehouse_id'] ? null : (int) $link['warehouse_id'],
+			'sync_stock'       => null === $link ? null : 1 === (int) $link['sync_stock'],
+			'sync_price'       => null === $link ? null : 1 === (int) $link['sync_price'],
 		];
 	}
 
