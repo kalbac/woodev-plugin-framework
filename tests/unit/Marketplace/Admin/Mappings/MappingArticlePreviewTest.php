@@ -9,6 +9,7 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Mappings;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mapping_Article_Preview;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mapping_Products;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Controller;
@@ -17,10 +18,16 @@ use Woodev\Framework\Marketplace\Catalog\Article_Preview;
 use Woodev\Framework\Marketplace\Catalog\Mapping;
 use Woodev\Framework\Marketplace\Catalog\Profile;
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
+use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Facts;
+use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
+use Woodev\Framework\Marketplace\Flows\Sellable_Units;
+use Woodev\Framework\Marketplace\Flows\Shown_Article;
 use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Article_Policy;
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/Mappings_Harness.php';
@@ -44,6 +51,20 @@ final class Fake_Article_Preview implements Article_Preview {
 	public $asked = [];
 
 	/**
+	 * The mappings the questions came with, in order.
+	 *
+	 * @var Mapping[]
+	 */
+	public $mappings = [];
+
+	/**
+	 * Mapping id => text put before the article of a product sent by that mapping.
+	 *
+	 * @var array<int,string>
+	 */
+	public $prefixes = [];
+
+	/**
 	 * Returns the article.
 	 *
 	 * @param \WC_Product $product Product.
@@ -52,9 +73,10 @@ final class Fake_Article_Preview implements Article_Preview {
 	 * @return string
 	 */
 	public function preview_article( \WC_Product $product, Mapping $mapping, Profile $profile ): string {
-		$this->asked[] = [ $product->get_id(), (int) $mapping->id(), $profile->name() ];
+		$this->asked[]    = [ $product->get_id(), (int) $mapping->id(), $profile->name() ];
+		$this->mappings[] = $mapping;
 
-		return $this->articles[ $product->get_id() ] ?? '';
+		return ( $this->prefixes[ (int) $mapping->id() ] ?? '' ) . ( $this->articles[ $product->get_id() ] ?? '' );
 	}
 }
 
@@ -113,6 +135,34 @@ final class MappingArticlePreviewTest extends TestCase {
 	private $mapping_id;
 
 	/**
+	 * Enabled accounts.
+	 *
+	 * @var Account[]
+	 */
+	private $accounts = [];
+
+	/**
+	 * Article typed at a product, by `{product id}:{account id}`.
+	 *
+	 * @var array<string,string>
+	 */
+	private $typed = [];
+
+	/**
+	 * Shop category of each product or variation; the mapping's own when not set.
+	 *
+	 * @var array<int,int>
+	 */
+	private $categories = [];
+
+	/**
+	 * What the export does with the article it is given: the typed one is taken unless a test says otherwise.
+	 *
+	 * @var callable|null
+	 */
+	private $offer_id_for;
+
+	/**
 	 * Builds a shop with one mapping.
 	 *
 	 * @return void
@@ -144,6 +194,18 @@ final class MappingArticlePreviewTest extends TestCase {
 		$this->links      = new Wpdb_Link_Store( $this->h->db, Sqlite_Tables::table( 'links' ), Sqlite_Tables::table( 'link_ids' ) );
 		$this->mapping_id = $this->h->mappings->create( 'Футболки', null, [], null, [] );
 		$this->h->mappings->link_term_if_absent( 5, $this->mapping_id );
+		$this->accounts = [ self::account( 1, 'Основной' ) ];
+	}
+
+	/**
+	 * Builds an account.
+	 *
+	 * @param int    $id   Id.
+	 * @param string $name Name.
+	 * @return Account
+	 */
+	private static function account( int $id, string $name ): Account {
+		return new Account( $id, 'fake', $name, true );
 	}
 
 	/**
@@ -176,6 +238,22 @@ final class MappingArticlePreviewTest extends TestCase {
 		$product = Mockery::mock( 'WC_Product' );
 		$product->shouldReceive( 'get_id' )->andReturn( $id );
 		$product->shouldReceive( 'get_name' )->andReturn( $name );
+		$product->shouldReceive( 'get_parent_id' )->andReturnUsing(
+			function () use ( $id ) {
+				foreach ( $this->shop as $parent ) {
+					if ( in_array( $id, $parent->get_children(), true ) ) {
+						return $parent->get_id();
+					}
+				}
+
+				return 0;
+			}
+		);
+		$product->shouldReceive( 'get_meta' )->andReturnUsing(
+			function ( $key ) use ( $id ) {
+				return $this->typed[ $id . ':' . substr( $key, strrpos( $key, '_' ) + 1 ) ] ?? '';
+			}
+		);
 		$product->shouldReceive( 'get_children' )->andReturn( $children );
 		$product->shouldReceive( 'is_type' )->andReturnUsing(
 			static function ( $asked ) use ( $type ) {
@@ -191,11 +269,12 @@ final class MappingArticlePreviewTest extends TestCase {
 	 *
 	 * @param int    $product_id Product or variation.
 	 * @param int    $parent_id  Parent, 0 for a product.
-	 * @param string $state      Card state.
+	 * @param string              $state      Card state.
+	 * @param array<string,mixed> $columns    Any other column of the link.
 	 * @return int Link id.
 	 */
-	private function link( int $product_id, int $parent_id, string $state ): int {
-		$this->links->insert_if_absent( Link_Record::offer( 1, $product_id, $parent_id, 'key-' . $product_id, [ 'card_state' => $state ] ) );
+	private function link( int $product_id, int $parent_id, string $state, array $columns = [] ): int {
+		$this->links->insert_if_absent( Link_Record::offer( 1, $product_id, $parent_id, 'key-' . $product_id, [ 'card_state' => $state ] + $columns ) );
 
 		return (int) $this->links->find( 1, $product_id )->link_id();
 	}
@@ -203,9 +282,10 @@ final class MappingArticlePreviewTest extends TestCase {
 	/**
 	 * Builds the preview.
 	 *
+	 * @param Sellable_Units|null $units Unit rules of the marketplace.
 	 * @return Mapping_Article_Preview
 	 */
-	private function preview(): Mapping_Article_Preview {
+	private function preview( ?Sellable_Units $units = null ): Mapping_Article_Preview {
 		$ledger = Mockery::mock( Task_Ledger::class );
 		$ledger->shouldReceive( 'sent_offer_id' )->andReturnUsing(
 			function ( $link_id ) {
@@ -219,14 +299,39 @@ final class MappingArticlePreviewTest extends TestCase {
 			}
 		);
 
+		$facts->shouldReceive( 'offer_id_for' )->andReturnUsing( $this->offer_id_for ?? static function ( $frozen ) {
+			return (string) $frozen;
+		} );
+		$policy   = new Fake_Article_Policy();
+		$pinned   = new Pinned_Offer_Id( 'fake', $policy );
+		$contexts = new Export_Context_Builder(
+			new Link_Context_Resolver( $this->links, $this->h->mappings ),
+			$this->h->profiles,
+			$this->links,
+			$facts,
+			$policy,
+			$pinned,
+			null,
+			function ( $product ) {
+				return [ $this->categories[ $product->get_id() ] ?? 5 ];
+			},
+			null,
+			$ledger
+		);
+
 		return new Mapping_Article_Preview(
 			$this->articles,
 			$this->h->mappings,
-			$this->h->profiles,
 			new Mapping_Products( [ $this->h->mappings, 'terms_by_mapping' ] ),
 			$this->links,
 			$ledger,
-			$facts
+			$facts,
+			$contexts,
+			$pinned,
+			function (): array {
+				return $this->accounts;
+			},
+			$units
 		);
 	}
 
@@ -256,10 +361,12 @@ final class MappingArticlePreviewTest extends TestCase {
 					'articles' => [
 						[
 							'article'    => 'tee-red',
+							'note'       => '',
 							'variations' => 'Вариация 11; Вариация 12',
 						],
 						[
 							'article'    => 'tee-blue',
+							'note'       => '',
 							'variations' => 'Вариация 13',
 						],
 					],
@@ -271,6 +378,7 @@ final class MappingArticlePreviewTest extends TestCase {
 					'articles' => [
 						[
 							'article'    => 'cap',
+							'note'       => '',
 							'variations' => '',
 						],
 					],
@@ -327,6 +435,193 @@ final class MappingArticlePreviewTest extends TestCase {
 
 		$this->assertSame( [ 10 ], array_column( $products, 'id' ) );
 		$this->assertSame( [ 13 ], array_column( $this->articles->asked, 0 ) );
+	}
+
+	/**
+	 * An article typed at a product wins over the mapping's, and the line says so; the other variations are not touched.
+	 *
+	 * @return void
+	 */
+	public function test_an_article_typed_at_the_product_is_shown_with_the_reason(): void {
+		$this->product( 10, 'Футболка', [ 11, 12 ] );
+		$this->articles->articles = [
+			11 => 'tee-red',
+			12 => 'tee-red',
+		];
+		$this->typed              = [ '12:1' => 'MY-OWN' ];
+
+		$this->assertSame(
+			[
+				[
+					'article'    => 'tee-red',
+					'note'       => '',
+					'variations' => 'Вариация 11',
+				],
+				[
+					'article'    => 'MY-OWN',
+					'note'       => 'Артикул вписан в самом товаре',
+					'variations' => 'Вариация 12',
+				],
+			],
+			$this->preview()->read( $this->mapping_id )['products'][0]['articles']
+		);
+	}
+
+	/**
+	 * A marketplace of units reads a typed key the way the export does, and shows its article.
+	 *
+	 * @return void
+	 */
+	public function test_a_typed_key_of_units_is_shown_as_its_article(): void {
+		$this->product( 20, 'Кепка' );
+		$this->articles->articles = [ 20 => 'cap' ];
+		$this->typed              = [ '20:1' => 'own|M' ];
+		$units                    = Mockery::mock( Sellable_Units::class );
+		$units->shouldReceive( 'shown_article' )->with( 'own|M' )->andReturn( new Shown_Article( 'own', 'M' ) );
+
+		$line = $this->preview( $units )->read( $this->mapping_id )['products'][0]['articles'][0];
+
+		$this->assertSame( 'own', $line['article'] );
+		$this->assertSame( 'Артикул вписан в самом товаре', $line['note'] );
+	}
+
+	/**
+	 * An export that refuses what was typed and sends its own article shows that article, with nothing to say.
+	 *
+	 * @return void
+	 */
+	public function test_a_typed_article_the_export_refuses_is_not_shown(): void {
+		$this->product( 20, 'Кепка' );
+		$this->articles->articles = [ 20 => 'cap' ];
+		$this->typed              = [ '20:1' => 'not a key' ];
+		$this->offer_id_for       = static function () {
+			return 'cap';
+		};
+
+		$this->assertSame(
+			[
+				[
+					'article'    => 'cap',
+					'note'       => '',
+					'variations' => '',
+				],
+			],
+			$this->preview()->read( $this->mapping_id )['products'][0]['articles']
+		);
+	}
+
+	/**
+	 * Accounts that agree make one line; accounts that disagree get a line each, naming them.
+	 *
+	 * @return void
+	 */
+	public function test_accounts_that_disagree_get_a_line_each(): void {
+		$this->accounts = [ self::account( 1, 'Основной' ), self::account( 2, 'Второй' ), self::account( 3, 'Третий' ) ];
+		$this->product( 20, 'Кепка' );
+		$this->articles->articles = [ 20 => 'cap' ];
+
+		$agreed = $this->preview()->read( $this->mapping_id )['products'][0]['articles'];
+
+		$this->typed = [ '20:2' => 'CAP-2' ];
+		$split       = $this->preview()->read( $this->mapping_id )['products'][0]['articles'];
+
+		$this->assertCount( 1, $agreed );
+		$this->assertSame( '', $agreed[0]['note'] );
+		$this->assertSame( [ 'cap', 'CAP-2' ], array_column( $split, 'article' ) );
+		$this->assertSame( [ 'Для: «Основной», «Третий»', 'Для: «Второй». Артикул вписан в самом товаре' ], array_column( $split, 'note' ) );
+	}
+
+	/**
+	 * A product that names another mapping is asked about with that one and its profile, and the line names it. A variation follows
+	 * the mapping its parent names.
+	 *
+	 * @return void
+	 */
+	public function test_a_mapping_chosen_at_the_product_wins(): void {
+		$profile_id = $this->h->profiles->create( 'Особый', [] );
+		$other      = $this->h->mappings->create( 'Шапки', null, [], $profile_id, [] );
+		$this->product( 10, 'Футболка', [ 11 ] );
+		$this->product( 20, 'Кепка' );
+		$this->links->insert_if_absent( Link_Record::parent_row( 1, 10, [ 'mapping_id' => $other ] ) );
+		$this->link( 20, 0, Link_Record::STATE_UNLINKED, [ 'mapping_id' => $other ] );
+		$this->articles->articles = [
+			11 => 'tee',
+			20 => 'cap',
+		];
+		$this->articles->prefixes = [ $other => 'hat-' ];
+
+		$products = $this->preview()->read( $this->mapping_id )['products'];
+
+		$this->assertSame( 'hat-tee', $products[0]['articles'][0]['article'] );
+		$this->assertSame( 'hat-cap', $products[1]['articles'][0]['article'] );
+		$this->assertSame( 'Товар выгружается по другому сопоставлению: «Шапки»', $products[1]['articles'][0]['note'] );
+		$this->assertSame( [ 20, $other, 'Особый' ], $this->articles->asked[1] );
+	}
+
+	/**
+	 * The mapping of a nearer category is the product's, as the export resolves it.
+	 *
+	 * @return void
+	 */
+	public function test_the_mapping_of_the_products_category_wins(): void {
+		$other = $this->h->mappings->create( 'Шапки', null, [], null, [] );
+		$this->h->mappings->link_term_if_absent( 9, $other );
+		$this->product( 20, 'Кепка' );
+		$this->categories         = [ 20 => 9 ];
+		$this->articles->articles = [ 20 => 'cap' ];
+
+		$line = $this->preview()->read( $this->mapping_id )['products'][0]['articles'][0];
+
+		$this->assertSame( $other, $this->articles->asked[0][1] );
+		$this->assertSame( 'Товар выгружается по другому сопоставлению: «Шапки»', $line['note'] );
+	}
+
+	/**
+	 * A value set at the product reaches the adapter laid over the mapping.
+	 *
+	 * @return void
+	 */
+	public function test_values_set_at_the_product_reach_the_adapter(): void {
+		$this->product( 20, 'Кепка' );
+		$this->link( 20, 0, Link_Record::STATE_UNLINKED, [ 'attribute_overrides' => wp_json_encode( [ '7' => [ [ 'value' => 'XL' ] ] ] ) ] );
+
+		$this->preview()->read( $this->mapping_id );
+
+		$this->assertSame( 'XL', $this->articles->mappings[0]->source_for( '7' )->value() );
+	}
+
+	/**
+	 * A product that names a mapping which is gone gets no article: nothing would be sent.
+	 *
+	 * @return void
+	 */
+	public function test_a_product_with_a_mapping_that_is_gone_shows_no_article(): void {
+		$this->product( 20, 'Кепка' );
+		$this->articles->articles = [ 20 => 'cap' ];
+		$this->link( 20, 0, Link_Record::STATE_UNLINKED, [ 'mapping_id' => 404 ] );
+
+		$line = $this->preview()->read( $this->mapping_id )['products'][0]['articles'][0];
+
+		$this->assertSame( '', $line['article'] );
+		$this->assertSame( 'Сопоставление, выбранное в товаре, не найдено', $line['note'] );
+		$this->assertSame( [], $this->articles->asked );
+	}
+
+	/**
+	 * Without an enabled account no product has settings of its own, and the mapping on the screen answers.
+	 *
+	 * @return void
+	 */
+	public function test_without_an_account_the_mapping_on_the_screen_answers(): void {
+		$this->accounts = [];
+		$this->product( 20, 'Кепка' );
+		$this->articles->articles = [ 20 => 'cap' ];
+		$this->typed              = [ '20:1' => 'MY-OWN' ];
+
+		$line = $this->preview()->read( $this->mapping_id )['products'][0]['articles'][0];
+
+		$this->assertSame( [ 'cap', '' ], [ $line['article'], $line['note'] ] );
+		$this->assertSame( $this->mapping_id, $this->articles->asked[0][1] );
 	}
 
 	/**
@@ -390,6 +685,7 @@ final class MappingArticlePreviewTest extends TestCase {
 		$mapping_id = $this->h->mappings->create( 'Платья', null, [], $profile_id, [] );
 		$this->h->mappings->link_term_if_absent( 8, $mapping_id );
 		$this->product( 20, 'Платье' );
+		$this->categories = [ 20 => 8 ];
 
 		$this->preview()->read( $mapping_id );
 

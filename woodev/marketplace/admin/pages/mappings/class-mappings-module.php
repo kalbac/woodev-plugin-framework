@@ -14,10 +14,14 @@ use Woodev\Framework\Marketplace\Catalog\Article_Preview;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Mapping;
 use Woodev\Framework\Marketplace\Catalog\Profile;
+use Woodev\Framework\Marketplace\Data\Pinned_Offer_Id;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
+use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
+use Woodev\Framework\Marketplace\Flows\Link_Context_Resolver;
+use Woodev\Framework\Marketplace\Flows\Sellable_Units;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 
@@ -47,14 +51,16 @@ final class Mappings_Module {
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Marketplace_Plugin $plugin The marketplace plugin.
+	 * @param Marketplace_Plugin $plugin        The marketplace plugin.
+	 * @param callable|null      $account_store Gives the plugin's account store: `function (): Account_Store`. Without it the
+	 *                                          form has no article preview, which must know the accounts.
 	 * @return void
 	 */
-	public static function register( Marketplace_Plugin $plugin ): void {
+	public static function register( Marketplace_Plugin $plugin, ?callable $account_store = null ): void {
 		add_action(
 			'rest_api_init',
-			static function () use ( $plugin ): void {
-				$controller = self::controller( $plugin );
+			static function () use ( $plugin, $account_store ): void {
+				$controller = self::controller( $plugin, $account_store );
 
 				if ( null !== $controller ) {
 					$controller->register_routes();
@@ -100,10 +106,11 @@ final class Mappings_Module {
 	 *
 	 * @since 2.1.0
 	 *
-	 * @param Marketplace_Plugin $plugin The marketplace plugin.
+	 * @param Marketplace_Plugin $plugin        The marketplace plugin.
+	 * @param callable|null      $account_store Gives the plugin's account store: `function (): Account_Store`.
 	 * @return Mappings_Controller|null Null when the plugin has no mappings page or its id cannot be a route segment.
 	 */
-	public static function controller( Marketplace_Plugin $plugin ): ?Mappings_Controller {
+	public static function controller( Marketplace_Plugin $plugin, ?callable $account_store = null ): ?Mappings_Controller {
 		$parts = self::parts( $plugin );
 
 		if ( null === $parts || 1 !== preg_match( Mappings_Controller::OWNER_PATTERN, $plugin->get_id() ) ) {
@@ -122,7 +129,7 @@ final class Mappings_Module {
 			$parts['choices'],
 			$adapter->price_source(),
 			$parts['fields'],
-			$parts['articles']
+			null === $account_store ? null : self::article_preview( $adapter, $account_store )
 		);
 	}
 
@@ -131,7 +138,7 @@ final class Mappings_Module {
 	 * forms save.
 	 *
 	 * @param Marketplace_Plugin $plugin The marketplace plugin.
-	 * @return array{path:string,capability:string,mappings:Mapping_Editor,profiles:Profile_Editor,check:Mapping_Check,categories:Category_Finder,choices:Profile_Choices,fields:array<string,string>,articles:Mapping_Article_Preview|null}|null
+	 * @return array{path:string,capability:string,mappings:Mapping_Editor,profiles:Profile_Editor,check:Mapping_Check,categories:Category_Finder,choices:Profile_Choices,fields:array<string,string>}|null
 	 *   Null when the plugin has no mappings page.
 	 */
 	private static function parts( Marketplace_Plugin $plugin ): ?array {
@@ -175,20 +182,17 @@ final class Mappings_Module {
 			'categories' => $categories,
 			'choices'    => $choices,
 			'fields'     => $fields,
-			'articles'   => self::article_preview( $adapter, $mappings, $profiles, $products ),
 		];
 	}
 
 	/**
-	 * Builds the article preview of the mapping form.
+	 * Builds the article preview of the mapping form, which resolves a product the way the export does.
 	 *
-	 * @param Marketplace_Adapter $adapter  The adapter.
-	 * @param Wpdb_Mapping_Store  $mappings Mappings.
-	 * @param Wpdb_Profile_Store  $profiles Profiles.
-	 * @param Mapping_Products    $products The products a mapping covers.
+	 * @param Marketplace_Adapter $adapter       The adapter.
+	 * @param callable            $account_store Gives the plugin's account store: `function (): Account_Store`.
 	 * @return Mapping_Article_Preview|null Null for an adapter that does not implement {@see Article_Preview}.
 	 */
-	private static function article_preview( Marketplace_Adapter $adapter, Wpdb_Mapping_Store $mappings, Wpdb_Profile_Store $profiles, Mapping_Products $products ): ?Mapping_Article_Preview {
+	private static function article_preview( Marketplace_Adapter $adapter, callable $account_store ): ?Mapping_Article_Preview {
 		global $wpdb;
 
 		if ( ! $adapter instanceof Article_Preview ) {
@@ -200,14 +204,36 @@ final class Mappings_Module {
 			return $schema->table_name( $name, $wpdb->prefix );
 		};
 
+		$mappings = new Wpdb_Mapping_Store( $wpdb, $table( 'mappings' ), $table( 'mapping_terms' ) );
+		$links    = new Wpdb_Link_Store( $wpdb, $table( 'links' ), $table( 'link_ids' ) );
+		$ledger   = new Wpdb_Task_Ledger( $wpdb, $table( 'tasks' ), $table( 'task_items' ) );
+		$pinned   = new Pinned_Offer_Id( $adapter->id(), $adapter->article_policy() );
+		$contexts = new Export_Context_Builder(
+			new Link_Context_Resolver( $links, $mappings ),
+			new Wpdb_Profile_Store( $wpdb, $table( 'profiles' ), Wpdb_Profile_Store::price_changed_action( $adapter->id() ) ),
+			$links,
+			$adapter->export_facts(),
+			$adapter->article_policy(),
+			$pinned,
+			$adapter->price_source(),
+			null,
+			null,
+			$ledger
+		);
+
 		return new Mapping_Article_Preview(
 			$adapter,
 			$mappings,
-			$profiles,
-			$products,
-			new Wpdb_Link_Store( $wpdb, $table( 'links' ), $table( 'link_ids' ) ),
-			new Wpdb_Task_Ledger( $wpdb, $table( 'tasks' ), $table( 'task_items' ) ),
-			$adapter->export_facts()
+			new Mapping_Products( [ $mappings, 'terms_by_mapping' ] ),
+			$links,
+			$ledger,
+			$adapter->export_facts(),
+			$contexts,
+			$pinned,
+			static function () use ( $account_store, $adapter ): array {
+				return $account_store()->all( $adapter->id(), true );
+			},
+			$adapter instanceof Sellable_Units ? $adapter : null
 		);
 	}
 

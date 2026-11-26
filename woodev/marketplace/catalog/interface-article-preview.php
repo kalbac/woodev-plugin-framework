@@ -25,13 +25,17 @@ interface Article_Preview {
 	 * Returns the article of the card a product would be created with.
 	 *
 	 * Asked about every sellable unit: a simple product, or one variation. Units that answer the same article are shown on one line.
-	 * Only units without a card are asked about, and the answer is about the mapping and the profile given: what the merchant typed
-	 * on one product for one account is no part of it.
+	 * Only units without a card are asked about, once for each enabled account.
+	 *
+	 * The answer must be the article of the card the export would send for this mapping and profile — the one
+	 * {@see \Woodev\Framework\Marketplace\Flows\Export_Facts::offer_id_for()} would name. An article the merchant typed at the
+	 * product is no part of it: the framework reads that one through `offer_id_for()` itself and shows what comes back.
 	 *
 	 * @since 2.1.27
 	 *
 	 * @param \WC_Product $product Product or variation.
-	 * @param Mapping     $mapping The mapping on the screen, as saved.
+	 * @param Mapping     $mapping The mapping the product is sent by for that account, with the product's own values laid over it. It
+	 *                             is the one on the screen unless the product names another or a nearer category has its own.
 	 * @param Profile     $profile Its profile; an empty one when the mapping chose none.
 	 * @return string The article as the merchant knows it (not the key of a link); '' when it cannot be worked out.
 	 */

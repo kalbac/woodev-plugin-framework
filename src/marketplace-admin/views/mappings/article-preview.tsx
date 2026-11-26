@@ -76,7 +76,8 @@ export function ArticlePreview( { api, messages, mappingId }: Props ) {
 		};
 	}, [ load ] );
 
-	const missing = products.some( ( product ) => product.articles.some( ( line ) => line.article === '' ) );
+	// A dash with a note of its own is already explained.
+	const missing = products.some( ( product ) => product.articles.some( ( line ) => line.article === '' && line.note === '' ) );
 	const variable = products.some( ( product ) => product.articles.some( ( line ) => line.variations !== '' ) );
 
 	return (
@@ -96,14 +97,17 @@ export function ArticlePreview( { api, messages, mappingId }: Props ) {
 						{ products.map( ( product ) => (
 							<Fragment key={ product.id }>
 								{ product.articles.map( ( line, index ) => (
-									<tr key={ line.article }>
+									<tr key={ `${ line.article }\n${ line.note }` }>
 										{ index === 0 && (
 											<td rowSpan={ product.articles.length }>
 												{ product.url ? <a href={ product.url }>{ product.name }</a> : product.name }
 											</td>
 										) }
 										{ variable && <td>{ line.variations }</td> }
-										<td>{ line.article === '' ? '—' : <code>{ line.article }</code> }</td>
+										<td>
+											{ line.article === '' ? '—' : <code>{ line.article }</code> }
+											{ line.note !== '' && <p className="description">{ line.note }</p> }
+										</td>
 									</tr>
 								) ) }
 							</Fragment>

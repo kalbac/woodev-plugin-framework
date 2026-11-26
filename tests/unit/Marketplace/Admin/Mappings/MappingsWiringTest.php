@@ -85,7 +85,8 @@ final class MappingsWiringTest extends TestCase {
 		$source      = (array) file( (string) $constructor->getFileName() );
 		$lines       = array_slice( $source, $constructor->getStartLine() - 1, $constructor->getEndLine() - $constructor->getStartLine() + 1 );
 
-		$this->assertStringContainsString( 'Mappings_Module::register( $this );', implode( '', $lines ) );
+		$this->assertStringContainsString( 'Mappings_Module::register(', implode( '', $lines ) );
+		$this->assertStringContainsString( 'return $this->get_account_store();', implode( '', $lines ) );
 	}
 
 	/**
@@ -149,10 +150,15 @@ final class MappingsWiringTest extends TestCase {
 			}
 		);
 
-		Mappings_Module::controller( $plugin )->register_routes();
+		Mappings_Module::controller( $plugin, array( $plugin, 'accounts' ) )->register_routes();
 
 		$this->assertContains( '/admin/marketplace/ozon/mappings/mappings/(?P<id>[1-9][0-9]{0,18})/articles', $routes );
 		$this->assertCount( 11, $routes );
+
+		$routes = [];
+		Mappings_Module::controller( $plugin )->register_routes();
+
+		$this->assertCount( 10, $routes, 'without the accounts there is no preview: it would not know the products own settings' );
 	}
 
 	/**

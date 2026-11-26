@@ -418,11 +418,13 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Resolves the effective mapping; an empty one when nothing maps the product, which the validator reports.
 	 *
+	 * @since 2.1.27
+	 *
 	 * @param Account     $account Account.
 	 * @param \WC_Product $product Product.
 	 * @return Mapping
 	 */
-	private function mapping( Account $account, \WC_Product $product ): Mapping {
+	public function mapping( Account $account, \WC_Product $product ): Mapping {
 		$terms = (array) call_user_func( $this->term_ids, $product );
 
 		return $this->resolver->effective_mapping( $account->id(), (int) $product->get_id(), $terms, (int) $product->get_parent_id() ) ?? new Mapping( null, [], null );
@@ -431,10 +433,12 @@ final class Export_Context_Builder implements Price_Context {
 	/**
 	 * Loads the mapping's profile, else an empty one.
 	 *
+	 * @since 2.1.27
+	 *
 	 * @param Mapping $mapping Mapping.
 	 * @return Profile
 	 */
-	private function profile( Mapping $mapping ): Profile {
+	public function profile( Mapping $mapping ): Profile {
 		$profile = null !== $mapping->profile_id() ? $this->profiles->get( (int) $mapping->profile_id() ) : null;
 
 		return $profile ?? new Profile( null, '' );

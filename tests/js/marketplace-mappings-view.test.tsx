@@ -1061,11 +1061,11 @@ describe( 'article preview', () => {
 		name: 'Футболка',
 		url: 'http://localhost/edit/10',
 		articles: [
-			{ article: 'tee-red', variations: 'Красный, S; Красный, M' },
-			{ article: '', variations: 'Синий, S' },
+			{ article: 'tee-red', note: '', variations: 'Красный, S; Красный, M' },
+			{ article: '', note: '', variations: 'Синий, S' },
 		],
 	};
-	const CAP = { id: 20, name: 'Кепка', url: '', articles: [ { article: 'cap', variations: '' } ] };
+	const CAP = { id: 20, name: 'Кепка', url: '', articles: [ { article: 'cap', note: '', variations: '' } ] };
 
 	const openSaved = async () => {
 		openView();
@@ -1105,6 +1105,25 @@ describe( 'article preview', () => {
 		expect( screen.queryByRole( 'button', { name: 'Показать ещё' } ) ).not.toBeInTheDocument();
 	} );
 
+	test( 'the reason of a line stands under its article, one article may have two lines, and an explained dash needs no hint', async () => {
+		const own = {
+			...CAP,
+			articles: [
+				{ article: 'cap', note: 'Для: «Основной»', variations: '' },
+				{ article: 'cap', note: 'Для: «Второй». Артикул вписан в самом товаре', variations: '' },
+				{ article: '', note: 'Сопоставление не найдено', variations: '' },
+			],
+		};
+		serve( { 'GET ': WITH_PREVIEW, 'GET /mappings/1': SAVED, 'GET /mappings/1/articles?offset=0': { products: [ own ], next_offset: 0 } } );
+		await openSaved();
+
+		const table = await screen.findByRole( 'table' );
+		expect( within( table ).getAllByText( 'cap' ) ).toHaveLength( 2 );
+		expect( within( table ).getByText( 'Для: «Второй». Артикул вписан в самом товаре' ).closest( 'td' ) ).toHaveTextContent( 'cap' );
+		expect( within( table ).getByText( 'Сопоставление не найдено' ).closest( 'td' ) ).toHaveTextContent( '—' );
+		expect( screen.queryByText( 'Прочерк — артикул не получается' ) ).not.toBeInTheDocument();
+	} );
+
 	test( 'a mapping with nothing to create says so', async () => {
 		serve( { 'GET ': WITH_PREVIEW, 'GET /mappings/1': SAVED, 'GET /mappings/1/articles?offset=0': { products: [], next_offset: 0 } } );
 		await openSaved();
@@ -1132,7 +1151,7 @@ describe( 'article preview', () => {
 		await userEvent.click( screen.getByRole( 'button', { name: 'Повторить' } ) );
 		expect( await screen.findByText( 'cap' ) ).toBeInTheDocument();
 
-		answer = () => ( { products: [ { ...CAP, articles: [ { article: 'hat', variations: '' } ] } ], next_offset: 0 } );
+		answer = () => ( { products: [ { ...CAP, articles: [ { article: 'hat', note: '', variations: '' } ] } ], next_offset: 0 } );
 		await userEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
 		expect( await screen.findByText( 'hat' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'cap' ) ).not.toBeInTheDocument();

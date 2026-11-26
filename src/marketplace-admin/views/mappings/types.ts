@@ -135,8 +135,11 @@ export interface ArticleProduct {
 	name: string;
 	/** The product's edit screen; '' when the user cannot edit it. */
 	url: string;
-	/** `article` is '' when it cannot be worked out; `variations` is '' for a product without variations. */
-	articles: Array< { article: string; variations: string } >;
+	/**
+	 * `article` is '' when it cannot be worked out; `note` says why it is not simply what this mapping gives (the product's own
+	 * setting, or the accounts disagreeing), '' otherwise; `variations` is '' for a product without variations.
+	 */
+	articles: Array< { article: string; note: string; variations: string } >;
 }
 
 export interface ArticlesStep {
