@@ -12,6 +12,7 @@ use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Admin\Diagnostics\Logging;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Notes;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Export_Validator;
 use Woodev\Framework\Marketplace\Catalog\Validation_Report;
@@ -292,6 +293,7 @@ final class Site_Products_Module {
 				'marketplace' => $adapter->settings_descriptor()->marketplace_name(),
 				'withheld'    => $withheld,
 				'articles'    => $adapter instanceof Sellable_Units ? new Article_Display( $adapter, self::card_store( $plugin, $adapter, $db ) ) : null,
+				'notes'       => $adapter instanceof Link_Notes ? $adapter : null,
 			],
 			$runner,
 			$runs
@@ -406,7 +408,8 @@ final class Site_Products_Module {
 			],
 			$importer,
 			null,
-			null === $units ? null : new Remote_Cards_Units( $units, $rows, new Remote_Cards_Cells( $adapter instanceof Remote_Card_Address ? [ $adapter, 'remote_card_url' ] : null ), null !== $importer )
+			null === $units ? null : new Remote_Cards_Units( $units, $rows, new Remote_Cards_Cells( $adapter instanceof Remote_Card_Address ? [ $adapter, 'remote_card_url' ] : null ), null !== $importer ),
+			$adapter instanceof Link_Notes ? $adapter : null
 		);
 	}
 

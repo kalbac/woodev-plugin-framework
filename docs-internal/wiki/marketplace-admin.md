@@ -1434,6 +1434,25 @@ the plan with the reason and the advice — ticked rows, «all by filter» and t
 characters of the marketplace's text, so the bulk run's 200-character reason keeps the advice; past 40 distinct reasons the
 smallest fold into «Другие причины».
 
+## A note on a card, at the product (#2017)
+
+Card WF12 of the Wildberries design (`2.1.24`). A marketplace may accept a card and still say something about it (a verdict, an
+error-list entry) that neither the link's error nor the state of the card carries. Ozon Seller 2.0.0 needs no change.
+
+**The seam.** An **optional** `Admin\Shared\Link_Notes` beside the adapter: `link_notes( $account_id, $link_ids )` answers
+`Link_Note`s by link id. A note is a translated plain-text sentence and a tone (`info`, `warning`, `error`; `warning` by default).
+It is asked while screens are drawn, once for all the rows of a read, so it reads what the plugin stored — **never the
+marketplace**. The plugin writes notes from its jobs, and drops one by no longer answering it.
+
+| Screen | `info` | `warning`, `error` |
+|---|---|---|
+| Product tab, a product's or a variation's block | a grey line | a marked line; the state badge shows «!» and the dialog lists it |
+| Product tab, the table of the variants | tooltip of the state badge | tooltip, and the badge turns orange / red |
+| «Товары сайта», «Карточки на маркетплейсе» | first lines of the state badge's tooltip | the same, and the badge turns orange / red (`Link_Note_Badge`) |
+
+A parent row (a variable product, a card with several sizes) says each distinct sentence once, at the badge of the state its member
+is in. A cabinet card no product carries has no link and so no note.
+
 ## Changing the article after the export (framework 2.1.13, #1860)
 
 Before 2.1.13 the article (`offer_id`) was frozen once a card was sent. Operator decision 19.11.2026: it stays changeable, and the change goes to the marketplace by its own

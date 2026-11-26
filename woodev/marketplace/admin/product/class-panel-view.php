@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Product;
 
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Note;
 use Woodev\Framework\Marketplace\Price\Price_Override;
 
 defined( 'ABSPATH' ) || exit;
@@ -136,6 +137,7 @@ final class Panel_View {
 			// Every account's block stays in the form (so «Обновить» saves each); the account select of «Product data» shows one of them.
 			echo '<div class="' . esc_attr( self::WRAPPER_CLASS ) . ' woodev-mp-block--variation"' . $this->account_part_attributes( $block, $shown, $several ) . '>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in account_part_attributes().
 			printf( '<h4>%s %s</h4>', esc_html( ( $several ? $this->names->name() . ' · ' . $block['account']->name() : $this->names->name() ) . ':' ), $this->state_badge( $block['badge'], $this->problems( $block, $screen ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in state_badge().
+			$this->link_note( $block );
 			$this->identifiers( $block, $base, $id );
 			$this->settings_fields( $block, $base, $id, false );
 			$this->variation_buttons( $block, $screen );
@@ -213,6 +215,7 @@ final class Panel_View {
 		if ( 'parent' === $block['kind'] ) {
 			$this->parent_fields( $block, $base, $id, $screen );
 		} else {
+			$this->link_note( $block );
 			$this->identifiers( $block, $base, $id );
 			$this->settings_fields( $block, $base, $id, true, $screen );
 			$this->buttons( $block, $screen );
@@ -405,7 +408,7 @@ final class Panel_View {
 		$cells .= '<td class="woodev-mp-variations__image">' . ( '' === $image ? '' : sprintf( '<img src="%s" alt="" width="36" height="36" loading="lazy" />', esc_url( $image ) ) ) . '</td>';
 		// The words in `data-label` are the headings of a row that is stacked on a narrow panel (the heading row is hidden then).
 		$cells .= '<td class="woodev-mp-variations__name">' . esc_html( $name ) . '</td>';
-		$cells .= '<td class="woodev-mp-variations__state">' . $this->badge( $row['badge'] ) . '</td>';
+		$cells .= '<td class="woodev-mp-variations__state">' . $this->noted_badge( $row['badge'], $row['note'] ?? null ) . '</td>';
 		$cells .= '<td class="woodev-mp-variations__article" data-label="' . esc_attr__( 'Артикул', 'woodev-plugin-framework' ) . '">' . esc_html( $row['offer_id'] ) . ( $row['planned'] ? $this->help_tip( __( 'Артикул будет отправлен на маркетплейс вместе с карточкой.', 'woodev-plugin-framework' ) ) : '' ) . $this->article_note( $row ) . ( '' !== (string) ( $row['notice'] ?? '' ) ? $this->help_tip( $row['notice'] ) : '' ) . '</td>';
 		$cells .= '<td class="woodev-mp-variations__stock" data-label="' . esc_attr__( 'Остаток', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_stock'] ?? '' ), (string) $row['stock'] ) ) . '</td>';
 		$cells .= '<td class="woodev-mp-variations__price" data-label="' . esc_attr__( 'Цена', 'woodev-plugin-framework' ) . '">' . esc_html( $this->site_and_remote( (string) ( $row['site_price'] ?? '' ), (string) $row['price'] ) ) . '</td>';
@@ -621,6 +624,14 @@ final class Panel_View {
 		if ( '' !== (string) ( $block['ids']['notice'] ?? '' ) ) {
 			++$count;
 			$html .= '<h3>' . esc_html__( 'Артикул товара', 'woodev-plugin-framework' ) . '</h3><p class="woodev-mp-error">' . esc_html( $block['ids']['notice'] ) . '</p>';
+		}
+
+		$note = $block['note'] ?? null;
+
+		// A note that asks for something is counted, so the badge does not say «Проблем не найдено» above it.
+		if ( null !== $note && $note->needs_attention() ) {
+			++$count;
+			$html .= '<h3>' . esc_html( sprintf( /* translators: %s: marketplace name. */ __( 'Замечание: %s', 'woodev-plugin-framework' ), $this->names->name() ) ) . '</h3><p class="' . esc_attr( $this->note_class( $note ) ) . '">' . nl2br( esc_html( $note->text() ) ) . '</p>';
 		}
 
 		if ( '' !== $block['remote_error'] ) {
@@ -1197,6 +1208,59 @@ final class Panel_View {
 	 */
 	private function badge( array $badge ): string {
 		return sprintf( '<span class="woodev-mp-badge woodev-mp-badge--%1$s">%2$s</span>', esc_attr( $badge['tone'] ), esc_html( $badge['label'] ) );
+	}
+
+	/**
+	 * Prints what the plugin says about the block's card, as a line under the title.
+	 *
+	 * @param array<string,mixed> $block Block.
+	 * @return void
+	 */
+	private function link_note( array $block ): void {
+		$note = $block['note'] ?? null;
+
+		if ( null === $note ) {
+			return;
+		}
+
+		printf( '<p class="form-field woodev-mp-intro"><span class="%1$s">%2$s</span></p>', esc_attr( $this->note_class( $note ) ), nl2br( esc_html( $note->text() ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped here.
+	}
+
+	/**
+	 * Names the look of a note's text: the mark of a warning or of an error, plain grey for a note that asks for nothing.
+	 *
+	 * @param Link_Note $note Note.
+	 * @return string CSS classes.
+	 */
+	private function note_class( Link_Note $note ): string {
+		return $note->needs_attention() ? 'woodev-mp-issue woodev-mp-issue--' . $note->tone() : 'woodev-mp-note';
+	}
+
+	/**
+	 * Builds the state badge of a row of the variations' table, which has no dialog of its own: the note is its tooltip, and a note
+	 * that asks for something takes over its colour.
+	 *
+	 * @param array{label:string,tone:string} $badge Badge.
+	 * @param Link_Note|null                  $note  What the plugin says about the card.
+	 * @return string Escaped markup.
+	 */
+	private function noted_badge( array $badge, ?Link_Note $note ): string {
+		if ( null === $note ) {
+			return $this->badge( $badge );
+		}
+
+		$tone = $badge['tone'];
+
+		if ( Link_Note::TONE_ERROR === $note->tone() ) {
+			$tone = Card_State_Badge::TONE_ERROR;
+		} elseif ( Link_Note::TONE_WARNING === $note->tone() && Card_State_Badge::TONE_ERROR !== $tone ) {
+			$tone = 'problem';
+		}
+
+		// WooCommerce draws `data-tip` as HTML and the note may quote the marketplace, so it is encoded twice.
+		$tip = htmlspecialchars( htmlspecialchars( $note->text(), ENT_QUOTES, 'UTF-8' ), ENT_QUOTES, 'UTF-8' );
+
+		return sprintf( '<span class="woodev-mp-badge woodev-mp-badge--%1$s tips" tabindex="0" data-tip="%2$s" aria-label="%3$s">%4$s</span>', esc_attr( $tone ), $tip, esc_attr( $badge['label'] . '. ' . $note->text() ), esc_html( $badge['label'] ) );
 	}
 
 	/**

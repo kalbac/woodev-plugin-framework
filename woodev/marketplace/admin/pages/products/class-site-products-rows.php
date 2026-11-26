@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Pages\Products;
 
 use Woodev\Framework\Admin\Records\Row_Normalizer;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Note_Badge;
 use Woodev\Framework\Marketplace\Admin\Shared\Sync_Reason_Text;
 use Woodev\Framework\Marketplace\Diagnostics\Sync_Reason;
 
@@ -195,12 +196,13 @@ final class Site_Products_Rows {
 	 * synchronised and the error are its tooltip, not lines under it, so every row is the same height.
 	 *
 	 * @param string              $name  Name.
-	 * @param array<string,mixed> $offer Offer.
+	 * @param array<string,mixed> $offer Offer, with the plugin's `note` when it keeps one.
 	 * @return array<string,mixed>
 	 */
 	private function offer_cells( string $name, array $offer ): array {
 		$badge = State_Groups::badge( $offer['group'] );
 		$tip   = $this->state_tooltip( $offer, null !== $offer['link_id'] );
+		$badge = '' === $tip ? $badge : $badge + [ 'tooltip' => $tip ];
 
 		return [
 			'name'      => $this->clip( $name ),
@@ -208,7 +210,7 @@ final class Site_Products_Rows {
 			'state'     => [
 				[
 					'type'  => 'badge',
-					'value' => '' === $tip ? $badge : $badge + [ 'tooltip' => $tip ],
+					'value' => Link_Note_Badge::add( $badge, $this->notes( [ $offer ] ) ),
 				],
 			],
 			'stock'     => $this->pair_text( $this->count( $offer['site_stock'] ), null === $offer['remote_stock'] ? null : (string) $offer['remote_stock'] ),
@@ -235,7 +237,19 @@ final class Site_Products_Rows {
 
 		// The errors of the variations are said once, in the tooltip of the first (biggest) group's badge.
 		if ( [] !== $errors && [] !== $badges ) {
-			$badges[0]['value']['tooltip'] = sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) );
+			$badges[ array_key_first( $badges ) ]['value']['tooltip'] = sprintf( /* translators: %d: number of variations. */ _n( 'Ошибка у %d варианта', 'Ошибка у %d вариантов', count( $errors ), 'woodev-plugin-framework' ), count( $errors ) );
+		}
+
+		// A note about a variation is said at the badge of its group.
+		foreach ( $badges as $group => $badge ) {
+			$members = array_filter(
+				$offers,
+				static function ( array $offer ) use ( $group ): bool {
+					return $offer['group'] === $group;
+				}
+			);
+
+			$badges[ $group ]['value'] = Link_Note_Badge::add( $badge['value'], $this->notes( $members ) );
 		}
 
 		return [
@@ -246,7 +260,7 @@ final class Site_Products_Rows {
 					'value' => $this->clip( $product['sku'] ),
 				],
 			],
-			'state'     => $badges,
+			'state'     => array_values( $badges ),
 			'stock'     => $this->pair_text( $this->site_stock_sum( $offers ), $this->remote_stock_sum( $offers ) ),
 			'price'     => $this->pair_text( $this->price_range( array_column( $offers, 'site_price' ) ), null ),
 			'actions'   => null,
@@ -258,7 +272,7 @@ final class Site_Products_Rows {
 	 *
 	 * @param array<int,array<string,mixed>> $offers Offers.
 	 * @param int                            $room   Most badges the cell has room for.
-	 * @return array<int,array<string,mixed>>
+	 * @return array<string,array<string,mixed>> By state group.
 	 */
 	private function state_badges( array $offers, int $room ): array {
 		$counts = array_count_values( array_column( $offers, 'group' ) );
@@ -266,13 +280,23 @@ final class Site_Products_Rows {
 		$badges = [];
 
 		foreach ( array_slice( $counts, 0, $room, true ) as $group => $count ) {
-			$badges[] = [
+			$badges[ $group ] = [
 				'type'  => 'badge',
 				'value' => State_Groups::badge( (string) $group, $count ),
 			];
 		}
 
 		return $badges;
+	}
+
+	/**
+	 * The notes the plugin keeps about some offers.
+	 *
+	 * @param array<int,array<string,mixed>> $offers Offers.
+	 * @return \Woodev\Framework\Marketplace\Admin\Shared\Link_Note[]
+	 */
+	private function notes( array $offers ): array {
+		return array_values( array_filter( array_column( $offers, 'note' ) ) );
 	}
 
 	/**

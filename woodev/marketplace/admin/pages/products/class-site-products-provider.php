@@ -14,6 +14,7 @@ use Woodev\Framework\Admin\Records\Provides_Field_Options;
 use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Notes;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Catalog\Bulk_Validation_Report;
 use Woodev\Framework\Marketplace\Data\Bulk_Run;
@@ -99,9 +100,9 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 
 	/**
 	 * `adapter_id`, `marketplace` (merchant-facing name), `withheld` (action ids the adapter cannot serve), `articles` (how a
-	 * marketplace that sells units shows an article, else null).
+	 * marketplace that sells units shows an article, else null), `notes` (what the plugin says about a link, else null).
 	 *
-	 * @var array{adapter_id:string,marketplace:string,withheld:string[],articles:Article_Display|null}
+	 * @var array{adapter_id:string,marketplace:string,withheld:string[],articles:Article_Display|null,notes:Link_Notes|null}
 	 */
 	private $config;
 
@@ -117,7 +118,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * @param Site_Products_Bulk      $bulk       Bulk actions.
 	 * @param Warehouse_Options       $warehouses Warehouses of an account.
 	 * @param License_Gate            $license    Licence gate.
-	 * @param array<string,mixed>     $config     `adapter_id`, `marketplace`, `withheld` and, for an adapter that sells units, `articles`.
+	 * @param array<string,mixed>     $config     `adapter_id`, `marketplace`, `withheld`; for an adapter that sells units, `articles`; for one that keeps notes about links, `notes`.
 	 * @param Bulk_Run_Runner|null    $runs       Bulk runs of the «все по фильтру» mode.
 	 * @param Bulk_Run_Store|null     $run_store  Their store.
 	 */
@@ -136,6 +137,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			'marketplace' => (string) ( $config['marketplace'] ?? '' ),
 			'withheld'    => (array) ( $config['withheld'] ?? [] ),
 			'articles'    => ( $config['articles'] ?? null ) instanceof Article_Display ? $config['articles'] : null,
+			'notes'       => ( $config['notes'] ?? null ) instanceof Link_Notes ? $config['notes'] : null,
 		];
 	}
 
@@ -760,6 +762,15 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			}
 		}
 
+		// The plugin is asked once for the whole page.
+		$offers = $this->with_notes( $account->id(), $offers );
+
+		foreach ( $products as $index => $product ) {
+			foreach ( $product['offers'] as $position => $offer ) {
+				$products[ $index ]['offers'][ $position ] = $offers[ $offer['product_id'] ];
+			}
+		}
+
 		$activity = $this->activity->for_offers( $account->id(), $offers );
 		$builder  = $this->row_builder( $account );
 		$rows     = [];
@@ -787,6 +798,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 	 * @return array<int,array<string,mixed>>
 	 */
 	private function child_rows( Account $account, int $parent_id, array $offers ): array {
+		$offers   = $this->with_notes( $account->id(), $offers );
 		$activity = $this->activity->for_offers( $account->id(), array_column( $offers, null, 'product_id' ) );
 		$builder  = $this->row_builder( $account );
 
@@ -810,7 +822,7 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 			return [];
 		}
 
-		$offers   = $this->reader->variation_offers( $account->id(), $ids );
+		$offers   = $this->with_notes( $account->id(), $this->reader->variation_offers( $account->id(), $ids ) );
 		$kinds    = $this->reader->kinds( $ids );
 		$activity = $this->activity->for_offers( $account->id(), $offers );
 		$builder  = $this->row_builder( $account );
@@ -821,6 +833,30 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * Adds to each offer the note the plugin keeps about its link ({@see Link_Notes}), one question for all of them.
+	 *
+	 * @param int                            $account_id Account.
+	 * @param array<int,array<string,mixed>> $offers     Offers.
+	 * @return array<int,array<string,mixed>> The same offers, under the same keys.
+	 */
+	private function with_notes( int $account_id, array $offers ): array {
+		$notes    = $this->config['notes'];
+		$link_ids = array_values( array_filter( array_column( $offers, 'link_id' ) ) );
+
+		if ( null === $notes || [] === $link_ids ) {
+			return $offers;
+		}
+
+		$found = $notes->link_notes( $account_id, $link_ids );
+
+		foreach ( $offers as $key => $offer ) {
+			$offers[ $key ]['note'] = $found[ (int) $offer['link_id'] ] ?? null;
+		}
+
+		return $offers;
 	}
 
 	/**

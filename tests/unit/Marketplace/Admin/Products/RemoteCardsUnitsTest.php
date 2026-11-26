@@ -9,6 +9,8 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Admin\Records\Action_Response;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Note;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Link_Notes;
 use Woodev\Framework\Admin\Records\Row_Normalizer;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Ids;
@@ -249,5 +251,36 @@ final class RemoteCardsUnitsTest extends Remote_Cards_Test_Case {
 		$this->put_cards( [ $this->unit( str_repeat( 'a', 191 ), '', 1 ), $this->unit( 'mug', '', 1 ) ] );
 
 		$this->assertSame( 1, $this->list_body()['total'] );
+	}
+
+	public function test_a_note_about_a_size_is_said_at_the_badge_of_its_card_and_at_its_own_row(): void {
+		$this->shop->product( 40, 'Пальто', 'coat-M', 1, '100', 'simple' );
+		$this->shop->link( 40, 0, 'coat|M', Link_Record::STATE_CREATED );
+		$notes                                  = new Fake_Link_Notes();
+		$notes->notes[ (int) $this->link_of( 40 )->link_id() ] = new Link_Note( 'Добавьте документы.' );
+		$this->link_notes                       = $notes;
+
+		$rows  = array_column( $this->list_body()['rows'], null, 'id' );
+		$badge = $rows[ $this->parent_id( 'coat' ) ]['cells']['state'][0]['value'];
+
+		$this->assertSame( 'Добавьте документы.', $badge['tooltip'] );
+		$this->assertSame( 'warning', $badge['tone'] );
+		$this->assertStringNotContainsString( 'Добавьте документы.', (string) ( $rows[ $this->card_row_id( 'mug|' ) ]['cells']['state'][0]['value']['tooltip'] ?? '' ) );
+		$this->assertCount( 1, $notes->asked, 'one question for the whole page' );
+		$this->assertSame( [ (int) $this->link_of( 40 )->link_id() ], $notes->asked[0][1], 'a card no product carries has no link to ask about' );
+
+		$children = $this->cards_provider()->get_children( $this->context(), $this->parent_id( 'coat' ), [ 'page' => 1, 'per_page' => 20 ] )['rows'];
+		$sizes    = array_column( $children, null, 'id' );
+
+		$this->assertStringStartsWith( "Добавьте документы.\n", $sizes[ $this->card_row_id( 'coat|M' ) ]['cells']['state'][0]['value']['tooltip'] );
+		$this->assertStringNotContainsString( 'Добавьте документы.', (string) ( $sizes[ $this->card_row_id( 'coat|L' ) ]['cells']['state'][0]['value']['tooltip'] ?? '' ) );
+
+		$refreshed = $this->cards_provider()->get_activity( $this->context(), [ $this->parent_id( 'coat' ), $this->card_row_id( 'coat|M' ) ] )['rows'];
+
+		$this->assertCount( 2, $refreshed );
+
+		foreach ( $refreshed as $row ) {
+			$this->assertStringStartsWith( 'Добавьте документы.', $row['cells']['state'][0]['value']['tooltip'] );
+		}
 	}
 }

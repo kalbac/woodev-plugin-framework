@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Admin\Product\Card_State_Badge;
 use Woodev\Framework\Marketplace\Admin\Product\Panel_View;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Data\Link_Record;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Note;
 use Woodev\Tests\Unit\TestCase;
 
 final class PanelViewTest extends TestCase {
@@ -585,6 +586,78 @@ final class PanelViewTest extends TestCase {
 		$this->assertMatchesRegularExpression( '#<th scope="col">Остаток<span class="woocommerce-help-tip"[^>]*></span></th><th scope="col">Цена<span class="woocommerce-help-tip"[^>]*></span></th>#u', $html );
 		$this->assertStringContainsString( 'data-tip="Слева — остаток на сайте, справа — на Fake. Прочерк — данных пока нет."', $html, 'the «?» explains «сайт / Fake»' );
 		$this->assertStringNotContainsString( 'Цена: Fake', $html );
+	}
+
+	public function test_a_note_that_asks_for_something_is_a_line_of_the_block_and_a_problem_of_its_badge(): void {
+		$block         = $this->block();
+		$block['note'] = new Link_Note( "Добавьте документы <b>в кабинете</b>.\nИначе карточку заблокируют." );
+		$html          = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( '<p class="form-field woodev-mp-intro"><span class="woodev-mp-issue woodev-mp-issue--warning">Добавьте документы &lt;b&gt;в кабинете&lt;/b&gt;.<br />', $html );
+		$this->assertStringContainsString( 'data-tip="Есть проблемы (1) — нажмите, чтобы посмотреть"', $html );
+		$this->assertStringContainsString( '<h3>Замечание: Fake</h3><p class="woodev-mp-issue woodev-mp-issue--warning">Добавьте документы', $html );
+		$this->assertStringNotContainsString( '<b>в кабинете</b>', $html );
+	}
+
+	public function test_a_note_that_asks_for_nothing_is_only_a_line(): void {
+		$block         = $this->block();
+		$block['note'] = new Link_Note( 'Карточка проверяется.', Link_Note::TONE_INFO );
+		$html          = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( '<p class="form-field woodev-mp-intro"><span class="woodev-mp-note">Карточка проверяется.</span></p>', $html );
+		$this->assertStringContainsString( 'data-tip="Проблем не найдено"', $html );
+		$this->assertStringNotContainsString( 'Замечание', $html );
+	}
+
+	public function test_a_variation_panel_shows_its_note_under_the_badge(): void {
+		$block         = $this->block();
+		$block['note'] = new Link_Note( 'Отклонена модерацией.', Link_Note::TONE_ERROR );
+
+		ob_start();
+		( new Panel_View( new Screen_Names( 'fake', 'Fake' ) ) )->render_variation(
+			[
+				'blocks'       => [ $block ],
+				'nonce'        => 'save-nonce',
+				'loop'         => 0,
+				'settings_url' => 'https://example.test/settings',
+				'mappings_url' => 'https://example.test/mappings',
+			]
+		);
+		$html = (string) ob_get_clean();
+
+		$this->assertMatchesRegularExpression( '#</template></h4><p class="form-field woodev-mp-intro"><span class="woodev-mp-issue woodev-mp-issue--error">Отклонена модерацией\.</span></p>#u', $html );
+	}
+
+	public function test_a_variant_with_a_note_has_it_as_the_tooltip_of_its_badge_and_the_badge_changes_colour(): void {
+		$block                = $this->block();
+		$block['kind']        = 'parent';
+		$block['counts']      = [];
+		$block['any_created'] = true;
+		$block['any_linked']  = true;
+		$block['any_unsent']  = false;
+		$row                  = [
+			'id'       => 5,
+			'name'     => 'S',
+			'badge'    => Card_State_Badge::of( Link_Record::STATE_CREATED ),
+			'offer_id' => 'ART-S',
+			'planned'  => false,
+			'stock'    => '',
+			'price'    => '',
+			'currency' => 'RUB',
+		];
+		$block['rows']        = [
+			array_merge( $row, [ 'note' => new Link_Note( 'Ошибка <img src=x onerror=alert(1)> от «маркетплейса»' ) ] ),
+			array_merge( $row, [ 'id' => 6, 'note' => new Link_Note( 'Отклонена', Link_Note::TONE_ERROR ) ] ),
+			array_merge( $row, [ 'id' => 7, 'note' => new Link_Note( 'Проверяется', Link_Note::TONE_INFO ) ] ),
+			array_merge( $row, [ 'id' => 8, 'note' => null ] ),
+		];
+		$html                 = $this->render_tab( [ $block ], [] );
+
+		$this->assertStringContainsString( '<span class="woodev-mp-badge woodev-mp-badge--problem tips" tabindex="0" data-tip="Ошибка &amp;lt;img src=x onerror=alert(1)&amp;gt; от «маркетплейса»"', $html, 'WooCommerce draws the tooltip as HTML: the text is encoded twice' );
+		$this->assertStringContainsString( '<span class="woodev-mp-badge woodev-mp-badge--error tips" tabindex="0" data-tip="Отклонена" aria-label="Создан. Отклонена">Создан</span>', $html );
+		$this->assertStringContainsString( '<span class="woodev-mp-badge woodev-mp-badge--ok tips" tabindex="0" data-tip="Проверяется"', $html );
+		$this->assertStringContainsString( '<td class="woodev-mp-variations__state"><span class="woodev-mp-badge woodev-mp-badge--ok">Создан</span></td>', $html );
+		$this->assertStringNotContainsString( '<img src=x', $html );
 	}
 
 	public function test_a_variable_product_has_an_intro_across_the_tab_and_variants_whose_notes_stay_on_their_line(): void {

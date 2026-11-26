@@ -15,6 +15,7 @@ use Woodev\Framework\Admin\Records\Records_Provider;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Shop_Categories;
 use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
+use Woodev\Framework\Marketplace\Admin\Shared\Link_Notes;
 use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Link_Report_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
@@ -110,10 +111,18 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	private $units;
 
 	/**
+	 * What the plugin says about a link; null when it keeps no notes.
+	 *
+	 * @var Link_Notes|null
+	 */
+	private $notes;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
 	 * @since 2.1.23 `$units`.
+	 * @since 2.1.24 `$notes`.
 	 *
 	 * @param Wpdb_Account_Store      $accounts  Accounts.
 	 * @param Wpdb_Card_Store         $cards     The stored list of the cabinet's cards.
@@ -125,8 +134,10 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 	 * @param Import_Scheduler|null   $importer  Reads the import queue; null when the adapter cannot import cards, and the table then offers no «Импортировать».
 	 * @param callable|null           $clock     Returns the Unix time; the system clock when null.
 	 * @param Remote_Cards_Units|null $units   Card rows over units, for an adapter that sells them.
+	 * @param Link_Notes|null         $notes   What the plugin says about a link, shown at the card's state badge.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Wpdb_Card_Store $cards, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null, ?callable $clock = null, ?Remote_Cards_Units $units = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Wpdb_Card_Store $cards, Link_Report_Store $reports, Remote_Cards_Rows $rows, Remote_Cards_Products $products, Remote_Cards_Actions $actions, array $config, ?Import_Scheduler $importer = null, ?callable $clock = null, ?Remote_Cards_Units $units = null, ?Link_Notes $notes = null ) {
+		$this->notes     = $notes;
 		$this->units     = $units;
 		$this->accounts  = $accounts;
 		$this->cards     = $cards;
@@ -258,13 +269,13 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		if ( null === $this->units ) {
 			$found = $this->cards->page( $account_id, $on_site, $search, $page, $per_page );
 
-			foreach ( $found['cards'] as $card ) {
+			foreach ( $this->with_notes( $account_id, $found['cards'] ) as $card ) {
 				$rows[] = $this->card_row( $account_id, $card, $state );
 			}
 		} else {
 			$found = $this->cards->card_page( $account_id, $on_site, $search, $page, $per_page );
 
-			foreach ( $found['cards'] as $ref => $units ) {
+			foreach ( $this->with_unit_notes( $account_id, $found['cards'] ) as $ref => $units ) {
 				$rows[] = $this->unit_card_row( $account_id, (string) $ref, $units, $state );
 			}
 		}
@@ -345,7 +356,7 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		$state    = $this->import_state( $account->id() );
 		$rows     = [];
 
-		foreach ( array_slice( $units, ( max( 1, (int) $query['page'] ) - 1 ) * $per_page, $per_page ) as $unit ) {
+		foreach ( $this->with_notes( $account->id(), array_slice( $units, ( max( 1, (int) $query['page'] ) - 1 ) * $per_page, $per_page ) ) as $unit ) {
 			$rows[] = $this->card_row( $account->id(), $unit, $state );
 		}
 
@@ -563,6 +574,46 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		return $this->rows->row( $account_id, $card, $note, in_array( $offer_id, $state['importing'], true ) );
 	}
 
+	/**
+	 * Adds to each card a product carries the note the plugin keeps about its link ({@see Link_Notes}), one question for all of them.
+	 *
+	 * @param int                                  $account_id Account id.
+	 * @param array<array-key,array<string,mixed>> $cards Cards of the stored list.
+	 * @return array<array-key,array<string,mixed>> The same cards under the same keys, with `link_note` where there is one.
+	 */
+	private function with_notes( int $account_id, array $cards ): array {
+		$link_ids = array_values( array_filter( array_column( $cards, 'link_id' ) ) );
+
+		if ( null === $this->notes || [] === $link_ids ) {
+			return $cards;
+		}
+
+		$found = $this->notes->link_notes( $account_id, $link_ids );
+
+		foreach ( $cards as $key => $card ) {
+			$cards[ $key ]['link_note'] = $found[ (int) ( $card['link_id'] ?? 0 ) ] ?? null;
+		}
+
+		return $cards;
+	}
+
+	/**
+	 * {@see self::with_notes()} for the units of several cards at once.
+	 *
+	 * @param int                                          $account_id Account id.
+	 * @param array<string,array<int,array<string,mixed>>> $cards      Units by card reference.
+	 * @return array<string,array<int,array<string,mixed>>>
+	 */
+	private function with_unit_notes( int $account_id, array $cards ): array {
+		$units = $this->with_notes( $account_id, array_merge( [], ...array_values( $cards ) ) );
+
+		foreach ( $cards as $ref => $own ) {
+			$cards[ $ref ] = array_splice( $units, 0, count( $own ) );
+		}
+
+		return $cards;
+	}
+
 	private function with_currency( int $account_id, array $card ): array {
 		if ( ! isset( $this->currencies[ $account_id ] ) ) {
 			$health                          = $this->accounts->health( $account_id );
@@ -600,9 +651,11 @@ final class Remote_Cards_Provider implements Records_Provider, Provides_Field_Op
 		$found = $this->cards->find_many( $account->id(), $keys );
 		$rows  = [];
 
-		foreach ( [] === $refs ? [] : $this->cards->units_of( $account->id(), $refs ) as $ref => $units ) {
+		foreach ( [] === $refs ? [] : $this->with_unit_notes( $account->id(), $this->cards->units_of( $account->id(), $refs ) ) as $ref => $units ) {
 			$rows[] = $this->unit_card_row( $account->id(), (string) $ref, $units, $state );
 		}
+
+		$found = $this->with_notes( $account->id(), $found );
 
 		foreach ( $keys as $key ) {
 			if ( isset( $found[ $key ] ) ) {
