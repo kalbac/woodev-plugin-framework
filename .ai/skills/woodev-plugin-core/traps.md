@@ -265,8 +265,9 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 - Bank test keys are bound to the cabinet's site domain: `create` returns 400 for return URLs on another domain, and a probe without URLs passes
   without proving it. Accept on the bound domain with the real URLs. →
   `docs-internal/gotchas/a-bank-binds-its-test-keys-to-the-cabinet-domain-so-a-url-less-probe-proves-nothing.md`
-- A 4xx body thrown in `do_pre_parse_response_validation()` is logged EMPTY (framework card #1509); override
-  `get_sanitized_response_body()` in the plugin's API client and mask personal data. →
+- A 4xx body thrown in `do_pre_parse_response_validation()` was logged EMPTY before framework 2.1.28 (#1509); from 2.1.28 the
+  framework logs it redacted (secret keys only). On an older framework override `get_sanitized_response_body()` in the
+  plugin's API client and mask personal data. →
   `docs-internal/gotchas/a-4xx-body-thrown-in-the-pre-parse-validation-is-logged-empty.md`
 
 - **A notice inside the product's Variations panel loses its box.** WooCommerce styles `#variable_product_options .notice`

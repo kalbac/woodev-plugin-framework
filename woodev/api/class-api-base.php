@@ -2823,21 +2823,35 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * log unredacted by default — the exact gap {@see self::redact_secret_request_body()}
 		 * already closed on the request side.
 		 *
-		 * Whatever `to_string_safe()` returns — or `''` when there is no response
-		 * yet, or its class does not implement the method at all — is run through
+		 * Whatever `to_string_safe()` returns — or `''` when its class does not
+		 * implement the method at all — is run through
 		 * {@see self::redact_secret_request_body()} unconditionally, exactly like
 		 * the request side: a JSON object/array body within the size limit is
 		 * walked and redacted by key at any depth, an oversized body is withheld
 		 * with its byte size, and anything else (XML, a `print_r()` dump, free text,
 		 * a bare JSON scalar) is replaced with {@see self::UNPARSEABLE_BODY_MASK}.
 		 *
+		 * When no response object was parsed at all — {@see self::do_pre_parse_response_validation()}
+		 * threw before {@see self::get_parsed_response()} ran, e.g. on a 4xx refusal — the
+		 * raw body off the wire is the only body there is, so it is redacted the same way
+		 * instead of being logged as empty: the service's refusal reason is what support
+		 * needs (card #1509). A parsed response whose `to_string_safe()` is falsy still
+		 * logs as empty; the raw bytes are never a fallback for that case.
+		 *
 		 * @since 2.0.2
+		 * @since 2.1.28 an unparsed response logs its redacted raw body (#1509).
 		 *
 		 * @return string
 		 */
 		protected function get_sanitized_response_body(): string {
 
-			$body = is_callable( [ $this->get_response(), 'to_string_safe' ] ) ? (string) $this->get_response()->to_string_safe() : '';
+			$response = $this->get_response();
+
+			if ( null === $response ) {
+				$body = (string) $this->get_raw_response_body();
+			} else {
+				$body = is_callable( [ $response, 'to_string_safe' ] ) ? (string) $response->to_string_safe() : '';
+			}
 
 			return self::redact_secret_request_body( $body, $this->get_secret_param_names(), '', true === $this->masking_broadcast_for_log );
 		}

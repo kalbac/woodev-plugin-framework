@@ -16,9 +16,10 @@ parsing never reaches it.
 
 ❌ **Wrong** — debug a refusal from the framework log alone.
 
-✅ **Correct** — until #1509 is fixed in the framework, override `get_sanitized_response_body()` in the plugin's API client
-and return the raw body with personal data masked (woodev-vkredit#36 masks e-mail and phone numbers; free-text refusals echo
-the buyer's data). Remove the override once the framework logs the raw rejected body.
+✅ **Correct** — from framework 2.1.28 (#1509) `get_sanitized_response_body()` logs the raw rejected body run through
+`redact_secret_request_body()` when no response was parsed, so no override is needed. Secret-named keys are masked;
+buyer personal data (e-mail, phone) echoed in a free-text refusal is NOT masked by that function. Plugins on an older
+framework still need the override from woodev-vkredit#36, which masks those too, until they update.
 
 ## Related
 

@@ -351,12 +351,12 @@ final class ApiBaseSanitizedResponseBodyTest extends TestCase {
 	}
 
 	/**
-	 * No response object at all (e.g. the transport itself failed, before a
-	 * response was ever parsed) must not fall back to the raw body either.
+	 * No response was ever parsed (a 4xx refusal thrown in do_pre_parse_response_validation()):
+	 * the raw body is logged redacted, never raw, and a non-JSON body is masked in full.
 	 *
 	 * @return void
 	 */
-	public function test_no_response_object_does_not_fall_back_to_the_raw_body(): void {
+	public function test_unparsed_non_json_body_is_logged_masked_not_raw(): void {
 
 		$secret = 'super-secret-token-value';
 
@@ -365,7 +365,37 @@ final class ApiBaseSanitizedResponseBodyTest extends TestCase {
 
 		$broadcast = $api->get_response_data_for_broadcast_for_test();
 
-		$this->assertSame( '', $broadcast['body'] );
+		$this->assertSame( \Woodev_API_Base::UNPARSEABLE_BODY_MASK, $broadcast['body'] );
+		$this->assertStringNotContainsString( $secret, $broadcast['body'] );
+	}
+
+	/**
+	 * The bank's 400 refusal, never parsed (do_pre_parse_response_validation() threw): the
+	 * validation text stays readable in the log, while a secret-named key is still masked.
+	 *
+	 * @return void
+	 */
+	public function test_unparsed_json_refusal_body_is_logged_readable_with_secret_masked(): void {
+
+		$secret = 'super-secret-token-value';
+		$body   = (string) json_encode(
+			[
+				'validations' => [ 'amount' => 'amount is too small' ],
+				'errors'      => [ 'amount is too small' ],
+				'token'       => $secret,
+			]
+		);
+
+		$api = new Testable_Api_Base_For_Response_Body_Test();
+		$api->set_raw_response_body_for_test( $body );
+
+		$broadcast = $api->get_response_data_for_broadcast_for_test();
+		$decoded   = json_decode( $broadcast['body'], true );
+
+		$this->assertIsArray( $decoded );
+		$this->assertSame( 'amount is too small', $decoded['validations']['amount'] );
+		$this->assertSame( [ 'amount is too small' ], $decoded['errors'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $decoded['token'] );
 		$this->assertStringNotContainsString( $secret, $broadcast['body'] );
 	}
 
