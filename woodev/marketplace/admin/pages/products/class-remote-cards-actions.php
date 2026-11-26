@@ -373,7 +373,9 @@ final class Remote_Cards_Actions {
 			[
 				'accepted' => count( $offers ),
 				'queued'   => true,
-				'rows'     => $this->locked_rows( $account, $offers ),
+				// Card rows expand into more units than a selection may name; the engine refuses an answer with more rows, and the
+				// activity poll locks the others.
+				'rows'     => $this->locked_rows( $account, array_slice( $offers, 0, Remote_Cards_Definition::MAX_IMPORT ) ),
 				'messages' => [ 'action_status_queued' => __( 'Импорт поставлен в очередь. Товары появятся на сайте в течение нескольких минут — обновите страницу чуть позже. Ход работы виден в строках: пока карточка импортируется, она заблокирована.', 'woodev-plugin-framework' ) ],
 			]
 		);

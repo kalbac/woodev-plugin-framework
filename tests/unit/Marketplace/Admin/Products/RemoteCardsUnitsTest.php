@@ -8,7 +8,9 @@
 namespace Woodev\Tests\Unit\Marketplace\Admin\Products;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Admin\Records\Action_Response;
 use Woodev\Framework\Admin\Records\Row_Normalizer;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Ids;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
@@ -163,6 +165,28 @@ final class RemoteCardsUnitsTest extends Remote_Cards_Test_Case {
 		$preview = $this->cards_provider()->preview( $this->context(), 'import_selected', [ $this->parent_id( 'coat' ), $this->card_row_id( 'coat|M' ) ], [] );
 
 		$this->assertSame( 2, $preview['eligible'], 'a size ticked beside its card is counted once' );
+	}
+
+	/**
+	 * One ticked card can hold more sizes than a selection may name rows: the engine must still accept the answer.
+	 */
+	public function test_importing_a_card_with_more_sizes_than_the_selection_limit_is_answered(): void {
+		$sizes = Remote_Cards_Definition::MAX_IMPORT + 1;
+		$units = [];
+
+		for ( $size = 1; $size <= $sizes; $size++ ) {
+			$units[] = $this->unit( 'ring', (string) $size, $sizes );
+		}
+
+		$this->put_cards( $units );
+
+		$definition = $this->cards_definition();
+		$result     = $this->cards_provider()->apply( $this->context(), 'import_selected', [ $this->parent_id( 'ring' ) ], [] );
+		$body       = Action_Response::apply( $definition, $definition->get_action( 'import_selected' ), $result );
+
+		$this->assertIsArray( $body, 'The engine accepts the answer.' );
+		$this->assertSame( $sizes, $body['accepted'], 'every size is queued' );
+		$this->assertCount( Remote_Cards_Definition::MAX_IMPORT, $body['rows'] );
 	}
 
 	public function test_a_conflict_of_the_link_run_is_said_at_the_card_until_a_product_carries_it(): void {
