@@ -184,8 +184,8 @@ final class Sync_State_Store {
 	 * what was last accepted (a cancelled order it did not give back).
 	 *
 	 * Written without the account claim, unlike the flusher's writes: it only forgets the sent value and the frozen in-flight one,
-	 * so a send that is on its way acknowledges nothing as sent and the pair goes out once more. The backoff and the failure count
-	 * stay.
+	 * so a send that is on its way acknowledges nothing as sent and the pair goes out once more. It is a new reason to send, so
+	 * the failure count starts again, also for a pair that had failed for good; a wait the pair is in stays.
 	 *
 	 * @since 2.1.28
 	 *
@@ -197,7 +197,7 @@ final class Sync_State_Store {
 	 */
 	public function request_resend( int $account_id, int $link_id, int $warehouse_id ): void {
 		$changed = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-			$this->db->prepare( 'UPDATE %i SET sent_payload = NULL, in_flight_payload = NULL WHERE account_id = %d AND link_id = %d AND warehouse_id = %d AND kind = %s', $this->table, $account_id, $link_id, $warehouse_id, self::KIND_STOCK )
+			$this->db->prepare( 'UPDATE %i SET sent_payload = NULL, in_flight_payload = NULL, attempts = 0 WHERE account_id = %d AND link_id = %d AND warehouse_id = %d AND kind = %s', $this->table, $account_id, $link_id, $warehouse_id, self::KIND_STOCK )
 		);
 
 		if ( false === $changed ) {

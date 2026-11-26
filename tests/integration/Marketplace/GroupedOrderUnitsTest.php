@@ -38,6 +38,8 @@ use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
 
 class GroupedOrderUnitsTest extends TestCase {
 
+	use Savepoint_Stock;
+
 	private const WAREHOUSE = 22;
 
 	/**
@@ -249,6 +251,142 @@ class GroupedOrderUnitsTest extends TestCase {
 	}
 
 	/**
+	 * The line that stays keeps its item and its tax; the tax lines and the total are the remaining unit's alone.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_a_partial_cancellation_leaves_the_remaining_unit_with_its_own_tax( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$this->product( 'SKU-A', 10 );
+		$this->product( 'SKU-B', 10 );
+		$this->write( '1', 'SKU-A', Status_Map::NEW );
+		$order_id = $this->write( '2', 'SKU-B', Status_Map::NEW );
+		$order    = wc_get_order( $order_id );
+
+		foreach ( $order->get_items() as $item ) {
+			$item->set_taxes(
+				[
+					'total'    => [ 1 => '20' ],
+					'subtotal' => [ 1 => '20' ],
+				]
+			);
+			$item->save();
+		}
+
+		$order->update_taxes();
+		$order->calculate_totals( false );
+		$this->assertSame( '240.00', wc_format_decimal( wc_get_order( $order_id )->get_total(), 2 ) );
+		$remaining = $this->item_id_of_unit( $order_id, '2' );
+
+		$this->write( '1', 'SKU-A', Status_Map::CANCELLED );
+
+		$this->assertSame( [ '120.00', '20.00', '20.00' ], $this->totals( $order_id ), 'total, tax, sum of the tax lines' );
+		$this->assertSame( $remaining, $this->item_id_of_unit( $order_id, '2' ), 'the remaining line is the same item' );
+
+		$this->write( '2', 'SKU-B', Status_Map::CANCELLED );
+
+		$this->assertSame( [ '0.00', '0.00', '0.00' ], $this->totals( $order_id ) );
+	}
+
+	/**
+	 * A listener of WooCommerce's stock hook fails after the stock came back and before the item forgot it: nothing of that step
+	 * stays, and the retry gives the unit back once.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_an_interrupted_give_back_returns_the_unit_once( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$a = $this->product( 'SKU-A', 10 );
+		$b = $this->product( 'SKU-B', 10 );
+		$this->write( '1', 'SKU-A', Status_Map::NEW );
+		$order_id = $this->write( '2', 'SKU-B', Status_Map::NEW );
+
+		$this->interrupt_once_at_stock_of(
+			$a,
+			function (): void {
+				$this->write( '1', 'SKU-A', Status_Map::CANCELLED );
+			}
+		);
+
+		$this->assertSame( [ 9, 9 ], [ $this->stock( $a ), $this->stock( $b ) ], 'the interrupted step left nothing' );
+
+		$this->write( '1', 'SKU-A', Status_Map::CANCELLED );
+		$this->write( '1', 'SKU-A', Status_Map::CANCELLED, '2026-11-03T10:00:00Z' );
+
+		$this->assertSame( [ 10, 9 ], [ $this->stock( $a ), $this->stock( $b ) ] );
+		$this->assertSame( [ '2' ], $this->units_of_items( $order_id ) );
+		$this->assertSame( 'processing', wc_get_order( $order_id )->get_status() );
+	}
+
+	/**
+	 * The same for a posting that is one order and whose quantity changes: the old quantity comes back once.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_an_interrupted_line_change_of_a_one_order_posting_returns_its_stock_once( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$product = $this->product( 'SKU-A', 10 );
+		$writer  = $this->writer();
+		$two     = $this->member( 'P-1', 'SKU-A', Status_Map::NEW, '', '', 2 );
+		$one     = $this->member( 'P-1', 'SKU-A', Status_Map::NEW, '', '', 1 );
+
+		$writer->upsert( $two, new Status_Map() );
+		$this->assertSame( 8, $this->stock( $product ) );
+
+		$this->interrupt_once_at_stock_of(
+			$product,
+			static function () use ( $writer, $one ): void {
+				$writer->upsert( $one, new Status_Map() );
+			}
+		);
+
+		$this->assertSame( 8, $this->stock( $product ) );
+
+		$writer->upsert( $one, new Status_Map() );
+		$writer->upsert( $one, new Status_Map() );
+
+		$this->assertSame( 9, $this->stock( $product ) );
+	}
+
+	/**
+	 * A pair that used up its attempts is sent again for a newly cancelled unit; the next poll of the same unit changes nothing.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_a_cancellation_arms_a_pair_that_had_failed_for_good( bool $hpos ): void {
+		global $wpdb;
+
+		$this->use_datastore( $hpos );
+
+		$product = $this->product( 'SKU-A', 10 );
+		$this->send_stock( $product, 7 );
+
+		$table = $this->schema->table_name( 'sync_state', $wpdb->prefix );
+		$wpdb->query( "UPDATE {$table} SET sent_payload = NULL, attempts = 5" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- Test table.
+		$this->assertSame( [], $this->due() );
+
+		$this->write( '1', 'SKU-A', Status_Map::CANCELLED );
+
+		$this->assertSame( [ [ 'stock' => 7 ] ], $this->due() );
+
+		$wpdb->query( "UPDATE {$table} SET attempts = 5" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- Test table.
+		$this->write( '1', 'SKU-A', Status_Map::CANCELLED, '2026-11-03T10:00:00Z' );
+
+		$this->assertSame( [], $this->due(), 'a unit already known as cancelled is no new reason' );
+	}
+
+	/**
 	 * A posting that is one order keeps no units, tags no line and announces nothing when it is cancelled.
 	 *
 	 * @dataProvider datastore_provider
@@ -283,8 +421,8 @@ class GroupedOrderUnitsTest extends TestCase {
 		return $this->writer()->upsert_member( $this->member( $id, $sku, $canonical, 'cart-1', $updated_at ), new Status_Map() )->get_id();
 	}
 
-	private function member( string $id, string $sku, string $canonical, string $group = '', string $updated_at = '' ): Order_DTO {
-		$line  = new Order_Line( $sku, [ 'item' => 1 ], 1, Money::from_string( '100.00', 'RUB' ), 'Товар ' . $sku );
+	private function member( string $id, string $sku, string $canonical, string $group = '', string $updated_at = '', int $quantity = 1 ): Order_DTO {
+		$line  = new Order_Line( $sku, [ 'item' => 1 ], $quantity, Money::from_string( '100.00', 'RUB' ), 'Товар ' . $sku );
 		$dates = '' === $updated_at ? [] : [ 'updated_at' => $updated_at ];
 
 		return new Order_DTO( $this->account_id, $id, $group, $canonical, $canonical, [ $line ], [], null, $dates );
@@ -295,7 +433,7 @@ class GroupedOrderUnitsTest extends TestCase {
 
 		return new Registry_Order_Writer(
 			new Order_Registry( $wpdb, $this->schema->table_name( 'postings', $wpdb->prefix ) ),
-			new Wc_Order_Store( $this->meta ),
+			new Wc_Order_Store( $this->meta, $this->savepoint_stock_transaction() ),
 			static function (): string {
 				return 'wc-processing';
 			}
@@ -344,6 +482,65 @@ class GroupedOrderUnitsTest extends TestCase {
 		sort( $units );
 
 		return $units;
+	}
+
+	/**
+	 * Runs a write that dies in a listener of the stock hook of one product, the first time it fires.
+	 *
+	 * @param int      $product_id Product whose stock write is interrupted.
+	 * @param callable $write      The write.
+	 * @return void
+	 */
+	private function interrupt_once_at_stock_of( int $product_id, callable $write ): void {
+		$interrupt = static function ( $product ) use ( $product_id ): void {
+			if ( $product->get_id() === $product_id ) {
+				throw new \RuntimeException( 'interrupted after the stock write' );
+			}
+		};
+		add_action( 'woocommerce_product_set_stock', $interrupt, 99 );
+
+		try {
+			$write();
+			$this->fail( 'The interruption must stop the write.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'interrupted after the stock write', $e->getMessage() );
+		} finally {
+			remove_action( 'woocommerce_product_set_stock', $interrupt, 99 );
+		}
+	}
+
+	/**
+	 * @param int    $order_id Order id.
+	 * @param string $unit     Unit id.
+	 * @return int The id of the unit's line item, 0 for none.
+	 */
+	private function item_id_of_unit( int $order_id, string $unit ): int {
+		foreach ( wc_get_order( $order_id )->get_items() as $item ) {
+			if ( (string) $item->get_meta( Wc_Order_Store::ITEM_UNIT ) === $unit ) {
+				return $item->get_id();
+			}
+		}
+
+		return 0;
+	}
+
+	/**
+	 * @param int $order_id Order id.
+	 * @return string[] The order's total, its tax and the sum of its tax lines.
+	 */
+	private function totals( int $order_id ): array {
+		$order = wc_get_order( $order_id );
+		$lines = 0.0;
+
+		foreach ( $order->get_items( 'tax' ) as $tax ) {
+			$lines += (float) $tax->get_tax_total();
+		}
+
+		return [
+			wc_format_decimal( $order->get_total(), 2 ),
+			wc_format_decimal( $order->get_total_tax(), 2 ),
+			wc_format_decimal( $lines, 2 ),
+		];
 	}
 
 	/**

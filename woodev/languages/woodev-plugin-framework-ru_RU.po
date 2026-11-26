@@ -10106,6 +10106,12 @@ msgstr ""
 msgid "Показать ещё товары"
 msgstr ""
 
+#. translators: %s: the goods and their stock before and after, «Футболка (9→10)».
+#: marketplace/flows/class-wc-order-store.php:493
+#, php-format
+msgid "Остатки по снятым позициям возвращены: %s"
+msgstr ""
+
 #. translators: %s: the seller article, with the size beside it.
 #: marketplace/admin/pages/orders/class-site-orders-units.php:128
 #, php-format

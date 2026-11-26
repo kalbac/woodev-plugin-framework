@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Flows;
 use Woodev\Framework\Marketplace\Orders\Order_DTO;
 use Woodev\Framework\Marketplace\Orders\Order_Line;
 use Woodev\Framework\Marketplace\Orders\Order_Store;
+use Woodev\Framework\Marketplace\Sync\Stock_Transaction;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -18,12 +19,14 @@ defined( 'ABSPATH' ) || exit;
  * spec 3.2). Lookup goes through {@see Order_Query}, the module's only order query by meta.
  *
  * Stock is WooCommerce's own business: a new order is saved `pending` (no stock effect) and takes stock when the writer gives
- * it its real status; a line set that changes on a stock-reduced order first gives back what the old lines took
- * (`wc_increase_stock_levels()`), then the new lines are reduced, so the order never holds stock twice. Both paths honour
- * WooCommerce's `woocommerce_can_reduce_order_stock` / `woocommerce_can_restore_order_stock` filters.
+ * it its real status. When the line set changes, only the lines that differ are touched: a line that stays keeps its item with
+ * its taxes and its stock; an item that leaves first gives back what it took — the stock write and the item's record of it in
+ * one transaction, so an interrupted refresh gives it back once — and then the new lines are reduced, so the order never holds
+ * stock twice. Both paths honour WooCommerce's `woocommerce_can_reduce_order_stock` / `woocommerce_can_restore_order_stock`
+ * filters.
  *
- * A grouped order (one remote order per unit) has one item per live unit, tied to it by {@see self::ITEM_UNIT}; a cancelled unit
- * leaves the items through that same swap, stays with the order as a record ({@see Order_Units}) and is announced
+ * A grouped order (one remote order per unit) has one item per live unit, tied to it by {@see self::ITEM_UNIT}; a cancelled
+ * unit's item leaves the order that way, the unit stays with the order as a record ({@see Order_Units}) and is announced
  * ({@see self::units_cancelled_hook()}).
  *
  * Everything the marketplace decides — the meta that identifies its order, the product of a line, what an order is created
@@ -54,6 +57,11 @@ final class Wc_Order_Store implements Order_Store {
 	public const ITEM_UNIT = '_woodev_mp_unit';
 
 	/**
+	 * WooCommerce's item meta: the quantity the item took from stock.
+	 */
+	private const ITEM_REDUCED_STOCK = '_reduced_stock';
+
+	/**
 	 * Status of an order before its registration won: WooCommerce takes no stock in it.
 	 */
 	private const INERT_STATUS = 'pending';
@@ -80,14 +88,24 @@ final class Wc_Order_Store implements Order_Store {
 	private $contract;
 
 	/**
+	 * Transaction around giving back an item's stock; the database's own when null.
+	 *
+	 * @var Stock_Transaction|null
+	 */
+	private $transaction;
+
+	/**
 	 * Creates the store.
 	 *
 	 * @since 2.1.0
+	 * @since 2.1.28 Takes the stock transaction.
 	 *
-	 * @param Order_Meta_Contract $contract The marketplace's meta contract.
+	 * @param Order_Meta_Contract    $contract    The marketplace's meta contract.
+	 * @param Stock_Transaction|null $transaction Transaction around giving back an item's stock; one over `$wpdb` when null.
 	 */
-	public function __construct( Order_Meta_Contract $contract ) {
-		$this->contract = $contract;
+	public function __construct( Order_Meta_Contract $contract, ?Stock_Transaction $transaction = null ) {
+		$this->contract    = $contract;
+		$this->transaction = $transaction;
 	}
 
 	/**
@@ -160,7 +178,7 @@ final class Wc_Order_Store implements Order_Store {
 
 		$this->contract->write_meta( $wc_order, $order, true );
 		$wc_order->update_meta_data( self::META_PROVISIONAL, '1' );
-		$unlinked = $this->attach( $wc_order, $this->build_items( $order ) );
+		$unlinked = $this->attach( $wc_order, $this->build_items( $order, $order->lines() ) );
 		$wc_order->calculate_totals( false );
 		$wc_order->save();
 
@@ -221,12 +239,12 @@ final class Wc_Order_Store implements Order_Store {
 		$wc_order->update_meta_data( self::META_GROUP_MEMBERS, (string) wp_json_encode( $members ) );
 		$wc_order->delete_meta_data( self::META_PROVISIONAL );
 
-		$pairs = $this->matched_items( $wc_order, $order );
+		list( $kept, $leaving, $arriving ) = $this->compare_lines( $wc_order, $order );
 
-		if ( null === $pairs ) {
-			$this->replace_lines( $wc_order, $order );
-		} else {
-			$this->refresh_item_meta( $order, $pairs );
+		$this->refresh_item_meta( $order, $kept );
+
+		if ( [] !== $leaving || [] !== $arriving ) {
+			$this->change_lines( $wc_order, $order, $leaving, $arriving );
 		}
 
 		if ( $wc_order->get_status() !== $wc_status ) {
@@ -336,13 +354,14 @@ final class Wc_Order_Store implements Order_Store {
 	}
 
 	/**
-	 * Pairs each DTO line with the existing item that already is it (marketplace key, quantity and unit price).
+	 * Pairs each DTO line with the existing item that already is it (unit, marketplace key, quantity and unit price).
 	 *
 	 * @param \WC_Order $wc_order The order.
 	 * @param Order_DTO $order    Whole order.
-	 * @return array<int,array{0:\WC_Order_Item_Product,1:Order_Line}>|null Null when the line sets differ.
+	 * @return array{0:array<int,array{0:\WC_Order_Item_Product,1:Order_Line}>,1:\WC_Order_Item_Product[],2:Order_Line[]} The items
+	 *         that stay with their lines, the items no line is any more, and the lines no item is yet.
 	 */
-	private function matched_items( \WC_Order $wc_order, Order_DTO $order ): ?array {
+	private function compare_lines( \WC_Order $wc_order, Order_DTO $order ): array {
 		$items = [];
 		foreach ( $wc_order->get_items( 'line_item' ) as $item ) {
 			if ( $item instanceof \WC_Order_Item_Product ) {
@@ -350,23 +369,22 @@ final class Wc_Order_Store implements Order_Store {
 			}
 		}
 
-		if ( count( $items ) !== count( $order->lines() ) ) {
-			return null;
-		}
+		$kept     = [];
+		$arriving = [];
 
-		$pairs = [];
 		foreach ( $order->lines() as $line ) {
 			$match = $this->matching_item( $items, $line );
 
 			if ( null === $match ) {
-				return null;
+				$arriving[] = $line;
+				continue;
 			}
 
-			$pairs[] = [ $items[ $match ], $line ];
+			$kept[] = [ $items[ $match ], $line ];
 			unset( $items[ $match ] );
 		}
 
-		return $pairs;
+		return [ $kept, array_values( $items ), $arriving ];
 	}
 
 	/**
@@ -401,45 +419,151 @@ final class Wc_Order_Store implements Order_Store {
 	}
 
 	/**
-	 * Swaps the line set for the DTO's: the new items are built in full first, then the stock the old lines took is given back
-	 * and the order marked as holding none, then the lines are swapped. The new lines take their stock after the save, in
-	 * {@see self::take_stock_if_due()}, so a process that dies anywhere in between leaves a state the next refresh completes.
+	 * Changes the line set to the DTO's: the new items are built in full first, then the leaving items give back the stock they
+	 * took, then they are removed and the new ones added, and the tax lines and totals are worked out again from the items the
+	 * order now has (their taxes as stored: nothing is recalculated from today's tax settings). The new lines take their stock
+	 * after the save, in {@see self::take_stock_if_due()}, so a process that dies anywhere in between leaves a state the next
+	 * refresh completes.
 	 *
-	 * @param \WC_Order $wc_order The order.
-	 * @param Order_DTO $order    Whole order.
+	 * @param \WC_Order                $wc_order The order.
+	 * @param Order_DTO                $order    Whole order.
+	 * @param \WC_Order_Item_Product[] $leaving  Items no line is any more.
+	 * @param Order_Line[]             $arriving Lines no item is yet.
 	 * @return void
 	 */
-	private function replace_lines( \WC_Order $wc_order, Order_DTO $order ): void {
-		$items = $this->build_items( $order );
+	private function change_lines( \WC_Order $wc_order, Order_DTO $order, array $leaving, array $arriving ): void {
+		$built = $this->build_items( $order, $arriving );
 
 		if ( $wc_order->get_id() > 0 && (bool) $wc_order->get_data_store()->get_stock_reduced( $wc_order->get_id() ) ) {
-			// Stored before the stock is given back, so a death after this point still knows the order held stock.
+			// Stored before any stock moves, so a death after this point still knows the order held stock.
 			$wc_order->update_meta_data( self::META_STOCK_PENDING, '1' );
 			$wc_order->save_meta_data();
-
-			wc_increase_stock_levels( $wc_order );
-			$wc_order->get_data_store()->set_stock_reduced( $wc_order, false );
 		}
 
-		$wc_order->remove_order_items( 'line_item' );
-		$this->note_unlinked( $wc_order, $this->attach( $wc_order, $items ) );
+		$this->give_back_stock( $wc_order, $leaving );
+
+		foreach ( $leaving as $item ) {
+			$wc_order->remove_item( $item->get_id() );
+		}
+
+		$unlinked = $this->attach( $wc_order, $built );
+		$wc_order->update_taxes();
 		$wc_order->calculate_totals( false );
+
+		$this->note_unlinked( $wc_order, $unlinked );
+	}
+
+	/**
+	 * Gives back the stock the leaving items took, the way `wc_increase_stock_levels()` does for a whole order, with the same
+	 * filter and actions. For each item the stock write and the removal of its record are one transaction: a death or a failure
+	 * between them (a listener of the stock hook included) leaves neither, and the next refresh gives the stock back once.
+	 *
+	 * @param \WC_Order                $wc_order The order.
+	 * @param \WC_Order_Item_Product[] $items    Items about to leave the order.
+	 * @return void
+	 * @throws \Throwable What a stock write or its listener threw; the item then keeps its record.
+	 */
+	private function give_back_stock( \WC_Order $wc_order, array $items ): void {
+		if ( [] === $items || 'yes' !== get_option( 'woocommerce_manage_stock' ) || ! apply_filters( 'woocommerce_can_restore_order_stock', true, $wc_order ) ) {
+			return;
+		}
+
+		$changes = [];
+
+		foreach ( $items as $item ) {
+			$taken   = $item->get_meta( self::ITEM_REDUCED_STOCK, true );
+			$product = $item->get_product();
+
+			if ( ! $taken || ! $product || ! $product->managing_stock() ) {
+				continue;
+			}
+
+			$stock     = $this->give_back_item( $wc_order, $item, $product, $taken );
+			$changes[] = $product->get_name() . ' (' . ( $stock - $taken ) . '→' . $stock . ')';
+
+			do_action( 'woocommerce_restore_order_item_stock', $item, $stock, $stock - $taken, $wc_order );
+		}
+
+		if ( [] === $changes ) {
+			return;
+		}
+
+		$wc_order->add_order_note(
+			/* translators: %s: the goods and their stock before and after, «Футболка (9→10)». */
+			sprintf( __( 'Остатки по снятым позициям возвращены: %s', 'woodev-plugin-framework' ), implode( ', ', $changes ) )
+		);
+
+		do_action( 'woocommerce_restore_order_stock', $wc_order );
+	}
+
+	/**
+	 * Gives back one item's stock in one transaction with the removal of the item's record of it.
+	 *
+	 * @param \WC_Order              $wc_order The order.
+	 * @param \WC_Order_Item_Product $item     Item.
+	 * @param \WC_Product            $product  Its product.
+	 * @param int|float|string       $taken    What the item took.
+	 * @return int|float The stock now.
+	 * @throws \Throwable What the stock write or its listener threw.
+	 */
+	private function give_back_item( \WC_Order $wc_order, \WC_Order_Item_Product $item, \WC_Product $product, $taken ) {
+		global $wpdb;
+
+		$transaction = $this->transaction ?? new Stock_Transaction( $wpdb );
+
+		try {
+			return $transaction->run(
+				static function () use ( $item, $product, $taken ) {
+					$stock = wc_update_product_stock( $product, $taken, 'increase' );
+					$item->delete_meta_data( self::ITEM_REDUCED_STOCK );
+					$item->save();
+
+					return $stock;
+				},
+				[ $product->get_id(), $product->get_stock_managed_by_id() ]
+			);
+		} catch ( \Throwable $e ) {
+			self::forget_item( $item->get_id(), $wc_order->get_id() );
+
+			throw $e;
+		}
+	}
+
+	/**
+	 * Drops the cached copies of an item a rolled-back transaction had written, so this process reads it from the database again.
+	 *
+	 * @param int $item_id  Item id.
+	 * @param int $order_id Order id.
+	 * @return void
+	 */
+	private static function forget_item( int $item_id, int $order_id ): void {
+		wp_cache_delete( 'item-' . $item_id, 'order-items' );
+		wp_cache_delete( $item_id, 'order_item_meta' );
+		wp_cache_delete( 'order-items-' . $order_id, 'orders' );
+		\WC_Cache_Helper::invalidate_cache_group( 'object_' . $item_id );
 	}
 
 	/**
 	 * Takes the order's stock when WooCommerce has not taken it yet and the order holds stock: its status is one WooCommerce reduces
-	 * on, or a line swap gave its stock back (the marker of {@see self::replace_lines()}, which covers a custom status too) and its
-	 * status does not release stock. This also completes a refresh that died between saving new lines and reducing them.
+	 * on, or its lines changed while it held stock (the marker of {@see self::change_lines()}, which covers a custom status too)
+	 * and its status does not release stock. This also completes a refresh that died between saving new lines and reducing them.
 	 * WooCommerce's own `wc_maybe_reduce_stock_levels()` does the work: it reduces only items without a `_reduced_stock` record,
-	 * honours the reduce filters and marks the order.
+	 * honours the reduce filters and marks the order. In a releasing status the order keeps its mark, so WooCommerce gives back
+	 * the lines that stayed.
 	 *
 	 * @param \WC_Order $wc_order The order, saved.
 	 * @return void
 	 */
 	private function take_stock_if_due( \WC_Order $wc_order ): void {
 		$swapped = '1' === (string) $wc_order->get_meta( self::META_STOCK_PENDING );
+		$retake  = $swapped && ! $wc_order->has_status( self::STOCK_RELEASING_STATUSES );
 
-		if ( $wc_order->has_status( self::STOCK_HOLDING_STATUSES ) || ( $swapped && ! $wc_order->has_status( self::STOCK_RELEASING_STATUSES ) ) ) {
+		if ( $retake ) {
+			// WooCommerce reduces only an order it has not marked; the lines that stayed keep their record and are skipped.
+			$wc_order->get_data_store()->set_stock_reduced( $wc_order, false );
+		}
+
+		if ( $retake || $wc_order->has_status( self::STOCK_HOLDING_STATUSES ) ) {
 			wc_maybe_reduce_stock_levels( $wc_order->get_id() );
 		}
 
@@ -492,13 +616,14 @@ final class Wc_Order_Store implements Order_Store {
 	/**
 	 * Builds one item per line: a product line for a linked product, else a line with the marketplace's name.
 	 *
-	 * @param Order_DTO $order Whole order.
+	 * @param Order_DTO    $order Whole order.
+	 * @param Order_Line[] $lines Lines of it.
 	 * @return array<int,array{item:\WC_Order_Item_Product,unlinked:bool}>
 	 */
-	private function build_items( Order_DTO $order ): array {
+	private function build_items( Order_DTO $order, array $lines ): array {
 		$items = [];
 
-		foreach ( $order->lines() as $line ) {
+		foreach ( $lines as $line ) {
 			$items[] = $this->build_item( $order, $line );
 		}
 

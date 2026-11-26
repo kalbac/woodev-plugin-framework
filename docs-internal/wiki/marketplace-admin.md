@@ -1594,9 +1594,9 @@ writes an order note and calls `refresh_after_action()`; it changes no order and
 orders; every refusal is a group with its own sentence and «№ order: goods» examples. A refused action stays visible, off, with
 the reason (the «Заказы доставки» mechanism). Rows can be ticked only when a bulk action exists.
 
-**Limits of this card.** In the table a unit action stands on the unit's row ([below](#order-units-and-partial-cancellation-2004)). A `code` field keeps the GS
-separator (U+001D) on the order screen only: the records engine refuses control characters, so a table or supply entry of a
-marking code needs an engine change first.
+**Codes.** In the table a unit action stands on the unit's row ([below](#order-units-and-partial-cancellation-2004)). A `code`
+field keeps the GS separator (U+001D) on both screens: the table declares it as a text field with `scanned_code` (since 2.1.28),
+which the records engine lets hold that one control character; every other field of the engine still refuses it.
 
 **Cancellation without reasons.** For a `Reasonless_Canceller` neither screen asks `reasons()`; both show a confirmation with
 `cancel_warning()` and call `cancel()` with `0` and `''`; an empty returned `title` gives a note without a reason. A marketplace
@@ -1611,10 +1611,16 @@ one-order posting (`upsert()`, Ozon) keeps no units, tags no line and announces 
 | What | Where |
 |---|---|
 | One line item per live unit, item meta `_woodev_mp_unit` = the member's external id | the writer tags each line (`Order_Line::with_unit()`), `Wc_Order_Store` writes and matches it: two equal units are two items, and only the cancelled one leaves |
-| A cancelled unit leaves the items through the line swap | stock is given back and the live lines take theirs again, so net only the cancelled unit comes back; the order is `cancelled` only when every unit is |
+| A cancelled unit's item leaves the order | only its stock comes back; the other items stay, with their taxes and stock records, and the tax lines are worked out again from them. The order is `cancelled` only when every unit is |
 | Unit records, order meta `_woodev_mp_units` (`Flows\Order_Units`, value `Flows\Order_Unit`) | every unit: id, marketplace status, cancellation time (UTC), lines (shop product id, article key, name, quantity, price). A live record follows the marketplace; a **cancelled one is final** |
 | `woodev_marketplace_{created_via}_units_cancelled( int $account_id, string[] $offer_ids, \WC_Order $order )` | fired for units newly cancelled, one first seen cancelled included, after the stock was settled and **before** the records are stored (a death in between repeats it) |
-| The stock pair goes out again (`Stock_Intents::on_units_cancelled()`, `Sync_State_Store::request_resend()`) | the marketplace need not give a cancelled unit back, so the pair is due although the number equals the accepted one. No schema change: the sent and the in-flight payload are forgotten, so a send on its way settles nothing |
+| The stock pair goes out again (`Stock_Intents::on_units_cancelled()`, `Sync_State_Store::request_resend()`) | the marketplace need not give a cancelled unit back, so the pair is due although the number equals the accepted one, a pair that had used up its attempts included (the count restarts, a wait stays). No schema change: the sent and the in-flight payload are forgotten, so a send on its way settles nothing |
+
+**Changing lines** (both kinds of order, since this card). `Wc_Order_Store` touches only the items that differ. A leaving item
+gives back its stock and loses its `_reduced_stock` record in **one transaction** (`Sync\Stock_Transaction`), so a failure in
+between, a listener of WooCommerce's stock hook included, is repaid once by the next refresh. Before 2.1.28 the whole set was
+swapped with `wc_increase_stock_levels()`: an interrupted swap could return a line's stock twice, and a swap on an order with
+tax left the old tax total.
 
 **Screens.** The details box lists every unit (goods, article through `Sellable_Units::shown_article()`, status, amount, the
 unit's seller actions); a cancelled one reads «Отменено», with the marketplace's own name of the status beside it when the

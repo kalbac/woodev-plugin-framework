@@ -9,7 +9,9 @@ namespace Woodev\Tests\Unit\Marketplace\Sync;
 
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Stock_Pusher;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
 
@@ -21,6 +23,22 @@ use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
  * @covers \Woodev\Framework\Marketplace\Stock\Sync_State_Store
  */
 final class StockResendTest extends Sync_Test_Case {
+	/**
+	 * Makes the next sends fail, each after the wait of the one before.
+	 *
+	 * @param int $times How many.
+	 * @return void
+	 */
+	private function fail_sends( int $times ): void {
+		for ( $attempt = 0; $attempt < $times; $attempt++ ) {
+			$this->market->script[] = static function (): void {
+				throw Fake_Remote_Exception::of( Remote_Error::RETRY, 'Operation timed out' );
+			};
+			$this->now             += DAY_IN_SECONDS;
+			$this->assertSame( 1, $this->flush()->requests );
+		}
+	}
+
 	/**
 	 * @return void
 	 */
@@ -88,6 +106,56 @@ final class StockResendTest extends Sync_Test_Case {
 		$stock->on_units_cancelled( $this->account_id, [ 'cap|' ] );
 
 		$this->assertSame( [ self::WAREHOUSE ], $this->queue()->warehouses_with_stock( $this->account_id, (int) $this->links()->find_by_offer_id( $this->account_id, 'cap|' )->link_id() ) );
+	}
+
+	/**
+	 * Five failed sends retire a pair; a cancellation is a new reason to send it, once the wait it is in has passed.
+	 *
+	 * @return void
+	 */
+	public function test_a_cancellation_arms_a_pair_that_had_used_up_its_attempts(): void {
+		$product = $this->stock_product( 'cap|', 101 );
+		$stock   = $this->hook_stock();
+		$this->set_stock( $product, 7 );
+		$this->fail_sends( 5 );
+
+		$this->now += DAY_IN_SECONDS;
+		$this->assertSame( 0, $this->flush()->requests, 'The pair has failed for good.' );
+		$this->now -= DAY_IN_SECONDS;
+
+		$stock->on_units_cancelled( $this->account_id, [ 'cap|' ] );
+
+		$this->assertSame( 0, (int) $this->stock_row( $product )['attempts'] );
+		$this->assertSame( 0, $this->flush()->requests, 'The wait of the last failure stays.' );
+
+		$this->now += DAY_IN_SECONDS;
+		$this->assertSame( 1, $this->flush()->sent );
+		$this->assertSame( [ 'stock' => 7 ], $this->stock_row( $product )['sent_payload'] );
+	}
+
+	/**
+	 * The cancellation arrives during the attempt that would have been the last: that failure starts the count, it does not end it.
+	 *
+	 * @return void
+	 */
+	public function test_a_cancellation_during_the_last_failing_attempt_keeps_the_pair_alive(): void {
+		$product = $this->stock_product( 'cap|', 101 );
+		$stock   = $this->hook_stock();
+		$this->set_stock( $product, 7 );
+		$this->fail_sends( 4 );
+
+		$this->market->script[] = function () use ( $stock ): void {
+			$stock->on_units_cancelled( $this->account_id, [ 'cap|' ] );
+
+			throw Fake_Remote_Exception::of( Remote_Error::RETRY, 'Operation timed out' );
+		};
+		$this->now             += DAY_IN_SECONDS;
+		$this->flush();
+
+		$this->assertSame( 1, (int) $this->stock_row( $product )['attempts'] );
+
+		$this->now += DAY_IN_SECONDS;
+		$this->assertSame( 1, $this->flush()->sent );
 	}
 
 	/**

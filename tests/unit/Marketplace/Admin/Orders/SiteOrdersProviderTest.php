@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Orders;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Admin\Records\Action_Input;
 use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_Response;
 use Woodev\Framework\Admin\Records\Action_State_Exception;
@@ -1842,6 +1843,21 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertSame( 'done', $body['status'] );
 		$this->assertSame( [ 'u-1' ], Fake_Seller_Adapter::unit_ids( $this->seller->calls[0] ) );
 		$this->assertSame( [ $this->row_id( 101 ), $id ], array_column( $body['rows'], 'id' ) );
+	}
+
+	public function test_a_marking_code_with_group_separators_passes_the_table_check_on_a_unit_row_untouched(): void {
+		$this->stock_with_units();
+		$action = $this->definition()->get_action( 'unit-marking' );
+		$code   = "010460043993125621ab%2f<x\x1D91EE06\x1D92dGVzdA==";
+
+		$typed = Action_Input::validate( $action, [ 'sgtin' => $code ] );
+
+		$this->assertSame( [ 'sgtin' => $code ], $typed );
+
+		$this->provider()->apply( $this->context(), 'unit-marking', [ $this->unit_row_id( 101, 'u-1' ) ], $typed );
+
+		$this->assertSame( $code, $this->seller->calls[0]->value( 'sgtin' ) );
+		$this->assertFalse( $this->definition()->get_action( 'bulk-supply' )['fields'][0]['scanned_code'], 'Only a code field is marked.' );
 	}
 
 	public function test_an_action_of_one_kind_of_row_is_refused_on_the_other(): void {

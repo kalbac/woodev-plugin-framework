@@ -24,6 +24,7 @@ use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
 
 class OrderStoresTest extends TestCase {
 	use Mailer_Listens;
+	use Savepoint_Stock;
 
 	private const ACCOUNT = 7;
 
@@ -144,7 +145,7 @@ class OrderStoresTest extends TestCase {
 	public function test_create_saves_an_inert_provisional_order_the_store_can_find( bool $hpos ): void {
 		$this->use_datastore( $hpos );
 
-		$store    = new Wc_Order_Store( $this->meta );
+		$store    = new Wc_Order_Store( $this->meta, $this->savepoint_stock_transaction() );
 		$wc_order = $store->create( $this->dto( 'M-1', [ [ 'NO-SUCH-SKU', 2 ] ] ) );
 		$fresh    = $store->get( $wc_order->get_id() );
 
@@ -172,7 +173,7 @@ class OrderStoresTest extends TestCase {
 		$this->use_datastore( $hpos );
 
 		$product = $this->product( 'SKU-A', 10 );
-		$store   = new Wc_Order_Store( $this->meta );
+		$store   = new Wc_Order_Store( $this->meta, $this->savepoint_stock_transaction() );
 		$order   = $this->dto( 'U-1', [ [ 'SKU-A', 2 ] ] );
 		$members = [
 			'U-1' => [
@@ -204,7 +205,7 @@ class OrderStoresTest extends TestCase {
 
 		$a     = $this->product( 'SKU-A', 10 );
 		$b     = $this->product( 'SKU-B', 10 );
-		$store = new Wc_Order_Store( $this->meta );
+		$store = new Wc_Order_Store( $this->meta, $this->savepoint_stock_transaction() );
 
 		$first    = $this->dto( 'S-1', [ [ 'SKU-A', 2 ] ] );
 		$wc_order = $store->create( $first );
@@ -231,7 +232,7 @@ class OrderStoresTest extends TestCase {
 		$this->use_datastore( $hpos );
 
 		$product  = $this->product( 'SKU-A', 10 );
-		$store    = new Wc_Order_Store( $this->meta );
+		$store    = new Wc_Order_Store( $this->meta, $this->savepoint_stock_transaction() );
 		$one      = $this->dto( 'R-1', [ [ 'SKU-A', 1 ] ] );
 		$two      = $this->dto( 'R-1', [ [ 'SKU-A', 2 ] ] );
 		$wc_order = $store->create( $one );
@@ -283,7 +284,7 @@ class OrderStoresTest extends TestCase {
 
 		try {
 			$product  = $this->product( 'SKU-A', 10 );
-			$store    = new Wc_Order_Store( $this->meta );
+			$store    = new Wc_Order_Store( $this->meta, $this->savepoint_stock_transaction() );
 			$one      = $this->dto( 'C-1', [ [ 'SKU-A', 1 ] ] );
 			$two      = $this->dto( 'C-1', [ [ 'SKU-A', 2 ] ] );
 			$wc_order = $store->create( $one );
@@ -337,7 +338,7 @@ class OrderStoresTest extends TestCase {
 		add_filter( 'pre_wp_mail', $count );
 
 		$cutoff = time();
-		$store  = new Wc_Order_Store( $this->meta );
+		$store  = new Wc_Order_Store( $this->meta, $this->savepoint_stock_transaction() );
 		$write  = function ( string $key, int $created_at, string $status ) use ( $store ): void {
 			$this->product( 'SKU-' . $key, 3 );
 
@@ -387,7 +388,7 @@ class OrderStoresTest extends TestCase {
 	public function test_discard_moves_the_order_to_the_trash( bool $hpos ): void {
 		$this->use_datastore( $hpos );
 
-		$store    = new Wc_Order_Store( $this->meta );
+		$store    = new Wc_Order_Store( $this->meta, $this->savepoint_stock_transaction() );
 		$wc_order = $store->create( $this->dto( 'D-1', [] ) );
 
 		$store->discard( $wc_order );

@@ -53,26 +53,59 @@ class Stock_Transaction {
 	 * @throws \Throwable What the work threw.
 	 */
 	public function run( callable $work, array $touched = [] ) {
-		if ( false === $this->db->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- A transaction statement.
+		if ( ! $this->begin() ) {
 			throw new \RuntimeException( 'The stock transaction could not begin: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
 		try {
 			$result = call_user_func( $work );
 		} catch ( \Throwable $e ) {
-			$this->db->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- A transaction statement.
+			$this->rollback();
 			self::forget( $touched );
 
 			throw $e;
 		}
 
-		if ( false === $this->db->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- A transaction statement.
+		if ( ! $this->commit() ) {
 			self::forget( $touched );
 
 			throw new \RuntimeException( 'The stock transaction could not be committed: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Opens the transaction.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @return bool False when the database refused.
+	 */
+	protected function begin(): bool {
+		return false !== $this->db->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- A transaction statement.
+	}
+
+	/**
+	 * Commits the transaction.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @return bool False when the database refused.
+	 */
+	protected function commit(): bool {
+		return false !== $this->db->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- A transaction statement.
+	}
+
+	/**
+	 * Rolls the transaction back.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @return void
+	 */
+	protected function rollback(): void {
+		$this->db->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- A transaction statement.
 	}
 
 	/**

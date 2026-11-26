@@ -320,7 +320,8 @@ final class Site_Orders_Seller {
 	}
 
 	/**
-	 * One declared field in the engine's shape. The engine has no field for a code, so a code is a line of text there.
+	 * One declared field in the engine's shape. A code is a line of text there, marked as a scanned code so that it keeps the
+	 * group separator.
 	 *
 	 * @param Seller_Action_Field $field Field.
 	 * @return array<string,mixed>
@@ -340,6 +341,10 @@ final class Site_Orders_Seller {
 			'required' => $field->is_required(),
 			'help'     => $field->help(),
 		];
+
+		if ( Seller_Action_Field::CODE === $field->type() ) {
+			$definition['scanned_code'] = true;
+		}
 
 		if ( Seller_Action_Field::SELECT === $field->type() ) {
 			$definition['options']        = $field->options();

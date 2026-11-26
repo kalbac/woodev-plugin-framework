@@ -136,6 +136,32 @@ class ActionInputTest extends TestCase {
 		$this->assertFieldError( Action_Input::validate( $action, [ 'note' => str_repeat( 'x', 501 ) ] ), 'note' );
 	}
 
+	public function test_a_scanned_code_field_keeps_the_group_separator_and_refuses_every_other_control_character(): void {
+		$definition = Action_Definitions::with_actions();
+
+		foreach ( $definition['row_actions'] as &$row_action ) {
+			if ( 'sync' === $row_action['id'] ) {
+				$row_action['fields'][0]['scanned_code'] = true;
+			}
+		}
+		unset( $row_action );
+
+		$action = Records_Definition::from_array( $definition )->get_action( 'sync' );
+		$code   = "010460043993125621ab\x1D91EE06\x1D92dGVzdA==";
+
+		$this->assertSame( [ 'note' => $code ], Action_Input::validate( $action, [ 'note' => ' ' . $code . ' ' ] ) );
+
+		foreach ( [ "\0", "\n", "\t", "\x1C", "\x1E", "\x1F", "\x7F" ] as $control ) {
+			$this->assertFieldError( Action_Input::validate( $action, [ 'note' => 'a' . $control . 'b' ] ), 'note' );
+		}
+	}
+
+	public function test_a_plain_text_field_refuses_the_group_separator(): void {
+		$action = Records_Definition::from_array( Action_Definitions::with_actions() )->get_action( 'sync' );
+
+		$this->assertFieldError( Action_Input::validate( $action, [ 'note' => "a\x1Db" ] ), 'note' );
+	}
+
 	public function test_a_source_backed_select_is_checked_by_shape_only(): void {
 		$this->assertSame( [ 'warehouse' => 'any-warehouse:1' ], Action_Input::validate( $this->action, [ 'warehouse' => 'any-warehouse:1' ] ) );
 	}
