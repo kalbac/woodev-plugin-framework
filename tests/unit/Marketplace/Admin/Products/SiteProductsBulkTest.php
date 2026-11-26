@@ -113,9 +113,7 @@ final class SiteProductsBulkTest extends Products_Test_Case {
 	}
 
 	public function test_choosing_a_warehouse_stores_it_and_zero_means_the_account_default(): void {
-		$product = $this->add_product();
-		$this->add_link( $product, Link_Record::STATE_CREATED );
-		$id = (int) $product->get_id();
+		$id = $this->stock_product( 'W-0', 9000, 5 );
 
 		$this->assertSame( 1, $this->apply( Site_Products_Bulk::SET_WAREHOUSE, [ $id ], 33 )['accepted'] );
 		$this->assertSame( 33, $this->link_of( $id )->warehouse_id() );
@@ -125,6 +123,47 @@ final class SiteProductsBulkTest extends Products_Test_Case {
 
 		$this->assertSame( 1, $this->apply( Site_Products_Bulk::SET_WAREHOUSE, [ $id ], 0 )['accepted'] );
 		$this->assertNull( $this->link_of( $id )->warehouse_id() );
+	}
+
+	/**
+	 * Choosing a warehouse records the stock for it and zero for the left one (#2034); a repeat records what an interrupted run
+	 * left unrecorded.
+	 *
+	 * @return void
+	 */
+	public function test_choosing_a_warehouse_sends_the_stock_there_and_zero_to_the_left_one(): void {
+		$product = $this->stock_product( 'W-1', 9001, 5 );
+		$this->apply( Site_Products_Bulk::SEND_STOCK, [ $product ] );
+		$this->flush();
+
+		$this->apply( Site_Products_Bulk::SET_WAREHOUSE, [ $product ], 33 );
+
+		$this->assertSame( 0, $this->stock_row( $product )['pending_payload']['stock'], 'the left warehouse' );
+		$this->assertSame( [ 'stock' => 5 ], $this->stock_row( $product, 33 )['pending_payload'] );
+
+		$this->db->query( 'DELETE FROM ' . Sqlite_Tables::table( 'sync_state' ) . ' WHERE warehouse_id = 33' );
+		$this->apply( Site_Products_Bulk::SET_WAREHOUSE, [ $product ], 33 );
+
+		$this->assertSame( [ 'stock' => 5 ], $this->stock_row( $product, 33 )['pending_payload'], 'recorded by the retry' );
+	}
+
+	/**
+	 * The zero of a left warehouse is not a process of the product until it fails: one that waits for a switched-off warehouse
+	 * would otherwise stand in the table for good (#2042).
+	 *
+	 * @return void
+	 */
+	public function test_a_waiting_zero_of_a_left_warehouse_is_no_process(): void {
+		$product = $this->stock_product( 'W-2', 9002, 5 );
+		$link_id = (int) $this->link_of( $product )->link_id();
+		$offers  = [ $product => [ 'link_id' => $link_id, 'card_state' => Link_Record::STATE_CREATED ] ];
+		$this->intents()->record_vacate( $this->account_id, $link_id, 33 );
+
+		$this->assertSame( [], $this->activity()->for_offers( $this->account_id, $offers )[ $product ]['processes'] );
+
+		$this->db->query( 'UPDATE ' . Sqlite_Tables::table( 'sync_state' ) . " SET last_error = 'refused' WHERE warehouse_id = 33" );
+
+		$this->assertSame( 'failed', $this->activity()->for_offers( $this->account_id, $offers )[ $product ]['processes'][0]['state'] );
 	}
 
 	public function test_reset_returns_a_card_to_not_linked_and_skips_one_that_already_is(): void {

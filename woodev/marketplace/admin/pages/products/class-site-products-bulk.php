@@ -708,9 +708,10 @@ final class Site_Products_Bulk {
 				continue;
 			}
 
-			// A switch-on that was interrupted after the flags changed (a lost tick, a refused intent write) leaves cards that are on
-			// and have no first send; the retry must still record it, though «already so» keeps them out of the targets.
-			if ( $this->is_switched_on( $action, $record ) ) {
+			// A switch-on or a warehouse choice that was interrupted after the rows changed (a lost tick, a refused intent write)
+			// leaves cards that are so and have no first send; the retry must still record it, though «already so» keeps them out
+			// of the targets.
+			if ( $this->is_already_so( $action, $record, $warehouse ) ) {
 				$enabled[] = $record;
 			}
 
@@ -765,15 +766,21 @@ final class Site_Products_Bulk {
 	}
 
 	/**
-	 * Tells whether a switch-on action finds the card already switched on (a created one: only those have a first send to record).
+	 * Tells whether a switch-on or a warehouse choice finds the card already so (a created one: only those have a first send to
+	 * record).
 	 *
-	 * @param string      $action Action id.
-	 * @param Link_Record $record Link row.
+	 * @param string      $action    Action id.
+	 * @param Link_Record $record    Link row.
+	 * @param int|null    $warehouse Warehouse for {@see self::SET_WAREHOUSE}.
 	 * @return bool
 	 */
-	private function is_switched_on( string $action, Link_Record $record ): bool {
+	private function is_already_so( string $action, Link_Record $record, ?int $warehouse ): bool {
 		if ( Link_Record::STATE_CREATED !== $record->card_state() ) {
 			return false;
+		}
+
+		if ( self::SET_WAREHOUSE === $action ) {
+			return null !== $warehouse && ( $record->warehouse_id() ?? 0 ) === $warehouse;
 		}
 
 		return ( self::SYNC_STOCK_ON === $action && $record->sync_stock() ) || ( self::SYNC_PRICE_ON === $action && $record->sync_price() );
@@ -891,7 +898,9 @@ final class Site_Products_Bulk {
 	 */
 	private function reason_without_stock( Account $account, Link_Record $record ): ?string {
 		if ( null === Stock_Warehouse::for_link( $account, $record ) ) {
-			return __( 'не выбран склад', 'woodev-plugin-framework' );
+			return null === Stock_Warehouse::chosen( $account, $record )
+				? __( 'не выбран склад', 'woodev-plugin-framework' )
+				: __( 'выбранный склад отключён в маркетплейсе', 'woodev-plugin-framework' );
 		}
 
 		$product = $this->contexts->product( $record->wc_product_id() );
@@ -1009,14 +1018,16 @@ final class Site_Products_Bulk {
 	}
 
 	/**
-	 * Applies a flag, warehouse or reset change. Switching a flag on also records the first send of the cards it reached (#1795, D1).
+	 * Applies a flag, warehouse or reset change. Switching a flag on also records the first send of the cards it reached (#1795, D1),
+	 * and choosing a warehouse records their stock for it.
 	 *
 	 * @param Account       $account   Account.
 	 * @param string        $action    Action id.
 	 * @param Link_Record[] $targets   Rows.
 	 * @param int|null      $warehouse Warehouse.
-	 * @param Link_Record[] $enabled   Created cards a switch-on found already on: their first send is recorded too, so a part that was
-	 *                                 interrupted after the flags changed is finished by its retry.
+	 * @param Link_Record[] $enabled   Created cards a switch-on found already on, or a warehouse choice found already on that
+	 *                                 warehouse: their first send is recorded too, so a part that was interrupted after the rows
+	 *                                 changed is finished by its retry.
 	 * @return int Rows changed.
 	 * @throws Bulk_Run_Lost When a bulk run tick lost its run before a write.
 	 * @throws Action_State_Exception When a first send could not be stored: the flags are on, and repeating the action records it.
@@ -1041,13 +1052,14 @@ final class Site_Products_Bulk {
 				$changed = $this->links->set_sync_flag( $account->id(), $link_ids, 'sync_price', self::SYNC_PRICE_ON === $action );
 				break;
 			case self::SET_WAREHOUSE:
-				return $this->links->set_warehouse( $account->id(), $link_ids, (int) $warehouse > 0 ? (int) $warehouse : null );
+				$changed = $this->links->set_warehouse( $account->id(), $link_ids, (int) $warehouse > 0 ? (int) $warehouse : null );
+				break;
 			default:
 				return $this->links->reset_state( $account->id(), $link_ids );
 		}
 
-		if ( in_array( $action, [ self::SYNC_STOCK_ON, self::SYNC_PRICE_ON ], true ) ) {
-			$this->record_first_send( $account, array_merge( $targets, $enabled ), self::SYNC_STOCK_ON === $action );
+		if ( in_array( $action, [ self::SYNC_STOCK_ON, self::SYNC_PRICE_ON, self::SET_WAREHOUSE ], true ) ) {
+			$this->record_first_send( $account, array_merge( $targets, $enabled ), $action );
 		}
 
 		return $changed;
@@ -1056,18 +1068,18 @@ final class Site_Products_Bulk {
 	/**
 	 * Records the first send of cards whose synchronisation was just switched on, as the product tab does on switch-on (#1795, D1):
 	 * a merchant who switched stock sync on for three thousand products expects their stock on the marketplace, not an empty column
-	 * until each product happens to change. The intent decides whether anything goes (the account's stock mode, a warehouse, managed
-	 * stock; the price direction) and records nothing otherwise, so a card with nothing to send is simply left alone. Only created cards
-	 * have anything to send to.
+	 * until each product happens to change. A chosen warehouse is the same case: it gets the stock, and the left one zero. The intent
+	 * decides whether anything goes (the account's stock mode, a warehouse, managed stock; the price direction) and records nothing
+	 * otherwise, so a card with nothing to send is simply left alone. Only created cards have anything to send to.
 	 *
-	 * @param Account       $account  Account.
-	 * @param Link_Record[] $targets  Rows the switch reached, and the created ones it found already on.
-	 * @param bool          $is_stock Stock when true, price when false.
+	 * @param Account       $account Account.
+	 * @param Link_Record[] $targets Rows the action reached, and the created ones it found already so.
+	 * @param string        $action  {@see self::SYNC_STOCK_ON}, {@see self::SYNC_PRICE_ON} or {@see self::SET_WAREHOUSE}.
 	 * @return void
 	 * @throws Bulk_Run_Lost When a bulk run tick lost its run.
 	 * @throws Action_State_Exception When an intent could not be stored.
 	 */
-	private function record_first_send( Account $account, array $targets, bool $is_stock ): void {
+	private function record_first_send( Account $account, array $targets, string $action ): void {
 		$created = [];
 
 		foreach ( $targets as $record ) {
@@ -1085,14 +1097,18 @@ final class Site_Products_Bulk {
 			$this->guard();
 
 			try {
-				if ( $is_stock ) {
-					$this->stock->record_stock( $fresh );
-				} else {
+				if ( self::SYNC_PRICE_ON === $action ) {
 					$this->prices->record_for_link( $account, $fresh );
+				} else {
+					$this->stock->record_stock( $fresh );
 				}
 			} catch ( \RuntimeException $e ) {
 				// Never reported as done: a card that is on with no first send would be skipped as «already so» by every later try.
-				throw new Action_State_Exception( __( 'Синхронизация включена, но первую отправку записать не удалось. Повторите действие — оно запишет недостающее.', 'woodev-plugin-framework' ) );
+				throw new Action_State_Exception(
+					self::SET_WAREHOUSE === $action
+						? __( 'Склад выбран, но отправку остатков записать не удалось. Повторите действие — оно запишет недостающее.', 'woodev-plugin-framework' )
+						: __( 'Синхронизация включена, но первую отправку записать не удалось. Повторите действие — оно запишет недостающее.', 'woodev-plugin-framework' )
+				);
 			}
 		}
 	}

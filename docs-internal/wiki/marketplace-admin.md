@@ -492,6 +492,24 @@ What the code settled, where the text above left it open:
   `Warehouse_Options`) shows ONE line in the account's status naming the ids, not one message per product. The current list is read
   once per account per request and dropped when anything writes the catalogue cache (`Wpdb_Catalog_Cache::writes()`), so a refresh in
   the same process is seen. Sends resume by themselves once another warehouse is picked or the id is listed again — no stored flag.
+- **One product, one warehouse (#2034).** Whenever a link's stock is recorded (`Stock_Intents::record_stock()`), every other
+  warehouse that may still hold its units (a stock row with an unresolved send, or a last sent or read quantity above zero) and is
+  no longer the chosen one gets the pending payload `{stock: 0, vacate: true}` (`Sync_State_Store::record_vacate()`). The flusher
+  sends it although the warehouse is not the link's, then clears the row's readback; it never touches the link's last pushed stock.
+  A changed default or oversize warehouse fires `woodev_{plugin id}_account_warehouse_changed`, and `Reseed_Stock_Runner` records
+  every created card again; the bulk «Выбрать склад» and the product tab record their own cards. A run sends all its zeros before
+  any stock (`Sync_State_Queue::due()` lists them first, the flusher sends them as their own group), and — because the due list is
+  limited — holds a link's stock while a zero of another listed warehouse still awaits its first answer
+  (`Sync_State_Queue::unanswered_vacates()`, whether that zero is due or not). A refused or failed zero holds nothing back. A left warehouse is zeroed
+  only when something replaces it: not while the CHOSEN warehouse is switched off by the marketplace (the link's due pairs wait,
+  with the reason; the product tab says `warehouse_unavailable`) and not for a product without managed stock. With no warehouse
+  chosen the left one is zeroed.
+- **A switched-off warehouse keeps its intents (#2042).** `Stock_Intents::record_stock()` and `Card_Created_Seeder` record for the
+  CHOSEN warehouse whether or not it is listed (`Stock_Warehouse::chosen()`, not `for_link()`), and zeros for left ones likewise;
+  the flusher holds such rows (`Sync_State_Queue::hold()`, 60 s, uncounted, to the back of the due list) and sends them once the
+  warehouse is listed again. Nothing has to notice the switch-on: the adapter writes the warehouse list, the framework only reads
+  it. A waiting zero is not shown in the products table until it fails. A warehouse flag the marketplace
+  itself flips (oversize, from the card poll) is followed only at the product's next stock record.
 - **Notification types are switches.** The adapter declares them in `Push_Protocol::webhook_types()` (`Webhook_Type`: id = the
   decoder's event type, label, purpose, cabinet location, default). The framework registers one toggle per type
   (`woodev_{plugin id}_webhook_{type id}`), explains them in the first card, and `Notification_Intake` stores a switched-off type

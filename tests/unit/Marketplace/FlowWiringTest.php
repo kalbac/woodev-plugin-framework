@@ -76,6 +76,8 @@ final class FlowWiringTest extends TestCase {
 	private const ACTIONS = [
 		'woodev_%s_flush_sync'                    => 1,
 		'woodev_%s_reconcile_stock'               => 1,
+		'woodev_%s_reseed_stock'                  => 1,
+		'woodev_%s_account_warehouse_changed'     => 1,
 		'woodev_%s_recompute_prices'              => 1,
 		'woodev_%s_refresh_prices'                => 1,
 		'woodev_%s_export_batch'                  => 1,

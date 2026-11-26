@@ -471,7 +471,20 @@ final class StockRegressionTest extends Sync_Test_Case {
 		$this->now += 31;
 		$this->flush();
 
-		$this->assertSame( 3, $this->market->present['accepted'], 'the older value of the retired warehouse does not come back' );
+		$sent = [];
+
+		foreach ( array_slice( $this->market->requests, 1 ) as $request ) {
+			$sent[ $request[1] ] = $request[2]['accepted'];
+		}
+
+		$this->assertSame(
+			[
+				self::WAREHOUSE => 0,
+				99              => 3,
+			],
+			$sent,
+			'the older value of the retired warehouse does not come back: it is zeroed first, then the new warehouse takes the newest value'
+		);
 	}
 
 	/**

@@ -31,6 +31,13 @@ final class Sync_Reason {
 	public const LAST_ERROR       = 'last_error';
 
 	/**
+	 * The chosen warehouse is switched off by the marketplace.
+	 *
+	 * @since 2.1.25
+	 */
+	public const WAREHOUSE_UNAVAILABLE = 'warehouse_unavailable';
+
+	/**
 	 * The marketplace refused the new price (2.1.25).
 	 */
 	public const PRICE_REFUSED = Price_Refusal::REFUSED;
