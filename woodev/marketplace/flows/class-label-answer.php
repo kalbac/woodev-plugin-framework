@@ -11,16 +11,24 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * The marketplace's answer to "is the label ready?", already read by the adapter's {@see Label_Provider}: still being made, made
- * (a file), refused (a sentence), or an answer of a shape the provider does not know, which the service keeps as it came so
- * nothing is lost.
+ * (one file, or several files with their names), refused (a sentence), or an answer of a shape the provider does not know, which
+ * the service keeps as it came so nothing is lost.
  *
  * @since 2.1.0
  */
 final class Label_Answer {
 	public const PENDING = 'pending';
 	public const FILE    = 'file';
+	public const FILES   = 'files';
 	public const BROKEN  = 'broken';
 	public const OTHER   = 'other';
+
+	/**
+	 * The files of a `FILES` answer.
+	 *
+	 * @var Label_File[]
+	 */
+	private $files = [];
 
 	/**
 	 * Kind.
@@ -100,6 +108,35 @@ final class Label_Answer {
 	}
 
 	/**
+	 * The labels are ready as separate files: PNG stickers become a page to print, other files are downloaded under their names.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param Label_File[] $files Files in the order they are printed; anything else in the list is dropped.
+	 * @param array<mixed> $raw   The answer without the files, for the task row.
+	 * @return self A `BROKEN` answer when the list holds no file.
+	 */
+	public static function files( array $files, array $raw = [] ): self {
+		$files = array_values(
+			array_filter(
+				$files,
+				static function ( $file ): bool {
+					return $file instanceof Label_File;
+				}
+			)
+		);
+
+		if ( [] === $files ) {
+			return self::broken( '', $raw );
+		}
+
+		$answer        = new self( self::FILES, '', '', '', $raw );
+		$answer->files = $files;
+
+		return $answer;
+	}
+
+	/**
 	 * The marketplace could not make the label.
 	 *
 	 * @since 2.1.0
@@ -166,6 +203,17 @@ final class Label_Answer {
 	 */
 	public function content_type(): string {
 		return $this->content_type;
+	}
+
+	/**
+	 * Returns the files of a `FILES` answer.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @return Label_File[] Empty for any other kind.
+	 */
+	public function file_list(): array {
+		return $this->files;
 	}
 
 	/**
