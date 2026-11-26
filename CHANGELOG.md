@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.22] — 2026-11-26
+### Bug Fixes
+- **settings**: Show the server's field errors in a connection block on Save (#2020)
+
+- **marketplace**: Show the stored OK detail of a saved account (#2021)
+
+
+### Documentation
+- **research**: Wildberries Seller M0b — sandbox flows, DBS checks, marking fixtures (#2013)
+
+- **research**: Wildberries Seller M0a — live-cabinet measurement without orders (#2014)
+
+
+
 ## [2.1.21] — 2026-11-26
 ### Documentation
 - **research**: Wildberries Seller plugin — API map, gap map, card plan (#1990)
