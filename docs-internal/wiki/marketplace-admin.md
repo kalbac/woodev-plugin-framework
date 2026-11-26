@@ -1400,7 +1400,6 @@ of the `ordersPage` manifest.
 **`order_source()` and `card_exporter()`** are `@deprecated`, not removed: released adapters implement them. A new adapter may throw
 a `\LogicException` from both.
 
-
 ## Changing the article after the export (framework 2.1.13, #1860)
 
 Before 2.1.13 the article (`offer_id`) was frozen once a card was sent. Operator decision 19.11.2026: it stays changeable, and the change goes to the marketplace by its own
