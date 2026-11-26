@@ -1,0 +1,35 @@
+{
+ "date": "2026-11-26",
+ "request": {
+  "address-type-to": "DEFAULT",
+  "mail-type": "ECOM",
+  "mail-category": "WITH_COMPULSORY_PAYMENT",
+  "mail-direct": 643,
+  "mass": 1000,
+  "index-to": 190000,
+  "region-to": "г Санкт-Петербург",
+  "place-to": "г Санкт-Петербург",
+  "street-to": "Невский пр-кт",
+  "house-to": "1",
+  "given-name": "Тест",
+  "surname": "TestovR1475",
+  "tel-address": 79000000000,
+  "order-num": "R1475-p4-1795651734",
+  "compulsory-payment": 30000
+ },
+ "status": 200,
+ "response": {
+  "errors": [
+   {
+    "error-codes": [
+     {
+      "code": "DISABLED_MAIL_TYPE",
+      "description": "Услуга временно недоступна",
+      "details": "ECOM"
+     }
+    ],
+    "position": 0
+   }
+  ]
+ }
+}

@@ -1,0 +1,63 @@
+{
+ "date": "2026-11-26",
+ "request": {
+  "info": {
+   "operator_request_id": "r1475-y3-postpay-goods-zero-no-fee",
+   "referral_source": "woodev"
+  },
+  "source": {
+   "platform_station": {
+    "platform_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+   }
+  },
+  "destination": {
+   "type": "platform_station",
+   "platform_station": {
+    "platform_id": "05212278-441c-4033-9ed8-851ca27facca"
+   }
+  },
+  "last_mile_policy": "self_pickup",
+  "billing_info": {
+   "payment_method": "card_on_receipt",
+   "delivery_cost": 0
+  },
+  "recipient_info": {
+   "first_name": "Measure",
+   "last_name": "Test",
+   "phone": "+79000000000",
+   "email": "measure@example.com"
+  },
+  "places": [
+   {
+    "barcode": "r1475-y3-postpay-goods-zero-no-fee",
+    "physical_dims": {
+     "predefined_volume": 24000,
+     "weight_gross": 3000
+    }
+   }
+  ],
+  "items": [
+   {
+    "article": "r1475",
+    "count": 1,
+    "name": "Measurement item",
+    "place_barcode": "r1475-y3-postpay-goods-zero-no-fee",
+    "billing_details": {
+     "assessed_unit_price": 300000,
+     "unit_price": 0,
+     "nds": -1
+    }
+   }
+  ]
+ },
+ "status": 200,
+ "response": {
+  "offers": 5,
+  "first_offer_pricing": {
+   "pricing": "203.74 RUB",
+   "pricing_commission_on_delivery_payment": "2.5%",
+   "pricing_commission_on_delivery_payment_amount": "0 RUB",
+   "pricing_total": "203.74 RUB"
+  }
+ }
+}

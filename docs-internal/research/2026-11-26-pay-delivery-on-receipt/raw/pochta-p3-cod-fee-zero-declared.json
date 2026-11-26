@@ -1,0 +1,35 @@
+{
+ "date": "2026-11-26",
+ "request": {
+  "address-type-to": "DEFAULT",
+  "mail-type": "ONLINE_PARCEL",
+  "mail-category": "WITH_DECLARED_VALUE_AND_CASH_ON_DELIVERY",
+  "mail-direct": 643,
+  "mass": 1000,
+  "index-to": 190000,
+  "region-to": "г Санкт-Петербург",
+  "place-to": "г Санкт-Петербург",
+  "street-to": "Невский пр-кт",
+  "house-to": "1",
+  "given-name": "Тест",
+  "surname": "TestovR1475",
+  "tel-address": 79000000000,
+  "order-num": "R1475-p3-1795651733",
+  "insr-value": 0,
+  "payment": 30000
+ },
+ "status": 200,
+ "response": {
+  "errors": [
+   {
+    "error-codes": [
+     {
+      "code": "ILLEGAL_INSR_VALUE",
+      "description": "Объявленная сумма некорректна"
+     }
+    ],
+    "position": 0
+   }
+  ]
+ }
+}
