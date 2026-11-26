@@ -206,9 +206,9 @@ prefixes) — M0a observes the real shapes.
   buyer gives the courier when receiving the order».
 - `reject` also takes `{orders:[{orderId, code}]}` (MEASURED `w29`, 200 with a code).
 
-**Verdict.** The 400 for a missing code is **sandbox-only evidence**: the sandbox's own `Code` schema
-marks `code` required, while the **production** `api.OrderCodeRequest` has **no `required` list — `code`
-is optional there** (SOURCED, `05-dbs.yaml`; spec §7.4 says the same). The documented per-unit errors of
+**Verdict.** The 400 for a missing code is **sandbox-only evidence** (measured, `w26`); the
+**production** `api.OrderCodeRequest` has **no `required` list — `code` is optional there**
+(SOURCED, `05-dbs.yaml`; spec §7.4 says the same). The documented per-unit errors of
 `status/receive` are `NotFound`, `StatusMismatch` and `SGTINIsNotFilled` (a required marking code missing).
 Nothing here proves production demands the code, so the owner-accepted R2 design stands: one automatic
 `receive` attempt without a code, then handle whichever outcome comes back (refusal → merchant-facing
