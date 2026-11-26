@@ -298,15 +298,60 @@ final class Wpdb_Task_Ledger implements Task_Ledger {
 		);
 
 		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
-			$result = json_decode( (string) ( $row['result'] ?? '' ), true );
-			$sent   = is_array( $result ) ? array_map( 'intval', (array) ( $result['sent_links'] ?? [] ) ) : [];
-
-			if ( in_array( $link_id, $sent, true ) && '' !== (string) $row['offer_id'] ) {
+			if ( self::was_sent( $row, $link_id ) ) {
 				return (string) $row['offer_id'];
 			}
 		}
 
 		return null;
+	}
+
+	/**
+	 * Tells which of some links a request has already carried — {@see self::sent_offer_id()} for many links in one read.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param int[] $link_ids Link ids.
+	 * @return int[]
+	 */
+	public function sent_link_ids( array $link_ids ): array {
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $link_ids ) ) ) );
+
+		if ( [] === $ids ) {
+			return [];
+		}
+
+		$in   = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
+		$rows = $this->db->get_results(
+			$this->db->prepare(
+				'SELECT i.link_id, i.offer_id, t.result FROM %i AS i INNER JOIN %i AS t ON t.task_id = i.task_id WHERE i.link_id IN (' . $in . ') AND t.request_hash <> %s', // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Only placeholders are concatenated.
+				array_merge( [ $this->items, $this->tasks ], $ids, [ '' ] )
+			),
+			'ARRAY_A'
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		$sent = [];
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			if ( self::was_sent( $row, (int) $row['link_id'] ) ) {
+				$sent[ (int) $row['link_id'] ] = (int) $row['link_id'];
+			}
+		}
+
+		return array_values( $sent );
+	}
+
+	/**
+	 * Tells whether the request of a task item carried its link's article.
+	 *
+	 * @param array<string,mixed> $row     The item's `offer_id` and its task's `result`.
+	 * @param int                 $link_id Link id.
+	 * @return bool
+	 */
+	private static function was_sent( array $row, int $link_id ): bool {
+		$result = json_decode( (string) ( $row['result'] ?? '' ), true );
+		$sent   = is_array( $result ) ? array_map( 'intval', (array) ( $result['sent_links'] ?? [] ) ) : [];
+
+		return in_array( $link_id, $sent, true ) && '' !== (string) $row['offer_id'];
 	}
 
 	/**

@@ -10,6 +10,7 @@ import { Button, SelectControl, Spinner, TextControl } from '@wordpress/componen
 import FieldRow from '../../../components/field-row';
 import SelectField from '../../../components/select-field';
 import { errorLines, type MappingsApi } from './api';
+import { ArticlePreview } from './article-preview';
 import { AttributeTable } from './attribute-table';
 import { CategoryPicker } from './category-picker';
 import { CheckReport } from './check-report';
@@ -81,6 +82,8 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 	const [ notice, setNotice ] = useState< NoticeState | null >( null );
 	/** The name the mapping has in the shop: the title does not follow what is being typed. */
 	const [ savedName, setSavedName ] = useState( '' );
+	/** Counts the saves; what is read about the saved mapping is read again after each. */
+	const [ saves, setSaves ] = useState( 0 );
 
 	useEffect( () => {
 		setNotice( null );
@@ -181,6 +184,7 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 		act( async () => {
 			const result = await api.saveMapping( mappingId, toBody( draft ) );
 			setSavedName( draft.name );
+			setSaves( ( count ) => count + 1 );
 			onSaved( result.id, result.notices );
 		} );
 
@@ -292,6 +296,9 @@ export function MappingEditor( { api, state, mappingId, onSaved, onCopied, onDel
 				/>
 			</FormCard>
 
+			{ mappingId !== null && state.article_preview && (
+				<ArticlePreview key={ saves } api={ api } messages={ messages } mappingId={ mappingId } />
+			) }
 			{ mappingId !== null && <CheckReport api={ api } messages={ messages } mappingId={ mappingId } /> }
 		</>
 	);

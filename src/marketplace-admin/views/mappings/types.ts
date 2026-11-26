@@ -67,6 +67,8 @@ export interface MappingsState {
 	product_fields: Option[];
 	profile_form: ProfileForm;
 	categories_loaded: boolean;
+	/** Whether the adapter can say which article a new card gets (`Article_Preview`). */
+	article_preview?: boolean;
 }
 
 export interface CategoryChoice {
@@ -125,6 +127,32 @@ export interface CheckStep {
 	next_offset: number;
 	groups: Array< { text: string; count: number } >;
 	text: string;
+}
+
+/** A product without a card and the articles its units would get. */
+export interface ArticleProduct {
+	id: number;
+	name: string;
+	/** The product's edit screen; '' when the user cannot edit it. */
+	url: string;
+	/**
+	 * `article` is '' when it cannot be worked out; `note` says why it is not simply what this mapping gives (the product's own
+	 * setting, or the accounts disagreeing), '' otherwise; `variations` is '' for a product without variations.
+	 */
+	articles: Array< { article: string; note: string; variations: string } >;
+}
+
+/** Where a read of the articles starts: products read in full, and units already read of the one after them. */
+export interface ArticlesCursor {
+	offset: number;
+	skip: number;
+}
+
+/** One bounded read: its first product may be the last one of the read before, continued. */
+export interface ArticlesStep {
+	products: ArticleProduct[];
+	/** Null once every product of the mapping has been read. */
+	next: ArticlesCursor | null;
 }
 
 export interface SaveResult {

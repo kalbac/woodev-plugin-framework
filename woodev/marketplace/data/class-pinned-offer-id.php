@@ -94,6 +94,22 @@ final class Pinned_Offer_Id {
 	}
 
 	/**
+	 * Reads the chosen article from the post meta cache, for a screen that reads many products: with their meta primed
+	 * (`_prime_post_caches()`) it asks the database nothing, while {@see self::of()} reads each product's meta by itself.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param int $product_id Product or variation id.
+	 * @param int $account_id Account id.
+	 * @return string|null Null when the merchant chose none.
+	 */
+	public function of_primed( int $product_id, int $account_id ): ?string {
+		$value = get_post_meta( $product_id, $this->meta_key( $account_id ), true );
+
+		return is_string( $value ) && '' !== $value ? $value : null;
+	}
+
+	/**
 	 * Stores or clears the chosen article.
 	 *
 	 * @since 2.0.29

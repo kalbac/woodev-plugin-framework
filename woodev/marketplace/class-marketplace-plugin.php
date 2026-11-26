@@ -72,7 +72,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			parent::__construct( $id, $version, $args );
 
 			Admin_Collector::instance()->register_plugin( $this );
-			Mappings_Module::register( $this );
+			Mappings_Module::register(
+				$this,
+				function (): Account_Store {
+					return $this->get_account_store();
+				}
+			);
 
 			// Priority 0: the runners must be hooked before Action Scheduler starts at `init` priority 1, and the plugin's adapter
 			// is ready by then (the plugin's own constructor has finished).

@@ -7628,6 +7628,58 @@ msgid "Проверка сохранённого сопоставления: ч�
 msgstr ""
 
 #: marketplace/admin/pages/mappings/class-view-config.php:220
+msgid "Артикулы новых карточек"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:221
+msgid "Какой артикул получит товар, когда для него будет создана карточка. Показано по сохранённому сопоставлению; если у товара есть своя настройка, показан артикул с ней и причина. Товаров, у которых карточка уже есть или отправлялась на маркетплейс, здесь нет."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:222
+msgid "Прочерк — артикул пока не получается. Что мешает, покажет проверка товаров."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:223
+msgid "Считаем артикулы…"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:224
+msgid "В этом сопоставлении нет товаров, которым нужна новая карточка."
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:227
+msgid "Вариации"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:226
+msgid "Среди уже проверенных товаров новые карточки не нужны. Нажмите «Показать ещё», чтобы проверить следующие."
+msgstr ""
+
+#. translators: %s: account names, each in quotes.
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:306
+#, php-format
+msgid "Для: %s"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:319
+msgid "У товара своё сопоставление"
+msgstr ""
+
+#. translators: %s: mapping name.
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:323
+#, php-format
+msgid "Товар выгружается по другому сопоставлению: «%s»"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:334
+msgid "Сопоставление, выбранное в товаре, не найдено"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-mapping-messages.php:345
+msgid "Артикул вписан в самом товаре"
+msgstr ""
+
+#: marketplace/admin/pages/mappings/class-view-config.php:220
 msgid "Название профиля"
 msgstr ""
 
