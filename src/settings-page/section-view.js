@@ -32,6 +32,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 				conditionValues={ conditionValues || values }
 				onFieldChange={ onFieldChange }
 				onFieldRevert={ onFieldRevert }
+				serverErrors={ serverErrors }
 			/>
 		);
 	}

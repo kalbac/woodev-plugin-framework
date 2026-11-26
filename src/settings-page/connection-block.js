@@ -65,7 +65,7 @@ export function emptyFieldsHint( labels ) {
 	return sprintf( __( 'Заполните поля: %s.', 'woodev-plugin-framework' ), labels.join( ', ' ) );
 }
 
-export default function ConnectionBlock( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert } ) {
+export default function ConnectionBlock( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert, serverErrors } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ result, setResult ] = useState( section.status || null );
 
@@ -110,7 +110,7 @@ export default function ConnectionBlock( { providerId, section, values, conditio
 			{ Object.keys( section.fields ).map( ( settingId ) => (
 				<ControlField
 					key={ settingId }
-					schema={ section.fields[ settingId ] }
+					schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
 					conditionValues={ conditionValues || values }
 					value={ values[ settingId ] ?? section.fields[ settingId ].value }
 					onChange={ ( next ) => handleFieldChange( settingId, next ) }

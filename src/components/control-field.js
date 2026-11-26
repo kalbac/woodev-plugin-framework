@@ -401,7 +401,9 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				onRevert,
 				onChange,
 				disabled,
-			} )
+			} ),
+			// The server's refusal of a secret (a token it will not accept) is said under it; the client rules are not run here.
+			schema.serverError
 		);
 	}
 
