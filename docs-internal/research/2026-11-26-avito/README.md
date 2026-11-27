@@ -14,6 +14,9 @@ to `api.avito.ru`.
 | [access-needed.ru.md](access-needed.ru.md) | What the owner has to set up before measurement, in Russian, step by step |
 | [owner-questions.ru.md](owner-questions.ru.md) | 13 v1 scope questions, Russian, each with a recommendation |
 | [card-plan.md](card-plan.md) | Estimated framework and plugin cards |
+| [decisions.md](decisions.md) | The owner's answers of 27.11.2026 (D1–D13) — final; they win over every recommendation here |
+| [spec-input.md](spec-input.md) | Input pack for the specification (28.11.2026): what the framework already has per gap, the API facts per scope part, open questions |
+| [spec-draft.md](spec-draft.md) | Draft design by Sonnet — input for the specification, not authoritative |
 
 ## Verdict
 
