@@ -22,6 +22,7 @@
 - [admin-ui/tables] **A right-aligned sortable header pads its button 24px a side (48px dead), and `scrollbar-color` switches the always-drawn `::-webkit-scrollbar` bar off: on macOS a scrolling table shows no bar.** → [a-numeric-sortable-header-and-scrollbar-color-hide-what-a-records-table-needs](../gotchas/a-numeric-sortable-header-and-scrollbar-color-hide-what-a-records-table-needs.md) (s243)
 - [admin-ui/orders] **`#order_data .order_data_column { width: 31% }` beats a custom order box's column CSS — override through the same `#order_data` id.** → [wc-order-data-column-width-beats-a-custom-order-box-column-css](../gotchas/wc-order-data-column-width-beats-a-custom-order-box-column-css.md) (s239)
 - [admin-ui/errors] **A special-case early return in a shared field renderer (`SectionView` connection section, `ControlField` sensitive branch) silently drops the server's field error — «Сохранить» shows only the generic message.** → [a-special-branch-of-a-shared-field-renderer-drops-the-server-error](../gotchas/a-special-branch-of-a-shared-field-renderer-drops-the-server-error.md) (26.11.2026)
+- [admin-ui/notices] **A wc-admin page already draws the notices store's snackbars: an embedded body with its own `SnackbarList` shows every toast twice, and jest, which mounts the body alone, stays green.** → [a-wc-admin-page-shows-every-snackbar-of-the-notices-store-itself](../gotchas/a-wc-admin-page-shows-every-snackbar-of-the-notices-store-itself.md) (#2025)
 
 ## Related
 

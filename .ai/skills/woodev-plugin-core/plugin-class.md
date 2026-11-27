@@ -190,6 +190,22 @@ For a marketplace where one cart is several remote orders (one per piece of good
 - A unit sold by a key the merchant must not see needs `Flows\Sellable_Units` on the adapter: the screens read the article
   through it.
 
+## A marketplace adapter: what the screens learn from optional parts
+
+For a `Marketplace_Plugin`; the full design is `docs-internal/wiki/marketplace-admin.md`, «What the screens learn from optional
+parts» (#2058). Both interfaces exist from framework 2.1.28 — require it before you declare them.
+
+- **No archive of cards:** your `Stock_Rules` implements `Sync\Archiveless_Stock_Rules`
+  (`woodev/marketplace/sync/interface-archiveless-stock-rules.php`, no method). The products table, the product tab and the
+  variations then offer no «Архивировать». `archive()` still answers true: it runs after the zero stock of a removed product.
+- **A key with part of its rights:** your `Credential_Health` implements `Account\Credential_Limits`
+  (`woodev/marketplace/account/interface-credential-limits.php`). `has_limits()` reads the stored credentials only — no remote
+  call, the settings screen asks on every load. Say what does not work in the `ok` result's message; the line is then a warning.
+- **The check runs on «Сохранить»** for an enabled account with no stored result (a new one, new credentials). Do not tell the
+  merchant that the button is the only way to connect.
+- **Price and stock on the cards table** come from the rows of your `Flows\Card_List_Source` (`price`, `stock`); the framework
+  asks no other method. An absent key shows «—».
+
 ## Subclassing traps that fatal at declaration time
 
 - A base constructor that ASSIGNS a property the subclass set BEFORE calling `parent::__construct()`

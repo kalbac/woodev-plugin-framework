@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
+use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
 use Woodev\Framework\Marketplace\Admin\Shared\Link_Notes;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
@@ -285,9 +286,23 @@ final class Embedded_Screens {
 				'assets'   => $assets_url,
 			],
 			$plugin->get_version(),
-			Capability::has_catalog( $adapter ) ? [] : [ 'export', 'link' ],
+			self::withheld_ops( $adapter ),
 			$adapter instanceof Settings_Extension ? new Product_Extension( $adapter, $names ) : null,
 			$variation_actions
 		);
+	}
+
+	/**
+	 * The buttons of the product tab the marketplace cannot serve: no export and no linking without a catalogue, no archive
+	 * where the table withholds it ({@see Site_Products_Module::withheld_actions()}).
+	 *
+	 * @param Marketplace_Adapter $adapter Adapter.
+	 * @return string[] Operations of {@see Product_Tab::OPS}.
+	 */
+	private static function withheld_ops( Marketplace_Adapter $adapter ): array {
+		$withheld = Capability::has_catalog( $adapter ) ? [] : [ 'export', 'link' ];
+		$archives = ! in_array( Site_Products_Bulk::ARCHIVE, Site_Products_Module::withheld_actions( $adapter ), true );
+
+		return $archives ? $withheld : array_merge( $withheld, [ 'archive' ] );
 	}
 }

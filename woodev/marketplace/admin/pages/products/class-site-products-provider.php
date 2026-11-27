@@ -916,6 +916,9 @@ final class Site_Products_Provider implements Records_Provider, Provides_Field_O
 				$product = wc_get_product( $product_id );
 
 				return $product instanceof \WC_Product ? Unit_Products::sku_conflict_text( $adapter_id, $product ) : '';
+			},
+			null === $articles ? null : static function ( string $offer_id ) use ( $articles, $account_id ): string {
+				return $articles->card_article_of_link( $account_id, $offer_id );
 			}
 		);
 	}
