@@ -24,8 +24,8 @@ defined( 'ABSPATH' ) || exit;
  * ({@see Seller_Action_Runner}) into the engine's plan and report. The counts of a plan and a report are **goods** (units), not
  * orders: the marketplace answers for each, and every refusal is shown with its own sentence and the goods it concerns.
  *
- * The engine keeps row and bulk actions in one id space, so an action has the id `act-{id}` on a row and `bulk-{id}` among the
- * bulk actions.
+ * The engine keeps row and bulk actions in one id space, so an action has the id `act-{id}` on an order's row, `unit-{id}` on the
+ * row of one unit ({@see Site_Orders_Units}) and `bulk-{id}` among the bulk actions.
  *
  * @since 2.1.27
  */
@@ -33,6 +33,8 @@ final class Site_Orders_Seller {
 	private const ROW_PREFIX = 'act-';
 
 	private const BULK_PREFIX = 'bulk-';
+
+	private const UNIT_PREFIX = 'unit-';
 
 	/**
 	 * Longest `short_label` the engine takes.
@@ -110,6 +112,79 @@ final class Site_Orders_Seller {
 		);
 	}
 
+	/**
+	 * Tells whether an engine action id is one of an action on one unit.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $engine_id Action id of a request.
+	 * @return bool
+	 */
+	public function handles_unit( string $engine_id ): bool {
+		return 0 === strpos( $engine_id, self::UNIT_PREFIX ) && $this->handles( $engine_id );
+	}
+
+	/**
+	 * Declares the actions of a unit's row.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $capability Capability the actions ask for.
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function unit_definitions( string $capability ): array {
+		return array_map(
+			function ( Seller_Action $action ) use ( $capability ): array {
+				return $this->definition( $action, self::UNIT_PREFIX, $capability ) + [ 'icon' => $action->icon() ];
+			},
+			$this->runner->actions_for( Seller_Action::UNIT )
+		);
+	}
+
+	/**
+	 * The states of the actions on each unit the marketplace lists for an order, by the rule of the order screen.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param Account   $account  Account of the order.
+	 * @param \WC_Order $order    Order.
+	 * @param bool      $editable Whether the user may edit the order.
+	 * @return array<string,array<int,array{id:string,enabled:bool,reason:string}>> Keyed by `#` and the unit id.
+	 */
+	public function unit_states( Account $account, \WC_Order $order, bool $editable ): array {
+		$actions = $this->runner->actions_for( Seller_Action::UNIT );
+		$states  = [];
+
+		foreach ( [] === $actions ? [] : $this->runner->units( $order ) as $unit ) {
+			foreach ( $actions as $action ) {
+				if ( ! $unit->has_action( $action->id() ) ) {
+					continue;
+				}
+
+				$reason = $editable
+					? $this->runner->unit_reason( $account, $action, $order, $unit )
+					: __( 'Нет права изменять этот заказ.', 'woodev-plugin-framework' );
+
+				$states[ '#' . $unit->id() ][] = [
+					'id'      => self::UNIT_PREFIX . $action->id(),
+					'enabled' => '' === $reason,
+					'reason'  => mb_substr( $reason, 0, Records_Definition::MAX_STRING_LENGTH ),
+				];
+			}
+		}
+
+		return $states;
+	}
+
+	/**
+	 * The states of the actions on an order's row.
+	 *
+	 * @since 2.1.27
+	 *
+	 * @param Account   $account Account of the order.
+	 * @param \WC_Order $order   Order.
+	 * @return array<int,array{id:string,enabled:bool,reason:string}>
+	 */
 	public function row_states( Account $account, \WC_Order $order ): array {
 		$states = [];
 
@@ -129,13 +204,14 @@ final class Site_Orders_Seller {
 	 * @param string              $engine_id Action id.
 	 * @param \WC_Order[]         $orders    Orders of the account.
 	 * @param array<string,mixed> $payload   Validated fields.
+	 * @param string              $unit_id   Only this unit of the order (since 2.1.28); empty for every unit.
 	 * @return array<string,mixed>
 	 * @throws Action_State_Exception When the account or the licence does not allow the action.
 	 * @throws Action_Input_Exception When the input is refused.
 	 */
-	public function preview( Account $account, string $engine_id, array $orders, array $payload ): array {
+	public function preview( Account $account, string $engine_id, array $orders, array $payload, string $unit_id = '' ): array {
 		try {
-			$plan = $this->runner->preview( $account, $this->action_of( $engine_id ), $orders, $payload );
+			$plan = $this->runner->preview( $account, $this->action_of( $engine_id ), $orders, $payload, $unit_id );
 		} catch ( Seller_Action_Refused $e ) {
 			throw new Action_State_Exception( $e->getMessage() ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
@@ -158,13 +234,14 @@ final class Site_Orders_Seller {
 	 * @param string              $engine_id Action id.
 	 * @param \WC_Order[]         $orders    Orders of the account.
 	 * @param array<string,mixed> $payload   Validated fields.
+	 * @param string              $unit_id   Only this unit of the order (since 2.1.28); empty for every unit.
 	 * @return array<string,mixed> The engine's apply answer, without rows.
 	 * @throws Action_State_Exception When nothing was done: the account, the licence or the marketplace does not allow it.
 	 * @throws Action_Input_Exception When the input is refused.
 	 */
-	public function apply( Account $account, string $engine_id, array $orders, array $payload ): array {
+	public function apply( Account $account, string $engine_id, array $orders, array $payload, string $unit_id = '' ): array {
 		try {
-			$report = $this->runner->run( $account, $this->action_of( $engine_id ), $orders, $payload );
+			$report = $this->runner->run( $account, $this->action_of( $engine_id ), $orders, $payload, $unit_id );
 		} catch ( Seller_Action_Refused $e ) {
 			throw new Action_State_Exception( $e->getMessage() ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
@@ -202,6 +279,7 @@ final class Site_Orders_Seller {
 		foreach ( [
 			self::ROW_PREFIX  => Seller_Action::ORDER,
 			self::BULK_PREFIX => Seller_Action::BULK,
+			self::UNIT_PREFIX => Seller_Action::UNIT,
 		] as $prefix => $target ) {
 			if ( 0 !== strpos( $engine_id, $prefix ) ) {
 				continue;

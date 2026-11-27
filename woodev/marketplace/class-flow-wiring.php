@@ -25,6 +25,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
@@ -46,6 +47,7 @@ use Woodev\Framework\Marketplace\Flows\Offer_Id_Renames;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Sellable_Units;
+use Woodev\Framework\Marketplace\Flows\Shipment_Snapshot;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Flows\Unit_Product_Source;
 use Woodev\Framework\Marketplace\Flows\Unit_Products;
@@ -91,6 +93,7 @@ use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Runner;
 use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Reseed_Stock_Runner;
+use Woodev\Framework\Marketplace\Jobs\Shipment_Jobs;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Links\Product_Link;
@@ -98,6 +101,7 @@ use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Marketplace\Price\Price_Pusher;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
+use Woodev\Framework\Marketplace\Shipments\Shipment_Batches;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Mirror_Stock_Writer;
@@ -329,6 +333,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->import();
 			$this->offer_id_renames();
 			$this->postings();
+			$this->shipments();
 			$this->labels();
 			$this->intake();
 
@@ -734,6 +739,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			foreach ( $this->importer->import_event_types() as $type ) {
 				$handlers->register( (string) $type, $handler );
 			}
+		}
+
+		/**
+		 * The refresh and the recurring poll of the seller's shipments, for a marketplace that ships in shipments.
+		 *
+		 * @return void
+		 */
+		private function shipments(): void {
+			$adapter = $this->adapter;
+
+			if ( ! $adapter instanceof Shipment_Batches || ! $adapter->supports( Capability::CONFIRM_SHIPMENT ) ) {
+				return;
+			}
+
+			$store    = new Wpdb_Shipment_Store( $this->db, $this->table( 'shipments' ), $this->table( 'shipment_units' ), Uninstaller::option_prefix( $this->plugin_id ) );
+			$snapshot = Shipment_Snapshot::over( $adapter, $store, new Order_Registry( $this->db, $this->table( 'postings' ) ) );
+
+			( new Shipment_Jobs( $this->gate, $this->accounts, $snapshot, $store, $adapter->error_classifier(), $this->names, $adapter->id(), $this->log_error ) )->register();
 		}
 
 		/**

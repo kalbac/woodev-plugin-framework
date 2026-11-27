@@ -13597,3 +13597,519 @@ msgstr ""
 #: marketplace/flows/class-label-sheet.php:59
 msgid "Для принтера этикеток: в окне печати выберите поля «Нет» и масштаб 100 %."
 msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment, «поставка».
+#: marketplace/admin/pages/orders/class-site-orders-shipments.php:239
+#, php-format
+msgid "Новая %s"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/admin/pages/orders/class-site-orders-shipments.php:264
+#, php-format
+msgid "Добавить в %s"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/admin/pages/orders/class-site-orders-shipments.php:274
+#, php-format
+msgid "Товары выбранных заказов будут добавлены в %s на маркетплейсе."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the genitive, «поставки».
+#: marketplace/admin/pages/orders/class-site-orders-shipments.php:287
+#, php-format
+msgid "Название новой %s"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment, «поставка».
+#: marketplace/admin/pages/orders/class-site-orders-shipments.php:290
+#, php-format
+msgid "Заполните, если выбрана новая %s."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/admin/pages/orders/class-site-orders-shipments.php:302
+#: marketplace/flows/class-shipment-service.php:331
+#, php-format
+msgid "добавить товары в %s на маркетплейсе"
+msgstr ""
+
+#. translators: %d: most characters.
+#: marketplace/admin/pages/orders/class-site-orders-shipments.php:317
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:926
+#, php-format
+msgid "Введите название не длиннее %d символов."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipment-document-download.php:159
+msgid "У вас нет прав скачать этот файл."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipment-report-groups.php:49
+msgid "Другие причины: выберите меньше товаров, чтобы увидеть каждую."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-data-status.php:64
+msgid "Последнее обновление"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-data-status.php:68
+msgid "Следующее обновление"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-data-status.php:83
+msgid "Таблица показывает копию, которую сайт читает с маркетплейса по расписанию и после каждого действия."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:137
+msgid "Чего не хватает"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:142
+msgid "Пункт и дата отгрузки"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:147
+msgid "Создана"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the genitive, «поставки».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:168
+#, php-format
+msgid "Поиск по названию, номеру %s или ID заказа"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:180
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:278
+msgid "Открытые"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:184
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:283
+msgid "Переданные"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:190
+msgid "Требуют повторной отгрузки"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:210
+msgid "Выбрать пункт и дату отгрузки"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:211
+msgid "Пункт и дата"
+msgstr ""
+
+#. translators: %s: the marketplace's word for cargo places, «грузовые места».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:222
+#, php-format
+msgid "Добавить %s"
+msgstr ""
+
+#. translators: %s: «of cargo places», «грузовых мест».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:229
+#, php-format
+msgid "Сколько %s должно быть всего"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:232
+msgid "Будут добавлены только недостающие."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:255
+msgid "Передать в доставку"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:256
+msgid "Передать"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment, capitalised: «Поставка».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:260
+#, php-format
+msgid "%s будет передана маркетплейсу. После этого изменить её нельзя."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:268
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:321
+#, php-format
+msgid "Перенести в другую %s"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:269
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:326
+msgid "Перенести"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:284
+#, php-format
+msgid "Создать %s"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment, «поставка».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:296
+#, php-format
+msgid "На маркетплейсе появится новая пустая %s."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the genitive, «поставки».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:302
+#, php-format
+msgid "Название %s"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:316
+msgid "Список будет прочитан с маркетплейса заново."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:364
+#, php-format
+msgid "В какую %s"
+msgstr ""
+
+#. translators: %s: the marketplace's word for shipments in the genitive, «поставок».
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:412
+#, php-format
+msgid "Пока нет %s. Создайте первую или добавьте заказы на странице «Заказы»."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:413
+msgid "По этим фильтрам ничего нет."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:415
+msgid "Не удалось загрузить список. Повторите чуть позже."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:423
+msgid "Строк на странице"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:425
+msgid "Показать товары"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:426
+msgid "Скрыть товары"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:427
+msgid "Загружаем товары…"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:442
+msgid "Обновление поставлено в очередь."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:448
+msgid "Ответа нет: действие могло выполниться. Мы обновили таблицу — проверьте состояние."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:450
+msgid "Скачать файл"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-definition.php:451
+msgid "Адрес файла не прошёл проверку, поэтому ссылка не показана."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:427
+msgid "Не удалось выполнить действие. Проверьте состояние, прежде чем повторять."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:537
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:614
+msgid "Это действие здесь недоступно."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:561
+msgid "прочитать список с маркетплейса"
+msgstr ""
+
+#. translators: %s: the marketplace's word for cargo places, «грузовых мест».
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:609
+#, php-format
+msgid "Нужное количество %s уже есть: ничего не отправлено."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:756
+msgid "Заказ этого товара не найден. Обновите страницу."
+msgstr ""
+
+#. translators: %d: largest number accepted.
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:943
+#, php-format
+msgid "Введите целое число от 1 до %d."
+msgstr ""
+
+#. translators: %s: the marketplace's word for shipments, «поставки».
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:1015
+#, php-format
+msgid "изменить %s на маркетплейсе"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-provider.php:1029
+msgid "Список обновляется с маркетплейса."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the genitive, «поставки».
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:159
+#, php-format
+msgid "Нет открытой %s, куда перенести: создайте её."
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:216
+msgid "Открыта"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:217
+msgid "Передана"
+msgstr ""
+
+#. translators: %d: number of goods to ship again.
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:228
+#, php-format
+msgid "Повторная отгрузка: %d"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:241
+msgid "Ещё не прочитано"
+msgstr ""
+
+#. translators: %d: number of goods.
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:254
+#, php-format
+msgid "Не заполнено: %d"
+msgstr ""
+
+#. translators: %d: number of goods.
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:259
+#, php-format
+msgid "Проверьте: %d"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:262
+msgid "Всё заполнено"
+msgstr ""
+
+#. translators: %d: number of further missing items.
+#. translators: %d: number of further items.
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:287
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:429
+#: marketplace/flows/class-shipment-service.php:1194
+#, php-format
+msgid "и ещё %d"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:299
+msgid "Не выбраны"
+msgstr ""
+
+#. translators: %s: order number.
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:372
+#, php-format
+msgid "Заказ № %s"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:394
+msgid "Нужна повторная отгрузка"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:453
+msgid "заполнено"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:454
+msgid "проверяется"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:455
+msgid "не принято"
+msgstr ""
+
+#: marketplace/admin/pages/shipments/class-shipments-rows.php:456
+msgid "не заполнено"
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:195
+msgid "скачать документ с маркетплейса"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the prepositional case, «поставке».
+#: marketplace/flows/class-shipment-service.php:214
+#, php-format
+msgid "В %s нет товаров."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/flows/class-shipment-service.php:239
+#, php-format
+msgid "создать %s на маркетплейсе"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment, capitalised: «Поставка».
+#: marketplace/flows/class-shipment-service.php:242
+#, php-format
+msgid "%s с таким названием уже создана. Если нужна ещё одна, дайте ей другое название или повторите через час."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/flows/class-shipment-service.php:418
+#, php-format
+msgid "перенести товары в другую %s"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the prepositional case, «поставке».
+#: marketplace/flows/class-shipment-service.php:487
+#, php-format
+msgid "Товар уже в этой %s."
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:504
+msgid "Маркетплейс не даёт перенести этот товар."
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:544
+msgid "выбрать пункт и дату отгрузки"
+msgstr ""
+
+#. translators: 1: the marketplace's word for cargo places, capitalised: «Грузовые места», 2: how many there are.
+#: marketplace/flows/class-shipment-service.php:610
+#, php-format
+msgid "%1$s уже есть в количестве %2$d. Укажите, сколько их должно быть всего: убрать лишние отсюда нельзя."
+msgstr ""
+
+#. translators: 1: most places one request adds, 2: how many there are.
+#: marketplace/flows/class-shipment-service.php:617
+#, php-format
+msgid "За один раз можно добавить не больше %1$d, а уже есть %2$d. Укажите меньшее общее количество."
+msgstr ""
+
+#. translators: %s: the marketplace's word for cargo places, «грузовые места».
+#: marketplace/flows/class-shipment-service.php:640
+#, php-format
+msgid "добавить %s"
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/flows/class-shipment-service.php:693
+#, php-format
+msgid "передать %s маркетплейсу"
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:915
+msgid "Это действие уже отправлено. Дождитесь, пока список обновится."
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:919
+msgid "Это действие уже отправлялось, но ответа не было: оно могло выполниться. Проверьте результат в кабинете маркетплейса; повторить можно через час."
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:922
+msgid "Это действие уже отправляется. Дождитесь ответа."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment in the accusative, «поставку».
+#: marketplace/flows/class-shipment-service.php:985
+#, php-format
+msgid "Маркетплейс не ответил: действие могло выполниться. Проверьте %s, прежде чем повторять."
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:1031
+msgid "Маркетплейс ограничил число запросов. Повторите через несколько минут."
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:1106
+msgid "Маркетплейс не ответил по этому товару: проверьте его, прежде чем повторять."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment, capitalised: «Поставка».
+#: marketplace/flows/class-shipment-service.php:1142
+#, php-format
+msgid "%s не найдена. Обновите страницу."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment, «поставка».
+#: marketplace/flows/class-shipment-service.php:1154
+#, php-format
+msgid "Другое действие ещё выполняется: %s занята. Подождите немного и повторите."
+msgstr ""
+
+#: marketplace/flows/class-shipment-service.php:1161
+msgid "Подключение к маркетплейсу выключено в настройках плагина. Включите его и повторите."
+msgstr ""
+
+#. translators: %s: the marketplace's word for a shipment, capitalised: «Поставка».
+#: marketplace/flows/class-shipment-service.php:1173
+#, php-format
+msgid "%s уже передана, изменить её нельзя."
+msgstr ""
+
+#. translators: %s: list of goods with what each misses.
+#: marketplace/flows/class-shipment-service.php:1198
+#, php-format
+msgid "Не хватает обязательных данных: %s."
+msgstr ""
+
+#: marketplace/jobs/class-shipment-jobs.php:225
+msgid "Не всё удалось прочитать с маркетплейса: повторим позже."
+msgstr ""
+
+#: marketplace/jobs/class-shipment-jobs.php:231
+msgid "Не удалось получить данные с маркетплейса. Показано последнее полученное, повторим позже."
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:86
+msgctxt "shipment noun: title"
+msgid "Отгрузки"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:87
+msgctxt "shipment noun: one"
+msgid "отгрузка"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:88
+msgctxt "shipment noun: of one"
+msgid "отгрузки"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:89
+msgctxt "shipment noun: to one"
+msgid "отгрузке"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:90
+msgctxt "shipment noun: accusative"
+msgid "отгрузку"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:91
+msgctxt "shipment noun: many"
+msgid "отгрузки"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:92
+msgctxt "shipment noun: of many"
+msgid "отгрузок"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:93
+msgctxt "shipment noun: cargo place"
+msgid "грузовое место"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:94
+msgctxt "shipment noun: cargo places"
+msgid "грузовые места"
+msgstr ""
+
+#: marketplace/settings/class-shipment-noun.php:95
+msgctxt "shipment noun: of cargo places"
+msgid "грузовых мест"
+msgstr ""
