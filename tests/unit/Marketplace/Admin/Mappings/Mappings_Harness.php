@@ -22,6 +22,7 @@ use Woodev\Framework\Marketplace\Catalog\Rules\Category_Mapped_Rule;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Error_Classifier;
 use Woodev\Tests\Unit\Marketplace\Support\Sqlite_Wpdb;
 
 require_once __DIR__ . '/wp-term-stub.php';
@@ -249,7 +250,7 @@ final class Mappings_Harness {
 				return $base;
 			}
 		);
-		$this->controller     = new Mappings_Controller( 'fake-plugin', 'manage_woocommerce', $this->editor, $this->profile_editor, $this->check, $this->finder, $choices, null, $fields );
+		$this->controller     = new Mappings_Controller( 'fake-plugin', 'manage_woocommerce', $this->editor, $this->profile_editor, $this->check, $this->finder, $choices, null, $fields, null, new Fake_Error_Classifier() );
 	}
 
 	/**

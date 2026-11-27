@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 
 use Woodev\Framework\Admin\Records\Query_Validator;
 use Woodev\Framework\Admin\Records\Records_Error;
+use Woodev\Framework\Marketplace\Jobs\Error_Classifier;
 use Woodev\Framework\Marketplace\Price\Price_Source;
 
 defined( 'ABSPATH' ) || exit;
@@ -30,8 +31,9 @@ defined( 'ABSPATH' ) || exit;
  * Every route runs the same order: the capability (and, from WordPress core, the cookie nonce) before anything is
  * read; the body checked against a declared key list (unknown keys → 400); the editor's own validation (→ 422 with
  * the PHP sentences); only then a write. The marketplace is asked only when the merchant acts (opening a category,
- * searching, checking), never on the first paint, and an adapter failure is a 502 with the adapter's sentence rather
- * than a blank screen. A mapping is account-agnostic, so no route takes an account.
+ * searching, checking), never on the first paint, and an adapter failure answers the adapter's sentence rather than a
+ * blank screen: 422 when its {@see Error_Classifier} knows it as the marketplace's answer, 502 for anything else. A
+ * mapping is account-agnostic, so no route takes an account.
  *
  * @since 2.1.0
  */
@@ -117,6 +119,13 @@ final class Mappings_Controller {
 	private $articles;
 
 	/**
+	 * The adapter's error classifier, null when none was given.
+	 *
+	 * @var Error_Classifier|null
+	 */
+	private $classifier;
+
+	/**
 	 * Creates the controller.
 	 *
 	 * @since 2.1.0
@@ -130,7 +139,9 @@ final class Mappings_Controller {
 	 * @param Profile_Choices              $choices        What the profile form offers.
 	 * @param Price_Source|null            $price_source   The marketplace's price source.
 	 * @param array<string,string>         $product_fields Product fields a `field` source may name.
-	 * @param Mapping_Article_Preview|null $articles The article preview, null for an adapter without one.
+	 * @param Mapping_Article_Preview|null $articles       The article preview, null for an adapter without one.
+	 * @param Error_Classifier|null        $classifier     Tells the marketplace's answers from other failures (since 2.1.28);
+	 *                                                     null answers every failure 502.
 	 */
 	public function __construct(
 		string $owner,
@@ -142,7 +153,8 @@ final class Mappings_Controller {
 		Profile_Choices $choices,
 		?Price_Source $price_source,
 		array $product_fields,
-		?Mapping_Article_Preview $articles = null
+		?Mapping_Article_Preview $articles = null,
+		?Error_Classifier $classifier = null
 	) {
 		$this->owner          = $owner;
 		$this->capability     = $capability;
@@ -154,6 +166,7 @@ final class Mappings_Controller {
 		$this->price_source   = $price_source;
 		$this->product_fields = $product_fields;
 		$this->articles       = $articles;
+		$this->classifier     = $classifier;
 	}
 
 	/**
@@ -223,8 +236,8 @@ final class Mappings_Controller {
 
 	/**
 	 * `GET R`: everything the first paint needs. It reads the adapter's category list (a cache read) for the labels of
-	 * saved mappings and asks the marketplace for nothing else; a category list that cannot be read is a 502 with the
-	 * adapter's sentence.
+	 * saved mappings and asks the marketplace for nothing else; a category list that cannot be read answers the adapter's
+	 * sentence ({@see self::failure_status()}).
 	 *
 	 * @since 2.1.0
 	 *
@@ -641,7 +654,7 @@ final class Mappings_Controller {
 	/**
 	 * Maps a write result to a response.
 	 *
-	 * @param array{status:string,id:int,errors:string[],notices?:string[]} $result Result of an editor write.
+	 * @param array{status:string,id:int,errors:string[],notices?:string[],cause?:\Throwable} $result Result of an editor write.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	private function answer( array $result ) {
@@ -655,20 +668,30 @@ final class Mappings_Controller {
 		}
 
 		$statuses = [
-			'invalid'     => 422,
-			'missing'     => 404,
-			'in_use'      => 409,
-			'unavailable' => 502,
+			'invalid' => 422,
+			'missing' => 404,
+			'in_use'  => 409,
 		];
 
 		$message = $result['errors'][0] ?? Mapping_Messages::save_failed();
-		$status  = $statuses[ $result['status'] ] ?? 500;
+		$status  = isset( $result['cause'] ) ? $this->failure_status( $result['cause'] ) : ( $statuses[ $result['status'] ] ?? 500 );
 
 		return $this->error( 'woodev_mappings_' . $result['status'], $message, $status, $result['errors'] );
 	}
 
 	/**
-	 * Runs a read that may reach the adapter and turns its failure into a 502 with the adapter's sentence.
+	 * The status of a failed call to the adapter: 422 when the marketplace answered it — never a 5xx for that, whose body a
+	 * proxy or a bot filter in front of the shop may replace — and 502 for anything else the adapter threw.
+	 *
+	 * @param \Throwable $thrown What the adapter threw.
+	 * @return int
+	 */
+	private function failure_status( \Throwable $thrown ): int {
+		return null !== $this->classifier && null !== $this->classifier->classify( $thrown ) ? 422 : 502;
+	}
+
+	/**
+	 * Runs a read that may reach the adapter and turns its failure into an error answer with the adapter's sentence.
 	 *
 	 * @param callable $read Does the read and returns a response.
 	 * @return \WP_REST_Response|\WP_Error
@@ -679,7 +702,7 @@ final class Mappings_Controller {
 		} catch ( \Throwable $e ) {
 			$message = Mapping_Messages::marketplace_failure( $e->getMessage() );
 
-			return $this->error( 'woodev_mappings_unavailable', $message, 502 );
+			return $this->error( 'woodev_mappings_unavailable', $message, $this->failure_status( $e ) );
 		}
 	}
 

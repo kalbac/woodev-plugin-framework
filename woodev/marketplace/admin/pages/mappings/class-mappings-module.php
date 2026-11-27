@@ -127,7 +127,8 @@ final class Mappings_Module {
 			$parts['choices'],
 			$adapter->price_source(),
 			$parts['fields'],
-			null === $account_store ? null : self::article_preview( $adapter, $account_store )
+			null === $account_store ? null : self::article_preview( $adapter, $account_store ),
+			$adapter->error_classifier()
 		);
 	}
 
