@@ -28,6 +28,8 @@ the questions file, the estimate in [the card plan](card-plan.md) — **this fil
 | D9 | Menu | Товары, Заказы (FBS and DBS together, with a filter by scheme), Поставки, Сопоставление, Инструменты, Диагностика, Настройки; the shared marketplace «Аналитика» as it is. No pages for reviews, questions, advertising, finance or returns. |
 | D10 | Orders | One WooCommerce order per buyer cart per warehouse; the cancellation of one unit shows as its own line. |
 | D11 | Returns | Not in 1.0 — card [#1991](https://github.com/kalbac/woodev-plugin-framework/issues/1991). |
+| D12 | Article (vendorCode) change — tension T6 | **Owner, 27.11.2026.** In 1.0 the article changes **only in the Wildberries cabinet**; the plugin follows the change (§5.1 of the design). A rename from the shop is **not** in 1.0 and comes later — card [#2055](https://github.com/kalbac/woodev-plugin-framework/issues/2055) («Wildberries после 1.0: смена артикула из магазина»). |
+| D13 | DBS relay phone extension — tension T7 | **Owner, 27.11.2026.** In 1.0 the plugin does **not** pass the relay number's extension to CDEK or Yandex; the manager sees a warning when the number needs one (§7.3 of the design). Passing the extension to the carriers comes later, on the plugin side (owner of the delivery plugins: `bot:Plugins`). No card exists for that yet. |
 
 ## Standing rules that bind the design
 

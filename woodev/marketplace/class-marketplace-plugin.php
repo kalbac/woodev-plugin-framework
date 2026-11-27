@@ -22,6 +22,7 @@ use Woodev\Framework\Marketplace\Admin\Order\Order_Source_Filter;
 use Woodev\Framework\Marketplace\Admin\Page;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mappings_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Module;
+use Woodev\Framework\Marketplace\Admin\Pages\Shipments\Shipments_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Diagnostics\Diagnostics_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Tools\Tools_Module;
@@ -147,6 +148,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			Deletion_Module::register( $this, $accounts, $wpdb );
 			Diagnostics_Module::register( $this, $accounts );
 			Site_Orders_Module::register( $this, $accounts, $wpdb, $write_gate );
+			Shipments_Module::register( $this, $accounts, $wpdb, $write_gate );
 			Order_Source_Filter::register( $this->get_marketplace_adapter(), $accounts, $wpdb );
 		}
 
@@ -188,7 +190,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 
 		/**
 		 * The pages besides «Настройки», in menu order. The default is the framework's five («Диагностика» is built into the menu only
-		 * while «Логирование» is on, whoever lists it); a plugin overrides it to drop a page its
+		 * while «Логирование» is on, whoever lists it), plus the page of shipments after «Заказы» for a marketplace that ships in
+		 * shipments (since 2.1.28, {@see Shipments_Module::is_offered()}); a plugin overrides it to drop a page its
 		 * marketplace cannot support, to add one, or to attach `legacy_page` URLs to a default (call the parent, then change the
 		 * array). «Настройки» is not listed: the framework adds it, by itself, when the plugin has settings providers — first while
 		 * {@see self::is_configured()} is false, last once it is true.
@@ -201,7 +204,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 		 * @return array<int,array<string,mixed>>
 		 */
 		protected function get_marketplace_pages(): array {
-			return [
+			$pages = [
 				[
 					'slug'   => Page::LANDING_SLUG,
 					'title'  => __( 'Товары', 'woodev-plugin-framework' ),
@@ -235,6 +238,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 					'view'  => 'diagnostics',
 				],
 			];
+
+			if ( Shipments_Module::is_offered( $this->get_marketplace_adapter() ) ) {
+				array_splice( $pages, 2, 0, [ Shipments_Module::page( $this->get_marketplace_adapter() ) ] ); // After «Заказы».
+			}
+
+			return $pages;
 		}
 
 		/**

@@ -29,11 +29,17 @@ use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Refused;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Rows;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Seller;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Shipments;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Units;
 use Woodev\Framework\Marketplace\Admin\Shared\Order_Unit_Text;
+use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
 use Woodev\Framework\Marketplace\Flows\Article_Display;
 use Woodev\Framework\Marketplace\Flows\Order_Unit;
 use Woodev\Framework\Marketplace\Flows\Order_Units;
+use Woodev\Framework\Marketplace\Flows\Shipment_Service;
+use Woodev\Framework\Marketplace\Flows\Shipment_Snapshot;
+use Woodev\Framework\Marketplace\Settings\Shipment_Noun;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Shipment_Marketplace;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
@@ -159,6 +165,13 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	private $seller;
 
 	/**
+	 * «Add to a shipment»; null for a table without it.
+	 *
+	 * @var Site_Orders_Shipments|null
+	 */
+	private $shipments;
+
+	/**
 	 * Order id => its units, `[ id, label, status, action ids or null ]`.
 	 *
 	 * @var array<int,array<int,array<int,mixed>>>
@@ -181,6 +194,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->forbidden   = [];
 		$this->notes     = [];
 		$this->seller    = null;
+		$this->shipments = null;
 		$this->units     = [];
 		$this->records   = null;
 		$this->logged    = [];
@@ -386,6 +400,7 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			$gate,
 			null,
 			$seller,
+			$this->shipments,
 			null === $this->records ? null : new Site_Orders_Units( new Order_Unit_Text( null, new Article_Display() ), $seller )
 		);
 	}
@@ -489,6 +504,57 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			'posts table (CPT)' => [ false ],
 			'HPOS table'        => [ true ],
 		];
+	}
+
+	/**
+	 * Gives the table the shipment actions over a fake marketplace.
+	 *
+	 * @return Fake_Shipment_Marketplace
+	 */
+	private function with_shipments(): Fake_Shipment_Marketplace {
+		Functions\when( 'update_option' )->justReturn( true );
+		Functions\when( 'get_option' )->alias(
+			function ( string $name, $fallback = false ) {
+				return $this->options[ $name ] ?? $fallback;
+			}
+		);
+
+		$marketplace     = new Fake_Shipment_Marketplace();
+		$store           = new Wpdb_Shipment_Store( $this->db, Sqlite_Tables::table( 'shipments' ), Sqlite_Tables::table( 'shipment_units' ), 'woodev_fake-seller_', $this->clock() );
+		$service         = new Shipment_Service(
+			$marketplace,
+			$store,
+			Shipment_Snapshot::over( $marketplace, $store, $this->registry() ),
+			new Posting_Action_Gate( new Label_Availability( null ), null, $this->write_gate ),
+			$this->license(),
+			$this->classifier,
+			$this->pause(),
+			Shipment_Noun::dispatch(),
+			static function (): void {},
+			new Wpdb_Seller_Action_Store( $this->db, Sqlite_Tables::table( 'seller_actions' ), $this->clock() )
+		);
+		$this->shipments = new Site_Orders_Shipments( $service, $store, Shipment_Noun::dispatch() );
+
+		return $marketplace;
+	}
+
+	public function test_add_to_a_shipment_runs_through_the_table(): void {
+		$this->stock( false );
+		$marketplace = $this->with_shipments();
+
+		$definition = $this->definition();
+		$row        = $this->by_id( $this->list_body() )[ $this->row_id( 101 ) ];
+
+		$this->assertNotNull( $definition->get_action( 'bulk-ship-add' ) );
+		$this->assertTrue( $row['selectable'] );
+		$this->assertContains( 'ship-add', array_column( $row['actions'], 'id' ) );
+
+		$result = $this->provider()->apply( $this->context(), 'ship-add', [ $this->row_id( 101 ) ], [ 'target' => 'new', 'name' => 'Первая' ] );
+		$body   = Action_Response::apply( $definition, $definition->get_action( 'ship-add' ), $result );
+
+		$this->assertIsArray( $body, 'The engine accepts the answer.' );
+		$this->assertSame( 1, $body['accepted'] );
+		$this->assertSame( [ 'create_shipment', 'read_shipment', 'add_units', 'read_shipment' ], $marketplace->remote );
 	}
 
 	public function test_the_definition_is_accepted_by_the_engine_and_declares_what_the_adapter_can_do(): void {
@@ -1888,6 +1954,32 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 
 		$this->assertSame( $code, $this->seller->calls[0]->value( 'sgtin' ) );
 		$this->assertFalse( $this->definition()->get_action( 'bulk-supply' )['fields'][0]['scanned_code'], 'Only a code field is marked.' );
+	}
+
+	public function test_a_grouped_table_with_shipments_offers_them_on_the_order_row_only(): void {
+		$this->stock_with_units();
+		$marketplace = $this->with_shipments();
+		$definition  = $this->definition();
+
+		$this->assertSame( [ 'open', 'label', 'act-confirm', 'act-receive', 'ship-add', 'cancel', 'unit-receive', 'unit-marking' ], $definition->get_row_action_ids() );
+		$this->assertSame( [ 'bulk-confirm', 'bulk-supply', 'bulk-ship-add' ], array_column( $definition->to_array()['bulk_actions'], 'id' ) );
+		$this->assertSame( 50, $definition->get_children()['default_per_page'] );
+
+		$order = $this->by_id( $this->list_body() )[ $this->row_id( 101 ) ];
+
+		$this->assertTrue( $order['has_children'] );
+		$this->assertTrue( $order['selectable'] );
+		$this->assertContains( 'ship-add', array_column( $order['actions'], 'id' ) );
+		$this->assertNotContains( 'ship-add', array_column( $this->children_of( 101 )[0]['actions'], 'id' ) );
+
+		try {
+			$this->provider()->apply( $this->context(), 'ship-add', [ $this->unit_row_id( 101, 'u-1' ) ], [ 'target' => 'new', 'name' => 'Первая' ] );
+			$this->fail( 'A shipment takes orders, not the row of one unit.' );
+		} catch ( Action_State_Exception $e ) {
+			$this->assertNotSame( '', $e->getMessage() );
+		}
+
+		$this->assertSame( [], $marketplace->remote );
 	}
 
 	public function test_an_action_of_one_kind_of_row_is_refused_on_the_other(): void {

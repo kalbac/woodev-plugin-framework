@@ -16,6 +16,7 @@ use Woodev\Framework\Marketplace\Data\Uninstaller;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
@@ -47,7 +48,7 @@ defined( 'ABSPATH' ) || exit;
  * The steps run in this order; each deletes what is left of the account and the account row goes after the last:
  *
  * `queue` (its queued jobs) · `links` (their remote ids first) · `sync_state` (after the links: a stock or price change writes a row for every link left) · `tasks` (their items first) · `postings` ·
- * `documents` · `throttle` · `api_errors` · `bulk_runs` · `cards` · `seller_actions` · `options` (progress and report options, snapshot transients, cached catalogue rows) ·
+ * `documents` · `throttle` · `api_errors` · `bulk_runs` · `cards` · `seller_actions` · `shipments` (with their units) · `options` (progress and report options, snapshot transients, cached catalogue rows) ·
  * `product_meta` (pinned articles) · `events` · and the adapter's own, `plugin`.
  *
  * @since 2.1.5
@@ -127,7 +128,7 @@ final class Deletion_Module {
 		$steps = self::steps(
 			$queue,
 			$stores,
-			self::forget_options( $plugin->get_id(), new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ), $stores['cards'] ),
+			self::forget_options( $plugin->get_id(), new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ), $stores['cards'], $stores['shipments'] ),
 			new Pinned_Offer_Eraser( $db, $adapter->id() ),
 			new Wpdb_Event_Ledger( $db, $schema->table_name( 'events', $db->prefix ) )
 		);
@@ -194,6 +195,7 @@ final class Deletion_Module {
 			'bulk_runs'  => new Bulk_Run_Store( $db, $table( 'bulk_runs' ) ),
 			'cards'      => new Wpdb_Card_Store( $db, $table( 'cards' ), $table( 'links' ), $options ),
 			'seller_actions' => new Wpdb_Seller_Action_Store( $db, $table( 'seller_actions' ) ),
+			'shipments'      => new Wpdb_Shipment_Store( $db, $table( 'shipments' ), $table( 'shipment_units' ), $options ),
 		];
 	}
 
@@ -230,24 +232,26 @@ final class Deletion_Module {
 	/**
 	 * Deletes the options, transients and cached rows an account owns. Runs once: it reports nothing removed.
 	 *
-	 * @param string             $plugin_id Plugin id, whose option family the options are in.
-	 * @param Wpdb_Catalog_Cache $cache     Catalogue cache.
-	 * @param Wpdb_Card_Store    $cards     The cards list, whose record of refreshes goes; its rows went with the stores.
+	 * @param string              $plugin_id Plugin id, whose option family the options are in.
+	 * @param Wpdb_Catalog_Cache  $cache     Catalogue cache.
+	 * @param Wpdb_Card_Store     $cards     The cards list, whose record of refreshes goes; its rows went with the stores.
+	 * @param Wpdb_Shipment_Store $shipments The shipments' copy, whose record of refreshes goes the same way.
 	 * @return callable `function ( int $account_id ): int`
 	 */
-	private static function forget_options( string $plugin_id, Wpdb_Catalog_Cache $cache, Wpdb_Card_Store $cards ): callable {
+	private static function forget_options( string $plugin_id, Wpdb_Catalog_Cache $cache, Wpdb_Card_Store $cards, Wpdb_Shipment_Store $shipments ): callable {
 		$options  = Uninstaller::option_prefix( $plugin_id );
 		$progress = new Link_Progress_Store( $options );
 		$reports  = new Link_Report_Store( $options );
 		$cutoffs  = new Posting_History_Cutoffs( $plugin_id );
 		$polls    = new Posting_Poll_Times( $plugin_id );
 
-		return static function ( int $account_id ) use ( $progress, $reports, $cutoffs, $polls, $cards, $cache ): int {
+		return static function ( int $account_id ) use ( $progress, $reports, $cutoffs, $polls, $cards, $cache, $shipments ): int {
 			$progress->forget_account( $account_id );
 			$reports->forget_account( $account_id );
 			$cutoffs->forget( $account_id );
 			$polls->forget( $account_id );
 			$cards->forget( $account_id );
+			$shipments->forget( $account_id );
 			$cache->delete_keys( [ Warehouse_Options::key_for( $account_id ) ] );
 
 			return 0;

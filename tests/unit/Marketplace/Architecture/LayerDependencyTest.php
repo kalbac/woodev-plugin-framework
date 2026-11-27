@@ -21,7 +21,7 @@ final class LayerDependencyTest extends TestCase {
 	 *
 	 * @var string[]
 	 */
-	private const FOLDERS = array( 'account', 'governor', 'ledger', 'links', 'stock', 'price', 'orders', 'catalog', 'capabilities', 'diagnostics' );
+	private const FOLDERS = array( 'account', 'governor', 'ledger', 'links', 'stock', 'price', 'orders', 'catalog', 'capabilities', 'diagnostics', 'shipments' );
 
 	/**
 	 * Returns the repository root.
