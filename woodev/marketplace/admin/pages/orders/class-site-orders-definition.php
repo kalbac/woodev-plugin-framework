@@ -53,13 +53,16 @@ final class Site_Orders_Definition {
 	 * @param Posting_Noun|null                           $noun           The marketplace's word for a posting; null for «отправление».
 	 * @param Site_Orders_Seller|null                     $seller         The adapter's seller actions; null for an adapter that declares none.
 	 * @param string|null                                 $cancel_warning Null for a cancellation that asks for a reason; otherwise what the merchant should know before confirming one that asks for none (empty for nothing).
+	 * @param bool                                        $units          Whether an order opens into its units (since 2.1.28).
 	 * @return array<string,mixed>
 	 */
-	public static function build( array $accounts, array $statuses, array $offered, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?string $cancel_warning = null ): array {
-		$noun = $noun ?? Posting_Noun::shipment();
-		$bulk = null === $seller ? [] : $seller->bulk_definitions( self::EDIT );
+	public static function build( array $accounts, array $statuses, array $offered, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?string $cancel_warning = null, bool $units = false ): array {
+		$noun         = $noun ?? Posting_Noun::shipment();
+		$bulk         = null === $seller ? [] : $seller->bulk_definitions( self::EDIT );
+		$row_actions  = self::with_seller_actions( self::row_actions( $offered, $noun, $cancel_warning ), $seller );
+		$unit_actions = $units && null !== $seller ? $seller->unit_definitions( self::EDIT ) : [];
 
-		return [
+		$definition = [
 			'context'     => [
 				'label'   => __( 'Аккаунт', 'woodev-plugin-framework' ),
 				'options' => $accounts,
@@ -80,7 +83,7 @@ final class Site_Orders_Definition {
 				'max_per_page'     => 100,
 				'max_selection'    => 100,
 			],
-			'row_actions' => self::with_seller_actions( self::row_actions( $offered, $noun, $cancel_warning ), $seller ),
+			'row_actions'  => array_merge( $row_actions, $unit_actions ),
 			'bulk_actions' => $bulk,
 			'activity'    => [
 				'refresh_ms'     => 5000,
@@ -88,8 +91,32 @@ final class Site_Orders_Definition {
 				'stale_after_ms' => 30000,
 				'id_limit'       => 100,
 			],
-			'messages'    => array_merge( self::messages(), [] === $bulk ? [] : Standard_Messages::bulk() ),
+			'messages'    => array_merge( self::messages(), [] === $bulk ? [] : Standard_Messages::bulk(), $units ? self::unit_messages() : [] ),
 			'analytics'   => null,
+		];
+
+		if ( $units ) {
+			$definition['children'] = [
+				'default_per_page' => 50,
+				'max_per_page'     => 100,
+			];
+		}
+
+		return $definition;
+	}
+
+	/**
+	 * The sentences of the rows an order opens into.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function unit_messages(): array {
+		return [
+			'expand_column'    => __( 'Товары', 'woodev-plugin-framework' ),
+			'expand'           => __( 'Показать товары заказа', 'woodev-plugin-framework' ),
+			'collapse'         => __( 'Скрыть товары заказа', 'woodev-plugin-framework' ),
+			'children_loading' => __( 'Загружаем товары…', 'woodev-plugin-framework' ),
+			'children_more'    => __( 'Показать ещё товары', 'woodev-plugin-framework' ),
 		];
 	}
 

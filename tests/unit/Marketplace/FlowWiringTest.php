@@ -19,11 +19,13 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flow_Wiring;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Offer_Id_Renamer;
+use Woodev\Framework\Marketplace\Flows\Wc_Order_Store;
 use Woodev\Framework\Marketplace\Jobs\Card_Event_Handler;
 use Woodev\Framework\Marketplace\Jobs\Event_Handler_Registry;
 use Woodev\Framework\Marketplace\Jobs\Noop_Event_Handler;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
+use Woodev\Framework\Marketplace\Sync\Stock_Intents;
 use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
@@ -240,6 +242,21 @@ final class FlowWiringTest extends TestCase {
 
 		$this->assertCount( 1, $queued, 'the account price rule change queues one recompute job' );
 		$this->assertSame( [ 7, 0 ], $queued[0]['args'] ?? null, 'it works the changed account from the first link' );
+	}
+
+	public function test_the_stock_sender_listens_for_the_cancelled_units_of_its_marketplace(): void {
+		$listener = null;
+
+		Actions\expectAdded( Wc_Order_Store::units_cancelled_hook( 'fake-seller' ) )->once()->whenHappen(
+			static function ( $callback ) use ( &$listener ): void {
+				$listener = $callback;
+			}
+		);
+
+		$this->wiring( self::PLUGIN )->register();
+
+		$this->assertInstanceOf( Stock_Intents::class, $listener[0] );
+		$this->assertSame( 'on_units_cancelled', $listener[1] );
 	}
 
 	public function test_every_flow_is_hooked_exactly_once(): void {

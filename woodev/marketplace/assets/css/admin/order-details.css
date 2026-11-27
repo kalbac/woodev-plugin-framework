@@ -111,6 +111,27 @@
 	border-top: 1px solid #dcdcde;
 }
 
+/* The list of the order's goods: a row per unit, a cancelled one greyed. */
+.woodev-mp-units {
+	margin-top: 16px;
+}
+
+.woodev-mp-details .woodev-mp-units th,
+.woodev-mp-details .woodev-mp-units td {
+	width: auto;
+	padding: 8px 10px;
+	vertical-align: middle;
+}
+
+.woodev-mp-details .woodev-mp-units__cancelled td {
+	color: #646970;
+}
+
+.woodev-mp-units .description {
+	display: block;
+	margin-top: 4px;
+}
+
 /* The label button and the line beside it that says what it is doing. */
 .woodev-mp-label-wrap {
 	display: inline-flex;

@@ -237,6 +237,55 @@ final class Stock_Intents {
 	}
 
 	/**
+	 * Makes the stock of units that turned cancelled due again, one pair per article, although the number may equal the one last
+	 * accepted: the marketplace need not give a cancelled unit back, and a unit cancelled before it was ingested, or ordered and
+	 * cancelled between two sends, changes nothing in the shop's number.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param int      $account_id Account id.
+	 * @param string[] $offer_ids  Seller article keys of the cancelled units.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function on_units_cancelled( int $account_id, array $offer_ids ): void {
+		foreach ( $offer_ids as $offer_id ) {
+			$link = $this->links->find_by_offer_id( $account_id, (string) $offer_id );
+
+			if ( null !== $link ) {
+				$this->resend_stock( $link );
+			}
+		}
+	}
+
+	/**
+	 * Records the current stock of one link and makes it go out even when it equals the accepted value. Does nothing for a link
+	 * whose stock the shop does not send.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param Link_Record $link Link.
+	 * @return void
+	 * @throws \RuntimeException When the database refuses a write.
+	 */
+	public function resend_stock( Link_Record $link ): void {
+		$account = $this->account( $link->account_id() );
+
+		if ( null === $account || null === $link->link_id() || ! $link->sync_stock() || ! Stock_Mode::is_site( $account ) ) {
+			return;
+		}
+
+		$this->record_stock( $link );
+
+		$warehouse = Stock_Warehouse::chosen( $account, $link );
+
+		// Without managed stock there is no current number: an old one must not go out again.
+		if ( null !== $warehouse && null !== self::managed_quantity( wc_get_product( $link->wc_product_id() ) ) ) {
+			$this->intents->request_resend( $account->id(), (int) $link->link_id(), $warehouse );
+		}
+	}
+
+	/**
 	 * Wants zero on every warehouse that may still hold the link's units and is no longer the chosen one: the marketplace would go
 	 * on selling from it. For a warehouse the marketplace has switched off the zero is kept until it is listed again. A zero that
 	 * was refused for good is tried again, as a new stock value would be.

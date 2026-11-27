@@ -22,11 +22,6 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Seller_Action_Input {
 	/**
-	 * Control characters a code must not hold: all of them but the group separator U+001D.
-	 */
-	private const CODE_FORBIDDEN = '/[\x00-\x1C\x1E\x1F\x7F]/';
-
-	/**
 	 * Reads the values of an action's fields.
 	 *
 	 * @since 2.1.27
@@ -90,7 +85,7 @@ final class Seller_Action_Input {
 			return __( 'Значение слишком длинное.', 'woodev-plugin-framework' );
 		}
 
-		if ( Seller_Action_Field::CODE === $field->type() && 1 === preg_match( self::CODE_FORBIDDEN, $value ) ) {
+		if ( Seller_Action_Field::CODE === $field->type() && 1 === preg_match( Action_Input::SCANNED_CODE_FORBIDDEN, $value ) ) {
 			return __( 'Значение содержит недопустимые символы.', 'woodev-plugin-framework' );
 		}
 

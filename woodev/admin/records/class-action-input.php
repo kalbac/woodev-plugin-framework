@@ -34,6 +34,13 @@ final class Action_Input {
 	const MAX_TEXTAREA_LENGTH = 2000;
 
 	/**
+	 * Control characters a scanned code must not hold: all of them but the group separator U+001D, which marking codes carry.
+	 *
+	 * @since 2.1.28
+	 */
+	const SCANNED_CODE_FORBIDDEN = '/[\x00-\x1C\x1E\x1F\x7F]/';
+
+	/**
 	 * Validates a payload.
 	 *
 	 * @since 2.1.0
@@ -139,6 +146,10 @@ final class Action_Input {
 		}
 
 		$forbidden = $multiline ? '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/' : '/[\x00-\x1F\x7F]/';
+		if ( true === ( $field['scanned_code'] ?? false ) ) {
+			$forbidden = self::SCANNED_CODE_FORBIDDEN;
+		}
+
 		if ( 1 === preg_match( $forbidden, $text ) ) {
 			throw new \InvalidArgumentException( __( 'Значение содержит недопустимые символы.', 'woodev-plugin-framework' ) );
 		}
