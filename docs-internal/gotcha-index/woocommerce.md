@@ -5,6 +5,7 @@
 
 ## [woocommerce/*] — WooCommerce-specific
 
+- [woocommerce/privacy] **WC 8.5 and 9.3 report `wpdb::prepare` «Unsupported value type (object)» on any order erasure: their own analytics listener expects an id — unhook it in the test.** → [wc-old-releases-hand-an-order-object-to-the-erasure-analytics-listener](../gotchas/wc-old-releases-hand-an-order-object-to-the-erasure-analytics-listener.md) (#2007)
 - [woocommerce/hpos] **`Order_Query` `status => ['any']` is read literally by HPOS on WC 8.5/9.3 and returns nothing — omit the argument when the caller means «any».** → [order-query-status-any-is-read-literally-by-hpos-on-wc-8-5-and-9-3](../gotchas/order-query-status-any-is-read-literally-by-hpos-on-wc-8-5-and-9-3.md) (s227)
 - [woocommerce/shipping] **WooCommerce resets the chosen method to the default (often Free shipping) when ONE rate id appears or disappears; only its local pickup is exempt — filter `woocommerce_shipping_chosen_method` (#1268).** → [woocommerce-resets-the-chosen-shipping-method-on-any-rate-set-change](../gotchas/woocommerce-resets-the-chosen-shipping-method-on-any-rate-set-change.md) (s176)
 - [woocommerce/shipping-api-broken-contract] **Shipping_API interface references types that don't exist in the framework.** RESOLVED 2026-06-02 (interface narrowed). → [shipping-api-broken-contract](../gotchas/shipping-api-broken-contract.md)
