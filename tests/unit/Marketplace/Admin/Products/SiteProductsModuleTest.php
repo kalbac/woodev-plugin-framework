@@ -14,6 +14,8 @@ use Woodev\Framework\Admin\Records\Records_Registry;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Remote_Cards_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Module;
+use Woodev\Framework\Marketplace\Sync\Archiveless_Stock_Rules;
+use Woodev\Framework\Marketplace\Sync\Stock_Rules;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Provider;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -229,6 +231,7 @@ final class SiteProductsModuleTest extends TestCase {
 		);
 		$adapter->shouldReceive( 'price_reader' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Sync\Price_Reader::class ) );
 		$adapter->shouldReceive( 'price_pusher' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Price\Price_Pusher::class ) );
+		$adapter->shouldReceive( 'stock_rules' )->andReturn( Mockery::mock( Stock_Rules::class ) );
 
 		$this->assertSame( [], Site_Products_Module::withheld_actions( $adapter ) );
 	}
@@ -239,6 +242,7 @@ final class SiteProductsModuleTest extends TestCase {
 		$adapter->shouldReceive( 'supports' )->andReturn( false );
 		$adapter->shouldReceive( 'price_reader' )->andReturn( null );
 		$adapter->shouldReceive( 'price_pusher' )->andReturn( null );
+		$adapter->shouldReceive( 'stock_rules' )->andReturn( Mockery::mock( Stock_Rules::class ) );
 
 		$this->assertSame(
 			[ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE, Site_Products_Bulk::PULL_PRICES, Site_Products_Bulk::RESET_PRICE ],
@@ -250,7 +254,19 @@ final class SiteProductsModuleTest extends TestCase {
 		$capable->shouldReceive( 'supports' )->andReturn( true );
 		$capable->shouldReceive( 'price_reader' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Sync\Price_Reader::class ) );
 		$capable->shouldReceive( 'price_pusher' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Price\Price_Pusher::class ) );
+		$capable->shouldReceive( 'stock_rules' )->andReturn( Mockery::mock( Stock_Rules::class ) );
 
 		$this->assertSame( [], Site_Products_Module::withheld_actions( $capable ) );
+	}
+
+	public function test_a_marketplace_without_an_archive_is_offered_none(): void {
+		$adapter = Mockery::mock( Marketplace_Adapter::class );
+
+		$adapter->shouldReceive( 'supports' )->andReturn( true );
+		$adapter->shouldReceive( 'price_reader' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Sync\Price_Reader::class ) );
+		$adapter->shouldReceive( 'price_pusher' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Price\Price_Pusher::class ) );
+		$adapter->shouldReceive( 'stock_rules' )->andReturn( Mockery::mock( Archiveless_Stock_Rules::class ) );
+
+		$this->assertSame( [ Site_Products_Bulk::ARCHIVE ], Site_Products_Module::withheld_actions( $adapter ) );
 	}
 }

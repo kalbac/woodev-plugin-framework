@@ -560,7 +560,7 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   `{plugin id}-{slug}`. «Общие» exists only when the adapter has a price rule or exchange switch to default; «Уведомления» only with
   `PUSH_NOTIFICATIONS`. The page heading is `Page::get_heading()` («Настройки {plugin name}») over a menu entry that stays «Настройки»; it is also the last crumb of
   the manifest, which is what the wc-admin header shows (`Menu::build_manifest()`).
-- **«Подключение»** is ONE white wrapper card (the settings card; since #1885) holding a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.tsx`). The wrapper's header carries the tab's description on the left and «+ Добавить аккаунт» on the right; with no account the wrapper says «Пока нет ни одного аккаунта. Добавьте первый…». A card shows an **on/off switch** (it saves at once through the page's `onToggleAccount`: one `saveTab` of just that field, then the schema is read again; staged edits of open forms are untouched), the title, «Client-Id · description» (`identifierLine()`), the stored status line, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение») and «Удалить». «Удалить» is offered for EVERY account when the screen has a deletion route (`canDelete()` = `delete_url`); an enabled account is switched off by the dialog itself (see «Account deletion as built» below), so the old «сначала выключите» hint is gone — `delete_hint` now carries only «Удаление аккаунта недоступно.» for a screen without the route. An open form says the stored connection message once (under «Проверить подключение»; the header drops it), opening «Добавить аккаунт» collapses an open edit form (and the other way round), and Esc closes the open form. This is
+- **«Подключение»** is ONE white wrapper card (the settings card; since #1885) holding a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.tsx`). The wrapper's header carries the tab's description on the left and «+ Добавить аккаунт» on the right; with no account the wrapper says «Пока нет ни одного аккаунта. Добавьте первый…». Since #2058 a save checks an unchecked account and a limited connection is a warning ([the section on the optional parts](#what-the-screens-learn-from-optional-parts-2058-2025)). A card shows an **on/off switch** (it saves at once through the page's `onToggleAccount`: one `saveTab` of just that field, then the schema is read again; staged edits of open forms are untouched), the title, «Client-Id · description» (`identifierLine()`), the stored status line, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение») and «Удалить». «Удалить» is offered for EVERY account when the screen has a deletion route (`canDelete()` = `delete_url`); an enabled account is switched off by the dialog itself (see «Account deletion as built» below), so the old «сначала выключите» hint is gone — `delete_hint` now carries only «Удаление аккаунта недоступно.» for a screen without the route. An open form says the stored connection message once (under «Проверить подключение»; the header drops it), opening «Добавить аккаунт» collapses an open edit form (and the other way round), and Esc closes the open form. This is
   the one part the PHP-driven renderer cannot express: one section holds one connection block, and a card needs buttons and an expand.
 - **The account's «Описание»** (since #1885; the v1 store field) is an optional text field after «Название», registered by `Accounts_Sections` as `account_{id|new}_description`. It lives in the account's `settings` JSON under `description` — additive, no column and no migration: an account saved before it existed has none, `clean_description()` stores plain text (tags stripped, spaces collapsed, at most 200 characters) and an empty value removes the key. The card schema carries it as `description`.
 - **Tab descriptions** (since #1885). `Settings_Tab` takes an optional `$description` (escaped HTML) → the provider arg `description` → `Settings_Provider::get_description()` → the tab schema's `description` key, present only for a tab that has one. The settings app draws it through `tab-description.tsx` (inside the wrapper's header on «Подключение», above the cards on «Параметры аккаунта», above the content on a plain tab). The texts are `Accounts_Sections::connection_description()` / `parameters_description()`. The cabinet link in the connection text comes from the OPTIONAL `Settings\Credentials_Cabinet_Link::credentials_url()` that a plugin's `Settings_Descriptor` may implement (Ozon: `https://seller.ozon.ru/app/settings/api-keys`); without it the sentence names the cabinet without a link.
@@ -1690,6 +1690,36 @@ come from `Wpdb_Link_Store::rows_of_products()`, sent articles from one `sent_li
 mapping's name are each read once, and a typed article is read from the primed post meta (`Pinned_Offer_Id::of_primed()`).
 The adapter is asked once per unit for accounts that resolve alike. What its own methods read is not bounded here: an adapter
 whose article depends on a parent's other variations should read each parent once per request, priming their posts in one go.
+
+## What the screens learn from optional parts (#2058, #2025)
+
+Planned `2.1.28`. Ozon Seller 2.0.0 declares neither interface and keeps its screens; everything is optional.
+
+| Seam | Who implements it | Without it |
+|---|---|---|
+| `Sync\Archiveless_Stock_Rules extends Stock_Rules` (marker) | the stock rules of a marketplace with no archive | «Архивировать» is offered: the table's bulk action, the product tab, a variation's button |
+| `Account\Credential_Limits extends Credential_Health` | a credential check whose `ok` may mean part of the rights | an `ok` connection line is green |
+
+- **The archive is opt-out, not a capability.** A released adapter declares nothing and has an archive, so a positive
+  `Capability` would take the button from it. `Site_Products_Module::withheld_actions()` stays the one list: the table, the
+  variation panel and the product tab (`Embedded_Screens::withheld_ops()`) read it. Without the archive the bulk group
+  «Связи и архив» is «Связи».
+- **A limited connection** is `Woodev_Connection_Result::warning()` (`success` true plus `warning` in the REST payload), live
+  (`Accounts_Sections::test_connection()`) and stored (`Account_Status::connected()`).
+- **Check on save.** After «Сохранить» (and after an account is switched on) the page runs the ordinary verify route, with no
+  values, for each enabled account the save left without a stored status (`accountsToCheck()` in
+  `src/settings-page/app.js`): the saved one and a newly added one. One request per account per press, none for a stored
+  result. The card says «Проверяем подключение…» meanwhile.
+- **The card follows the check.** A finished «Проверить подключение» of an account re-reads the schema; the open block takes a
+  new stored status only when it holds no typed edits.
+- **One notice.** A marketplace page is a wc-admin page, which already draws the notices store's snackbars: the embedded
+  settings body draws no `SnackbarList` of its own.
+- **Tables.** «Артикул» takes a second line before it is cut; on «Товары сайта» it is 24ch in a card of 1100px and more
+  (a container query on the table's own card). A variable product with no SKU shows its variations' article and how many
+  others there are (`Article_Display::card_article_of_link()`). A parent row of either products table writes a state as
+  «Создан · 3» (`State_Groups::counted()`).
+- **Price and stock of «Карточки на маркетплейсе»** are the `price` and `stock` keys of `Card_List_Source` rows — the adapter's
+  to fill; no further framework method exists.
 
 ## Changing the article after the export (framework 2.1.13, #1860)
 

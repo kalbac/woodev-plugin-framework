@@ -322,7 +322,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 
 		return sprintf(
 			/* translators: 1: marketplace name, 2: comma-separated credential field names, 3: «личном кабинете …» (a link when the address is known). */
-			esc_html__( 'Здесь подключаются аккаунты %1$s. Для каждого нужны: %2$s — они выдаются в %3$s. Добавьте аккаунт, нажмите «Проверить подключение», и плагин начнёт с ним работать. Несколько аккаунтов работают независимо друг от друга.', 'woodev-plugin-framework' ),
+			esc_html__( 'Здесь подключаются аккаунты %1$s. Для каждого нужны: %2$s — они выдаются в %3$s. Добавьте аккаунт и сохраните: плагин проверит подключение и начнёт с ним работать. Несколько аккаунтов работают независимо друг от друга.', 'woodev-plugin-framework' ),
 			esc_html( $descriptor->marketplace_name() ),
 			esc_html( implode( ', ', $labels ) ),
 			$cabinet
@@ -590,7 +590,7 @@ final class Accounts_Sections implements Connection_Section_Provider, Table_Back
 		);
 
 		return $result->is_ok()
-			? \Woodev_Connection_Result::success( $safe_message )
+			? $this->status->connected( $probe, $safe_message )
 			: \Woodev_Connection_Result::failure( '' !== $safe_message ? $safe_message : __( 'Проверка подключения не прошла.', 'woodev-plugin-framework' ) );
 	}
 

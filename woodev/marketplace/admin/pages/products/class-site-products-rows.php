@@ -73,11 +73,19 @@ final class Site_Products_Rows {
 	private $article_notice;
 
 	/**
+	 * The article of the card a link belongs to, for a variable product's row: `function ( string $offer_id ): string`.
+	 *
+	 * @var callable|null
+	 */
+	private $card_article;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.4
 	 * @since 2.1.13 `$image_url` adds the photo column.
 	 * @since 2.1.23 `$shown_article` and `$article_notice`.
+	 * @since 2.1.28 `$card_article`.
 	 *
 	 * @param string               $marketplace Merchant-facing name of the marketplace.
 	 * @param array<string,string> $warehouses  Warehouse id => name of the account.
@@ -85,14 +93,16 @@ final class Site_Products_Rows {
 	 * @param callable|null        $image_url   `function ( int $product_id ): string`, '' when there is none; null leaves the photo cell empty.
 	 * @param callable|null        $shown_article `function ( string $offer_id ): string`, how a link's article is shown; as it is when null.
 	 * @param callable|null        $article_notice `function ( int $product_id ): string`, a sentence for the product's state badge about its article.
+	 * @param callable|null        $card_article `function ( string $offer_id ): string`, the article of a link's card without the unit; the link's article as it is when null.
 	 */
-	public function __construct( string $marketplace, array $warehouses, callable $edit_url, ?callable $image_url = null, ?callable $shown_article = null, ?callable $article_notice = null ) {
+	public function __construct( string $marketplace, array $warehouses, callable $edit_url, ?callable $image_url = null, ?callable $shown_article = null, ?callable $article_notice = null, ?callable $card_article = null ) {
 		$this->shown_article  = $shown_article;
 		$this->article_notice = $article_notice;
+		$this->card_article   = $card_article;
 		$this->marketplace    = $marketplace;
-		$this->warehouses  = $warehouses;
-		$this->edit_url    = $edit_url;
-		$this->image_url   = $image_url;
+		$this->warehouses     = $warehouses;
+		$this->edit_url       = $edit_url;
+		$this->image_url      = $image_url;
 	}
 
 	/**
@@ -254,12 +264,7 @@ final class Site_Products_Rows {
 
 		return [
 			'name'      => $this->clip( $product['title'] ),
-			'sku'       => '' === $product['sku'] ? null : [
-				[
-					'type' => 'text',
-					'value' => $this->clip( $product['sku'] ),
-				],
-			],
+			'sku'       => $this->parent_sku_cell( (string) $product['sku'], $offers ),
 			'state'     => array_values( $badges ),
 			'stock'     => $this->pair_text( $this->site_stock_sum( $offers ), $this->remote_stock_sum( $offers ) ),
 			'price'     => $this->pair_text( $this->price_range( array_column( $offers, 'site_price' ) ), null ),
@@ -319,6 +324,53 @@ final class Site_Products_Rows {
 		}
 
 		return [] === $items ? null : $items;
+	}
+
+	/**
+	 * The article of a variable product: its own SKU. A product without one is known by its variations, so it shows the first
+	 * article they go by — the card's on the marketplace, else the variation's SKU — and how many others there are.
+	 *
+	 * @param string                         $sku    The product's own SKU.
+	 * @param array<int,array<string,mixed>> $offers Its variations.
+	 * @return array<int,array<string,mixed>>|null
+	 */
+	private function parent_sku_cell( string $sku, array $offers ): ?array {
+		$text = $sku;
+
+		if ( '' === $text ) {
+			$articles = array_values( array_unique( array_filter( array_map( [ $this, 'offer_article' ], $offers ), 'strlen' ) ) );
+
+			if ( [] === $articles ) {
+				return null;
+			}
+
+			$others = count( $articles ) - 1;
+			/* translators: 1: an article, 2: how many other articles the product's variations have. */
+			$text = 0 === $others ? $articles[0] : sprintf( __( '%1$s и ещё %2$d', 'woodev-plugin-framework' ), $articles[0], $others );
+		}
+
+		return [
+			[
+				'type'  => 'text',
+				'value' => $this->clip( $text ),
+			],
+		];
+	}
+
+	/**
+	 * The article one variation goes by inside its parent's row: the marketplace card's, else the SKU.
+	 *
+	 * @param array<string,mixed> $offer Offer.
+	 * @return string
+	 */
+	private function offer_article( array $offer ): string {
+		$offer_id = (string) $offer['offer_id'];
+
+		if ( '' === $offer_id ) {
+			return (string) $offer['sku'];
+		}
+
+		return null === $this->card_article ? $offer_id : (string) call_user_func( $this->card_article, $offer_id );
 	}
 
 	/**

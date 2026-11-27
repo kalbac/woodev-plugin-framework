@@ -126,8 +126,21 @@ final class State_Groups {
 		$badge = Card_State_Badge::of( ( self::STATES[ $group ] ?? self::STATES[ self::UNLINKED ] )[0] );
 
 		return [
-			'label' => $count > 1 ? $badge['label'] . ' × ' . $count : $badge['label'],
+			'label' => self::counted( $badge['label'], $count ),
 			'tone'  => self::TONES[ $badge['tone'] ] ?? 'neutral',
 		];
+	}
+
+	/**
+	 * A state with how many offers of a parent row are in it: «Создан · 3». Both products tables write it this way.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $label Name of the state.
+	 * @param int    $count How many offers are in it; 0 or 1 adds nothing.
+	 * @return string
+	 */
+	public static function counted( string $label, int $count ): string {
+		return $count > 1 ? $label . ' · ' . $count : $label;
 	}
 }
