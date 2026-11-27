@@ -267,6 +267,16 @@ final class SiteProductsProviderTest extends Products_Test_Case {
 		$this->assertNotContains( 'link_by_article', $ids );
 	}
 
+	public function test_a_table_without_the_archive_names_its_last_group_without_it(): void {
+		$this->withheld = [ Site_Products_Bulk::ARCHIVE ];
+
+		$actions = $this->definition()->to_array()['bulk_actions'];
+
+		$this->assertNotContains( 'archive', array_column( $actions, 'id' ) );
+		$this->assertContains( 'Связи', array_column( $actions, 'group' ) );
+		$this->assertNotContains( 'Связи и архив', array_column( $actions, 'group' ) );
+	}
+
 	public function test_the_list_is_sorted_over_the_whole_table_and_each_row_is_account_scoped(): void {
 		$body = $this->list_body( [ 'sort' => 'price', 'direction' => 'desc' ] );
 

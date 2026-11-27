@@ -60,6 +60,7 @@ use Woodev\Framework\Marketplace\Settings\Effective_Settings;
 use Woodev\Framework\Marketplace\Settings\Warehouse_Options;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
+use Woodev\Framework\Marketplace\Sync\Archiveless_Stock_Rules;
 use Woodev\Framework\Marketplace\Sync\Price_Intents;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
 
@@ -302,13 +303,14 @@ final class Site_Products_Module {
 	}
 
 	/**
-	 * The bulk actions an adapter cannot serve: the table withholds them from its toolbar, and the variation panel's group of the
-	 * product edit screen leaves them out of its select.
+	 * The actions an adapter cannot serve: the table withholds them from its toolbar, the variation panel's group of the product
+	 * edit screen leaves them out of its select, and the product tab draws no button for them.
 	 *
 	 * An adapter without a catalogue has no export and no linking; one that reads no prices has nothing to pull; one that sends
-	 * none keeps no own prices to reset.
+	 * none keeps no own prices to reset; one whose marketplace has no archive ({@see Archiveless_Stock_Rules}) archives nothing.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.28 The archive.
 	 *
 	 * @param Marketplace_Adapter $adapter Adapter.
 	 * @return string[] Action ids.
@@ -316,8 +318,9 @@ final class Site_Products_Module {
 	public static function withheld_actions( Marketplace_Adapter $adapter ): array {
 		$withheld = Capability::has_catalog( $adapter ) ? [] : [ Site_Products_Bulk::EXPORT, Site_Products_Bulk::LINK_BY_ARTICLE ];
 		$withheld = null === $adapter->price_reader() ? array_merge( $withheld, [ Site_Products_Bulk::PULL_PRICES ] ) : $withheld;
+		$withheld = null === $adapter->price_pusher() ? array_merge( $withheld, [ Site_Products_Bulk::RESET_PRICE ] ) : $withheld;
 
-		return null === $adapter->price_pusher() ? array_merge( $withheld, [ Site_Products_Bulk::RESET_PRICE ] ) : $withheld;
+		return $adapter->stock_rules() instanceof Archiveless_Stock_Rules ? array_merge( $withheld, [ Site_Products_Bulk::ARCHIVE ] ) : $withheld;
 	}
 
 	/**

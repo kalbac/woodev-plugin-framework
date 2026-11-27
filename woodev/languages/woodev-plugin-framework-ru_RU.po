@@ -10934,6 +10934,10 @@ msgid "Подключение не проверялось"
 msgstr ""
 
 #: assets/build/settings-page/index.js:7
+msgid "Проверяем подключение…"
+msgstr ""
+
+#: assets/build/settings-page/index.js:7
 msgid "Свернуть"
 msgstr ""
 
@@ -11990,6 +11994,16 @@ msgstr ""
 msgid "Нужна, когда выбрана одна категория."
 msgstr ""
 
+#. translators: 1: an article, 2: how many other articles the product's variations have.
+#: marketplace/admin/pages/products/class-site-products-rows.php:349
+#, php-format
+msgid "%1$s и ещё %2$d"
+msgstr ""
+
+#: marketplace/admin/pages/products/class-site-products-definition.php:250
+msgid "Связи"
+msgstr ""
+
 #: marketplace/admin/pages/products/class-site-products-definition.php:261
 msgid "Связи и архив"
 msgstr ""
@@ -12850,7 +12864,7 @@ msgstr ""
 #. translators: 1: marketplace name, 2: comma-separated credential field names, 3: «личном кабинете …» (a link when the address is known).
 #: marketplace/settings/class-accounts-sections.php:305
 #, php-format
-msgid "Здесь подключаются аккаунты %1$s. Для каждого нужны: %2$s — они выдаются в %3$s. Добавьте аккаунт, нажмите «Проверить подключение», и плагин начнёт с ним работать. Несколько аккаунтов работают независимо друг от друга."
+msgid "Здесь подключаются аккаунты %1$s. Для каждого нужны: %2$s — они выдаются в %3$s. Добавьте аккаунт и сохраните: плагин проверит подключение и начнёт с ним работать. Несколько аккаунтов работают независимо друг от друга."
 msgstr ""
 
 #: marketplace/settings/class-accounts-sections.php:331
