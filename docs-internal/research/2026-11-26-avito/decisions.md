@@ -4,8 +4,8 @@ The owner answered [the thirteen questions](owner-questions.ru.md) on 27.11.2026
 («всё по рекомендациям»; recorded on [#1986](https://github.com/kalbac/woodev-plugin-framework/issues/1986)). Each row
 below is that recommendation in substance; the Russian original is the questions file. These answers are **final**: a
 design or implementation session does not reopen them. Where another file of this folder disagrees — the estimate in
-[the card plan](card-plan.md) included — **this file wins**. The design built on them:
-[Avito plugin 1.0 design](../../specs/2026-11-28-avito-plugin-design.md).
+[the card plan](card-plan.md) and the [draft design](spec-draft.md) included — **this file wins**. The facts the
+specification is written from: [spec-input.md](spec-input.md).
 
 ## Product
 
@@ -13,7 +13,7 @@ design or implementation session does not reopen them. Where another file of thi
 |---|---|
 | Plugin | A new plugin on `woodev/marketplace/`; the first release is 1.0 |
 | Order of work | After Wildberries 1.0 (owner, 26.11.2026, #1986; D12 below) |
-| Name | Not chosen (D2). The design uses a neutral working name |
+| Name | Not chosen (D2). Documents use a neutral working name |
 | Support letter | Prepared; the owner sends it before paying for a tariff (#1986, 26.11.2026) |
 | Card | [#1986](https://github.com/kalbac/woodev-plugin-framework/issues/1986) |
 
@@ -46,16 +46,9 @@ design or implementation session does not reopen them. Where another file of thi
 | R5 | The licence gate is the default. |
 | R6 | A convenience the merchant can see ships in the current release, not in a «phase 2». |
 
-## What the decisions changed against the research
-
-| Research said | Decision |
-|---|---|
-| Open questions with a recommendation each | Every recommendation accepted (D1–D13) |
-| The [card plan](card-plan.md): 2 phase-0, 7 framework and 9 plugin cards | Superseded by the card list of the design, which also reads the framework after the Wildberries cards that merged since |
-
 ## Related
 
 - [Research index](README.md)
 - [Owner questions](owner-questions.ru.md)
-- [Avito plugin 1.0 design](../../specs/2026-11-28-avito-plugin-design.md)
+- [Input pack for the specification](spec-input.md)
 - [Gap map](gap-map.md)

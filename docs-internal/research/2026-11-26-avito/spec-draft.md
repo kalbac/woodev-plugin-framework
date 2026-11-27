@@ -1,13 +1,17 @@
-# Avito Plugin 1.0 Design (working name)
+# Avito Plugin 1.0 Design (working name) — draft
+
+> **Draft by Sonnet, input for the Fable spec — not authoritative.** The owner decided that the Avito specification is
+> written later by Fable. Every interpretation, reading of a tension, card and size below is a proposal of this draft;
+> only [decisions.md](decisions.md) binds. Facts for the author: [spec-input.md](spec-input.md).
 
 **Date:** 2026-11-28  
 **Status:** draft — written before the phase-0 measurement (§3); card S0 amends it and puts the 1.0 scope back to the owner (D13).  
 **Target:** the first release, **1.0.0**, of a NEW plugin for WooCommerce shops that sell goods on Avito, built on the
 framework module `woodev/marketplace/`. Card [#1986](https://github.com/kalbac/woodev-plugin-framework/issues/1986).  
-**Evidence:** the fact base is [the research folder](../research/2026-11-26-avito/README.md): **D** =
-[decisions.md](../research/2026-11-26-avito/decisions.md), **API** =
-[the API map](../research/2026-11-26-avito/api-map.md) (its §§, page ids P1–P21 and conflicts C1–C8), **G n** = row n of
-[the gap map](../research/2026-11-26-avito/gap-map.md) (framework read at `157c4bd9`, 2.1.20). For this spec the module
+**Evidence:** the fact base is [the research folder](README.md): **D** =
+[decisions.md](decisions.md), **API** =
+[the API map](api-map.md) (its §§, page ids P1–P21 and conflicts C1–C8), **G n** = row n of
+[the gap map](gap-map.md) (framework read at `157c4bd9`, 2.1.20). For this spec the module
 was read again at `cd2495ce` (main: 2.1.27 plus the sticker documents of #2005) through Serena on the worktree and grep.
 Labels: **SOURCED** (Avito's OpenAPI text or an official page, through the API map), **READ** (framework code read for
 this spec), **M n** (to be measured, §3), **I n** (interpretation: a gap this spec closed, listed in §20.2), **T n**
@@ -32,7 +36,7 @@ pages, §17 data model, §18 errors and limits, §19 tests, §20 registers, §21
 
 ## 1. Binding decisions
 
-Source: [decisions.md](../research/2026-11-26-avito/decisions.md) (owner, 27.11.2026). Where any research file
+Source: [decisions.md](decisions.md) (owner, 27.11.2026). Where any research file
 disagrees, that file wins.
 
 | Id | Decision (short) | Where it lands |
@@ -73,7 +77,7 @@ the freeze.
 | Menu | own top-level entry, own icon (full square) | R2 |
 | Base class | `Woodev\Framework\Marketplace\Marketplace_Plugin` | R1 |
 | Supported | HPOS and legacy order storage; the PHP, WordPress and WooCommerce floors of Ozon Seller 2.0.0 | |
-| Installed-site data | none of ours exists | every key this spec names becomes a contract at 1.0.0 ([ADR-005](../adr/005-platform-v2-clean-break-policy.md)) |
+| Installed-site data | none of ours exists | every key this spec names becomes a contract at 1.0.0 ([ADR-005](../../adr/005-platform-v2-clean-break-policy.md)) |
 | Licence | the default gate (R5) | what it does to the feed: §5.7, T4 |
 
 **In 1.0.** Connection by the seller's own keys · goods categories and fields, mappings and profiles · the feed and the
@@ -92,13 +96,13 @@ scope for stocks or orders (API §1.1).
 | Part | Needs |
 |---|---|
 | Keys, listing list, price by API, linking by hand | a tariff |
-| Publication by feed, load report, **listing ids** (`ad_ids`, so linking by article) | + «Расширенная» or «Максимальная» subscription; some categories also a verified business |
+| Publication by feed, load report, **listing ids** (`ad_ids`, so linking by article; an autoload method — that it needs the subscription is inferred, not stated) | + «Расширенная» or «Максимальная» subscription; some categories also a verified business |
 | Stock | + subscription, company status, autoload connected |
 | Delivery orders, labels, marking | a company or sole trader with delivery for business, on any tariff |
 
 **What the merchant does in the cabinet** (settings help and merchant docs say so): confirm company data, pay the
 tariff and the subscription, accept the autoload rules, enable delivery for business, create the keys
-([access list](../research/2026-11-26-avito/access-needed.ru.md)).
+([access list](access-needed.ru.md)).
 
 ## 3. Phase 0 — measure before design is final
 
@@ -459,7 +463,7 @@ used.
 Every card: keeps Ozon Seller 2.0.x and the Wildberries paths behaving (their tests stay green; a **fake feed
 marketplace** proves the new path); adds only **new optional interfaces**, capability constants and classes — no new
 argument on an existing adapter method
-([gotcha](../gotchas/a-method-added-to-an-adapter-interface-fatals-released-plugins.md)); changes the schema only
+([gotcha](../../gotchas/a-method-added-to-an-adapter-interface-fatals-released-plugins.md)); changes the schema only
 additively with a `Schema::REVISION` step (7 on main; the open WF6b and WF8 pull requests may take the next numbers);
 touches no delivery code. Interface names below are proposals the card may refine.
 
@@ -725,9 +729,10 @@ Wave 1 is not a release by itself: out-of-stock goods stay orderable without wav
 
 ## Related
 
-- [Owner decisions](../research/2026-11-26-avito/decisions.md) — D1–D13, final
-- [Research index](../research/2026-11-26-avito/README.md) — API map, gap map, access list
-- [Wildberries Seller 1.0 plugin design](2026-11-26-wildberries-seller-plugin-design.md) — the shape followed and the extensions reused
-- [Marketplace module design](../wiki/marketplace-admin.md)
-- [ADR-013](../adr/013-marketplace-layer-and-react-admin-in-the-framework.md) — the marketplace layer in the framework
-- [ADR-005](../adr/005-platform-v2-clean-break-policy.md) — installed-site data contracts
+- [Owner decisions](decisions.md) — D1–D13, final
+- [Research index](README.md) — API map, gap map, access list
+- [Input pack for the specification](spec-input.md)
+- [Wildberries Seller 1.0 plugin design](../../specs/2026-11-26-wildberries-seller-plugin-design.md) — the shape followed and the extensions reused
+- [Marketplace module design](../../wiki/marketplace-admin.md)
+- [ADR-013](../../adr/013-marketplace-layer-and-react-admin-in-the-framework.md) — the marketplace layer in the framework
+- [ADR-005](../../adr/005-platform-v2-clean-break-policy.md) — installed-site data contracts
