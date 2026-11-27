@@ -17,6 +17,7 @@ import {
 	fetchToolbarActions,
 	fetchToolbarDialog,
 	getExportsInProgress,
+	performBulkOrderAction,
 	performOrderAction,
 	performToolbarRowAction,
 	submitToolbarAction,
@@ -24,9 +25,14 @@ import {
 
 jest.mock( '@wordpress/api-fetch' );
 
+/** An action route's successful answer as `apiFetch( { parse: false } )` resolves with it. */
+function answer( body ) {
+	return { status: 200, json: async () => body };
+}
+
 beforeEach( () => {
 	apiFetch.mockReset();
-	apiFetch.mockResolvedValue( { rows: [], total: 0, total_pages: 0 } );
+	apiFetch.mockResolvedValue( answer( { rows: [], total: 0, total_pages: 0 } ) );
 	window.woodevShippingOrders = { restRoot: 'https://example.test/wp-json/woodev/v1/shipping/orders', nonce: 'abc' };
 } );
 
@@ -190,8 +196,10 @@ describe( 'carrier document downloads (#1134)', () => {
 		apiFetch.mockRejectedValue( { code: 'x', message: 'нет сети' } );
 		await expect( fetchOrderDocument( 42, 'waybill' ) ).rejects.toEqual( { code: 'x', message: 'нет сети' } );
 
-		apiFetch.mockRejectedValue( { json: async () => { throw new Error( 'not json' ); } } );
-		await expect( fetchOrderDocument( 42, 'waybill' ) ).rejects.toEqual( {} );
+		apiFetch.mockRejectedValue( { status: 503, json: async () => { throw new Error( 'not json' ); } } );
+		await expect( fetchOrderDocument( 42, 'waybill' ) ).rejects.toEqual( {
+			message: expect.stringContaining( 'HTTP 503' ),
+		} );
 	} );
 
 	test( 'an answer that is none of the three rejects instead of resolving with nothing', async () => {
@@ -216,7 +224,7 @@ describe( 'fetchSyncStatus (#828 increment 8)', () => {
 	} );
 
 	test( 'sends no body for an action without fields — the request is exactly as it was', async () => {
-		apiFetch.mockResolvedValue( { row: {}, message: '' } );
+		apiFetch.mockResolvedValue( answer( { row: {}, message: '' } ) );
 
 		await performOrderAction( 42, 'export' );
 
@@ -224,7 +232,7 @@ describe( 'fetchSyncStatus (#828 increment 8)', () => {
 	} );
 
 	test( 'sends the values of an action\'s fields as a `payload` object (#1180)', async () => {
-		apiFetch.mockResolvedValue( { row: {}, message: '' } );
+		apiFetch.mockResolvedValue( answer( { row: {}, message: '' } ) );
 		const payload = { day: '2026-10-13', window: { from: '09:00', to: '18:00' }, comment: '' };
 
 		await performOrderAction( 42, 'call_courier', payload );
@@ -274,7 +282,7 @@ describe( 'fetchSyncStatus (#828 increment 8)', () => {
  */
 describe( 'performOrderAction (#824)', () => {
 	test( 'POSTs to the order/action sub-path under the same REST root, with the nonce header', async () => {
-		apiFetch.mockResolvedValue( { row: {}, message: 'Заказ выгружен.' } );
+		apiFetch.mockResolvedValue( answer( { row: {}, message: 'Заказ выгружен.' } ) );
 
 		await performOrderAction( 42, 'export' );
 
@@ -287,7 +295,7 @@ describe( 'performOrderAction (#824)', () => {
 	} );
 
 	test( 'sends the merchant\'s confirmation (#1204) only when it was given', async () => {
-		apiFetch.mockResolvedValue( { row: {}, message: 'Отказ от посылки оформлен.' } );
+		apiFetch.mockResolvedValue( answer( { row: {}, message: 'Отказ от посылки оформлен.' } ) );
 
 		await performOrderAction( 42, 'refuse', undefined, true );
 		await performOrderAction( 42, 'cancel' );
@@ -301,7 +309,7 @@ describe( 'performOrderAction (#824)', () => {
 			restRoot: 'https://example.test/wp-json/woodev/v1/shipping/orders/',
 			nonce: 'abc',
 		};
-		apiFetch.mockResolvedValue( { row: {}, message: 'Заказ выгружен.' } );
+		apiFetch.mockResolvedValue( answer( { row: {}, message: 'Заказ выгружен.' } ) );
 
 		await performOrderAction( 42, 'export' );
 
@@ -311,10 +319,10 @@ describe( 'performOrderAction (#824)', () => {
 	} );
 
 	test( 'resolves with the row and message untouched', async () => {
-		const response = { row: { id: 42 }, message: 'Заказ выгружен.' };
-		apiFetch.mockResolvedValue( response );
+		const body = { row: { id: 42 }, message: 'Заказ выгружен.' };
+		apiFetch.mockResolvedValue( answer( body ) );
 
-		await expect( performOrderAction( 42, 'export' ) ).resolves.toEqual( response );
+		await expect( performOrderAction( 42, 'export' ) ).resolves.toEqual( body );
 	} );
 
 	test( 'rejects with whatever apiFetch rejects with — the server\'s Russian message is never swallowed', async () => {
@@ -324,6 +332,85 @@ describe( 'performOrderAction (#824)', () => {
 			message: 'СДЭК недоступен.',
 			code: 'woodev_carrier_unavailable',
 		} );
+	} );
+} );
+
+/**
+ * #1979 — a proxy or a bot filter in front of the shop may replace a refusal with a body of its own. The merchant then
+ * reads the HTTP status, which `apiFetch` only hands over when the answer is read raw.
+ */
+describe( 'an action\'s failed answer (#1979)', () => {
+	/** A raw `Response` double whose body is `body`, or is not JSON at all when `body` is omitted. */
+	function rawResponse( status, body ) {
+		return {
+			status,
+			json: async () => {
+				if ( undefined === body ) {
+					throw new SyntaxError( 'Unexpected token <' );
+				}
+
+				return body;
+			},
+		};
+	}
+
+	const actions = [
+		[ 'performOrderAction', () => performOrderAction( 42, 'export' ) ],
+		[ 'performBulkOrderAction', () => performBulkOrderAction( 'export', [ 42 ] ) ],
+		[ 'fetchActionFieldOptions', () => fetchActionFieldOptions( 42, 'pick_interval', 'interval' ) ],
+		[ 'submitToolbarAction', () => submitToolbarAction( 'call_courier', {} ) ],
+		[ 'performToolbarRowAction', () => performToolbarRowAction( 'call_courier', 'intakes', 'uuid-1', 'cancel' ) ],
+	];
+
+	test.each( actions )( '%s reads the answer raw and keeps the server\'s own refusal', async ( name, run ) => {
+		const refusal = { code: 'woodev_shipping_orders_action_failed', message: 'СДЭК: пункт не принимает заказы.', data: { status: 422 } };
+
+		apiFetch.mockRejectedValue( rawResponse( 422, refusal ) );
+
+		await expect( run() ).rejects.toEqual( refusal );
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].parse ).toBe( false );
+	} );
+
+	test.each( [
+		[ 'a page of its own', 502, undefined ],
+		[ 'a JSON body without a message', 503, { error: 'blocked' } ],
+		[ 'a JSON body with an empty message', 403, { message: '' } ],
+		[ 'a JSON `null`', 504, null ],
+	] )( 'an answer replaced by %s names the HTTP status', async ( name, status, body ) => {
+		apiFetch.mockRejectedValue( rawResponse( status, body ) );
+
+		await expect( performOrderAction( 42, 'export' ) ).rejects.toMatchObject( {
+			message: expect.stringContaining( `HTTP ${ status }` ),
+		} );
+	} );
+
+	test( 'a page served with a 200 in place of the answer names the status too', async () => {
+		apiFetch.mockResolvedValue( rawResponse( 200 ) );
+
+		await expect( performOrderAction( 42, 'export' ) ).rejects.toEqual( {
+			code: 'invalid_json',
+			message: expect.stringContaining( 'HTTP 200' ),
+		} );
+	} );
+
+	test( 'a request that got no answer keeps `apiFetch`\'s own sentence', async () => {
+		const offline = { code: 'fetch_error', message: 'Нет связи с сервером.' };
+
+		apiFetch.mockRejectedValue( offline );
+
+		await expect( performOrderAction( 42, 'export' ) ).rejects.toBe( offline );
+	} );
+
+	test( 'an expired nonce is asked again the way `apiFetch` can renew it', async () => {
+		const done = { row: { id: 42 }, message: 'Заказ выгружен.' };
+
+		apiFetch
+			.mockRejectedValueOnce( rawResponse( 403, { code: 'rest_cookie_invalid_nonce', message: 'Проверка cookie не пройдена' } ) )
+			.mockResolvedValueOnce( done );
+
+		await expect( performOrderAction( 42, 'export' ) ).resolves.toEqual( done );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( apiFetch.mock.calls[ 1 ][ 0 ] ).not.toHaveProperty( 'parse' );
 	} );
 } );
 
@@ -538,7 +625,7 @@ describe( 'toolbar actions (s164)', () => {
 	test( 'a rejection reaches the caller untouched — the 422 `data.errors` included', async () => {
 		const rejection = { code: 'woodev_shipping_orders_invalid_payload', message: 'Проверьте заполнение полей.', data: { status: 422, errors: [] } };
 
-		apiFetch.mockRejectedValueOnce( rejection );
+		apiFetch.mockRejectedValueOnce( { status: 422, json: async () => rejection } );
 
 		await expect( submitToolbarAction( 'call_courier', {} ) ).rejects.toBe( rejection );
 	} );
@@ -546,11 +633,11 @@ describe( 'toolbar actions (s164)', () => {
 
 describe( 'fetchActionFieldOptions (Yandex #84)', () => {
 	test( 'GETs the field\'s options route of one order with the nonce, and returns the answer', async () => {
-		apiFetch.mockResolvedValue( { options: [ { value: 'a', label: 'A' } ] } );
+		apiFetch.mockResolvedValue( answer( { options: [ { value: 'a', label: 'A' } ] } ) );
 
-		const answer = await fetchActionFieldOptions( 42, 'pick_interval', 'interval' );
+		const options = await fetchActionFieldOptions( 42, 'pick_interval', 'interval' );
 
-		expect( answer ).toEqual( { options: [ { value: 'a', label: 'A' } ] } );
+		expect( options ).toEqual( { options: [ { value: 'a', label: 'A' } ] } );
 		expect( calledUrl() ).toBe( 'https://example.test/wp-json/woodev/v1/shipping/orders/42/actions/pick_interval/fields/interval/options' );
 
 		const request = apiFetch.mock.calls[ 0 ][ 0 ];

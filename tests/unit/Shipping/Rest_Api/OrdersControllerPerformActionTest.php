@@ -247,7 +247,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
 		$this->assertSame( 'Не удалось выгрузить заказ перевозчику.', $result->get_error_message() );
 	}
 
@@ -386,7 +386,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->assertSame( [ 'Оформлен отказ от посылки: она вернётся к вам, возврат платный' ], $notes );
 	}
 
-	public function test_a_refused_refusal_is_a_502_with_the_carriers_reason_and_a_note(): void {
+	public function test_a_refused_refusal_is_a_422_with_the_carriers_reason_and_a_note(): void {
 		$handler = $this->refusing_carrier( 'ON_WAY' );
 		$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::failure( 'Заказ уже вручён' ) );
 		$order = $this->order( 'processing' );
@@ -395,7 +395,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE, null, true ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
 		$this->assertSame( 'СДЭК: Заказ уже вручён', $result->get_error_message() );
 	}
 
@@ -439,7 +439,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->controller()->perform_action( $this->request( 123, Order_Actions::CANCEL ) );
 	}
 
-	public function test_a_failed_cancel_is_a_502(): void {
+	public function test_a_failed_cancel_is_a_422(): void {
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
 		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
 		$handler = $this->register_handler();
@@ -450,7 +450,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::CANCEL ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
 	}
 
 	// ----- round 2 MEDIUM 3: dispatch_action()'s default: branch is a real seam -----
@@ -498,7 +498,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$result = $this->controller()->perform_action( $this->request( 123, 'print_label' ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
 	}
 
 	/**
@@ -536,7 +536,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
 		$this->assertSame( 'СДЭК: Неверный индекс получателя', $result->get_error_message() );
 	}
 
@@ -609,7 +609,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 	 * A handler that THROWS is not an `Action_Result` — the exception text is never
 	 * shown (it could be anything), the merchant gets the generic sentence.
 	 */
-	public function test_a_thrown_exception_never_leaks_its_text(): void {
+	public function test_a_thrown_exception_is_a_502_and_never_leaks_its_text(): void {
 		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
 		$handler = $this->register_handler();
 		$handler->shouldReceive( 'export' )->once()->andThrow( new \RuntimeException( 'SQLSTATE secret-token-123' ) );
@@ -619,6 +619,8 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_shipping_orders_action_error', $result->get_error_code() );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
 		$this->assertStringNotContainsString( 'secret-token-123', $result->get_error_message() );
 	}
 
@@ -657,7 +659,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$result = $this->controller()->perform_action( $this->request( 123, 'print_label' ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
 		$this->assertSame( 'Действие не выполнено.', $result->get_error_message() );
 	}
 

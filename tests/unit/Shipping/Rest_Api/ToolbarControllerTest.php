@@ -367,7 +367,7 @@ final class ToolbarControllerTest extends TestCase {
 		$this->assertSame( 400, $result->get_error_data()['status'] );
 	}
 
-	public function test_a_row_button_the_carrier_refused_is_a_502_with_its_reason(): void {
+	public function test_a_row_button_the_carrier_refused_is_a_422_with_its_reason(): void {
 		$this->declare_courier( null, static fn() => Action_Result::failure( 'Заявка уже в работе' ) );
 
 		$result = $this->controller()->perform_row_action(
@@ -383,7 +383,31 @@ final class ToolbarControllerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'woodev_shipping_orders_toolbar_row_action_failed', $result->get_error_code() );
-		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
 		$this->assertSame( 'Заявка уже в работе', $result->get_error_message() );
+	}
+
+	public function test_a_row_button_whose_handler_threw_is_a_502_and_never_leaks_its_text(): void {
+		$this->declare_courier(
+			null,
+			static function () {
+				throw new \RuntimeException( 'secret-token-123' );
+			}
+		);
+
+		$result = $this->controller()->perform_row_action(
+			$this->request(
+				[
+					'id'     => 'call_courier',
+					'tab'    => 'intakes',
+					'row'    => 'uuid-1',
+					'action' => 'cancel',
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertStringNotContainsString( 'secret-token-123', $result->get_error_message() );
 	}
 }
