@@ -91,9 +91,11 @@
 			flex: 0 0 100%;
 		}
 
+		// The key input is 40px tall and centres the link on it; `top: 50%` would centre it on the whole control,
+		// which grows a line when the server's error sits under the input.
 		.woodev-field__secret-clear-link {
 			position: absolute;
-			top: 50%;
+			top: 20px;
 			right: wd.$gap;
 			margin-top: 0;
 			transform: translateY( -50% );
