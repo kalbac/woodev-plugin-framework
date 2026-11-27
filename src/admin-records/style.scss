@@ -191,6 +191,7 @@ $cell-padding: 8px;
 	// sum across lines: a cell that wraps mid-number is unreadable and makes every row three lines tall.
 	.woodev-records__col-order,
 	.woodev-records__col-posting,
+	.woodev-records__col-scheme,
 	.woodev-records__col-total,
 	.woodev-records__col-status,
 	.woodev-records__col-state,
@@ -206,6 +207,11 @@ $cell-padding: 8px;
 
 	.woodev-records__col-posting {
 		width: 18ch;
+	}
+
+	// A delivery scheme is a short code: «FBS», «DBS».
+	.woodev-records__col-scheme {
+		width: 8ch;
 	}
 
 	// The date and the time of «10.11.2026 08:30» are one line while the column has room and two when it has not (each half is `nowrap`,

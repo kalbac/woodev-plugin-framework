@@ -7,6 +7,7 @@
 
 namespace Woodev\Framework\Marketplace\Deletion;
 
+use Woodev\Framework\Marketplace\Admin\Order\Delivery_Schemes;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Data\Bulk_Run_Store;
 use Woodev\Framework\Marketplace\Data\Link_Progress_Store;
@@ -127,7 +128,8 @@ final class Deletion_Module {
 		$queue = new Account_Queue_Cleaner( $names->group(), $names->hook( '' ), [ $scheduler->hook(), $names->hook( Label_Jobs::JOB_POLL ) ] );
 		$steps = self::steps(
 			$queue,
-			$stores,
+			// The orders lose the buyer's data the framework kept on them before their posting rows go.
+			array_replace( $stores, [ 'postings' => new Posting_Eraser( $stores['postings'] ) ] ),
 			self::forget_options( $plugin->get_id(), new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ), $stores['cards'], $stores['shipments'] ),
 			new Pinned_Offer_Eraser( $db, $adapter->id() ),
 			new Wpdb_Event_Ledger( $db, $schema->table_name( 'events', $db->prefix ) )
@@ -157,7 +159,8 @@ final class Deletion_Module {
 			],
 			Effective_Settings::for_adapter( $adapter->id() ),
 			$has_push,
-			Posting_Noun::for_descriptor( $adapter->settings_descriptor() )
+			Posting_Noun::for_descriptor( $adapter->settings_descriptor() ),
+			$adapter instanceof Delivery_Schemes
 		);
 
 		return [

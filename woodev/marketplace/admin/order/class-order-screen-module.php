@@ -85,9 +85,10 @@ final class Order_Screen_Module {
 		};
 		$seller     = self::seller_actions( $plugin, $adapter, $registry, $names, $assets, $gate, $account_of, $accounts, $db );
 		$units      = self::unit_list( $plugin, $adapter, $registry, $seller, $db );
-		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of, $db ), $assets, $plugin->get_version(), $seller, $units );
+		$delivery   = new Seller_Delivery_Panel( $names, $adapter );
+		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of, $db ), $assets, $plugin->get_version(), $seller, $units, $delivery );
 
-		( new Order_Screen( $adapter->order_meta(), $box ) )->register();
+		( new Order_Screen( $adapter->order_meta(), $box, $delivery ) )->register();
 	}
 
 	/**

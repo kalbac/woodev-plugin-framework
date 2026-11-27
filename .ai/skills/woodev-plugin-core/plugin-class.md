@@ -190,6 +190,24 @@ For a marketplace where one cart is several remote orders (one per piece of good
 - A unit sold by a key the merchant must not see needs `Flows\Sellable_Units` on the adapter: the screens read the article
   through it.
 
+## A marketplace adapter: orders the seller delivers
+
+For a marketplace where the shop ships some orders itself; the full design is `docs-internal/wiki/marketplace-admin.md`, «Orders
+the seller delivers» (#2007). Framework 2.1.29.
+
+- Put `Orders\Seller_Delivery` on **every** DTO of such an order (`Order_DTO::with_delivery()`), status refreshes included, with
+  what you know so far; an empty value means «not told yet». Without it the order is treated as marketplace-delivered and
+  `buyer()` overwrites its fields on each refresh.
+- Bring the phone to the form carriers take (`+7…`) **before** you build the delivery: the framework writes it as given. A number
+  that needs an extension carries it in `with_phone()`; other numbers go to `with_other_phone()`, never into the phone field.
+- Name the scheme with `Order_DTO::with_scheme()` and declare `Admin\Order\Delivery_Schemes` (`code => name`); with two or more
+  schemes «Заказы» gets the column and filter.
+- Give the paid delivery of the cart with `with_price()` in the order's currency (another currency is not written), the buyer's
+  untouched data with `with_payload()`, and the sentence for a missing address with `with_address_note()`.
+- Read the recipient, phone and address from the **order** (`get_shipping_*`): the merchant may have corrected them. The
+  coordinates, the chosen day and the extension come from `Flows\Seller_Order::delivery()`.
+- Never write your own shipping line for the marketplace's delivery price, and never touch a line another writer added.
+
 ## A marketplace adapter: what the screens learn from optional parts
 
 For a `Marketplace_Plugin`; the full design is `docs-internal/wiki/marketplace-admin.md`, «What the screens learn from optional

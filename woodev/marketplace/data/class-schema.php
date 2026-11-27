@@ -58,12 +58,13 @@ final class Schema {
 	 * 7: `seller_actions`, the actions sent to the marketplace for the units of orders, so none is sent twice (#2003).
 	 * 8: `shipments` and `shipment_units`, the shop's copy of the seller's shipments (#2006); the changes of shipments are
 	 * claimed in `seller_actions`.
+	 * 9: `postings.scheme`, the delivery scheme of an order (#2007).
 	 *
 	 * @since 2.1.10
 	 *
 	 * @var int
 	 */
-	public const REVISION = 8;
+	public const REVISION = 9;
 
 	/**
 	 * The columns that a table of an earlier revision lacks and a revision above added, by table name without any prefix. {@see Lifecycle}
@@ -76,6 +77,7 @@ final class Schema {
 	 * 4: `postings.processing_since`.
 	 * 5: `cards.unit_card`, `cards.unit_article`, `cards.unit_data`.
 	 * 6: `sync_state.task_id`, `sync_state.refused_payload`, `sync_state.error_code`.
+	 * 9: `postings.scheme`.
 	 *
 	 * @since 2.1.10
 	 *
@@ -84,7 +86,7 @@ final class Schema {
 	private const REQUIRED_COLUMNS = [
 		'sync_state' => [ 'pending_source', 'task_id', 'refused_payload', 'error_code' ],
 		'links'      => [ 'pending_offer_id', 'rename_error', 'rename_confirmed' ],
-		'postings'   => [ 'processing_since' ],
+		'postings'   => [ 'processing_since', 'scheme' ],
 		'cards'      => [ 'unit_card', 'unit_article', 'unit_data' ],
 	];
 
@@ -497,6 +499,7 @@ final class Schema {
 			first_seen_at datetime NOT NULL,
 			processing_since datetime NULL DEFAULT NULL,
 			refreshed_at datetime NULL DEFAULT NULL,
+			scheme varchar(16) NOT NULL DEFAULT '',
 			PRIMARY KEY  (account_id,external_key),
 			KEY wc_order (wc_order_id),
 			KEY account_terminal (account_id,is_terminal)

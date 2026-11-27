@@ -1634,6 +1634,45 @@ row id is `{account}:{order}:{digest of the unit id}`: the marketplace's id neve
 **Limit.** An account that creates no WooCommerce orders (`Registry_Stock_Accounting`) gets none of this: its registry row keeps
 the lines of one member at a time.
 
+## Orders the seller delivers (#2007)
+
+Card WF9 of the Wildberries design (`2.1.29`). An order the shop ships itself (DBS) is an ordinary WooCommerce order with a
+shipping address. Everything is additive and optional: Ozon Seller 2.0.0 declares nothing and sends no delivery.
+
+**Adapter side.**
+
+| Seam | Use | Without it |
+|---|---|---|
+| `Orders\Seller_Delivery` on every DTO (`Order_DTO::with_delivery()`) | recipient, phone + extension, other phones, address + coordinates + pickup flag, comment, day and time, price of the paid delivery (`Money`), the raw payload, why the address is missing, payment title and shipping line title | the order is the marketplace's: `buyer()` is copied on every refresh |
+| `Order_DTO::with_scheme( code )` | the scheme, kept in `postings.scheme` (schema revision 9) and order meta `_woodev_mp_scheme` | no scheme |
+| `Admin\Order\Delivery_Schemes` | `code => name`; two or more give «Заказы» the «Схема» column and filter, one or more name the scheme in the details box | no column, no filter |
+
+An empty value means «not told yet». `Seller_Delivery::merged_over()` keeps what an earlier read told, group by group (the phones
+travel together, so a new number never keeps an old extension). The registry writer passes on the delivery of the member being
+written only while its snapshot is not older than the stored one.
+
+**What is written** (`Flows\Seller_Delivery_Writer`, from `Wc_Order_Store`):
+
+- payment title (once) and `date_paid` for a live order;
+- the framework's shipping line (item meta `_woodev_mp_delivery_line`) with the paid-delivery amount, in the order's currency;
+  total = units + that line. No other shipping line is created, priced or removed;
+- order meta (`Flows\Seller_Order`): `_woodev_mp_seller_delivered`, `_woodev_mp_delivery` (what the marketplace says),
+  `_woodev_mp_delivery_payload` (per unit, a value a later read leaves out stays), `_woodev_mp_delivery_seeded`;
+- **seed, then leave alone**: recipient (billing and shipping names), phone (both), address (`shipping_address_1`; city, region and
+  postcode are not parsed) and customer note. A group is written while all its fields are empty; later only while it still holds
+  exactly what the framework wrote. A group the merchant or a delivery wizard changed, or filled first, is never written again.
+
+**Order screen.** Items stay locked. The details box gets «Получатель и доставка» (`Admin\Order\Seller_Delivery_Panel`): recipient,
+phone and address inputs saved with the order form on `woocommerce_process_shop_order_meta` (own nonce, `edit_shop_order`), the
+marketplace's value beside a changed one, the chosen day, a pickup point notice, other phones, and warnings for a missing address
+and a phone that needs an extension. The shipping method is not edited here: the delivery wizard adds a carrier's line (WD1).
+
+**Personal data.** `Flows\Order_Privacy` plugs into WooCommerce's order exporter and eraser (`woocommerce_privacy_*`), so the
+e-mail requests of WordPress, «Remove personal data» of the orders list and the retention clean-up export and erase the module's
+meta with the order; an erased order (`_anonymized`) is never given buyer data again. **A marketplace order has no buyer e-mail**,
+so an e-mail request finds it only when somebody added one; the bulk action and the clean-up need no e-mail. Account deletion
+removes the module's buyer meta from the account's orders (`Deletion\Posting_Eraser`); the order's own fields stay.
+
 ## Sticker documents (#2005)
 
 Card WF7 of the Wildberries design (`2.1.28`). A label answer may hold several files, and a marketplace may answer without a

@@ -7,10 +7,12 @@
 
 namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
+use Woodev\Framework\Marketplace\Orders\Order_DTO;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Account, the posting state, the WooCommerce status, the marketplace's posting status, the order date range, the search text and the sort. Built from the engine's
+ * Account, the posting state, the WooCommerce status, the marketplace's posting status, the delivery scheme, the order date range, the search text and the sort. Built from the engine's
  * validated query, so a value is already typed; the sort is still checked against the whitelist and the status against its
  * shape, because the reader puts them in SQL.
  *
@@ -78,6 +80,13 @@ final class Site_Orders_Filter {
 	private $direction;
 
 	/**
+	 * The delivery scheme code, empty for any.
+	 *
+	 * @var string
+	 */
+	private $scheme;
+
+	/**
 	 * Creates the filter.
 	 *
 	 * @since 2.1.5
@@ -91,8 +100,10 @@ final class Site_Orders_Filter {
 	 * @param string $sort       Key of {@see Site_Orders_Storage::SORT_KEYS}; the date for anything else.
 	 * @param string $direction  `asc` or `desc`.
 	 * @param string $posting_status The marketplace's own posting status, as stored (since 2.1.13); anything of another shape is any.
+	 * @param string $scheme     Delivery scheme code (since 2.1.29); anything of another shape is any.
 	 */
-	public function __construct( int $account_id, string $state = '', string $wc_status = '', string $from = '', string $to = '', string $search = '', string $sort = 'date', string $direction = 'desc', string $posting_status = '' ) {
+	public function __construct( int $account_id, string $state = '', string $wc_status = '', string $from = '', string $to = '', string $search = '', string $sort = 'date', string $direction = 'desc', string $posting_status = '', string $scheme = '' ) {
+		$this->scheme         = 1 === preg_match( Order_DTO::SCHEME_SHAPE, $scheme ) ? $scheme : '';
 		$this->posting_status = 1 === preg_match( self::POSTING_STATUS_SHAPE, $posting_status ) ? $posting_status : '';
 		$this->account_id = $account_id;
 		$this->state      = in_array( $state, [ self::STATE_OPEN, self::STATE_FINISHED ], true ) ? $state : '';
@@ -126,7 +137,8 @@ final class Site_Orders_Filter {
 			(string) ( $filters['q'] ?? $query['search'] ?? '' ),
 			(string) ( $query['sort'] ?? 'date' ),
 			(string) ( $query['direction'] ?? 'desc' ),
-			(string) ( $filters['posting_status'] ?? '' )
+			(string) ( $filters['posting_status'] ?? '' ),
+			(string) ( $filters['scheme'] ?? '' )
 		);
 	}
 
@@ -205,6 +217,15 @@ final class Site_Orders_Filter {
 	 */
 	public function posting_status(): string {
 		return $this->posting_status;
+	}
+
+	/**
+	 * @since 2.1.29
+	 *
+	 * @return string The delivery scheme code, empty for any.
+	 */
+	public function scheme(): string {
+		return $this->scheme;
 	}
 
 	/**

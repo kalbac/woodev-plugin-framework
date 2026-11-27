@@ -185,6 +185,7 @@ final class OrderScreenTest extends TestCase {
 	public function test_it_hooks_the_boxes_the_savers_and_the_editability(): void {
 		Actions\expectAdded( 'add_meta_boxes' )->once()->with( Mockery::type( 'array' ), Order_Screen::BOXES_PRIORITY, 2 );
 		Actions\expectAdded( 'woocommerce_process_shop_order_meta' )->once()->with( Mockery::type( 'array' ), 1, 1 );
+		Actions\expectAdded( 'woocommerce_process_shop_order_meta' )->once()->with( Mockery::type( 'array' ), 40, 1 );
 		Filters\expectAdded( 'wc_order_is_editable' )->once()->with( Mockery::type( 'array' ), 10, 2 );
 
 		$this->screen()->register();

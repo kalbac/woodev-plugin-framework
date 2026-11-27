@@ -1352,6 +1352,11 @@ msgstr ""
 msgid "%s завершено или отменено — отменить его нельзя."
 msgstr ""
 
+#: marketplace/admin/order/class-order-details-box.php:221
+#: marketplace/admin/pages/orders/class-site-orders-definition.php:208
+msgid "Схема"
+msgstr ""
+
 #. translators: %s: marketplace name.
 #: marketplace/admin/order/class-cancel-modal.php:103
 #, php-format
@@ -12860,6 +12865,10 @@ msgstr ""
 msgid "Аккаунт включён. Выключить и удалить? Перед удалением плагин выключит аккаунт: остатки, цены и заказы по нему перестанут синхронизироваться. Связи товаров с карточками и записи %s будут удалены."
 msgstr ""
 
+#: marketplace/deletion/class-account-deletion-preview.php:119
+msgid "Сохранённые в этих заказах данные покупателей от маркетплейса будут удалены; получатель, телефон и адрес в самом заказе останутся."
+msgstr ""
+
 #. translators: %s: marketplace name, for example «Ozon».
 #: marketplace/settings/class-accounts-sections.php:297
 #, php-format
@@ -13593,6 +13602,73 @@ msgstr ""
 msgid "Это действие уже отправляется для этой позиции. Дождитесь ответа."
 msgstr ""
 
+#: marketplace/admin/order/class-seller-delivery-panel.php:91
+msgid "Получатель и доставка"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:105
+msgid "Сохранить получателя и адрес"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:159
+msgid "Имя получателя"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:160
+msgid "Фамилия получателя"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:163
+msgid "Квартира, подъезд, этаж"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:164
+msgid "Город"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:165
+msgid "Область, край"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:166
+msgid "Почтовый индекс"
+msgstr ""
+
+#. translators: 1: marketplace name, 2: the value the marketplace gives.
+#: marketplace/admin/order/class-seller-delivery-panel.php:225
+#, php-format
+msgid "%1$s сообщает: %2$s"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:255
+msgid "Адрес доставки от маркетплейса ещё не получен."
+msgstr ""
+
+#. translators: %s: phone extension.
+#: marketplace/admin/order/class-seller-delivery-panel.php:260
+#, php-format
+msgid "Для связи по этому номеру нужен добавочный: %s. Служба доставки не наберёт его сама."
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:283
+msgid "Покупатель выбрал доставку"
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:287
+msgid "В пункт выдачи: это адрес пункта, а не покупателя."
+msgstr ""
+
+#: marketplace/admin/order/class-seller-delivery-panel.php:292
+msgid "Запасной номер"
+msgstr ""
+
+#. translators: 1: phone number, 2: its extension.
+#: marketplace/admin/order/class-seller-delivery-panel.php:292
+#: marketplace/flows/class-order-privacy.php:178
+#, php-format
+msgid "%1$s, добавочный %2$s"
+msgstr ""
+
 #: marketplace/admin/order/class-label-button.php:139
 msgid "Открыть этикетки для печати"
 msgstr ""
@@ -13615,6 +13691,34 @@ msgstr ""
 
 #: marketplace/flows/class-label-sheet.php:59
 msgid "Для принтера этикеток: в окне печати выберите поля «Нет» и масштаб 100 %."
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:112
+msgid "Данные заказа от маркетплейса"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:185
+msgid "Получатель (от маркетплейса)"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:186
+msgid "Телефоны (от маркетплейса)"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:187
+msgid "Адрес доставки (от маркетплейса)"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:188
+msgid "Координаты адреса доставки"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:189
+msgid "Комментарий покупателя (от маркетплейса)"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:190
+msgid "Выбранный день доставки"
 msgstr ""
 
 #. translators: %s: the marketplace's word for a shipment, «поставка».

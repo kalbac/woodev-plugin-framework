@@ -17,6 +17,9 @@ defined( 'ABSPATH' ) || exit;
  * ({@see Order_Details_Box}) takes the top, the items stay visible but locked by WooCommerce's own «not editable» filter, and the
  * notes stay. A shop order is never touched.
  *
+ * An order the seller delivers has one exception: its recipient, phone and shipping address are edited in the details box and saved
+ * with the screen ({@see Seller_Delivery_Panel}). Items, prices, totals and statuses stay the marketplace's there too.
+ *
  * Which orders are the marketplace's is decided by `created_via`, the value its order writer stamps ({@see Order_Meta_Contract::created_via()}).
  *
  * WooCommerce saves the removed boxes without asking whether they are there (the order data box throws when its status field is
@@ -66,16 +69,26 @@ final class Order_Screen {
 	private $box;
 
 	/**
+	 * The editable delivery of an order the seller delivers.
+	 *
+	 * @var Seller_Delivery_Panel|null
+	 */
+	private $delivery;
+
+	/**
 	 * Creates the screen policy.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.29 Takes the delivery panel.
 	 *
-	 * @param Order_Meta_Contract $meta The marketplace's order meta.
-	 * @param Order_Details_Box   $box  The marketplace's box.
+	 * @param Order_Meta_Contract        $meta     The marketplace's order meta.
+	 * @param Order_Details_Box          $box      The marketplace's box.
+	 * @param Seller_Delivery_Panel|null $delivery The editable delivery of an order the seller delivers.
 	 */
-	public function __construct( Order_Meta_Contract $meta, Order_Details_Box $box ) {
-		$this->meta = $meta;
-		$this->box  = $box;
+	public function __construct( Order_Meta_Contract $meta, Order_Details_Box $box, ?Seller_Delivery_Panel $delivery = null ) {
+		$this->meta     = $meta;
+		$this->box      = $box;
+		$this->delivery = $delivery;
 	}
 
 	/**
@@ -88,7 +101,24 @@ final class Order_Screen {
 	public function register(): void {
 		add_action( 'add_meta_boxes', [ $this, 'arrange_boxes' ], self::BOXES_PRIORITY, 2 );
 		add_action( 'woocommerce_process_shop_order_meta', [ $this, 'unhook_savers' ], 1 );
+		add_action( 'woocommerce_process_shop_order_meta', [ $this, 'save_delivery' ], 40 );
 		add_filter( 'wc_order_is_editable', [ $this, 'filter_editable' ], 10, 2 );
+	}
+
+	/**
+	 * Saves the recipient and the address of a marketplace order the seller delivers ({@see Seller_Delivery_Panel::save()}).
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param mixed $order_id Order id.
+	 * @return void
+	 */
+	public function save_delivery( $order_id = 0 ): void {
+		$order = null === $this->delivery ? null : $this->marketplace_order( $order_id );
+
+		if ( null !== $order ) {
+			$this->delivery->save( $order );
+		}
 	}
 
 	/**

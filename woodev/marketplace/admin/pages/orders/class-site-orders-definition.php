@@ -54,9 +54,10 @@ final class Site_Orders_Definition {
 	 * @param Site_Orders_Seller|null                     $seller         The adapter's seller actions; null for an adapter that declares none.
 	 * @param string|null                                 $cancel_warning Null for a cancellation that asks for a reason; otherwise what the merchant should know before confirming one that asks for none (empty for nothing).
 	 * @param bool                                        $units          Whether an order opens into its units (since 2.1.28).
+	 * @param array<string,string>                        $schemes        Names of the marketplace's delivery schemes by code; with more than one the table gets a column and a filter (since 2.1.29).
 	 * @return array<string,mixed>
 	 */
-	public static function build( array $accounts, array $statuses, array $offered, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?string $cancel_warning = null, bool $units = false ): array {
+	public static function build( array $accounts, array $statuses, array $offered, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?string $cancel_warning = null, bool $units = false, array $schemes = [] ): array {
 		$noun         = $noun ?? Posting_Noun::shipment();
 		$bulk         = null === $seller ? [] : $seller->bulk_definitions( self::EDIT );
 		$row_actions  = self::with_seller_actions( self::row_actions( $offered, $noun, $cancel_warning ), $seller );
@@ -68,8 +69,8 @@ final class Site_Orders_Definition {
 				'options' => $accounts,
 				'default' => (string) ( $accounts[0]['value'] ?? '' ),
 			],
-			'columns'     => self::columns( $noun ),
-			'filters'     => self::filters( $statuses, $noun ),
+			'columns'     => self::columns( $noun, self::has_scheme_choice( $schemes ) ),
+			'filters'     => self::filters( $statuses, $noun, self::has_scheme_choice( $schemes ) ? $schemes : [] ),
 			'sorts'       => [
 				'keys'    => Site_Orders_Storage::SORT_KEYS,
 				'default' => [
@@ -103,6 +104,18 @@ final class Site_Orders_Definition {
 		}
 
 		return $definition;
+	}
+
+	/**
+	 * Tells whether the table shows delivery schemes: only a marketplace that sells under more than one.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param array<string,string> $schemes Names by code.
+	 * @return bool
+	 */
+	public static function has_scheme_choice( array $schemes ): bool {
+		return count( $schemes ) > 1;
 	}
 
 	/**
@@ -143,8 +156,8 @@ final class Site_Orders_Definition {
 	/**
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function columns( Posting_Noun $noun ): array {
-		return [
+	private static function columns( Posting_Noun $noun, bool $with_scheme ): array {
+		$columns = [
 			[
 				'id'        => 'order',
 				'label'     => __( 'Заказ', 'woodev-plugin-framework' ),
@@ -188,13 +201,26 @@ final class Site_Orders_Definition {
 				'cell_type' => 'actions',
 			],
 		];
+
+		if ( $with_scheme ) {
+			$scheme = [
+				'id'        => 'scheme',
+				'label'     => __( 'Схема', 'woodev-plugin-framework' ),
+				'cell_type' => 'text',
+			];
+
+			array_splice( $columns, 2, 0, [ $scheme ] ); // Beside the posting number.
+		}
+
+		return $columns;
 	}
 
 	/**
 	 * @param array<int,array{value:string,label:string}> $statuses WooCommerce order statuses.
+	 * @param array<string,string>                        $schemes  Delivery schemes to filter by; empty for no filter.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function filters( array $statuses, Posting_Noun $noun ): array {
+	private static function filters( array $statuses, Posting_Noun $noun, array $schemes ): array {
 		$filters = [
 			[
 				'id'    => 'q',
@@ -220,6 +246,24 @@ final class Site_Orders_Definition {
 				],
 			],
 		];
+
+		if ( [] !== $schemes ) {
+			$options = [];
+
+			foreach ( $schemes as $code => $name ) {
+				$options[] = [
+					'value' => (string) $code,
+					'label' => $name,
+				];
+			}
+
+			$filters[] = [
+				'id'      => 'scheme',
+				'label'   => __( 'Схема', 'woodev-plugin-framework' ),
+				'type'    => 'select',
+				'options' => $options,
+			];
+		}
 
 		$filters[] = [
 			'id'    => 'date',
