@@ -158,6 +158,7 @@ CI workflows: `ci.yml` (jobs: `version`, `lint`, `compat`, `unit-tests`, `test-j
 | `specs/2026-11-15-marketplace-admin-ui.md` | #1776 — marketplace admin pages look like the delivery plugins (cards C1–C3) | ✅ |
 | `specs/2026-11-16-marketplace-bulk-operations.md` | #1786 — bulk operations for large catalogues: «все по фильтру», sync on link, link by category, price actions | ✅ |
 | `specs/2026-11-26-wildberries-seller-plugin-design.md` | Wildberries Seller 1.0 (new plugin on `woodev/marketplace/`, #1670) — FBS and DBS, supplies, marking, framework extensions, card list; owner decisions in `research/2026-11-26-wb-seller/decisions.md` | draft |
+| `specs/2026-11-28-avito-plugin-design.md` | Avito plugin 1.0 under a working name (new plugin on `woodev/marketplace/`, #1986) — publication by feed, delivery orders, framework extensions, phase-0 measurement, card list; owner decisions in `research/2026-11-26-avito/decisions.md` | draft |
 
 | Plan | Implements |
 |------|------------|

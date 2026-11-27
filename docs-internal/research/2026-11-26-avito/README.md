@@ -13,7 +13,10 @@ to `api.avito.ru`.
 | [gap-map.md](gap-map.md) | Each capability against `woodev/marketplace/` with file:line; differences from Ozon and WB |
 | [access-needed.ru.md](access-needed.ru.md) | What the owner has to set up before measurement, in Russian, step by step |
 | [owner-questions.ru.md](owner-questions.ru.md) | 13 v1 scope questions, Russian, each with a recommendation |
-| [card-plan.md](card-plan.md) | Estimated framework and plugin cards |
+| [card-plan.md](card-plan.md) | Estimated framework and plugin cards (superseded by the design spec) |
+| [decisions.md](decisions.md) | The owner's answers of 27.11.2026 (D1–D13) — final; they win over every recommendation here |
+
+The design built on the research and the answers: [Avito plugin 1.0 design](../../specs/2026-11-28-avito-plugin-design.md).
 
 ## Verdict
 

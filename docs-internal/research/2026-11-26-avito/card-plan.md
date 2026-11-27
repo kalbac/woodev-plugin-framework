@@ -1,6 +1,10 @@
 
 # Avito: rough card list (estimate)
 
+**Superseded** on 28.11.2026 by §21 of the [design spec](../../specs/2026-11-28-avito-plugin-design.md), which follows the
+[owner's answers](decisions.md) and the framework as it stands after the Wildberries cards. Kept as the record of the
+research estimate.
+
 Filing briefs for the coordinator, **not filed cards**. Written against the recommendations of
 [the owner questions](owner-questions.ru.md). S/M/L are relative size; model tiers follow the project rule and every
 card gets a critic of another lineage. Delivery code is not touched. «G n» is a row of [the gap map](gap-map.md);
