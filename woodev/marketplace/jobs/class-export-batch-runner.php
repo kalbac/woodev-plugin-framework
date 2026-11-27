@@ -16,6 +16,7 @@ use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Export_Gateway;
+use Woodev\Framework\Marketplace\Flows\Receives_Export_Claim;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 
@@ -27,7 +28,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * 1. The job gate: account enabled, licence, account pause; then the plugin's write gate — an account that may not write keeps its
  *    links queued and the batch waits.
- * 2. **One run per account**: the run takes the account row's claim; a busy account retries in 30 s.
+ * 2. **One run per account**: the run takes the account row's claim; a busy account retries in 30 s. A gateway that implements
+ *    {@see Receives_Export_Claim} is handed that claim at once, before it builds or sends anything.
  * 3. A task row is opened and the queued links are claimed for it (`queued` → `submitted`), fenced by the account claim.
  * 4. Each claimed link is validated again and built; a link that fails here is `failed` with the reason.
  * 5. **Right before the request** the run checks it still holds the claim and drops every link that is no longer `submitted` for
@@ -253,6 +255,7 @@ final class Export_Batch_Runner {
 	 * @return void
 	 */
 	private function execute( Account $account, array $link_ids, int $attempt, Claim_Fence $fence, Export_Run $run ): void {
+		$this->hand_over_claim( $account, $fence );
 		$this->refresh_articles( $account, $link_ids );
 
 		$run->task_id = $this->ledger->open( new Async_Task( $account->id(), Async_Task::KIND_IMPORT ), [] );
@@ -287,6 +290,31 @@ final class Export_Batch_Runner {
 		}
 
 		$this->submit( $account, $run, $items, $attempt, $fence );
+	}
+
+	/**
+	 * Hands the run's claim to a gateway that asks for it ({@see Receives_Export_Claim}), before any of its methods is called.
+	 *
+	 * @param Account     $account Account.
+	 * @param Claim_Fence $fence   The run's claim.
+	 * @return void
+	 */
+	private function hand_over_claim( Account $account, Claim_Fence $fence ): void {
+		if ( ! $this->gateway instanceof Receives_Export_Claim ) {
+			return;
+		}
+
+		$gate       = $this->gate;
+		$account_id = $account->id();
+
+		$this->gateway->receive_export_claim(
+			$account,
+			static function () use ( $gate, $account_id, $fence ): void {
+				if ( ! $gate->still_holds( $account_id, $fence ) ) {
+					throw new Claim_Lost( 'The account claim was taken over during the export.' );
+				}
+			}
+		);
 	}
 
 	/**

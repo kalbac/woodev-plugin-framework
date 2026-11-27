@@ -333,6 +333,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Flows\\Order_Meta_Contract' => 'woodev/marketplace/flows/interface-order-meta-contract.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Order_Query' => 'woodev/marketplace/flows/class-order-query.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Product_Writer' => 'woodev/marketplace/flows/class-product-writer.php',
+	'Woodev\\Framework\\Marketplace\\Flows\\Receives_Export_Claim' => 'woodev/marketplace/flows/interface-receives-export-claim.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Refresh_Result' => 'woodev/marketplace/flows/class-refresh-result.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Releases_Reset_Imports' => 'woodev/marketplace/flows/interface-releases-reset-imports.php',
 	'Woodev\\Framework\\Marketplace\\Flows\\Selectable_Label_Format' => 'woodev/marketplace/flows/interface-selectable-label-format.php',
