@@ -2,7 +2,7 @@
 namespace Woodev\Tests\Unit\Admin\Records;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Admin\Records\{Records_Registry, Records_Rest_Controller};
+use Woodev\Framework\Admin\Records\{Action_State_Exception, Records_Registry, Records_Rest_Controller};
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/Records_Fixtures.php';
@@ -309,6 +309,17 @@ class RecordsRestControllerTest extends TestCase {
 			$this->ozon->last['field_options']
 		);
 		$this->assertSame( [ 'options', [ 'account_id' => 'a1' ], [ 'p:1:a1' ] ], $this->ozon->last['authorize'][0] );
+	}
+
+	public function test_a_refused_option_list_is_a_409_with_the_providers_sentence(): void {
+		$this->ozon->throw = new Action_State_Exception( 'Маркетплейс не даёт отменить это отправление.' );
+
+		$result = $this->controller->get_field_options(
+			$this->request( [], 'ozon-seller', 'products', [ 'action' => 'sync', 'field' => 'warehouse' ] )
+		);
+
+		$this->assertError( $result, 'woodev_records_action_conflict', 409 );
+		$this->assertSame( 'Маркетплейс не даёт отменить это отправление.', $result->get_error_message() );
 	}
 
 	/**

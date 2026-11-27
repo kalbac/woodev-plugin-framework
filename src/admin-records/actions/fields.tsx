@@ -245,7 +245,9 @@ function SearchableField( props: FieldProps ) {
 					<Spinner />
 				</span>
 			) }
-			{ source.status === 'error' && <p role="alert">{ actionMessage( messages, ACTION_MESSAGE_KEYS.optionsError ) }</p> }
+			{ source.status === 'error' && (
+				<p role="alert">{ source.message || actionMessage( messages, ACTION_MESSAGE_KEYS.optionsError ) }</p>
+			) }
 			{ source.hasMore && (
 				<Button variant="link" disabled={ disabled } onClick={ source.loadMore }>
 					{ actionMessage( messages, ACTION_MESSAGE_KEYS.optionsMore ) }
@@ -269,7 +271,9 @@ function SourceField( props: FieldProps ) {
 					<Spinner />
 				</span>
 			) }
-			{ source.status === 'error' && <p role="alert">{ actionMessage( messages, ACTION_MESSAGE_KEYS.optionsError ) }</p> }
+			{ source.status === 'error' && (
+				<p role="alert">{ source.message || actionMessage( messages, ACTION_MESSAGE_KEYS.optionsError ) }</p>
+			) }
 			{ source.hasMore && (
 				<Button variant="link" disabled={ props.disabled } onClick={ source.loadMore }>
 					{ actionMessage( messages, ACTION_MESSAGE_KEYS.optionsMore ) }

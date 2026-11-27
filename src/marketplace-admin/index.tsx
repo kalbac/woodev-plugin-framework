@@ -9,7 +9,9 @@
  */
 
 import './style.scss';
+import apiFetch from '@wordpress/api-fetch';
 import { addFilter } from '@wordpress/hooks';
+import { nameForeignAnswers } from '../components/foreign-answer';
 import { readManifest } from './manifest';
 import { buildAdminPages } from './pages';
 import type { WcAdminPage } from './types';
@@ -17,6 +19,9 @@ import './views/diagnostics';
 import './views/mappings';
 import './views/records';
 import './views/tools';
+
+// Every request of the marketplace screens, their embedded settings included: a replaced answer names its HTTP status.
+apiFetch.use( nameForeignAnswers( /woodev\/v1\/admin\/(records|marketplace)\// ) );
 
 addFilter( 'woocommerce_admin_pages_list', 'woodev/marketplace-admin', ( pages: WcAdminPage[] ) => [
 	...pages,

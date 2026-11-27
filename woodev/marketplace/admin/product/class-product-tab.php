@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Product;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Dialog_Assets;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
+use Woodev\Framework\Marketplace\Admin\Shared\Foreign_Answer_Text;
 use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
@@ -543,6 +544,7 @@ final class Product_Tab {
 					'close'   => __( 'Закрыть', 'woodev-plugin-framework' ),
 					'working' => __( 'Выполняем…', 'woodev-plugin-framework' ),
 					'failed'  => __( 'Не получилось: страница не ответила. Обновите её и повторите.', 'woodev-plugin-framework' ),
+					'foreign' => Foreign_Answer_Text::template(),
 					'pickAction'   => __( 'Выберите действие.', 'woodev-plugin-framework' ),
 					'pickVariants' => __( 'Отметьте варианты, с которыми нужно что-то сделать.', 'woodev-plugin-framework' ),
 				],

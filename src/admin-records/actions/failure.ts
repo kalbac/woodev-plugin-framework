@@ -6,7 +6,7 @@
  * - `fields`   — 422: the input was refused, with a sentence per field; the form opens again;
  * - `conflict` — 409: current state refuses the action; nothing ran;
  * - `rejected` — any other answer from the server (403, 404, 5xx…);
- * - `unknown`  — no usable answer at all (network, timeout, a non-JSON page): a mutation may have run.
+ * - `unknown`  — no usable answer at all (network, timeout, a replaced answer): a mutation may have run.
  *
  * @package woodev-plugin-framework
  */
@@ -17,7 +17,7 @@ export interface Failure {
 	kind: FailureKind;
 	/** HTTP status; 0 when no answer arrived. */
 	status: number;
-	/** The server's sentence; empty when it sent none. */
+	/** The server's sentence, or the one naming the status of a replaced answer; empty when there is neither. */
 	message: string;
 	/** Field id → sentence, for a 422. */
 	fieldErrors: Record< string, string >;
@@ -26,6 +26,8 @@ export interface Failure {
 interface RestError {
 	message?: unknown;
 	data?: { status?: unknown; errors?: unknown };
+	/** Set on an answer that was not the plugin's, see `components/foreign-answer`. */
+	httpStatus?: unknown;
 }
 
 function fieldErrorsOf( errors: unknown ): Record< string, string > {
@@ -50,7 +52,7 @@ export function describeFailure( error: unknown ): Failure {
 
 	if ( status === 0 ) {
 		// Not a REST error body: the request or its answer was lost, so what the server did is unknown.
-		return { kind: 'unknown', status, message: '', fieldErrors: {} };
+		return { kind: 'unknown', status, message: typeof rest.httpStatus === 'number' ? message : '', fieldErrors: {} };
 	}
 	if ( status === 422 ) {
 		return { kind: 'fields', status, message, fieldErrors: fieldErrorsOf( rest.data?.errors ) };

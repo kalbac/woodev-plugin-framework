@@ -54,10 +54,19 @@
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': text( 'nonce' ) },
 				body: JSON.stringify( body )
-			} ).then( function ( response ) {
-				return response.json().then( function ( answer ) {
-					return { ok: response.ok, answer: answer };
-				} );
+			} ).then( read );
+		}
+
+		// An answer that is not JSON, or a refusal without a message, was replaced on the way: its status is all there is to show.
+		function read( response ) {
+			return response.json().catch( function () {
+				return null;
+			} ).then( function ( answer ) {
+				if ( ! answer || ( ! response.ok && ! answer.message ) ) {
+					throw { foreign: text( 'foreign' ).replace( '%d', response.status ) };
+				}
+
+				return { ok: response.ok, answer: answer };
 			} );
 		}
 
@@ -164,8 +173,8 @@
 			}, POLL_MS );
 		}
 
-		function fail() {
-			say( text( 'failed' ) );
+		function fail( error ) {
+			say( error && error.foreign ? error.foreign : text( 'failed' ) );
 			finish();
 		}
 

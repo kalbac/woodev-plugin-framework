@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Account\Account_Store;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Bulk;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Definition;
 use Woodev\Framework\Marketplace\Admin\Pages\Products\Site_Products_Selection;
+use Woodev\Framework\Marketplace\Admin\Shared\Foreign_Answer_Text;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 
 defined( 'ABSPATH' ) || exit;
@@ -305,6 +306,7 @@ final class Variation_Bulk_Actions {
 		$config = [
 			'prefix'  => $this->prefix(),
 			'failed'  => __( 'Не получилось: страница не ответила. Обновите её и повторите.', 'woodev-plugin-framework' ),
+			'foreign' => Foreign_Answer_Text::template(),
 			'dismiss' => __( 'Скрыть это уведомление.', 'woodev-plugin-framework' ),
 		];
 

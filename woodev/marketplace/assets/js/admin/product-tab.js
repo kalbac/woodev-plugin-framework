@@ -421,7 +421,9 @@
 					product_id: $button.data( 'product' ),
 					account_id: $button.data( 'account' ),
 					_wpnonce: $button.data( 'nonce' )
-				}
+				},
+				null,
+				'json'
 			)
 			.done(
 				function ( response ) {
@@ -431,9 +433,7 @@
 			)
 			.fail(
 				function ( xhr ) {
-					var data = xhr.responseJSON && xhr.responseJSON.data;
-
-					$result.addClass( 'woodev-mp-result--error' ).text( data && data.message ? data.message : settings.texts.failed );
+					$result.addClass( 'woodev-mp-result--error' ).text( failureText( xhr ) );
 				}
 			)
 			.always(
@@ -443,6 +443,23 @@
 			);
 		}
 	);
+
+	/**
+	 * The sentence of a failed request: the server's own; the status of an answer that has none, because it was replaced on
+	 * the way; or that the page did not answer at all.
+	 *
+	 * @param {Object} xhr The failed request.
+	 * @return {string}
+	 */
+	function failureText( xhr ) {
+		var data = xhr.responseJSON && xhr.responseJSON.data;
+
+		if ( data && data.message ) {
+			return data.message;
+		}
+
+		return xhr.status ? settings.texts.foreign.replace( '%d', xhr.status ) : settings.texts.failed;
+	}
 
 	/**
 	 * Draws the answer of an action on variations in the line beside the buttons: the sentence, in red when it is a refusal, and the link to the page
@@ -479,7 +496,9 @@
 				account_id: request.source.data( 'account' ),
 				product_id: request.source.data( 'product' ),
 				variations: request.variations
-			}
+			},
+			null,
+			'json'
 		)
 		.done(
 			function ( response ) {
@@ -488,9 +507,7 @@
 		)
 		.fail(
 			function ( xhr ) {
-				var data = xhr.responseJSON && xhr.responseJSON.data;
-
-				request.$result.addClass( 'woodev-mp-result--error' ).text( data && data.message ? data.message : settings.texts.failed );
+				request.$result.addClass( 'woodev-mp-result--error' ).text( failureText( xhr ) );
 			}
 		)
 		.always(

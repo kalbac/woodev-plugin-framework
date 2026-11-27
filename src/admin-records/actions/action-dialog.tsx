@@ -114,7 +114,7 @@ function FailureView( { state, messages }: { state: FlowState; messages: Message
 	// No answer from an apply: it may have run. The table was read again; say so, and do not offer to send it again.
 	const text =
 		failure.kind === 'unknown'
-			? actionMessage( messages, ACTION_MESSAGE_KEYS.recovery )
+			? [ failure.message, actionMessage( messages, ACTION_MESSAGE_KEYS.recovery ) ].filter( Boolean ).join( ' ' )
 			: failure.message || actionMessage( messages, ACTION_MESSAGE_KEYS.error );
 
 	return (
