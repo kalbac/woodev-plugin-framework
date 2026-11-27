@@ -320,3 +320,31 @@ test( 'a field show_if hides is an empty cell in the table, while its siblings k
 
 	expect( within( rowOf( 'Mapbox' ) ).getByRole( 'spinbutton', { name: 'Лимит в сутки: Mapbox' } ) ).toBeInTheDocument();
 } );
+
+test( 'a server error on a key is drawn under the key, on the key\'s own line, and marks the input aria-invalid', () => {
+	const fields = { ...FIELDS, plain_password: { type: 'string', name: 'Пароль', controlType: 'password', value: 'secret' } };
+	const table = { row_title: 'Сервис', columns: [ { id: 'key', label: 'Ключ API' } ], rows: [
+		{ id: 'mapbox', label: 'Mapbox', cells: { key: { type: 'field', setting: 'mapbox_key' } } },
+		{ id: 'plain', label: 'Plain', cells: { key: { type: 'field', setting: 'plain_password' } } },
+	] } as TableSchema;
+	render( <FieldsTable providerId="range" table={ table } fields={ fields } values={ {} } onFieldChange={ jest.fn() } onFieldRevert={ jest.fn() }
+		serverErrors={ { mapbox_key: 'Токен не принят.', plain_password: 'Пароль не принят.' } } /> );
+
+	const mapbox = within( rowOf( 'Mapbox' ) );
+	const secretInput = mapbox.getByLabelText( 'Ключ API: Mapbox' );
+	expect( secretInput ).toHaveAttribute( 'aria-invalid', 'true' );
+	const secretError = mapbox.getByText( 'Токен не принят.' );
+	expect( secretError ).toHaveClass( 'woodev-field__error' );
+	expect( secretError.parentElement ).toHaveClass( 'woodev-field__control' );
+	expect( secretInput.closest( '.woodev-field__control' ) ).toBe( secretError.parentElement );
+
+	const plain = within( rowOf( 'Plain' ) );
+	expect( plain.getByLabelText( 'Ключ API: Plain' ) ).toHaveAttribute( 'aria-invalid', 'true' );
+	expect( plain.getByText( 'Пароль не принят.' ).parentElement ).toHaveClass( 'woodev-field__control' );
+} );
+
+test( 'a key without a server error is not marked invalid', () => {
+	render( <Harness /> );
+
+	expect( within( rowOf( 'Mapbox' ) ).getByPlaceholderText( '•••••• сохранено' ) ).toHaveAttribute( 'aria-invalid', 'false' );
+} );

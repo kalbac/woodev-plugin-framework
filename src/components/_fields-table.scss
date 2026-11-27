@@ -80,8 +80,15 @@
 			position: relative;
 			display: flex;
 			flex: 1 1 auto;
+			flex-wrap: wrap;
 			align-items: center;
 			min-width: 0;
+		}
+
+		// The server's refusal (and a client error) is said under the input, on its own line: the control is a row,
+		// so without the break the message sat beside the key, in the input's column.
+		.woodev-field__control > .woodev-field__error {
+			flex: 0 0 100%;
 		}
 
 		.woodev-field__secret-clear-link {
