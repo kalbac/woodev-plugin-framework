@@ -74,6 +74,10 @@ class SellerDeliveredOrdersTest extends TestCase {
 		Order_Privacy::forget();
 		( new Order_Privacy( $this->meta->created_via() ) )->register();
 		update_option( 'woocommerce_erasure_request_removes_order_data', 'yes' );
+
+		// WooCommerce's own analytics listener of the erasure takes an order id in older releases (8.5, 9.3) and is handed the order,
+		// which wpdb::prepare() reports. It is not the subject here.
+		remove_action( 'woocommerce_privacy_remove_order_personal_data', [ \Automattic\WooCommerce\Admin\API\Reports\Customers\DataStore::class, 'anonymize_customer' ] );
 	}
 
 	/**
