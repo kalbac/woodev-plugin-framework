@@ -196,6 +196,8 @@ function ColorControl( { value, optional, onChange, disabled } ) {
  * @param {boolean}  [props.disabled] whether the control is disabled (D11).
  * @param {string}   [props.savedPlaceholder] shorter placeholder for a tight cell (`schema.saved_placeholder`).
  * @param {string}   [props.clearLabel] shorter clear link text for a tight cell (`schema.clear_label`).
+ * @param {string}   [props.ariaLabel] accessible name of the input when no visible label is drawn (`schema.aria_label`).
+ * @param {boolean}  [props.invalid] whether the field carries an error, announced as `aria-invalid`.
  * @return {Object} React element.
  */
 function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled, savedPlaceholder, clearLabel, ariaLabel, invalid } ) {

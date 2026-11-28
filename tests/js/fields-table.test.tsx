@@ -348,3 +348,22 @@ test( 'a key without a server error is not marked invalid', () => {
 
 	expect( within( rowOf( 'Mapbox' ) ).getByPlaceholderText( '•••••• сохранено' ) ).toHaveAttribute( 'aria-invalid', 'false' );
 } );
+
+test( 'a required password left empty is marked aria-invalid once errors are revealed, until it is filled', () => {
+	const fields = { plain_password: { type: 'string', name: 'Пароль', controlType: 'password', required: true, value: '' } };
+	const table = { row_title: 'Сервис', columns: [ { id: 'key', label: 'Ключ API' } ], rows: [
+		{ id: 'plain', label: 'Plain', cells: { key: { type: 'field', setting: 'plain_password' } } },
+	] } as TableSchema;
+	const view = ( values: Record< string, unknown >, showErrors: boolean ) => <FieldsTable providerId="range" table={ table } fields={ fields } values={ values }
+		onFieldChange={ jest.fn() } onFieldRevert={ jest.fn() } showErrors={ showErrors } />;
+
+	const { rerender } = render( view( {}, false ) );
+	const input = () => screen.getByLabelText( 'Ключ API: Plain' );
+	expect( input() ).toHaveAttribute( 'aria-invalid', 'false' );
+
+	rerender( view( {}, true ) );
+	expect( input() ).toHaveAttribute( 'aria-invalid', 'true' );
+
+	rerender( view( { plain_password: 'secret' }, true ) );
+	expect( input() ).toHaveAttribute( 'aria-invalid', 'false' );
+} );

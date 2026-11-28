@@ -10,6 +10,10 @@
 
 @use './tokens' as wd;
 
+// The middle of a cell's input line: half of the 40px input. What sits beside an input is centred here rather than
+// at `50%`, because an error under the input makes the cell's field a line taller.
+$input-middle: 20px;
+
 .woodev-fields-table {
 	width: 100%;
 	overflow-x: auto;
@@ -95,7 +99,7 @@
 		// which grows a line when the server's error sits under the input.
 		.woodev-field__secret-clear-link {
 			position: absolute;
-			top: 20px;
+			top: $input-middle;
 			right: wd.$gap;
 			margin-top: 0;
 			transform: translateY( -50% );
@@ -144,15 +148,25 @@
 	// whether or not the row has a tip. Other fields (a key) share the line with it.
 	&__field.has-tip:has( input[type="number"] ) > .woodev-field__tip {
 		position: absolute;
-		top: 50%;
+		top: $input-middle;
 		left: 100%;
 		margin-left: wd.$gap-sm;
 		transform: translateY( -50% );
 	}
 
+	// A tip that shares the line with its input (a key): under an error it stays beside the input too. Scoped to the
+	// error, so a control of another height (a toggle) keeps its tip centred on it.
+	&__field:has( .woodev-field__error ) > .woodev-field__tip {
+		position: relative;
+		top: $input-middle;
+		align-self: flex-start;
+		margin-top: 0;
+		transform: translateY( -50% );
+	}
+
 	&__prefix {
 		position: absolute;
-		top: 50%;
+		top: $input-middle;
 		right: 100%;
 		margin-right: wd.$gap-sm;
 		transform: translateY( -50% );
