@@ -45,12 +45,20 @@ abstract class Carrier_Test_Case extends Sync_Test_Case {
 	 */
 	protected $notes = [];
 
+	/**
+	 * Options written.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected $options = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->adapter = new Fake_Carrier_Adapter();
 		$this->orders  = [];
 		$this->notes   = [];
+		$this->options = [];
 
 		Functions\when( 'sanitize_text_field' )->alias( 'strip_tags' );
 		Functions\when( 'wc_get_order' )->alias(
@@ -71,13 +79,6 @@ abstract class Carrier_Test_Case extends Sync_Test_Case {
 			}
 		);
 	}
-
-	/**
-	 * Options written.
-	 *
-	 * @var array<string,mixed>
-	 */
-	protected $options = [];
 
 	/**
 	 * Creates an order the seller delivers, registered as a posting of the test account.
