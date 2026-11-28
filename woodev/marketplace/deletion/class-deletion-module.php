@@ -129,7 +129,7 @@ final class Deletion_Module {
 		$steps = self::steps(
 			$queue,
 			// The orders lose the buyer's data the framework kept on them before their posting rows go.
-			array_replace( $stores, [ 'postings' => new Posting_Eraser( $stores['postings'] ) ] ),
+			array_replace( $stores, [ 'postings' => new Posting_Eraser( $stores['postings'], $db ) ] ),
 			self::forget_options( $plugin->get_id(), new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ), $stores['cards'], $stores['shipments'] ),
 			new Pinned_Offer_Eraser( $db, $adapter->id() ),
 			new Wpdb_Event_Ledger( $db, $schema->table_name( 'events', $db->prefix ) )

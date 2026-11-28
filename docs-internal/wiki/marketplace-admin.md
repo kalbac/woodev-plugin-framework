@@ -1680,7 +1680,8 @@ in `_woodev_mp_delivery_seeded`; an erased order (`_anonymized`) is never given 
 buyer e-mail**, so an e-mail request finds it only when somebody added one (waived for 1.0, coordinator, 28.11.2026: WordPress'
 export is keyed by e-mail or username); the bulk action and the clean-up need no e-mail. Account deletion
 removes the module's buyer meta from the account's orders (`Deletion\Posting_Eraser`); the order's own fields stay. A refused
-read of the postings is a failed run (retried), never «none left».
+read of the postings is a failed run (retried), never «none left». A posting stays until its order's data is gone: an order that
+cannot be loaded fails the run unless a successful read of the order store finds no such order.
 
 ## Sticker documents (#2005)
 

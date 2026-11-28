@@ -392,7 +392,7 @@ final class AccountDeletionJobTest extends Sync_Test_Case {
 	public function test_a_failed_read_of_the_postings_is_retried_and_keeps_the_account(): void {
 		$registry = new Order_Registry( $this->db, Sqlite_Tables::table( 'postings' ) );
 		$registry->reserve( $this->account_id, 'cart-1' );
-		$steps               = [ 'postings' => [ new Posting_Eraser( $registry ), 'delete_account' ] ];
+		$steps               = [ 'postings' => [ new Posting_Eraser( $registry, $this->db ), 'delete_account' ] ];
 		$this->db->fail_read = static function ( string $query ): bool {
 			return false !== strpos( $query, '_postings' );
 		};

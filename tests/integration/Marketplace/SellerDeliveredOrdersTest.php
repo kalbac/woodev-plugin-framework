@@ -302,13 +302,49 @@ class SellerDeliveredOrdersTest extends TestCase {
 
 		$order_id = $this->write( '1', $this->delivery()->with_payload( [ 'client' => 'raw-buyer' ] ) );
 
-		$this->assertSame( 1, ( new Posting_Eraser( $this->registry() ) )->delete_account( self::ACCOUNT, 500 ) );
+		$this->assertSame( 1, $this->eraser()->delete_account( self::ACCOUNT, 500 ) );
 
 		$order = wc_get_order( $order_id );
 
 		$this->assertNull( Seller_Order::delivery( $order ) );
 		$this->assertSame( [], Seller_Order::payload( $order ) );
 		$this->assertSame( '+79991111111', $order->get_shipping_phone() );
+		$this->assertSame( 0, $this->registry()->count_for_account( self::ACCOUNT ) );
+	}
+
+	/**
+	 * An order the shop fails to load keeps its posting, so the deletion can come back to it; a deleted order does not hold the
+	 * deletion up. The order store is asked on the real datastore.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_the_posting_stays_while_its_order_cannot_be_loaded( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$order_id = $this->write( '1', $this->delivery()->with_payload( [ 'client' => 'raw-buyer' ] ) );
+		$broken   = static function (): string {
+			return 'Woodev_No_Such_Order_Class';
+		};
+		add_filter( 'woocommerce_order_class', $broken );
+		wp_cache_flush(); // A cached order would be answered without being loaded.
+
+		try {
+			$this->eraser()->delete_account( self::ACCOUNT, 500 );
+			$this->fail( 'An order that cannot be loaded must fail the run.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'could not be loaded', $e->getMessage() );
+		} finally {
+			remove_filter( 'woocommerce_order_class', $broken );
+		}
+
+		$this->assertSame( 1, $this->registry()->count_for_account( self::ACCOUNT ) );
+		$this->assertNotSame( [], Seller_Order::payload( wc_get_order( $order_id ) ) );
+
+		wc_get_order( $order_id )->delete( true );
+
+		$this->assertSame( 1, $this->eraser()->delete_account( self::ACCOUNT, 500 ), 'a deleted order holds nothing back' );
 		$this->assertSame( 0, $this->registry()->count_for_account( self::ACCOUNT ) );
 	}
 
@@ -432,6 +468,12 @@ class SellerDeliveredOrdersTest extends TestCase {
 		$this->assertNull( Seller_Order::delivery( $order ) );
 		$this->assertSame( [], Seller_Order::payload( $order ) );
 		$this->assertTrue( Seller_Order::is_seller_delivered( $order ) );
+	}
+
+	private function eraser(): Posting_Eraser {
+		global $wpdb;
+
+		return new Posting_Eraser( $this->registry(), $wpdb );
 	}
 
 	private function registry(): Order_Registry {
