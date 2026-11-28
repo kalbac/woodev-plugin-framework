@@ -1612,7 +1612,7 @@ one-order posting (`upsert()`, Ozon) keeps no units, tags no line and announces 
 |---|---|
 | One line item per live unit, item meta `_woodev_mp_unit` = the member's external id | the writer tags each line (`Order_Line::with_unit()`), `Wc_Order_Store` writes and matches it: two equal units are two items, and only the cancelled one leaves |
 | A cancelled unit's item leaves the order | only its stock comes back; the other items stay, with their taxes and stock records, and the tax lines are worked out again from them. The order is `cancelled` only when every unit is |
-| Unit records, order meta `_woodev_mp_units` (`Flows\Order_Units`, value `Flows\Order_Unit`) | every unit: id, marketplace status, cancellation time (UTC), lines (shop product id, article key, name, quantity, price). A live record follows the marketplace; a **cancelled one is final** |
+| Unit records, order meta `_woodev_mp_units` (`Flows\Order_Units`, value `Flows\Order_Unit`) | every unit: id, marketplace status, cancellation time (UTC), lines (shop product id, article key, name — the linked shop product's since 2.1.29, else the marketplace's —, quantity, price). A live record follows the marketplace; a **cancelled one is final** |
 | `woodev_marketplace_{created_via}_units_cancelled( int $account_id, string[] $offer_ids, \WC_Order $order )` | fired for units newly cancelled, one first seen cancelled included, after the stock was settled and **before** the records are stored (a death in between repeats it) |
 | The stock pair goes out again (`Stock_Intents::on_units_cancelled()`, `Sync_State_Store::request_resend()`) | the marketplace need not give a cancelled unit back, so the pair is due although the number equals the accepted one, a pair that had used up its attempts included (the count restarts, a wait stays). No schema change: the sent and the in-flight payload are forgotten, so a send on its way settles nothing |
 
@@ -1633,6 +1633,55 @@ row id is `{account}:{order}:{digest of the unit id}`: the marketplace's id neve
 
 **Limit.** An account that creates no WooCommerce orders (`Registry_Stock_Accounting`) gets none of this: its registry row keeps
 the lines of one member at a time.
+
+## Orders the seller delivers (#2007)
+
+Card WF9 of the Wildberries design (`2.1.29`). An order the shop ships itself (DBS) is an ordinary WooCommerce order with a
+shipping address. Everything is additive and optional: Ozon Seller 2.0.0 declares nothing and sends no delivery.
+
+**Adapter side.**
+
+| Seam | Use | Without it |
+|---|---|---|
+| `Orders\Seller_Delivery` on every DTO (`Order_DTO::with_delivery()`) | recipient, phone + extension, other phones, address + coordinates + pickup flag, comment, day and time, price of the paid delivery (`Money`), the raw payload, why the address is missing, payment title and shipping line title | the order is the marketplace's: `buyer()` is copied on every refresh |
+| `Order_DTO::with_scheme( code )` | the scheme, kept in `postings.scheme` (schema revision 9) and order meta `_woodev_mp_scheme` | no scheme |
+| `Admin\Order\Delivery_Schemes` | `code => name`; two or more give «Заказы» the «Схема» column and filter, one or more name the scheme in the details box | no column, no filter |
+
+An empty value means «not told yet». `Seller_Delivery::merged_over()` keeps what an earlier read told, group by group (the phones
+travel together, so a new number never keeps an old extension). The registry writer passes on the delivery of the member being
+written only while its snapshot is not older than the stored one.
+
+**What is written** (`Flows\Seller_Delivery_Writer`, from `Wc_Order_Store`):
+
+- payment title (once) and `date_paid` for a live order;
+- the framework's shipping line (item meta `_woodev_mp_delivery_line`) with the paid-delivery amount, in the order's currency;
+  total = units + that line. No other shipping line is created, priced or removed;
+- order meta (`Flows\Seller_Order`): `_woodev_mp_seller_delivered`, `_woodev_mp_delivery` (what the marketplace says),
+  `_woodev_mp_delivery_payload` (per unit, a value a later read leaves out stays), `_woodev_mp_delivery_seeded`;
+- **seed, then leave alone**: recipient (billing and shipping names), phone (both), address (`shipping_address_1`; city, region and
+  postcode are not parsed) and customer note. A group is written while all its fields are empty; later only while it still holds
+  exactly what the framework wrote. A group the merchant or a delivery wizard changed, or filled first, is never written again.
+
+**Order screen.** Items stay locked. The details box gets «Получатель и доставка» (`Admin\Order\Seller_Delivery_Panel`): recipient,
+phone and address inputs saved with the order form on `woocommerce_process_shop_order_meta` (own nonce, `edit_shop_order`; Enter
+in a field submits nothing, as on every WooCommerce order screen — the button saves), the
+marketplace's value beside a changed one, the chosen day, a pickup point notice, other phones, and warnings for a missing address
+and a phone that needs an extension. The shipping method is not edited here: the delivery wizard adds a carrier's line (WD1).
+The framework's own item meta (the unit of a line, the mark of the delivery line) is hidden on the order screen; an adapter hides
+what it writes itself.
+
+**A status code with `/`** («new/waiting») is written `new::waiting` as a value of the «Статус на маркетплейсе» filter and in the
+link from «Аналитика» (`Site_Orders_Filter::posting_status_value()`): the records engine takes no `/` in a value.
+
+**Personal data.** `Flows\Order_Privacy` plugs into WooCommerce's order exporter and eraser (`woocommerce_privacy_*`), so the
+e-mail requests of WordPress, «Remove personal data» of the orders list and the retention clean-up export and erase the module's
+meta with the order — the export includes the values first written into the order's fields, which a merchant's correction leaves
+in `_woodev_mp_delivery_seeded`; an erased order (`_anonymized`) is never given buyer data again. **A marketplace order has no
+buyer e-mail**, so an e-mail request finds it only when somebody added one (waived for 1.0, coordinator, 28.11.2026: WordPress'
+export is keyed by e-mail or username); the bulk action and the clean-up need no e-mail. Account deletion
+removes the module's buyer meta from the account's orders (`Deletion\Posting_Eraser`); the order's own fields stay. A refused
+read of the postings is a failed run (retried), never «none left». A posting stays until its order's data is gone: an order that
+cannot be loaded fails the run unless a successful read of the order store finds no such order.
 
 ## Sticker documents (#2005)
 

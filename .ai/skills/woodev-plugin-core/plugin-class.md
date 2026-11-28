@@ -190,6 +190,33 @@ For a marketplace where one cart is several remote orders (one per piece of good
 - A unit sold by a key the merchant must not see needs `Flows\Sellable_Units` on the adapter: the screens read the article
   through it.
 
+## A marketplace adapter: orders the seller delivers
+
+For a marketplace where the shop ships some orders itself; the full design is `docs-internal/wiki/marketplace-admin.md`, «Orders
+the seller delivers» (#2007). Framework 2.1.29.
+
+- Put `Orders\Seller_Delivery` on **every** DTO of such an order (`Order_DTO::with_delivery()`), status refreshes included, with
+  what you know so far; an empty value means «not told yet». Without it the order is treated as marketplace-delivered and
+  `buyer()` overwrites its fields on each refresh.
+- Bring the phone to the form carriers take (`+7…`) **before** you build the delivery: the framework writes it as given. A number
+  that needs an extension carries it in `with_phone()`; other numbers go to `with_other_phone()`, never into the phone field.
+- Name the scheme with `Order_DTO::with_scheme()` and declare `Admin\Order\Delivery_Schemes` (`code => name`); with two or more
+  schemes «Заказы» gets the column and filter.
+- Give the paid delivery of the cart with `with_price()` in the order's currency (another currency is not written), the buyer's
+  untouched data with `with_payload()`, and the sentence for a missing address with `with_address_note()`.
+- Read the recipient, phone and address from the **order** (`get_shipping_*`): the merchant may have corrected them. The
+  coordinates, the chosen day and the extension come from `Flows\Seller_Order::delivery()`.
+- Never write your own shipping line for the marketplace's delivery price, and never touch a line another writer added.
+- The merchant cannot change the shipping method on such an order's screen (items stay locked); the delivery wizard does (#2010).
+- **A limit to state in the plugin's own docs** (waived for 1.0 by the coordinator, 28.11.2026): the buyer has no e-mail, and
+  WordPress' export tool finds a person by e-mail or username, so it cannot identify the buyer of such an order. Export and erase
+  requests reach it only if somebody added an e-mail. Without one, «Remove personal data» of the orders list (a WooCommerce
+  setting) and WooCommerce's clean-up of old orders erase the data; nothing exports it.
+- A linked line of a unit is shown under the shop product's name; the `Order_Line` name you give is for a line the shop has not
+  linked, so give the marketplace's title there when it has one, not the article.
+- Hide the item meta you write in `write_line_meta()` with `woocommerce_hidden_order_itemmeta`: the order screen shows keys that
+  start with `_` too (gotcha `wc-order-screen-shows-underscore-item-meta`). The framework hides its own.
+
 ## A marketplace adapter: what the screens learn from optional parts
 
 For a `Marketplace_Plugin`; the full design is `docs-internal/wiki/marketplace-admin.md`, «What the screens learn from optional

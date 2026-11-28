@@ -22,6 +22,13 @@ use Woodev\Tests\Unit\TestCase;
  */
 final class OrderUnitsTest extends TestCase {
 
+	protected function setUp(): void {
+		parent::setUp();
+
+		// No shop product by default: a record then keeps the marketplace's name.
+		Functions\when( 'wc_get_product' )->justReturn( null );
+	}
+
 	public function test_a_unit_turning_cancelled_is_announced_once_and_its_record_is_kept_as_it_was(): void {
 		$live = $this->refreshed( [], [ self::member( '11', Status_Map::NEW, 100 ), self::member( '12', Status_Map::NEW, 200 ) ] );
 
@@ -67,6 +74,17 @@ final class OrderUnitsTest extends TestCase {
 		);
 		$this->assertSame( '450.50', $read->total()->to_string() );
 		$this->assertSame( 'confirm/waiting', $read->status_raw() );
+	}
+
+	public function test_a_linked_line_is_named_after_the_shop_product(): void {
+		$product = \Mockery::mock( '\WC_Product' );
+		$product->shouldReceive( 'get_name' )->andReturn( 'Футболка синяя' );
+		Functions\when( 'wc_get_product' )->justReturn( $product );
+
+		$records = $this->refreshed( [], [ self::member( '11', Status_Map::NEW, 100, '', 'tee|M' ) ] );
+
+		$this->assertSame( 'Футболка синяя', $records[0]->lines()[0]['name'], 'The article stays in its own column.' );
+		$this->assertSame( 'tee|M', $records[0]->lines()[0]['offer_id'] );
 	}
 
 	public function test_a_line_without_a_name_takes_the_shop_products(): void {

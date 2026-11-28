@@ -29,6 +29,10 @@ defined( 'ABSPATH' ) || exit;
  * unit's item leaves the order that way, the unit stays with the order as a record ({@see Order_Units}) and is announced
  * ({@see self::units_cancelled_hook()}).
  *
+ * The recipient of a marketplace-delivered order follows the marketplace; an order the seller delivers
+ * ({@see Order_DTO::delivery()}) gets its shipping line, paid mark and recipient from {@see Seller_Delivery_Writer}, which never
+ * writes over the merchant's corrections.
+ *
  * Everything the marketplace decides — the meta that identifies its order, the product of a line, what an order is created
  * via — is the {@see Order_Meta_Contract} the adapter supplies.
  *
@@ -234,10 +238,18 @@ final class Wc_Order_Store implements Order_Store {
 	 * @return void
 	 */
 	private function save_changes( \WC_Order $wc_order, Order_DTO $order, string $wc_status, array $members, bool $created ): void {
-		$this->set_buyer( $wc_order, $order );
+		// An order the seller delivers keeps the merchant's corrections, and an erased order stays erased.
+		if ( null === $order->delivery() && ! Seller_Order::is_seller_delivered( $wc_order ) && ! Seller_Delivery_Writer::is_erased( $wc_order ) ) {
+			$this->set_buyer( $wc_order, $order );
+		}
+
 		$this->contract->write_meta( $wc_order, $order, $created );
 		$wc_order->update_meta_data( self::META_GROUP_MEMBERS, (string) wp_json_encode( $members ) );
 		$wc_order->delete_meta_data( self::META_PROVISIONAL );
+
+		if ( '' !== $order->scheme() ) {
+			$wc_order->update_meta_data( Seller_Order::META_SCHEME, $order->scheme() );
+		}
 
 		list( $kept, $leaving, $arriving ) = $this->compare_lines( $wc_order, $order );
 
@@ -245,6 +257,10 @@ final class Wc_Order_Store implements Order_Store {
 
 		if ( [] !== $leaving || [] !== $arriving ) {
 			$this->change_lines( $wc_order, $order, $leaving, $arriving );
+		}
+
+		if ( ( new Seller_Delivery_Writer() )->apply( $wc_order, $order ) ) {
+			$wc_order->calculate_totals( false );
 		}
 
 		if ( $wc_order->get_status() !== $wc_status ) {
@@ -665,7 +681,8 @@ final class Wc_Order_Store implements Order_Store {
 	}
 
 	/**
-	 * Copies the buyer fields the marketplace shows: `name`, `phone`, `city`, `region`.
+	 * Copies the buyer fields the marketplace shows: `name`, `phone`, `city`, `region`. Not for an order the seller delivers, whose
+	 * recipient {@see Seller_Delivery_Writer} seeds.
 	 *
 	 * @param \WC_Order $wc_order The order.
 	 * @param Order_DTO $order    Whole order.

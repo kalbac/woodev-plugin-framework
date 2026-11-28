@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
+use Woodev\Framework\Marketplace\Admin\Order\Delivery_Schemes;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Actions;
@@ -136,6 +137,7 @@ final class Site_Orders_Module {
 		$gate     = Posting_Action_Gate::for_adapter( $adapter, $write_gate );
 		$seller   = self::seller( $plugin, $adapter, $gate, $license, new Wpdb_Seller_Action_Store( $db, $table( 'seller_actions' ) ) );
 		$units    = $adapter instanceof Unit_Orders ? new Site_Orders_Units( Order_Unit_Text::for_adapter( $adapter, $db, $plugin->get_id() ), $seller ) : null;
+		$schemes  = $adapter instanceof Delivery_Schemes ? $adapter->delivery_schemes() : [];
 
 		return new Site_Orders_Provider(
 			$accounts,
@@ -147,7 +149,8 @@ final class Site_Orders_Module {
 					return null !== $cancel && $cancel->is_finished( $order );
 				},
 				$adapter instanceof Posting_Status_Names ? $adapter : null,
-				$gate
+				$gate,
+				$schemes
 			),
 			new Site_Orders_Activity(),
 			$labels,
@@ -164,7 +167,8 @@ final class Site_Orders_Module {
 			$noun,
 			$seller,
 			self::shipments( $plugin, $adapter, $accounts, $db, $write_gate ),
-			$units
+			$units,
+			$schemes
 		);
 	}
 

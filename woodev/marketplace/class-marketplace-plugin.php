@@ -31,6 +31,7 @@ use Woodev\Framework\Marketplace\Data\Lifecycle;
 use Woodev\Framework\Marketplace\Data\Schema;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Deletion\Deletion_Module;
+use Woodev\Framework\Marketplace\Flows\Order_Privacy;
 use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Settings\Settings_Handler;
 use Woodev\Framework\Marketplace\Settings\Settings_Module;
@@ -150,6 +151,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Marketplace_Plugin' ) ) 
 			Site_Orders_Module::register( $this, $accounts, $wpdb, $write_gate );
 			Shipments_Module::register( $this, $accounts, $wpdb, $write_gate );
 			Order_Source_Filter::register( $this->get_marketplace_adapter(), $accounts, $wpdb );
+			( new Order_Privacy( $this->get_marketplace_adapter()->order_meta()->created_via() ) )->register();
 		}
 
 		/**

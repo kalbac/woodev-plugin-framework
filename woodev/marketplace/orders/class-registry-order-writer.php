@@ -123,6 +123,9 @@ final class Registry_Order_Writer implements Order_Writer {
 	 * Writes one member of a grouped order. The member snapshots live in the registry row, so the claim holder always folds
 	 * the newest state of every member; a writer whose claim was taken over cannot overwrite what the new holder wrote.
 	 *
+	 * The delivery data of an order the seller delivers ({@see Order_DTO::delivery()}) travels with the member being written,
+	 * and only while its snapshot is not older than the stored one.
+	 *
 	 * @since 2.0.29
 	 *
 	 * @param Order_DTO  $member One member.
@@ -141,9 +144,15 @@ final class Registry_Order_Writer implements Order_Writer {
 				$group = $group->with_member( self::thaw( $member->account_id(), $member->group_key(), (string) $external_id, (array) $snapshot ) );
 			}
 
-			$group = $group->with_member( $member );
+			$next     = $group->with_member( $member );
+			$accepted = $next !== $group; // The same object: the snapshot is older than the stored one, so its delivery data is too.
+			$order    = self::fold( $next, $member );
 
-			return $this->write( self::fold( $group, $member ), $map, $token, $group->member_registry(), self::freeze( $group ) );
+			if ( $accepted && null !== $member->delivery() ) {
+				$order = $order->with_delivery( $member->delivery() );
+			}
+
+			return $this->write( $order, $map, $token, $next->member_registry(), self::freeze( $next ) );
 		} finally {
 			$this->registry->release_claim( $member->account_id(), $member->group_key(), $token );
 		}
@@ -217,7 +226,8 @@ final class Registry_Order_Writer implements Order_Writer {
 			(bool) call_user_func( $this->is_terminal, $order ),
 			self::registry_lines( $order ),
 			$snapshots,
-			$order->processing_since()
+			$order->processing_since(),
+			$order->scheme()
 		);
 
 		if ( ! $recorded ) {
@@ -384,7 +394,7 @@ final class Registry_Order_Writer implements Order_Writer {
 			[ 'members' => array_keys( $members ) ]
 		);
 
-		return $order->with_units( $members );
+		return $order->with_units( $members )->with_scheme( $member->scheme() );
 	}
 
 	/**

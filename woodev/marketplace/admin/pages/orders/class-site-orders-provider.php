@@ -155,6 +155,13 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	private $units;
 
 	/**
+	 * Names of the marketplace's delivery schemes by code; empty for a marketplace that declares none.
+	 *
+	 * @var array<string,string>
+	 */
+	private $schemes;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
@@ -176,8 +183,10 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param Site_Orders_Seller|null      $seller       The adapter's seller actions (since 2.1.27); null for an adapter that declares none.
 	 * @param Site_Orders_Shipments|null   $shipments    «Add to a shipment» (since 2.1.28); null for a marketplace without shipments.
 	 * @param Site_Orders_Units|null       $units        The unit rows of a grouped order (since 2.1.28); null for a marketplace whose orders hold none.
+	 * @param array<string,string>         $schemes      Names of the delivery schemes by code (since 2.1.29); empty for a marketplace that declares none.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?Site_Orders_Shipments $shipments = null, ?Site_Orders_Units $units = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?Site_Orders_Shipments $shipments = null, ?Site_Orders_Units $units = null, array $schemes = [] ) {
+		$this->schemes     = $schemes;
 		$this->units       = $units;
 		$this->shipments   = $shipments;
 		$this->seller      = $seller;
@@ -235,7 +244,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	public function get_definition( array $context ): array {
 		$warning = null === $this->cancel || $this->cancel->needs_reason() ? null : $this->cancel->warning();
 
-		$definition = Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun, $this->seller, $warning, null !== $this->units );
+		$definition = Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun, $this->seller, $warning, null !== $this->units, $this->schemes );
 
 		return null === $this->shipments ? $definition : $this->shipments->extend_definition( $definition );
 	}

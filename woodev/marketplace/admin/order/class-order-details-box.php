@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Text;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
+use Woodev\Framework\Marketplace\Flows\Seller_Order;
 use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
@@ -23,6 +24,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * It shows what the WooCommerce order and the postings registry hold, so a field only the marketplace's own plugin knows (a
  * warehouse, a ship-by date) comes through the `woodev_marketplace_{id}_order_details` filter as one more `label => HTML` row.
+ * An order the seller delivers also gets its recipient and address, editable ({@see Seller_Delivery_Panel}).
  *
  * @since 2.1.13
  */
@@ -91,11 +93,19 @@ final class Order_Details_Box {
 	private $units;
 
 	/**
+	 * The delivery of an order the seller delivers.
+	 *
+	 * @var Seller_Delivery_Panel|null
+	 */
+	private $delivery;
+
+	/**
 	 * Creates the box.
 	 *
 	 * @since 2.1.13
 	 * @since 2.1.27 Takes the seller action buttons.
 	 * @since 2.1.28 Takes the unit list.
+	 * @since 2.1.29 Takes the delivery panel.
 	 *
 	 * @param Screen_Names               $names         Names.
 	 * @param Marketplace_Adapter        $adapter       The adapter.
@@ -106,8 +116,10 @@ final class Order_Details_Box {
 	 * @param string                     $version       Plugin version.
 	 * @param Seller_Action_Buttons|null $seller        The seller action buttons, when the adapter declares actions.
 	 * @param Order_Unit_List|null       $units         The unit list of a grouped order.
+	 * @param Seller_Delivery_Panel|null $delivery      The delivery of an order the seller delivers.
 	 */
-	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version, ?Seller_Action_Buttons $seller = null, ?Order_Unit_List $units = null ) {
+	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version, ?Seller_Action_Buttons $seller = null, ?Order_Unit_List $units = null, ?Seller_Delivery_Panel $delivery = null ) {
+		$this->delivery      = $delivery;
 		$this->units         = $units;
 		$this->names         = $names;
 		$this->adapter       = $adapter;
@@ -158,6 +170,7 @@ final class Order_Details_Box {
 		$this->column( __( 'Основное', 'woodev-plugin-framework' ), $this->general_rows( $order ) );
 		$this->column( __( 'Суммы', 'woodev-plugin-framework' ), $this->amount_rows( $order ) );
 		echo '</div><div class="clear"></div>';
+		echo null === $this->delivery ? '' : $this->delivery->render( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo $this->unit_list( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo $this->actions( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo '</div></div>';
@@ -198,15 +211,22 @@ final class Order_Details_Box {
 		/* translators: %s: the marketplace's word for a posting in the genitive, «отправления». */
 		$number_label = sprintf( __( 'Номер %s', 'woodev-plugin-framework' ), $this->names->posting_noun()->of_one() );
 
+		$scheme = null === $this->delivery ? '' : $this->delivery->scheme_name( $order );
+		// The address of an order the seller delivers is where it goes: the shipping one.
+		$address = null !== $this->delivery && Seller_Order::is_seller_delivered( $order )
+			? $order->get_formatted_shipping_address( '' )
+			: $order->get_formatted_billing_address( '' );
+
 		$rows = [
 			$number_label => esc_html( $this->posting_number( $order ) ),
+			__( 'Схема', 'woodev-plugin-framework' ) => esc_html( $scheme ),
 			__( 'Номер заказа на сайте', 'woodev-plugin-framework' ) => esc_html( (string) $order->get_order_number() ),
 			__( 'Статус на сайте', 'woodev-plugin-framework' ) => esc_html( html_entity_decode( (string) wc_get_order_status_name( $order->get_status() ), ENT_QUOTES, 'UTF-8' ) ),
 			__( 'Создан', 'woodev-plugin-framework' ) => esc_html( $this->date( $order->get_date_created() ) ),
 			__( 'Обновлён', 'woodev-plugin-framework' ) => esc_html( $this->date( $order->get_date_modified() ) ),
 			__( 'Способ оплаты', 'woodev-plugin-framework' ) => esc_html( (string) $order->get_payment_method_title() ),
 			__( 'Доставка', 'woodev-plugin-framework' ) => esc_html( (string) $order->get_shipping_method() ),
-			__( 'Адрес', 'woodev-plugin-framework' ) => wp_kses_post( (string) $order->get_formatted_billing_address( '' ) ),
+			__( 'Адрес', 'woodev-plugin-framework' ) => wp_kses_post( (string) $address ),
 			__( 'Примечание покупателя', 'woodev-plugin-framework' ) => nl2br( esc_html( (string) $order->get_customer_note() ) ),
 		];
 
