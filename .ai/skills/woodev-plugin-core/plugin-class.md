@@ -207,6 +207,12 @@ the seller delivers» (#2007). Framework 2.1.29.
 - Read the recipient, phone and address from the **order** (`get_shipping_*`): the merchant may have corrected them. The
   coordinates, the chosen day and the extension come from `Flows\Seller_Order::delivery()`.
 - Never write your own shipping line for the marketplace's delivery price, and never touch a line another writer added.
+- The merchant cannot change the shipping method on such an order's screen (items stay locked); the delivery wizard does (#2010).
+- **A limit to state in the plugin's own docs:** such an order has no buyer e-mail, and WordPress' export and erase requests find
+  orders by e-mail. They reach it only if somebody added one. Without it, «Remove personal data» of the orders list (a
+  WooCommerce setting) and WooCommerce's clean-up of old orders erase the data; nothing exports it.
+- Hide the item meta you write in `write_line_meta()` with `woocommerce_hidden_order_itemmeta`: the order screen shows keys that
+  start with `_` too (gotcha `wc-order-screen-shows-underscore-item-meta`). The framework hides its own.
 
 ## A marketplace adapter: what the screens learn from optional parts
 

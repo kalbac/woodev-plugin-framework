@@ -1663,9 +1663,15 @@ written only while its snapshot is not older than the stored one.
   exactly what the framework wrote. A group the merchant or a delivery wizard changed, or filled first, is never written again.
 
 **Order screen.** Items stay locked. The details box gets «Получатель и доставка» (`Admin\Order\Seller_Delivery_Panel`): recipient,
-phone and address inputs saved with the order form on `woocommerce_process_shop_order_meta` (own nonce, `edit_shop_order`), the
+phone and address inputs saved with the order form on `woocommerce_process_shop_order_meta` (own nonce, `edit_shop_order`; Enter
+in a field submits nothing, as on every WooCommerce order screen — the button saves), the
 marketplace's value beside a changed one, the chosen day, a pickup point notice, other phones, and warnings for a missing address
 and a phone that needs an extension. The shipping method is not edited here: the delivery wizard adds a carrier's line (WD1).
+The framework's own item meta (the unit of a line, the mark of the delivery line) is hidden on the order screen; an adapter hides
+what it writes itself.
+
+**A status code with `/`** («new/waiting») is written `new::waiting` as a value of the «Статус на маркетплейсе» filter and in the
+link from «Аналитика» (`Site_Orders_Filter::posting_status_value()`): the records engine takes no `/` in a value.
 
 **Personal data.** `Flows\Order_Privacy` plugs into WooCommerce's order exporter and eraser (`woocommerce_privacy_*`), so the
 e-mail requests of WordPress, «Remove personal data» of the orders list and the retention clean-up export and erase the module's

@@ -579,8 +579,9 @@ there; an `edbs` unit that still arrives is shown and can be worked like `dbs`.
 | Customer e-mail | none exists; WooCommerce customer e-mails have no address to go to |
 
 A DBS order is the seller's to deliver, so it is not the read-only marketplace order of today: WF9 gives the module a
-**seller-delivered** order policy — the shipping address, the phone and the shipping method are editable, the items,
-prices and totals stay locked (they are Wildberries').
+**seller-delivered** order policy — the recipient, the shipping address and the phone are editable on the order screen,
+the items, prices and totals stay locked (they are Wildberries'). The shipping method is **not** changed there: a carrier's
+method is added to the order by WD1 ([#2010](https://github.com/kalbac/woodev-plugin-framework/issues/2010), §7.5).
 
 **Who owns a field after the first write (WF9).** Today every refresh copies the buyer fields again
 (`Wc_Order_Store::save_changes()` → `set_buyer()`), which would undo a manager's correction. For a seller-delivered
@@ -1192,7 +1193,7 @@ No card is conditional: DBS stays in 1.0 (owner, 26.11.2026).
 | 26.11.2026 | Second critic round of PR #2018: the clock-margin rule for error-list entries (previous row) is withdrawn — it could fail a successful create on a retained entry the plugin had never read. No entry finalizes a send; the card list decides, and what is still open fails at the task deadline — §5.6, §12.1, WP4 |
 | 26.11.2026 | Third critic round of PR #2018: a write no read ever shows is retired once none of its sizes waits for it (deadline, reset or a new send), keeping the newest `updatedAt` baseline, so a corrected update is not blocked — §5.6, §11, WP4; no framework change |
 | 27.11.2026 | The owner's answers to the last two tensions. **T6:** in 1.0 the article changes only in the Wildberries cabinet; the plugin follows it; a rename from the shop is card #2055 (decision D12) — §5.1, §13.3. **T7:** in 1.0 the relay extension is not passed to CDEK or Yandex; the manager sees the warning — §7.3, §13.3 (decision D13). **R7 and R8** (phase 0) were reported on 26.11.2026 and are carried as known residual risks, not separately accepted — §13.4 |
-| 28.11.2026 | WF9 built (#2007): §8 row says as built; buyer data uses WooCommerce's privacy hooks (an e-mail request needs an order e-mail, which a DBS order lacks); the shipping method is edited only through WD1 — §7.2, §8 |
+| 28.11.2026 | WF9 built (#2007): §8 row says as built; buyer data uses WooCommerce's privacy hooks (an e-mail request needs an order e-mail, which a DBS order lacks); the shipping method is changed only through WD1 (#2010), not on the order screen — §7.2, §8; rig check: a status code with `/` is escaped in the «Заказы» filter, and the framework hides its own item meta on the order screen |
 
 ## Related
 
