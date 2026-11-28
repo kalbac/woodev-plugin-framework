@@ -1,6 +1,28 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.29] — 2026-11-28
+### Bug Fixes
+- **marketplace**: Show why a cancel-reason list failed, and name a replaced answer (#2065) (#2066)
+
+- **marketplace**: Keep a marketplace's refusal out of 5xx (#2063) (#2064)
+
+- **shipping-orders**: Keep a carrier's refusal out of 5xx and name the status of a replaced answer (#1979) (#2062)
+
+- **fields-table**: Server error under a key, aria-invalid on secret inputs (#2060)
+
+
+### Features
+- **marketplace**: Orders the seller delivers (WF9) (#2007) (#2072)
+
+- **marketplace**: Hand the export job's account claim to the gateway (#2054) (#2061)
+
+- **shipping**: «Оформить доставку» for an existing order of another module (WD1) (#2074)
+
+- **marketplace**: Pass a delivery service's news on to the marketplace (WF10) (#2078)
+
+
+
 ## [2.1.28] — 2026-11-27
 ### Bug Fixes
 - **api**: Log the redacted raw body when no response was parsed (#1509) (#2053)
