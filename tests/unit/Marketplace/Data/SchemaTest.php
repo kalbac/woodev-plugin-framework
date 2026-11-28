@@ -37,7 +37,7 @@ final class SchemaTest extends TestCase {
 			'task_items'    => [ 'task_id', 'link_id', 'offer_id', 'status', 'errors' ],
 			'events'        => [ 'event_id', 'account_id', 'type', 'dedup_key', 'received_at', 'processed_at', 'status', 'attempts', 'claim_token', 'claim_until', 'next_attempt_at', 'payload', 'result', 'source_ip', 'ip_trusted' ],
 			'sync_state'    => [ 'account_id', 'link_id', 'warehouse_id', 'kind', 'pending_payload', 'pending_rev', 'pending_since', 'pending_source', 'in_flight_rev', 'in_flight_payload', 'sent_payload', 'sent_rev', 'sent_at', 'attempts', 'next_attempt_at', 'last_error', 'remote_present', 'remote_reserved', 'remote_read_at', 'task_id', 'refused_payload', 'error_code' ],
-			'postings'      => [ 'account_id', 'external_key', 'wc_order_id', 'members', 'status_raw', 'is_terminal', 'claim_token', 'claim_until', 'lines', 'baseline', 'first_seen_at', 'processing_since', 'refreshed_at' ],
+			'postings'      => [ 'account_id', 'external_key', 'wc_order_id', 'members', 'status_raw', 'is_terminal', 'claim_token', 'claim_until', 'lines', 'baseline', 'first_seen_at', 'processing_since', 'refreshed_at', 'scheme' ],
 			'documents'     => [ 'document_id', 'account_id', 'task_id', 'external_keys', 'content_type', 'body', 'created_at' ],
 			'throttle'      => [ 'account_id', 'bucket', 'state', 'version', 'disabled_until', 'disabled_reason' ],
 			'api_errors'    => [ 'error_id', 'account_id', 'path', 'http_status', 'code', 'message', 'trace_id', 'occurred_at', 'context' ],
@@ -48,6 +48,8 @@ final class SchemaTest extends TestCase {
 			'bulk_runs'     => [ 'account_id', 'run_id', 'state', 'cancel', 'tick', 'action', 'payload', 'filter', 'user_id', 'cursor', 'items', 'counts', 'report', 'started_at', 'finished_at' ],
 			'cards'         => [ 'account_id', 'card_key', 'offer_id', 'name', 'image', 'state', 'is_created', 'failed', 'archived', 'details_ok', 'status_text', 'price', 'stock', 'remote_ids', 'group_key', 'group_size', 'unit_card', 'unit_article', 'unit_data', 'position', 'seen_run', 'updated_at' ],
 			'seller_actions' => [ 'account_id', 'order_id', 'unit_key', 'action', 'identity', 'state', 'claim_token', 'claim_until' ],
+			'shipments'      => [ 'account_id', 'shipment_key', 'remote_id', 'name', 'is_open', 'status_label', 'kind_label', 'shipping_label', 'created_at', 'closed_at', 'facts', 'cargo', 'unit_count', 'blocking_count', 'warning_count', 'reship_count', 'is_stale', 'read_attempts', 'retry_at', 'read_at', 'seen_run', 'lock_token', 'lock_until', 'updated_at' ],
+			'shipment_units' => [ 'account_id', 'shipment_key', 'unit_key', 'unit_id', 'posting_key', 'order_id', 'label', 'status_label', 'is_movable', 'needs_reshipment', 'requirements', 'facts', 'position' ],
 		];
 	}
 

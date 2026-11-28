@@ -302,7 +302,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 		 * stale, and a row action the carrier does not currently offer on that row is refused, never forwarded.
 		 *
 		 * @since 2.0.2
-		 * @since 2.1.28 Card #1979: `threw` marks a handler that threw, to tell it from a refusal.
+		 * @since 2.1.29 Card #1979: `threw` marks a handler that threw, to tell it from a refusal.
 		 *
 		 * @param string $id         the toolbar action id.
 		 * @param string $tab_id     the list tab's id.

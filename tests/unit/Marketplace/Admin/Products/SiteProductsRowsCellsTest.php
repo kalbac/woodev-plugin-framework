@@ -199,7 +199,7 @@ final class SiteProductsRowsCellsTest extends TestCase {
 	public function test_a_variable_product_shows_every_state_group_of_its_variations_up_to_the_stack_limit(): void {
 		// Four groups, the biggest first; none of them is dropped to make room for lines a parent never has.
 		$this->assertSame(
-			[ 'Создан × 4', 'Не связан × 3', 'В очереди × 2', 'В архиве' ],
+			[ 'Создан · 4', 'Не связан · 3', 'В очереди · 2', 'В архиве' ],
 			$this->parent_state_labels( [ 'created', 'created', 'created', 'created', 'unlinked', 'unlinked', 'unlinked', 'queued', 'queued', 'archived' ] )
 		);
 	}
@@ -217,6 +217,50 @@ final class SiteProductsRowsCellsTest extends TestCase {
 		$state = array_column( $this->parent_cells( [ 'created', 'unlinked' ] )['state'], 'value' );
 
 		$this->assertArrayNotHasKey( 'tooltip', $state[0] );
+	}
+
+	/**
+	 * The «Артикул» of a variable product row.
+	 *
+	 * @param string                          $sku          The product's own SKU.
+	 * @param array<int,array{0:string,1:string}> $variations   SKU and marketplace offer id of each variation.
+	 * @param callable|null                   $card_article The article of the card behind an offer id.
+	 * @return string[]
+	 */
+	private function parent_articles( string $sku, array $variations, ?callable $card_article = null ): array {
+		$offers = [];
+
+		foreach ( $variations as $index => [ $own, $offer_id ] ) {
+			$offers[] = [
+				'product_id'   => 30 + $index, 'label' => '', 'link_id' => null, 'group' => 'created', 'sku' => $own, 'offer_id' => $offer_id,
+				'site_stock'   => 1, 'remote_stock' => null, 'site_price' => '1', 'remote_price' => null, 'sync_stock' => false,
+				'sync_price'   => false, 'warehouse_id' => null, 'error' => '', 'stock_pool' => null,
+			];
+		}
+
+		$rows  = new Site_Products_Rows( 'Тестмаркет', [], static fn( int $id ): string => '', null, null, null, $card_article );
+		$cells = $rows->parent( 1, [ 'id' => 10, 'title' => 'Футболка', 'sku' => $sku, 'is_variable' => true, 'offers' => $offers ], [] )['cells'];
+
+		return array_column( (array) $cells['sku'], 'value' );
+	}
+
+	public function test_a_variable_product_shows_its_own_sku(): void {
+		$this->assertSame( [ 'SHIRT' ], $this->parent_articles( 'SHIRT', [ [ 'SHIRT-S', 'OZ-S' ], [ 'SHIRT-M', 'OZ-M' ] ] ) );
+	}
+
+	public function test_a_variable_product_without_a_sku_shows_the_article_its_variations_share(): void {
+		$card = static fn( string $offer_id ): string => strstr( $offer_id, '/', true );
+
+		$this->assertSame( [ 'coat' ], $this->parent_articles( '', [ [ 'C-S', 'coat/S' ], [ 'C-M', 'coat/M' ] ], $card ) );
+	}
+
+	public function test_a_variable_product_without_a_sku_names_one_article_and_counts_the_others(): void {
+		$this->assertSame( [ 'OZ-S и ещё 2' ], $this->parent_articles( '', [ [ 'V-S', 'OZ-S' ], [ 'V-M', 'OZ-M' ], [ 'V-L', '' ] ] ), 'An unlinked variation goes by its SKU.' );
+		$this->assertSame( [ '100' ], $this->parent_articles( '', [ [ '', '100' ], [ '100', '' ], [ '', '' ] ] ), 'A numeric article stays text and is counted once.' );
+	}
+
+	public function test_a_variable_product_with_no_article_anywhere_leaves_the_cell_empty(): void {
+		$this->assertSame( [], $this->parent_articles( '', [ [ '', '' ], [ '', '' ] ] ) );
 	}
 
 	/**

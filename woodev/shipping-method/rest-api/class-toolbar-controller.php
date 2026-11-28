@@ -234,7 +234,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Toolbar_Controlle
 		 * Runs a button of a row of the dialog's list tab, and answers with the refreshed dialog.
 		 *
 		 * @since 2.0.2
-		 * @since 2.1.28 Card #1979: a refused row button answers {@see Orders_Controller::CARRIER_REFUSAL_STATUS} (was 502);
+		 * @since 2.1.29 Card #1979: a refused row button answers {@see Orders_Controller::CARRIER_REFUSAL_STATUS} (was 502);
 		 *               only a thrown handler answers 502.
 		 *
 		 * @param \WP_REST_Request $request request; `id` comes from the route, `tab`, `row` and `action` from the body.

@@ -24,6 +24,13 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Order_DTO {
 	/**
+	 * Shape of a delivery scheme code: it goes into a `varchar(16)` column and into SQL.
+	 *
+	 * @since 2.1.29
+	 */
+	public const SCHEME_SHAPE = '/^[a-z0-9_]{1,16}$/D';
+
+	/**
 	 * Account id.
 	 *
 	 * @var int
@@ -101,6 +108,27 @@ final class Order_DTO {
 	private $raw;
 
 	/**
+	 * Every unit of a grouped order, cancelled ones included; empty for a one-order posting.
+	 *
+	 * @var Order_DTO[]
+	 */
+	private $units = [];
+
+	/**
+	 * The delivery scheme of the order, a code the adapter declares; '' when the marketplace has one scheme or did not say.
+	 *
+	 * @var string
+	 */
+	private $scheme = '';
+
+	/**
+	 * What the marketplace says about an order the seller delivers; null for an order the marketplace delivers.
+	 *
+	 * @var Seller_Delivery|null
+	 */
+	private $delivery;
+
+	/**
 	 * Creates an order DTO.
 	 *
 	 * @since 2.0.29
@@ -155,6 +183,92 @@ final class Order_DTO {
 		$this->dates            = $dates;
 		$this->shipment         = $shipment;
 		$this->raw              = $raw;
+	}
+
+	/**
+	 * Returns a copy that lists the units of a grouped order: the member snapshots the writer folded into this order, the
+	 * cancelled ones included, which have no line in it.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param Order_DTO[] $units Members of the group.
+	 * @return self
+	 */
+	public function with_units( array $units ): self {
+		$order        = clone $this;
+		$order->units = array_values( $units );
+
+		return $order;
+	}
+
+	/**
+	 * Returns every unit of a grouped order, cancelled ones included.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @return Order_DTO[] Empty for a one-order posting.
+	 */
+	public function units(): array {
+		return $this->units;
+	}
+
+	/**
+	 * Returns a copy of the order under a delivery scheme, one of the codes the adapter declares
+	 * ({@see \Woodev\Framework\Marketplace\Admin\Order\Delivery_Schemes}). The order keeps it, and the «Заказы» table filters by it.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param string $scheme Lower-case letters, digits and `_`, at most 16 characters; '' for none.
+	 * @return self
+	 * @throws \InvalidArgumentException When the code has another shape.
+	 */
+	public function with_scheme( string $scheme ): self {
+		if ( '' !== $scheme && 1 !== preg_match( self::SCHEME_SHAPE, $scheme ) ) {
+			throw new \InvalidArgumentException( 'A delivery scheme is lower-case letters, digits and \"_\", at most 16 characters.' );
+		}
+
+		$order         = clone $this;
+		$order->scheme = $scheme;
+
+		return $order;
+	}
+
+	/**
+	 * Returns the delivery scheme.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @return string '' when none was said.
+	 */
+	public function scheme(): string {
+		return $this->scheme;
+	}
+
+	/**
+	 * Returns a copy of an order the seller delivers. Every DTO of such an order carries it; the order's recipient, address and
+	 * phone then come from it, and {@see self::buyer()} is not written.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param Seller_Delivery $delivery What the marketplace says about the delivery.
+	 * @return self
+	 */
+	public function with_delivery( Seller_Delivery $delivery ): self {
+		$order           = clone $this;
+		$order->delivery = $delivery;
+
+		return $order;
+	}
+
+	/**
+	 * Returns what the marketplace says about an order the seller delivers.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @return Seller_Delivery|null Null for an order the marketplace delivers, and for a read that says nothing about the delivery.
+	 */
+	public function delivery(): ?Seller_Delivery {
+		return $this->delivery;
 	}
 
 	/**

@@ -26,6 +26,10 @@ defined( 'ABSPATH' ) || exit;
  *
  * A unit the marketplace refused keeps no row: it can be sent again at once.
  *
+ * The changes of shipments are claimed here the same way ({@see \Woodev\Framework\Marketplace\Flows\Shipment_Service}): their
+ * action names hold a dot, which no seller action's id can, and a change of a whole shipment has order 0 and the shipment as its
+ * unit.
+ *
  * Taking a row is atomic (`INSERT IGNORE` on the primary key, else a compare-and-set `UPDATE`), and every later write carries the
  * claim token, so a request whose claim expired and was taken over changes nothing.
  *

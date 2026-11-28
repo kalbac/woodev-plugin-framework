@@ -25,6 +25,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
@@ -46,9 +47,11 @@ use Woodev\Framework\Marketplace\Flows\Offer_Id_Renames;
 use Woodev\Framework\Marketplace\Flows\Link_Detacher;
 use Woodev\Framework\Marketplace\Flows\Product_Writer;
 use Woodev\Framework\Marketplace\Flows\Sellable_Units;
+use Woodev\Framework\Marketplace\Flows\Shipment_Snapshot;
 use Woodev\Framework\Marketplace\Flows\Shop_Sku_Source;
 use Woodev\Framework\Marketplace\Flows\Unit_Product_Source;
 use Woodev\Framework\Marketplace\Flows\Unit_Products;
+use Woodev\Framework\Marketplace\Flows\Wc_Order_Store;
 use Woodev\Framework\Marketplace\Intake\Notification_Account_Reader;
 use Woodev\Framework\Marketplace\Intake\Notification_Intake;
 use Woodev\Framework\Marketplace\Intake\Notifications_Controller;
@@ -91,6 +94,7 @@ use Woodev\Framework\Marketplace\Jobs\Reconcile_Stock_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Runner;
 use Woodev\Framework\Marketplace\Jobs\Refresh_Catalog_Scheduler;
 use Woodev\Framework\Marketplace\Jobs\Reseed_Stock_Runner;
+use Woodev\Framework\Marketplace\Jobs\Shipment_Jobs;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Event_Ledger;
 use Woodev\Framework\Marketplace\Ledger\Wpdb_Task_Ledger;
 use Woodev\Framework\Marketplace\Links\Product_Link;
@@ -98,6 +102,7 @@ use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Marketplace\Price\Price_Pusher;
 use Woodev\Framework\Marketplace\Price\Price_Sync_Queue;
 use Woodev\Framework\Marketplace\Settings\Effective_Settings;
+use Woodev\Framework\Marketplace\Shipments\Shipment_Batches;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Queue;
 use Woodev\Framework\Marketplace\Stock\Sync_State_Store;
 use Woodev\Framework\Marketplace\Sync\Mirror_Stock_Writer;
@@ -270,6 +275,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		private $imports;
 
 		/**
+		 * The hooked stock recorder, which also sends again the stock of cancelled order units.
+		 *
+		 * @var Stock_Intents
+		 */
+		private $stock;
+
+		/**
 		 * Creates the wiring of one plugin.
 		 *
 		 * @since 2.1.0
@@ -329,6 +341,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$this->import();
 			$this->offer_id_renames();
 			$this->postings();
+			$this->shipments();
 			$this->labels();
 			$this->intake();
 
@@ -386,6 +399,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$stock = new Stock_Intents( [ $this->accounts, 'get' ], $this->links, $store, $queue, $adapter->stock_policy() );
 			$stock->register();
 			( new Reseed_Stock_Runner( $this->names, $this->links, $stock, $this->log_error ) )->register();
+			$this->stock = $stock;
 
 			if ( null !== $pusher ) {
 				$price_queue = new Price_Sync_Queue( $this->db, $this->table( 'sync_state' ), $this->table( 'links' ), $this->table( 'accounts' ), $adapter->price_cadence() );
@@ -737,7 +751,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 		}
 
 		/**
-		 * The posting refresh and the recurring poll of postings.
+		 * The refresh and the recurring poll of the seller's shipments, for a marketplace that ships in shipments.
+		 *
+		 * @return void
+		 */
+		private function shipments(): void {
+			$adapter = $this->adapter;
+
+			if ( ! $adapter instanceof Shipment_Batches || ! $adapter->supports( Capability::CONFIRM_SHIPMENT ) ) {
+				return;
+			}
+
+			$store    = new Wpdb_Shipment_Store( $this->db, $this->table( 'shipments' ), $this->table( 'shipment_units' ), Uninstaller::option_prefix( $this->plugin_id ) );
+			$snapshot = Shipment_Snapshot::over( $adapter, $store, new Order_Registry( $this->db, $this->table( 'postings' ) ) );
+
+			( new Shipment_Jobs( $this->gate, $this->accounts, $snapshot, $store, $adapter->error_classifier(), $this->names, $adapter->id(), $this->log_error ) )->register();
+		}
+
+		/**
+		 * The posting refresh and the recurring poll of postings, and the stock sent again for the cancelled units of an order.
 		 *
 		 * @return void
 		 */
@@ -749,6 +781,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			}
 
 			( new Posting_Jobs( $this->gate, $this->accounts, $handler, $this->adapter->error_classifier(), $this->names, $this->adapter->id(), Posting_Jobs::option_key( $this->plugin_id ), new Posting_Poll_Times( $this->plugin_id ), new Posting_History_Cutoffs( $this->plugin_id ) ) )->register();
+
+			add_action( Wc_Order_Store::units_cancelled_hook( $this->adapter->order_meta()->created_via() ), [ $this->stock, 'on_units_cancelled' ], 10, 2 );
 		}
 
 		/**

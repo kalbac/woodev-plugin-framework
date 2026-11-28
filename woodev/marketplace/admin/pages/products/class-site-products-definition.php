@@ -247,7 +247,7 @@ final class Site_Products_Definition {
 	private static function bulk_actions( string $marketplace, array $withheld ): array {
 		$export = __( 'Выгрузка', 'woodev-plugin-framework' );
 		$sync   = __( 'Синхронизация', 'woodev-plugin-framework' );
-		$links  = __( 'Связи и архив', 'woodev-plugin-framework' );
+		$links  = in_array( Site_Products_Bulk::ARCHIVE, $withheld, true ) ? __( 'Связи', 'woodev-plugin-framework' ) : __( 'Связи и архив', 'woodev-plugin-framework' );
 		$actions = [
 			self::action( Site_Products_Bulk::EXPORT, self::label_of( Site_Products_Bulk::EXPORT ), __( 'Товары, прошедшие проверку, уйдут в очередь на отправку. Остальные останутся как есть — исправьте причину и повторите.', 'woodev-plugin-framework' ), $export ),
 			self::link_by_article( null, true ),

@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 564 atomic gotchas across 30 topics. At session start read THIS file, then open
+> **Topic map.** 568 atomic gotchas across 30 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -18,7 +18,7 @@
 | [`compat/*`](gotcha-index/compat.md) | 3 | Backward compatibility, HPOS |
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 3 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
-| [`woocommerce/*`](gotcha-index/woocommerce.md) | 50 | WooCommerce-specific |
+| [`woocommerce/*`](gotcha-index/woocommerce.md) | 52 | WooCommerce-specific |
 | [`framework/*`](gotcha-index/framework.md) | 13 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 4 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 26 | Location provider layer |
@@ -30,7 +30,7 @@
 | [`api/*`](gotcha-index/api.md) | 10 | API layer |
 | [`licensing/*`](gotcha-index/licensing.md) | 7 | License/EDD store |
 | [`build/*`](gotcha-index/build.md) | 29 | Build/CI/release |
-| [`admin-ui/*`](gotcha-index/admin-ui.md) | 21 | Admin pages / React UI |
+| [`admin-ui/*`](gotcha-index/admin-ui.md) | 23 | Admin pages / React UI |
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 6 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |
 | [`box-packer/*`](gotcha-index/box-packer.md) | 3 | Box-packer algorithm (S2) |

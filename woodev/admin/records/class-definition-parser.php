@@ -499,7 +499,7 @@ final class Definition_Parser {
 		foreach ( self::list( $raw, $path, 0, Records_Definition::MAX_ACTION_FIELDS ) as $i => $field ) {
 			$field_path = "{$path}[$i]";
 			$field      = self::map( $field, $field_path );
-			self::allow_keys( $field, [ 'id', 'label', 'type', 'required', 'options', 'options_source', 'searchable', 'placeholder', 'help', 'toggle', 'hidden_when' ], $field_path );
+			self::allow_keys( $field, [ 'id', 'label', 'type', 'required', 'options', 'options_source', 'searchable', 'placeholder', 'help', 'toggle', 'hidden_when', 'scanned_code' ], $field_path );
 
 			$entry = [
 				'id'             => self::slug( $field, 'id', $field_path ),
@@ -513,6 +513,7 @@ final class Definition_Parser {
 				'help'           => self::text( $field, 'help', $field_path, true ),
 				'toggle'         => self::flag( $field, 'toggle', $field_path, false ),
 				'hidden_when'    => self::text( $field, 'hidden_when', $field_path, true, 64 ),
+				'scanned_code'   => self::flag( $field, 'scanned_code', $field_path, false ),
 			];
 
 			$entry = self::filter_options( $entry, $field, $field_path );
@@ -522,6 +523,9 @@ final class Definition_Parser {
 			}
 			if ( $entry['toggle'] && 'boolean' !== $entry['type'] ) {
 				throw new \InvalidArgumentException( "$field_path: only a boolean field can be a toggle." );
+			}
+			if ( $entry['scanned_code'] && 'text' !== $entry['type'] ) {
+				throw new \InvalidArgumentException( "$field_path: only a text field can hold a scanned code." );
 			}
 
 			$out[] = $entry;

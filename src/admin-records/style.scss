@@ -191,6 +191,7 @@ $cell-padding: 8px;
 	// sum across lines: a cell that wraps mid-number is unreadable and makes every row three lines tall.
 	.woodev-records__col-order,
 	.woodev-records__col-posting,
+	.woodev-records__col-scheme,
 	.woodev-records__col-total,
 	.woodev-records__col-status,
 	.woodev-records__col-state,
@@ -206,6 +207,11 @@ $cell-padding: 8px;
 
 	.woodev-records__col-posting {
 		width: 18ch;
+	}
+
+	// A delivery scheme is a short code: «FBS», «DBS».
+	.woodev-records__col-scheme {
+		width: 8ch;
 	}
 
 	// The date and the time of «10.11.2026 08:30» are one line while the column has room and two when it has not (each half is `nowrap`,
@@ -468,8 +474,9 @@ $cell-padding: 8px;
 		white-space: normal;
 	}
 
-	// The article: 14ch (the products table too: «OW-OZ-TEST-3» fits, a longer one ends in «…»), one line; the full value is the line's
-	// `title`.
+	// The article: 14ch (the products table too: «OW-OZ-TEST-3» fits on one line). A longer one takes a second line and only then ends
+	// in «…»; the full value is the line's `title`. A cell with two articles (the site's and the marketplace's) keeps one line each, so
+	// no row grows past the photo.
 	.woodev-records__col-sku,
 	.woodev-records__col-offer_id {
 		max-width: 14ch;
@@ -486,6 +493,31 @@ $cell-padding: 8px;
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
+		}
+
+		> .woodev-records__text,
+		.woodev-records__stack > span:only-child > .woodev-records__text {
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 2;
+			display: -webkit-box;
+			line-clamp: 2;
+			overflow-wrap: anywhere;
+			white-space: normal;
+		}
+	}
+
+	// The products table's cell with two articles has one line for each. A card with room to spare (1280px and wider, the WordPress menu
+	// collapsed) gives it more of that room: the name column, which has no width of its own, is the one that shrinks. A narrower card
+	// keeps 14ch, or the table would scroll sideways. The width asked about is the table's own card.
+	.woocommerce-table__table {
+		container: woodev-records-table / inline-size;
+	}
+
+	@container woodev-records-table (min-width: 1100px) {
+
+		.woodev-records__col-sku {
+			max-width: 24ch;
+			width: 24ch;
 		}
 	}
 

@@ -104,6 +104,7 @@ final class EmbeddedScreensTest extends TestCase {
 		$adapter->shouldReceive( 'price_pusher' )->andReturn( null );
 		$adapter->shouldReceive( 'price_reader' )->andReturn( null );
 		$adapter->shouldReceive( 'supports' )->andReturn( false );
+		$adapter->shouldReceive( 'stock_rules' )->andReturn( Mockery::mock( \Woodev\Framework\Marketplace\Sync\Stock_Rules::class ) );
 
 		Filters\expectAdded( 'woocommerce_product_data_tabs' )->once();
 		Actions\expectAdded( 'wp_ajax_woodev_fake_product' )->once();
@@ -114,6 +115,47 @@ final class EmbeddedScreensTest extends TestCase {
 		Actions\expectAdded( 'add_meta_boxes' )->never();
 
 		Embedded_Screens::register( $this->plugin( $adapter ), $this->accounts(), new Sqlite_Wpdb() );
+	}
+
+	/**
+	 * The product tab draws no button for what the marketplace cannot serve: the archive of a marketplace that has none.
+	 *
+	 * @dataProvider provide_withheld_operations
+	 *
+	 * @param bool     $catalog  Whether the marketplace has a catalogue.
+	 * @param string   $rules    Class of its stock rules.
+	 * @param string[] $withheld Operations the tab withholds.
+	 * @return void
+	 */
+	public function test_the_tab_withholds_the_operations_the_marketplace_cannot_serve( bool $catalog, string $rules, array $withheld ): void {
+		$adapter = Mockery::mock( Marketplace_Adapter::class );
+		$adapter->shouldReceive( 'supports' )->andReturn( $catalog );
+		$adapter->shouldReceive( 'price_reader' )->andReturn( null );
+		$adapter->shouldReceive( 'price_pusher' )->andReturn( null );
+		$adapter->shouldReceive( 'stock_rules' )->andReturn( Mockery::mock( $rules ) );
+
+		$method = new \ReflectionMethod( Embedded_Screens::class, 'withheld_ops' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+
+		$this->assertSame( $withheld, $method->invoke( null, $adapter ) );
+	}
+
+	/**
+	 * @return array<string,array{0:bool,1:string,2:string[]}>
+	 */
+	public function provide_withheld_operations(): array {
+		$rules       = \Woodev\Framework\Marketplace\Sync\Stock_Rules::class;
+		$archiveless = \Woodev\Framework\Marketplace\Sync\Archiveless_Stock_Rules::class;
+
+		return [
+			'a catalogue with an archive'    => [ true, $rules, [] ],
+			'a catalogue without an archive' => [ true, $archiveless, [ 'archive' ] ],
+			'no catalogue'                   => [ false, $rules, [ 'export', 'link' ] ],
+		];
 	}
 
 	public function test_outside_the_admin_nothing_is_hooked(): void {

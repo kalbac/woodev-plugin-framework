@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Orders;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Admin\Records\Action_Input;
 use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_Response;
 use Woodev\Framework\Admin\Records\Action_State_Exception;
@@ -28,6 +29,17 @@ use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Refused;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Rows;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Seller;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Shipments;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Units;
+use Woodev\Framework\Marketplace\Admin\Shared\Order_Unit_Text;
+use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
+use Woodev\Framework\Marketplace\Flows\Article_Display;
+use Woodev\Framework\Marketplace\Flows\Order_Unit;
+use Woodev\Framework\Marketplace\Flows\Order_Units;
+use Woodev\Framework\Marketplace\Flows\Shipment_Service;
+use Woodev\Framework\Marketplace\Flows\Shipment_Snapshot;
+use Woodev\Framework\Marketplace\Settings\Shipment_Noun;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Shipment_Marketplace;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Allowed_Actions;
@@ -58,6 +70,8 @@ require_once dirname( __DIR__, 3 ) . '/Shipping/Rest_Api/wp-rest-controller-stub
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Cancel
  * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Seller
  * @covers \Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner
+ * @covers \Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Units
+ * @covers \Woodev\Framework\Marketplace\Admin\Shared\Order_Unit_Text
  */
 final class SiteOrdersProviderTest extends Label_Test_Case {
 	/**
@@ -151,11 +165,25 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	private $seller;
 
 	/**
+	 * «Add to a shipment»; null for a table without it.
+	 *
+	 * @var Site_Orders_Shipments|null
+	 */
+	private $shipments;
+
+	/**
 	 * Order id => its units, `[ id, label, status, action ids or null ]`.
 	 *
 	 * @var array<int,array<int,array<int,mixed>>>
 	 */
 	private $units = [];
+
+	/**
+	 * Order id => the unit records a grouped order keeps; null for a marketplace whose orders hold no units.
+	 *
+	 * @var array<int,Order_Unit[]>|null
+	 */
+	private $records;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -166,7 +194,9 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->forbidden   = [];
 		$this->notes     = [];
 		$this->seller    = null;
+		$this->shipments = null;
 		$this->units     = [];
+		$this->records   = null;
 		$this->logged    = [];
 		$this->meta      = new Fake_Order_Meta();
 		$this->canceller = new Fake_Order_Canceller();
@@ -293,6 +323,15 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 					return $this->units[ $id ] ?? [];
 				}
 
+				if ( Order_Units::META === $key ) {
+					return array_map(
+						static function ( Order_Unit $unit ): array {
+							return $unit->to_array();
+						},
+						$this->records[ $id ] ?? []
+					);
+				}
+
 				return $meta[ $key ] ?? '';
 			}
 		);
@@ -360,7 +399,9 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			null,
 			$gate,
 			null,
-			$seller
+			$seller,
+			$this->shipments,
+			null === $this->records ? null : new Site_Orders_Units( new Order_Unit_Text( null, new Article_Display() ), $seller )
 		);
 	}
 
@@ -463,6 +504,57 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 			'posts table (CPT)' => [ false ],
 			'HPOS table'        => [ true ],
 		];
+	}
+
+	/**
+	 * Gives the table the shipment actions over a fake marketplace.
+	 *
+	 * @return Fake_Shipment_Marketplace
+	 */
+	private function with_shipments(): Fake_Shipment_Marketplace {
+		Functions\when( 'update_option' )->justReturn( true );
+		Functions\when( 'get_option' )->alias(
+			function ( string $name, $fallback = false ) {
+				return $this->options[ $name ] ?? $fallback;
+			}
+		);
+
+		$marketplace     = new Fake_Shipment_Marketplace();
+		$store           = new Wpdb_Shipment_Store( $this->db, Sqlite_Tables::table( 'shipments' ), Sqlite_Tables::table( 'shipment_units' ), 'woodev_fake-seller_', $this->clock() );
+		$service         = new Shipment_Service(
+			$marketplace,
+			$store,
+			Shipment_Snapshot::over( $marketplace, $store, $this->registry() ),
+			new Posting_Action_Gate( new Label_Availability( null ), null, $this->write_gate ),
+			$this->license(),
+			$this->classifier,
+			$this->pause(),
+			Shipment_Noun::dispatch(),
+			static function (): void {},
+			new Wpdb_Seller_Action_Store( $this->db, Sqlite_Tables::table( 'seller_actions' ), $this->clock() )
+		);
+		$this->shipments = new Site_Orders_Shipments( $service, $store, Shipment_Noun::dispatch() );
+
+		return $marketplace;
+	}
+
+	public function test_add_to_a_shipment_runs_through_the_table(): void {
+		$this->stock( false );
+		$marketplace = $this->with_shipments();
+
+		$definition = $this->definition();
+		$row        = $this->by_id( $this->list_body() )[ $this->row_id( 101 ) ];
+
+		$this->assertNotNull( $definition->get_action( 'bulk-ship-add' ) );
+		$this->assertTrue( $row['selectable'] );
+		$this->assertContains( 'ship-add', array_column( $row['actions'], 'id' ) );
+
+		$result = $this->provider()->apply( $this->context(), 'ship-add', [ $this->row_id( 101 ) ], [ 'target' => 'new', 'name' => 'Первая' ] );
+		$body   = Action_Response::apply( $definition, $definition->get_action( 'ship-add' ), $result );
+
+		$this->assertIsArray( $body, 'The engine accepts the answer.' );
+		$this->assertSame( 1, $body['accepted'] );
+		$this->assertSame( [ 'create_shipment', 'read_shipment', 'add_units', 'read_shipment' ], $marketplace->remote );
 	}
 
 	public function test_the_definition_is_accepted_by_the_engine_and_declares_what_the_adapter_can_do(): void {
@@ -1690,5 +1782,219 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 
 		$this->expectException( Action_Input_Exception::class );
 		$this->provider()->apply( $this->context(), 'cancel', [ $this->row_id( 104 ) ], [] );
+	}
+
+	/**
+	 * Orders of a grouped marketplace: 101 holds a live unit `u-1` and `u-2` cancelled before; 102 holds `u-3`; 104 none.
+	 *
+	 * @return void
+	 */
+	private function stock_with_units(): void {
+		$this->stock_with_seller_actions();
+		$this->keep_units();
+	}
+
+	/**
+	 * Gives orders 101 and 102 their unit records.
+	 *
+	 * @return void
+	 */
+	private function keep_units(): void {
+		$this->records = [
+			101 => [
+				self::unit_record( 'u-1', 'confirm', '', 'Футболка', 'tee|M', 45000 ),
+				self::unit_record( 'u-2', 'cancelled', '2026-11-02T08:30:00Z', 'Кепка', 'cap|', 12000 ),
+			],
+			102 => [ self::unit_record( 'u-3', 'deliver', '', 'Носки', 'socks|', 9900 ) ],
+		];
+		$this->units[101] = [
+			[ 'u-1', 'Футболка, M', 'confirm' ],
+			[ 'u-2', 'Кепка', 'cancelled', [] ],
+		];
+	}
+
+	/**
+	 * @param string $id           Unit id.
+	 * @param string $status       Marketplace status.
+	 * @param string $cancelled_at Cancellation time; '' for a live unit.
+	 * @param string $name         Goods.
+	 * @param string $offer        Article.
+	 * @param int    $minor        Price in minor units.
+	 * @return Order_Unit
+	 */
+	private static function unit_record( string $id, string $status, string $cancelled_at, string $name, string $offer, int $minor ): Order_Unit {
+		return new Order_Unit(
+			$id,
+			$status,
+			$cancelled_at,
+			[
+				[
+					'product_id' => 12,
+					'offer_id'   => $offer,
+					'name'       => $name,
+					'quantity'   => 1,
+					'unit_minor' => $minor,
+					'currency'   => 'RUB',
+				],
+			]
+		);
+	}
+
+	/**
+	 * @param int    $order_id Order id.
+	 * @param string $unit_id  Unit id.
+	 * @return string
+	 */
+	private function unit_row_id( int $order_id, string $unit_id ): string {
+		return Site_Orders_Ids::unit_row_id( $this->account_id, $order_id, $unit_id );
+	}
+
+	/**
+	 * @param int $order_id Order id.
+	 * @return array<int,array<string,mixed>> The child rows as the engine would send them.
+	 */
+	private function children_of( int $order_id ): array {
+		$result = $this->provider()->get_children( $this->context(), $this->row_id( $order_id ), [ 'page' => 1, 'per_page' => 50 ] );
+		$body   = Row_Normalizer::children_page( $this->definition(), $result, 50 );
+
+		$this->assertIsArray( $body, 'The engine accepts the unit rows.' );
+
+		return $body['rows'];
+	}
+
+	public function test_a_grouped_table_declares_unit_rows_and_unit_actions_and_a_plain_one_neither(): void {
+		$this->stock_with_seller_actions();
+
+		$this->assertNull( $this->definition()->get_children() );
+		$this->assertSame( [ 'open', 'label', 'act-confirm', 'act-receive', 'cancel' ], $this->definition()->get_row_action_ids() );
+		$this->assertFalse( $this->by_id( $this->list_body() )[ $this->row_id( 101 ) ]['has_children'] );
+
+		$this->keep_units();
+		$definition = $this->definition();
+
+		$this->assertSame( 50, $definition->get_children()['default_per_page'] );
+		$this->assertSame( [ 'open', 'label', 'act-confirm', 'act-receive', 'cancel', 'unit-receive', 'unit-marking' ], $definition->get_row_action_ids() );
+		$this->assertSame( 'Показать товары заказа', $definition->to_array()['messages']['expand'] );
+
+		$rows = $this->by_id( $this->list_body() );
+
+		$this->assertTrue( $rows[ $this->row_id( 101 ) ]['has_children'] );
+		$this->assertFalse( $rows[ $this->row_id( 104 ) ]['has_children'], 'An order that keeps no units cannot be opened.' );
+	}
+
+	public function test_an_order_opens_into_its_live_and_cancelled_units(): void {
+		$this->stock_with_units();
+
+		$this->assertTrue( $this->provider()->authorize( 'children', $this->context(), [ $this->row_id( 101 ) ] ) );
+
+		$rows = $this->children_of( 101 );
+
+		$this->assertSame( [ $this->unit_row_id( 101, 'u-1' ), $this->unit_row_id( 101, 'u-2' ) ], array_column( $rows, 'id' ) );
+		$this->assertSame( [ 'Футболка', 'Артикул: tee|M' ], array_column( $rows[0]['cells']['order'], 'value' ) );
+		$this->assertSame( 'Отменено', $rows[1]['cells']['status'][0]['value']['label'] );
+		$this->assertSame( 'danger', $rows[1]['cells']['status'][0]['value']['tone'] );
+		$this->assertNull( $rows[0]['cells']['date'] );
+		$this->assertSame( '2026-11-02T08:30:00Z', $rows[1]['cells']['date'] );
+		$this->assertSame( "120.00\u{00a0}₽", $rows[1]['cells']['total'] );
+		$this->assertSame( [ false, false ], array_column( $rows, 'selectable' ) );
+		$this->assertSame( [ 'unit-receive', 'unit-marking' ], array_column( $rows[0]['actions'], 'id' ) );
+		$this->assertSame( [], $rows[1]['actions'], 'A unit the marketplace offers nothing on has no buttons.' );
+		$this->assertStringNotContainsString( 'u-1', (string) wp_json_encode( $rows ), 'The marketplace unit id never reaches the page.' );
+	}
+
+	public function test_only_a_listed_order_of_the_account_can_be_opened(): void {
+		$this->stock_with_units();
+		$provider = $this->provider();
+
+		$this->assertFalse( $provider->authorize( 'children', $this->context(), [ Site_Orders_Ids::row_id( $this->account_id, 201 ) ] ) );
+		$this->assertFalse( $provider->authorize( 'children', $this->context(), [ $this->unit_row_id( 101, 'u-1' ) ] ) );
+		$this->assertFalse( $provider->authorize( 'children', $this->context(), [ Site_Orders_Ids::row_id( $this->account_id + 1, 101 ) ] ) );
+		$this->assertTrue( $provider->authorize( 'unit-marking', $this->context(), [ $this->unit_row_id( 101, 'u-1' ) ] ) );
+
+		$this->forbidden = [ 101 ];
+
+		$this->assertFalse( $this->provider()->authorize( 'unit-marking', $this->context(), [ $this->unit_row_id( 101, 'u-1' ) ] ) );
+		$this->assertSame( [ false, false ], array_column( $this->children_of( 101 )[0]['actions'], 'enabled' ) );
+	}
+
+	public function test_the_refresh_answers_for_unit_rows_on_screen(): void {
+		$this->stock_with_units();
+
+		$gone = $this->unit_row_id( 101, 'u-9' );
+		$body = $this->provider()->get_activity( $this->context(), [ $this->row_id( 101 ), $this->unit_row_id( 101, 'u-2' ), $gone ] );
+
+		$this->assertSame( [ $this->row_id( 101 ), $this->unit_row_id( 101, 'u-2' ) ], array_column( $body['rows'], 'id' ) );
+		$this->assertSame( [ $gone ], $body['removed_ids'] );
+		$this->assertTrue( $this->provider()->authorize( 'activity', $this->context(), [ $this->row_id( 101 ), $gone ] ) );
+	}
+
+	public function test_an_action_on_a_unit_row_reaches_that_unit_only(): void {
+		$this->stock_with_units();
+		$definition = $this->definition();
+		$id         = $this->unit_row_id( 101, 'u-1' );
+
+		$result = $this->provider()->apply( $this->context(), 'unit-marking', [ $id ], [ 'sgtin' => '0104600000000000' ] );
+		$body   = Action_Response::apply( $definition, $definition->get_action( 'unit-marking' ), $result );
+
+		$this->assertSame( 'done', $body['status'] );
+		$this->assertSame( [ 'u-1' ], Fake_Seller_Adapter::unit_ids( $this->seller->calls[0] ) );
+		$this->assertSame( [ $this->row_id( 101 ), $id ], array_column( $body['rows'], 'id' ) );
+	}
+
+	public function test_a_marking_code_with_group_separators_passes_the_table_check_on_a_unit_row_untouched(): void {
+		$this->stock_with_units();
+		$action = $this->definition()->get_action( 'unit-marking' );
+		$code   = "010460043993125621ab%2f<x\x1D91EE06\x1D92dGVzdA==";
+
+		$typed = Action_Input::validate( $action, [ 'sgtin' => $code ] );
+
+		$this->assertSame( [ 'sgtin' => $code ], $typed );
+
+		$this->provider()->apply( $this->context(), 'unit-marking', [ $this->unit_row_id( 101, 'u-1' ) ], $typed );
+
+		$this->assertSame( $code, $this->seller->calls[0]->value( 'sgtin' ) );
+		$this->assertFalse( $this->definition()->get_action( 'bulk-supply' )['fields'][0]['scanned_code'], 'Only a code field is marked.' );
+	}
+
+	public function test_a_grouped_table_with_shipments_offers_them_on_the_order_row_only(): void {
+		$this->stock_with_units();
+		$marketplace = $this->with_shipments();
+		$definition  = $this->definition();
+
+		$this->assertSame( [ 'open', 'label', 'act-confirm', 'act-receive', 'ship-add', 'cancel', 'unit-receive', 'unit-marking' ], $definition->get_row_action_ids() );
+		$this->assertSame( [ 'bulk-confirm', 'bulk-supply', 'bulk-ship-add' ], array_column( $definition->to_array()['bulk_actions'], 'id' ) );
+		$this->assertSame( 50, $definition->get_children()['default_per_page'] );
+
+		$order = $this->by_id( $this->list_body() )[ $this->row_id( 101 ) ];
+
+		$this->assertTrue( $order['has_children'] );
+		$this->assertTrue( $order['selectable'] );
+		$this->assertContains( 'ship-add', array_column( $order['actions'], 'id' ) );
+		$this->assertNotContains( 'ship-add', array_column( $this->children_of( 101 )[0]['actions'], 'id' ) );
+
+		try {
+			$this->provider()->apply( $this->context(), 'ship-add', [ $this->unit_row_id( 101, 'u-1' ) ], [ 'target' => 'new', 'name' => 'Первая' ] );
+			$this->fail( 'A shipment takes orders, not the row of one unit.' );
+		} catch ( Action_State_Exception $e ) {
+			$this->assertNotSame( '', $e->getMessage() );
+		}
+
+		$this->assertSame( [], $marketplace->remote );
+	}
+
+	public function test_an_action_of_one_kind_of_row_is_refused_on_the_other(): void {
+		$this->stock_with_units();
+
+		foreach ( [ [ 'unit-marking', $this->row_id( 101 ) ], [ 'act-confirm', $this->unit_row_id( 101, 'u-1' ) ], [ 'cancel', $this->unit_row_id( 101, 'u-1' ) ] ] as list( $action, $id ) ) {
+			try {
+				$this->provider()->apply( $this->context(), $action, [ $id ], [ 'sgtin' => '1' ] );
+				$this->fail( $action . ' must not run on ' . $id );
+			} catch ( Action_State_Exception $e ) {
+				$this->assertNotSame( '', $e->getMessage() );
+			}
+		}
+
+		$this->assertSame( [], $this->seller->calls );
+		$this->assertSame( [], $this->canceller->cancelled );
 	}
 }

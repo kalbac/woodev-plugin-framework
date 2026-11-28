@@ -246,6 +246,18 @@ final class AccountDeletionServiceTest extends Sync_Test_Case {
 			'only this account\'s rows are counted'
 		);
 		$this->assertStringContainsString( 'заказы удаляются отдельно', $preview['kept'] );
+		$this->assertStringNotContainsString( 'данные покупателей', $preview['kept'] );
+	}
+
+	/**
+	 * A marketplace whose orders may keep the buyer's data says that the deletion removes it.
+	 *
+	 * @return void
+	 */
+	public function test_the_preview_says_that_the_buyers_data_goes(): void {
+		$preview = new Account_Deletion_Preview( [], new Effective_Settings( Sqlite_Tables::MARKETPLACE_ID ), false, null, true );
+
+		$this->assertStringContainsString( 'данные покупателей от маркетплейса будут удалены', $preview->describe( $this->accounts()->get( $this->account_id ) )['kept'] );
 	}
 
 	/**

@@ -83,7 +83,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * Never a 5xx: a reverse proxy or a bot filter in front of the shop may replace the body of one with its own, and
 		 * the carrier's reason is lost on the way. 502 stays for a carrier call that threw or answered nothing usable.
 		 *
-		 * @since 2.1.28
+		 * @since 2.1.29
 		 *
 		 * @var int
 		 */
@@ -766,7 +766,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 *              (`[ { field, code, message } ]`) before the carrier is called.
 		 * @since 2.0.2 Card #1204: a paid action ({@see Order_Actions::requires_confirmation()}) needs `confirmed: true` in the
 		 *              body, or it answers 400 `woodev_shipping_orders_confirmation_required` and the carrier is not called.
-		 * @since 2.1.28 Card #1979: a failed {@see Action_Result} answers {@see self::CARRIER_REFUSAL_STATUS} (was 502); only a
+		 * @since 2.1.29 Card #1979: a failed {@see Action_Result} answers {@see self::CARRIER_REFUSAL_STATUS} (was 502); only a
 		 *               thrown carrier call answers 502.
 		 *
 		 * @param \WP_REST_Request $request request; `id` and `action` come from the route, `payload` and `confirmed` from the body.
@@ -895,7 +895,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * anything else that is not a list — an exception, an error without a message — is a 502.
 		 *
 		 * @since 2.0.2
-		 * @since 2.1.28 Card #1979: the filter's `WP_Error` answers {@see self::CARRIER_REFUSAL_STATUS} (was 502).
+		 * @since 2.1.29 Card #1979: the filter's `WP_Error` answers {@see self::CARRIER_REFUSAL_STATUS} (was 502).
 		 *
 		 * @param \WP_REST_Request $request request; `id`, `action` and `field` come from the route.
 		 * @return \WP_REST_Response|\WP_Error `{ options: [ { value, label } ] }`.

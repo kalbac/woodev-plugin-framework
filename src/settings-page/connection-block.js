@@ -7,13 +7,14 @@
  * @package woodev-plugin-framework
  */
 
-import { useState } from '@wordpress/element';
+import { useEffect, useState } from '@wordpress/element';
 import { RawHTML } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import ControlField, { resolveControl } from '../components/control-field';
 import { isRequirable } from '../components/validate';
 import { testConnection } from './rest';
+import { connectionTone } from './connection-status';
 
 /**
  * Whether a connection field counts as filled: a wp-config constant, a typed value, or a masked secret that is
@@ -65,15 +66,36 @@ export function emptyFieldsHint( labels ) {
 	return sprintf( __( 'Заполните поля: %s.', 'woodev-plugin-framework' ), labels.join( ', ' ) );
 }
 
-export default function ConnectionBlock( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert, serverErrors } ) {
+/**
+ * @param {Object}    props
+ * @param {boolean}   [props.checking] true while the page checks this block's connection on its own (after a save).
+ * @param {?Function} [props.onTested] called after the button's check answered (not when it could not run): an account block
+ *                                     has the page read the stored status again, so its card says the same.
+ */
+export default function ConnectionBlock( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert, serverErrors, checking = false, onTested } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ result, setResult ] = useState( section.status || null );
+	const hasEdits = Object.keys( section.fields ).some( ( settingId ) => Object.prototype.hasOwnProperty.call( values, settingId ) );
+
+	// An account's stored status changes under the open form (a save, a check): show it. With edits staged the line is about
+	// them, not about what is stored.
+	useEffect( () => {
+		if ( section.card && ! hasEdits ) {
+			setResult( section.status || null );
+		}
+	}, [ section.status ] ); // eslint-disable-line react-hooks/exhaustive-deps -- only a new stored status replaces the line.
 
 	const run = () => {
 		setBusy( true );
 		setResult( null );
 		testConnection( providerId, section.id, values )
-			.then( ( res ) => setResult( res ) )
+			.then( ( res ) => {
+				setResult( res );
+
+				if ( onTested ) {
+					onTested();
+				}
+			} )
 			.catch( ( err ) =>
 				setResult( {
 					success: false,
@@ -122,8 +144,8 @@ export default function ConnectionBlock( { providerId, section, values, conditio
 				{ section.supports_test && (
 					<Button
 						variant="secondary"
-						isBusy={ busy }
-						disabled={ busy || ! allFieldsFilled }
+						isBusy={ busy || checking }
+						disabled={ busy || checking || ! allFieldsFilled }
 						onClick={ run }
 					>
 						{ section.action_label || __( 'Проверить подключение', 'woodev-plugin-framework' ) }
@@ -134,7 +156,7 @@ export default function ConnectionBlock( { providerId, section, values, conditio
 				) }
 				{ result && (
 					<span
-						className={ `woodev-connection__result is-${ result.success ? 'ok' : 'error' }` }
+						className={ `woodev-connection__result is-${ connectionTone( result ) }` }
 					>
 						{ result.message }
 					</span>

@@ -20,6 +20,7 @@ use Woodev\Framework\Marketplace\Admin\Shared\Russian_Plural;
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
 use Woodev\Framework\Marketplace\Flows\Label_Exception;
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
+use Woodev\Framework\Marketplace\Flows\Order_Units;
 use Woodev\Framework\Marketplace\Settings\Posting_Noun;
 
 defined( 'ABSPATH' ) || exit;
@@ -28,12 +29,13 @@ defined( 'ABSPATH' ) || exit;
  * The orders a marketplace account brought to the shop, as a records provider: one row per remote order group that has a WooCommerce
  * order, on either order storage. It is the small coordinator: SQL is in {@see Site_Orders_Reader}, cells in {@see Site_Orders_Rows},
  * processes and locks in {@see Site_Orders_Activity}, labels in {@see Site_Orders_Labels}, the cancellation in
- * {@see Site_Orders_Cancel} and the adapter's seller actions in {@see Site_Orders_Seller}.
+ * {@see Site_Orders_Cancel}, the adapter's seller actions in {@see Site_Orders_Seller}, «add to a shipment» in
+ * {@see Site_Orders_Shipments} and the rows a grouped order opens into in {@see Site_Orders_Units}.
  *
  * Sorting, filtering and paging are done in SQL over the whole table, never over one page. Reading never calls the marketplace; it
  * is called only for the cancellation reasons of one order, when the merchant opens the cancel window, and by an applied action.
  *
- * Every row is `{account id}:{order id}`. An action may touch an order only when it is a registry row of the account, carries the
+ * Every order row is `{account id}:{order id}`, and a unit's row below it adds a digest of the unit ({@see Site_Orders_Ids}). An action may touch an order only when it is a registry row of the account, carries the
  * account's owner stamp (the check the label download makes too) and the user may edit it.
  *
  * @since 2.1.5
@@ -139,6 +141,27 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	private $seller;
 
 	/**
+	 * Null when the marketplace does not ship in shipments the screens manage.
+	 *
+	 * @var Site_Orders_Shipments|null
+	 */
+	private $shipments;
+
+	/**
+	 * Null for a marketplace whose orders hold no units.
+	 *
+	 * @var Site_Orders_Units|null
+	 */
+	private $units;
+
+	/**
+	 * Names of the marketplace's delivery schemes by code; empty for a marketplace that declares none.
+	 *
+	 * @var array<string,string>
+	 */
+	private $schemes;
+
+	/**
 	 * Creates the provider.
 	 *
 	 * @since 2.1.5
@@ -158,8 +181,14 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param Posting_Action_Gate|null     $gate         Whether the write actions are on offer for a posting (since 2.1.17); when given it is used instead of `$availability`, and null offers every action to every account.
 	 * @param Posting_Noun|null            $noun         The marketplace's word for a posting (since 2.1.23); null for «отправление».
 	 * @param Site_Orders_Seller|null      $seller       The adapter's seller actions (since 2.1.27); null for an adapter that declares none.
+	 * @param Site_Orders_Shipments|null   $shipments    «Add to a shipment» (since 2.1.28); null for a marketplace without shipments.
+	 * @param Site_Orders_Units|null       $units        The unit rows of a grouped order (since 2.1.28); null for a marketplace whose orders hold none.
+	 * @param array<string,string>         $schemes      Names of the delivery schemes by code (since 2.1.29); empty for a marketplace that declares none.
 	 */
-	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null ) {
+	public function __construct( Wpdb_Account_Store $accounts, Site_Orders_Reader $reader, Site_Orders_Rows $rows, Site_Orders_Activity $activity, ?Site_Orders_Labels $labels, ?Site_Orders_Cancel $cancel, Order_Meta_Contract $meta, callable $can_edit, string $adapter_id, ?callable $log_error = null, ?Site_Orders_Data_Status $data_status = null, ?Label_Availability $availability = null, ?Posting_Action_Gate $gate = null, ?Posting_Noun $noun = null, ?Site_Orders_Seller $seller = null, ?Site_Orders_Shipments $shipments = null, ?Site_Orders_Units $units = null, array $schemes = [] ) {
+		$this->schemes     = $schemes;
+		$this->units       = $units;
+		$this->shipments   = $shipments;
 		$this->seller      = $seller;
 		$this->noun        = $noun ?? Posting_Noun::shipment();
 		$this->data_status = $data_status;
@@ -215,15 +244,19 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	public function get_definition( array $context ): array {
 		$warning = null === $this->cancel || $this->cancel->needs_reason() ? null : $this->cancel->warning();
 
-		return Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun, $this->seller, $warning );
+		$definition = Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun, $this->seller, $warning, null !== $this->units, $this->schemes );
+
+		return null === $this->shipments ? $definition : $this->shipments->extend_definition( $definition );
 	}
 
 	/**
-	 * Every id must be a row of this account's table. For an action (and for the cancel window's reasons) it must also be an order
-	 * of the account — registered for it and carrying its owner stamp — that the user may edit; anything else is refused like an unknown
-	 * id. The activity refresh asks about rows that were on screen, so a vanished one is answered in `removed_ids`, not refused.
+	 * Every id must be a row of this account's table: an order's, or a unit's below it. For an action (and for the cancel window's
+	 * reasons) its order must also be an order of the account — registered for it and carrying its owner stamp — that the user may
+	 * edit; anything else is refused like an unknown id. Opening a row into its units is a read of a listed order. The activity
+	 * refresh asks about rows that were on screen, so a vanished one is answered in `removed_ids`, not refused.
 	 *
 	 * @since 2.1.5
+	 * @since 2.1.28 Answers for the rows of units.
 	 *
 	 * @param string               $operation `definition`, `list`, `children`, `options`, `activity` or an action id.
 	 * @param array<string,string> $context   Resolved context.
@@ -235,7 +268,13 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			return true;
 		}
 
-		$order_ids = 'children' === $operation ? null : $this->order_ids( $this->account_id( $context ), $ids );
+		$account_id = $this->account_id( $context );
+
+		if ( 'children' === $operation ) {
+			return null !== $this->units && 1 === count( $ids ) && null !== $this->listed_order_id( $account_id, (string) $ids[0] );
+		}
+
+		$order_ids = $this->named_order_ids( $account_id, $ids );
 
 		if ( null === $order_ids ) {
 			return false;
@@ -312,9 +351,10 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	}
 
 	/**
-	 * Orders have no children.
+	 * The units of a grouped order, one row each, live or cancelled. A local read.
 	 *
 	 * @since 2.1.5
+	 * @since 2.1.28 Lists the units of a grouped order.
 	 *
 	 * @param array<string,string> $context   Resolved context.
 	 * @param string               $parent_id Row id.
@@ -322,9 +362,24 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @return array<string,mixed>
 	 */
 	public function get_children( array $context, string $parent_id, array $query ): array {
+		$account  = $this->account( $context );
+		$order_id = null === $account || null === $this->units ? null : $this->listed_order_id( $account->id(), $parent_id );
+		$order    = null === $order_id ? null : $this->order( $order_id );
+
+		if ( null === $order ) {
+			return [
+				'rows'  => [],
+				'total' => 0,
+			];
+		}
+
+		$units    = Order_Units::of( $order );
+		$per_page = (int) $query['per_page'];
+		$page     = array_slice( $units, ( (int) $query['page'] - 1 ) * $per_page, $per_page );
+
 		return [
-			'rows'  => [],
-			'total' => 0,
+			'rows'  => $this->units->rows( $account, $order, $page, true === call_user_func( $this->can_edit, $order_id ) ),
+			'total' => count( $units ),
 		];
 	}
 
@@ -341,10 +396,20 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @throws Action_State_Exception When the order, the account or the licence does not allow the action.
 	 */
 	public function preview( array $context, string $action, array $ids, array $payload ): array {
+		if ( $this->is_unit_action( $action ) ) {
+			$call = $this->prepare_unit( $context, $ids );
+
+			return $this->seller->preview( $call['account'], $action, [ $call['order'] ], $payload, $call['unit_id'] );
+		}
+
 		$call = $this->prepare( $context, $action, $ids );
 
 		if ( $this->is_seller_action( $action ) ) {
 			return $this->seller->preview( $call['account'], $action, $this->orders_of_call( $call ), $payload );
+		}
+
+		if ( $this->is_shipment_action( $action ) ) {
+			return $this->shipments->preview( $call['account'], $this->orders_of_call( $call ), $payload );
 		}
 
 		if ( Site_Orders_Definition::CANCEL === $action ) {
@@ -368,10 +433,20 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @throws Action_Input_Exception When the cancel reason is missing.
 	 */
 	public function apply( array $context, string $action, array $ids, array $payload ): array {
+		if ( $this->is_unit_action( $action ) ) {
+			return $this->unit_apply( $this->prepare_unit( $context, $ids ), $action, $payload );
+		}
+
 		$call = $this->prepare( $context, $action, $ids );
 
 		if ( $this->is_seller_action( $action ) ) {
 			$result = $this->seller->apply( $call['account'], $action, $this->orders_of_call( $call ), $payload );
+
+			return $result + [ 'rows' => $this->build_rows( $call['account'], $call['targets'] ) ];
+		}
+
+		if ( $this->is_shipment_action( $action ) ) {
+			$result = $this->shipments->apply( $call['account'], $this->orders_of_call( $call ), $payload );
 
 			return $result + [ 'rows' => $this->build_rows( $call['account'], $call['targets'] ) ];
 		}
@@ -387,6 +462,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * The current rows of the asked ids. A local read.
 	 *
 	 * @since 2.1.5
+	 * @since 2.1.28 Answers the rows of units.
 	 *
 	 * @param array<string,string> $context Resolved context.
 	 * @param string[]             $ids     Visible row ids.
@@ -399,17 +475,21 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			return [ 'removed_ids' => $ids ];
 		}
 
-		$order_ids = $this->order_ids( $account->id(), $ids ) ?? [];
-		$found     = $this->reader->find( $account->id(), $order_ids );
-		$items     = [];
+		$order_ids = [];
+		$digests   = [];
 
-		foreach ( $order_ids as $order_id ) {
-			if ( isset( $found[ $order_id ] ) ) {
-				$items[] = $found[ $order_id ];
+		foreach ( $ids as $id ) {
+			$order_id = Site_Orders_Ids::order_id( (string) $id, $account->id() );
+			$unit     = null === $order_id ? Site_Orders_Ids::unit( (string) $id, $account->id() ) : null;
+
+			if ( null !== $order_id ) {
+				$order_ids[] = $order_id;
+			} elseif ( null !== $unit ) {
+				$digests[ $unit['order_id'] ][] = $unit['digest'];
 			}
 		}
 
-		$rows = $this->build_rows( $account, $items );
+		$rows = array_merge( $this->build_rows( $account, $this->listed_items( $account->id(), $order_ids ) ), $this->unit_rows( $account, $digests ) );
 
 		return [
 			'rows'             => $rows,
@@ -439,6 +519,13 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		];
 		$account = $this->account( $context );
 
+		if ( null !== $account && $this->is_shipment_action( $action ) ) {
+			return [
+				'options'     => $this->shipments->field_options( $account, $field, $query['search'] ),
+				'next_cursor' => null,
+			];
+		}
+
 		if ( null !== $account && $this->is_seller_action( $action ) ) {
 			return [
 				'options'     => $this->seller->field_options( $account, $action, $field, $query['search'] ),
@@ -467,6 +554,124 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	}
 
 	/**
+	 * Checks a request for an action on one unit and resolves it: the account, the order's registry item, the order and the unit.
+	 *
+	 * @param array<string,string> $context Resolved context.
+	 * @param string[]             $ids     Selected row ids: the one unit row.
+	 * @return array{account:Account,targets:array<int,array<string,mixed>>,order:\WC_Order,unit_id:string}
+	 * @throws Action_State_Exception When the account is gone or the unit is not available.
+	 */
+	private function prepare_unit( array $context, array $ids ): array {
+		$account = $this->account( $context );
+
+		if ( null === $account ) {
+			throw new Action_State_Exception( __( 'Аккаунт не найден или выключен.', 'woodev-plugin-framework' ) );
+		}
+
+		$asked   = null === $this->units || 1 !== count( $ids ) ? null : Site_Orders_Ids::unit( (string) $ids[0], $account->id() );
+		$targets = null === $asked ? null : $this->targets( $account, [ $asked['order_id'] ] );
+		$order   = null === $targets ? null : $this->order( $asked['order_id'] );
+		$unit    = null === $order ? null : $this->units->find( $order, $asked['digest'] );
+
+		if ( null === $unit ) {
+			throw new Action_State_Exception( __( 'Заказ не найден. Обновите страницу.', 'woodev-plugin-framework' ) );
+		}
+
+		return [
+			'account' => $account,
+			'targets' => $targets,
+			'order'   => $order,
+			'unit_id' => $unit->id(),
+		];
+	}
+
+	/**
+	 * Applies an action to one unit and answers with the order's row and the unit's.
+	 *
+	 * @param array{account:Account,targets:array<int,array<string,mixed>>,order:\WC_Order,unit_id:string} $call    Resolved call.
+	 * @param string                                                                                       $action  Action id.
+	 * @param array<string,mixed>                                                                          $payload Validated fields.
+	 * @return array<string,mixed>
+	 * @throws Action_State_Exception When nothing was done.
+	 * @throws Action_Input_Exception When the input is refused.
+	 */
+	private function unit_apply( array $call, string $action, array $payload ): array {
+		$result   = $this->seller->apply( $call['account'], $action, [ $call['order'] ], $payload, $call['unit_id'] );
+		$digests  = [ $call['order']->get_id() => [ Site_Orders_Ids::unit_digest( $call['unit_id'] ) ] ];
+		$new_rows = array_merge( $this->build_rows( $call['account'], $call['targets'] ), $this->unit_rows( $call['account'], $digests ) );
+
+		return $result + [ 'rows' => $new_rows ];
+	}
+
+	/**
+	 * Builds the asked unit rows of listed orders.
+	 *
+	 * @param Account             $account Account.
+	 * @param array<int,string[]> $digests Unit digests by order id.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function unit_rows( Account $account, array $digests ): array {
+		if ( null === $this->units || [] === $digests ) {
+			return [];
+		}
+
+		$items = $this->listed_items( $account->id(), array_keys( $digests ) );
+		$rows  = [];
+
+		foreach ( $items as $item ) {
+			$order = $this->order( $item['order_id'] );
+
+			if ( null === $order ) {
+				continue;
+			}
+
+			$asked = array_filter(
+				Order_Units::of( $order ),
+				static function ( $unit ) use ( $digests, $item ): bool {
+					return in_array( Site_Orders_Ids::unit_digest( $unit->id() ), $digests[ $item['order_id'] ], true );
+				}
+			);
+
+			$rows = array_merge( $rows, $this->units->rows( $account, $order, array_values( $asked ), true === call_user_func( $this->can_edit, $item['order_id'] ) ) );
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * The registry items of the orders the table lists for the account, in the order asked.
+	 *
+	 * @param int   $account_id Account.
+	 * @param int[] $order_ids  Order ids.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function listed_items( int $account_id, array $order_ids ): array {
+		$found = [] === $order_ids ? [] : $this->reader->find( $account_id, $order_ids );
+		$items = [];
+
+		foreach ( $order_ids as $order_id ) {
+			if ( isset( $found[ $order_id ] ) ) {
+				$items[] = $found[ $order_id ];
+			}
+		}
+
+		return $items;
+	}
+
+	/**
+	 * The order an order row id names, when the table lists it for the account.
+	 *
+	 * @param int    $account_id Account.
+	 * @param string $row_id     Row id.
+	 * @return int|null
+	 */
+	private function listed_order_id( int $account_id, string $row_id ): ?int {
+		$order_id = Site_Orders_Ids::order_id( $row_id, $account_id );
+
+		return null === $order_id || [] === $this->listed_items( $account_id, [ $order_id ] ) ? null : $order_id;
+	}
+
+	/**
 	 * Checks an action request and resolves it: the account and the registry items of the asked rows.
 	 *
 	 * @param array<string,string> $context Resolved context.
@@ -476,7 +681,9 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @throws Action_State_Exception When the action is not one this table runs, the account is gone or the order is not available.
 	 */
 	private function prepare( array $context, string $action, array $ids ): array {
-		if ( ( ! in_array( $action, $this->offered(), true ) && ! $this->is_seller_action( $action ) ) || Site_Orders_Definition::OPEN === $action ) {
+		$known = in_array( $action, $this->offered(), true ) || $this->is_seller_action( $action ) || $this->is_shipment_action( $action );
+
+		if ( ! $known || Site_Orders_Definition::OPEN === $action ) {
 			throw new Action_State_Exception( __( 'Это действие недоступно для заказов этого маркетплейса.', 'woodev-plugin-framework' ) );
 		}
 
@@ -604,6 +811,22 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 */
 	private function is_seller_action( string $action ): bool {
 		return null !== $this->seller && $this->seller->handles( $action );
+	}
+
+	/**
+	 * @param string $action Action id of a request.
+	 * @return bool Whether it is «add to a shipment».
+	 */
+	private function is_shipment_action( string $action ): bool {
+		return null !== $this->shipments && $this->shipments->handles( $action );
+	}
+
+	/**
+	 * @param string $action Action id of a request.
+	 * @return bool Whether it is one of the adapter's actions on one unit.
+	 */
+	private function is_unit_action( string $action ): bool {
+		return null !== $this->seller && $this->seller->handles_unit( $action );
 	}
 
 	/**
@@ -896,12 +1119,24 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 				$activity[ $item['order_id'] ],
 				$refusal,
 				( $states[ $item['external_key'] ]['document_id'] ?? 0 ) > 0,
-				null === $this->seller ? [] : $this->seller->row_states( $account, $order ),
-				null !== $this->seller && $this->seller->has_bulk()
+				$this->extra_states( $account, $order ),
+				null !== $this->shipments || ( null !== $this->seller && $this->seller->has_bulk() ),
+				null !== $this->units && $this->units->has_units( $order )
 			);
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * @param Account   $account Account.
+	 * @param \WC_Order $order   Order.
+	 * @return array<int,array{id:string,enabled:bool,reason:string}> The states of the seller actions and of «add to a shipment».
+	 */
+	private function extra_states( Account $account, \WC_Order $order ): array {
+		$states = null === $this->seller ? [] : $this->seller->row_states( $account, $order );
+
+		return null === $this->shipments ? $states : array_merge( $states, $this->shipments->row_states( $account, $order ) );
 	}
 
 	/**
@@ -963,6 +1198,30 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 		}
 
 		return $order_ids;
+	}
+
+	/**
+	 * The orders named by row ids of the account, a unit's row naming its order.
+	 *
+	 * @param int      $account_id Account.
+	 * @param string[] $ids        Row ids.
+	 * @return int[]|null Each order once; null when any id is malformed or names another account.
+	 */
+	private function named_order_ids( int $account_id, array $ids ): ?array {
+		$order_ids = [];
+
+		foreach ( $ids as $id ) {
+			$unit     = null === $this->units ? null : Site_Orders_Ids::unit( (string) $id, $account_id );
+			$order_id = null === $unit ? Site_Orders_Ids::order_id( (string) $id, $account_id ) : $unit['order_id'];
+
+			if ( null === $order_id ) {
+				return null;
+			}
+
+			$order_ids[ $order_id ] = $order_id;
+		}
+
+		return array_values( $order_ids );
 	}
 
 	/**

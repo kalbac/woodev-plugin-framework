@@ -111,6 +111,67 @@
 	border-top: 1px solid #dcdcde;
 }
 
+/* The list of the order's goods: a row per unit, a cancelled one greyed. */
+.woodev-mp-units {
+	margin-top: 16px;
+}
+
+.woodev-mp-details .woodev-mp-units th,
+.woodev-mp-details .woodev-mp-units td {
+	width: auto;
+	padding: 8px 10px;
+	vertical-align: middle;
+}
+
+.woodev-mp-details .woodev-mp-units__cancelled td {
+	color: #646970;
+}
+
+.woodev-mp-units .description {
+	display: block;
+	margin-top: 4px;
+}
+
+/* The recipient and address of an order the seller delivers: the only fields of a marketplace order the merchant edits. */
+.woodev-mp-delivery {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid #dcdcde;
+}
+
+.woodev-mp-details .woodev-mp-delivery table {
+	width: auto;
+}
+
+.woodev-mp-delivery__fields {
+	display: grid;
+	grid-template-columns: repeat( auto-fill, minmax( 18em, 1fr ) );
+	gap: 12px 16px;
+	margin-top: 12px;
+}
+
+.woodev-mp-details #order_data .woodev-mp-delivery__field {
+	margin: 0;
+}
+
+.woodev-mp-details #order_data .woodev-mp-delivery__field.is-address_1 {
+	grid-column: 1 / -1;
+}
+
+.woodev-mp-delivery__field label {
+	display: block;
+	margin-bottom: 4px;
+}
+
+.woodev-mp-delivery__field input {
+	width: 100%;
+}
+
+.woodev-mp-delivery__field .description {
+	display: block;
+	margin-top: 4px;
+}
+
 /* The label button and the line beside it that says what it is doing. */
 .woodev-mp-label-wrap {
 	display: inline-flex;

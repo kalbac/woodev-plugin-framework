@@ -88,6 +88,7 @@ final class SiteOrdersReaderTest extends TestCase {
 				'status_raw'   => 'delivering',
 				'is_terminal'  => false,
 				'claim_until'  => '',
+				'scheme'       => '',
 			],
 			$page['items'][0]
 		);
