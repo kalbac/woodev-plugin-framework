@@ -267,6 +267,9 @@ class Fake_Provider implements Records_Provider, Provides_Field_Options {
 	public function get_field_options( array $context, string $action, string $field, array $query ): array {
 		$this->calls[]                = 'get_field_options';
 		$this->last['field_options'] = [ $context, $action, $field, $query ];
+		if ( null !== $this->throw ) {
+			throw $this->throw;
+		}
 
 		return [
 			'options'     => $this->field_options,

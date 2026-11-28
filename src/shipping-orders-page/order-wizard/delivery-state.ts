@@ -109,6 +109,45 @@ export function buildRepriceRequest( data: WizardData ): Record<string, unknown>
 	};
 }
 
+/**
+ * The quote a delivery-only edit ends with (#2010), having no step ⑤: {@link buildRepriceRequest} for the chosen
+ * tariff, pickup point and the order's own payment method. A method the shop does not offer (the route refuses it) is
+ * left out. `null` when no tariff is chosen, or the plain tariffs already answer exactly this.
+ *
+ * @param {WizardData}             data           the wizard state.
+ * @param {Record<string, string>} paymentMethods the shop's enabled payment methods, id → title.
+ * @return {Record<string, unknown>|null} the request body.
+ */
+export function buildFinalQuoteRequest( data: WizardData, paymentMethods: Record<string, string> = {} ): Record<string, unknown> | null {
+	if ( '' === chosenRateId( data.rest ) ) {
+		return null;
+	}
+
+	const offered = Object.prototype.hasOwnProperty.call( paymentMethods, data.rest.payment_method );
+	const request = buildRepriceRequest( offered ? data : { ...data, rest: { ...data.rest, payment_method: '' } } );
+
+	return ratesRequestKey( request ) === ratesRequestKey( buildRatesRequest( data ) ) ? null : request;
+}
+
+/**
+ * A delivery the shop pays for is priced at what the carrier asks, not at the customer's price (#2010): the same
+ * answer with every tariff's `cost` replaced by its `carrier_cost`.
+ */
+export function atCarrierCost( response: RatesResponse ): RatesResponse {
+	return {
+		...response,
+		providers: response.providers.map( ( group ) => ( {
+			...group,
+			rates: group.rates.map( ( rate ) => ( { ...rate, cost: rate.carrier_cost ?? rate.cost } ) ),
+		} ) ),
+	};
+}
+
+/** Marks where the final quote of a delivery-only edit stands. Returns the very same object when nothing changes. */
+export function setFinalQuote( data: WizardData, state: '' | 'pending' | 'failed' ): WizardData {
+	return ( data.rest.final_quote ?? '' ) === state ? data : { ...data, rest: { ...data.rest, final_quote: state } };
+}
+
 /** Same request ⇒ same key: the step asks again only when this changes. */
 export function ratesRequestKey( request: Record<string, unknown> | null ): string {
 	return null === request ? '' : JSON.stringify( request );

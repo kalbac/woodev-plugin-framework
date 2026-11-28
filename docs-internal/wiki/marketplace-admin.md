@@ -1364,6 +1364,20 @@ asking for that article and ends by itself (`done_with_errors`, since a skipped 
 interface nothing changes (Ozon). A task still being built counts as open too; the batch runner already drops a link reset before
 the request.
 
+## The run's claim handed to the export gateway (#2054, `2.1.29`)
+
+An optional interface on the `Export_Gateway`, `Flows\Receives_Export_Claim`, for an adapter whose own reads, waits or several
+requests may outlast the account claim (`Job_Gate::CLAIM_TTL`, 120 s). `Export_Batch_Runner` calls
+`receive_export_claim( $account, $hold )` right after it takes the claim, before any other call to the gateway, once per run.
+`$hold` (`function (): void`) extends that run's claim and throws `Jobs\Claim_Lost` once it is not the run's any more. The gateway
+calls it between remote calls and before each write, and lets the exception through as it is — it neither swallows it nor wraps it
+in its own. The job rethrows `Claim_Lost` from `submit()` and from the card list read before it asks the `Error_Classifier`, so a
+catch-all classifier cannot turn it into a failed task. It logs it and leaves the task and its links as they are, and the recovery
+sweep queues the links again.
+
+A gateway must not read the token from the account row instead: between the job's claim and the gateway's first card the row may
+already hold another run's claim. Without the interface nothing changes (Ozon).
+
 ## A size inside a card as the sellable unit (#2000)
 
 Card WF3 of the Wildberries design (`2.1.23`). One **optional** adapter interface, `Flows\Sellable_Units`; an adapter without it
@@ -1682,6 +1696,48 @@ export is keyed by e-mail or username); the bulk action and the clean-up need no
 removes the module's buyer meta from the account's orders (`Deletion\Posting_Eraser`); the order's own fields stay. A refused
 read of the postings is a failed run (retried), never «none left». A posting stays until its order's data is gone: an order that
 cannot be loaded fails the run unless a successful read of the order store finds no such order.
+
+## A carrier for a seller-delivered order (#2010)
+
+Card WD1 of the Wildberries design (`2.1.29`), the one marketplace card that changes the shipping module (owner's exception, T2).
+The shipping module knows no marketplace: it offers a registry, and **nothing registers an entry yet** — WF10 does.
+
+**Seams** (`woodev/shipping-method/admin/orders/`).
+
+| Seam | Use |
+|---|---|
+| `Delivery_Entry::claims( $order )` | the order is the module's: only its delivery is the wizard's. Asked per orders-page row — local data only |
+| `Delivery_Entry::refusal_reason( $order )` | why it cannot be arranged or changed now; the framework adds «exported» and final statuses itself |
+| `Delivery_Entry::notices( $order )` | warnings above the address in the wizard, plain text |
+| `Orders_Registry::register_delivery_entry( $entry )` | on every request |
+| `Orders_Registry::get_delivery_url( $order )` | the «Оформить доставку» link; `''` when there is nothing to open |
+
+**What WF10 wires** (design §7.4–7.5): claim `Flows\Seller_Order::is_seller_delivered()` orders of its own marketplace; refuse
+until the units are in `confirm`; in `notices()` give the phone-extension warning of `Seller_Delivery_Panel` (D13: the extension
+is not passed to a carrier) and the day and time the buyer chose; print the button from `get_delivery_url()`. The licence of the
+marketplace plugin is that module's to check in `refusal_reason()`.
+
+**Behaviour.** `GET /shipping/orders/{id}/edit` answers `entry: 'delivery'` and `notices` for a claimed order, a row or not, and
+`PUT /shipping/orders/{id}` writes the delivery only (`Order_Payload_Validator::validate_delivery()`,
+`Order_Editor::write_delivery()`): shipping address, recipient and phone, the carrier's line (an earlier carrier line is replaced,
+the framework's «Доставка …» line is not touched), the marker, point, carrier fields and settlement. No total is recalculated.
+The line totals 0; the price is item meta `_woodev_shipping_seller_cost` (installed-site contract). The checkout's «removed»
+address fields keep their stored value. The row action reads «Изменить доставку».
+
+**Which price is stored.** The carrier's, not the customer's: `Shipping_Rate::get_carrier_cost()` — the cost the rate was first
+built with, kept through `with_cost()` and the rate cache (shape 3) — reaches the wizard as `carrier_cost` of the rates answer
+(the calculator listens to `woodev_shipping_method_before_add_rate`), and step ④ shows and saves it. Step ④ also asks the final
+quote itself (there is no step ⑤): for the chosen pickup point and the order's payment method, when the shop offers it. While
+that quote is pending or failed «Сохранить доставку» is held. Create, edit and checkout prices are unchanged.
+
+**With WF9's seed-then-leave-alone:** the address is the merchant's after the save; a name or phone the manager did not change
+still follows the marketplace's later reads.
+
+**Limits.** As for any wizard edit, an order whose city is filled but has no saved settlement record asks for the settlement to be
+picked through the search. Without a registered entry (the marketplace plugin off) such a row is edited by the full editor, like
+any order. The orders table names both shipping lines and the buyer-paid sum (#2073). Yandex Delivery builds its rate without
+the insurance the shop pays itself, so the stored cost lacks it until the plugin names its carrier price (#2075). A carrier must find its line by method id
+(CDEK, Yandex, Russian Post and Ozon Delivery were read on 28.11.2026 and do).
 
 ## Sticker documents (#2005)
 

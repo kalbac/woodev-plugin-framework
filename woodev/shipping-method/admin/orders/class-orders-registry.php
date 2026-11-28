@@ -53,6 +53,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		const ANALYTICS_REPORT_PATH = '/analytics/woodev-delivery';
 
 		/**
+		 * @var string query argument of the orders page that opens the wizard on an order's delivery (#2010); the page's bundle reads it.
+		 */
+		private const DELIVERY_QUERY_ARG = 'deliver_order';
+
+		/**
 		 * Framework-owned heartbeat payload key for the order wizard edit lock.
 		 */
 		private const EDIT_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
@@ -195,6 +200,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @var array<string, Shipping_Plugin>
 		 */
 		private $provider_plugins = [];
+
+		/**
+		 * Entries offering «Оформить доставку» for another module's orders (#2010), in registration order.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @var Delivery_Entry[]
+		 */
+		private $delivery_entries = [];
 
 		/**
 		 * Order ids already reported by {@see self::report_multiple_markers()} this request (#928).
@@ -554,6 +568,78 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * Registers an entry that offers «Оформить доставку» for another module's orders (#2010).
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param Delivery_Entry $entry the entry.
+		 * @return void
+		 */
+		public function register_delivery_entry( Delivery_Entry $entry ): void {
+			$this->delivery_entries[] = $entry;
+		}
+
+		/**
+		 * The registered entry that claims an order, the first one that answers.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order $order the order.
+		 * @return Delivery_Entry|null null for an order of the shop's own.
+		 */
+		public function get_delivery_entry( \WC_Order $order ): ?Delivery_Entry {
+			foreach ( $this->delivery_entries as $entry ) {
+				if ( $entry->claims( $order ) ) {
+					return $entry;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * The admin link that opens the order wizard on the delivery of an order — what «Оформить доставку» points at.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order $order the order.
+		 * @return string unescaped URL of the orders page; '' when there is nothing to open: no entry claims the order, no carrier
+		 *                plugin takes orders from the admin, the user may not open the page, or the delivery cannot be arranged now.
+		 */
+		public function get_delivery_url( \WC_Order $order ): string {
+			$entry = $this->get_delivery_entry( $order );
+
+			if ( null === $entry || ! $this->has_admin_order_carrier() || ! current_user_can( $this->get_page_capability() ) ) {
+				return '';
+			}
+
+			if ( '' !== Order_Actions::delivery_refusal_reason( $order, $this->resolve_provider_for_order( $order ), $entry ) ) {
+				return '';
+			}
+
+			return admin_url(
+				'admin.php?page=wc-admin&path=' . rawurlencode( '/' . self::PAGE_SLUG ) . '&' . self::DELIVERY_QUERY_ARG . '=' . (int) $order->get_id()
+			);
+		}
+
+		/**
+		 * Whether any registered carrier can take an order from the admin wizard (it declared a marker writer, #710 O12).
+		 *
+		 * @since 2.1.29
+		 *
+		 * @return bool
+		 */
+		private function has_admin_order_carrier(): bool {
+			foreach ( $this->get_providers() as $provider ) {
+				if ( $provider->has_marker_writer() ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
 		 * WP_DEBUG-only invariant guard (#928): an order carries the marker meta of AT MOST ONE
 		 * registered carrier.
 		 *
@@ -715,6 +801,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @since 2.0.2 Card #947: also subscribes {@see self::snapshot_shipment_fingerprint()} to
 		 *              `woodev_shipping_order_export_requested` and {@see self::record_shipment_fingerprint()}
 		 *              to `woodev_shipping_order_exported`.
+		 * @since 2.1.29 Card #2010: also names and formats the seller's delivery cost on a shipping line
+		 *              ({@see Order_Editor::seller_cost_meta_label()}).
 		 *
 		 * @return void
 		 */
@@ -742,6 +830,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 			add_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20, 2 );
+
+			// #2010: the seller's delivery cost kept on a carrier line reads as words and money on the order screen.
+			add_filter( 'woocommerce_order_item_display_meta_key', [ Order_Editor::class, 'seller_cost_meta_label' ], 10, 2 );
+			add_filter( 'woocommerce_order_item_display_meta_value', [ Order_Editor::class, 'seller_cost_meta_value' ], 10, 3 );
 
 			// #981: the process-wide half of the order editor's «an edit sends no New order» rule
 			// (spec C4). A WooCommerce transactional e-mail may be DEFERRED to a later request, so
@@ -2352,6 +2444,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 			remove_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20 );
 			remove_filter( 'woocommerce_email_enabled_new_order', [ Order_Editor::class, 'mute_new_order_email' ], PHP_INT_MAX );
+			remove_filter( 'woocommerce_order_item_display_meta_key', [ Order_Editor::class, 'seller_cost_meta_label' ], 10 );
+			remove_filter( 'woocommerce_order_item_display_meta_value', [ Order_Editor::class, 'seller_cost_meta_value' ], 10 );
 
 			if ( null !== $this->export_notice ) {
 				$this->export_notice->remove_hooks();
@@ -2368,6 +2462,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->tracking_handlers = [];
 			$this->document_sources  = [];
 			$this->provider_plugins  = [];
+			$this->delivery_entries  = [];
 			$this->admin_order       = null;
 			$this->automation        = null;
 			$this->export_notice     = null;

@@ -1516,6 +1516,11 @@ $orders-cell-padding: 7px;
 		font-size: 15px;
 	}
 
+	// A delivery-only edit may open with several notices above the address (#2010).
+	&__step > .components-notice {
+		margin: 0 0 wd.$gap;
+	}
+
 	&__grid {
 		display: grid;
 		gap: wd.$gap;

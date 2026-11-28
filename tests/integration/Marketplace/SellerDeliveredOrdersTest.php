@@ -30,6 +30,10 @@ use Woodev\Framework\Marketplace\Orders\Registry_Order_Writer;
 use Woodev\Framework\Marketplace\Orders\Seller_Delivery;
 use Woodev\Framework\Marketplace\Orders\Status_Map;
 use Woodev\Framework\Marketplace\Price\Money;
+use Woodev\Framework\Shipping\Admin\Orders\Delivery_Entry;
+use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Tests\Integration\TestCase;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Order_Meta;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace_Adapter;
@@ -85,6 +89,10 @@ class SellerDeliveredOrdersTest extends TestCase {
 	 */
 	protected function tearDown(): void {
 		$_POST = [];
+
+		if ( class_exists( Orders_Registry::class ) ) {
+			Orders_Registry::instance()->reset_for_tests();
+		}
 
 		parent::tearDown();
 
@@ -367,6 +375,200 @@ class SellerDeliveredOrdersTest extends TestCase {
 
 		$this->assertSame( [ $order_id ], $found( 'dbs' ) );
 		$this->assertSame( [], $found( 'fbs' ) );
+	}
+
+	/**
+	 * #2010: the order wizard gives a seller-delivered order a carrier. Only the delivery changes, the order becomes a row of
+	 * «Заказы доставки», and after the hand-over to the carrier and three polls the carrier's line, the address and the phone
+	 * are still there.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_a_delivery_arranged_in_the_wizard_survives_the_hand_over_and_the_polls( bool $hpos ): void {
+		if ( ! class_exists( '\Woodev_Realistic_Shipping_Plugin' ) ) {
+			$this->markTestSkipped( 'The shipping fixture plugins are not loaded.' );
+		}
+
+		$this->use_datastore( $hpos );
+		$this->register_carrier_and_delivery_entry();
+
+		$this->write( '1', $this->delivery() );
+		$order_id = $this->write( '2', $this->delivery() );
+		$items    = $this->product_lines( wc_get_order( $order_id ) );
+		$editor   = new Order_Editor();
+
+		$prefill = $editor->load( $order_id );
+
+		$this->assertSame( 'delivery', $prefill['entry'] );
+		$this->assertSame( 'Москва, Тверская 1', $prefill['shipping']['address_1'] );
+		$this->assertSame( 'Анна', $prefill['shipping']['first_name'] );
+		$this->assertSame( '+79991111111', $prefill['shipping']['phone'] );
+
+		$payload = [
+			'shipping'      => array_merge(
+				$prefill['shipping'],
+				[
+					'country'  => 'RU',
+					'state'    => 'Москва',
+					'city'     => 'Москва',
+					'postcode' => '125009',
+					'phone'    => '+79000000000',
+				]
+			),
+			'shipping_line' => [
+				'method_id'   => 'woodev_realistic_shipping',
+				'instance_id' => 6,
+				'label'       => 'Курьер',
+				'cost'        => '350',
+			],
+			// Nothing of these is the wizard's to write on such an order.
+			'items'         => [],
+			'status'        => 'cancelled',
+		];
+
+		// Saved twice: a second choice replaces the carrier's line and only that one.
+		$this->assert_saved( $editor->update( $order_id, $payload ) );
+		$payload['shipping_line']['cost'] = '360';
+		$this->assert_saved( $editor->update( $order_id, $payload ) );
+
+		$order = wc_get_order( $order_id );
+
+		$this->assert_delivery_arranged( $order, $items );
+		$this->assertSame( 'processing', $order->get_status() );
+		$this->assertSame( '360', (string) $this->carrier_line( $order )->get_meta( Order_Editor::SELLER_COST_ITEM_META ) );
+		$this->assertSame( 'realistic', Orders_Registry::instance()->resolve_provider_for_order( $order )->get_id() );
+		$this->assertContains( $order_id, $this->listed_ids() );
+
+		$outcome = $editor->export_created( $order );
+
+		$this->assertTrue( $outcome['success'], $outcome['message'] );
+		$this->assertSame( 409, $editor->load( $order_id )->get_error_data()['status'], 'an exported order is not rearranged' );
+
+		$new = $this->delivery()->with_phone( '+79992222222' )->with_recipient( 'Ольга' );
+		$this->write( '1', $new, '2026-11-03T10:00:00Z' );
+		$this->write( '2', $new, '2026-11-04T10:00:00Z' );
+		$this->write( '1', $new, '2026-11-05T10:00:00Z' );
+
+		$order = wc_get_order( $order_id );
+
+		$this->assert_delivery_arranged( $order, $items );
+		$this->assertSame( 'Ольга', $order->get_shipping_first_name(), 'The name nobody edited follows the marketplace.' );
+		$this->assertSame( 'REALISTIC-EXPORT', substr( (string) $order->get_meta( '_woodev_realistic_carrier_order_id' ), 0, 16 ) );
+		$this->assertContains( $order_id, $this->listed_ids() );
+	}
+
+	/**
+	 * The realistic fixture's carrier, and an entry that claims the orders the seller delivers.
+	 *
+	 * @return void
+	 */
+	private function register_carrier_and_delivery_entry(): void {
+		Orders_Registry::instance()->reset_for_tests();
+
+		$plugin   = \Woodev_Realistic_Shipping_Plugin::instance();
+		$register = new \ReflectionMethod( $plugin, 'init_realistic_orders_page' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$register->setAccessible( true );
+		}
+
+		$register->invoke( $plugin );
+
+		Orders_Registry::instance()->register_delivery_entry(
+			new class() implements Delivery_Entry {
+				public function claims( \WC_Order $order ): bool {
+					return Seller_Order::is_seller_delivered( $order );
+				}
+
+				public function refusal_reason( \WC_Order $order ): string {
+					return '';
+				}
+
+				public function notices( \WC_Order $order ): array {
+					return [];
+				}
+			}
+		);
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+	}
+
+	/**
+	 * @param \WC_Order|\WP_Error $result What the editor answered.
+	 * @return void
+	 */
+	private function assert_saved( $result ): void {
+		$this->assertInstanceOf( \WC_Order::class, $result, $result instanceof \WP_Error ? $result->get_error_message() . ' ' . wp_json_encode( $result->get_error_data() ) : '' );
+	}
+
+	/**
+	 * What the wizard wrote and nothing may undo: both shipping lines, the totals, the goods, the address and the phone.
+	 *
+	 * @param \WC_Order        $order Order, read fresh.
+	 * @param array<int,array> $items Its product lines before the delivery was arranged.
+	 * @return void
+	 */
+	private function assert_delivery_arranged( \WC_Order $order, array $items ): void {
+		$this->assertSame(
+			[
+				[ 'Доставка Тест', '1.00' ],
+				[ 'Курьер', '0.00' ],
+			],
+			$this->shipping_lines( $order )
+		);
+		$this->assertSame( '201.00', wc_format_decimal( $order->get_total(), 2 ) );
+		$this->assertSame( $items, $this->product_lines( $order ) );
+		$this->assertSame( 'Москва, Тверская 1', $order->get_shipping_address_1() );
+		$this->assertSame( 'Москва', $order->get_shipping_city() );
+		$this->assertSame( '+79000000000', $order->get_shipping_phone() );
+		$this->assertSame( '+79000000000', $order->get_billing_phone() );
+		$this->assertSame( 'Тест', $order->get_payment_method_title() );
+	}
+
+	/**
+	 * @param \WC_Order $order Order.
+	 * @return array<int,array<int,mixed>> Id, name, quantity, subtotal and total of every product line.
+	 */
+	private function product_lines( \WC_Order $order ): array {
+		return array_values(
+			array_map(
+				static function ( $item ): array {
+					return [ $item->get_id(), $item->get_name(), $item->get_quantity(), $item->get_subtotal(), $item->get_total() ];
+				},
+				$order->get_items()
+			)
+		);
+	}
+
+	private function carrier_line( \WC_Order $order ): \WC_Order_Item_Shipping {
+		foreach ( $order->get_shipping_methods() as $line ) {
+			if ( 'woodev_realistic_shipping' === $line->get_method_id() ) {
+				return $line;
+			}
+		}
+
+		$this->fail( 'The order has no line of the carrier.' );
+	}
+
+	/**
+	 * @return int[] Orders «Заказы доставки» lists for the carrier.
+	 */
+	private function listed_ids(): array {
+		$result = ( new Orders_Query() )->get_results(
+			[
+				'carrier'  => 'realistic',
+				'per_page' => 200,
+			]
+		);
+
+		return array_map(
+			static function ( \WC_Order $order ): int {
+				return (int) $order->get_id();
+			},
+			$result->orders
+		);
 	}
 
 	private function delivery(): Seller_Delivery {

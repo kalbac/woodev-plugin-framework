@@ -11,7 +11,7 @@ const PREFIX = 'woodev_fake_bulk_';
 global.jQuery = require( 'jquery' );
 global.$ = global.jQuery;
 window.jQuery = global.jQuery;
-window.woodevMarketplaceVariationBulk = [ { prefix: PREFIX, failed: 'The page did not answer.', dismiss: 'Dismiss this notice.' } ];
+window.woodevMarketplaceVariationBulk = [ { prefix: PREFIX, failed: 'The page did not answer.', foreign: 'Replaced (HTTP %d)', dismiss: 'Dismiss this notice.' } ];
 
 // The script attaches its handlers to `document` once, when it loads.
 require( SCRIPT );
@@ -23,10 +23,10 @@ require( SCRIPT );
  * @param {string} bulkAction   The `bulk_action` the request carried.
  * @param {string} responseText The response body.
  */
-function fire( event, bulkAction, responseText ) {
+function fire( event, bulkAction, responseText, status = 0 ) {
 	const data = 'action=woocommerce_bulk_edit_variations&security=x&product_id=7&bulk_action=' + bulkAction;
 
-	$( document ).trigger( event, [ { responseText }, { data } ] );
+	$( document ).trigger( event, [ { responseText, status }, { data } ] );
 }
 
 function comment( notice ) {
@@ -112,6 +112,12 @@ describe( 'variation bulk notice', () => {
 
 		expect( notice.classList.contains( 'notice-error' ) ).toBe( true );
 		expect( notice.querySelector( 'p' ).textContent ).toBe( 'The page did not answer.' );
+	} );
+
+	test( 'a failed request that was answered names the HTTP status', () => {
+		fire( 'ajaxError', PREFIX + '1_export', '<html></html>', 503 );
+
+		expect( document.querySelector( '.woodev-mp-variation-notice p' ).textContent ).toBe( 'Replaced (HTTP 503)' );
 	} );
 
 	test( 'the dismiss button removes the notice', () => {

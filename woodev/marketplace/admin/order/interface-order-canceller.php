@@ -15,7 +15,8 @@ defined( 'ABSPATH' ) || exit;
  * What the order metabox and {@see Cancel_Ajax} ask the marketplace (`Capability::CANCEL_ORDER`): which posting an order carries,
  * whether it is finished, the reasons a cancellation may give and the cancellation itself. The plugin implements it next to its
  * adapter. Every remote failure is thrown as a {@see Cancel_Refused} with a sentence for the merchant (status 502 when the
- * marketplace refused or did not answer), so nothing marketplace-specific reaches the screen.
+ * marketplace refused or did not answer; {@see Cancel_Ajax} answers it as 422), so nothing marketplace-specific reaches the
+ * screen.
  *
  * @since 2.1.2
  */

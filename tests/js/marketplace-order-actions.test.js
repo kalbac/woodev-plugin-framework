@@ -9,7 +9,7 @@ const SCRIPT = path.join( __dirname, '../../woodev/marketplace/assets/js/admin/o
 
 const DIALOG = `
 	<dialog id="woodev-mp-action-dialog" data-url="https://x.test/ajax" data-button=".woodev-mp-action" data-sending="Sending"
-		data-loading="Loading" data-choose="Choose" data-close="Close" data-failed="No answer">
+		data-loading="Loading" data-choose="Choose" data-close="Close" data-failed="No answer" data-foreign="Replaced (HTTP %d)">
 		<h2 id="woodev-mp-action-title"></h2>
 		<p id="woodev-mp-action-text"></p>
 		<div id="woodev-mp-action-fields"></div>
@@ -95,6 +95,19 @@ describe( 'seller action dialog', () => {
 		} );
 		expect( document.querySelector( '[data-error="sgtin"]' ).textContent ).toBe( 'No separator.' );
 		expect( document.getElementById( 'woodev-mp-action-status' ).textContent ).toBe( 'Check the fields.' );
+		expect( document.getElementById( 'woodev-mp-action-confirm' ).disabled ).toBe( false );
+	} );
+
+	test( 'names the HTTP status of an answer that was replaced on the way, and keeps the form', async () => {
+		button( CONFIG ).click();
+		global.fetch.mockImplementationOnce( () =>
+			Promise.resolve( { status: 502, json: () => Promise.reject( new SyntaxError( 'Unexpected token <' ) ) } )
+		);
+		document.querySelector( '[data-field="sgtin"]' ).value = 'code';
+		document.getElementById( 'woodev-mp-action-confirm' ).click();
+		await settle();
+
+		expect( document.getElementById( 'woodev-mp-action-status' ).textContent ).toBe( 'Replaced (HTTP 502)' );
 		expect( document.getElementById( 'woodev-mp-action-confirm' ).disabled ).toBe( false );
 	} );
 

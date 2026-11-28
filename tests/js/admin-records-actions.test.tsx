@@ -699,6 +699,16 @@ describe( 'refusals and lost answers', () => {
 		expect( within( dialog ).queryByRole( 'button', { name: 'Выгрузить товар' } ) ).not.toBeInTheDocument();
 	} );
 
+	test( 'a replaced answer to an apply names its status before the recovery sentence', async () => {
+		serve( { apply: () => Promise.reject( { code: 'invalid_json', message: 'Подменённый ответ (HTTP 502).', httpStatus: 502 } ) } );
+		await renderPage();
+
+		const dialog = await openRowAction( 'p1', 'Выгрузить' );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Выгрузить товар' } ) );
+
+		await within( dialog ).findByText( `Подменённый ответ (HTTP 502). ${ ACTION_COPY.action_recovery }` );
+	} );
+
 	test( 'a server error on apply shows its sentence and reads the table again', async () => {
 		serve( { apply: () => Promise.reject( { code: 'woodev_records_provider_error', message: 'Внутренняя ошибка сервера. Попробуйте ещё раз.', data: { status: 500 } } ) } );
 		await renderPage();
@@ -779,6 +789,21 @@ describe( 'input fields', () => {
 		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Показать, что изменится' } ) );
 		await within( dialog ).findByRole( 'button', { name: 'Выгрузить всё' } );
 		expect( previews()[ 1 ].data ).toMatchObject( { payload: { warehouse: 'w1', note: 'срочно' } } );
+	} );
+
+	test.each( [
+		[ 'the server’s sentence', { code: 'woodev_records_action_conflict', message: 'Отправление уже в доставке.', data: { status: 409 } }, 'Отправление уже в доставке.' ],
+		[ 'the status of a replaced answer', { code: 'invalid_json', message: 'Подменённый ответ (HTTP 502).', httpStatus: 502 }, 'Подменённый ответ (HTTP 502).' ],
+		[ 'PHP’s sentence when there was no answer', { code: 'fetch_error', message: 'Failed to fetch' }, ACTION_COPY.action_options_error ],
+	] )( 'an option list that could not be read shows %s', async ( name, rejection, sentence ) => {
+		serve( { options: () => Promise.reject( rejection ) } );
+		await renderPage();
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Кружка/ } ) );
+		fireEvent.click( toolbarButton( 'Выгрузить выбранные' ) );
+		const dialog = await screen.findByRole( 'dialog' );
+
+		await within( dialog ).findByText( sentence );
 	} );
 
 	test( 'more options are read page by page', async () => {

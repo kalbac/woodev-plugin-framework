@@ -433,6 +433,54 @@ final class PriceFeaturesTest extends TestCase {
 	}
 
 	/**
+	 * #2010: free shipping, a markup, rounding and the cost limits make the customer's price; the rate keeps what the
+	 * carrier asked, which the admin records as the shop's own cost of a delivery.
+	 *
+	 * @return void
+	 */
+	public function test_the_carrier_cost_stays_the_quote_whatever_the_customer_pays(): void {
+		$features = [
+			Shipping_Method::FEATURE_MARKUP,
+			Shipping_Method::FEATURE_FREE_SHIPPING,
+			Shipping_Method::FEATURE_ROUNDING,
+		];
+		$options  = [
+			'fee'              => '50',
+			'free_cost'        => '5000',
+			'round_cost'       => 'ceil',
+			'round_cost_range' => '100',
+		];
+
+		$free      = $this->method( $features, $options )->finished_rate( [ 'contents_cost' => 6000 ] );
+		$marked_up = $this->method( $features, $options )->finished_rate( [ 'contents_cost' => 1000 ] );
+
+		$this->assertSame( 0.0, (float) $free->get_cost() );
+		$this->assertSame( 100.0, $free->get_carrier_cost() );
+		$this->assertSame( 200.0, (float) $marked_up->get_cost() );
+		$this->assertSame( 100.0, $marked_up->get_carrier_cost() );
+	}
+
+	/**
+	 * #2010: every clone of a rate keeps the carrier cost, the ones that change the cost included; a per-item cost counts
+	 * as its total; a carrier may name its price apart.
+	 *
+	 * @return void
+	 */
+	public function test_a_rate_keeps_the_carrier_cost_through_its_copies(): void {
+		$rate = ( new Shipping_Rate( 'cost-limits', 'cost-limits:1', 'Courier', [ 'a' => 60, 'b' => 40 ] ) )
+			->with_cost( 0 )
+			->with_label( 'Free courier' )
+			->with_meta_data( [ 'tariff' => '1' ] )
+			->with_args( [ 'description' => 'To the door' ] )
+			->with_cost( 25 );
+
+		$this->assertSame( 100.0, $rate->get_carrier_cost() );
+		$this->assertSame( 25.0, (float) $rate->get_cost() );
+		$this->assertSame( 130.0, $rate->with_carrier_cost( 130 )->with_cost( 0 )->get_carrier_cost() );
+		$this->assertArrayNotHasKey( 'carrier_cost', $rate->to_array() );
+	}
+
+	/**
 	 * The package as the cart delivers it to WooCommerce: what the applied coupons took off, and whether prices are
 	 * shown with tax, decide the amount the cart puts on the package ({@see Order_Amount}).
 	 *

@@ -24,6 +24,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Ids;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Reader;
+use Woodev\Framework\Marketplace\Admin\Order\Cancel_Refused;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Refused;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
@@ -1304,6 +1305,23 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$provider->get_field_options( $this->context(), 'cancel', 'reason', $query( $this->row_id( 104 ) ) );
 
 		$this->assertSame( 4, $this->canceller->reason_calls, 'An empty answer is asked for again.' );
+	}
+
+	/**
+	 * Ozon Seller 2.0.0 refuses the list with a `Cancel_Refused`; the engine shows only an `Action_State_Exception` (#2065).
+	 */
+	public function test_a_refused_list_of_reasons_reaches_the_window_with_the_marketplaces_sentence(): void {
+		$this->stock( false );
+		$this->canceller = new class() extends Fake_Order_Canceller {
+			public function reasons( Account $account, string $posting_number ): array {
+				throw new Cancel_Refused( 'Ozon: отправление уже в доставке.', 502 );
+			}
+		};
+
+		$this->expectException( Action_State_Exception::class );
+		$this->expectExceptionMessage( 'Ozon: отправление уже в доставке.' );
+
+		$this->provider()->get_field_options( $this->context(), 'cancel', 'reason', [ 'row_id' => $this->row_id( 104 ), 'search' => '', 'cursor' => '' ] );
 	}
 
 	public function test_the_cancel_window_does_not_ask_the_marketplace_without_the_account_and_the_licence(): void {

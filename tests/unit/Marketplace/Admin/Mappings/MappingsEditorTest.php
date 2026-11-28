@@ -13,6 +13,8 @@ use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Mapping_Messages;
 use Woodev\Framework\Marketplace\Catalog\Catalog_Schema;
 use Woodev\Framework\Marketplace\Catalog\Field_Definition;
 use Woodev\Tests\Unit\TestCase;
+use Woodev\Framework\Marketplace\Jobs\Remote_Error;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
 
 require_once __DIR__ . '/Mappings_Harness.php';
 require_once dirname( __DIR__, 5 ) . '/woodev/rest-api/class-rest-v1-registrar.php';
@@ -477,7 +479,8 @@ final class MappingsEditorTest extends TestCase {
 	}
 
 	/**
-	 * The adapter failing on a lookup is a 502 with its sentence; an unknown category key is a 400 and never reaches the fields call.
+	 * The adapter failing on a lookup is an error with its sentence; an unknown category key is a 400 and never reaches the fields
+	 * call. A failure that is not the marketplace's answer stays a 502.
 	 *
 	 * @return void
 	 */
@@ -493,6 +496,62 @@ final class MappingsEditorTest extends TestCase {
 		$down                    = $broken->controller->get_categories( new Json_Request( [], [ 'search' => 'пл' ] ) );
 		$this->assertError( $down, 'woodev_mappings_unavailable', 502 );
 		$this->assertStringContainsString( 'нет связи', $down->get_error_message() );
+	}
+
+	/**
+	 * A refusal of the marketplace never travels in a 5xx, which a proxy may replace (#2063): a lookup and a save both answer
+	 * 422. An uncertain outcome and a request that never left the site are no refusal and stay a 502.
+	 *
+	 * @dataProvider classified_failures
+	 *
+	 * @param string $consequence A `Remote_Error` consequence.
+	 * @param bool   $sent        Whether the request left the site.
+	 * @param int    $status      The status both routes answer.
+	 * @return void
+	 */
+	public function test_a_classified_failure_answers_by_whether_the_marketplace_refused( string $consequence, bool $sent, int $status ): void {
+		$body                     = $this->body();
+		$failure                  = Fake_Remote_Exception::of( $consequence, 'ключ отозван', null, $sent );
+		$this->h->schema->failure = $failure;
+		$lookup                   = $this->h->controller->get_categories( new Json_Request( [], [ 'search' => 'пл' ] ) );
+
+		$fresh                  = new Mappings_Harness(); // The finder of the first one has already asked.
+		$fresh->schema->failure = $failure;
+		$save                   = $fresh->controller->create_mapping( new Json_Request( $body ) );
+
+		foreach ( [ $lookup, $save ] as $answer ) {
+			$this->assertError( $answer, 'woodev_mappings_unavailable', $status );
+			$this->assertStringContainsString( 'ключ отозван', $answer->get_error_message() );
+		}
+	}
+
+	/**
+	 * Failures the adapter's classifier knows.
+	 *
+	 * @return array<string,array{0:string,1:bool,2:int}>
+	 */
+	public static function classified_failures(): array {
+		return [
+			'refused for good'         => [ Remote_Error::FAIL, true, 422 ],
+			'credentials refused'      => [ Remote_Error::PAUSE_ACCOUNT, true, 422 ],
+			'asked to wait'            => [ Remote_Error::THROTTLE, true, 422 ],
+			'method gone'              => [ Remote_Error::API_CHANGED, true, 422 ],
+			'article taken'            => [ Remote_Error::ARTICLE_TAKEN, true, 422 ],
+			'timeout or server error'  => [ Remote_Error::RETRY, true, 502 ],
+			'unsent, uncertain'        => [ Remote_Error::RETRY, false, 502 ],
+			'held back before sending' => [ Remote_Error::THROTTLE, false, 502 ],
+		];
+	}
+
+	/**
+	 * A save that failed for any other reason stays a 502.
+	 *
+	 * @return void
+	 */
+	public function test_a_save_the_adapter_could_not_answer_is_a_502(): void {
+		$this->h->schema->failure = new \RuntimeException( 'нет связи' );
+
+		$this->assertError( $this->h->controller->create_mapping( new Json_Request( $this->body() ) ), 'woodev_mappings_unavailable', 502 );
 	}
 
 	/**

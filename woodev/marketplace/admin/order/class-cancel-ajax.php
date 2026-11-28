@@ -27,7 +27,8 @@ defined( 'ABSPATH' ) || exit;
  * ({@see Admin_Guard}), then the ownership check — the order carries the owner stamp of an account of this plugin
  * ({@see Order_Meta_Contract::order_owner()}) and a posting number. An order that is not a marketplace order, or whose account is
  * gone, is answered 404 and the marketplace is never asked. The licence gate runs here, before either remote call; the reason
- * check lives in the {@see Order_Canceller}. Any other failure of the adapter is answered 502 and logged.
+ * check lives in the {@see Order_Canceller}. A refusal is never answered 5xx, whose body a proxy or a bot filter in front of the shop
+ * may replace: a {@see Cancel_Refused} that says so goes out as 422. Any other failure of the adapter is answered 502 and logged.
  *
  * The WooCommerce order is not changed here beyond a note: the posting is queued for a refresh, and the order writer moves the order
  * to `cancelled` (restoring stock through WooCommerce) once the marketplace reports it. It works the same on both order storages:
@@ -146,7 +147,7 @@ final class Cancel_Ajax {
 
 			$reasons = $reasonless ? [] : $this->canceller->reasons( $account, $posting_number );
 		} catch ( Cancel_Refused $e ) {
-			wp_send_json_error( [ 'message' => $e->getMessage() ], $e->status() );
+			$this->answer_refusal( $e );
 		} catch ( \Throwable $e ) {
 			$this->fail_unexpectedly( $e );
 		}
@@ -164,7 +165,7 @@ final class Cancel_Ajax {
 			/* translators: %s: the marketplace's word for a posting, «отправление». */
 			$message = sprintf( __( 'Маркетплейс не вернул причин, с которыми можно отменить это %s. Попробуйте позже.', 'woodev-plugin-framework' ), $this->names->posting_noun()->one() );
 
-			wp_send_json_error( [ 'message' => $message ], 502 );
+			wp_send_json_error( [ 'message' => $message ], 422 );
 		}
 
 		wp_send_json_success(
@@ -196,7 +197,7 @@ final class Cancel_Ajax {
 				$reasonless ? '' : self::text( self::field( 'message' ) )
 			);
 		} catch ( Cancel_Refused $e ) {
-			wp_send_json_error( [ 'message' => $e->getMessage() ], $e->status() );
+			$this->answer_refusal( $e );
 		} catch ( \Throwable $e ) {
 			$this->fail_unexpectedly( $e );
 		}
@@ -283,6 +284,19 @@ final class Cancel_Ajax {
 		if ( null !== $refusal ) {
 			throw new Cancel_Refused( $refusal, 403 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		}
+	}
+
+	/**
+	 * Answers a refusal with its sentence, as 422 when the refusal asks for a 5xx (an adapter says 502 when the marketplace
+	 * refused or did not answer).
+	 *
+	 * @param Cancel_Refused $refusal The refusal.
+	 * @return never
+	 */
+	private function answer_refusal( Cancel_Refused $refusal ): void {
+		$status = $refusal->status() < 500 ? $refusal->status() : 422;
+
+		wp_send_json_error( [ 'message' => $refusal->getMessage() ], $status );
 	}
 
 	/**

@@ -37,7 +37,7 @@ export function stepOfField( field: string ): WizardStepId {
 		return 'customer';
 	}
 
-	if ( field.startsWith( 'billing' ) || field.startsWith( 'shipping.' ) ) {
+	if ( field.startsWith( 'billing' ) || field.startsWith( 'shipping.' ) || 'location' === field ) {
 		return 'address';
 	}
 
@@ -205,7 +205,7 @@ export function validateDelivery( data: WizardData ): FieldErrors {
 	const line = data.rest.shipping_line;
 
 	// A tariff chosen against an earlier package is not confirmed until the new answer lands.
-	if ( data.rest.rates_pending ) {
+	if ( data.rest.rates_pending || 'pending' === data.rest.final_quote ) {
 		add( errors, 'shipping_line', __( 'Дождитесь расчёта тарифов.', 'woodev-plugin-framework' ) );
 
 		return errors;
@@ -213,6 +213,13 @@ export function validateDelivery( data: WizardData ): FieldErrors {
 
 	if ( ! line ) {
 		add( errors, 'shipping_line', __( 'Выберите способ доставки.', 'woodev-plugin-framework' ) );
+
+		return errors;
+	}
+
+	// A delivery-only edit records what the carrier asks now (#2010): without that answer there is nothing to save.
+	if ( 'failed' === data.rest.final_quote ) {
+		add( errors, 'shipping_line', __( 'Стоимость доставки не посчитана — повторите расчёт или выберите другой тариф или пункт выдачи.', 'woodev-plugin-framework' ) );
 
 		return errors;
 	}
@@ -288,7 +295,7 @@ export function validateStep(
 }
 
 /**
- * Every step's check, merged — the last look before the order is sent. The manager can only get
+ * The checks of every step the wizard shows (`steps`, all five by default), merged — the last look before the order is sent. The manager can only get
  * to ⑤ through «Далее», which checked each step on the way, but a step's data can change
  * behind its back (the rates answering late, a tariff dropping out), and one 422 round trip is
  * a poor way to learn it.
@@ -298,12 +305,13 @@ export function validateAll(
 	countries: Record<string, string>,
 	states: Record<string, Record<string, string>>,
 	statuses?: Record<string, string>,
-	addressPolicy?: AddressPolicy | null
+	addressPolicy?: AddressPolicy | null,
+	steps: readonly WizardStepId[] = WIZARD_STEPS
 ): FieldErrors {
 	const all: FieldErrors = {};
 
-	WIZARD_STEPS.forEach( ( _step, index ) => {
-		Object.assign( all, validateStep( index, data, countries, states, statuses, addressPolicy ) );
+	steps.forEach( ( step ) => {
+		Object.assign( all, validateStep( WIZARD_STEPS.indexOf( step ), data, countries, states, statuses, addressPolicy ) );
 	} );
 
 	return all;
