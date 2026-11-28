@@ -11,6 +11,8 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
+import type { APIFetchOptions } from '@wordpress/api-fetch';
+import { __, sprintf } from '@wordpress/i18n';
 import { withQuery } from '../components/rest-url';
 
 /** `status` — the plain WC order status (increment 1; kept alongside `delivery_status`). */
@@ -392,22 +394,72 @@ export type OrderDocument =
 	| { kind: 'pending'; message: string; retryAfter: number };
 
 /** The `{ code, message }` a REST error carries, whichever way `apiFetch` surfaced it. */
-interface DocumentError {
+interface RestFailure {
 	message?: string;
 	code?: string;
 }
 
-/** `apiFetch` with `parse: false` rejects with the raw `Response`; turn it into its JSON error body. */
-async function documentError( error: unknown ): Promise<DocumentError> {
-	if ( error && 'function' === typeof ( error as Response ).json ) {
-		try {
-			return ( await ( error as Response ).json() ) as DocumentError;
-		} catch {
-			return {};
-		}
+/**
+ * What the merchant reads when an answer explains nothing (#1979). Every refusal of these routes carries a message, so
+ * such an answer was replaced on the way, and its HTTP status is all there is to show.
+ */
+function foreignAnswerMessage( status: number ): string {
+	return sprintf(
+		/* translators: %d: the HTTP status code of the answer. */
+		__(
+			'Ответ пришёл не от плагина (HTTP %d) — возможно, его подменила защита или другой сервис перед сайтом.',
+			'woodev-plugin-framework'
+		),
+		status
+	);
+}
+
+/**
+ * `apiFetch` with `parse: false` rejects with the raw `Response`; turn it into its JSON error body, never without a
+ * `message`. Anything else it rejects with (no network, an aborted request) is returned as it is.
+ */
+async function restFailure( error: unknown ): Promise<RestFailure> {
+	if ( ! error || 'function' !== typeof ( error as Response ).json ) {
+		return ( error || {} ) as RestFailure;
 	}
 
-	return ( error || {} ) as DocumentError;
+	const response = error as Response;
+	const body = ( await response.json().catch( () => null ) ) as RestFailure | null;
+
+	return body?.message ? body : { ...body, message: foreignAnswerMessage( response.status ) };
+}
+
+/** The JSON of a successful answer; a page served in its place (a bot check) rejects with a {@link RestFailure}. */
+async function readJson< T >( response: Response ): Promise< T > {
+	try {
+		return ( await response.json() ) as T;
+	} catch {
+		throw { code: 'invalid_json', message: foreignAnswerMessage( response.status ) } as RestFailure;
+	}
+}
+
+/**
+ * A request of a carrier action. Read raw (`parse: false`), because an answer `apiFetch` parses itself loses its HTTP
+ * status — see {@link foreignAnswerMessage}.
+ */
+async function actionRequest< T >( options: APIFetchOptions< true > ): Promise< T > {
+	let response: Response;
+
+	try {
+		response = ( await apiFetch( { ...options, parse: false } ) ) as unknown as Response;
+	} catch ( error ) {
+		const failure = await restFailure( error );
+
+		// `apiFetch` renews an expired nonce only for an answer it parses itself, so ask once more that way. The refused
+		// request never reached the route: the action cannot run twice.
+		if ( 'rest_cookie_invalid_nonce' === failure.code ) {
+			return apiFetch< T >( options );
+		}
+
+		throw failure;
+	}
+
+	return readJson< T >( response );
 }
 
 /** Response header the bulk route names the orders left out in: `id:code,id:code`. */
@@ -434,7 +486,7 @@ function parseSkippedHeader( value: string | null ): SkippedOrder[] {
  */
 async function readDocumentResponse( response: Response, fallbackFilename: string ): Promise<OrderDocument> {
 	if ( 202 === response.status ) {
-		const body = ( await response.json() ) as { message?: string; retry_after?: number };
+		const body = await readJson< { message?: string; retry_after?: number } >( response );
 
 		return {
 			kind: 'pending',
@@ -456,7 +508,7 @@ async function readDocumentResponse( response: Response, fallbackFilename: strin
 		};
 	}
 
-	const body = ( await response.json() ) as { status?: string; url?: string; skipped?: SkippedOrder[] };
+	const body = await readJson< { status?: string; url?: string; skipped?: SkippedOrder[] } >( response );
 
 	if ( 'url' === body.status && 'string' === typeof body.url && '' !== body.url ) {
 		return {
@@ -466,7 +518,7 @@ async function readDocumentResponse( response: Response, fallbackFilename: strin
 		};
 	}
 
-	throw {} as DocumentError;
+	throw {} as RestFailure;
 }
 
 /** One GET to a documents route; a rejected request carries the server's own `{ code, message }`. */
@@ -484,7 +536,7 @@ async function getDocument( url: string, fallbackFilename: string, signal?: Abor
 			...( signal ? { signal } : {} ),
 		} ) ) as unknown as Response;
 	} catch ( error ) {
-		throw await documentError( error );
+		throw await restFailure( error );
 	}
 
 	return readDocumentResponse( response, fallbackFilename );
@@ -744,7 +796,7 @@ export function performOrderAction(
 ): Promise<OrderActionResult> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
-	return apiFetch<OrderActionResult>( {
+	return actionRequest<OrderActionResult>( {
 		url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/actions/${ action }`,
 		method: 'POST',
 		headers: { 'X-WP-Nonce': nonce },
@@ -774,7 +826,7 @@ export function fetchActionFieldOptions(
 ): Promise<{ options: OrderActionFieldOption[] }> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
-	return apiFetch<{ options: OrderActionFieldOption[] }>( {
+	return actionRequest<{ options: OrderActionFieldOption[] }>( {
 		url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/actions/${ action }/fields/${ fieldId }/options`,
 		method: 'GET',
 		headers: { 'X-WP-Nonce': nonce },
@@ -825,7 +877,7 @@ export interface BulkActionResult {
 export function performBulkOrderAction( action: string, ids: number[] ): Promise<BulkActionResult> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
-	return apiFetch<BulkActionResult>( {
+	return actionRequest<BulkActionResult>( {
 		url: `${ restRoot.replace( /\/+$/, '' ) }/bulk/${ action }`,
 		method: 'POST',
 		headers: { 'X-WP-Nonce': nonce },
@@ -1075,7 +1127,7 @@ export function fetchToolbarDialog( id: string ): Promise<{ id: string; dialog: 
 export function submitToolbarAction( id: string, payload: OrderActionPayload ): Promise<ToolbarSubmitResult> {
 	const { nonce = '' } = bootstrap();
 
-	return apiFetch<ToolbarSubmitResult>( {
+	return actionRequest<ToolbarSubmitResult>( {
 		url: `${ toolbarRoot() }/${ encodeURIComponent( id ) }`,
 		method: 'POST',
 		headers: { 'X-WP-Nonce': nonce },
@@ -1092,7 +1144,7 @@ export function performToolbarRowAction(
 ): Promise<ToolbarRowActionResult> {
 	const { nonce = '' } = bootstrap();
 
-	return apiFetch<ToolbarRowActionResult>( {
+	return actionRequest<ToolbarRowActionResult>( {
 		url: `${ toolbarRoot() }/${ encodeURIComponent( id ) }/rows`,
 		method: 'POST',
 		headers: { 'X-WP-Nonce': nonce },

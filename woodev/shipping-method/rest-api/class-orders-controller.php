@@ -78,6 +78,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		private const BULK_MAX_IDS = 100;
 
 		/**
+		 * The status of an answer that passes a carrier's refusal on to the merchant (card #1979).
+		 *
+		 * Never a 5xx: a reverse proxy or a bot filter in front of the shop may replace the body of one with its own, and
+		 * the carrier's reason is lost on the way. 502 stays for a carrier call that threw or answered nothing usable.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @var int
+		 */
+		public const CARRIER_REFUSAL_STATUS = 422;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -754,6 +766,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 *              (`[ { field, code, message } ]`) before the carrier is called.
 		 * @since 2.0.2 Card #1204: a paid action ({@see Order_Actions::requires_confirmation()}) needs `confirmed: true` in the
 		 *              body, or it answers 400 `woodev_shipping_orders_confirmation_required` and the carrier is not called.
+		 * @since 2.1.29 Card #1979: a failed {@see Action_Result} answers {@see self::CARRIER_REFUSAL_STATUS} (was 502); only a
+		 *               thrown carrier call answers 502.
 		 *
 		 * @param \WP_REST_Request $request request; `id` and `action` come from the route, `payload` and `confirmed` from the body.
 		 * @return \WP_REST_Response|\WP_Error
@@ -857,7 +871,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				return new \WP_Error(
 					'woodev_shipping_orders_action_failed',
 					$result->merchant_message( $provider->get_label(), self::action_failure_message( $action ) ),
-					[ 'status' => 502 ]
+					[ 'status' => self::CARRIER_REFUSAL_STATUS ]
 				);
 			}
 
@@ -877,9 +891,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * offered NOW), then the field must be one the action declared with `async_options`. The options come from the
 		 * carrier through the `woodev_shipping_order_action_field_options` filter and are re-sanitised here
 		 * ({@see Order_Action_Fields::sanitize_async_options()}). An empty list is a valid answer — the client says so;
-		 * a `WP_Error` from the filter is passed on with its merchant text, anything else that is not a list is a 502.
+		 * a `WP_Error` from the filter with a message is the carrier's refusal ({@see self::CARRIER_REFUSAL_STATUS}),
+		 * anything else that is not a list — an exception, an error without a message — is a 502.
 		 *
 		 * @since 2.0.2
+		 * @since 2.1.29 Card #1979: the filter's `WP_Error` answers {@see self::CARRIER_REFUSAL_STATUS} (was 502).
 		 *
 		 * @param \WP_REST_Request $request request; `id`, `action` and `field` come from the route.
 		 * @return \WP_REST_Response|\WP_Error `{ options: [ { value, label } ] }`.
@@ -965,8 +981,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				return $this->field_options_error();
 			}
 
-			if ( $options instanceof \WP_Error ) {
-				return new \WP_Error( 'woodev_shipping_orders_field_options_failed', $options->get_error_message(), [ 'status' => 502 ] );
+			if ( $options instanceof \WP_Error && '' !== $options->get_error_message() ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_field_options_failed',
+					$options->get_error_message(),
+					[ 'status' => self::CARRIER_REFUSAL_STATUS ]
+				);
 			}
 
 			if ( ! is_array( $options ) ) {
@@ -1394,7 +1414,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		}
 
 		/**
-		 * A generic 502 for an action that threw rather than returning false.
+		 * A generic 502 for an action that threw rather than returning an {@see Action_Result}.
 		 *
 		 * @since 2.0.2
 		 *
