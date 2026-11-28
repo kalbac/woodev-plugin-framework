@@ -1364,14 +1364,16 @@ asking for that article and ends by itself (`done_with_errors`, since a skipped 
 interface nothing changes (Ozon). A task still being built counts as open too; the batch runner already drops a link reset before
 the request.
 
-## The run's claim handed to the export gateway (#2054, `2.1.28`)
+## The run's claim handed to the export gateway (#2054, `2.1.29`)
 
 An optional interface on the `Export_Gateway`, `Flows\Receives_Export_Claim`, for an adapter whose own reads, waits or several
 requests may outlast the account claim (`Job_Gate::CLAIM_TTL`, 120 s). `Export_Batch_Runner` calls
 `receive_export_claim( $account, $hold )` right after it takes the claim, before any other call to the gateway, once per run.
 `$hold` (`function (): void`) extends that run's claim and throws `Jobs\Claim_Lost` once it is not the run's any more. The gateway
-calls it between remote calls and before each write, and lets the exception through (its classifier returns `null` for it): the job
-logs it and leaves the task and its links as they are, and the recovery sweep queues the links again.
+calls it between remote calls and before each write, and lets the exception through as it is — it neither swallows it nor wraps it
+in its own. The job rethrows `Claim_Lost` from `submit()` and from the card list read before it asks the `Error_Classifier`, so a
+catch-all classifier cannot turn it into a failed task. It logs it and leaves the task and its links as they are, and the recovery
+sweep queues the links again.
 
 A gateway must not read the token from the account row instead: between the job's claim and the gateway's first card the row may
 already hold another run's claim. Without the interface nothing changes (Ozon).

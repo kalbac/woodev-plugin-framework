@@ -11,12 +11,14 @@ use Woodev\Framework\Marketplace\Data\Link_Record;
 use Woodev\Framework\Marketplace\Flows\Card_Outcome;
 use Woodev\Framework\Marketplace\Flows\Import_Outcome;
 use Woodev\Framework\Marketplace\Jobs\Backoff;
+use Woodev\Framework\Marketplace\Jobs\Claim_Lost;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Poll_Task_Runner;
 use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Framework\Marketplace\Ledger\Task_Ledger;
 use Woodev\Tests\Unit\Marketplace\Support\Export_Test_Case;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Catch_All_Error_Classifier;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Fake_Remote_Exception;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Article_Lifecycle;
 
@@ -132,6 +134,26 @@ final class ArticleKeyedExportTest extends Export_Test_Case {
 
 		$this->assertSame( Link_Record::STATE_CREATED, $this->state_of( $link ) );
 		$this->assertSame( [ (int) $link->link_id() ], $this->seeded );
+	}
+
+	/**
+	 * A claim lost while the card list is read stops the run even under a classifier that answers for any exception.
+	 *
+	 * @return void
+	 */
+	public function test_a_catch_all_classifier_is_not_asked_about_a_claim_lost_during_the_card_list_read(): void {
+		$link                     = $this->lost_answer( 'NB-1' );
+		$classifier               = new Catch_All_Error_Classifier();
+		$this->classifier         = $classifier;
+		$this->lifecycle->failure = new Claim_Lost( 'taken over' );
+
+		$this->run_batch( [ $link ], 1 );
+
+		$this->assertSame( [], $classifier->asked );
+		$this->assertCount( 1, $this->gateway->submitted, 'only the first request' );
+		$this->assertSame( Link_Record::STATE_SUBMITTED, $this->state_of( $link ) );
+		$this->assertSame( Async_Task::STATUS_SUBMITTED, $this->ledger()->get( 2 )->status() );
+		$this->assertSame( [], $this->scheduler->of( self::EXPORT ) );
 	}
 
 	/**

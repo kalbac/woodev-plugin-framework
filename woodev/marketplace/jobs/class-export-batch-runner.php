@@ -413,6 +413,8 @@ final class Export_Batch_Runner {
 
 		try {
 			$cards = $this->by_article->find_cards( $account, array_values( $resent ), $this->scheduler->export_hook() );
+		} catch ( Claim_Lost $lost ) {
+			throw $lost; // Not a marketplace answer: the adapter's classifier is never asked about it.
 		} catch ( \Throwable $thrown ) {
 			$error = $this->classifier->classify( $thrown );
 
@@ -534,6 +536,8 @@ final class Export_Batch_Runner {
 
 		try {
 			$remote = $this->gateway->submit( $account, $items, $this->scheduler->export_hook() );
+		} catch ( Claim_Lost $lost ) {
+			throw $lost; // Not a marketplace answer: the adapter's classifier is never asked about it.
 		} catch ( \Throwable $thrown ) {
 			$error = $this->classifier->classify( $thrown );
 

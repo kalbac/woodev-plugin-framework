@@ -13,6 +13,7 @@ use Woodev\Framework\Marketplace\Jobs\Job_Gate;
 use Woodev\Framework\Marketplace\Jobs\Poll_Task_Runner;
 use Woodev\Framework\Marketplace\Ledger\Async_Task;
 use Woodev\Tests\Unit\Marketplace\Support\Export_Test_Case;
+use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Catch_All_Error_Classifier;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Claim_Receiving_Export_Gateway;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Marketplace\Scripted_Export_Gateway;
 
@@ -133,6 +134,29 @@ final class ExportClaimHandOverTest extends Export_Test_Case {
 
 		$this->assertSame( Link_Record::STATE_QUEUED, $this->link_of( $link->wc_product_id() )->card_state() );
 		$this->assertCount( 1, $this->scheduler->of( self::EXPORT ) );
+	}
+
+	/**
+	 * A classifier that answers for any exception is not asked about a lost claim: no failed task, no retry.
+	 *
+	 * @return void
+	 */
+	public function test_a_catch_all_classifier_is_not_asked_about_a_claim_lost_inside_the_send(): void {
+		$link             = $this->queued( 'NB-1' );
+		$classifier       = new Catch_All_Error_Classifier();
+		$this->classifier = $classifier;
+
+		$this->scripted->before_submit = function (): void {
+			$this->take_over();
+			call_user_func( $this->gateway->holds[0] );
+		};
+
+		$this->run_batch( [ $link ] );
+
+		$this->assertSame( [], $classifier->asked );
+		$this->assertSame( Link_Record::STATE_SUBMITTED, $this->link_of( $link->wc_product_id() )->card_state() );
+		$this->assertSame( Async_Task::STATUS_SUBMITTED, $this->ledger()->get( 1 )->status() );
+		$this->assertSame( [], $this->scheduler->of( self::EXPORT ) );
 	}
 
 	/**

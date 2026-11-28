@@ -22,7 +22,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Without it nothing changes: the job still checks its claim before it calls {@see Export_Gateway::submit()}.
  *
- * @since 2.1.28
+ * @since 2.1.29
  */
 interface Receives_Export_Claim {
 	/**
@@ -31,10 +31,11 @@ interface Receives_Export_Claim {
 	 *
 	 * `$hold` extends the claim, so a gateway calls it between its remote calls and right before each write. It throws
 	 * {@see \Woodev\Framework\Marketplace\Jobs\Claim_Lost} once the claim is no longer this run's: another run took it, or this run
-	 * ended and released it. The gateway lets that exception through, and its {@see \Woodev\Framework\Marketplace\Jobs\Error_Classifier}
-	 * does not classify it: the job logs it and leaves its task and links as they are, for the recovery sweep.
+	 * ended and released it. The gateway lets that exception through as it is — it neither swallows it nor wraps it in its own: the job
+	 * takes it before the {@see \Woodev\Framework\Marketplace\Jobs\Error_Classifier} is asked, logs it and leaves its task and links
+	 * as they are, for the recovery sweep.
 	 *
-	 * @since 2.1.28
+	 * @since 2.1.29
 	 *
 	 * @param Account  $account Account the cards of the run go to.
 	 * @param callable $hold    `function (): void`.
