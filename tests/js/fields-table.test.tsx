@@ -367,3 +367,15 @@ test( 'a required password left empty is marked aria-invalid once errors are rev
 	rerender( view( { plain_password: 'secret' }, true ) );
 	expect( input() ).toHaveAttribute( 'aria-invalid', 'false' );
 } );
+
+test( 'the row label, text, status and button each sit on the row\'s input line', () => {
+	render( <Harness /> );
+
+	const lineOf = ( el: HTMLElement ) => el.closest( '.woodev-fields-table__line' );
+	const mapbox = within( rowOf( 'Mapbox' ) );
+
+	expect( lineOf( mapbox.getByText( 'Mapbox' ) ) ).not.toBeNull();
+	expect( lineOf( mapbox.getByText( '● Подключён' ) ) ).not.toBeNull();
+	expect( lineOf( mapbox.getByRole( 'button', { name: 'Проверить' } ) ) ).not.toBeNull();
+	expect( lineOf( within( rowOf( 'По прямой' ) ).getByText( '● работает' ) ) ).not.toBeNull();
+} );

@@ -10,9 +10,10 @@
 
 @use './tokens' as wd;
 
-// The middle of a cell's input line: half of the 40px input. What sits beside an input is centred here rather than
-// at `50%`, because an error under the input makes the cell's field a line taller.
-$input-middle: 20px;
+// The line every row is laid out on: the 40px input. What sits beside an input is centred on this line rather than
+// on its cell or field, which an error under the input makes taller.
+$input-height: 40px;
+$input-middle: $input-height * 0.5;
 
 .woodev-fields-table {
 	width: 100%;
@@ -28,6 +29,13 @@ $input-middle: 20px;
 			padding: wd.$gap-sm wd.$gap;
 			vertical-align: middle;
 			text-align: left;
+		}
+
+		// A row's cells hang from its top, so an error under one input grows the row downwards and moves nothing
+		// beside it.
+		tbody th,
+		tbody td {
+			vertical-align: top;
 		}
 
 		thead th {
@@ -71,12 +79,21 @@ $input-middle: 20px;
 		}
 	}
 
+	// The row label, a line of text, a status or a button, centred on the row's input line.
+	&__line {
+		display: flex;
+		align-items: center;
+		min-height: $input-height;
+	}
+
 	// One logical row stays one visual row. `.woodev-settings .woodev-field` (label | control grid, 12px padding) would
 	// make every cell tall, so the cell's field is flattened here with a selector that outranks it.
 	&__field {
 		display: flex;
 		align-items: center;
 		gap: wd.$gap-sm;
+		// A control shorter than an input (a toggle) is centred on the same line.
+		min-height: $input-height;
 
 		// The control, and for a stored secret its «Очистить» link at the input's right edge: the link overlays the
 		// (empty) input instead of sitting beside it, so every key input has the same width and left edge.
