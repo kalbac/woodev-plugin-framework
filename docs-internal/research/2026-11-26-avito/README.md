@@ -17,6 +17,7 @@ to `api.avito.ru`.
 | [decisions.md](decisions.md) | The owner's answers of 27.11.2026 (D1–D13) — final; they win over every recommendation here |
 | [spec-input.md](spec-input.md) | Input pack for the specification (28.11.2026): what the framework already has per gap, the API facts per scope part, open questions |
 | [spec-draft.md](spec-draft.md) | Draft design by Sonnet — input for the specification, not authoritative |
+| [measurement.md](measurement.md) | Read-only probe of one owner profile (28.11.2026): per method status, what the answer says, whether missing access can be detected |
 
 ## Verdict
 
