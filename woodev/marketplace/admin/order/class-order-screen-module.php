@@ -14,6 +14,7 @@ use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Labels;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Module;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Provider;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Carrier_State;
 use Woodev\Framework\Marketplace\Admin\Shared\Order_Unit_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -31,7 +32,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Gives every marketplace plugin the read-only order screen ({@see Order_Screen}) with its details box ({@see Order_Details_Box}),
  * whatever else its adapter offers: the cancel button comes with an {@see Order_Canceller}, the label button with label calls, the
- * seller action buttons and their AJAX with {@see Seller_Actions}.
+ * seller action buttons and their AJAX with {@see Seller_Actions}, the delivery service's parts with {@see Carrier_Actions}.
  *
  * @since 2.1.13
  */
@@ -86,7 +87,8 @@ final class Order_Screen_Module {
 		$seller     = self::seller_actions( $plugin, $adapter, $registry, $names, $assets, $gate, $account_of, $accounts, $db );
 		$units      = self::unit_list( $plugin, $adapter, $registry, $seller, $db );
 		$delivery   = new Seller_Delivery_Panel( $names, $adapter );
-		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of, $db ), $assets, $plugin->get_version(), $seller, $units, $delivery );
+		$carrier    = $adapter instanceof Carrier_Actions ? new Carrier_Panel( new Carrier_State( $adapter, $adapter->order_meta()->created_via() ) ) : null;
+		$box        = new Order_Details_Box( $names, $adapter, [ $registry, 'status_of_order' ], self::cancel_modal( $plugin, $adapter, $names, $assets, self::cancel_unavailable( $registry, $gate, $account_of ) ), self::label_button( $plugin, $adapter, $registry, $assets, $gate, $account_of, $db ), $assets, $plugin->get_version(), $seller, $units, $delivery, $carrier );
 
 		( new Order_Screen( $adapter->order_meta(), $box, $delivery ) )->register();
 	}

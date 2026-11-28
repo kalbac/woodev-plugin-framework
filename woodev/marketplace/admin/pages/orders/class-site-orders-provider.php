@@ -246,6 +246,8 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 
 		$definition = Site_Orders_Definition::build( $this->account_options(), $this->status_options(), $this->offered(), $this->noun, $this->seller, $warning, null !== $this->units, $this->schemes );
 
+		$definition = $this->rows->extend_definition( $definition );
+
 		return null === $this->shipments ? $definition : $this->shipments->extend_definition( $definition );
 	}
 

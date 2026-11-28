@@ -69,6 +69,20 @@ final class Seller_Order {
 	}
 
 	/**
+	 * Tells whether an order is a marketplace's and the seller delivers it: the question every marketplace plugin asks before it
+	 * touches an order, so that one never works on another's.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param \WC_Order $order       Order.
+	 * @param string    $created_via What the marketplace's orders are created via ({@see Order_Meta_Contract::created_via()}).
+	 * @return bool
+	 */
+	public static function belongs_to( \WC_Order $order, string $created_via ): bool {
+		return self::is_seller_delivered( $order ) && $order->get_created_via() === $created_via;
+	}
+
+	/**
 	 * Returns what the marketplace last said about the delivery.
 	 *
 	 * @since 2.1.29

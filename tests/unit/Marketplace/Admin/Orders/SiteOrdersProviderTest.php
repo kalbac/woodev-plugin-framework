@@ -10,6 +10,14 @@ namespace Woodev\Tests\Unit\Marketplace\Admin\Orders;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Carrier;
+use Woodev\Framework\Marketplace\Admin\Shared\Carrier_State;
+use Woodev\Framework\Marketplace\Flows\Carrier_Notice;
+use Woodev\Framework\Marketplace\Flows\Seller_Order;
+use Woodev\Framework\Shipping\Admin\Orders\Delivery_Entry;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Carrier_Adapter;
 use Woodev\Framework\Admin\Records\Action_Input;
 use Woodev\Framework\Admin\Records\Action_Input_Exception;
 use Woodev\Framework\Admin\Records\Action_Response;
@@ -186,6 +194,20 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 	 */
 	private $records;
 
+	/**
+	 * The delivery service's part of the table; null for a table without it.
+	 *
+	 * @var Site_Orders_Carrier|null
+	 */
+	private $carrier;
+
+	/**
+	 * Meta of the orders the seller delivers, by order id.
+	 *
+	 * @var array<int,array<string,mixed>>
+	 */
+	private $delivered = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -196,6 +218,8 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->notes     = [];
 		$this->seller    = null;
 		$this->shipments = null;
+		$this->carrier   = null;
+		$this->delivered = [];
 		$this->units     = [];
 		$this->records   = null;
 		$this->logged    = [];
@@ -318,8 +342,13 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$order->shouldReceive( 'get_total' )->andReturn( $total );
 		$order->shouldReceive( 'get_currency' )->andReturn( 'RUB' );
 		$order->shouldReceive( 'get_formatted_billing_full_name' )->andReturn( $name );
+		$order->shouldReceive( 'get_created_via' )->andReturn( 'fake-seller' );
 		$order->shouldReceive( 'get_meta' )->andReturnUsing(
 			function ( $key ) use ( $meta, $id ) {
+				if ( isset( $this->delivered[ $id ][ $key ] ) ) {
+					return $this->delivered[ $id ][ $key ];
+				}
+
 				if ( Fake_Seller_Adapter::META_UNITS === $key ) {
 					return $this->units[ $id ] ?? [];
 				}
@@ -385,7 +414,9 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 					return null !== $cancel && $cancel->is_finished( $order );
 				},
 				null,
-				$gate
+				$gate,
+				[],
+				$this->carrier
 			),
 			new Site_Orders_Activity( $this->clock() ),
 			$labels,
@@ -556,6 +587,61 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 		$this->assertIsArray( $body, 'The engine accepts the answer.' );
 		$this->assertSame( 1, $body['accepted'] );
 		$this->assertSame( [ 'create_shipment', 'read_shipment', 'add_units', 'read_shipment' ], $marketplace->remote );
+	}
+
+	public function test_the_engine_accepts_the_delivery_link_and_the_notice_of_a_seller_delivered_order(): void {
+		$this->stock( false );
+
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'get_post_meta' )->justReturn( '' );
+		Functions\when( 'admin_url' )->alias(
+			static function ( string $path = '' ): string {
+				return 'https://shop.test/wp-admin/' . $path;
+			}
+		);
+
+		$adapter                = new Fake_Carrier_Adapter();
+		$this->carrier          = new Site_Orders_Carrier( new Carrier_State( $adapter, 'fake-seller' ) );
+		$this->units[101]       = [ [ 'u-1', 'Кружка', 'confirm' ] ];
+		$this->delivered[101]   = [ Seller_Order::META_SELLER_DELIVERED => 'yes' ];
+		$this->units[104]       = [ [ 'u-2', 'Кружка', 'deliver' ] ];
+		$this->delivered[104]   = [
+			Seller_Order::META_SELLER_DELIVERED => 'yes',
+			Carrier_Notice::META                => [
+				'action' => 'receive',
+				'text'   => 'Подтвердите вручение: нужен код покупателя.',
+			],
+		];
+		$entry                  = Mockery::mock( Delivery_Entry::class );
+		$entry->shouldReceive( 'claims' )->andReturnUsing(
+			static function ( \WC_Order $order ): bool {
+				return 101 === $order->get_id();
+			}
+		);
+		$entry->shouldReceive( 'refusal_reason' )->andReturn( '' );
+
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider( Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek_courier' ], [ 'marker_writer' => static function (): void {} ] ) );
+		$registry->register_delivery_entry( $entry );
+
+		try {
+			$definition = $this->definition();
+			$rows       = $this->by_id( $this->list_body() );
+		} finally {
+			$registry->reset_for_tests();
+		}
+
+		$this->assertSame( [ 'open', 'delivery', 'delivery-change', 'label', 'cancel' ], array_column( $definition->to_array()['row_actions'], 'id' ) );
+
+		$arrange = array_column( $rows[ $this->row_id( 101 ) ]['actions'], null, 'id' )['delivery'];
+
+		$this->assertTrue( $arrange['enabled'] );
+		$this->assertStringContainsString( 'deliver_order=101', $arrange['url'] );
+		$badge = $rows[ $this->row_id( 104 ) ]['cells']['status'][1]['value'];
+
+		$this->assertSame( [ 'Проверьте', 'Подтвердите вручение: нужен код покупателя.' ], [ $badge['label'], $badge['tooltip'] ] );
+		$this->assertNotContains( 'delivery', array_column( $rows[ $this->row_id( 102 ) ]['actions'], 'id' ), 'An order the marketplace delivers has no link.' );
 	}
 
 	public function test_the_definition_is_accepted_by_the_engine_and_declares_what_the_adapter_can_do(): void {

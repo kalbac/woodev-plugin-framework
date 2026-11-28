@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
 use Woodev\Framework\Marketplace\Deletion\Deletion_Module;
+use Woodev\Framework\Marketplace\Flows\Code_Required_Accounts;
 use Woodev\Framework\Marketplace\Jobs\Posting_History_Cutoffs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
@@ -114,6 +115,22 @@ final class AccountOptionsForgottenTest extends TestCase {
 
 		$this->forget_options( self::DELETED );
 		$this->assertSame( 1795000200, $polls->last( self::KEPT ), 'forgetting an account that has no record changes nothing' );
+	}
+
+	/**
+	 * A later account under the deleted one's id is confirmed by itself again: what the old cabinet asked for goes with it.
+	 *
+	 * @return void
+	 */
+	public function test_the_account_that_needed_confirmation_codes_is_forgotten(): void {
+		$codes = new Code_Required_Accounts( self::PLUGIN );
+		$codes->remember( self::DELETED );
+		$codes->remember( self::KEPT );
+
+		$this->forget_options( self::DELETED );
+
+		$this->assertFalse( $codes->has( self::DELETED ) );
+		$this->assertTrue( $codes->has( self::KEPT ) );
 	}
 
 	/**

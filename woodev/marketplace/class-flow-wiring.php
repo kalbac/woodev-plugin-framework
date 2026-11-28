@@ -8,7 +8,12 @@
 namespace Woodev\Framework\Marketplace;
 
 use Woodev\Framework\Marketplace\Account\Account;
+use Woodev\Framework\Marketplace\Admin\Order\Carrier_Actions;
+use Woodev\Framework\Marketplace\Admin\Order\Carrier_Delivery_Entry;
+use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Category_Finder;
+use Woodev\Framework\Marketplace\Admin\Shared\Carrier_State;
+use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Catalog\Dictionary_Label_Lookup;
@@ -25,14 +30,17 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Mapping_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Profile_Store;
+use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
 use Woodev\Framework\Marketplace\Flows\Article_Keyed_Lifecycle;
 use Woodev\Framework\Marketplace\Flows\Card_Created_Seeder;
+use Woodev\Framework\Marketplace\Flows\Carrier_Bridge;
 use Woodev\Framework\Marketplace\Flows\Card_Import;
 use Woodev\Framework\Marketplace\Flows\Card_Importer;
 use Woodev\Framework\Marketplace\Flows\Card_Linker;
 use Woodev\Framework\Marketplace\Flows\Card_List_Source;
+use Woodev\Framework\Marketplace\Flows\Code_Required_Accounts;
 use Woodev\Framework\Marketplace\Flows\Deleted_Product_Releaser;
 use Woodev\Framework\Marketplace\Flows\Export_Context_Builder;
 use Woodev\Framework\Marketplace\Flows\Group_Assembler;
@@ -112,6 +120,7 @@ use Woodev\Framework\Marketplace\Sync\Shop_Price_Writer;
 use Woodev\Framework\Marketplace\Sync\Stock_Flusher;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
 use Woodev\Framework\Marketplace\Sync\Stock_Readback;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -783,6 +792,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			( new Posting_Jobs( $this->gate, $this->accounts, $handler, $this->adapter->error_classifier(), $this->names, $this->adapter->id(), Posting_Jobs::option_key( $this->plugin_id ), new Posting_Poll_Times( $this->plugin_id ), new Posting_History_Cutoffs( $this->plugin_id ) ) )->register();
 
 			add_action( Wc_Order_Store::units_cancelled_hook( $this->adapter->order_meta()->created_via() ), [ $this->stock, 'on_units_cancelled' ], 10, 2 );
+			$this->carrier();
+		}
+
+		/**
+		 * The delivery services of the orders the seller delivers: their news passed on to the marketplace, and «Оформить доставку»
+		 * offered to the shipping module's order wizard. Nothing is hooked for an adapter that names no actions for them.
+		 *
+		 * @return void
+		 */
+		private function carrier(): void {
+			$adapter = $this->adapter;
+
+			if ( ! $adapter instanceof Carrier_Actions ) {
+				return;
+			}
+
+			$created_via = $adapter->order_meta()->created_via();
+			$marketplace = $adapter->settings_descriptor()->marketplace_name();
+			$postings    = new Order_Registry( $this->db, $this->table( 'postings' ) );
+			$sent        = new Wpdb_Seller_Action_Store( $this->db, $this->table( 'seller_actions' ) );
+			$runner      = new Seller_Action_Runner( $adapter, Posting_Action_Gate::for_adapter( $adapter, $this->write_gate ), $this->license, $marketplace, $sent, $this->log_error );
+
+			$codes = new Code_Required_Accounts( $this->plugin_id );
+			$state = new Carrier_State( $adapter, $created_via );
+
+			( new Carrier_Bridge( $adapter, $runner, $this->gate, $postings, $codes, $this->names, $created_via, $marketplace, $this->log_error, $state ) )->register();
+
+			Orders_Registry::instance()->register_delivery_entry( new Carrier_Delivery_Entry( $adapter, $runner, $postings, $this->accounts, $created_via ) );
 		}
 
 		/**

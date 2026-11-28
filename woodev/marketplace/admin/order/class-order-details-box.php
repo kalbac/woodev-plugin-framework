@@ -100,12 +100,19 @@ final class Order_Details_Box {
 	private $delivery;
 
 	/**
+	 * The delivery service of an order the seller delivers.
+	 *
+	 * @var Carrier_Panel|null
+	 */
+	private $carrier;
+
+	/**
 	 * Creates the box.
 	 *
 	 * @since 2.1.13
 	 * @since 2.1.27 Takes the seller action buttons.
 	 * @since 2.1.28 Takes the unit list.
-	 * @since 2.1.29 Takes the delivery panel.
+	 * @since 2.1.29 Takes the delivery panel and the delivery service's panel.
 	 *
 	 * @param Screen_Names               $names         Names.
 	 * @param Marketplace_Adapter        $adapter       The adapter.
@@ -117,8 +124,10 @@ final class Order_Details_Box {
 	 * @param Seller_Action_Buttons|null $seller        The seller action buttons, when the adapter declares actions.
 	 * @param Order_Unit_List|null       $units         The unit list of a grouped order.
 	 * @param Seller_Delivery_Panel|null $delivery      The delivery of an order the seller delivers.
+	 * @param Carrier_Panel|null         $carrier       The delivery service of such an order.
 	 */
-	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version, ?Seller_Action_Buttons $seller = null, ?Order_Unit_List $units = null, ?Seller_Delivery_Panel $delivery = null ) {
+	public function __construct( Screen_Names $names, Marketplace_Adapter $adapter, callable $remote_status, ?Cancel_Modal $modal, ?Label_Button $label_button, string $assets_url, string $version, ?Seller_Action_Buttons $seller = null, ?Order_Unit_List $units = null, ?Seller_Delivery_Panel $delivery = null, ?Carrier_Panel $carrier = null ) {
+		$this->carrier       = $carrier;
 		$this->delivery      = $delivery;
 		$this->units         = $units;
 		$this->names         = $names;
@@ -170,6 +179,7 @@ final class Order_Details_Box {
 		$this->column( __( 'Основное', 'woodev-plugin-framework' ), $this->general_rows( $order ) );
 		$this->column( __( 'Суммы', 'woodev-plugin-framework' ), $this->amount_rows( $order ) );
 		echo '</div><div class="clear"></div>';
+		echo null === $this->carrier ? '' : $this->carrier->render( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo null === $this->delivery ? '' : $this->delivery->render( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo $this->unit_list( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
 		echo $this->actions( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped where it is built.
@@ -293,7 +303,8 @@ final class Order_Details_Box {
 			$cancel = '<span class="description">' . esc_html( $text ) . '</span>';
 		}
 
-		$html = null === $this->seller ? '' : $this->seller->order_buttons( $order ) . ' ';
+		$html = null === $this->carrier ? '' : $this->carrier->button( $order ) . ' ';
+		$html .= null === $this->seller ? '' : $this->seller->order_buttons( $order ) . ' ';
 		$html .= $cancel;
 
 		if ( null !== $this->label_button ) {

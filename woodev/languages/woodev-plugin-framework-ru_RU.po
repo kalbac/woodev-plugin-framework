@@ -14346,3 +14346,77 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:12
 msgid "Стоимость доставки не посчитана — повторите расчёт или выберите другой тариф или пункт выдачи."
 msgstr ""
+
+#: marketplace/admin/order/class-carrier-delivery-entry.php:94
+msgid "Подключение, через которое пришёл этот заказ, не найдено, поэтому оформить доставку нельзя."
+msgstr ""
+
+#. translators: %s: name of an action, «Передать в доставку».
+#: marketplace/admin/order/class-carrier-delivery-entry.php:119
+#, php-format
+msgid "Сейчас доставку оформить нельзя: действие «%s» для этого заказа недоступно."
+msgstr ""
+
+#. translators: 1: the marketplace status of the goods, 2: name of an action, «Передать в доставку».
+#: marketplace/admin/order/class-carrier-delivery-entry.php:123
+#, php-format
+msgid "Сейчас заказ в статусе «%1$s»: доставку можно оформить, когда доступно действие «%2$s»."
+msgstr ""
+
+#. translators: %s: day and time.
+#: marketplace/admin/order/class-carrier-delivery-entry.php:149
+#, php-format
+msgid "Покупатель выбрал доставку: %s."
+msgstr ""
+
+#: marketplace/admin/order/class-carrier-delivery-entry.php:153
+msgid "Доставка в пункт выдачи: это адрес пункта, а не покупателя."
+msgstr ""
+
+#: marketplace/admin/order/class-carrier-panel.php:58
+msgid "Служба доставки"
+msgstr ""
+
+#: marketplace/admin/order/class-carrier-panel.php:108
+msgid "Отследить"
+msgstr ""
+
+#: marketplace/flows/class-carrier-bridge.php:279
+msgid "Не удалось запланировать передачу сведений службы доставки. Выполните действие в этом заказе вручную."
+msgstr ""
+
+#. translators: %s: name of the action, «Отказ при получении».
+#: marketplace/flows/class-carrier-bridge.php:298
+#, php-format
+msgid "Служба доставки сообщает, что заказ возвращается отправителю. Отметьте это действием «%s»."
+msgstr ""
+
+#. translators: 1: name of the action, 2: number of attempts.
+#: marketplace/flows/class-carrier-bridge.php:521
+#, php-format
+msgid "Не удалось выполнить действие «%1$s» после %2$d попыток. Выполните его вручную."
+msgstr ""
+
+#: marketplace/flows/class-carrier-bridge.php:610
+msgid "Подтвердите вручение: нужен код покупателя."
+msgstr ""
+
+#. translators: 1: name of the action, 2: the reason.
+#: marketplace/flows/class-carrier-bridge.php:677
+#, php-format
+msgid "Не удалось выполнить действие «%1$s»: %2$s"
+msgstr ""
+
+#. translators: 1: the goods, 2: their marketplace status, 3: name of an action, «Передать в доставку».
+#: marketplace/admin/order/class-carrier-delivery-entry.php:170
+#, php-format
+msgid "Не все товары заказа готовы: «%1$s» — в статусе «%2$s». Доставку можно оформить, когда действие «%3$s» доступно для всех товаров заказа."
+msgstr ""
+
+#: marketplace/admin/pages/orders/class-site-orders-carrier.php:150
+msgid "Проверьте"
+msgstr ""
+
+#: marketplace/flows/class-carrier-bridge.php:640
+msgid "заказ ещё не закрыт, нужен код покупателя."
+msgstr ""

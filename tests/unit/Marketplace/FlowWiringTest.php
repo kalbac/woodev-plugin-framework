@@ -12,6 +12,8 @@ use Brain\Monkey\Functions;
 use Brain\Monkey\Filters;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
+use Woodev\Framework\Marketplace\Admin\Order\Carrier_Actions;
+use Woodev\Framework\Marketplace\Admin\Order\Carrier_Delivery_Entry;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
 use Woodev\Framework\Marketplace\Data\Schema;
@@ -27,6 +29,7 @@ use Woodev\Framework\Marketplace\Jobs\License_Gate;
 use Woodev\Framework\Marketplace\Jobs\Posting_Jobs;
 use Woodev\Framework\Marketplace\Sync\Stock_Intents;
 use Woodev\Framework\Marketplace\Account\Account_Store;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Tests\Unit\Marketplace\Admin\Test_Marketplace_Plugin;
 use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Fake_Action_Scheduler;
@@ -138,6 +141,7 @@ final class FlowWiringTest extends TestCase {
 		parent::setUp();
 
 		Flow_Wiring::forget();
+		Orders_Registry::instance()->reset_for_tests();
 
 		// The wiring also hooks the orders-list filter, which is wp-admin only.
 		Functions\when( 'is_admin' )->justReturn( false );
@@ -150,6 +154,12 @@ final class FlowWiringTest extends TestCase {
 		foreach ( ( new Schema( 'fake_wildberries' ) )->statements( 'wp_', '' ) as $statement ) {
 			$this->db->define( Sqlite_Tables::to_sqlite( $statement ) );
 		}
+	}
+
+	protected function tearDown(): void {
+		Orders_Registry::instance()->reset_for_tests();
+
+		parent::tearDown();
 	}
 
 	/**
@@ -257,6 +267,39 @@ final class FlowWiringTest extends TestCase {
 
 		$this->assertInstanceOf( Stock_Intents::class, $listener[0] );
 		$this->assertSame( 'on_units_cancelled', $listener[1] );
+	}
+
+	public function test_a_marketplace_that_names_carrier_actions_offers_its_delivery_and_listens_to_the_shipments(): void {
+		Actions\expectAdded( 'woodev_shipping_order_exported' )->once();
+		Actions\expectAdded( 'woodev_shipping_delivery_status_changed' )->once();
+		Actions\expectAdded( 'woodev_fake_seller_carrier_action' )->once();
+
+		$adapter = \Mockery::mock( Marketplace_Adapter::class, Carrier_Actions::class );
+
+		foreach ( get_class_methods( Marketplace_Adapter::class ) as $method ) {
+			$adapter->shouldReceive( $method )->andReturnUsing(
+				function ( ...$args ) use ( $method ) {
+					return $this->adapter()->$method( ...$args );
+				}
+			);
+		}
+
+		$this->wiring( self::PLUGIN, $adapter )->register();
+
+		$order = \Mockery::mock( '\WC_Order' );
+		$order->shouldReceive( 'get_meta' )->andReturn( 'yes' );
+		$order->shouldReceive( 'get_created_via' )->andReturn( 'fake-seller' );
+		$adapter->shouldReceive( 'carrier_actions' )->andReturn( [ Carrier_Actions::HANDED_OVER => 'deliver' ] );
+
+		$this->assertInstanceOf( Carrier_Delivery_Entry::class, Orders_Registry::instance()->get_delivery_entry( $order ) );
+	}
+
+	public function test_a_marketplace_without_carrier_actions_offers_no_delivery(): void {
+		Actions\expectAdded( 'woodev_shipping_order_exported' )->never();
+
+		$this->wiring( self::PLUGIN )->register();
+
+		$this->assertNull( Orders_Registry::instance()->get_delivery_entry( \Mockery::mock( '\WC_Order' ) ) );
 	}
 
 	public function test_every_flow_is_hooked_exactly_once(): void {

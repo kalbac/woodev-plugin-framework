@@ -266,12 +266,50 @@ final class Seller_Delivery_Panel {
 				: __( 'Адрес доставки от маркетплейса ещё не получен.', 'woodev-plugin-framework' );
 		}
 
-		if ( '' !== $delivery->phone_extension() && wc_sanitize_phone_number( $delivery->phone() ) === self::value( $order, 'phone' ) ) {
-			/* translators: %s: phone extension. */
-			$warnings[] = sprintf( __( 'Для связи по этому номеру нужен добавочный: %s. Служба доставки не наберёт его сама.', 'woodev-plugin-framework' ), $delivery->phone_extension() );
+		$extension = self::extension_warning( $order, $delivery );
+
+		if ( '' !== $extension ) {
+			$warnings[] = $extension;
 		}
 
 		return $warnings;
+	}
+
+	/**
+	 * Warns that the order's phone needs an extension: a delivery service does not dial it, and the framework passes it to none.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param \WC_Order       $order    Order.
+	 * @param Seller_Delivery $delivery What the marketplace says.
+	 * @return string '' when the order's phone is not the marketplace's number with an extension.
+	 */
+	public static function extension_warning( \WC_Order $order, Seller_Delivery $delivery ): string {
+		if ( '' === $delivery->phone_extension() || wc_sanitize_phone_number( $delivery->phone() ) !== self::value( $order, 'phone' ) ) {
+			return '';
+		}
+
+		/* translators: %s: phone extension. */
+		return sprintf( __( 'Для связи по этому номеру нужен добавочный: %s. Служба доставки не наберёт его сама.', 'woodev-plugin-framework' ), $delivery->phone_extension() );
+	}
+
+	/**
+	 * The day and time the buyer chose for the delivery.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param Seller_Delivery $delivery What the marketplace says.
+	 * @return string «05.11.2026 10:00–14:00»; '' when the buyer chose none.
+	 */
+	public static function chosen_time( Seller_Delivery $delivery ): string {
+		if ( '' === $delivery->date() ) {
+			return '';
+		}
+
+		$day  = \DateTimeImmutable::createFromFormat( '!Y-m-d', $delivery->date() );
+		$time = trim( $delivery->time_from() . ( '' === $delivery->time_to() ? '' : '–' . $delivery->time_to() ) );
+
+		return trim( ( false === $day ? $delivery->date() : $day->format( 'd.m.Y' ) ) . ' ' . $time );
 	}
 
 	/**
@@ -285,13 +323,11 @@ final class Seller_Delivery_Panel {
 			return '';
 		}
 
-		$rows = [];
-		$day  = \DateTimeImmutable::createFromFormat( '!Y-m-d', $delivery->date() );
+		$rows   = [];
+		$chosen = self::chosen_time( $delivery );
 
-		if ( '' !== $delivery->date() ) {
-			$time = trim( $delivery->time_from() . ( '' === $delivery->time_to() ? '' : '–' . $delivery->time_to() ) );
-
-			$rows[ __( 'Покупатель выбрал доставку', 'woodev-plugin-framework' ) ] = trim( ( false === $day ? $delivery->date() : $day->format( 'd.m.Y' ) ) . ' ' . $time );
+		if ( '' !== $chosen ) {
+			$rows[ __( 'Покупатель выбрал доставку', 'woodev-plugin-framework' ) ] = $chosen;
 		}
 
 		if ( $delivery->is_pickup_point() ) {
