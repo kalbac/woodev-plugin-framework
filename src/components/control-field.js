@@ -68,9 +68,10 @@ export const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
  * @param {boolean}  [props.disabled] whether the control is disabled (D11).
  * @param {string}   [props.savedPlaceholder] placeholder shown while a secret is stored and nothing is typed.
  * @param {string}   [props.ariaLabel] accessible name of the input when no visible label is drawn (`schema.aria_label`).
+ * @param {boolean}  [props.invalid] whether the field carries an error, announced as `aria-invalid`.
  * @return {Object} React element.
  */
-function PasswordControl( { value, onChange, isSet, disabled, savedPlaceholder, ariaLabel } ) {
+function PasswordControl( { value, onChange, isSet, disabled, savedPlaceholder, ariaLabel, invalid } ) {
 	const [ show, setShow ] = useState( false );
 	const hasValue = '' !== ( value ?? '' );
 
@@ -86,6 +87,7 @@ function PasswordControl( { value, onChange, isSet, disabled, savedPlaceholder, 
 			disabled,
 			onChange,
 			'aria-label': ariaLabel || undefined,
+			'aria-invalid': !! invalid,
 		} ),
 		hasValue &&
 			createElement(
@@ -194,9 +196,11 @@ function ColorControl( { value, optional, onChange, disabled } ) {
  * @param {boolean}  [props.disabled] whether the control is disabled (D11).
  * @param {string}   [props.savedPlaceholder] shorter placeholder for a tight cell (`schema.saved_placeholder`).
  * @param {string}   [props.clearLabel] shorter clear link text for a tight cell (`schema.clear_label`).
+ * @param {string}   [props.ariaLabel] accessible name of the input when no visible label is drawn (`schema.aria_label`).
+ * @param {boolean}  [props.invalid] whether the field carries an error, announced as `aria-invalid`.
  * @return {Object} React element.
  */
-function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled, savedPlaceholder, clearLabel, ariaLabel } ) {
+function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled, savedPlaceholder, clearLabel, ariaLabel, invalid } ) {
 	const hasValue = '' !== ( value ?? '' );
 	const canClear = isSet && 'function' === typeof onRevert;
 
@@ -228,7 +232,7 @@ function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled, s
 	return createElement(
 		Fragment,
 		null,
-		createElement( PasswordControl, { value, onChange, isSet, disabled, savedPlaceholder, ariaLabel } ),
+		createElement( PasswordControl, { value, onChange, isSet, disabled, savedPlaceholder, ariaLabel, invalid } ),
 		canClear && ! hasValue &&
 			createElement(
 				'button',
@@ -401,6 +405,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				onRevert,
 				onChange,
 				disabled,
+				invalid: !! schema.serverError,
 			} ),
 			// The server's refusal of a secret (a token it will not accept) is said under it; the client rules are not run here.
 			schema.serverError
@@ -633,7 +638,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 		case 'password':
 			return withAnatomy(
 				schema,
-				createElement( PasswordControl, { value, disabled, onChange, ariaLabel: schema.aria_label } ),
+				createElement( PasswordControl, { value, disabled, onChange, ariaLabel: schema.aria_label, invalid: !! error } ),
 				error
 			);
 
