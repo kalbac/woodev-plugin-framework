@@ -9,8 +9,9 @@
  *  1. the cells pad 8px through one variable, like «Заказы доставки» (#1909);
  *  2. a sortable left-aligned heading's button pads nothing on EITHER side: its 12px right padding sat after the sort arrow of every
  *     sortable column;
- *  3. the article column is 14ch everywhere (the products table's own 19ch rule is gone), a price and a stock are 12ch, the name's
- *     floor is 10ch (#1945: 12ch, plus the variations' 28px expand column, made «Товары сайта» 813px in the 784px card).
+ *  3. the article column is 14ch in a narrow card (the products table's own 19ch rule is gone) and takes a second line before it is
+ *     cut (#2058); only the products table's article is wider, and only in a card of 1100px and more. A price and a stock are 12ch, the
+ *     name's floor is 10ch (#1945: 12ch, plus the variations' 28px expand column, made «Товары сайта» 813px in the 784px card).
  *  4. what makes a column rigid is allowed to wrap (#1945, #1930): a badge breaks at its spaces, a date breaks from its time, the buyer
  *     breaks anywhere, and a right-aligned sortable heading pads nothing around its button.
  *  5. a table that still scrolls draws its bar: the standard `scrollbar-color` switches `::-webkit-scrollbar` off, and on macOS the
@@ -73,12 +74,29 @@ describe( 'the records table cells', () => {
 } );
 
 describe( 'the columns of the products and mappings tables', () => {
-	test( 'the article is 14ch in every table, with no products-only widening', () => {
+	test( 'the article is 14ch in every table, with no products-only widening of a narrow card', () => {
 		const article = block( scss, '.woodev-records__col-sku,\n\t.woodev-records__col-offer_id {' );
+		const wide = block( scss, '@container woodev-records-table (min-width: 1100px)' );
 
 		expect( article ).toMatch( /max-width: 14ch;\s*width: 14ch;/ );
-		expect( scss ).not.toMatch( /\.woodev-records__col-sku\s*\{/ );
+		expect( scss.replace( wide, '' ) ).not.toMatch( /\.woodev-records__col-sku\s*\{/ );
 		expect( scss ).not.toContain( '19ch' );
+	} );
+
+	test( 'a long article takes a second line before it is cut; a cell with two articles keeps one line each', () => {
+		const article = block( scss, '.woodev-records__col-sku,\n\t.woodev-records__col-offer_id {' );
+		const clamp = block( article, '> .woodev-records__text,\n\t\t.woodev-records__stack > span:only-child > .woodev-records__text' );
+
+		expect( clamp ).toMatch( /line-clamp: 2;/ );
+		expect( clamp ).toMatch( /white-space: normal;/ );
+	} );
+
+	test( 'only the products table\'s article widens, and only in a card of 1100px and more', () => {
+		const wide = block( scss, '@container woodev-records-table (min-width: 1100px)' );
+
+		expect( scss ).toContain( 'container: woodev-records-table / inline-size;' );
+		expect( block( wide, '.woodev-records__col-sku' ) ).toMatch( /max-width: 24ch;\s*width: 24ch;/ );
+		expect( wide ).not.toContain( 'offer_id' );
 	} );
 
 	test( 'a price and a stock are 12ch', () => {

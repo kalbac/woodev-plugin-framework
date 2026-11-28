@@ -560,7 +560,7 @@ The screen is five tabs on the plugin's own page, not one tab with a row of sect
   `{plugin id}-{slug}`. «Общие» exists only when the adapter has a price rule or exchange switch to default; «Уведомления» only with
   `PUSH_NOTIFICATIONS`. The page heading is `Page::get_heading()` («Настройки {plugin name}») over a menu entry that stays «Настройки»; it is also the last crumb of
   the manifest, which is what the wc-admin header shows (`Menu::build_manifest()`).
-- **«Подключение»** is ONE white wrapper card (the settings card; since #1885) holding a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.tsx`). The wrapper's header carries the tab's description on the left and «+ Добавить аккаунт» on the right; with no account the wrapper says «Пока нет ни одного аккаунта. Добавьте первый…». A card shows an **on/off switch** (it saves at once through the page's `onToggleAccount`: one `saveTab` of just that field, then the schema is read again; staged edits of open forms are untouched), the title, «Client-Id · description» (`identifierLine()`), the stored status line, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение») and «Удалить». «Удалить» is offered for EVERY account when the screen has a deletion route (`canDelete()` = `delete_url`); an enabled account is switched off by the dialog itself (see «Account deletion as built» below), so the old «сначала выключите» hint is gone — `delete_hint` now carries only «Удаление аккаунта недоступно.» for a screen without the route. An open form says the stored connection message once (under «Проверить подключение»; the header drops it), opening «Добавить аккаунт» collapses an open edit form (and the other way round), and Esc closes the open form. This is
+- **«Подключение»** is ONE white wrapper card (the settings card; since #1885) holding a card per account (`Settings_Section::with_card()`, `src/settings-page/accounts-view.tsx`). The wrapper's header carries the tab's description on the left and «+ Добавить аккаунт» on the right; with no account the wrapper says «Пока нет ни одного аккаунта. Добавьте первый…». Since #2058 a save checks an unchecked account and a limited connection is a warning ([the section on the optional parts](#what-the-screens-learn-from-optional-parts-2058-2025)). A card shows an **on/off switch** (it saves at once through the page's `onToggleAccount`: one `saveTab` of just that field, then the schema is read again; staged edits of open forms are untouched), the title, «Client-Id · description» (`identifierLine()`), the stored status line, «Редактировать» (opens the section's own connection block, the existing fields and «Проверить подключение») and «Удалить». «Удалить» is offered for EVERY account when the screen has a deletion route (`canDelete()` = `delete_url`); an enabled account is switched off by the dialog itself (see «Account deletion as built» below), so the old «сначала выключите» hint is gone — `delete_hint` now carries only «Удаление аккаунта недоступно.» for a screen without the route. An open form says the stored connection message once (under «Проверить подключение»; the header drops it), opening «Добавить аккаунт» collapses an open edit form (and the other way round), and Esc closes the open form. This is
   the one part the PHP-driven renderer cannot express: one section holds one connection block, and a card needs buttons and an expand.
 - **The account's «Описание»** (since #1885; the v1 store field) is an optional text field after «Название», registered by `Accounts_Sections` as `account_{id|new}_description`. It lives in the account's `settings` JSON under `description` — additive, no column and no migration: an account saved before it existed has none, `clean_description()` stores plain text (tags stripped, spaces collapsed, at most 200 characters) and an empty value removes the key. The card schema carries it as `description`.
 - **Tab descriptions** (since #1885). `Settings_Tab` takes an optional `$description` (escaped HTML) → the provider arg `description` → `Settings_Provider::get_description()` → the tab schema's `description` key, present only for a tab that has one. The settings app draws it through `tab-description.tsx` (inside the wrapper's header on «Подключение», above the cards on «Параметры аккаунта», above the content on a plain tab). The texts are `Accounts_Sections::connection_description()` / `parameters_description()`. The cabinet link in the connection text comes from the OPTIONAL `Settings\Credentials_Cabinet_Link::credentials_url()` that a plugin's `Settings_Descriptor` may implement (Ozon: `https://seller.ozon.ru/app/settings/api-keys`); without it the sentence names the cabinet without a link.
@@ -1606,14 +1606,94 @@ writes an order note and calls `refresh_after_action()`; it changes no order and
 orders; every refusal is a group with its own sentence and «№ order: goods» examples. A refused action stays visible, off, with
 the reason (the «Заказы доставки» mechanism). Rows can be ticked only when a bulk action exists.
 
-**Limits of this card.** Unit actions have no place in the table until the unit child rows (WF6b). A `code` field keeps the GS
-separator (U+001D) on the order screen only: the records engine refuses control characters, so a table or supply entry of a
-marking code needs an engine change first.
+**Codes.** In the table a unit action stands on the unit's row ([below](#order-units-and-partial-cancellation-2004)). A `code`
+field keeps the GS separator (U+001D) on both screens: the table declares it as a text field with `scanned_code` (since 2.1.28),
+which the records engine lets hold that one control character; every other field of the engine still refuses it.
 
 **Cancellation without reasons.** For a `Reasonless_Canceller` neither screen asks `reasons()`; both show a confirmation with
 `cancel_warning()` and call `cancel()` with `0` and `''`; an empty returned `title` gives a note without a reason. A marketplace
 that cancels **per unit** (Wildberries) declares its cancellation as a seller action instead — `cancel()` answers for the whole
 posting only. Implementing both puts two cancel buttons on a row.
+
+## Order units and partial cancellation (#2004)
+
+Card WF6b of the Wildberries design (`2.1.28`). Everything works on grouped orders only (`Order_Writer::upsert_member()`); a
+one-order posting (`upsert()`, Ozon) keeps no units, tags no line and announces nothing.
+
+| What | Where |
+|---|---|
+| One line item per live unit, item meta `_woodev_mp_unit` = the member's external id | the writer tags each line (`Order_Line::with_unit()`), `Wc_Order_Store` writes and matches it: two equal units are two items, and only the cancelled one leaves |
+| A cancelled unit's item leaves the order | only its stock comes back; the other items stay, with their taxes and stock records, and the tax lines are worked out again from them. The order is `cancelled` only when every unit is |
+| Unit records, order meta `_woodev_mp_units` (`Flows\Order_Units`, value `Flows\Order_Unit`) | every unit: id, marketplace status, cancellation time (UTC), lines (shop product id, article key, name — the linked shop product's since 2.1.29, else the marketplace's —, quantity, price). A live record follows the marketplace; a **cancelled one is final** |
+| `woodev_marketplace_{created_via}_units_cancelled( int $account_id, string[] $offer_ids, \WC_Order $order )` | fired for units newly cancelled, one first seen cancelled included, after the stock was settled and **before** the records are stored (a death in between repeats it) |
+| The stock pair goes out again (`Stock_Intents::on_units_cancelled()`, `Sync_State_Store::request_resend()`) | the marketplace need not give a cancelled unit back, so the pair is due although the number equals the accepted one, a pair that had used up its attempts included (the count restarts, a wait stays). No schema change: the sent and the in-flight payload are forgotten, so a send on its way settles nothing |
+
+**Changing lines** (both kinds of order, since this card). `Wc_Order_Store` touches only the items that differ. A leaving item
+gives back its stock and loses its `_reduced_stock` record in **one transaction** (`Sync\Stock_Transaction`), so a failure in
+between, a listener of WooCommerce's stock hook included, is repaid once by the next refresh. Before 2.1.28 the whole set was
+swapped with `wc_increase_stock_levels()`: an interrupted swap could return a line's stock twice, and a swap on an order with
+tax left the old tax total.
+
+**Screens.** The details box lists every unit (goods, article through `Sellable_Units::shown_article()`, status, amount, the
+unit's seller actions); a cancelled one reads «Отменено», with the marketplace's own name of the status beside it when the
+adapter has `Posting_Status_Names`. The «Заказы» table opens an order into the same rows (the records engine's children) when the
+adapter carries the **optional marker** `Admin\Order\Unit_Orders`; the unit's actions are row actions `unit-{id}` there. A unit
+row id is `{account}:{order}:{digest of the unit id}`: the marketplace's id never reaches the page.
+
+**For the adapter.** `Posting_Unit` ids are the members' external ids (the framework puts each unit's buttons beside its record;
+`Order_Units::of()` gives the stored units to build them from). `Order_Meta_Contract::matches()` need not look at the unit.
+
+**Limit.** An account that creates no WooCommerce orders (`Registry_Stock_Accounting`) gets none of this: its registry row keeps
+the lines of one member at a time.
+
+## Orders the seller delivers (#2007)
+
+Card WF9 of the Wildberries design (`2.1.29`). An order the shop ships itself (DBS) is an ordinary WooCommerce order with a
+shipping address. Everything is additive and optional: Ozon Seller 2.0.0 declares nothing and sends no delivery.
+
+**Adapter side.**
+
+| Seam | Use | Without it |
+|---|---|---|
+| `Orders\Seller_Delivery` on every DTO (`Order_DTO::with_delivery()`) | recipient, phone + extension, other phones, address + coordinates + pickup flag, comment, day and time, price of the paid delivery (`Money`), the raw payload, why the address is missing, payment title and shipping line title | the order is the marketplace's: `buyer()` is copied on every refresh |
+| `Order_DTO::with_scheme( code )` | the scheme, kept in `postings.scheme` (schema revision 9) and order meta `_woodev_mp_scheme` | no scheme |
+| `Admin\Order\Delivery_Schemes` | `code => name`; two or more give «Заказы» the «Схема» column and filter, one or more name the scheme in the details box | no column, no filter |
+
+An empty value means «not told yet». `Seller_Delivery::merged_over()` keeps what an earlier read told, group by group (the phones
+travel together, so a new number never keeps an old extension). The registry writer passes on the delivery of the member being
+written only while its snapshot is not older than the stored one.
+
+**What is written** (`Flows\Seller_Delivery_Writer`, from `Wc_Order_Store`):
+
+- payment title (once) and `date_paid` for a live order;
+- the framework's shipping line (item meta `_woodev_mp_delivery_line`) with the paid-delivery amount, in the order's currency;
+  total = units + that line. No other shipping line is created, priced or removed;
+- order meta (`Flows\Seller_Order`): `_woodev_mp_seller_delivered`, `_woodev_mp_delivery` (what the marketplace says),
+  `_woodev_mp_delivery_payload` (per unit, a value a later read leaves out stays), `_woodev_mp_delivery_seeded`;
+- **seed, then leave alone**: recipient (billing and shipping names), phone (both), address (`shipping_address_1`; city, region and
+  postcode are not parsed) and customer note. A group is written while all its fields are empty; later only while it still holds
+  exactly what the framework wrote. A group the merchant or a delivery wizard changed, or filled first, is never written again.
+
+**Order screen.** Items stay locked. The details box gets «Получатель и доставка» (`Admin\Order\Seller_Delivery_Panel`): recipient,
+phone and address inputs saved with the order form on `woocommerce_process_shop_order_meta` (own nonce, `edit_shop_order`; Enter
+in a field submits nothing, as on every WooCommerce order screen — the button saves), the
+marketplace's value beside a changed one, the chosen day, a pickup point notice, other phones, and warnings for a missing address
+and a phone that needs an extension. The shipping method is not edited here: the delivery wizard adds a carrier's line (WD1).
+The framework's own item meta (the unit of a line, the mark of the delivery line) is hidden on the order screen; an adapter hides
+what it writes itself.
+
+**A status code with `/`** («new/waiting») is written `new::waiting` as a value of the «Статус на маркетплейсе» filter and in the
+link from «Аналитика» (`Site_Orders_Filter::posting_status_value()`): the records engine takes no `/` in a value.
+
+**Personal data.** `Flows\Order_Privacy` plugs into WooCommerce's order exporter and eraser (`woocommerce_privacy_*`), so the
+e-mail requests of WordPress, «Remove personal data» of the orders list and the retention clean-up export and erase the module's
+meta with the order — the export includes the values first written into the order's fields, which a merchant's correction leaves
+in `_woodev_mp_delivery_seeded`; an erased order (`_anonymized`) is never given buyer data again. **A marketplace order has no
+buyer e-mail**, so an e-mail request finds it only when somebody added one (waived for 1.0, coordinator, 28.11.2026: WordPress'
+export is keyed by e-mail or username); the bulk action and the clean-up need no e-mail. Account deletion
+removes the module's buyer meta from the account's orders (`Deletion\Posting_Eraser`); the order's own fields stay. A refused
+read of the postings is a failed run (retried), never «none left». A posting stays until its order's data is gone: an order that
+cannot be loaded fails the run unless a successful read of the order store finds no such order.
 
 ## Sticker documents (#2005)
 
@@ -1660,6 +1740,71 @@ printer or barcode scanner was tried.
 itself and, for a page, shows a link that opens it in a new tab (a tab asked for after a wait is blocked). The link in the
 «Заказы» table's result dialog opens a page in a new tab too, so the table stays.
 
+## The page of shipments (#2006)
+
+A marketplace that gathers goods into shipments and hands each one over gets a records page after «Заказы», the actions of that
+page, and «add to a shipment» on «Заказы». It is offered only when the adapter reports `Capability::CONFIRM_SHIPMENT` **and**
+implements the optional `Shipments\Shipment_Batches` (`Shipments_Module::is_offered()`); any other plugin keeps its menu. Ozon
+Seller 2.0.0 declares neither.
+
+**Words.** The settings descriptor may implement `Settings\Shipment_Wording` and return a `Shipment_Noun` (the page title and every
+form of the shipment — feminine — and of a cargo place — neuter). Without it: «Отгрузки» / «грузовое место».
+
+**Contract** (`woodev/marketplace/shipments/`, domain layer). Three groups of methods:
+
+| Group | Methods | Rule |
+|---|---|---|
+| read | `list_shipments` (cursor pages), `read_shipment` (header + units + what each misses + cargo places), `units_to_reship` | the job and the one shipment an action touched |
+| stored data | `shipment_candidates`, `move_refusal`, `shipping_fields`, `hand_over_refusal`, `max_cargo_places`, `cargo_place_refusal`, `shipment_documents`, `document_refusal` | asked while a screen is drawn: **no remote call** |
+| change | `create_shipment`, `add_units`, `move_units`, `shipping_options` (when the list opens), `choose_shipping`, `add_cargo_places`, `hand_over`, `shipment_document` | a merchant's request |
+
+- A marketplace refusal is thrown as `Shipment_Refused` (merchant sentence). Any other failure is classified; the merchant reads
+  that the action may have happened. Units are answered one by one; an unmentioned unit is failed.
+- A rule about a whole selection (one cargo kind per shipment) is `shipment_candidates()` refusing the units.
+- `Shipment` takes `facts` (the adapter's notes, e.g. the cargo kind) and `still_changing`: a handed-over shipment the marketplace
+  is still working on is read again at every refresh. A shipment holding units to ship again is read again too — that is when a unit
+  becomes movable (`Shipment_Unit` `movable`).
+- `Shipment_Requirement` is one line of «what is missing»: met / waiting / refused / missing, blocking or only a warning. A blocking
+  unmet one keeps «Передать в доставку» off; the hand-over reads the shipment again first and refuses before sending.
+- `Shipment_Unit::posting_key()` is the order registry key; the framework resolves the WooCommerce order from it.
+
+**Storage and job.** Tables `shipments` and `shipment_units` (schema revision 8, `Data\Wpdb_Shipment_Store`); a table read touches
+only them. `Jobs\Shipment_Jobs`: `poll_shipments` per account every 15 minutes and `refresh_shipments` (after an action, «Обновить
+список», continuations: 10 list pages and 20 shipment reads a run). A full listing sweeps what the marketplace no longer lists after
+its last page. Only a throttle answer re-queues; any other failure waits for the next poll. Deleting an account removes the rows.
+
+**A failed read is never forgotten.** A shipment that cannot be read stays marked and is put off
+(`read_attempts`, `retry_at`): 10 minutes, doubled after every further failure, at most 6 hours. «Обновить список» tries it at
+once. «Статус данных» says the copy is incomplete until it is read. A read that fails after an action marks the shipment too.
+
+**Locks.** An action holds its shipment (`lock_until`, 300 s at most); a second action is refused and the row shows the busy marker.
+
+**A change is sent once.** The lock covers only overlapping requests, so every change is also claimed in WF6a's `seller_actions`
+table before it is sent, with the same states and periods (`Wpdb_Seller_Action_Store`; action names `shipment.*` hold a dot, which
+no seller action id can). The same identity is refused while the claim holds — accepted or unanswered: 1 hour; on its way: 10
+minutes. A refused, throttled or never-sent request frees it. Identity = what is meant:
+
+| Change | Claimed on | Identity (a different one is a new change) |
+|---|---|---|
+| create | the name | the name |
+| add, move | each unit | from which shipment to which (the claim remembers the last, so a unit can go back) |
+| pickup point and date | the shipment | the chosen values |
+| cargo places | the shipment | the **total** wanted |
+| hand over | the shipment | — |
+
+**Cargo places are a total, not an increment.** The dialog asks how many there must be in all; the framework reads the shipment and
+passes the adapter's `add_cargo_places()` only the missing number. Asking for the number already there sends nothing.
+
+**Counterpart in «Заказы доставки»** (reference only; no delivery code changed): the view row of states with counts, icon row actions
+that stay visible and off with the reason, the busy veil and bar on a locked row, the bulk select, the «Статус данных» block, and
+parent rows with expandable children — the same engine mechanism «Товары» uses for variable products.
+
+**Child rows** show the unit, its order, status, «ship again» mark and each requirement, plus «Перенести» for a movable unit and the
+adapter's seller actions with target `UNIT` (engine ids `unit-{id}`; the marking field of spec §6.4). ⚠ The records engine still
+refuses the GS separator (U+001D) in a text field, so a marking code that carries it is refused here; the order screen takes it.
+
+**Not built:** deleting a shipment, removing a cargo place, passes, auto-returns (D3); unit stickers are the label flow (WF7).
+
 ## The articles of new cards in the mapping form (#2038)
 
 Card #2038 of the Wildberries design (§5.5, `2.1.27`). A marketplace whose article is built from more than the SKU shows the
@@ -1702,6 +1847,36 @@ come from `Wpdb_Link_Store::rows_of_products()`, sent articles from one `sent_li
 mapping's name are each read once, and a typed article is read from the primed post meta (`Pinned_Offer_Id::of_primed()`).
 The adapter is asked once per unit for accounts that resolve alike. What its own methods read is not bounded here: an adapter
 whose article depends on a parent's other variations should read each parent once per request, priming their posts in one go.
+
+## What the screens learn from optional parts (#2058, #2025)
+
+Planned `2.1.28`. Ozon Seller 2.0.0 declares neither interface and keeps its screens; everything is optional.
+
+| Seam | Who implements it | Without it |
+|---|---|---|
+| `Sync\Archiveless_Stock_Rules extends Stock_Rules` (marker) | the stock rules of a marketplace with no archive | «Архивировать» is offered: the table's bulk action, the product tab, a variation's button |
+| `Account\Credential_Limits extends Credential_Health` | a credential check whose `ok` may mean part of the rights | an `ok` connection line is green |
+
+- **The archive is opt-out, not a capability.** A released adapter declares nothing and has an archive, so a positive
+  `Capability` would take the button from it. `Site_Products_Module::withheld_actions()` stays the one list: the table, the
+  variation panel and the product tab (`Embedded_Screens::withheld_ops()`) read it. Without the archive the bulk group
+  «Связи и архив» is «Связи».
+- **A limited connection** is `Woodev_Connection_Result::warning()` (`success` true plus `warning` in the REST payload), live
+  (`Accounts_Sections::test_connection()`) and stored (`Account_Status::connected()`).
+- **Check on save.** After «Сохранить» (and after an account is switched on) the page runs the ordinary verify route, with no
+  values, for each enabled account the save left without a stored status (`accountsToCheck()` in
+  `src/settings-page/app.js`): the saved one and a newly added one. One request per account per press, none for a stored
+  result. The card says «Проверяем подключение…» meanwhile.
+- **The card follows the check.** A finished «Проверить подключение» of an account re-reads the schema; the open block takes a
+  new stored status only when it holds no typed edits.
+- **One notice.** A marketplace page is a wc-admin page, which already draws the notices store's snackbars: the embedded
+  settings body draws no `SnackbarList` of its own.
+- **Tables.** «Артикул» takes a second line before it is cut; on «Товары сайта» it is 24ch in a card of 1100px and more
+  (a container query on the table's own card). A variable product with no SKU shows its variations' article and how many
+  others there are (`Article_Display::card_article_of_link()`). A parent row of either products table writes a state as
+  «Создан · 3» (`State_Groups::counted()`).
+- **Price and stock of «Карточки на маркетплейсе»** are the `price` and `stock` keys of `Card_List_Source` rows — the adapter's
+  to fill; no further framework method exists.
 
 ## Changing the article after the export (framework 2.1.13, #1860)
 

@@ -13,7 +13,10 @@ use Woodev\Framework\Marketplace\Deletion\Account_Data_Cleaner;
 use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Job;
 use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Progress;
 use Woodev\Framework\Marketplace\Deletion\Account_Deletion_Scheduler;
+use Woodev\Framework\Marketplace\Deletion\Posting_Eraser;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
+use Woodev\Framework\Marketplace\Orders\Order_Registry;
+use Woodev\Tests\Unit\Marketplace\Data\Support\Sqlite_Tables;
 use Woodev\Tests\Unit\Marketplace\Support\Sync_Test_Case;
 
 /**
@@ -378,6 +381,33 @@ final class AccountDeletionJobTest extends Sync_Test_Case {
 		$second = $this->accounts()->find_by_identifier( 'c-2' );
 		$this->job( [], null, false )->run( $second->id(), 0 );
 		$this->assertSame( [], $this->progress->get( $second->id() )['notes'], 'no address registered: nothing to say' );
+	}
+
+	/**
+	 * A read of the postings the database refused is a failed run, not an empty step: the account and its postings stay, the
+	 * run is queued again and the next one finishes.
+	 *
+	 * @return void
+	 */
+	public function test_a_failed_read_of_the_postings_is_retried_and_keeps_the_account(): void {
+		$registry = new Order_Registry( $this->db, Sqlite_Tables::table( 'postings' ) );
+		$registry->reserve( $this->account_id, 'cart-1' );
+		$steps               = [ 'postings' => [ new Posting_Eraser( $registry, $this->db ), 'delete_account' ] ];
+		$this->db->fail_read = static function ( string $query ): bool {
+			return false !== strpos( $query, '_postings' );
+		};
+
+		$this->job( $steps )->run( $this->account_id, 0 );
+		$this->db->fail_read = null;
+
+		$this->assertNotNull( $this->accounts()->get( $this->account_id ), 'the row stays while data is left' );
+		$this->assertSame( 1, $registry->count_for_account( $this->account_id ) );
+		$this->assertSame( [ $this->account_id, 1 ], $this->scheduler->of( 'woodev_fake_seller_delete_account' )[0]['args'] );
+
+		$this->job( $steps )->run( $this->account_id, 1 );
+
+		$this->assertNull( $this->accounts()->get( $this->account_id ) );
+		$this->assertSame( 0, $registry->count_for_account( $this->account_id ) );
 	}
 
 	/**

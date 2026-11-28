@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Settings;
 
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Account_Store;
+use Woodev\Framework\Marketplace\Account\Credential_Limits;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Account\Key_Expiry;
 use Woodev\Framework\Marketplace\Admin\Shared\Date_Text;
@@ -148,7 +149,25 @@ final class Account_Status {
 		// The OK detail the adapter stored with its last check (redacted); empty when it stored none.
 		$stored_ok = trim( Report_Redactor::redact_text( trim( $health->message() ), $secret_fields, $secret_vals ) );
 
-		return \Woodev_Connection_Result::success( $this->connected_detail( $account, $expires_at, $now, $stored_ok ) );
+		return $this->connected( $account, $this->connected_detail( $account, $expires_at, $now, $stored_ok ) );
+	}
+
+	/**
+	 * The result of credentials that passed the check: a success, or a warning when the adapter says they open only part of what
+	 * the plugin does ({@see Credential_Limits}).
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param Account $account Account, with the credentials that passed.
+	 * @param string  $message The line the merchant reads.
+	 * @return \Woodev_Connection_Result
+	 */
+	public function connected( Account $account, string $message ): \Woodev_Connection_Result {
+		$health = $this->adapter->credential_health();
+
+		return $health instanceof Credential_Limits && $health->has_limits( $account )
+			? \Woodev_Connection_Result::warning( $message )
+			: \Woodev_Connection_Result::success( $message );
 	}
 
 	/**

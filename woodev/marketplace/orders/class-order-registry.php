@@ -92,6 +92,66 @@ final class Order_Registry {
 	}
 
 	/**
+	 * Lists a batch of an account's postings with the WooCommerce order each one became, for a deletion that has work to do on the
+	 * orders before it removes the rows ({@see self::delete_postings()}).
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param int $account_id Account id.
+	 * @param int $limit      Most rows to return.
+	 * @return array<string,int> WooCommerce order id by group key; 0 for a posting without an order. Empty only when none is left.
+	 * @throws \RuntimeException When the database refused the read, which must not be taken for «none left».
+	 */
+	public function batch_of_account( int $account_id, int $limit ): array {
+		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The deletion reads what is left.
+			$this->db->prepare( 'SELECT external_key, wc_order_id FROM %i WHERE account_id = %d ORDER BY external_key LIMIT %d', $this->table, $account_id, max( 1, $limit ) ),
+			'ARRAY_A'
+		);
+
+		// A failed read answers with no rows too; only the error tells them apart.
+		if ( '' !== (string) $this->db->last_error ) {
+			throw new \RuntimeException( 'The postings could not be read: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		$batch = [];
+
+		foreach ( (array) $rows as $row ) {
+			$batch[ (string) $row['external_key'] ] = (int) $row['wc_order_id'];
+		}
+
+		return $batch;
+	}
+
+	/**
+	 * Deletes some of an account's postings. WooCommerce orders are not touched.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param int      $account_id Account id.
+	 * @param string[] $keys       Group keys.
+	 * @return int Rows deleted.
+	 * @throws \RuntimeException When the database refused the deletion.
+	 */
+	public function delete_postings( int $account_id, array $keys ): int {
+		if ( [] === $keys ) {
+			return 0;
+		}
+
+		$deleted = $this->db->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- One placeholder per key.
+			$this->db->prepare(
+				'DELETE FROM %i WHERE account_id = %d AND external_key IN (' . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Only placeholders are concatenated.
+				array_merge( [ $this->table, $account_id ], array_map( 'strval', array_values( $keys ) ) )
+			)
+		);
+
+		if ( false === $deleted ) {
+			throw new \RuntimeException( 'The postings could not be deleted: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
+		return (int) $deleted;
+	}
+
+	/**
 	 * Reserves the row of a group: inserts it unless it exists. Two writers that reserve at once end with one row.
 	 *
 	 * @since 2.0.29
@@ -288,21 +348,23 @@ final class Order_Registry {
 	 * @param array<int,array{offer_id:string,sku:string,qty_seen:int}> $lines            Lines as the marketplace sent them.
 	 * @param array<string,mixed>|null                                  $members          Member snapshots of a grouped order; null for one-member orders.
 	 * @param string|null                                               $processing_since GMT `Y-m-d H:i:s` the marketplace says the order entered processing ({@see Order_DTO::processing_since()}); null leaves what the row already holds (since 2.1.17).
+	 * @param string                                                    $scheme           Delivery scheme of the order ({@see Order_DTO::scheme()}); '' leaves what the row already holds (since 2.1.29).
 	 * @return bool False when the claim was lost.
 	 * @throws \RuntimeException When the database refused the write (never read as «claim lost»).
 	 */
-	public function record( int $account_id, string $key, string $token, string $status_raw, bool $is_terminal, array $lines, ?array $members, ?string $processing_since = null ): bool {
+	public function record( int $account_id, string $key, string $token, string $status_raw, bool $is_terminal, array $lines, ?array $members, ?string $processing_since = null, string $scheme = '' ): bool {
 		$row    = $this->find( $account_id, $key );
 		$merged = self::merge_lines( null === $row ? [] : $row['lines'], $lines );
 		return $this->write_if_claimed(
 			$this->table,
 			self::key( $account_id, $key ),
 			$token,
-			'status_raw = %s, is_terminal = %d, `lines` = %s, members = ' . ( null === $members ? 'NULL' : '%s' ) . ( null === $processing_since ? '' : ', processing_since = %s' ) . ', refreshed_at = %s',
+			'status_raw = %s, is_terminal = %d, `lines` = %s, members = ' . ( null === $members ? 'NULL' : '%s' ) . ( null === $processing_since ? '' : ', processing_since = %s' ) . ( '' === $scheme ? '' : ', scheme = %s' ) . ', refreshed_at = %s',
 			array_merge(
 				[ substr( $status_raw, 0, 32 ), $is_terminal ? 1 : 0, (string) json_encode( $merged ) ], // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The layer uses no WordPress function.
 				null === $members ? [] : [ (string) json_encode( $members ) ], // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- The layer uses no WordPress function.
 				null === $processing_since ? [] : [ $processing_since ],
+				'' === $scheme ? [] : [ $scheme ],
 				[ $this->claim_clock( 0 ) ]
 			)
 		);

@@ -63,8 +63,8 @@ interface Order_Store {
 	public function is_provisional( \WC_Order $wc_order ): bool;
 
 	/**
-	 * Brings an order in line with the DTO and saves it: marketplace meta, the line set (replaced only when it differs, with
-	 * the stock the old lines took given back first), the status and the member registry.
+	 * Brings an order in line with the DTO and saves it: marketplace meta, the line set (only the lines that differ change, an
+	 * item that leaves giving back the stock it took first), the status and the member registry.
 	 *
 	 * @since 2.0.29
 	 *

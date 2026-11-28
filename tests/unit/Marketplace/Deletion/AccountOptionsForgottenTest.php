@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit\Marketplace\Deletion;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Data\Wpdb_Card_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
+use Woodev\Framework\Marketplace\Data\Wpdb_Shipment_Store;
 use Woodev\Framework\Marketplace\Deletion\Deletion_Module;
 use Woodev\Framework\Marketplace\Jobs\Posting_History_Cutoffs;
 use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
@@ -135,7 +136,8 @@ final class AccountOptionsForgottenTest extends TestCase {
 			null,
 			self::PLUGIN,
 			new Wpdb_Catalog_Cache( $db, $schema->table_name( 'catalog_cache', $db->prefix ) ),
-			new Wpdb_Card_Store( $db, $schema->table_name( 'cards', $db->prefix ), $schema->table_name( 'links', $db->prefix ), 'woodev_' . self::PLUGIN . '_' )
+			new Wpdb_Card_Store( $db, $schema->table_name( 'cards', $db->prefix ), $schema->table_name( 'links', $db->prefix ), 'woodev_' . self::PLUGIN . '_' ),
+			new Wpdb_Shipment_Store( $db, $schema->table_name( 'shipments', $db->prefix ), $schema->table_name( 'shipment_units', $db->prefix ), 'woodev_' . self::PLUGIN . '_' )
 		);
 
 		$forget( $account_id );

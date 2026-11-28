@@ -333,7 +333,8 @@ final class Orders_Analytics_Report {
 
 			if ( ! isset( $codes[ $code ] ) ) {
 				$codes[ $code ] = [
-					'code'     => $code,
+					// The value of the «Заказы» table's status filter: the page links a count to those orders.
+					'code'     => Site_Orders_Filter::posting_status_value( $code ),
 					'label'    => Posting_Status_Text::label( $code, $this->names ),
 					'tone'     => Posting_Status_Text::tone( $code ),
 					'count'    => 0,

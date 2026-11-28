@@ -171,7 +171,7 @@ final class Remote_Cards_Units {
 
 		foreach ( array_slice( $badges, 0, Row_Normalizer::MAX_STACK_ITEMS ) as $badge ) {
 			$shown  = [
-				'label' => $badge['label'] . ' · ' . $badge['count'],
+				'label' => State_Groups::counted( $badge['label'], $badge['count'] ),
 				'tone'  => $badge['tone'],
 			];
 			$cell[] = [
