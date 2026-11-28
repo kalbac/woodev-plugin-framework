@@ -121,7 +121,7 @@ final class Site_Orders_Rows {
 
 		foreach ( $labels as $code => $label ) {
 			$options[] = [
-				'value' => (string) $code,
+				'value' => Site_Orders_Filter::posting_status_value( (string) $code ),
 				'label' => $uses[ $label ] > 1 ? $label . ' (' . $code . ')' : $label,
 				'count' => (int) $counts[ $code ],
 			];

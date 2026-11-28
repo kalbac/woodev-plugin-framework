@@ -8,6 +8,8 @@
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
+use Woodev\Framework\Marketplace\Flows\Seller_Order;
+use Woodev\Framework\Marketplace\Flows\Wc_Order_Store;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -103,6 +105,24 @@ final class Order_Screen {
 		add_action( 'woocommerce_process_shop_order_meta', [ $this, 'unhook_savers' ], 1 );
 		add_action( 'woocommerce_process_shop_order_meta', [ $this, 'save_delivery' ], 40 );
 		add_filter( 'wc_order_is_editable', [ $this, 'filter_editable' ], 10, 2 );
+		add_filter( 'woocommerce_hidden_order_itemmeta', [ $this, 'hide_item_meta' ] );
+	}
+
+	/**
+	 * Keeps the framework's own item meta off the order screen: the unit a line is and the mark of the delivery line are keys the
+	 * merchant can do nothing with. WooCommerce's order screen shows item meta whatever its key starts with.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param mixed $hidden Meta keys WooCommerce hides.
+	 * @return mixed
+	 */
+	public function hide_item_meta( $hidden ) {
+		if ( ! is_array( $hidden ) ) {
+			return $hidden;
+		}
+
+		return array_values( array_unique( array_merge( $hidden, [ Wc_Order_Store::ITEM_UNIT, Seller_Order::ITEM_DELIVERY_LINE ] ) ) );
 	}
 
 	/**

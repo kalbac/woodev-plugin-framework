@@ -30,9 +30,15 @@ final class Site_Orders_Filter {
 	public const STATE_FINISHED = 'finished';
 
 	/**
-	 * Shape of a stored posting status (`status_raw` is a `varchar(32)`), checked before it reaches SQL.
+	 * Shape of a stored posting status (`status_raw` is a `varchar(32)`), checked before it reaches SQL. A marketplace with two
+	 * status axes writes them with a `/` between ({@see self::posting_status_value()}).
 	 */
-	public const POSTING_STATUS_SHAPE = '/^[A-Za-z0-9_.:-]{1,32}$/D';
+	public const POSTING_STATUS_SHAPE = '#^[A-Za-z0-9_./:-]{1,32}$#D';
+
+	/**
+	 * What stands for `/` in a filter value: the records engine takes no `/` in one.
+	 */
+	private const SLASH_IN_VALUE = '::';
 
 	/**
 	 * @var int
@@ -137,9 +143,22 @@ final class Site_Orders_Filter {
 			(string) ( $filters['q'] ?? $query['search'] ?? '' ),
 			(string) ( $query['sort'] ?? 'date' ),
 			(string) ( $query['direction'] ?? 'desc' ),
-			(string) ( $filters['posting_status'] ?? '' ),
+			str_replace( self::SLASH_IN_VALUE, '/', (string) ( $filters['posting_status'] ?? '' ) ),
 			(string) ( $filters['scheme'] ?? '' )
 		);
+	}
+
+	/**
+	 * The value of a posting status in the table's filter and in a link to it: the stored code, with `/` written as `::`, which
+	 * {@see self::from_query()} reads back.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param string $code Stored posting status.
+	 * @return string
+	 */
+	public static function posting_status_value( string $code ): string {
+		return str_replace( '/', self::SLASH_IN_VALUE, $code );
 	}
 
 	/**
