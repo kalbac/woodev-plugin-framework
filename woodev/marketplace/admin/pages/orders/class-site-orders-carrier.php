@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Adds to the table the link that opens the delivery wizard — «Оформить доставку», or «Изменить доставку» once a service is
- * chosen — and, under a row's status, what the merchant still has to do after the service's news ({@see Carrier_State}). The
+ * chosen — and, under a row's status, a badge with what the merchant still has to do after the service's news ({@see Carrier_State}). The
  * link is declared only where a delivery can be arranged at all.
  *
  * @since 2.1.29
@@ -95,11 +95,14 @@ final class Site_Orders_Carrier {
 			return $actions;
 		}
 
+		// The table draws a link only when it has an address, a switched-off one too (it is never followed): without one the row
+		// would lose the button together with the reason it is off.
 		$link = [
 			'id'      => $button['changes'] ? self::CHANGE : self::ARRANGE,
 			'enabled' => '' !== $button['url'],
 			'reason'  => $button['reason'],
-		] + ( '' === $button['url'] ? [] : [ 'url' => $button['url'] ] );
+			'url'     => '' !== $button['url'] ? $button['url'] : (string) $order->get_edit_order_url(),
+		];
 
 		$at = array_search( Site_Orders_Definition::OPEN, array_column( $actions, 'id' ), true );
 
@@ -109,7 +112,8 @@ final class Site_Orders_Carrier {
 	}
 
 	/**
-	 * Puts under a row's status what the merchant still has to do.
+	 * Puts under a row's status a badge that says the merchant still has something to do, with the sentence in its tooltip: a
+	 * sentence in the cell would widen the table past its card.
 	 *
 	 * @since 2.1.29
 	 *
@@ -125,8 +129,12 @@ final class Site_Orders_Carrier {
 		}
 
 		$status[] = [
-			'type'  => 'text',
-			'value' => $notice,
+			'type'  => 'badge',
+			'value' => [
+				'label'   => __( 'Проверьте', 'woodev-plugin-framework' ),
+				'tone'    => 'warning',
+				'tooltip' => $notice,
+			],
 		];
 
 		return $status;

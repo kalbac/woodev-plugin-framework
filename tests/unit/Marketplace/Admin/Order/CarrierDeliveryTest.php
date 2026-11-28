@@ -12,8 +12,11 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Admin\Order\Carrier_Delivery_Entry;
 use Woodev\Framework\Marketplace\Admin\Order\Carrier_Panel;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Carrier;
+use Woodev\Tests\Unit\Marketplace\Admin\Support\Fake_Seller_Adapter;
 use Woodev\Framework\Marketplace\Admin\Shared\Carrier_State;
 use Woodev\Framework\Marketplace\Flows\Carrier_Notice;
+use Woodev\Framework\Marketplace\Flows\Order_Unit;
+use Woodev\Framework\Marketplace\Flows\Order_Units;
 use Woodev\Framework\Marketplace\Flows\Seller_Order;
 use Woodev\Framework\Marketplace\Orders\Seller_Delivery;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
@@ -98,6 +101,33 @@ final class CarrierDeliveryTest extends Carrier_Test_Case {
 		$this->move( $order, 'confirm' );
 
 		$this->assertSame( '', $this->entry()->refusal_reason( $order->order ) );
+	}
+
+	public function test_a_grouped_order_waits_until_every_unit_can_be_handed_over(): void {
+		$order = $this->order( 700 );
+		$this->units( $order, [ [ 'u-1', 'Кружка', 'confirm' ], [ 'u-2', 'Блюдце', 'new' ] ] );
+
+		$this->assertSame(
+			'Не все товары заказа готовы: «Блюдце» — в статусе «Статус new». Доставку можно оформить, когда действие «Передать в доставку» доступно для всех товаров заказа.',
+			$this->entry()->refusal_reason( $order->order )
+		);
+
+		$this->move( $order, 'confirm' );
+
+		$this->assertSame( '', $this->entry()->refusal_reason( $order->order ) );
+	}
+
+	public function test_a_cancelled_unit_and_one_past_the_hand_over_do_not_hold_the_delivery(): void {
+		$order = $this->order( 700 );
+		// The cancelled unit lists every action; the delivered one no longer lists the hand-over.
+		$this->units( $order, [ [ 'u-1', 'Кружка', 'confirm' ], [ 'u-2', 'Блюдце', 'cancelled' ], [ 'u-3', 'Ложка', 'sold', [ 'receive' ] ] ] );
+		$order->meta[ Order_Units::META ] = [ ( new Order_Unit( 'u-2', 'cancelled', '2026-11-27 10:00:00', [] ) )->to_array() ];
+
+		$this->assertSame( '', $this->entry()->refusal_reason( $order->order ) );
+
+		$this->units( $order, [ [ 'u-2', 'Блюдце', 'cancelled' ] ] );
+
+		$this->assertStringContainsString( 'для этого заказа недоступно', $this->entry()->refusal_reason( $order->order ) );
 	}
 
 	public function test_a_delivery_is_refused_without_a_licence_or_a_switched_on_account(): void {
@@ -237,12 +267,27 @@ final class CarrierDeliveryTest extends Carrier_Test_Case {
 		$this->assertSame(
 			[
 				[
-					'type'  => 'text',
-					'value' => 'Заказ возвращается.',
+					'type'  => 'badge',
+					'value' => [
+						'label'   => 'Проверьте',
+						'tone'    => 'warning',
+						'tooltip' => 'Заказ возвращается.',
+					],
 				],
 			],
 			$table->with_notice( [], $order->order )
 		);
+	}
+
+	public function test_a_refused_link_keeps_an_address_so_the_table_shows_it_off_with_the_reason(): void {
+		$order = $this->order( 700, 'new' );
+		$this->register_delivery_plugin();
+		$order->order->shouldReceive( 'get_edit_order_url' )->andReturn( 'https://example.test/wp-admin/post.php?post=700' );
+
+		$link = ( new Site_Orders_Carrier( $this->state() ) )->with_link( [ [ 'id' => 'open' ] ], $order->order )[1];
+
+		$this->assertSame( [ 'delivery', false, 'https://example.test/wp-admin/post.php?post=700' ], [ $link['id'], $link['enabled'], $link['url'] ] );
+		$this->assertStringContainsString( '«Передать в доставку»', $link['reason'] );
 	}
 
 	public function test_a_site_without_a_delivery_plugin_gets_the_table_it_had(): void {
@@ -253,6 +298,17 @@ final class CarrierDeliveryTest extends Carrier_Test_Case {
 		$this->assertSame( $definition, $table->extend_definition( $definition ) );
 		$this->assertSame( $definition['row_actions'], $table->with_link( $definition['row_actions'], $order->order ) );
 		$this->assertSame( [], $table->with_notice( [], $order->order ) );
+	}
+
+	/**
+	 * Replaces the units of an order.
+	 *
+	 * @param Stateful_Order          $order Order.
+	 * @param array<int,array<mixed>> $units Units: id, label, status, and the actions that exist for it.
+	 * @return void
+	 */
+	private function units( Stateful_Order $order, array $units ): void {
+		$order->meta[ Fake_Seller_Adapter::META_UNITS ] = $units;
 	}
 
 	/**

@@ -8,6 +8,7 @@
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
 use Woodev\Framework\Marketplace\Data\Wpdb_Account_Store;
+use Woodev\Framework\Marketplace\Flows\Order_Units;
 use Woodev\Framework\Marketplace\Flows\Seller_Order;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Shipping\Admin\Orders\Delivery_Entry;
@@ -18,8 +19,8 @@ defined( 'ABSPATH' ) || exit;
  * Hands the shipping module's order wizard the marketplace's seller-delivered orders: it picks a delivery service's tariff or
  * pickup point and saves the shipping line onto the same order, items and prices untouched.
  *
- * A delivery is arranged only while the marketplace takes the hand-over ({@see Carrier_Actions::HANDED_OVER}) for a unit of the
- * order and the account may send it, the licence included. What the manager must know first stands above the address: a phone
+ * A delivery is arranged only while the marketplace takes the hand-over ({@see Carrier_Actions::HANDED_OVER}) for every unit of
+ * the order that can still be handed over, and the account may send it, the licence included. What the manager must know first stands above the address: a phone
  * that needs an extension (it is not passed to the delivery service), the day the buyer chose, a pickup point address.
  *
  * @since 2.1.29
@@ -79,12 +80,6 @@ final class Carrier_Delivery_Entry implements Delivery_Entry {
 		return Seller_Order::belongs_to( $order, $this->created_via ) && isset( $this->adapter->carrier_actions()[ Carrier_Actions::HANDED_OVER ] );
 	}
 
-	/**
-	 * @since 2.1.29
-	 *
-	 * @param \WC_Order $order Order.
-	 * @return string
-	 */
 	public function refusal_reason( \WC_Order $order ): string {
 		$posting = $this->postings->posting_of_order( $order->get_id() );
 		$account = null === $posting ? null : $this->accounts->get( $posting['account_id'] );
@@ -96,31 +91,59 @@ final class Carrier_Delivery_Entry implements Delivery_Entry {
 
 		$refusal = $this->runner->account_refusal( $account, $action );
 
-		if ( '' !== $refusal ) {
-			return $refusal;
+		return '' !== $refusal ? $refusal : $this->units_refusal( $order, $action );
+	}
+
+	/**
+	 * One shipment carries the whole order, so a delivery waits until EVERY unit that can still be handed over takes the
+	 * hand-over: a cancelled unit and one the marketplace no longer lists the action for do not count.
+	 *
+	 * @param \WC_Order     $order  Order.
+	 * @param Seller_Action $action The hand-over action.
+	 * @return string '' when the delivery may be arranged.
+	 */
+	private function units_refusal( \WC_Order $order, Seller_Action $action ): string {
+		$cancelled = [];
+
+		foreach ( Order_Units::of( $order ) as $record ) {
+			if ( $record->is_cancelled() ) {
+				$cancelled[ '#' . $record->id() ] = true;
+			}
 		}
 
-		$status = '';
+		$ready   = 0;
+		$waiting = null;
 
 		foreach ( $this->runner->units( $order ) as $unit ) {
-			if ( ! $unit->has_action( $action->id() ) ) {
+			if ( ! $unit->has_action( $action->id() ) || isset( $cancelled[ '#' . $unit->id() ] ) ) {
 				continue;
 			}
 
 			if ( $action->is_offered_in( $unit->status() ) ) {
+				++$ready;
+			} elseif ( null === $waiting ) {
+				$waiting = $unit;
+			}
+		}
+
+		if ( null === $waiting ) {
+			if ( $ready > 0 ) {
 				return '';
 			}
 
-			$status = '' === $status ? $unit->status_label() : $status;
-		}
-
-		if ( '' === $status ) {
 			/* translators: %s: name of an action, «Передать в доставку». */
 			return sprintf( __( 'Сейчас доставку оформить нельзя: действие «%s» для этого заказа недоступно.', 'woodev-plugin-framework' ), $action->label() );
 		}
 
-		/* translators: 1: the marketplace status of the goods, 2: name of an action, «Передать в доставку». */
-		return sprintf( __( 'Сейчас заказ в статусе «%1$s»: доставку можно оформить, когда доступно действие «%2$s».', 'woodev-plugin-framework' ), $status, $action->label() );
+		$status = '' === $waiting->status_label() ? $waiting->status() : $waiting->status_label();
+
+		if ( 0 === $ready ) {
+			/* translators: 1: the marketplace status of the goods, 2: name of an action, «Передать в доставку». */
+			return sprintf( __( 'Сейчас заказ в статусе «%1$s»: доставку можно оформить, когда доступно действие «%2$s».', 'woodev-plugin-framework' ), $status, $action->label() );
+		}
+
+		/* translators: 1: the goods, 2: their marketplace status, 3: name of an action, «Передать в доставку». */
+		return sprintf( __( 'Не все товары заказа готовы: «%1$s» — в статусе «%2$s». Доставку можно оформить, когда действие «%3$s» доступно для всех товаров заказа.', 'woodev-plugin-framework' ), $waiting->label(), $status, $action->label() );
 	}
 
 	/**

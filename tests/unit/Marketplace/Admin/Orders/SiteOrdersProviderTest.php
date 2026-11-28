@@ -638,7 +638,9 @@ final class SiteOrdersProviderTest extends Label_Test_Case {
 
 		$this->assertTrue( $arrange['enabled'] );
 		$this->assertStringContainsString( 'deliver_order=101', $arrange['url'] );
-		$this->assertContains( 'Подтвердите вручение: нужен код покупателя.', array_column( $rows[ $this->row_id( 104 ) ]['cells']['status'], 'value' ) );
+		$badge = $rows[ $this->row_id( 104 ) ]['cells']['status'][1]['value'];
+
+		$this->assertSame( [ 'Проверьте', 'Подтвердите вручение: нужен код покупателя.' ], [ $badge['label'], $badge['tooltip'] ] );
 		$this->assertNotContains( 'delivery', array_column( $rows[ $this->row_id( 102 ) ]['actions'], 'id' ), 'An order the marketplace delivers has no link.' );
 	}
 

@@ -1770,19 +1770,18 @@ A paused account or a lapsed licence waits without spending a run; a switched-of
 
 **What the merchant sees** (`Admin\Shared\Carrier_State`, one reading for both screens):
 
-- a notice (order meta `_woodev_mp_carrier_notice`, tied to an action) in the details box and under the status in «Заказы», shown
-  only while a unit still takes that action — «Подтвердите вручение: нужен код покупателя.», the return, or why an action did
-  not go through;
+- a notice (order meta `_woodev_mp_carrier_notice`, tied to an action), shown only while a unit still takes that action —
+  «Подтвердите вручение: нужен код покупателя.», the return, or why an action did not go through: on top of the details box, and
+  in «Заказы» as a badge «Проверьте» under the status with the sentence in its tooltip;
 - «Оформить доставку» / «Изменить доставку» in the details box and as a row link in «Заказы», where a delivery plugin that takes
-  orders from the admin is active; off with the reason before the hand-over is available; gone once the shipment is created;
+  orders from the admin is active; off with the reason before the hand-over is available (a switched-off link row action still
+  carries an address — the table draws no link without one); gone once the shipment is created;
 - the delivery service and its tracking numbers (what the buyer sees) in the details box.
 
 `Admin\Order\Carrier_Delivery_Entry` is the [WD1 entry](#a-carrier-for-a-seller-delivered-order-2010): it refuses without the
-account, the right to write, the licence, or a unit in the hand-over's status, and warns in the wizard about a phone extension
+account, the right to write, the licence, or while any unit that can still be handed over is not in the hand-over's status (one
+shipment carries the whole order, so a partly confirmed grouped order waits; cancelled units do not count), and warns in the wizard about a phone extension
 (D13: not passed to a delivery service), the day the buyer chose and a pickup point address.
-
-**Limit.** A grouped order with some units not yet confirmed can get a delivery as soon as one unit takes the hand-over; the
-others are not handed over by the export and need the button.
 
 ## Sticker documents (#2005)
 

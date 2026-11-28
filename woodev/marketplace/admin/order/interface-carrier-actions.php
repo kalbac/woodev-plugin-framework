@@ -26,9 +26,10 @@ defined( 'ABSPATH' ) || exit;
  */
 interface Carrier_Actions extends Seller_Actions {
 	/**
-	 * The delivery service took the order over: sent by itself. «Оформить доставку» is on only while a unit takes this action. A
-	 * unit whose {@see Posting_Unit} list of actions names it gets the button, off with the reason, in every other status — so
-	 * list it only while the unit can still be handed over.
+	 * The delivery service took the order over: sent by itself. «Оформить доставку» is on only while EVERY unit that lists this
+	 * action ({@see Posting_Unit}) is in a status that offers it — cancelled units ({@see \Woodev\Framework\Marketplace\Flows\Order_Units})
+	 * do not count. So list it for a unit only while that unit can still be handed over: a unit that lists it in any other status
+	 * keeps the button off, with the reason.
 	 */
 	public const HANDED_OVER = 'handed_over';
 
