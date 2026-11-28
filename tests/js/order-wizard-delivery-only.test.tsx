@@ -336,6 +336,52 @@ describe( 'the shop pays for the delivery', () => {
 	} );
 } );
 
+describe( 'switching tariffs after a quote with the order payment method', () => {
+	/** Two couriers: what each costs in the plain list, and what it costs once the payment method is known. */
+	const couriers = ( first: number, second: number ) => [
+		tariff( 'cdek_courier', first, first, { label: 'Курьер А' } ),
+		tariff( 'other_courier', second, second, { label: 'Курьер Б' } ),
+	];
+
+	test( 'the newly chosen tariff is quoted again, and that quote is saved', async () => {
+		mockedFetch.mockImplementation( ( request: Request ) => {
+			if ( request.url.endsWith( '/301/edit' ) ) {
+				return Promise.resolve( { ...PREFILL, payment_method: 'cod' } );
+			}
+
+			if ( request.url.endsWith( '/rates' ) ) {
+				return Promise.resolve( answer( request.data?.payment_method ? couriers( 400, 500 ) : couriers( 300, 350 ) ) );
+			}
+
+			if ( 'PUT' === request.method ) {
+				return Promise.resolve( { id: 301, number: '301', message: 'Заказ №301 сохранён.' } );
+			}
+
+			return Promise.resolve( { country: 'RU', pickup: false, fields: [] } );
+		} );
+		( window as unknown as { woodevShippingOrders: { wizard: Record<string, unknown> } } ).woodevShippingOrders.wizard.paymentMethods = { cod: 'При получении' };
+
+		const { onSaved } = mount();
+
+		await toDeliveryStep();
+		fireEvent.click( await screen.findByRole( 'radio', { name: /Курьер А/ } ) );
+		expect( await screen.findByText( /Ваш расход на доставку: 400,00/ ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'radio', { name: /Курьер Б/ } ) );
+
+		// The plain list's 350 is not this order's cost: nothing is saved before the new quote answers.
+		save();
+		expect( requests( 'PUT' ) ).toHaveLength( 0 );
+
+		expect( await screen.findByText( /Ваш расход на доставку: 500,00/ ) ).toBeInTheDocument();
+		save();
+
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+		expect( requests( 'PUT' ) ).toHaveLength( 1 );
+		expect( requests( 'PUT' )[ 0 ].data?.shipping_line ).toMatchObject( { method_id: 'other_courier', cost: '500' } );
+	} );
+} );
+
 describe( 'buildFinalQuoteRequest', () => {
 	const data = ( paymentMethod: string ) =>
 		deliveryPrefillToData(

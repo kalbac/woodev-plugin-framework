@@ -300,7 +300,8 @@ export default function StepDelivery( { data, setData, errors, delivery }: StepP
 	const [ quoteError, setQuoteError ] = useState( '' );
 	const [ quoteAttempt, setQuoteAttempt ] = useState( 0 );
 	const finalRequest = delivery ? buildFinalQuoteRequest( data, wizard.paymentMethods ) : null;
-	const finalKey = ratesRequestKey( finalRequest );
+	// The request alone does not name the tariff (two couriers send the same one), and each tariff has its own final price.
+	const finalKey = null === finalRequest ? '' : `${ chosenRateId( data.rest ) }|${ ratesRequestKey( finalRequest ) }`;
 
 	// Runs after every answer of the tariffs above: that answer prices the tariff for no particular point, this one settles it.
 	useEffect( () => {
@@ -354,7 +355,7 @@ export default function StepDelivery( { data, setData, errors, delivery }: StepP
 			cancelled = true;
 			clearTimeout( timer );
 		};
-		// `finalKey` is the request; the object identities are not the question.
+		// `finalKey` is the tariff and the request; the object identities are not the question.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ finalKey, rates.phase, rates.response, quoteAttempt ] );
 
