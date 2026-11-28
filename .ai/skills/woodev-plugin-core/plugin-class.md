@@ -208,9 +208,12 @@ the seller delivers» (#2007). Framework 2.1.29.
   coordinates, the chosen day and the extension come from `Flows\Seller_Order::delivery()`.
 - Never write your own shipping line for the marketplace's delivery price, and never touch a line another writer added.
 - The merchant cannot change the shipping method on such an order's screen (items stay locked); the delivery wizard does (#2010).
-- **A limit to state in the plugin's own docs:** such an order has no buyer e-mail, and WordPress' export and erase requests find
-  orders by e-mail. They reach it only if somebody added one. Without it, «Remove personal data» of the orders list (a
-  WooCommerce setting) and WooCommerce's clean-up of old orders erase the data; nothing exports it.
+- **A limit to state in the plugin's own docs** (waived for 1.0 by the coordinator, 28.11.2026): the buyer has no e-mail, and
+  WordPress' export tool finds a person by e-mail or username, so it cannot identify the buyer of such an order. Export and erase
+  requests reach it only if somebody added an e-mail. Without one, «Remove personal data» of the orders list (a WooCommerce
+  setting) and WooCommerce's clean-up of old orders erase the data; nothing exports it.
+- A linked line of a unit is shown under the shop product's name; the `Order_Line` name you give is for a line the shop has not
+  linked, so give the marketplace's title there when it has one, not the article.
 - Hide the item meta you write in `write_line_meta()` with `woocommerce_hidden_order_itemmeta`: the order screen shows keys that
   start with `_` too (gotcha `wc-order-screen-shows-underscore-item-meta`). The framework hides its own.
 

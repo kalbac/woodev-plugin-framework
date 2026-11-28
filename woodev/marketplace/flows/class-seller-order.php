@@ -107,6 +107,21 @@ final class Seller_Order {
 	}
 
 	/**
+	 * Returns the values the framework itself wrote into the order's fields, by group: what the marketplace reported before the
+	 * merchant made a group their own. Personal data.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return array<string,array<string,string>> Value by order field, by group.
+	 */
+	public static function seeded( \WC_Order $order ): array {
+		$stored = $order->get_meta( self::META_SEEDED );
+
+		return is_array( $stored ) ? $stored : [];
+	}
+
+	/**
 	 * Removes the buyer's data the framework keeps on an order and saves the order when there was some. The order's own fields are
 	 * not touched: WooCommerce's erasure tools anonymise those.
 	 *

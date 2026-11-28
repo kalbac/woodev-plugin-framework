@@ -261,6 +261,36 @@ class SellerDeliveredOrdersTest extends TestCase {
 	}
 
 	/**
+	 * The marketplace reports a phone, the merchant corrects it, the marketplace reports another: WooCommerce's export carries the
+	 * correction, the latest report and the one the framework wrote first, and the erasure removes them all.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos Datastore.
+	 * @return void
+	 */
+	public function test_the_export_carries_what_was_reported_before_a_correction( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$order_id = $this->write( '1', $this->delivery() );
+		$this->save_in_panel( $order_id, [ 'phone' => '+79992222222' ] );
+		$this->write( '1', $this->delivery()->with_phone( '+79993333333' ), '2026-11-03T10:00:00Z' );
+
+		$order = wc_get_order( $order_id );
+		$order->set_billing_email( self::BUYER_EMAIL );
+		$order->save();
+
+		$exported = wp_json_encode( \WC_Privacy_Exporters::order_data_exporter( self::BUYER_EMAIL, 1 ), JSON_UNESCAPED_UNICODE );
+
+		foreach ( [ '+79991111111', '+79992222222', '+79993333333' ] as $phone ) {
+			$this->assertStringContainsString( $phone, $exported );
+		}
+
+		\WC_Privacy_Erasers::order_data_eraser( self::BUYER_EMAIL, 1 );
+
+		$this->assertSame( [], Seller_Order::seeded( wc_get_order( $order_id ) ) );
+	}
+
+	/**
 	 * The account's deletion removes the marketplace's data from the order, and the order stays.
 	 *
 	 * @dataProvider datastore_provider

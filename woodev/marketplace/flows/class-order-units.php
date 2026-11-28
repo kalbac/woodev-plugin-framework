@@ -122,12 +122,10 @@ final class Order_Units {
 		$lines = array_map(
 			static function ( Order_Line $line ) use ( $product_id_of ): array {
 				$product_id = (int) $product_id_of( $line );
-				$name       = $line->name();
-
-				if ( '' === $name && $product_id > 0 ) {
-					$product = wc_get_product( $product_id );
-					$name    = $product instanceof \WC_Product ? $product->get_name() : '';
-				}
+				$product    = $product_id > 0 ? wc_get_product( $product_id ) : null;
+				// A linked line is named like the order's item, after the shop product; the marketplace's name (often only the
+				// article) is for a line the shop has not linked.
+				$name = $product instanceof \WC_Product && '' !== $product->get_name() ? $product->get_name() : $line->name();
 
 				return [
 					'product_id' => $product_id,

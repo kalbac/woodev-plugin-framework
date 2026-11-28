@@ -13721,6 +13721,22 @@ msgstr ""
 msgid "Выбранный день доставки"
 msgstr ""
 
+#: marketplace/flows/class-order-privacy.php:208
+msgid "Получатель, записанный в заказ от маркетплейса"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:209
+msgid "Телефон, записанный в заказ от маркетплейса"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:210
+msgid "Адрес, записанный в заказ от маркетплейса"
+msgstr ""
+
+#: marketplace/flows/class-order-privacy.php:211
+msgid "Комментарий, записанный в заказ от маркетплейса"
+msgstr ""
+
 #. translators: %s: the marketplace's word for a shipment, «поставка».
 #: marketplace/admin/pages/orders/class-site-orders-shipments.php:239
 #, php-format

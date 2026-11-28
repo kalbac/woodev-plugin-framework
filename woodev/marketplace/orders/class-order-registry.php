@@ -99,13 +99,19 @@ final class Order_Registry {
 	 *
 	 * @param int $account_id Account id.
 	 * @param int $limit      Most rows to return.
-	 * @return array<string,int> WooCommerce order id by group key; 0 for a posting without an order.
+	 * @return array<string,int> WooCommerce order id by group key; 0 for a posting without an order. Empty only when none is left.
+	 * @throws \RuntimeException When the database refused the read, which must not be taken for «none left».
 	 */
 	public function batch_of_account( int $account_id, int $limit ): array {
 		$rows = $this->db->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- The deletion reads what is left.
 			$this->db->prepare( 'SELECT external_key, wc_order_id FROM %i WHERE account_id = %d ORDER BY external_key LIMIT %d', $this->table, $account_id, max( 1, $limit ) ),
 			'ARRAY_A'
 		);
+
+		// A failed read answers with no rows too; only the error tells them apart.
+		if ( '' !== (string) $this->db->last_error ) {
+			throw new \RuntimeException( 'The postings could not be read: ' . $this->db->last_error ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
 
 		$batch = [];
 

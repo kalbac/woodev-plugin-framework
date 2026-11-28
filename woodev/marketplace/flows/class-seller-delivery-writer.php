@@ -146,8 +146,7 @@ final class Seller_Delivery_Writer {
 	 * @return void
 	 */
 	private function seed_fields( \WC_Order $wc_order, Seller_Delivery $delivery ): void {
-		$seeded = $wc_order->get_meta( Seller_Order::META_SEEDED );
-		$seeded = is_array( $seeded ) ? $seeded : [];
+		$seeded = Seller_Order::seeded( $wc_order );
 
 		foreach ( self::wanted_values( $delivery ) as $group => $values ) {
 			$current = self::read_group( $wc_order, $group );

@@ -1612,7 +1612,7 @@ one-order posting (`upsert()`, Ozon) keeps no units, tags no line and announces 
 |---|---|
 | One line item per live unit, item meta `_woodev_mp_unit` = the member's external id | the writer tags each line (`Order_Line::with_unit()`), `Wc_Order_Store` writes and matches it: two equal units are two items, and only the cancelled one leaves |
 | A cancelled unit's item leaves the order | only its stock comes back; the other items stay, with their taxes and stock records, and the tax lines are worked out again from them. The order is `cancelled` only when every unit is |
-| Unit records, order meta `_woodev_mp_units` (`Flows\Order_Units`, value `Flows\Order_Unit`) | every unit: id, marketplace status, cancellation time (UTC), lines (shop product id, article key, name, quantity, price). A live record follows the marketplace; a **cancelled one is final** |
+| Unit records, order meta `_woodev_mp_units` (`Flows\Order_Units`, value `Flows\Order_Unit`) | every unit: id, marketplace status, cancellation time (UTC), lines (shop product id, article key, name — the linked shop product's since 2.1.29, else the marketplace's —, quantity, price). A live record follows the marketplace; a **cancelled one is final** |
 | `woodev_marketplace_{created_via}_units_cancelled( int $account_id, string[] $offer_ids, \WC_Order $order )` | fired for units newly cancelled, one first seen cancelled included, after the stock was settled and **before** the records are stored (a death in between repeats it) |
 | The stock pair goes out again (`Stock_Intents::on_units_cancelled()`, `Sync_State_Store::request_resend()`) | the marketplace need not give a cancelled unit back, so the pair is due although the number equals the accepted one, a pair that had used up its attempts included (the count restarts, a wait stays). No schema change: the sent and the in-flight payload are forgotten, so a send on its way settles nothing |
 
@@ -1675,9 +1675,12 @@ link from «Аналитика» (`Site_Orders_Filter::posting_status_value()`):
 
 **Personal data.** `Flows\Order_Privacy` plugs into WooCommerce's order exporter and eraser (`woocommerce_privacy_*`), so the
 e-mail requests of WordPress, «Remove personal data» of the orders list and the retention clean-up export and erase the module's
-meta with the order; an erased order (`_anonymized`) is never given buyer data again. **A marketplace order has no buyer e-mail**,
-so an e-mail request finds it only when somebody added one; the bulk action and the clean-up need no e-mail. Account deletion
-removes the module's buyer meta from the account's orders (`Deletion\Posting_Eraser`); the order's own fields stay.
+meta with the order — the export includes the values first written into the order's fields, which a merchant's correction leaves
+in `_woodev_mp_delivery_seeded`; an erased order (`_anonymized`) is never given buyer data again. **A marketplace order has no
+buyer e-mail**, so an e-mail request finds it only when somebody added one (waived for 1.0, coordinator, 28.11.2026: WordPress'
+export is keyed by e-mail or username); the bulk action and the clean-up need no e-mail. Account deletion
+removes the module's buyer meta from the account's orders (`Deletion\Posting_Eraser`); the order's own fields stay. A refused
+read of the postings is a failed run (retried), never «none left».
 
 ## Sticker documents (#2005)
 

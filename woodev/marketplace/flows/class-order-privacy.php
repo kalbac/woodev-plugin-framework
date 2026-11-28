@@ -13,8 +13,9 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * An order the seller delivers holds the buyer's data twice: in its own fields, which WooCommerce exports and erases itself, and in
- * the marketplace's data the framework keeps ({@see Seller_Order}). This adds the second to WooCommerce's order exporter and
- * erasure, so every tool that reaches the order handles both: the export and erasure requests of WordPress (they find an order by
+ * the marketplace's data the framework keeps ({@see Seller_Order}): what the marketplace says now, its own data of the order, and
+ * the values written into the order's fields. This adds the second to WooCommerce's order exporter and erasure, so every tool that
+ * reaches the order handles both: the export and erasure requests of WordPress (they find an order by
  * its billing e-mail), «Remove personal data» of the orders list, and WooCommerce's clean-up of old orders.
  *
  * The erasure also empties the order's comment when the marketplace sent one, and WooCommerce marks the order, so no later read
@@ -95,8 +96,12 @@ final class Order_Privacy {
 		}
 
 		$delivery = Seller_Order::delivery( $order );
+		$pairs    = array_merge(
+			null === $delivery ? [] : self::delivery_pairs( $delivery ),
+			self::seeded_pairs( Seller_Order::seeded( $order ) )
+		);
 
-		foreach ( null === $delivery ? [] : self::delivery_pairs( $delivery ) as $name => $value ) {
+		foreach ( $pairs as $name => $value ) {
 			if ( '' !== $value ) {
 				$data[] = [
 					'name'  => $name,
@@ -189,5 +194,31 @@ final class Order_Privacy {
 			__( 'Комментарий покупателя (от маркетплейса)', 'woodev-plugin-framework' ) => $delivery->comment(),
 			__( 'Выбранный день доставки', 'woodev-plugin-framework' )                => trim( $delivery->date() . ' ' . $delivery->time_from() . ( '' === $delivery->time_to() ? '' : '–' . $delivery->time_to() ) ),
 		];
+	}
+
+	/**
+	 * The values the framework wrote into the order's fields, as the export shows them. After the merchant corrects a field these
+	 * still hold what the marketplace reported then, which neither the order's own fields nor the latest delivery data say.
+	 *
+	 * @param array<string,array<string,string>> $seeded {@see Seller_Order::seeded()}.
+	 * @return array<string,string> Value by name.
+	 */
+	private static function seeded_pairs( array $seeded ): array {
+		$names = [
+			'recipient' => __( 'Получатель, записанный в заказ от маркетплейса', 'woodev-plugin-framework' ),
+			'phone'     => __( 'Телефон, записанный в заказ от маркетплейса', 'woodev-plugin-framework' ),
+			'address'   => __( 'Адрес, записанный в заказ от маркетплейса', 'woodev-plugin-framework' ),
+			'comment'   => __( 'Комментарий, записанный в заказ от маркетплейса', 'woodev-plugin-framework' ),
+		];
+		$pairs = [];
+
+		foreach ( $names as $group => $name ) {
+			// The billing and shipping fields of a group usually hold the same value: it is listed once.
+			$values = array_unique( array_filter( array_map( 'strval', (array) ( $seeded[ $group ] ?? [] ) ), 'strlen' ) );
+
+			$pairs[ $name ] = implode( ', ', $values );
+		}
+
+		return $pairs;
 	}
 }

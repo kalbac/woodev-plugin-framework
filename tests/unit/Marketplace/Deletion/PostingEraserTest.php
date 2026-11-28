@@ -54,4 +54,22 @@ final class PostingEraserTest extends TestCase {
 		$this->assertSame( [ Seller_Order::META_SELLER_DELIVERED => 'yes' ], $order->meta );
 		$this->assertSame( '', $order->props['shipping_phone'], 'The order fields are not touched.' );
 	}
+
+	public function test_a_refused_read_is_an_error_and_not_the_end_of_the_postings(): void {
+		$db       = new Sqlite_Wpdb();
+		$registry = new Order_Registry( $db, Sqlite_Tables::table( 'postings' ) );
+		Sqlite_Tables::install( $db );
+		$registry->reserve( 1, 'cart-1' );
+		$db->fail_reads = true;
+
+		try {
+			( new Posting_Eraser( $registry ) )->delete_account( 1, 500 );
+			$this->fail( 'A refused read must not answer «nothing left».' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'could not be read', $e->getMessage() );
+		}
+
+		$db->fail_reads = false;
+		$this->assertSame( 1, $registry->count_for_account( 1 ) );
+	}
 }
