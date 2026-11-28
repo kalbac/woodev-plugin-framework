@@ -655,6 +655,23 @@ namespace Woodev\Tests\Unit\Shipping {
 			$this->assertSame( 350, $restored->get_cost() );
 		}
 
+		/**
+		 * #2010: a rate made free for the customer comes back from the cache still knowing what the carrier asked.
+		 *
+		 * @return void
+		 */
+		public function test_a_hit_restores_the_carrier_cost(): void {
+			$cache  = new Shipping_Rate_Cache();
+			$method = $this->method();
+
+			$this->assertTrue( $cache->put( $method, $this->package(), $this->rate()->with_cost( 0 ) ) );
+
+			$restored = $cache->get( $method, $this->package() );
+
+			$this->assertSame( 0, $restored->get_cost() );
+			$this->assertSame( 350.0, $restored->get_carrier_cost() );
+		}
+
 		/** @return void */
 		public function test_a_carrier_exception_is_not_cached(): void {
 			$method                 = $this->method();

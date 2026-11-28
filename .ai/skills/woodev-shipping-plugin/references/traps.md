@@ -48,6 +48,12 @@ Each detail link records the failure and the correct seam. Check the relevant en
   `CANCELLED` arrives (yandex PR #115): [pending-cancel gotcha](../../../../docs-internal/gotchas/a-carrier-cancel-reply-can-mean-accepted-but-pending.md).
 - A quote in a currency other than the store's is refused BEFORE the API call (edostavka PR #114).
 
+- **Your shipping line may not be the first one, nor carry the price** (#2010): an order another module owns (a marketplace order the seller
+  delivers) keeps that module's shipping line, and the wizard adds yours AFTER it with total 0 — your price is in the item meta
+  `_woodev_shipping_seller_cost`. Find your line by method id (`Shipping_Helper::get_order_shipping_item()`, or a loop over
+  `get_items( 'shipping' )` that checks the id), never `[0]` / `reset()`. Such an order has an empty payment method (paid elsewhere) and
+  usually no buyer e-mail: neither may be required by the export.
+
 ### Plugin identity and wiring
 
 - `get_plugin_name()` runs before `init`: return a plain, untranslated string: [get_plugin_name gotcha](../../../../docs-internal/gotchas/get-plugin-name-runs-before-init-so-a-translated-name-warns.md).

@@ -43,6 +43,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 	 *    (`export_now` is ignored — an edit never exports, O4);
 	 *    load → `200` the prefill in the same shape the create / update body takes, plus an `order`
 	 *    block (`id`, `number`, `status`, `is_paid`, `total`, `currency`) the O14 warning reads.
+	 *  - **Delivery only** (#2010) — for an order a {@see \Woodev\Framework\Shipping\Admin\Orders\Delivery_Entry} claims, load
+	 *    adds `entry: 'delivery'` and `notices`, and update reads only the delivery keys (`shipping`, `shipping_line`,
+	 *    `pickup_point`, `fields`, `carrier_fields`, `location`). Such an order answers before it is a row of the page.
 	 *
 	 * The payload's own shape is validated by the service ({@see \Woodev\Framework\Shipping\Admin\Orders\Order_Payload_Validator}),
 	 * not by REST argument schemas: a schema mismatch would answer 400 and leave the contract above
