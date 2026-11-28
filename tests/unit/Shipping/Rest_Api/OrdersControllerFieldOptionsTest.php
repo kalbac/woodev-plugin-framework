@@ -5,7 +5,7 @@
  *
  * Covers: the same gate as the write route (capability, order, carrier, the action being offered now), the field having
  * to be a declared `async_options` select, the carrier's answer being re-sanitised, an empty list being a valid 200, a
- * carrier `WP_Error` / exception / non-list answer being a 502, and a list row carrying NO options.
+ * carrier `WP_Error` being a 422, an exception / non-list answer a 502, and a list row carrying NO options.
  *
  * @package Woodev\Tests\Unit\Shipping\Rest_Api
  */
@@ -371,7 +371,7 @@ final class OrdersControllerFieldOptionsTest extends TestCase {
 		$this->assertSame( 0, $calls, 'a locked order never reaches the carrier options' );
 	}
 
-	public function test_a_carrier_wp_error_passes_its_merchant_sentence_on_as_a_502(): void {
+	public function test_a_carrier_wp_error_passes_its_merchant_sentence_on_as_a_422(): void {
 		$this->register_provider();
 		$this->register_handler();
 		$this->stub_interval_action( new \WP_Error( 'x', 'Яндекс Доставка не ответила.' ) );
@@ -380,7 +380,7 @@ final class OrdersControllerFieldOptionsTest extends TestCase {
 		$result = $this->controller()->get_field_options( $this->request( 123, 'pick_interval', 'interval' ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
 		$this->assertSame( 'Яндекс Доставка не ответила.', $result->get_error_message() );
 	}
 
@@ -396,6 +396,7 @@ final class OrdersControllerFieldOptionsTest extends TestCase {
 				},
 				null,
 				'not a list',
+				new \WP_Error( 'x', '' ),
 			] as $answer
 		) {
 			$this->stub_interval_action( $answer );

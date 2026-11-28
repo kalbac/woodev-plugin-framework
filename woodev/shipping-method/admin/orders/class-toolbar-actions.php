@@ -302,12 +302,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 		 * stale, and a row action the carrier does not currently offer on that row is refused, never forwarded.
 		 *
 		 * @since 2.0.2
+		 * @since 2.1.29 Card #1979: `threw` marks a handler that threw, to tell it from a refusal.
 		 *
 		 * @param string $id         the toolbar action id.
 		 * @param string $tab_id     the list tab's id.
 		 * @param string $row_id     the row's id.
 		 * @param string $row_action the button's id.
-		 * @return array{available:bool,ok?:bool,message?:string,confirm?:string} `available` false => the dialog, tab, row or button is not on offer.
+		 * @return array{available:bool,ok?:bool,message?:string,confirm?:string,threw?:bool} `available` false => the dialog, tab, row or button is not on offer.
 		 */
 		public function perform_row_action( string $id, string $tab_id, string $row_id, string $row_action ): array {
 			$dialog = $this->dialog( $id );
@@ -423,7 +424,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 		 * @param string $tab_id     the list tab's id.
 		 * @param string $row_id     the row's id.
 		 * @param string $row_action the button's id.
-		 * @return array{available:bool,ok:bool,message:string}
+		 * @return array{available:bool,ok:bool,message:string,threw?:bool}
 		 */
 		private function run_row_action( string $id, string $tab_id, string $row_id, string $row_action ): array {
 			try {
@@ -451,6 +452,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 					'available' => true,
 					'ok'        => false,
 					'message'   => __( 'Сервис перевозчика временно недоступен. Попробуйте повторить действие позже.', 'woodev-plugin-framework' ),
+					'threw'     => true,
 				];
 			}
 

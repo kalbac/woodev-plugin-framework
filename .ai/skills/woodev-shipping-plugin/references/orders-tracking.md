@@ -175,6 +175,10 @@ Compiled reference: "Shipping orders page" in `docs-internal/wiki/architecture.m
   `help`), an `icon` (Dashicons slug without `dashicons-`), and `destructive => true` with a `confirm` sentence. The values arrive
   validated as the `array $payload` argument of `woodev_shipping_perform_order_action` (422 `woodev_shipping_orders_invalid_payload`
   on a bad value). A bulk run skips an action that needs fields.
+- **A refusal is `Action_Result::failure( $reason )`, never a thrown exception** (#1979). The routes answer a failure `422` with your
+  sentence and a throw `502` with a generic one. In a REST route of your own, answer a carrier's refusal 4xx too: a proxy or a bot
+  filter may replace the body of a 5xx, and the merchant loses the reason
+  ([gotcha](../../../../docs-internal/gotchas/a-5xx-refusal-can-reach-the-browser-with-a-replaced-body.md)).
 - **A `select` field may load its options when the dialog opens (#1285).** Declare `async_options` on the field: the row ships with no
   options, the opened dialog calls `GET woodev/v1/shipping/orders/{id}/actions/{action}/fields/{field}/options` (capability `edit_shop_orders`,
   the same offered-action and edit-lock gate as the write route) and your callback on the filter
