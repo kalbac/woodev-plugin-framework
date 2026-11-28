@@ -44,9 +44,26 @@ test( 'saved accounts and the add block are told apart', () => {
 } );
 
 test( 'the status line says «Выключен» for a switched-off account and shows the stored message otherwise', () => {
-	expect( cardStatus( account( 1, { enabled: false } ) ) ).toEqual( { ok: false, text: 'Выключен' } );
-	expect( cardStatus( account( 1 ) ) ).toEqual( { ok: true, text: 'Подключено' } );
-	expect( cardStatus( { ...account( 1 ), status: null } ).ok ).toBe( false );
+	expect( cardStatus( account( 1, { enabled: false } ) ) ).toEqual( { tone: 'error', text: 'Выключен' } );
+	expect( cardStatus( account( 1 ) ) ).toEqual( { tone: 'ok', text: 'Подключено' } );
+	expect( cardStatus( { ...account( 1 ), status: null } ) ).toEqual( { tone: 'error', text: 'Подключение не проверялось' } );
+} );
+
+test( 'a connection with limits is a warning, not a success, and a check under way is said in a neutral line', () => {
+	const limited = { ...account( 1 ), status: { success: true, warning: true, message: 'Токен только для чтения' } };
+
+	expect( cardStatus( limited ) ).toEqual( { tone: 'warning', text: 'Токен только для чтения' } );
+	expect( cardStatus( { ...account( 1 ), status: null }, true ) ).toEqual( { tone: 'pending', text: 'Проверяем подключение…' } );
+	expect( cardStatus( account( 1, { enabled: false } ), true ).text ).toBe( 'Выключен' );
+} );
+
+test( 'a card colours its line by tone and shows the check the page is running', () => {
+	view( [ { ...account( 1 ), status: { success: true, warning: true, message: 'Только чтение' } }, { ...account( 2 ), status: null }, adder ], {
+		checkingIds: [ 'account_connection_2' ],
+	} );
+
+	expect( screen.getByText( 'Только чтение' ) ).toHaveClass( 'is-warning' );
+	expect( screen.getByText( 'Проверяем подключение…' ) ).toHaveClass( 'is-pending' );
 } );
 
 test( 'with no account the wrapper says to add the first one, and «Добавить аккаунт» opens the form', () => {

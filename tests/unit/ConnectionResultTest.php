@@ -37,6 +37,21 @@ class ConnectionResultTest extends TestCase {
 	}
 
 	/**
+	 * A warning is a success that says so; only a warning carries the key in the payload.
+	 *
+	 * @return void
+	 */
+	public function test_warning_factory() {
+		$r = \Woodev_Connection_Result::warning( 'Только чтение' );
+
+		$this->assertTrue( $r->is_success() );
+		$this->assertTrue( $r->is_warning() );
+		$this->assertSame( [ 'success' => true, 'message' => 'Только чтение', 'warning' => true ], $r->to_array() );
+		$this->assertFalse( \Woodev_Connection_Result::success( 'ok' )->is_warning() );
+		$this->assertArrayNotHasKey( 'warning', \Woodev_Connection_Result::success( 'ok' )->to_array() );
+	}
+
+	/**
 	 * The REST payload shape carries the success flag and message.
 	 *
 	 * @return void

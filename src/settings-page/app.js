@@ -13,7 +13,7 @@ import { __ } from '@wordpress/i18n';
 import { dispatch, useSelect } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { Button, Notice, Spinner, Card, CardBody, SnackbarList } from '@wordpress/components';
-import { fetchSchema, saveTab } from './rest';
+import { fetchSchema, saveTab, testConnection } from './rest';
 import { setBootstrap } from './bootstrap';
 import { validateFields, isFieldVisible, isFieldDisabled } from '../components/validate';
 import { getProviderMismatchError } from '../components/location-picker-field';
@@ -142,6 +142,30 @@ export function sectionHasSaveButton( section ) {
 }
 
 /**
+ * The accounts a save has left with no stored connection status: the saved block's own account and any account the save added.
+ * A switched-off account is not checked — it makes no requests.
+ *
+ * @since 2.1.28
+ * @param {Object} before         the tab as it was when Save was pressed.
+ * @param {Object} after          the tab read again after the save.
+ * @param {string} savedSectionId the saved section.
+ * @return {Object[]} the sections to check.
+ */
+export function accountsToCheck( before, after, savedSectionId ) {
+	const known = new Set( ( before.sections || [] ).map( ( section ) => section.id ) );
+
+	return ( after.sections || [] ).filter(
+		( section ) =>
+			!! section.card &&
+			! section.card.new &&
+			section.card.enabled &&
+			section.supports_test &&
+			! section.status &&
+			( section.id === savedSectionId || ! known.has( section.id ) )
+	);
+}
+
+/**
  * The settings body.
  *
  * Mounted by `index.js` on Woodev → Настройки with no props. Embedded in a marketplace plugin's own page it receives
@@ -162,6 +186,7 @@ export default function App( { bootstrap = null } ) {
 	const [ fieldErrors, setFieldErrors ] = useState( {} ); // { providerId: { settingId: message } }
 	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
 	const [ noticeSection, setNoticeSection ] = useState( '' ); // section whose save the inline notices report (stacked tabs).
+	const [ checking, setChecking ] = useState( [] ); // `tab:section` of every connection check a save has started and not heard from.
 	// A body embedded in a marketplace plugin's own page gets `bootstrap`; the Woodev page (delivery and payment plugins) gets none.
 	// The marketplace look (wider label column, visible switch explanations, a Save that reads as a button at rest) hangs on this.
 	const isMarketplace = !! ( bootstrap && bootstrap.placement );
@@ -367,6 +392,10 @@ export default function App( { bootstrap = null } ) {
 					.then( ( res ) => {
 						if ( res && res.tabs ) {
 							setTabs( res.tabs );
+							const saved = res.tabs.find( ( other ) => other.id === providerId );
+							if ( saved ) {
+								checkAccounts( providerId, accountsToCheck( tab, saved, section.id ) );
+							}
 						}
 						// #1326: drop only the values that were SUBMITTED. An edit typed
 						// while the save/refetch was pending differs from the snapshot and
@@ -398,8 +427,8 @@ export default function App( { bootstrap = null } ) {
 			} );
 	};
 
-	// The deletion dialog changes the cards (an account is gone, or a deletion is running): read them again.
-	const refreshTabs = () => {
+	// The cards changed on the server (an account is gone or being deleted, a connection was checked): read them again.
+	const refreshTabs = () =>
 		fetchSchema()
 			.then( ( res ) => {
 				if ( res && res.tabs ) {
@@ -407,6 +436,21 @@ export default function App( { bootstrap = null } ) {
 				}
 			} )
 			.catch( () => {} );
+
+	// A saved account that nothing has checked yet is checked at once, so its card never says «not checked» after «Сохранить».
+	// The check sends no values: the server tests what it has just stored, and stores what it hears.
+	const checkAccounts = ( providerId, sections ) => {
+		sections.forEach( ( section ) => {
+			const key = `${ providerId }:${ section.id }`;
+			setChecking( ( prev ) => [ ...prev, key ] );
+
+			testConnection( providerId, section.id, {} )
+				.catch( ( err ) =>
+					showBlockSnackbar( `check:${ key }`, 'error', ( err && err.message ) || __( 'Ошибка проверки.', 'woodev-plugin-framework' ) )
+				)
+				.then( refreshTabs )
+				.then( () => setChecking( ( prev ) => prev.filter( ( other ) => other !== key ) ) );
+		} );
 	};
 
 	// An account card's on/off switch saves at once, on its own: the staged edits of the open forms are neither sent nor lost.
@@ -430,6 +474,10 @@ export default function App( { bootstrap = null } ) {
 			.then( ( res ) => {
 				if ( res && res.tabs ) {
 					setTabs( res.tabs );
+					const switched = res.tabs.find( ( other ) => other.id === tab.id );
+					if ( enabled && switched ) {
+						checkAccounts( tab.id, accountsToCheck( tab, switched, section.id ) );
+					}
 				}
 			} )
 			.catch( ( err ) => {
@@ -510,6 +558,8 @@ export default function App( { bootstrap = null } ) {
 						}
 						showErrors={ !! showErrors[ tab.id ] }
 						serverErrors={ fieldErrors[ tab.id ] || {} }
+						checking={ checking.includes( `${ tab.id }:${ section.id }` ) }
+						onTested={ section.card ? refreshTabs : undefined }
 					/>
 					{ sectionHasSaveButton( section ) && (
 						<div className="woodev-settings__actions">
@@ -545,6 +595,7 @@ export default function App( { bootstrap = null } ) {
 							renderSection={ renderSection }
 							onAccountsChanged={ refreshTabs }
 							onToggleEnabled={ ( section, enabled ) => onToggleAccount( tab, section, enabled ) }
+							checkingIds={ ( tab.sections || [] ).map( ( section ) => section.id ).filter( ( id ) => checking.includes( `${ tab.id }:${ id }` ) ) }
 						/>
 					) : isStackedTab( tab ) ? (
 						<StackedView tab={ tab } renderSection={ renderSection } />
@@ -560,11 +611,15 @@ export default function App( { bootstrap = null } ) {
 					setSaved( '' );
 				} }
 			/>
-			<SnackbarList
-				className="woodev-settings__snackbars"
-				notices={ snackbars }
-				onRemove={ ( id ) => dispatch( noticesStore ).removeNotice( id ) }
-			/>
+			{ /* A marketplace page is a wc-admin page, which shows the notices store's snackbars itself: a list of ours would
+			     show every one of them twice. */ }
+			{ ! isMarketplace && (
+				<SnackbarList
+					className="woodev-settings__snackbars"
+					notices={ snackbars }
+					onRemove={ ( id ) => dispatch( noticesStore ).removeNotice( id ) }
+				/>
+			) }
 		</div>
 	);
 }
