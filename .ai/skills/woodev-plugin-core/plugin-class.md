@@ -161,6 +161,38 @@ public function posting_noun(): Posting_Noun {
   implement the marker `Flows\Releases_Reset_Imports` (`woodev/marketplace/flows/interface-releases-reset-imports.php`): the
   reset then closes the card's open import items. Do not declare it if a second send could collide with the first.
 
+## A marketplace adapter: a send that may outlast the account claim
+
+For an export whose own reads, waits or several write requests may take longer than the account claim
+(`Jobs\Job_Gate::CLAIM_TTL`, 120 s); the full design is `docs-internal/wiki/marketplace-admin.md`, «The run's claim handed to
+the export gateway» (#2054). Framework 2.1.29 — require it before you declare the interface, an older copy has no such class.
+
+- Your `Export_Gateway` also implements `Flows\Receives_Export_Claim`
+  (`woodev/marketplace/flows/interface-receives-export-claim.php`). The `export_batch` job calls
+  `receive_export_claim( $account, $hold )` once per run, before `build_item()` and `submit()`. Keep `$hold`, replacing the
+  one before; send nothing from there.
+- Call `$hold()` between your remote calls and right before each write. It extends this run's claim and throws
+  `Jobs\Claim_Lost` when the claim is no longer yours.
+- Let `Claim_Lost` through as it is: no `catch ( \Throwable $e )` around it that swallows it or wraps it in your API
+  exception. The job then leaves the task and links alone and the recovery sweep queues the links again.
+- **Do not read the claim token from the account row** to prove the claim yourself: by your first card the row may hold another
+  run's token, and the paused run acts under it.
+
+```php
+public function receive_export_claim( Account $account, callable $hold ): void {
+	$this->hold = $hold;
+}
+
+public function submit( Account $account, array $items, string $context ): string {
+	call_user_func( $this->hold ); // Throws once another run owns the account.
+	$this->upload_media( $account, $items ); // Slow: may outlast the claim.
+
+	call_user_func( $this->hold ); // Right before the write.
+
+	return $this->api->send_cards( $account, $items ); // The remote task id.
+}
+```
+
 ## A marketplace adapter: one price for several links
 
 For a marketplace whose price belongs to a card and not to a size; the full design is `docs-internal/wiki/marketplace-admin.md`,

@@ -18,6 +18,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Builds a card in the marketplace's shape and sends a batch of them. The `export_batch` job owns everything around the call
  * (the gate, the claim, the task row, the retry ladder); this contract owns the card and the request.
+ * A gateway that must prove the claim in the middle of its own work asks for it with {@see Receives_Export_Claim}.
  *
  * @since 2.1.0
  */
