@@ -1710,12 +1710,19 @@ the framework's «Доставка …» line is not touched), the marker, point
 The line totals 0; the price is item meta `_woodev_shipping_seller_cost` (installed-site contract). The checkout's «removed»
 address fields keep their stored value. The row action reads «Изменить доставку».
 
+**Which price is stored.** The carrier's, not the customer's: `Shipping_Rate::get_carrier_cost()` — the cost the rate was first
+built with, kept through `with_cost()` and the rate cache (shape 3) — reaches the wizard as `carrier_cost` of the rates answer
+(the calculator listens to `woodev_shipping_method_before_add_rate`), and step ④ shows and saves it. Step ④ also asks the final
+quote itself (there is no step ⑤): for the chosen pickup point and the order's payment method, when the shop offers it. While
+that quote is pending or failed «Сохранить доставку» is held. Create, edit and checkout prices are unchanged.
+
 **With WF9's seed-then-leave-alone:** the address is the merchant's after the save; a name or phone the manager did not change
 still follows the marketplace's later reads.
 
 **Limits.** As for any wizard edit, an order whose city is filled but has no saved settlement record asks for the settlement to be
 picked through the search. Without a registered entry (the marketplace plugin off) such a row is edited by the full editor, like
-any order. The orders table names both shipping lines and the buyer-paid sum (#2073). A carrier must find its line by method id
+any order. The orders table names both shipping lines and the buyer-paid sum (#2073). Yandex Delivery builds its rate without
+the insurance the shop pays itself, so the stored cost lacks it until the plugin names its carrier price (#2075). A carrier must find its line by method id
 (CDEK, Yandex, Russian Post and Ozon Delivery were read on 28.11.2026 and do).
 
 ## Sticker documents (#2005)

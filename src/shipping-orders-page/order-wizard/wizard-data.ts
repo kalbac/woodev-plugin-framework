@@ -339,13 +339,14 @@ export function isDirty( initial: WizardData, current: WizardData ): boolean {
  * over are the manager's.
  */
 function withoutDerived( data: WizardData ): unknown {
-	const { rate_cost, cost_typed, rate_is_pickup, rates_pending, pickup_check, carrier_schema, shipping_line, ...rest } = data.rest;
+	const { rate_cost, cost_typed, rate_is_pickup, rates_pending, final_quote, pickup_check, carrier_schema, shipping_line, ...rest } = data.rest;
 	const { settlementRecord, isOrderEdit, ...view } = data;
 
 	void rate_cost;
 	void cost_typed;
 	void rate_is_pickup;
 	void rates_pending;
+	void final_quote;
 	void pickup_check;
 	void carrier_schema;
 	void settlementRecord;

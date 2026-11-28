@@ -205,7 +205,7 @@ export function validateDelivery( data: WizardData ): FieldErrors {
 	const line = data.rest.shipping_line;
 
 	// A tariff chosen against an earlier package is not confirmed until the new answer lands.
-	if ( data.rest.rates_pending ) {
+	if ( data.rest.rates_pending || 'pending' === data.rest.final_quote ) {
 		add( errors, 'shipping_line', __( 'Дождитесь расчёта тарифов.', 'woodev-plugin-framework' ) );
 
 		return errors;
@@ -213,6 +213,13 @@ export function validateDelivery( data: WizardData ): FieldErrors {
 
 	if ( ! line ) {
 		add( errors, 'shipping_line', __( 'Выберите способ доставки.', 'woodev-plugin-framework' ) );
+
+		return errors;
+	}
+
+	// A delivery-only edit records what the carrier asks now (#2010): without that answer there is nothing to save.
+	if ( 'failed' === data.rest.final_quote ) {
+		add( errors, 'shipping_line', __( 'Стоимость доставки не посчитана — повторите расчёт или выберите другой тариф или пункт выдачи.', 'woodev-plugin-framework' ) );
 
 		return errors;
 	}

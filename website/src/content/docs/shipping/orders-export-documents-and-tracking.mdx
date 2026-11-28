@@ -350,7 +350,7 @@ For a claimed order the wizard has two steps, the address with the recipient and
 - the shipping address, the recipient and the phone (a changed name or phone is also written to the billing side);
 - the carrier's shipping line, with the rate's meta, the carrier's marker, the pickup point and the carrier's own order fields.
 
-Items, prices, totals, payment, status and any shipping line that is not a carrier's stay as they are. The carrier's line totals **0**; the carrier's price is kept on it in the `_woodev_shipping_seller_cost` item meta. The order then is a row of «Заказы доставки» and is exported and tracked like any other, and its «Изменить доставку» action opens the same two steps until it is exported.
+Items, prices, totals, payment, status and any shipping line that is not a carrier's stay as they are. The carrier's line totals **0**; the carrier's price is kept on it in the `_woodev_shipping_seller_cost` item meta. That is the price **before** the shop's rules for customers (markup, free shipping, rounding), see [the carrier's price](../method-features/#the-carriers-price), quoted for the chosen pickup point and the order's payment method. Without that quote the delivery is not saved. The order then is a row of «Заказы доставки» and is exported and tracked like any other, and its «Изменить доставку» action opens the same two steps until it is exported.
 
 :::note
 Code that rewrites your order later must leave the carrier's line and the recipient fields the manager changed alone. And a claimed order may carry your own shipping line beside the carrier's: a carrier finds its line by method id, never by taking the first one.

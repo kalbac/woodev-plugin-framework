@@ -10,6 +10,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import OrderWizard from '../../src/shipping-orders-page/order-wizard/order-wizard';
+import { buildFinalQuoteRequest } from '../../src/shipping-orders-page/order-wizard/delivery-state';
+import { deliveryPrefillToData } from '../../src/shipping-orders-page/order-wizard/wizard-data';
+import type { OrderPrefill } from '../../src/shipping-orders-page/order-wizard/types';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -206,3 +209,151 @@ describe( 'delivery for an existing order', () => {
 		expect( await screen.findByText( /Ваш расход на доставку: 350,00/ ) ).toBeInTheDocument();
 	} );
 } );
+
+/** A tariff as the rates route answers it: `cost` is the customer's price, `carrier_cost` what the carrier asks. */
+const tariff = ( id: string, cost: number, carrierCost: number, extra: Record<string, unknown> = {} ) => ( {
+	id: `${ id }:3`,
+	method_id: id,
+	instance_id: 3,
+	label: 'cdek_pickup' === id ? 'До пункта выдачи' : 'Курьер',
+	cost,
+	carrier_cost: carrierCost,
+	delivery_time: '',
+	description: '',
+	is_pickup: 'cdek_pickup' === id,
+	meta: {},
+	...extra,
+} );
+
+const answer = ( rates: unknown[] ) => ( { ...RATES, providers: [ { id: 'cdek', label: 'СДЭК', rates } ] } );
+
+/**
+ * Routes the rates by what the request asks: a point gets its own price, anything else the representative one.
+ *
+ * @param {Function} pointAnswer what the route answers a request that names a point.
+ * @param {Array}    plain       the tariffs without a point.
+ */
+const routePickup = ( pointAnswer: ( request: Request ) => Promise<unknown>, plain: unknown[] = [ tariff( 'cdek_pickup', 300, 300 ) ] ) => {
+	mockedFetch.mockImplementation( ( request: Request ) => {
+		if ( request.url.endsWith( '/301/edit' ) ) {
+			return Promise.resolve( PREFILL );
+		}
+
+		if ( request.url.endsWith( '/rates' ) ) {
+			return request.data?.pickup_point ? pointAnswer( request ) : Promise.resolve( answer( plain ) );
+		}
+
+		if ( 'PUT' === request.method ) {
+			return Promise.resolve( { id: 301, number: '301', message: 'Заказ №301 сохранён.' } );
+		}
+
+		return Promise.resolve( { country: 'RU', pickup: false, fields: [] } );
+	} );
+};
+
+const toDeliveryStep = async () => {
+	await screen.findByText( 'Кому и куда доставить' );
+	type( 'Город или населённый пункт', 'Москва' );
+	next();
+};
+
+const save = () => fireEvent.click( screen.getByRole( 'button', { name: 'Сохранить доставку' } ) );
+
+describe( 'the shop pays for the delivery', () => {
+	test.each( [
+		[ 'free delivery from an order amount', 0 ],
+		[ 'a markup', 400 ],
+	] )( 'the carrier price is shown and saved, not the customer price after %s', async ( _rule, customerPrice ) => {
+		routePickup( () => Promise.reject( new Error( 'no point here' ) ), [ tariff( 'cdek_courier', customerPrice as number, 350 ) ] );
+		const { onSaved } = mount();
+
+		await toDeliveryStep();
+		fireEvent.click( await screen.findByRole( 'radio', { name: /Курьер/ } ) );
+
+		expect( screen.getByRole( 'radio', { name: /Курьер/ } ).closest( 'label' ) ).toHaveTextContent( '350,00' );
+		expect( screen.getByText( /Ваш расход на доставку: 350,00/ ) ).toBeInTheDocument();
+
+		save();
+
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+		expect( requests( 'PUT' )[ 0 ].data?.shipping_line ).toMatchObject( { cost: '350' } );
+	} );
+
+	test( 'a chosen pickup point is quoted on its own, and that quote is saved', async () => {
+		routePickup( () => Promise.resolve( answer( [ tariff( 'cdek_pickup', 0, 450, { meta: { quoted_for: 'POINT-B' } } ) ] ) ) );
+		const { onSaved } = mount();
+
+		await toDeliveryStep();
+		fireEvent.click( await screen.findByRole( 'radio', { name: /До пункта выдачи/ } ) );
+		expect( screen.getByText( /Ваш расход на доставку: 300,00/ ) ).toBeInTheDocument();
+
+		type( 'Код пункта выдачи', 'POINT-B' );
+
+		// Saving now would record the price of no particular point.
+		save();
+		expect( screen.getAllByText( 'Дождитесь расчёта тарифов.' ).length ).toBeGreaterThan( 0 );
+		expect( requests( 'PUT' ) ).toHaveLength( 0 );
+
+		expect( await screen.findByText( /Ваш расход на доставку: 450,00/ ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'radio', { name: /До пункта выдачи/ } ).closest( 'label' ) ).toHaveTextContent( '450,00' );
+		save();
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+
+		const quoted = requests( 'POST' ).filter( ( request ) => request.data?.pickup_point );
+
+		expect( quoted ).toHaveLength( 1 );
+		expect( quoted[ 0 ].data ).toMatchObject( { method_id: 'cdek_pickup', pickup_point: 'POINT-B' } );
+		expect( requests( 'PUT' )[ 0 ].data?.shipping_line ).toMatchObject( { cost: '450', meta: { quoted_for: 'POINT-B' } } );
+		expect( requests( 'PUT' )[ 0 ].data?.pickup_point ).toEqual( { id: 'POINT-B' } );
+	} );
+
+	test( 'a point that cannot be quoted holds the save back until the quote is repeated', async () => {
+		let refuse = true;
+
+		routePickup( () =>
+			refuse
+				? Promise.reject( { message: 'Этот пункт не принимает заказ.', data: { status: 422 } } )
+				: Promise.resolve( answer( [ tariff( 'cdek_pickup', 450, 450 ) ] ) )
+		);
+		const { onSaved } = mount();
+
+		await toDeliveryStep();
+		fireEvent.click( await screen.findByRole( 'radio', { name: /До пункта выдачи/ } ) );
+		type( 'Код пункта выдачи', 'POINT-B' );
+
+		expect( ( await screen.findAllByText( /Этот пункт не принимает заказ/ ) ).length ).toBeGreaterThan( 0 );
+
+		save();
+		expect( screen.getAllByText( /Стоимость доставки не посчитана/ ).length ).toBeGreaterThan( 0 );
+		expect( requests( 'PUT' ) ).toHaveLength( 0 );
+
+		refuse = false;
+		fireEvent.click( screen.getByRole( 'button', { name: 'Повторить' } ) );
+
+		expect( await screen.findByText( /Ваш расход на доставку: 450,00/ ) ).toBeInTheDocument();
+		save();
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+	} );
+} );
+
+describe( 'buildFinalQuoteRequest', () => {
+	const data = ( paymentMethod: string ) =>
+		deliveryPrefillToData(
+			{
+				...( PREFILL as unknown as OrderPrefill ),
+				shipping_line: { method_id: 'cdek_courier', instance_id: 3, rate_id: 'cdek_courier:3', label: 'Курьер', cost: '350', meta: {} },
+				payment_method: paymentMethod,
+			},
+			'RU'
+		);
+
+	test( 'asks with the order payment method when the shop offers it', () => {
+		expect( buildFinalQuoteRequest( data( 'cod' ), { cod: 'При получении' } ) ).toMatchObject( { payment_method: 'cod' } );
+	} );
+
+	test( 'asks nothing more for a method the shop does not offer, or none', () => {
+		expect( buildFinalQuoteRequest( data( 'gone' ), { cod: 'При получении' } ) ).toBeNull();
+		expect( buildFinalQuoteRequest( data( '' ), { cod: 'При получении' } ) ).toBeNull();
+	} );
+} );
+

@@ -14,6 +14,7 @@ use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
 use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 use Woodev\Framework\Shipping\Shipping_Method;
+use Woodev\Framework\Shipping\Shipping_Rate;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -366,8 +367,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 					// instance, and every rate it yields carries them.
 					$order_fields = Carrier_Field_Set::for_rate( $provider, (string) $method->id, (int) ( $method->instance_id ?? 0 ), $method )->to_schema();
 
-					foreach ( $this->method_rates( $method, $package, $record, $pickup ) as $rate ) {
-						$rates[] = $this->format_rate( $rate, $method, $order_fields );
+					$carrier_costs = [];
+
+					foreach ( $this->method_rates( $method, $package, $record, $pickup, $carrier_costs ) as $rate ) {
+						$rates[] = $this->format_rate( $rate, $method, $order_fields, $carrier_costs[ (string) $rate->get_id() ] ?? null );
 					}
 				}
 
@@ -396,28 +399,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * ({@see Pickup_Handler::get_selected_point_for_method()}) answers — the admin has no WooCommerce
 		 * session to hold it — and the override is gone when the call returns.
 		 *
+		 * While it runs, each rate the method is about to add reports what the carrier asks for it
+		 * ({@see Shipping_Rate::get_carrier_cost()}) — the WooCommerce rate only holds the customer's price.
+		 *
 		 * @since 2.0.7
+		 * @since 2.1.29 Adds `$carrier_costs`.
 		 *
 		 * @param Shipping_Method                                 $method  The method.
 		 * @param array<string, mixed>                            $package A {@see self::build_package()} result.
 		 * @param Location_Record|null                            $record  Destination location record, or `null`.
 		 * @param array{method_id: string, point_id: string}|null $pickup  The chosen point, or `null`.
+		 * @param array<string, float>                            $carrier_costs Filled with the carrier's price by rate id.
 		 *
 		 * @return array<int|string, \WC_Shipping_Rate>
 		 */
-		private function method_rates( Shipping_Method $method, array $package, ?Location_Record $record, ?array $pickup ): array {
+		private function method_rates( Shipping_Method $method, array $package, ?Location_Record $record, ?array $pickup, array &$carrier_costs ): array {
 
 			$handler = null !== $pickup && (string) $method->id === $pickup['method_id'] ? $this->pickup_handler_for( $pickup['method_id'] ) : null;
+			$note    = static function ( $rate ) use ( &$carrier_costs ): void {
+				if ( $rate instanceof Shipping_Rate ) {
+					$carrier_costs[ $rate->get_id() ] = $rate->get_carrier_cost();
+				}
+			};
 
-			if ( null === $pickup || null === $handler ) {
-				return $method->get_admin_rates_for_package( $package, $record );
+			add_action( 'woodev_shipping_method_before_add_rate', $note );
+
+			try {
+				if ( null === $pickup || null === $handler ) {
+					return $method->get_admin_rates_for_package( $package, $record );
+				}
+
+				return $handler->with_request_selected_point(
+					$pickup['method_id'],
+					$pickup['point_id'],
+					static fn() => $method->get_admin_rates_for_package( $package, $record )
+				);
+			} finally {
+				remove_action( 'woodev_shipping_method_before_add_rate', $note );
 			}
-
-			return $handler->with_request_selected_point(
-				$pickup['method_id'],
-				$pickup['point_id'],
-				static fn() => $method->get_admin_rates_for_package( $package, $record )
-			);
 		}
 
 		/**
@@ -532,20 +551,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * `meta` is the rate's meta as WooCommerce holds it: the order-create route copies it onto
 		 * the shipping item, exactly as `WC_Checkout` does.
 		 *
+		 * `cost` is the customer's price. `carrier_cost` is what the carrier asks before the shop's price rules:
+		 * a delivery the shop pays for is recorded at it. Absent for a rate that did not report it.
+		 *
 		 * `order_fields` are the carrier's own fields for this tariff ({@see Carrier_Field_Set::to_schema()}) —
 		 * empty for a carrier that declares none; the wizard renders them under the chosen tariff (spec D7).
 		 *
 		 * @since 2.0.2
+		 * @since 2.1.29 Adds `carrier_cost`.
 		 *
 		 * @param \WC_Shipping_Rate                $rate         The rate.
 		 * @param Shipping_Method                  $method       The method that produced it.
 		 * @param array<int, array<string, mixed>> $order_fields The carrier's order-field schema for this tariff.
+		 * @param float|null                       $carrier_cost The carrier's price, when the rate reported it.
 		 *
 		 * @return array<string, mixed>
 		 */
-		private function format_rate( \WC_Shipping_Rate $rate, Shipping_Method $method, array $order_fields = [] ): array {
+		private function format_rate( \WC_Shipping_Rate $rate, Shipping_Method $method, array $order_fields = [], ?float $carrier_cost = null ): array {
 
-			return [
+			$formatted = [
 				'id'            => (string) $rate->get_id(),
 				'method_id'     => (string) $rate->get_method_id(),
 				'instance_id'   => (int) $rate->get_instance_id(),
@@ -557,6 +581,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 				'meta'          => (array) $rate->get_meta_data(),
 				'order_fields'  => $order_fields,
 			];
+
+			if ( null !== $carrier_cost ) {
+				$formatted['carrier_cost'] = $carrier_cost;
+			}
+
+			return $formatted;
 		}
 	}
 

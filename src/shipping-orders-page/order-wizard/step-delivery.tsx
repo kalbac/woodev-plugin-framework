@@ -17,6 +17,8 @@
  * stays visible beside it with «вернуть цену тарифа». The number sent is the FINAL one
  * (`shipping_line.cost`), the rate's `meta` travels with it. In a delivery-only edit (#2010) the price is not the
  * order's: it is the shop's own cost of the delivery, so it is shown, never typed, and follows every fresh quote.
+ * It is the carrier's price, not the customer's ({@link atCarrierCost}), and — there being no step ⑤ — the step asks
+ * the final quote for the chosen point and the order's payment method itself ({@link buildFinalQuoteRequest}).
  *
  * **Pickup point (O10, D3).** A pickup tariff shows the point list and map in this step — the
  * framework's own picker over the admin points routes, told the order's weight, the payment
@@ -44,6 +46,9 @@ import { fetchRates, toRequestError } from './api';
 import type { WizardRequestError } from './api';
 import {
 	applyRates,
+	applyReprice,
+	atCarrierCost,
+	buildFinalQuoteRequest,
 	buildRatesRequest,
 	chooseRate,
 	carrierFieldValue,
@@ -59,6 +64,7 @@ import {
 	resetDeliveryCost,
 	setCarrierField,
 	setDeliveryCost,
+	setFinalQuote,
 	setPickupPoint,
 	visibleCarrierFields,
 	withPickupCheck,
@@ -72,6 +78,9 @@ import type { CarrierField, FieldErrors, RateGroup, RateOption, RatesResponse, W
 import { formatMoney } from './wizard-data';
 
 type Phase = 'idle' | 'loading' | 'ready' | 'failed';
+
+/** How long a delivery-only edit waits before its final quote — a point code typed by hand changes with every key. */
+const FINAL_QUOTE_DELAY_MS = 400;
 
 interface RatesState {
 	phase: Phase;
@@ -121,7 +130,16 @@ function RateRow( { rate, checked, symbol, onChoose }: RateRowProps ) {
 	);
 }
 
-function RateGroupList( { group, chosen, symbol, onChoose }: { group: RateGroup; chosen: string; symbol: string; onChoose: ( rate: RateOption ) => void } ) {
+interface RateGroupListProps {
+	group: RateGroup;
+	chosen: string;
+	/** The price the chosen tariff was settled at, when that is not the one in this list (a delivery-only edit's final quote). */
+	chosenCost?: number;
+	symbol: string;
+	onChoose: ( rate: RateOption ) => void;
+}
+
+function RateGroupList( { group, chosen, chosenCost, symbol, onChoose }: RateGroupListProps ) {
 	return (
 		<fieldset className="woodev-order-wizard__rate-group">
 			<legend className="woodev-order-wizard__rate-group-title">{ group.label }</legend>
@@ -129,7 +147,13 @@ function RateGroupList( { group, chosen, symbol, onChoose }: { group: RateGroup;
 				<p className="woodev-order-wizard__muted">{ __( 'Для этого адреса и товаров тарифов нет.', 'woodev-plugin-framework' ) }</p>
 			) : (
 				group.rates.map( ( rate ) => (
-					<RateRow key={ rate.id } rate={ rate } checked={ chosen === rate.id } symbol={ symbol } onChoose={ () => onChoose( rate ) } />
+					<RateRow
+						key={ rate.id }
+						rate={ chosen === rate.id && undefined !== chosenCost ? { ...rate, cost: chosenCost } : rate }
+						checked={ chosen === rate.id }
+						symbol={ symbol }
+						onChoose={ () => onChoose( rate ) }
+					/>
 				) )
 			) }
 		</fieldset>
@@ -228,10 +252,12 @@ export default function StepDelivery( { data, setData, errors, delivery }: StepP
 		setData( ( d ) => ( d.rest.rates_pending ? d : { ...d, rest: { ...d.rest, rates_pending: true } } ) );
 
 		fetchRates( body )
-			.then( ( response ) => {
+			.then( ( answer ) => {
 				if ( cancelled ) {
 					return;
 				}
+
+				const response = delivery ? atCarrierCost( answer ) : answer;
 
 				settled = true;
 				setGone( isChosenRateGone( latest.current, response ) );
@@ -270,6 +296,67 @@ export default function StepDelivery( { data, setData, errors, delivery }: StepP
 		// Asked again only when the request itself changes, or the manager presses «Повторить».
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ requestKey, attempt ] );
+
+	const [ quoteError, setQuoteError ] = useState( '' );
+	const [ quoteAttempt, setQuoteAttempt ] = useState( 0 );
+	const finalRequest = delivery ? buildFinalQuoteRequest( data, wizard.paymentMethods ) : null;
+	const finalKey = ratesRequestKey( finalRequest );
+
+	// Runs after every answer of the tariffs above: that answer prices the tariff for no particular point, this one settles it.
+	useEffect( () => {
+		if ( ! delivery ) {
+			return undefined;
+		}
+
+		setQuoteError( '' );
+
+		if ( 'ready' !== rates.phase || null === finalRequest ) {
+			// Without the tariffs themselves there is no cost to save either.
+			setData( ( d ) => setFinalQuote( d, 'failed' === rates.phase ? 'failed' : '' ) );
+
+			return undefined;
+		}
+
+		let cancelled = false;
+
+		const fail = ( message: string ) => {
+			setQuoteError( message );
+			setData( ( d ) => setFinalQuote( d, 'failed' ) );
+		};
+
+		setData( ( d ) => setFinalQuote( d, 'pending' ) );
+
+		const timer = setTimeout( () => {
+			fetchRates( finalRequest )
+				.then( ( answer ) => {
+					if ( cancelled ) {
+						return;
+					}
+
+					const response = atCarrierCost( answer );
+
+					if ( 'failed' === applyReprice( latest.current, response ).outcome ) {
+						fail( __( 'Перевозчик не посчитал доставку для этого заказа.', 'woodev-plugin-framework' ) );
+
+						return;
+					}
+
+					setData( ( d ) => setFinalQuote( resetDeliveryCost( applyReprice( d, response ).data ), '' ) );
+				} )
+				.catch( ( raw: unknown ) => {
+					if ( ! cancelled ) {
+						fail( toRequestError( raw ).message );
+					}
+				} );
+		}, FINAL_QUOTE_DELAY_MS );
+
+		return () => {
+			cancelled = true;
+			clearTimeout( timer );
+		};
+		// `finalKey` is the request; the object identities are not the question.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ finalKey, rates.phase, rates.response, quoteAttempt ] );
 
 	const { rest } = data;
 	const line = rest.shipping_line;
@@ -403,6 +490,7 @@ export default function StepDelivery( { data, setData, errors, delivery }: StepP
 							key={ group.id }
 							group={ group }
 							chosen={ chosen }
+							chosenCost={ delivery && line && ! rest.final_quote ? Number( line.cost ) : undefined }
 							symbol={ symbol }
 							onChoose={ ( rate ) => {
 								setGone( false );
@@ -417,13 +505,29 @@ export default function StepDelivery( { data, setData, errors, delivery }: StepP
 
 			{ line && delivery && (
 				<div className="woodev-order-wizard__delivery-price">
-					<p className="woodev-order-wizard__hint">
-						{ sprintf(
-							/* translators: %s: the carrier's price of the delivery, e.g. "250,00 ₽". */
-							__( 'Ваш расход на доставку: %s. Сумма заказа не изменится.', 'woodev-plugin-framework' ),
-							formatMoney( Number( line.cost ), symbol )
-						) }
-					</p>
+					{ 'pending' === rest.final_quote && (
+						<div className="woodev-order-wizard__loading">
+							<Spinner />
+							<span>{ __( 'Уточняем стоимость доставки…', 'woodev-plugin-framework' ) }</span>
+						</div>
+					) }
+					{ ! rest.final_quote && (
+						<p className="woodev-order-wizard__hint">
+							{ sprintf(
+								/* translators: %s: the carrier's price of the delivery, e.g. "250,00 ₽". */
+								__( 'Ваш расход на доставку: %s. Сумма заказа не изменится.', 'woodev-plugin-framework' ),
+								formatMoney( Number( line.cost ), symbol )
+							) }
+						</p>
+					) }
+					{ quoteError && (
+						<Notice status="error" isDismissible={ false }>
+							{ quoteError }{ ' ' }
+							<Button variant="link" onClick={ () => setQuoteAttempt( ( n ) => n + 1 ) }>
+								{ __( 'Повторить', 'woodev-plugin-framework' ) }
+							</Button>
+						</Notice>
+					) }
 					<FieldErrorList messages={ errorsFor( errors, 'shipping_line.cost' ) } />
 				</div>
 			) }

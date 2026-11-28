@@ -100,6 +100,18 @@ $this->supports = [ self::FEATURE_ROUNDING ];
 
 The values are stored in `round_cost` (`none`, `ceil`, `floor` or `round`) and `round_cost_range` (`10`, `100` or `round`). The same rounding is available on its own as `Shipping_Helper::round_cost_to_step( $cost, $mode, $step )`.
 
+### The carrier's price
+
+A rate remembers the cost it was first built with as the carrier's price, `$rate->get_carrier_cost()`. The markup, free shipping, rounding, the box cost and the cost limits change the customer's cost with `with_cost()` and leave that value alone. The order wizard records it as the shop's own cost when the shop pays for a delivery, so build the rate with what the carrier asks and adjust it with `with_cost()`. If the carrier will charge something else than the amount the rate is built with — insurance the shop pays and the quote leaves out — name it:
+
+```php
+<?php
+// The quote shown to the customer is 300; the carrier will charge the shop 318.
+$rate = new Shipping_Rate( $this->id, $this->get_rate_id(), $this->get_title(), 300 );
+
+return $rate->with_carrier_cost( 318 );
+```
+
 ### Delivery time
 
 `FEATURE_DELIVERY_TIME` lets the merchant control the delivery period shown with the rate.

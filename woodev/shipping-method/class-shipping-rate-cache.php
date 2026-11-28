@@ -104,9 +104,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		 * Stored-shape version. Bump it when {@see self::snapshot()} changes, so an older entry is a miss.
 		 *
 		 * @since 2.0.2
+		 * @since 2.1.29 3: the carrier cost.
 		 * @var int
 		 */
-		private const SHAPE_VERSION = 2;
+		private const SHAPE_VERSION = 3;
 
 		/**
 		 * Deepest array nesting {@see self::is_plain()} accepts. A real key context or rate snapshot is
@@ -420,14 +421,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 			$rate_package = $rate->get_package();
 
 			return [
-				'method_id' => $rate->get_method_id(),
-				'id'        => $rate->get_id(),
-				'label'     => $rate->get_label(),
-				'cost'      => $rate->get_cost(),
+				'method_id'    => $rate->get_method_id(),
+				'id'           => $rate->get_id(),
+				'label'        => $rate->get_label(),
+				'cost'         => $rate->get_cost(),
+				'carrier_cost' => $rate->get_carrier_cost(),
 				// The calculation's own package is stored as a marker and rebuilt from the CURRENT one.
-				'package'   => is_array( $rate_package ) && $rate_package === $package ? true : $rate_package,
-				'meta_data' => $rate->get_meta_data(),
-				'args'      => $rate->get_args(),
+				'package'      => is_array( $rate_package ) && $rate_package === $package ? true : $rate_package,
+				'meta_data'    => $rate->get_meta_data(),
+				'args'         => $rate->get_args(),
 			];
 		}
 
@@ -447,7 +449,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 			}
 
 			try {
-				return new Shipping_Rate(
+				$rate = new Shipping_Rate(
 					(string) $data['method_id'],
 					(string) $data['id'],
 					(string) $data['label'],
@@ -456,6 +458,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 					is_array( $data['meta_data'] ?? null ) ? $data['meta_data'] : [],
 					is_array( $data['args'] ?? null ) ? $data['args'] : []
 				);
+
+				$carrier_cost = (float) ( $data['carrier_cost'] ?? $rate->get_carrier_cost() );
+
+				return $carrier_cost === $rate->get_carrier_cost() ? $rate : $rate->with_carrier_cost( $carrier_cost );
 			} catch ( \InvalidArgumentException $exception ) {
 				return null;
 			}

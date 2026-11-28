@@ -105,6 +105,11 @@ export interface WizardRest {
 	 */
 	rates_pending: boolean;
 	/**
+	 * A delivery-only edit (#2010) saves the cost the carrier asks for exactly this delivery: step ④ asks it once a
+	 * pickup point or the order's payment method is known. `pending` / `failed` hold the save back. UI only: never sent.
+	 */
+	final_quote?: '' | 'pending' | 'failed';
+	/**
 	 * What step ⑤ needs to ask whether the chosen pickup point still suits the payment method the
 	 * manager picks AFTER it (D3: «⑤ re-validates»): the carrier whose picker config holds the points
 	 * route, and the package weight in grams the last rates answer reported. `null` until the rates
@@ -245,6 +250,8 @@ export interface RateOption {
 	instance_id: number;
 	label: string;
 	cost: number;
+	/** What the carrier asks, before the shop's price rules (markup, free shipping, rounding). Absent when unknown. */
+	carrier_cost?: number;
 	delivery_time: string;
 	description: string;
 	is_pickup: boolean;

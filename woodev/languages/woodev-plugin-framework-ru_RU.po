@@ -14326,3 +14326,15 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:23
 msgid "Сохранить доставку"
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:10
+msgid "Перевозчик не посчитал доставку для этого заказа."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:10
+msgid "Уточняем стоимость доставки…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:12
+msgid "Стоимость доставки не посчитана — повторите расчёт или выберите другой тариф или пункт выдачи."
+msgstr ""
