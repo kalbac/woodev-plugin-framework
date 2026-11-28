@@ -54,6 +54,13 @@ final class Order_Line {
 	private $name;
 
 	/**
+	 * The unit of a grouped order the line belongs to, '' for a line of a one-order posting.
+	 *
+	 * @var string
+	 */
+	private $unit_id = '';
+
+	/**
 	 * Creates a line.
 	 *
 	 * @since 2.0.29
@@ -86,7 +93,37 @@ final class Order_Line {
 	 * @return self
 	 */
 	public function with_quantity( int $quantity ): self {
-		return new self( $this->seller_sku, $this->remote_ids, $quantity, $this->unit_price, $this->name );
+		$line          = new self( $this->seller_sku, $this->remote_ids, $quantity, $this->unit_price, $this->name );
+		$line->unit_id = $this->unit_id;
+
+		return $line;
+	}
+
+	/**
+	 * Returns a copy that belongs to a unit of a grouped order ({@see Registry_Order_Writer::upsert_member()}): the order store
+	 * ties the item it makes of the line to that unit, so that one of two equal units can be cancelled.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param string $unit_id The member's external id.
+	 * @return self
+	 */
+	public function with_unit( string $unit_id ): self {
+		$line          = clone $this;
+		$line->unit_id = $unit_id;
+
+		return $line;
+	}
+
+	/**
+	 * Returns the unit of a grouped order the line belongs to.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @return string '' for a line of a one-order posting.
+	 */
+	public function unit_id(): string {
+		return $this->unit_id;
 	}
 
 	/**

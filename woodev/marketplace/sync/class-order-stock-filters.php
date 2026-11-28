@@ -24,8 +24,8 @@ defined( 'ABSPATH' ) || exit;
  * In `off` nothing else moves WC stock (no notification, no readback), so a `legacy` restore is allowed as in `site`. Which stamp a
  * plugin writes on a new order in `off` is the plugin's call: `marketplace` means WooCommerce never subtracts that sale.
  *
- * One exception keeps a `legacy` order honest when its lines change: the order writer gives back what the old lines took and
- * marks the order ({@see self::META_STOCK_PENDING}) before the new lines take theirs. That reduction is this generation's own
+ * One exception keeps a `legacy` order honest when its lines change: the order writer marks the order
+ * ({@see self::META_STOCK_PENDING}), gives back what the leaving lines took and then lets the new lines take theirs. That reduction is this generation's own
  * accounting of the new lines, so it is allowed in `site` or `off` mode; otherwise a legacy order whose line was replaced would give
  * stock back and never take it again.
  *

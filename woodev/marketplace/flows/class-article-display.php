@@ -98,9 +98,36 @@ final class Article_Display {
 		$name = $account_id . ':' . $offer_id;
 
 		if ( ! isset( $this->looked_up[ $name ] ) ) {
-			$this->looked_up[ $name ] = $this->text( $offer_id, (array) $this->cards->find( $account_id, Wpdb_Card_Store::key( $offer_id ) ) );
+			$this->looked_up[ $name ] = $this->text( $offer_id, $this->stored_card( $account_id, $offer_id ) );
 		}
 
 		return $this->looked_up[ $name ];
+	}
+
+	/**
+	 * Returns the article of the card a link belongs to, without what tells the unit apart inside it: the text for a row that
+	 * stands for several units of one product. A local read.
+	 *
+	 * @since 2.1.28
+	 *
+	 * @param int    $account_id Account id.
+	 * @param string $offer_id   The link's article.
+	 * @return string '' for no article.
+	 */
+	public function card_article_of_link( int $account_id, string $offer_id ): string {
+		if ( null === $this->units || '' === $offer_id ) {
+			return $offer_id;
+		}
+
+		return $this->units->shown_article( $offer_id, $this->stored_card( $account_id, $offer_id ) )->article();
+	}
+
+	/**
+	 * @param int    $account_id Account id.
+	 * @param string $offer_id   The link's article.
+	 * @return array<string,mixed> The card as the stored list holds it, [] when it holds none or there is no list.
+	 */
+	private function stored_card( int $account_id, string $offer_id ): array {
+		return null === $this->cards ? [] : (array) $this->cards->find( $account_id, Wpdb_Card_Store::key( $offer_id ) );
 	}
 }

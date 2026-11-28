@@ -182,10 +182,20 @@ final class OrderScreenTest extends TestCase {
 		);
 	}
 
+	public function test_it_hides_the_frameworks_own_item_meta(): void {
+		$this->assertSame(
+			[ '_qty', '_woodev_mp_unit', '_woodev_mp_delivery_line' ],
+			$this->screen()->hide_item_meta( [ '_qty', '_woodev_mp_unit' ] )
+		);
+		$this->assertNull( $this->screen()->hide_item_meta( null ) );
+	}
+
 	public function test_it_hooks_the_boxes_the_savers_and_the_editability(): void {
 		Actions\expectAdded( 'add_meta_boxes' )->once()->with( Mockery::type( 'array' ), Order_Screen::BOXES_PRIORITY, 2 );
 		Actions\expectAdded( 'woocommerce_process_shop_order_meta' )->once()->with( Mockery::type( 'array' ), 1, 1 );
+		Actions\expectAdded( 'woocommerce_process_shop_order_meta' )->once()->with( Mockery::type( 'array' ), 40, 1 );
 		Filters\expectAdded( 'wc_order_is_editable' )->once()->with( Mockery::type( 'array' ), 10, 2 );
+		Filters\expectAdded( 'woocommerce_hidden_order_itemmeta' )->once();
 
 		$this->screen()->register();
 	}

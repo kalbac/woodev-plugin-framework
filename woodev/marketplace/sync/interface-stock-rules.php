@@ -54,7 +54,8 @@ interface Stock_Rules {
 	/**
 	 * Archives the cards of some links, after their stock was set to zero (a removed product).
 	 *
-	 * A marketplace that has no archive answers true: the zero stock is all it can do, and the links are retired.
+	 * A marketplace that has no archive answers true: the zero stock is all it can do, and the links are retired. Its rules
+	 * implement {@see Archiveless_Stock_Rules} too, so the screens offer no «Архивировать».
 	 *
 	 * @since 2.1.0
 	 *

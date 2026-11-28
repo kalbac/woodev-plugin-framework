@@ -112,5 +112,6 @@
 ## Related
 
 - [Обзор исследования](README.md)
+- [Ответы владельца от 27.11.2026](decisions.md)
 - [План карточек](card-plan.md)
 - [Что нужно от вас](access-needed.ru.md)

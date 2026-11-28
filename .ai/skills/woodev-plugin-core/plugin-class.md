@@ -175,6 +175,64 @@ For a marketplace whose price belongs to a card and not to a size; the full desi
 - A refused or quarantined price is not sent again until it changes: with one price per group the framework also turns down the
   same price of the group's other links; with size prices it leaves the refused link out of the call. Do not expect it back.
 
+## A marketplace adapter: grouped orders and their units
+
+For a marketplace where one cart is several remote orders (one per piece of goods); the full design is
+`docs-internal/wiki/marketplace-admin.md`, «Order units and partial cancellation» (#2004).
+
+- Write every remote order with `Order_Writer::upsert_member()` (`woodev/marketplace/orders/class-registry-order-writer.php`),
+  one line per order, a cancelled one included: the framework keeps one item per live unit, takes a cancelled unit out, returns
+  its stock once, records it on the order and sends its stock again. Do none of this yourself.
+- Declare the marker `Admin\Order\Unit_Orders` on the adapter (`woodev/marketplace/admin/order/interface-unit-orders.php`),
+  or the «Заказы» table cannot open an order into its units.
+- Give each `Posting_Unit` the member's external id; read the stored units with `Flows\Order_Units::of()`. Another id and the
+  buttons appear on a row of their own, away from the goods.
+- A unit sold by a key the merchant must not see needs `Flows\Sellable_Units` on the adapter: the screens read the article
+  through it.
+
+## A marketplace adapter: orders the seller delivers
+
+For a marketplace where the shop ships some orders itself; the full design is `docs-internal/wiki/marketplace-admin.md`, «Orders
+the seller delivers» (#2007). Framework 2.1.29.
+
+- Put `Orders\Seller_Delivery` on **every** DTO of such an order (`Order_DTO::with_delivery()`), status refreshes included, with
+  what you know so far; an empty value means «not told yet». Without it the order is treated as marketplace-delivered and
+  `buyer()` overwrites its fields on each refresh.
+- Bring the phone to the form carriers take (`+7…`) **before** you build the delivery: the framework writes it as given. A number
+  that needs an extension carries it in `with_phone()`; other numbers go to `with_other_phone()`, never into the phone field.
+- Name the scheme with `Order_DTO::with_scheme()` and declare `Admin\Order\Delivery_Schemes` (`code => name`); with two or more
+  schemes «Заказы» gets the column and filter.
+- Give the paid delivery of the cart with `with_price()` in the order's currency (another currency is not written), the buyer's
+  untouched data with `with_payload()`, and the sentence for a missing address with `with_address_note()`.
+- Read the recipient, phone and address from the **order** (`get_shipping_*`): the merchant may have corrected them. The
+  coordinates, the chosen day and the extension come from `Flows\Seller_Order::delivery()`.
+- Never write your own shipping line for the marketplace's delivery price, and never touch a line another writer added.
+- The merchant cannot change the shipping method on such an order's screen (items stay locked); the delivery wizard does (#2010).
+- **A limit to state in the plugin's own docs** (waived for 1.0 by the coordinator, 28.11.2026): the buyer has no e-mail, and
+  WordPress' export tool finds a person by e-mail or username, so it cannot identify the buyer of such an order. Export and erase
+  requests reach it only if somebody added an e-mail. Without one, «Remove personal data» of the orders list (a WooCommerce
+  setting) and WooCommerce's clean-up of old orders erase the data; nothing exports it.
+- A linked line of a unit is shown under the shop product's name; the `Order_Line` name you give is for a line the shop has not
+  linked, so give the marketplace's title there when it has one, not the article.
+- Hide the item meta you write in `write_line_meta()` with `woocommerce_hidden_order_itemmeta`: the order screen shows keys that
+  start with `_` too (gotcha `wc-order-screen-shows-underscore-item-meta`). The framework hides its own.
+
+## A marketplace adapter: what the screens learn from optional parts
+
+For a `Marketplace_Plugin`; the full design is `docs-internal/wiki/marketplace-admin.md`, «What the screens learn from optional
+parts» (#2058). Both interfaces exist from framework 2.1.28 — require it before you declare them.
+
+- **No archive of cards:** your `Stock_Rules` implements `Sync\Archiveless_Stock_Rules`
+  (`woodev/marketplace/sync/interface-archiveless-stock-rules.php`, no method). The products table, the product tab and the
+  variations then offer no «Архивировать». `archive()` still answers true: it runs after the zero stock of a removed product.
+- **A key with part of its rights:** your `Credential_Health` implements `Account\Credential_Limits`
+  (`woodev/marketplace/account/interface-credential-limits.php`). `has_limits()` reads the stored credentials only — no remote
+  call, the settings screen asks on every load. Say what does not work in the `ok` result's message; the line is then a warning.
+- **The check runs on «Сохранить»** for an enabled account with no stored result (a new one, new credentials). Do not tell the
+  merchant that the button is the only way to connect.
+- **Price and stock on the cards table** come from the rows of your `Flows\Card_List_Source` (`price`, `stock`); the framework
+  asks no other method. An absent key shows «—».
+
 ## Subclassing traps that fatal at declaration time
 
 - A base constructor that ASSIGNS a property the subclass set BEFORE calling `parent::__construct()`

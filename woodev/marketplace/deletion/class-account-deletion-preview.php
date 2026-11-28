@@ -49,21 +49,31 @@ final class Account_Deletion_Preview {
 	private $noun;
 
 	/**
+	 * Whether the marketplace's orders may keep the buyer's data, which the deletion removes.
+	 *
+	 * @var bool
+	 */
+	private $keeps_buyer_data;
+
+	/**
 	 * Creates the preview.
 	 *
 	 * @since 2.1.5
 	 * @since 2.1.23 Takes the posting noun.
+	 * @since 2.1.29 Takes whether the orders keep the buyer's data.
 	 *
-	 * @param array<string,callable> $counters Keys `links`, `tasks`, `postings`, `documents`, each `function ( int $account_id ): int`.
-	 * @param Effective_Settings     $settings Resolver of `import_enabled`.
-	 * @param bool                   $has_push Whether the marketplace has push notifications.
-	 * @param Posting_Noun|null      $noun     The marketplace's word for a posting; null for «отправление».
+	 * @param array<string,callable> $counters         Keys `links`, `tasks`, `postings`, `documents`, each `function ( int $account_id ): int`.
+	 * @param Effective_Settings     $settings         Resolver of `import_enabled`.
+	 * @param bool                   $has_push         Whether the marketplace has push notifications.
+	 * @param Posting_Noun|null      $noun             The marketplace's word for a posting; null for «отправление».
+	 * @param bool                   $keeps_buyer_data Whether the marketplace's orders may keep the buyer's data (an adapter with delivery schemes).
 	 */
-	public function __construct( array $counters, Effective_Settings $settings, bool $has_push, ?Posting_Noun $noun = null ) {
-		$this->counters = $counters;
-		$this->settings = $settings;
-		$this->has_push = $has_push;
-		$this->noun     = $noun ?? Posting_Noun::shipment();
+	public function __construct( array $counters, Effective_Settings $settings, bool $has_push, ?Posting_Noun $noun = null, bool $keeps_buyer_data = false ) {
+		$this->counters         = $counters;
+		$this->settings         = $settings;
+		$this->has_push         = $has_push;
+		$this->noun             = $noun ?? Posting_Noun::shipment();
+		$this->keeps_buyer_data = $keeps_buyer_data;
 	}
 
 	/**
@@ -88,10 +98,25 @@ final class Account_Deletion_Preview {
 
 		return [
 			'counts'       => $counts,
-			'kept'         => __( 'Товары и заказы WooCommerce остаются в магазине: заказы удаляются отдельно.', 'woodev-plugin-framework' ),
+			'kept'         => $this->kept(),
 			'enabled_note' => $account->is_enabled() ? $this->enabled_note() : '',
 			'warnings'     => $this->warnings( $account, $numbers['postings'] ),
 		];
+	}
+
+	/**
+	 * What stays in the shop, and what the deletion removes from the orders that stay.
+	 *
+	 * @return string
+	 */
+	private function kept(): string {
+		$kept = __( 'Товары и заказы WooCommerce остаются в магазине: заказы удаляются отдельно.', 'woodev-plugin-framework' );
+
+		if ( ! $this->keeps_buyer_data ) {
+			return $kept;
+		}
+
+		return $kept . ' ' . __( 'Сохранённые в этих заказах данные покупателей от маркетплейса будут удалены; получатель, телефон и адрес в самом заказе останутся.', 'woodev-plugin-framework' );
 	}
 
 	/**
