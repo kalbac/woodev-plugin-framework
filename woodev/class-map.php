@@ -210,6 +210,7 @@ return [
 	'Woodev\\Framework\\Marketplace\\Admin\\Product\\Screen_Names' => 'woodev/marketplace/admin/product/class-screen-names.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Product\\Variation_Bulk_Actions' => 'woodev/marketplace/admin/product/class-variation-bulk-actions.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Date_Text' => 'woodev/marketplace/admin/shared/class-date-text.php',
+	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Foreign_Answer_Text' => 'woodev/marketplace/admin/shared/class-foreign-answer-text.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Label_Availability' => 'woodev/marketplace/admin/shared/class-label-availability.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Label_Readiness' => 'woodev/marketplace/admin/shared/interface-label-readiness.php',
 	'Woodev\\Framework\\Marketplace\\Admin\\Shared\\Link_Note' => 'woodev/marketplace/admin/shared/class-link-note.php',

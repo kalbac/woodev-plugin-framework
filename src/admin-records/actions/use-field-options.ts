@@ -10,10 +10,13 @@ import { isAbort } from '../api';
 import type { TableHandle } from '../extensions';
 import type { Option } from '../types';
 import { createActionsApi } from './api';
+import { describeFailure } from './failure';
 
 export interface FieldOptions {
 	options: Option[];
 	status: 'loading' | 'ready' | 'error';
+	/** Why the read failed: the server's sentence; empty when there is none, or the read worked. */
+	message: string;
 	/** The server has another page. */
 	hasMore: boolean;
 	loadMore: () => void;
@@ -23,10 +26,11 @@ interface OptionsState {
 	options: Option[];
 	cursor: string;
 	status: 'loading' | 'ready' | 'error';
+	message: string;
 	next: string | null;
 }
 
-const LOADING: OptionsState = { options: [], cursor: '', status: 'loading', next: null };
+const LOADING: OptionsState = { options: [], cursor: '', status: 'loading', message: '', next: null };
 
 /**
  * @param table  The table the dialog belongs to.
@@ -70,12 +74,13 @@ export function useFieldOptions( table: TableHandle, action: string, field: stri
 					options: cursor === '' ? page.options : [ ...known.options, ...page.options ],
 					cursor,
 					status: 'ready',
+					message: '',
 					next: page.next_cursor,
 				} ) )
 			)
 			.catch( ( error: unknown ) => {
 				if ( ! isAbort( error ) ) {
-					setState( ( known ) => ( { ...known, status: 'error' } ) );
+					setState( ( known ) => ( { ...known, status: 'error', message: describeFailure( error ).message } ) );
 				}
 			} );
 
@@ -89,5 +94,5 @@ export function useFieldOptions( table: TableHandle, action: string, field: stri
 		}
 	}, [ next, search ] );
 
-	return { options: state.options, status: state.status, hasMore: state.next !== null, loadMore };
+	return { options: state.options, status: state.status, message: state.message, hasMore: state.next !== null, loadMore };
 }

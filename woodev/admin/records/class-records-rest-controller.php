@@ -251,6 +251,8 @@ final class Records_Rest_Controller {
 
 		try {
 			$result = $gate->get_field_options( $call['context'], $action, $field, $query );
+		} catch ( Action_State_Exception $e ) {
+			return Action_Error::conflict( $e->getMessage() );
 		} catch ( \Throwable $e ) {
 			return $this->fail( $call, 'options', $e );
 		}

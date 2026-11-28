@@ -510,7 +510,7 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 	 * @param string                                           $field   Field id.
 	 * @param array{row_id:string,search:string,cursor:string} $query   Validated input.
 	 * @return array{options:array<int,array{value:string,label:string}>,next_cursor:null}
-	 * @throws Cancel_Refused When the marketplace refuses or does not answer (the engine answers a generic error and logs it).
+	 * @throws Action_State_Exception When the marketplace refuses or does not answer: the window shows its sentence.
 	 */
 	public function get_field_options( array $context, string $action, string $field, array $query ): array {
 		$none    = [
@@ -540,8 +540,14 @@ final class Site_Orders_Provider implements Records_Provider, Provides_Field_Opt
 			return $none; // No account, no order, or no licence in force: the preview says why; the marketplace is not asked.
 		}
 
+		try {
+			$reasons = $this->cancel->reasons( $account, $order );
+		} catch ( Cancel_Refused $e ) {
+			throw new Action_State_Exception( $e->getMessage() ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
+		}
+
 		$options = array_filter(
-			$this->cancel->reasons( $account, $order ),
+			$reasons,
 			static function ( array $option ) use ( $query ): bool {
 				return '' === $query['search'] || false !== mb_stripos( $option['label'], $query['search'] );
 			}

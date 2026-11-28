@@ -6531,6 +6531,13 @@ msgstr ""
 msgid "Пока ничего нет."
 msgstr ""
 
+#. translators: %d: the HTTP status code of the answer.
+#: marketplace/admin/shared/class-foreign-answer-text.php:29
+#: assets/build/marketplace-admin/index.js:2
+#, php-format,js-format
+msgid "Ответ пришёл не от плагина (HTTP %d) — возможно, его подменила защита или другой сервис перед сайтом."
+msgstr ""
+
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Найти заказ по номеру или городу"
 msgstr ""

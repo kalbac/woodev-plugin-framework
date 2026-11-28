@@ -9,6 +9,7 @@ namespace Woodev\Framework\Marketplace\Admin\Order;
 
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Pages\Orders\Site_Orders_Ids;
+use Woodev\Framework\Marketplace\Admin\Shared\Foreign_Answer_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 
 defined( 'ABSPATH' ) || exit;
@@ -124,7 +125,7 @@ final class Label_Button {
 		wp_enqueue_script( self::ASSET_HANDLE, $this->assets_url . 'js/admin/order-label' . \Woodev_Plugin::get_assets_suffix() . '.js', [], $this->version, true );
 
 		return sprintf(
-			'<span class="woodev-mp-label-wrap"><button type="button" class="button %1$s%2$s" aria-disabled="%3$s"%4$s data-url="%5$s" data-account="%6$d" data-row="%7$s" data-nonce="%8$s" data-preparing="%9$s" data-waiting="%10$s" data-failed="%11$s" data-open="%12$s">%13$s</button><span class="description woodev-mp-label__status" role="status"></span></span>',
+			'<span class="woodev-mp-label-wrap"><button type="button" class="button %1$s%2$s" aria-disabled="%3$s"%4$s data-url="%5$s" data-account="%6$d" data-row="%7$s" data-nonce="%8$s" data-preparing="%9$s" data-waiting="%10$s" data-failed="%11$s" data-open="%12$s" data-foreign="%13$s">%14$s</button><span class="description woodev-mp-label__status" role="status"></span></span>',
 			esc_attr( self::BUTTON_CLASS ),
 			'' === $off_reason ? '' : ' disabled',
 			'' === $off_reason ? 'false' : 'true',
@@ -137,6 +138,7 @@ final class Label_Button {
 			esc_attr__( 'Этикетка ещё готовится. Обновите страницу чуть позже и нажмите кнопку снова.', 'woodev-plugin-framework' ),
 			esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ),
 			esc_attr__( 'Открыть этикетки для печати', 'woodev-plugin-framework' ),
+			esc_attr( Foreign_Answer_Text::template() ),
 			esc_html__( 'Этикетка', 'woodev-plugin-framework' )
 		);
 	}
