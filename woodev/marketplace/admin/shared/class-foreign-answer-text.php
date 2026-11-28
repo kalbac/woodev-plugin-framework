@@ -14,13 +14,13 @@ defined( 'ABSPATH' ) || exit;
  * carries a message, so an answer without one was replaced, and its HTTP status is all there is to show. The admin scripts
  * get the sentence from here; the React screens write the same one (`src/components/foreign-answer.ts`).
  *
- * @since 2.1.28
+ * @since 2.1.29
  */
 final class Foreign_Answer_Text {
 	/**
 	 * The sentence with `%d` where the script puts the HTTP status.
 	 *
-	 * @since 2.1.28
+	 * @since 2.1.29
 	 *
 	 * @return string
 	 */

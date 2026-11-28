@@ -55,6 +55,7 @@ describe( 'answers of the marketplace routes', () => {
 		[ 'a JSON body without a message', 503, { error: 'blocked' } ],
 		[ 'a JSON body with an empty message', 403, { message: '' } ],
 		[ 'a JSON `null`', 504, null ],
+		[ 'a JSON message without a REST status', 403, { message: 'Access denied' } ],
 		[ 'a page served with a 200', 200, undefined ],
 	] )( 'an answer replaced by %s names the HTTP status', async ( name, status, body ) => {
 		fetchMock.mockResolvedValue( response( status, body ) );
@@ -87,15 +88,25 @@ describe( 'answers of the marketplace routes', () => {
 		);
 	} );
 
-	test( 'an expired nonce is still renewed and the request repeated', async () => {
+	// Last: the nonce middleware stays registered on the shared `apiFetch`.
+	test( 'an expired nonce is still renewed and the request repeated with the new one', async () => {
 		apiFetch.nonceEndpoint = 'https://x.test/nonce';
 		apiFetch.nonceMiddleware = apiFetch.createNonceMiddleware( 'stale' );
+		apiFetch.use( apiFetch.nonceMiddleware );
 		fetchMock
-			.mockResolvedValueOnce( response( 403, { code: 'rest_cookie_invalid_nonce', message: 'Проверка не пройдена' } ) )
+			.mockResolvedValueOnce(
+				response( 403, {
+					code: 'rest_cookie_invalid_nonce',
+					message: 'Проверка не пройдена',
+					data: { status: 403 },
+				} )
+			)
 			.mockResolvedValueOnce( response( 200 ) )
 			.mockResolvedValueOnce( response( 200, { tools: [] } ) );
 
 		await expect( apiFetch( { path: PATH } ) ).resolves.toEqual( { tools: [] } );
 		expect( fetchMock ).toHaveBeenCalledTimes( 3 );
+		expect( fetchMock.mock.calls[ 0 ][ 1 ].headers ).toMatchObject( { 'X-WP-Nonce': 'stale' } );
+		expect( fetchMock.mock.calls[ 2 ][ 1 ].headers ).toMatchObject( { 'X-WP-Nonce': 'fresh-nonce' } );
 	} );
 } );

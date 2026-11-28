@@ -29,7 +29,7 @@ interface Provides_Field_Options {
 	 * @param string                                           $field   Declared field id of that action.
 	 * @param array{row_id:string,search:string,cursor:string} $query Validated input; empty strings when not sent.
 	 * @return array{options:array<int,array{value:string,label:string}>,next_cursor?:string|null}
-	 * @throws Action_State_Exception When the list is refused (since 2.1.28): the engine answers 409 and the dialog shows the
+	 * @throws Action_State_Exception When the list is refused (since 2.1.29): the engine answers 409 and the dialog shows the
 	 *                                message, so it must be merchant-safe. Anything else thrown is a failure: 500, logged.
 	 */
 	public function get_field_options( array $context, string $action, string $field, array $query ): array;

@@ -12,8 +12,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Thrown by {@see Records_Provider::preview()} or {@see Records_Provider::apply()} when the
  * action is known and the user may run it, but the whole request is refused by current state
- * (an account that is paused, a job already running). The engine answers 409 and the message
- * is the reason shown to the merchant, so it must be merchant-safe.
+ * (an account that is paused, a job already running). {@see Provides_Field_Options::get_field_options()}
+ * throws it too (since 2.1.29), when the list of a field is refused. The engine answers 409 and
+ * the message is the reason shown to the merchant, so it must be merchant-safe.
  *
  * A request where only some rows are refused is not an exception: those rows are skipped and
  * come back as grouped reasons.

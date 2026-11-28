@@ -1,7 +1,8 @@
 /**
  * An answer that is not the plugin's: a proxy or a bot filter in front of the shop may replace an answer with a body of
- * its own. Every refusal of the plugin's routes carries a message, so an answer without one was replaced, and its HTTP
- * status is all there is to show. `apiFetch` drops that status when it parses an answer itself, hence the middleware.
+ * its own. Every refusal of the plugin's routes is a REST error — a message, and the status in `data` — so an answer
+ * without either was replaced, and its HTTP status is all there is to show. `apiFetch` drops that status when it parses
+ * an answer itself, hence the middleware.
  *
  * The admin scripts write the same sentence, from `Foreign_Answer_Text` in PHP.
  *
@@ -50,15 +51,16 @@ async function readAnswer( answer: unknown ): Promise< unknown > {
 	}
 }
 
-/** A failed request: the server's own body when it explains itself. No answer at all (network, abort) passes through. */
+/** A failed request: the server's own body when it is a REST error. No answer at all (network, abort) passes through. */
 async function readFailure( error: unknown ): Promise< never > {
 	if ( ! isResponse( error ) ) {
 		throw error;
 	}
 
-	const body = ( await error.json().catch( () => null ) ) as { message?: unknown } | null;
+	const body = ( await error.json().catch( () => null ) ) as { message?: unknown; data?: { status?: unknown } } | null;
 
-	throw body?.message ? body : foreignAnswer( error.status, body );
+	// A message alone is not enough: a filter may answer `{ "message": "Access denied" }`.
+	throw body?.message && typeof body.data?.status === 'number' ? body : foreignAnswer( error.status, body );
 }
 
 /**

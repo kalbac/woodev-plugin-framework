@@ -322,6 +322,26 @@ class RecordsRestControllerTest extends TestCase {
 		$this->assertSame( 'Маркетплейс не даёт отменить это отправление.', $result->get_error_message() );
 	}
 
+	public function test_a_failed_option_list_stays_a_generic_500_with_the_secret_masked_in_the_log(): void {
+		$this->ozon->throw = new \RuntimeException( 'boom api_key=SECRET123' );
+		$logged            = null;
+		Functions\expect( 'error_log' )->once()->andReturnUsing(
+			static function ( $message ) use ( &$logged ) {
+				$logged = $message;
+				return true;
+			}
+		);
+
+		$result = $this->controller->get_field_options(
+			$this->request( [], 'ozon-seller', 'products', [ 'action' => 'sync', 'field' => 'warehouse' ] )
+		);
+
+		$this->assertError( $result, 'woodev_records_provider_error', 500 );
+		$this->assertStringNotContainsString( 'boom', $result->get_error_message() );
+		$this->assertStringContainsString( 'ozon-seller/products', (string) $logged );
+		$this->assertStringNotContainsString( 'SECRET123', (string) $logged );
+	}
+
 	/**
 	 * @dataProvider unreachable_option_sources
 	 *
