@@ -17,12 +17,10 @@ import { __ } from '@wordpress/i18n';
 import { Button, Card, CardBody, FormToggle } from '@wordpress/components';
 import AccountDeleteFlow from './account-delete-flow';
 import TabDescription from './tab-description';
+import { connectionTone } from './connection-status';
+import type { SectionStatus, StatusTone } from './connection-status';
 
-/** The stored connection status of an account section (`Settings_Section` status). */
-export interface SectionStatus {
-	success?: boolean;
-	message?: string;
-}
+export type { SectionStatus };
 
 /** `Settings_Section::with_card()` as the registry serialises it. */
 export interface AccountCardSchema {
@@ -67,9 +65,9 @@ export interface AccountsTab {
 /** A section known to carry a card. */
 type CardSection = AccountSection & { card: AccountCardSchema };
 
-/** The text of an account card's status line and whether it is good news. */
+/** The text of an account card's status line and its colour. */
 export interface CardStatus {
-	ok: boolean;
+	tone: StatusTone;
 	text: string;
 }
 
@@ -101,20 +99,25 @@ export function splitAccountSections( tab: AccountsTab ): { accounts: CardSectio
 /**
  * The status line of a saved account card.
  *
- * @param {CardSection} section the account's connection section.
- * @return {CardStatus} the text and whether it is good news.
+ * @param {CardSection} section  the account's connection section.
+ * @param {boolean}     checking true while the page checks the account on its own (after a save).
+ * @return {CardStatus} the text and its colour.
  */
-export function cardStatus( section: CardSection ): CardStatus {
+export function cardStatus( section: CardSection, checking = false ): CardStatus {
 	if ( ! section.card.enabled ) {
-		return { ok: false, text: __( 'Выключен', 'woodev-plugin-framework' ) };
+		return { tone: 'error', text: __( 'Выключен', 'woodev-plugin-framework' ) };
+	}
+
+	if ( checking ) {
+		return { tone: 'pending', text: __( 'Проверяем подключение…', 'woodev-plugin-framework' ) };
 	}
 
 	const status = section.status;
 	if ( ! status || ! status.message ) {
-		return { ok: false, text: __( 'Подключение не проверялось', 'woodev-plugin-framework' ) };
+		return { tone: 'error', text: __( 'Подключение не проверялось', 'woodev-plugin-framework' ) };
 	}
 
-	return { ok: !! status.success, text: status.message };
+	return { tone: connectionTone( status ), text: status.message };
 }
 
 interface AccountCardProps {
@@ -122,6 +125,8 @@ interface AccountCardProps {
 	open: boolean;
 	/** True while the switch is being saved. */
 	switching: boolean;
+	/** True while the page checks the account's connection on its own. */
+	checking: boolean;
 	onToggleOpen: () => void;
 	onToggleEnabled?: ( enabled: boolean ) => void;
 	onDelete: () => void;
@@ -139,9 +144,9 @@ export function canDelete( card: AccountCardSchema ): boolean {
 	return !! card.delete_url;
 }
 
-function AccountCard( { section, open, switching, onToggleOpen, onToggleEnabled, onDelete, children }: AccountCardProps ) {
+function AccountCard( { section, open, switching, checking, onToggleOpen, onToggleEnabled, onDelete, children }: AccountCardProps ) {
 	const card = section.card;
-	const status = cardStatus( section );
+	const status = cardStatus( section, checking );
 	// An open form shows the stored connection message under «Проверить подключение»: the header does not say it a second time.
 	const statusShownBelow = open && card.enabled && !! section.status?.message;
 	// The reason «Удалить» is not offered, as visible text: a disabled button shows no tooltip of its own.
@@ -162,7 +167,7 @@ function AccountCard( { section, open, switching, onToggleOpen, onToggleEnabled,
 					{ /* The merchant's own note; the Client-Id is in the «Редактировать» form, not repeated here. */ }
 					{ card.description && <span className="woodev-account-card__identifier">{ card.description }</span> }
 					{ ! statusShownBelow && (
-						<span className={ `woodev-account-card__status is-${ status.ok ? 'ok' : 'error' }` }>
+						<span className={ `woodev-account-card__status is-${ status.tone }` }>
 							{ status.text }
 						</span>
 					) }
@@ -193,6 +198,8 @@ interface AccountsViewProps {
 	onAccountsChanged?: () => void;
 	/** Saves an account's on/off switch at once and resolves when the cards are up to date; absent: the switch is read-only. */
 	onToggleEnabled?: ( section: AccountSection, enabled: boolean ) => Promise< unknown >;
+	/** The sections whose connection the page is checking on its own. */
+	checkingIds?: string[];
 }
 
 /**
@@ -201,7 +208,7 @@ interface AccountsViewProps {
  *
  * @param {AccountsViewProps} props the view props.
  */
-export default function AccountsView( { tab, renderSection, onAccountsChanged, onToggleEnabled }: AccountsViewProps ) {
+export default function AccountsView( { tab, renderSection, onAccountsChanged, onToggleEnabled, checkingIds = [] }: AccountsViewProps ) {
 	const { accounts, adder } = splitAccountSections( tab );
 	const [ openId, setOpenId ] = useState( '' );
 	const [ adding, setAdding ] = useState( false );
@@ -271,6 +278,7 @@ export default function AccountsView( { tab, renderSection, onAccountsChanged, o
 						section={ section }
 						open={ openId === section.id }
 						switching={ switchingId === section.id }
+						checking={ checkingIds.includes( section.id ) }
 						onToggleOpen={ () => {
 							// Two forms never stack: opening an edit puts the new-account form away.
 							setAdding( false );

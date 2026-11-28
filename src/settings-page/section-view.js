@@ -18,7 +18,7 @@ import { isFieldVisible } from '../components/validate';
 import HelpLink from '../components/help-link';
 import { RawHTML } from '@wordpress/element';
 
-export default function SectionView( { providerId, section, tabFields, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors } ) {
+export default function SectionView( { providerId, section, tabFields, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors, checking, onTested } ) {
 	if ( ! section ) {
 		return null;
 	}
@@ -33,6 +33,8 @@ export default function SectionView( { providerId, section, tabFields, values, c
 				onFieldChange={ onFieldChange }
 				onFieldRevert={ onFieldRevert }
 				serverErrors={ serverErrors }
+				checking={ checking }
+				onTested={ onTested }
 			/>
 		);
 	}

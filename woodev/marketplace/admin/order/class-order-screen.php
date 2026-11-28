@@ -8,6 +8,8 @@
 namespace Woodev\Framework\Marketplace\Admin\Order;
 
 use Woodev\Framework\Marketplace\Flows\Order_Meta_Contract;
+use Woodev\Framework\Marketplace\Flows\Seller_Order;
+use Woodev\Framework\Marketplace\Flows\Wc_Order_Store;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -16,6 +18,9 @@ defined( 'ABSPATH' ) || exit;
  * (the same on both order storages): the boxes that edit or act on the order are removed, the marketplace's own details box
  * ({@see Order_Details_Box}) takes the top, the items stay visible but locked by WooCommerce's own «not editable» filter, and the
  * notes stay. A shop order is never touched.
+ *
+ * An order the seller delivers has one exception: its recipient, phone and shipping address are edited in the details box and saved
+ * with the screen ({@see Seller_Delivery_Panel}). Items, prices, totals and statuses stay the marketplace's there too.
  *
  * Which orders are the marketplace's is decided by `created_via`, the value its order writer stamps ({@see Order_Meta_Contract::created_via()}).
  *
@@ -66,16 +71,26 @@ final class Order_Screen {
 	private $box;
 
 	/**
+	 * The editable delivery of an order the seller delivers.
+	 *
+	 * @var Seller_Delivery_Panel|null
+	 */
+	private $delivery;
+
+	/**
 	 * Creates the screen policy.
 	 *
 	 * @since 2.1.13
+	 * @since 2.1.29 Takes the delivery panel.
 	 *
-	 * @param Order_Meta_Contract $meta The marketplace's order meta.
-	 * @param Order_Details_Box   $box  The marketplace's box.
+	 * @param Order_Meta_Contract        $meta     The marketplace's order meta.
+	 * @param Order_Details_Box          $box      The marketplace's box.
+	 * @param Seller_Delivery_Panel|null $delivery The editable delivery of an order the seller delivers.
 	 */
-	public function __construct( Order_Meta_Contract $meta, Order_Details_Box $box ) {
-		$this->meta = $meta;
-		$this->box  = $box;
+	public function __construct( Order_Meta_Contract $meta, Order_Details_Box $box, ?Seller_Delivery_Panel $delivery = null ) {
+		$this->meta     = $meta;
+		$this->box      = $box;
+		$this->delivery = $delivery;
 	}
 
 	/**
@@ -88,7 +103,42 @@ final class Order_Screen {
 	public function register(): void {
 		add_action( 'add_meta_boxes', [ $this, 'arrange_boxes' ], self::BOXES_PRIORITY, 2 );
 		add_action( 'woocommerce_process_shop_order_meta', [ $this, 'unhook_savers' ], 1 );
+		add_action( 'woocommerce_process_shop_order_meta', [ $this, 'save_delivery' ], 40 );
 		add_filter( 'wc_order_is_editable', [ $this, 'filter_editable' ], 10, 2 );
+		add_filter( 'woocommerce_hidden_order_itemmeta', [ $this, 'hide_item_meta' ] );
+	}
+
+	/**
+	 * Keeps the framework's own item meta off the order screen: the unit a line is and the mark of the delivery line are keys the
+	 * merchant can do nothing with. WooCommerce's order screen shows item meta whatever its key starts with.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param mixed $hidden Meta keys WooCommerce hides.
+	 * @return mixed
+	 */
+	public function hide_item_meta( $hidden ) {
+		if ( ! is_array( $hidden ) ) {
+			return $hidden;
+		}
+
+		return array_values( array_unique( array_merge( $hidden, [ Wc_Order_Store::ITEM_UNIT, Seller_Order::ITEM_DELIVERY_LINE ] ) ) );
+	}
+
+	/**
+	 * Saves the recipient and the address of a marketplace order the seller delivers ({@see Seller_Delivery_Panel::save()}).
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param mixed $order_id Order id.
+	 * @return void
+	 */
+	public function save_delivery( $order_id = 0 ): void {
+		$order = null === $this->delivery ? null : $this->marketplace_order( $order_id );
+
+		if ( null !== $order ) {
+			$this->delivery->save( $order );
+		}
 	}
 
 	/**

@@ -72,6 +72,13 @@ final class Site_Orders_Rows {
 	private $gate;
 
 	/**
+	 * Names of the delivery schemes by code, when the table has a scheme column; empty otherwise.
+	 *
+	 * @var array<string,string>
+	 */
+	private $schemes;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
@@ -81,8 +88,10 @@ final class Site_Orders_Rows {
 	 * @param callable                  $is_finished `function ( \WC_Order $order ): bool`, whether the posting can no longer be cancelled.
 	 * @param Posting_Status_Names|null $status_names The adapter's own names of posting statuses, when it has them.
 	 * @param Posting_Action_Gate|null  $gate        Whether «Отменить» and «Этикетки» are on offer for a posting (since 2.1.17); null offers them to everyone who may edit the order.
+	 * @param array<string,string>      $schemes     Names of the delivery schemes by code, when the table shows them (since 2.1.29, {@see Site_Orders_Definition::has_scheme_choice()}).
 	 */
-	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null, ?Posting_Action_Gate $gate = null ) {
+	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null, ?Posting_Action_Gate $gate = null, array $schemes = [] ) {
+		$this->schemes      = Site_Orders_Definition::has_scheme_choice( $schemes ) ? $schemes : [];
 		$this->offered      = $offered;
 		$this->can_edit     = $can_edit;
 		$this->is_finished  = $is_finished;
@@ -112,7 +121,7 @@ final class Site_Orders_Rows {
 
 		foreach ( $labels as $code => $label ) {
 			$options[] = [
-				'value' => (string) $code,
+				'value' => Site_Orders_Filter::posting_status_value( (string) $code ),
 				'label' => $uses[ $label ] > 1 ? $label . ' (' . $code . ')' : $label,
 				'count' => (int) $counts[ $code ],
 			];
@@ -134,9 +143,10 @@ final class Site_Orders_Rows {
 	 * @param bool                                                   $label_stored  Whether a ready label document already covers the posting (since 2.1.17): its download is a read, so the label action stays on.
 	 * @param array<int,array{id:string,enabled:bool,reason:string}> $seller_actions The states of the order's seller actions (since 2.1.27).
 	 * @param bool                                                   $bulk          Whether the table has bulk actions (since 2.1.27): the row of an order the user may edit can then be ticked.
+	 * @param bool                                                   $has_units     Whether the row can be opened into the order's units (since 2.1.28).
 	 * @return array<string,mixed>
 	 */
-	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '', bool $label_stored = false, array $seller_actions = [], bool $bulk = false ): array {
+	public function row( int $account_id, array $item, \WC_Order $order, array $activity, string $write_refusal = '', bool $label_stored = false, array $seller_actions = [], bool $bulk = false, bool $has_units = false ): array {
 		$editable = true === call_user_func( $this->can_edit, $item['order_id'] );
 		$url      = $editable ? (string) $order->get_edit_order_url() : '';
 		$cells    = $this->cells( $item, $order, $url );
@@ -148,7 +158,7 @@ final class Site_Orders_Rows {
 			'cells'        => $cells,
 			'actions'      => $actions,
 			'selectable'   => $bulk && $editable,
-			'has_children' => false,
+			'has_children' => $has_units,
 			'activity'     => $activity,
 		];
 	}
@@ -160,7 +170,7 @@ final class Site_Orders_Rows {
 	 * @return array<string,mixed>
 	 */
 	private function cells( array $item, \WC_Order $order, string $url ): array {
-		return [
+		$cells = [
 			'order'    => [ $this->order_number( $order, $url ) ],
 			'posting'  => $item['external_key'],
 			'status'   => $this->status_items( $order, $item['status_raw'] ),
@@ -169,6 +179,13 @@ final class Site_Orders_Rows {
 			'total'    => $this->total( $order ),
 			'actions'  => null,
 		];
+
+		if ( [] !== $this->schemes ) {
+			$code            = (string) ( $item['scheme'] ?? '' );
+			$cells['scheme'] = '' === $code ? null : ( $this->schemes[ $code ] ?? $code );
+		}
+
+		return $cells;
 	}
 
 	/**

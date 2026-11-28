@@ -196,6 +196,7 @@ $marketplace-label-col: 280px;
 		font-size: 13px;
 
 		&.is-ok { color: wd.$ok-text; }
+		&.is-warning { color: wd.$warn-text; }
 		&.is-error { color: wd.$error-text; }
 	}
 }
@@ -420,7 +421,9 @@ $marketplace-label-col: 280px;
 		font-size: 13px;
 
 		&.is-ok { color: wd.$ok-text; }
+		&.is-warning { color: wd.$warn-text; }
 		&.is-error { color: wd.$error-text; }
+		&.is-pending { color: wd.$muted; }
 	}
 
 	// Buttons never wrap their labels.

@@ -36,7 +36,7 @@ final class OrderScreenModuleTest extends TestCase {
 
 	public function test_an_adapter_with_no_optional_capability_still_gets_the_screen(): void {
 		Actions\expectAdded( 'add_meta_boxes' )->once();
-		Actions\expectAdded( 'woocommerce_process_shop_order_meta' )->once();
+		Actions\expectAdded( 'woocommerce_process_shop_order_meta' )->twice(); // The savers are unhooked, then the delivery is saved.
 		Filters\expectAdded( 'wc_order_is_editable' )->once();
 
 		Order_Screen_Module::register( $this->plugin(), new Sqlite_Wpdb() );

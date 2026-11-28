@@ -1,6 +1,30 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.1.28] — 2026-11-27
+### Bug Fixes
+- **api**: Log the redacted raw body when no response was parsed (#1509) (#2053)
+
+- **marketplace**: Polish the product tables and the account connection block (#2059)
+
+
+### Documentation
+- **wb-seller**: Record owner decisions T6/T7 and accepted R7/R8 (#2056)
+
+- **wb-seller**: R7/R8 carried as known residual risks, not accepted (#2057)
+
+- **avito**: Owner decisions D1–D13 and the input pack for the 1.0 spec (#2068)
+
+
+### Features
+- **marketplace**: Sticker documents of several files (WF7) (#2005) (#2049)
+
+- **marketplace**: The page of the seller's shipments (WF8) (#2006) (#2052)
+
+- **marketplace**: Order units and partial cancellation (WF6b) (#2004) (#2051)
+
+
+
 ## [2.1.27] — 2026-11-26
 ### Features
 - **marketplace**: Show the articles of new cards in the mapping form (#2038) (#2045)

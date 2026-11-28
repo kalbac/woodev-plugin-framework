@@ -9,9 +9,13 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
+use Woodev\Framework\Marketplace\Admin\Order\Delivery_Schemes;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Actions;
+use Woodev\Framework\Marketplace\Admin\Order\Unit_Orders;
+use Woodev\Framework\Marketplace\Admin\Pages\Shipments\Shipments_Module;
+use Woodev\Framework\Marketplace\Admin\Shared\Order_Unit_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -32,6 +36,7 @@ use Woodev\Framework\Marketplace\Jobs\Posting_Poll_Times;
 use Woodev\Framework\Marketplace\Marketplace_Plugin;
 use Woodev\Framework\Marketplace\Orders\Order_Registry;
 use Woodev\Framework\Marketplace\Settings\Posting_Noun;
+use Woodev\Framework\Marketplace\Settings\Shipment_Noun;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -42,7 +47,7 @@ defined( 'ABSPATH' ) || exit;
  * The provider is built when the REST API starts, not on every request, and only when the plugin still has the `orders` page. An
  * adapter without label calls ({@see Capability::GET_LABEL}) gets the table without the label column and action; one that is not an
  * {@see Order_Canceller} gets it without «Отменить отправление»; one that declares {@see Seller_Actions} gets their row and bulk
- * actions.
+ * actions, and one with the page of shipments ({@see Shipments_Module::is_offered()}) «add to a shipment».
  *
  * @since 2.1.5
  */
@@ -130,6 +135,9 @@ final class Site_Orders_Module {
 			return current_user_can( 'edit_shop_order', $order_id );
 		};
 		$gate     = Posting_Action_Gate::for_adapter( $adapter, $write_gate );
+		$seller   = self::seller( $plugin, $adapter, $gate, $license, new Wpdb_Seller_Action_Store( $db, $table( 'seller_actions' ) ) );
+		$units    = $adapter instanceof Unit_Orders ? new Site_Orders_Units( Order_Unit_Text::for_adapter( $adapter, $db, $plugin->get_id() ), $seller ) : null;
+		$schemes  = $adapter instanceof Delivery_Schemes ? $adapter->delivery_schemes() : [];
 
 		return new Site_Orders_Provider(
 			$accounts,
@@ -141,7 +149,8 @@ final class Site_Orders_Module {
 					return null !== $cancel && $cancel->is_finished( $order );
 				},
 				$adapter instanceof Posting_Status_Names ? $adapter : null,
-				$gate
+				$gate,
+				$schemes
 			),
 			new Site_Orders_Activity(),
 			$labels,
@@ -156,7 +165,10 @@ final class Site_Orders_Module {
 			null,
 			$gate,
 			$noun,
-			self::seller( $plugin, $adapter, $gate, $license, new Wpdb_Seller_Action_Store( $db, $table( 'seller_actions' ) ) )
+			$seller,
+			self::shipments( $plugin, $adapter, $accounts, $db, $write_gate ),
+			$units,
+			$schemes
 		);
 	}
 
@@ -180,6 +192,28 @@ final class Site_Orders_Module {
 		};
 
 		return new Site_Orders_Seller( new Seller_Action_Runner( $adapter, $gate, $license, $adapter->settings_descriptor()->marketplace_name(), $sent, $log ) );
+	}
+
+	/**
+	 * «Add to a shipment», for a marketplace with the page of shipments.
+	 *
+	 * @param Marketplace_Plugin  $plugin     Plugin.
+	 * @param Marketplace_Adapter $adapter    Adapter.
+	 * @param Wpdb_Account_Store  $accounts   Accounts.
+	 * @param \wpdb               $db         Database.
+	 * @param callable|null       $write_gate The plugin's write gate.
+	 * @return Site_Orders_Shipments|null
+	 */
+	private static function shipments( Marketplace_Plugin $plugin, Marketplace_Adapter $adapter, Wpdb_Account_Store $accounts, \wpdb $db, ?callable $write_gate ): ?Site_Orders_Shipments {
+		if ( ! Shipments_Module::is_offered( $adapter ) ) {
+			return null;
+		}
+
+		return new Site_Orders_Shipments(
+			Shipments_Module::service( $plugin, $accounts, $db, $write_gate ),
+			Shipments_Module::store( $plugin, $db ),
+			Shipment_Noun::for_descriptor( $adapter->settings_descriptor() )
+		);
 	}
 
 	/**

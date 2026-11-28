@@ -12,6 +12,7 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Account\Credential_Fields;
 use Woodev\Framework\Marketplace\Account\Credential_Health;
+use Woodev\Framework\Marketplace\Account\Credential_Limits;
 use Woodev\Framework\Marketplace\Account\Health_Result;
 use Woodev\Framework\Marketplace\Account\Secret_Cipher;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
@@ -394,6 +395,83 @@ final class SettingsHandlerTest extends TestCase {
 		$handler->get_setting( "account_{$acc_id}_price_markup_kind" )->set_value( 'percent' );
 		$handler->get_setting( "account_{$acc_id}_price_markup" )->set_value( '15' );
 		$handler->save( "account_{$acc_id}_price_markup_kind" );
+	}
+
+	/**
+	 * Credentials that pass the check and open only part of what the plugin does are a warning, live and stored.
+	 *
+	 * @dataProvider provide_limits
+	 *
+	 * @param bool $limited Whether the adapter says the credentials have limits.
+	 * @return void
+	 */
+	public function test_a_connection_with_limits_is_a_warning_live_and_stored( bool $limited ): void {
+		$fields = new Credential_Fields( 'cabinet_id', [ 'api_token' ] );
+		$health = new class( $limited ) implements Credential_Limits {
+			/** @var bool */
+			private $limited;
+
+			public function __construct( bool $limited ) {
+				$this->limited = $limited;
+			}
+
+			public function check( Account $account ): Health_Result {
+				return new Health_Result( Health_Result::OK, 'Подключено.' );
+			}
+
+			public function has_limits( Account $account ): bool {
+				return $this->limited && 'secret-token-702' === $account->credentials()['api_token'];
+			}
+		};
+
+		$adapter = new Fake_Marketplace_Adapter(
+			null,
+			[
+				'id'                => Sqlite_Tables::MARKETPLACE_ID,
+				'capabilities'      => [],
+				'credential_fields' => $fields,
+				'credential_health' => $health,
+				'posting_handler'   => null,
+				'price_reader'      => null,
+			]
+		);
+
+		$store = Wpdb_Account_Store::for_adapter(
+			$this->db,
+			$this->schema->table_name( 'accounts', Sqlite_Tables::PREFIX ),
+			new Secret_Cipher( 'salt-1' ),
+			$adapter,
+			static function (): int {
+				return self::NOW;
+			}
+		);
+
+		$acc_id  = $store->save(
+			new Account( 0, Sqlite_Tables::MARKETPLACE_ID, 'Limited Shop', true, [ 'cabinet_id' => '702', 'api_token' => 'secret-token-702' ] )
+		);
+		$handler = $this->build_handler( $adapter, $store );
+
+		$live = $handler->test_connection(
+			"account_connection_{$acc_id}",
+			[
+				"account_{$acc_id}_cabinet_id" => '702',
+				"account_{$acc_id}_api_token"  => '',
+			]
+		);
+
+		$this->assertTrue( $live->is_success() );
+		$this->assertSame( $limited, $live->is_warning() );
+		$this->assertSame( $limited, $handler->get_connection_status( "account_connection_{$acc_id}" )->is_warning() );
+	}
+
+	/**
+	 * @return array<string,array{0:bool}>
+	 */
+	public function provide_limits(): array {
+		return [
+			'part of the rights' => [ true ],
+			'all of the rights'  => [ false ],
+		];
 	}
 
 	public function test_a_failed_connection_test_does_not_fire_account_connected(): void {

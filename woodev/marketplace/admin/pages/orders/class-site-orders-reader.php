@@ -15,8 +15,8 @@ defined( 'ABSPATH' ) || exit;
  * whole table, never over one page, and a registry row whose WooCommerce order is gone, trashed or still being created is not listed.
  *
  * An item is `order_id`, `external_key` (the marketplace's posting number), `status_raw` (the marketplace's own status),
- * `is_terminal` (the marketplace will not change the posting any more) and `claim_until` (UTC time until which a writer holds the
- * row; empty for none).
+ * `is_terminal` (the marketplace will not change the posting any more), `claim_until` (UTC time until which a writer holds the
+ * row; empty for none) and `scheme` (the delivery scheme code; empty for none).
  *
  * @since 2.1.5
  */
@@ -24,7 +24,7 @@ final class Site_Orders_Reader {
 	/**
 	 * Columns every read selects.
 	 */
-	private const COLUMNS = 'pg.wc_order_id, pg.external_key, pg.status_raw, pg.is_terminal, pg.claim_until';
+	private const COLUMNS = 'pg.wc_order_id, pg.external_key, pg.status_raw, pg.is_terminal, pg.claim_until, pg.scheme';
 
 	/**
 	 * Most posting statuses the status filter offers.
@@ -214,6 +214,10 @@ final class Site_Orders_Reader {
 			$clauses[] = $this->db->prepare( 'pg.status_raw = %s', $filter->posting_status() );
 		}
 
+		if ( '' !== $filter->scheme() ) {
+			$clauses[] = $this->db->prepare( 'pg.scheme = %s', $filter->scheme() );
+		}
+
 		if ( '' !== $filter->from() ) {
 			$clauses[] = $this->db->prepare( $this->storage->date_column() . ' >= %s', $filter->from() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The column is one of two fixed names.
 		}
@@ -245,7 +249,7 @@ final class Site_Orders_Reader {
 
 	/**
 	 * @param array<string,mixed> $row Database row.
-	 * @return array{order_id:int,external_key:string,status_raw:string,is_terminal:bool,claim_until:string}
+	 * @return array{order_id:int,external_key:string,status_raw:string,is_terminal:bool,claim_until:string,scheme:string}
 	 */
 	private function item( array $row ): array {
 		return [
@@ -254,6 +258,7 @@ final class Site_Orders_Reader {
 			'status_raw'   => (string) $row['status_raw'],
 			'is_terminal'  => 1 === (int) $row['is_terminal'],
 			'claim_until'  => (string) ( $row['claim_until'] ?? '' ),
+			'scheme'       => (string) ( $row['scheme'] ?? '' ),
 		];
 	}
 }
