@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Mappings;
 use Woodev\Framework\Admin\Records\Query_Validator;
 use Woodev\Framework\Admin\Records\Records_Error;
 use Woodev\Framework\Marketplace\Jobs\Error_Classifier;
+use Woodev\Framework\Marketplace\Jobs\Remote_Error;
 use Woodev\Framework\Marketplace\Price\Price_Source;
 
 defined( 'ABSPATH' ) || exit;
@@ -32,8 +33,8 @@ defined( 'ABSPATH' ) || exit;
  * read; the body checked against a declared key list (unknown keys → 400); the editor's own validation (→ 422 with
  * the PHP sentences); only then a write. The marketplace is asked only when the merchant acts (opening a category,
  * searching, checking), never on the first paint, and an adapter failure answers the adapter's sentence rather than a
- * blank screen: 422 when its {@see Error_Classifier} knows it as the marketplace's answer, 502 for anything else. A
- * mapping is account-agnostic, so no route takes an account.
+ * blank screen: 422 when its {@see Error_Classifier} knows it as the marketplace's refusal, 502 for anything else
+ * ({@see Mappings_Controller::failure_status()}). A mapping is account-agnostic, so no route takes an account.
  *
  * @since 2.1.0
  */
@@ -140,7 +141,7 @@ final class Mappings_Controller {
 	 * @param Price_Source|null            $price_source   The marketplace's price source.
 	 * @param array<string,string>         $product_fields Product fields a `field` source may name.
 	 * @param Mapping_Article_Preview|null $articles       The article preview, null for an adapter without one.
-	 * @param Error_Classifier|null        $classifier     Tells the marketplace's answers from other failures (since 2.1.28);
+	 * @param Error_Classifier|null        $classifier     Tells the marketplace's answers from other failures (since 2.1.29);
 	 *                                                     null answers every failure 502.
 	 */
 	public function __construct(
@@ -680,14 +681,18 @@ final class Mappings_Controller {
 	}
 
 	/**
-	 * The status of a failed call to the adapter: 422 when the marketplace answered it — never a 5xx for that, whose body a
-	 * proxy or a bot filter in front of the shop may replace — and 502 for anything else the adapter threw.
+	 * The status of a failed call to the adapter: 422 when the marketplace answered it with a refusal — never a 5xx for that,
+	 * whose body a proxy or a bot filter in front of the shop may replace — and 502 for anything else the adapter threw, an
+	 * uncertain outcome ({@see Remote_Error::RETRY}) and a request that never left the site included.
 	 *
 	 * @param \Throwable $thrown What the adapter threw.
 	 * @return int
 	 */
 	private function failure_status( \Throwable $thrown ): int {
-		return null !== $this->classifier && null !== $this->classifier->classify( $thrown ) ? 422 : 502;
+		$error    = null === $this->classifier ? null : $this->classifier->classify( $thrown );
+		$answered = null !== $error && $error->was_sent() && ! $error->is( Remote_Error::RETRY );
+
+		return $answered ? 422 : 502;
 	}
 
 	/**

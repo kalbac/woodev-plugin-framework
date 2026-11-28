@@ -314,7 +314,7 @@ final class Mapping_Editor {
 	 * @param int|null            $mapping_id Mapping id, null for a new one.
 	 * @param array<string,mixed> $body       Decoded request body.
 	 * @return array{status:string,id:int,errors:string[],notices:string[],cause?:\Throwable} Status `saved`, `invalid`,
-	 *   `missing`, `unavailable` or `failed`; `cause` is what the adapter threw, with `unavailable` (since 2.1.28).
+	 *   `missing`, `unavailable` or `failed`; `cause` is what the adapter threw, with `unavailable` (since 2.1.29).
 	 */
 	public function save( ?int $mapping_id, array $body ): array {
 		$stored = null === $mapping_id ? null : $this->mappings->find( $mapping_id );

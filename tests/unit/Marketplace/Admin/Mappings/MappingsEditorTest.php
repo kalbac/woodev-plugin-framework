@@ -499,25 +499,48 @@ final class MappingsEditorTest extends TestCase {
 	}
 
 	/**
-	 * What the adapter's classifier knows as the marketplace's answer never travels in a 5xx, which a proxy may replace (#2063):
-	 * a lookup and a save both answer 422.
+	 * A refusal of the marketplace never travels in a 5xx, which a proxy may replace (#2063): a lookup and a save both answer
+	 * 422. An uncertain outcome and a request that never left the site are no refusal and stay a 502.
 	 *
+	 * @dataProvider classified_failures
+	 *
+	 * @param string $consequence A `Remote_Error` consequence.
+	 * @param bool   $sent        Whether the request left the site.
+	 * @param int    $status      The status both routes answer.
 	 * @return void
 	 */
-	public function test_the_marketplace_s_refusal_is_a_422_with_its_sentence(): void {
+	public function test_a_classified_failure_answers_by_whether_the_marketplace_refused( string $consequence, bool $sent, int $status ): void {
 		$body                     = $this->body();
-		$refusal                  = Fake_Remote_Exception::of( Remote_Error::FAIL, 'ключ отозван' );
-		$this->h->schema->failure = $refusal;
+		$failure                  = Fake_Remote_Exception::of( $consequence, 'ключ отозван', null, $sent );
+		$this->h->schema->failure = $failure;
 		$lookup                   = $this->h->controller->get_categories( new Json_Request( [], [ 'search' => 'пл' ] ) );
 
 		$fresh                  = new Mappings_Harness(); // The finder of the first one has already asked.
-		$fresh->schema->failure = $refusal;
+		$fresh->schema->failure = $failure;
 		$save                   = $fresh->controller->create_mapping( new Json_Request( $body ) );
 
 		foreach ( [ $lookup, $save ] as $answer ) {
-			$this->assertError( $answer, 'woodev_mappings_unavailable', 422 );
+			$this->assertError( $answer, 'woodev_mappings_unavailable', $status );
 			$this->assertStringContainsString( 'ключ отозван', $answer->get_error_message() );
 		}
+	}
+
+	/**
+	 * Failures the adapter's classifier knows.
+	 *
+	 * @return array<string,array{0:string,1:bool,2:int}>
+	 */
+	public static function classified_failures(): array {
+		return [
+			'refused for good'         => [ Remote_Error::FAIL, true, 422 ],
+			'credentials refused'      => [ Remote_Error::PAUSE_ACCOUNT, true, 422 ],
+			'asked to wait'            => [ Remote_Error::THROTTLE, true, 422 ],
+			'method gone'              => [ Remote_Error::API_CHANGED, true, 422 ],
+			'article taken'            => [ Remote_Error::ARTICLE_TAKEN, true, 422 ],
+			'timeout or server error'  => [ Remote_Error::RETRY, true, 502 ],
+			'unsent, uncertain'        => [ Remote_Error::RETRY, false, 502 ],
+			'held back before sending' => [ Remote_Error::THROTTLE, false, 502 ],
+		];
 	}
 
 	/**
