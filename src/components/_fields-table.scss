@@ -10,6 +10,11 @@
 
 @use './tokens' as wd;
 
+// The line every row is laid out on: the 40px input. What sits beside an input is centred on this line rather than
+// on its cell or field, which an error under the input makes taller.
+$input-height: 40px;
+$input-middle: $input-height * 0.5;
+
 .woodev-fields-table {
 	width: 100%;
 	overflow-x: auto;
@@ -24,6 +29,13 @@
 			padding: wd.$gap-sm wd.$gap;
 			vertical-align: middle;
 			text-align: left;
+		}
+
+		// A row's cells hang from its top, so an error under one input grows the row downwards and moves nothing
+		// beside it.
+		tbody th,
+		tbody td {
+			vertical-align: top;
 		}
 
 		thead th {
@@ -67,12 +79,21 @@
 		}
 	}
 
+	// The row label, a line of text, a status or a button, centred on the row's input line.
+	&__line {
+		display: flex;
+		align-items: center;
+		min-height: $input-height;
+	}
+
 	// One logical row stays one visual row. `.woodev-settings .woodev-field` (label | control grid, 12px padding) would
 	// make every cell tall, so the cell's field is flattened here with a selector that outranks it.
 	&__field {
 		display: flex;
 		align-items: center;
 		gap: wd.$gap-sm;
+		// A control shorter than an input (a toggle) is centred on the same line.
+		min-height: $input-height;
 
 		// The control, and for a stored secret its «Очистить» link at the input's right edge: the link overlays the
 		// (empty) input instead of sitting beside it, so every key input has the same width and left edge.
@@ -80,13 +101,22 @@
 			position: relative;
 			display: flex;
 			flex: 1 1 auto;
+			flex-wrap: wrap;
 			align-items: center;
 			min-width: 0;
 		}
 
+		// The server's refusal (and a client error) is said under the input, on its own line: the control is a row,
+		// so without the break the message sat beside the key, in the input's column.
+		.woodev-field__control > .woodev-field__error {
+			flex: 0 0 100%;
+		}
+
+		// The key input is 40px tall and centres the link on it; `top: 50%` would centre it on the whole control,
+		// which grows a line when the server's error sits under the input.
 		.woodev-field__secret-clear-link {
 			position: absolute;
-			top: 50%;
+			top: $input-middle;
 			right: wd.$gap;
 			margin-top: 0;
 			transform: translateY( -50% );
@@ -135,15 +165,25 @@
 	// whether or not the row has a tip. Other fields (a key) share the line with it.
 	&__field.has-tip:has( input[type="number"] ) > .woodev-field__tip {
 		position: absolute;
-		top: 50%;
+		top: $input-middle;
 		left: 100%;
 		margin-left: wd.$gap-sm;
 		transform: translateY( -50% );
 	}
 
+	// A tip that shares the line with its input (a key): under an error it stays beside the input too. Scoped to the
+	// error, so a control of another height (a toggle) keeps its tip centred on it.
+	&__field:has( .woodev-field__error ) > .woodev-field__tip {
+		position: relative;
+		top: $input-middle;
+		align-self: flex-start;
+		margin-top: 0;
+		transform: translateY( -50% );
+	}
+
 	&__prefix {
 		position: absolute;
-		top: 50%;
+		top: $input-middle;
 		right: 100%;
 		margin-right: wd.$gap-sm;
 		transform: translateY( -50% );

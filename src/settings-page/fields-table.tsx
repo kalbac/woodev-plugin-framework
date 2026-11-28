@@ -14,7 +14,7 @@
  * @package woodev-plugin-framework
  */
 
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
@@ -211,6 +211,9 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 		);
 	};
 
+	/** What is not a field is centred on a line as tall as an input, so it stays beside the inputs of its row. */
+	const onInputLine = ( content: ReactNode ) => <div className="woodev-fields-table__line">{ content }</div>;
+
 	const renderCell = ( row: TableRow, columnLabel: string, cell: TableCell | undefined ) => {
 		if ( ! cell ) {
 			return null;
@@ -220,18 +223,18 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 			case 'field':
 				return renderField( row, columnLabel, cell );
 			case 'text':
-				return <span className={ `woodev-fields-table__text${ 'ok' === cell.tone ? ' is-ok' : '' }` }>{ cell.text }</span>;
+				return onInputLine( <span className={ `woodev-fields-table__text${ 'ok' === cell.tone ? ' is-ok' : '' }` }>{ cell.text }</span> );
 			case 'status': {
 				const check = findCheck( row );
 				const state = rowState( check, fields, values, latestOf( check ) );
-				return <span className={ `woodev-fields-table__status is-${ state }` }>{ STATE_TEXT[ state ]() }</span>;
+				return onInputLine( <span className={ `woodev-fields-table__status is-${ state }` }>{ STATE_TEXT[ state ]() }</span> );
 			}
 			case 'check': {
 				if ( ! cell.supports_test ) {
 					return null;
 				}
 				const ready = ( cell.settings || [] ).every( ( id ) => ! fields[ id ] || isFieldFilled( fields[ id ], values[ id ] ) );
-				return (
+				return onInputLine(
 					<Button
 						variant="secondary"
 						isBusy={ busy === cell.connection }
@@ -269,18 +272,22 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 						return [
 							<tr key={ row.id }>
 								<th scope="row" className="woodev-fields-table__row-label">
-									{ row.label }
-									{ row.link && (
-										<a
-											className="woodev-fields-table__row-link"
-											href={ row.link.url }
-											target="_blank"
-											rel="noopener noreferrer"
-											aria-label={ row.link.label }
-											title={ row.link.label }
-										>
-											<span className="dashicons dashicons-external" aria-hidden="true" />
-										</a>
+									{ onInputLine(
+										<>
+											{ row.label }
+											{ row.link && (
+												<a
+													className="woodev-fields-table__row-link"
+													href={ row.link.url }
+													target="_blank"
+													rel="noopener noreferrer"
+													aria-label={ row.link.label }
+													title={ row.link.label }
+												>
+													<span className="dashicons dashicons-external" aria-hidden="true" />
+												</a>
+											) }
+										</>
 									) }
 								</th>
 								{ table.columns.map( ( column ) => (
