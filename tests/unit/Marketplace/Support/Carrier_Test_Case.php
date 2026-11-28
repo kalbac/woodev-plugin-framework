@@ -106,6 +106,21 @@ abstract class Carrier_Test_Case extends Sync_Test_Case {
 			}
 		);
 
+		$order->props['status'] = 'processing';
+
+		$order->order->shouldReceive( 'get_status' )->andReturnUsing(
+			static function () use ( $order ): string {
+				return $order->props['status'];
+			}
+		);
+		$order->order->shouldReceive( 'update_status' )->andReturnUsing(
+			static function ( string $status ) use ( $order ): bool {
+				$order->props['status'] = $status;
+
+				return true;
+			}
+		);
+
 		$registry = $this->registry();
 		$key      = 'P-' . $id;
 

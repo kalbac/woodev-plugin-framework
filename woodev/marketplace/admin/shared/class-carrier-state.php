@@ -14,12 +14,13 @@ use Woodev\Framework\Marketplace\Flows\Carrier_Notice;
 use Woodev\Framework\Marketplace\Flows\Seller_Order;
 use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Order\Delivered_Order_Status;
 use Woodev\Framework\Shipping\Order\Tracking_Shipment;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * The one reading of it, for the order screen and the «Заказы» table: whether «Оформить доставку» is on offer, what the merchant
+ * The one reading of it, for the order screen, the «Заказы» table and {@see \Woodev\Framework\Marketplace\Flows\Carrier_Bridge}: whether «Оформить доставку» is on offer, what the merchant
  * still has to do after the delivery service's news, and the parcels to follow. Everything comes from stored data and the shipping
  * module's registry of delivery services; nothing calls a marketplace or a delivery service. An order that is not the
  * marketplace's, or that the marketplace delivers, gets nothing.
@@ -162,6 +163,28 @@ final class Carrier_State {
 			'service' => $provider->get_label(),
 			'parcels' => $parcels,
 		];
+	}
+
+	/**
+	 * The status the delivery service's «Статус доставленного заказа» setting has applied to an order
+	 * ({@see Delivered_Order_Status}); the setting also marks an order that was in that status already.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return string Status without `wc-`; '' when the setting did not act on the order.
+	 */
+	public function delivered_status( \WC_Order $order ): string {
+		$registry = Orders_Registry::instance();
+		$provider = $registry->resolve_provider_for_order( $order );
+
+		if ( null === $provider || '' === (string) $order->get_meta( Delivered_Order_Status::APPLIED_META_PREFIX . $provider->get_id() ) ) {
+			return '';
+		}
+
+		$plugin = $registry->get_provider_plugin( $provider->get_id() );
+
+		return null === $plugin ? '' : (string) $plugin->get_export_settings()->get_delivered_status();
 	}
 
 	/**

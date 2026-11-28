@@ -12,6 +12,7 @@ use Woodev\Framework\Marketplace\Admin\Order\Carrier_Actions;
 use Woodev\Framework\Marketplace\Admin\Order\Carrier_Delivery_Entry;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Pages\Mappings\Category_Finder;
+use Woodev\Framework\Marketplace\Admin\Shared\Carrier_State;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Capabilities\Capability;
 use Woodev\Framework\Marketplace\Capabilities\Marketplace_Adapter;
@@ -813,7 +814,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Marketplace\\Flow_Wiring' ) ) :
 			$sent        = new Wpdb_Seller_Action_Store( $this->db, $this->table( 'seller_actions' ) );
 			$runner      = new Seller_Action_Runner( $adapter, Posting_Action_Gate::for_adapter( $adapter, $this->write_gate ), $this->license, $marketplace, $sent, $this->log_error );
 
-			( new Carrier_Bridge( $adapter, $runner, $this->gate, $postings, new Code_Required_Accounts( $this->plugin_id ), $this->names, $created_via, $marketplace, $this->log_error ) )->register();
+			$codes = new Code_Required_Accounts( $this->plugin_id );
+			$state = new Carrier_State( $adapter, $created_via );
+
+			( new Carrier_Bridge( $adapter, $runner, $this->gate, $postings, $codes, $this->names, $created_via, $marketplace, $this->log_error, $state ) )->register();
 
 			Orders_Registry::instance()->register_delivery_entry( new Carrier_Delivery_Entry( $adapter, $runner, $postings, $this->accounts, $created_via ) );
 		}

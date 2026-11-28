@@ -14391,3 +14391,7 @@ msgstr ""
 #: marketplace/admin/pages/orders/class-site-orders-carrier.php:150
 msgid "Проверьте"
 msgstr ""
+
+#: marketplace/flows/class-carrier-bridge.php:640
+msgid "заказ ещё не закрыт, нужен код покупателя."
+msgstr ""

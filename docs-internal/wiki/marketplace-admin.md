@@ -1766,6 +1766,11 @@ so nothing is sent inside the delivery service's request. Sending goes through `
 | refused by the marketplace or by `seller_action_refusal()` | never repeated; the notice gives the reason |
 | refused for the code | the account is remembered (`Flows\Code_Required_Accounts`, forgotten with the account): this and later deliveries ask the merchant instead |
 
+When the code is asked for and the delivery service's «Статус доставленного заказа» has meanwhile closed the order, the order
+goes back to the status it had at the delivery report (order meta `_woodev_mp_status_before_delivery`, written by the bridge's
+listener, which runs before that setting), with a note — so the WooCommerce orders list does not show it as done. A status the
+order already had, or one set since, stays.
+
 A paused account or a lapsed licence waits without spending a run; a switched-off account ends the job.
 
 **What the merchant sees** (`Admin\Shared\Carrier_State`, one reading for both screens):

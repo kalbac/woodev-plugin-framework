@@ -15,6 +15,7 @@ use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Refused;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Report;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Unit_Result;
+use Woodev\Framework\Marketplace\Admin\Shared\Carrier_State;
 use Woodev\Framework\Marketplace\Data\Persistence_Exception;
 use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Jobs\Backoff;
@@ -32,7 +33,8 @@ defined( 'ABSPATH' ) || exit;
  * - `woodev_shipping_delivery_status_changed` to «delivered» — the hand-over action first if the marketplace still waits for it,
  *   then the delivered action once, without input. An answer that asks for the buyer's confirmation code
  *   ({@see Seller_Unit_Result::code_required()}) is remembered for the account ({@see Code_Required_Accounts}): the order, and
- *   every later one, asks the merchant instead of being sent;
+ *   every later one, asks the merchant instead of being sent. An order the delivery service's setting closed meanwhile goes
+ *   back to the status it had, so it does not look done while it waits for the code;
  * - the same to «returning» or «returned» — nothing is sent, the order asks the merchant to run the returned action.
  *
  * Nothing is sent inside the delivery service's request: the listeners queue the job `{plugin id}_carrier_action( account_id,
@@ -54,6 +56,11 @@ final class Carrier_Bridge {
 	 * Order meta of the runs already spent, by news.
 	 */
 	public const META_ATTEMPTS = '_woodev_mp_carrier_attempts';
+
+	/**
+	 * Order meta of the order status at the moment the delivery was reported, before the delivery service's setting changed it.
+	 */
+	public const META_STATUS_BEFORE = '_woodev_mp_status_before_delivery';
 
 	/**
 	 * The shipment state «handed to the buyer», as `woodev_shipping_delivery_status_changed` gives it. The three states are the
@@ -143,6 +150,13 @@ final class Carrier_Bridge {
 	private $log_error;
 
 	/**
+	 * What the delivery service has done to an order.
+	 *
+	 * @var Carrier_State
+	 */
+	private $state;
+
+	/**
 	 * @since 2.1.29
 	 *
 	 * @param Carrier_Actions        $adapter       The marketplace's actions.
@@ -154,8 +168,10 @@ final class Carrier_Bridge {
 	 * @param string                 $created_via   What the marketplace's orders are created via.
 	 * @param string                 $marketplace   Merchant-facing marketplace name.
 	 * @param callable               $log_error     `function ( string $line ): void`.
+	 * @param Carrier_State          $state         What the delivery service has done to an order.
 	 */
-	public function __construct( Carrier_Actions $adapter, Seller_Action_Runner $runner, Job_Gate $gate, Order_Registry $postings, Code_Required_Accounts $code_accounts, Job_Names $names, string $created_via, string $marketplace, callable $log_error ) {
+	public function __construct( Carrier_Actions $adapter, Seller_Action_Runner $runner, Job_Gate $gate, Order_Registry $postings, Code_Required_Accounts $code_accounts, Job_Names $names, string $created_via, string $marketplace, callable $log_error, Carrier_State $state ) {
+		$this->state         = $state;
 		$this->adapter       = $adapter;
 		$this->runner        = $runner;
 		$this->gate          = $gate;
@@ -270,6 +286,12 @@ final class Carrier_Bridge {
 
 			if ( 0 === $account_id || [] === array_filter( array_map( [ $this, 'action' ], $needed ) ) ) {
 				return;
+			}
+
+			if ( Carrier_Actions::DELIVERED === $news ) {
+				// This listener runs before the delivery service's own status setting (priority 20).
+				$order->update_meta_data( self::META_STATUS_BEFORE, $order->get_status() );
+				$order->save_meta_data();
 			}
 
 			$this->forget_attempts( $order, $news );
@@ -608,6 +630,15 @@ final class Carrier_Bridge {
 	 */
 	private function ask_for_code( \WC_Order $order, Seller_Action $action ): void {
 		$this->ask( $order, $action, __( 'Подтвердите вручение: нужен код покупателя.', 'woodev-plugin-framework' ) );
+
+		// The delivery service's setting may have closed the order meanwhile: put it back, so the orders list does not show it as
+		// done. A status the order already had, and one set since, stays.
+		$before = (string) $order->get_meta( self::META_STATUS_BEFORE );
+		$closed = $this->state->delivered_status( $order );
+
+		if ( '' !== $before && '' !== $closed && $before !== $closed && $order->get_status() === $closed ) {
+			$order->update_status( $before, $this->marketplace . ': ' . __( 'заказ ещё не закрыт, нужен код покупателя.', 'woodev-plugin-framework' ) );
+		}
 	}
 
 	/**

@@ -319,11 +319,7 @@ final class CarrierDeliveryTest extends Carrier_Test_Case {
 	 * @return Stateful_Order
 	 */
 	private function order( int $id, string $status = 'confirm' ): Stateful_Order {
-		$order = $this->delivery_order( $id, [ [ 'u-1', 'Кружка', $status ] ] );
-
-		$order->order->shouldReceive( 'get_status' )->andReturn( 'processing' );
-
-		return $order;
+		return $this->delivery_order( $id, [ [ 'u-1', 'Кружка', $status ] ] );
 	}
 
 	/**

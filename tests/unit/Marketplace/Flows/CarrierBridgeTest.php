@@ -8,14 +8,21 @@
 namespace Woodev\Tests\Unit\Marketplace\Flows;
 
 use Brain\Monkey\Actions;
+use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Admin\Order\Carrier_Actions;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Refused;
+use Woodev\Framework\Marketplace\Admin\Shared\Carrier_State;
 use Woodev\Framework\Marketplace\Data\Wpdb_Seller_Action_Store;
 use Woodev\Framework\Marketplace\Flows\Carrier_Bridge;
 use Woodev\Framework\Marketplace\Flows\Carrier_Notice;
 use Woodev\Framework\Marketplace\Flows\Code_Required_Accounts;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Order\Delivered_Order_Status;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Settings\Export_Settings;
+use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\Marketplace\Support\Carrier_Test_Case;
 use Woodev\Tests\Unit\Marketplace\Support\Stateful_Order;
 
@@ -29,6 +36,18 @@ final class CarrierBridgeTest extends Carrier_Test_Case {
 	private const JOB = 'woodev_fake_seller_carrier_action';
 
 	private const ASK_CODE = 'Подтвердите вручение: нужен код покупателя.';
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		Orders_Registry::instance()->reset_for_tests();
+	}
+
+	protected function tearDown(): void {
+		Orders_Registry::instance()->reset_for_tests();
+
+		parent::tearDown();
+	}
 
 	public function test_the_bridge_listens_to_both_shipment_events_and_to_its_job(): void {
 		Actions\expectAdded( 'woodev_shipping_order_exported' )->once();
@@ -246,6 +265,47 @@ final class CarrierBridgeTest extends Carrier_Test_Case {
 	}
 
 	/**
+	 * What the order was before the delivery report, what the merchant did before the job ran, and where it must end up.
+	 *
+	 * @return array<string,array{0:string,1:string,2:string}>
+	 */
+	public function closed_orders(): array {
+		return [
+			'closed by the delivery service'    => [ 'processing', '', 'processing' ],
+			'closed by the merchant beforehand' => [ 'completed', '', 'completed' ],
+			'moved on by the merchant since'    => [ 'processing', 'on-hold', 'on-hold' ],
+		];
+	}
+
+	/**
+	 * The delivery service's own «Статус доставленного заказа» step runs between the report and the job, as on a site.
+	 *
+	 * @dataProvider closed_orders
+	 * @param string $before   Status at the delivery report.
+	 * @param string $since    Status the merchant set after it; empty for none.
+	 * @param string $expected Status after the job.
+	 * @return void
+	 */
+	public function test_an_order_that_waits_for_the_code_does_not_stay_closed_by_the_delivery_service( string $before, string $since, string $expected ): void {
+		$order    = $this->delivery_order( 700, [ [ 'u-1', 'Кружка', 'deliver' ] ] );
+		$provider = $this->register_delivery_service( 'completed' );
+
+		$this->adapter->needs_code   = [ 'u-1' ];
+		$order->props['status']      = $before;
+		$order->meta['_cdek_marker'] = '1';
+
+		$this->deliver( $order );
+		Delivered_Order_Status::apply( $order->order, Delivery_Status::IN_TRANSIT, Delivery_Status::DELIVERED, $provider );
+		$this->assertSame( 'completed', $order->props['status'] );
+		$order->props['status'] = '' === $since ? $order->props['status'] : $since;
+
+		$this->run_jobs();
+
+		$this->assertSame( $expected, $order->props['status'] );
+		$this->assertSame( self::ASK_CODE, Carrier_Notice::of( $order->order )['text'] );
+	}
+
+	/**
 	 * @return array<string,array{0:string}>
 	 */
 	public function return_states(): array {
@@ -350,6 +410,40 @@ final class CarrierBridgeTest extends Carrier_Test_Case {
 	}
 
 	/**
+	 * Registers a delivery service whose plugin moves a delivered order to a status.
+	 *
+	 * @param string $status Status.
+	 * @return Orders_Provider
+	 */
+	private function register_delivery_service( string $status ): Orders_Provider {
+		Functions\when( 'wc_is_order_status' )->justReturn( true );
+		Functions\when( 'get_post_meta' )->alias(
+			function ( $id, string $key ) {
+				return $this->orders[ (int) $id ]->meta[ $key ] ?? '';
+			}
+		);
+		Functions\when( 'update_post_meta' )->alias(
+			function ( $id, string $key, $value ): bool {
+				$this->orders[ (int) $id ]->meta[ $key ] = $value;
+
+				return true;
+			}
+		);
+
+		$settings = \Mockery::mock( Export_Settings::class );
+		$settings->shouldReceive( 'get_delivered_status' )->andReturn( $status );
+
+		$plugin = \Mockery::mock( Shipping_Plugin::class );
+		$plugin->shouldReceive( 'get_export_settings' )->andReturn( $settings );
+
+		$provider = Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek_courier' ] );
+
+		Orders_Registry::instance()->register_provider( $provider, $plugin );
+
+		return $provider;
+	}
+
+	/**
 	 * @param Stateful_Order $order Order.
 	 * @return void
 	 */
@@ -405,7 +499,8 @@ final class CarrierBridgeTest extends Carrier_Test_Case {
 			$this->names(),
 			self::CREATED_VIA,
 			self::MARKETPLACE_NAME,
-			[ $this, 'log_line' ]
+			[ $this, 'log_line' ],
+			new Carrier_State( $this->adapter, self::CREATED_VIA )
 		);
 	}
 }
