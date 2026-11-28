@@ -197,6 +197,54 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 		}
 
 		/**
+		 * Validates and normalises what the wizard sends for the delivery of an order a {@see Delivery_Entry} claims (#2010): the
+		 * delivery address with the recipient and the phone, the shipping line, the pickup point, the carrier's fields and the
+		 * settlement. Every other key of the body is ignored — such an order's customer, items, payment and status are not the
+		 * wizard's.
+		 *
+		 * The checkout's address policy decides which fields are required, as in {@see self::validate()}, but a field the merchant
+		 * removed from the checkout keeps its value here: the order already has it, and the module that created the order wrote it.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param array<string, mixed> $payload the request body.
+		 * @return array{data: array<string, mixed>, errors: array<int, array{field: string, code: string, message: string}>}
+		 *         `data` is meaningful only when `errors` is empty.
+		 */
+		public function validate_delivery( array $payload ): array {
+			$errors   = [];
+			$shipping = $this->check_address( $payload['shipping'] ?? [], 'shipping', false, $errors );
+
+			if ( '' === $shipping['country'] ) {
+				self::add_error( $errors, 'shipping.country', 'country_required', __( 'Укажите страну доставки.', 'woodev-plugin-framework' ) );
+			}
+
+			$shipping_line = $this->check_shipping_line( $payload['shipping_line'] ?? null, $errors );
+			$pickup_point  = $this->check_pickup_point( $payload['pickup_point'] ?? null, $shipping_line, $errors );
+			$carrier_data  = $this->check_carrier_fields( $payload['carrier_fields'] ?? [], $shipping_line, $errors );
+			$location      = $this->check_location( $payload['location'] ?? null, $shipping, $shipping_line, $errors );
+
+			// The policy empties removed fields of the blocks it is given: it gets copies.
+			$policed_billing  = $shipping;
+			$policed_shipping = $shipping;
+			$address_rules    = $this->apply_address_policy( $policed_billing, $policed_shipping, 'shipping', $this->is_pickup_line( $shipping_line ), $errors );
+
+			$this->check_state( $shipping, 'shipping', ! empty( $address_rules['state']['hidden'] ) || ! empty( $address_rules['state']['removed'] ), $errors );
+
+			return [
+				'data'   => [
+					'shipping'       => $shipping,
+					'shipping_line'  => $shipping_line,
+					'pickup_point'   => $pickup_point,
+					'fields'         => self::scalar_map( $payload['fields'] ?? [] ),
+					'carrier_fields' => $carrier_data,
+					'location'       => $location,
+				],
+				'errors' => $errors,
+			];
+		}
+
+		/**
 		 * Validates the optional selected settlement record carried by the editor.
 		 *
 		 * @since 2.0.2

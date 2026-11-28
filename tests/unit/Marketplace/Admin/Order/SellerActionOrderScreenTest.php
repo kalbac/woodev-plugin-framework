@@ -257,7 +257,9 @@ final class SellerActionOrderScreenTest extends TestCase {
 
 	public function test_a_call_refused_as_a_whole_can_be_sent_again_at_once(): void {
 		$this->adapter->failure = new Seller_Action_Refused( 'Кабинет заблокирован.', 502 );
-		$this->assertSame( 502, $this->call( 'handle_run' )->status );
+		$refused                = $this->call( 'handle_run' );
+		$this->assertSame( 422, $refused->status ); // Never a 5xx: a proxy may replace its body (#2063).
+		$this->assertSame( 'Кабинет заблокирован.', $refused->data['message'] );
 		$this->adapter->failure = null;
 
 		$this->assertTrue( $this->call( 'handle_run' )->data['changed'] );

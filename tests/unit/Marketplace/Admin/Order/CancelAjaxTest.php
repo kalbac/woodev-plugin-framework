@@ -11,6 +11,7 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Guard\Admin_Guard;
 use Woodev\Framework\Marketplace\Admin\Order\Cancel_Ajax;
+use Woodev\Framework\Marketplace\Admin\Order\Cancel_Refused;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
 use Woodev\Framework\Marketplace\Admin\Shared\Label_Availability;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
@@ -321,10 +322,35 @@ final class CancelAjaxTest extends TestCase {
 		$this->assertStringContainsString( 'HTTP 503', $this->logged[0] );
 	}
 
-	public function test_an_empty_reason_list_is_a_502(): void {
+	public function test_an_empty_reason_list_is_a_422(): void {
 		$this->canceller->reasons = [];
 
-		$this->assertSame( 502, $this->call( 'handle_reasons' )->status );
+		$this->assertSame( 422, $this->call( 'handle_reasons' )->status );
+	}
+
+	/**
+	 * Ozon Seller 2.0.0 refuses with a 502; the sentence must not travel in a 5xx, which a proxy may replace (#2063).
+	 */
+	public function test_an_adapter_s_502_refusal_goes_out_as_a_422_with_its_sentence(): void {
+		$this->canceller = new class() extends Fake_Order_Canceller {
+			public function reasons( \Woodev\Framework\Marketplace\Account\Account $account, string $posting_number ): array {
+				throw new Cancel_Refused( 'Ozon: отправление уже в доставке.', 502 );
+			}
+
+			public function cancel( \Woodev\Framework\Marketplace\Account\Account $account, string $posting_number, int $reason_id, string $message ): array {
+				throw new Cancel_Refused( 'Ozon: отправление уже в доставке.', 502 );
+			}
+		};
+		$_POST['reason_id'] = '1';
+
+		foreach ( [ 'handle_reasons', 'handle_cancel' ] as $handler ) {
+			$answer = $this->call( $handler );
+
+			$this->assertSame( 422, $answer->status, $handler );
+			$this->assertSame( 'Ozon: отправление уже в доставке.', $answer->data['message'], $handler );
+		}
+
+		$this->assertSame( [], $this->logged );
 	}
 
 	public function test_a_cancellation_that_takes_no_reason_ignores_the_request_s_reason_and_writes_a_note_without_one(): void {

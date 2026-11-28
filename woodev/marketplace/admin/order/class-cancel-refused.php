@@ -11,8 +11,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Thrown by {@see Cancel_Ajax} and by an {@see Order_Canceller} when a cancellation must not go ahead. The message is a sentence for
- * the merchant; the status is the HTTP status of the AJAX answer (403 no right, 404 not a marketplace order, 409 wrong state,
- * 502 the marketplace refused or did not answer).
+ * the merchant; the status says why (403 no right, 404 not a marketplace order, 409 wrong state, 502 the marketplace refused or
+ * did not answer). It is the HTTP status of the AJAX answer, except that a 5xx goes out as 422 ({@see Cancel_Ajax}).
  *
  * @since 2.1.2
  */

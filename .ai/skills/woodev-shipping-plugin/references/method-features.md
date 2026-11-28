@@ -143,6 +143,12 @@ Order-amount limits and delivery-cost limits are different things with similar n
 confuse them (Russian Post #45). Before calling a method done, open its settings modal on the rig next to a sibling's and
 compare the lists field by field.
 
+**The price the rate is built with is the carrier's price** (#2010, 2.1.29). `Shipping_Rate` remembers it
+(`get_carrier_cost()`) while every price rule changes the cost through `with_cost()`, and the admin records it as the shop's own
+cost of a delivery the shop pays for (a marketplace order the seller delivers). So build the rate with what the carrier asks and
+change it only with `with_cost()` — never build a second `new Shipping_Rate` with the customer's price. Where the first amount
+is not the whole charge (insurance the shop pays and the quote leaves out), name it: `->with_carrier_cost( $charge )`.
+
 ## Instance form `show_if`
 
 A `form_fields` entry may carry `show_if` in the settings-API shape (`[ 'setting' => <unprefixed key>, 'operator' => '='|'!='|

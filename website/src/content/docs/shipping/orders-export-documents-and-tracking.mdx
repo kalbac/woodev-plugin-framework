@@ -311,6 +311,51 @@ If the carrier cannot delete a shipment after a certain point, list the states i
 
 The framework adds an «Выгрузка заказов» (Order export) section to your carrier's tab when a provider and a shipment handler are registered in the request. The merchant turns «Включить автоэкспорт» (Enable auto export) on, picks «Статусы для автоэкспорта» (Statuses for auto export; every status the shop has registered is offered except the final ones, so a custom status such as «В сборке» works; change the list with `woodev_shipping_exportable_statuses` — он действует на весь сайт и одинаков для всех перевозчиков, а финальные, черновые и «в корзине» статусы через него не разрешить), and picks the WooCommerce status given to a delivered order («Статус доставленного заказа») and to a cancelled one («Статус отменённого заказа»). Do not add a second export settings page. Your own fields go into the same section through `get_export_section_setting_ids()` and `get_export_section_extension()`.
 
+## Delivery for an order your module owns
+
+A module that creates its own orders and leaves the delivery to the shop — a marketplace order the seller delivers, for example — can let the manager give such an order a carrier. Register a `Delivery_Entry`; the carrier plugins need no change.
+
+```php
+<?php
+use Woodev\Framework\Shipping\Admin\Orders\Delivery_Entry;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+
+final class My_Delivery_Entry implements Delivery_Entry {
+
+	public function claims( \WC_Order $order ): bool {
+		return 'my-module' === $order->get_created_via();
+	}
+
+	public function refusal_reason( \WC_Order $order ): string {
+		return 'on-hold' === $order->get_status() ? 'Accept the order first.' : '';
+	}
+
+	public function notices( \WC_Order $order ): array {
+		$extension = (string) $order->get_meta( '_my_module_phone_extension' );
+
+		return '' === $extension ? [] : [ sprintf( 'This phone needs the extension %s.', $extension ) ];
+	}
+}
+
+// On every request, like a carrier's own registration.
+if ( class_exists( Orders_Registry::class ) ) {
+	Orders_Registry::instance()->register_delivery_entry( new My_Delivery_Entry() );
+}
+```
+
+Link to the order wizard with `Orders_Registry::instance()->get_delivery_url( $order )`. It returns an empty string when there is nothing to open: your entry does not claim the order or refuses it, no carrier plugin can take orders from the admin, the user may not open «Заказы доставки», or the order is already exported or in a final status. Escape the URL when you print it.
+
+For a claimed order the wizard has two steps, the address with the recipient and the delivery. Saving it writes only:
+
+- the shipping address, the recipient and the phone (a changed name or phone is also written to the billing side);
+- the carrier's shipping line, with the rate's meta, the carrier's marker, the pickup point and the carrier's own order fields.
+
+Items, prices, totals, payment, status and any shipping line that is not a carrier's stay as they are. The carrier's line totals **0**; the carrier's price is kept on it in the `_woodev_shipping_seller_cost` item meta. That is the price **before** the shop's rules for customers (markup, free shipping, rounding), see [the carrier's price](../method-features/#the-carriers-price), quoted for the chosen pickup point and the order's payment method. Without that quote the delivery is not saved. The order then is a row of «Заказы доставки» and is exported and tracked like any other, and its «Изменить доставку» action opens the same two steps until it is exported.
+
+:::note
+Code that rewrites your order later must leave the carrier's line and the recipient fields the manager changed alone. And a claimed order may carry your own shipping line beside the carrier's: a carrier finds its line by method id, never by taking the first one.
+:::
+
 ## Tracking
 
 Extend `Abstract_Tracking_Handler`, and turn the carrier's answer into events with `map_events()`. Build each event with `make_event( $status, $description, $timestamp, $location )`.

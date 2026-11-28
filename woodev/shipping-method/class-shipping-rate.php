@@ -101,6 +101,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 		private $cost;
 
 		/**
+		 * What the carrier asks, once it differs from the cost: null while the two are the same.
+		 * Read through {@see self::get_carrier_cost()}.
+		 *
+		 * @since 2.1.29
+		 * @var string|int|float|array|null
+		 */
+		private $carrier_cost = null;
+
+		/**
 		 * Package flag (boolean) or package data (array)
 		 *
 		 * @var bool|array|null
@@ -428,38 +437,90 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 		 * @return Shipping_Rate New rate instance with merged metadata
 		 */
 		public function with_meta_data( array $meta_data ): Shipping_Rate {
-			return new self(
-				$this->method_id,
-				$this->id,
-				$this->label,
-				$this->cost,
-				$this->package,
-				array_merge( $this->meta_data, $meta_data ),
-				$this->args
+			return $this->keeping_carrier_cost(
+				new self(
+					$this->method_id,
+					$this->id,
+					$this->label,
+					$this->cost,
+					$this->package,
+					array_merge( $this->meta_data, $meta_data ),
+					$this->args
+				)
 			);
 		}
 
 		/**
 		 * Creates a rate with a different cost
 		 *
-		 * Returns a new instance with updated cost (immutability preserved).
+		 * Returns a new instance with updated cost (immutability preserved). The carrier's own price
+		 * ({@see self::get_carrier_cost()}) stays what it was: this is how the price for the customer is made.
 		 *
 		 * @since 1.5.0
+		 * @since 2.1.29 Keeps the carrier cost.
 		 *
 		 * @param string|array|int|float $cost New cost value
 		 *
 		 * @return Shipping_Rate New rate instance with updated cost
 		 */
 		public function with_cost( $cost ): Shipping_Rate {
-			return new self(
-				$this->method_id,
-				$this->id,
-				$this->label,
-				$cost,
-				$this->package,
-				$this->meta_data,
-				$this->args
+			return $this->keeping_carrier_cost(
+				new self(
+					$this->method_id,
+					$this->id,
+					$this->label,
+					$cost,
+					$this->package,
+					$this->meta_data,
+					$this->args
+				)
 			);
+		}
+
+		/**
+		 * What the carrier asks for the delivery, in the shop's currency: the cost the rate was first built with. Everything that
+		 * makes the customer's price out of it — markup, free shipping, rounding, the box cost, the cost limits — goes through
+		 * {@see self::with_cost()}, which leaves this value alone. The admin records it as the shop's own cost of a delivery.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @return float the total of a per-item cost.
+		 */
+		public function get_carrier_cost(): float {
+			return (float) array_sum( array_map( 'floatval', (array) ( $this->carrier_cost ?? $this->cost ) ) );
+		}
+
+		/**
+		 * Creates a rate that names the carrier's price apart from its cost — for a carrier that builds a rate with an amount
+		 * other than what it will charge the shop.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param string|array|int|float $cost what the carrier asks.
+		 *
+		 * @return Shipping_Rate New rate instance carrying the carrier cost
+		 */
+		public function with_carrier_cost( $cost ): Shipping_Rate {
+			$rate               = clone $this;
+			$rate->carrier_cost = self::normalize_cost( $cost, $this->id );
+
+			return $rate;
+		}
+
+		/**
+		 * Hands this rate's carrier cost to a rate made out of it.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param Shipping_Rate $rate the new rate.
+		 *
+		 * @return Shipping_Rate the same new rate.
+		 */
+		private function keeping_carrier_cost( Shipping_Rate $rate ): Shipping_Rate {
+			$carrier_cost       = $this->carrier_cost ?? $this->cost;
+			$rate->carrier_cost = $carrier_cost === $rate->cost ? null : $carrier_cost;
+
+			return $rate;
 		}
 
 		/**
@@ -476,14 +537,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 		 * @return Shipping_Rate New rate instance carrying the given label
 		 */
 		public function with_label( string $label ): Shipping_Rate {
-			return new self(
-				$this->method_id,
-				$this->id,
-				$label,
-				$this->cost,
-				$this->package,
-				$this->meta_data,
-				$this->args
+			return $this->keeping_carrier_cost(
+				new self(
+					$this->method_id,
+					$this->id,
+					$label,
+					$this->cost,
+					$this->package,
+					$this->meta_data,
+					$this->args
+				)
 			);
 		}
 
@@ -497,14 +560,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 		 * @return Shipping_Rate New rate instance with the merged args
 		 */
 		public function with_args( array $args ): Shipping_Rate {
-			return new self(
-				$this->method_id,
-				$this->id,
-				$this->label,
-				$this->cost,
-				$this->package,
-				$this->meta_data,
-				array_merge( $this->args, $args )
+			return $this->keeping_carrier_cost(
+				new self(
+					$this->method_id,
+					$this->id,
+					$this->label,
+					$this->cost,
+					$this->package,
+					$this->meta_data,
+					array_merge( $this->args, $args )
+				)
 			);
 		}
 

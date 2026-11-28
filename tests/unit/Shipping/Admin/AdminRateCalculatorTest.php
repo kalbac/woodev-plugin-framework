@@ -136,6 +136,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-method.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-fee-payments.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-rate.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-order-amount.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-orders-provider.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
@@ -739,6 +740,46 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame( 310.0, $without['providers'][0]['rates'][0]['cost'], 'no point: the first one, as before' );
 			$this->assertSame( 516.0, $chosen['providers'][0]['rates'][0]['cost'], 'the chosen point wins' );
 			$this->assertNull( $current, 'and is gone afterwards' );
+		}
+
+		/**
+		 * #2010: beside the customer's price the answer names what the carrier asks, taken from the rate the method is about
+		 * to add; the listener lives only while the method is asked.
+		 *
+		 * @covers ::calculate
+		 * @covers ::method_rates
+		 *
+		 * @return void
+		 */
+		public function test_the_carrier_price_is_reported_beside_the_customer_price(): void {
+			$listeners = [];
+
+			\Brain\Monkey\Actions\expectAdded( 'woodev_shipping_method_before_add_rate' )->once()->whenHappen(
+				static function ( callable $listener ) use ( &$listeners ): void {
+					$listeners[] = $listener;
+				}
+			);
+			\Brain\Monkey\Actions\expectRemoved( 'woodev_shipping_method_before_add_rate' )->once();
+
+			$method     = Mockery::mock( Shipping_Method::class );
+			$method->id = 'test_courier';
+			$method->shouldReceive( 'is_pickup_shipping' )->andReturn( false );
+			$method->shouldReceive( 'get_admin_rates_for_package' )->andReturnUsing(
+				function () use ( &$listeners ): array {
+					// What the method does before add_rate(): the rate was quoted at 250, then made free for the customer.
+					$listeners[0]( ( new \Woodev\Framework\Shipping\Shipping_Rate( 'test_courier', 'test_courier:3', 'Курьер', 250 ) )->with_cost( 0 ) );
+
+					return [ 'test_courier:3' => $this->rate( [ 'id' => 'test_courier:3', 'method_id' => 'test_courier', 'cost' => '0' ] ) ];
+				}
+			);
+
+			$calculator               = $this->calculator( $this->provider( 'test', [ 'test_courier' ] ) );
+			$calculator->zone_methods = [ $method ];
+
+			$rate = $calculator->calculate( $this->one_line(), [ 'country' => 'RU' ] )['providers'][0]['rates'][0];
+
+			$this->assertSame( 0.0, $rate['cost'] );
+			$this->assertSame( 250.0, $rate['carrier_cost'] );
 		}
 
 		/**
