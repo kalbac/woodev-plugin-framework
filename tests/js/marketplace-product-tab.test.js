@@ -11,7 +11,7 @@ const TAB_SCRIPT = path.join( __dirname, '../../woodev/marketplace/assets/js/adm
 const CONFIRM_MS = 5000;
 
 window.woodevMarketplaceProduct = {
-	texts: { close: 'Close', working: 'Working…', failed: 'Failed' },
+	texts: { close: 'Close', working: 'Working…', failed: 'Failed', foreign: 'Replaced (HTTP %d)' },
 };
 global.jQuery = require( 'jquery' );
 global.$      = global.jQuery;
@@ -465,6 +465,22 @@ describe( 'the actions on the variations of a variable product', () => {
 
 		expect( result.textContent ).toBe( 'Page is stale.' );
 		expect( apply.disabled ).toBe( false );
+	} );
+
+	test.each( [
+		[ 'an answer that was replaced names its status', { status: 502 }, 'Replaced (HTTP 502)' ],
+		[ 'no answer at all keeps its own sentence', { status: 0 }, 'Failed' ],
+	] )( '%s', ( name, xhr, sentence ) => {
+		const { select, apply, result, checks } = renderVariants();
+
+		select.value = 'export';
+		checks[ 0 ].checked = true;
+		apply.click();
+		request.reject( xhr );
+
+		expect( result.textContent ).toBe( sentence );
+		// JSON is asked for, so a page served with a 200 in place of the answer fails too.
+		expect( global.jQuery.post.mock.calls[ 0 ][ 3 ] ).toBe( 'json' );
 	} );
 
 	test( 'a destructive button of a row asks twice, then posts its action for its own variation', () => {

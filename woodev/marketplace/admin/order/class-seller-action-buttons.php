@@ -10,6 +10,7 @@ namespace Woodev\Framework\Marketplace\Admin\Order;
 use Woodev\Framework\Marketplace\Account\Account;
 use Woodev\Framework\Marketplace\Admin\Dialog_Assets;
 use Woodev\Framework\Marketplace\Admin\Product\Screen_Names;
+use Woodev\Framework\Marketplace\Admin\Shared\Foreign_Answer_Text;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -195,7 +196,7 @@ final class Seller_Action_Buttons {
 
 		$printed = true;
 		?>
-		<dialog id="<?php echo esc_attr( self::DIALOG_ID ); ?>" class="woodev-dialog woodev-mp-action-dialog" aria-labelledby="woodev-mp-action-title" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-button="<?php echo esc_attr( '.' . self::BUTTON_CLASS ); ?>" data-sending="<?php echo esc_attr__( 'Выполняем…', 'woodev-plugin-framework' ); ?>" data-loading="<?php echo esc_attr__( 'Загружаем список…', 'woodev-plugin-framework' ); ?>" data-choose="<?php echo esc_attr__( 'Выберите…', 'woodev-plugin-framework' ); ?>" data-close="<?php echo esc_attr__( 'Закрыть', 'woodev-plugin-framework' ); ?>" data-failed="<?php echo esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ); ?>">
+		<dialog id="<?php echo esc_attr( self::DIALOG_ID ); ?>" class="woodev-dialog woodev-mp-action-dialog" aria-labelledby="woodev-mp-action-title" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-button="<?php echo esc_attr( '.' . self::BUTTON_CLASS ); ?>" data-sending="<?php echo esc_attr__( 'Выполняем…', 'woodev-plugin-framework' ); ?>" data-loading="<?php echo esc_attr__( 'Загружаем список…', 'woodev-plugin-framework' ); ?>" data-choose="<?php echo esc_attr__( 'Выберите…', 'woodev-plugin-framework' ); ?>" data-close="<?php echo esc_attr__( 'Закрыть', 'woodev-plugin-framework' ); ?>" data-failed="<?php echo esc_attr__( 'Не удалось связаться с сайтом. Проверьте интернет и повторите.', 'woodev-plugin-framework' ); ?>" data-foreign="<?php echo esc_attr( Foreign_Answer_Text::template() ); ?>">
 			<div class="woodev-dialog__header">
 				<h2 class="woodev-dialog__title" id="woodev-mp-action-title"></h2>
 				<button type="button" class="woodev-dialog__close" data-woodev-dialog-close aria-label="<?php esc_attr_e( 'Закрыть', 'woodev-plugin-framework' ); ?>"></button>

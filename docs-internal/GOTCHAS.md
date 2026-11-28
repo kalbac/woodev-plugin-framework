@@ -20,7 +20,7 @@
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
 | [`woocommerce/*`](gotcha-index/woocommerce.md) | 52 | WooCommerce-specific |
 | [`framework/*`](gotcha-index/framework.md) | 13 | Framework internals |
-| [`framework/contracts`](gotcha-index/framework-contracts.md) | 4 | What the framework guarantees to its consumers |
+| [`framework/contracts`](gotcha-index/framework-contracts.md) | 5 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 26 | Location provider layer |
 | [`rig/*`](gotcha-index/rig.md) | 35 | Local verification rig |
 | [`framework/wiring`](gotcha-index/framework-wiring.md) | 4 | Responsibilities that moved |

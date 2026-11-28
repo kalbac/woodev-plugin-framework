@@ -11,7 +11,7 @@ const BUTTON = `
 	<span class="woodev-mp-label-wrap">
 		<button type="button" class="button woodev-mp-label" aria-disabled="false" data-url="https://x.test/records" data-account="3"
 			data-row="3:700" data-nonce="n" data-preparing="Preparing" data-waiting="Waiting" data-failed="No answer"
-			data-open="Open the stickers">Label</button>
+			data-open="Open the stickers" data-foreign="Replaced (HTTP %d)">Label</button>
 		<span class="woodev-mp-label__status" role="status"></span>
 	</span>`;
 
@@ -71,6 +71,27 @@ describe( 'order label button', () => {
 		expect( link.getAttribute( 'href' ) ).toBe( '/wp-admin/admin-post.php?document_id=2' );
 		expect( link.target ).toBe( '_blank' );
 		expect( link.textContent ).toBe( 'Open the stickers' );
+	} );
+
+	test.each( [
+		[ 'a page of its own', 502, () => Promise.reject( new SyntaxError( 'Unexpected token <' ) ) ],
+		[ 'a JSON body without a message', 403, () => Promise.resolve( { error: 'blocked' } ) ],
+	] )( 'names the HTTP status of an answer replaced by %s', async ( name, code, json ) => {
+		document.body.innerHTML = BUTTON;
+		global.fetch = jest.fn( ( url ) =>
+			Promise.resolve(
+				url.endsWith( '/activity' )
+					? { ok: true, status: 200, json: () => Promise.resolve( { rows: [] } ) }
+					: { ok: false, status: code, json }
+			)
+		);
+
+		jest.isolateModules( () => require( SCRIPT ) );
+		await settle();
+		document.querySelector( '.woodev-mp-label' ).click();
+		await settle();
+
+		expect( status().textContent ).toBe( `Replaced (HTTP ${ code })` );
 	} );
 
 	test( 'a page on another site is not offered', async () => {

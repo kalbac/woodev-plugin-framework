@@ -104,7 +104,8 @@
 		var config = configOf( settings );
 
 		if ( config ) {
-			show( 'error', config.failed, '', '' );
+			// A status without our notice: the answer was not the plugin's. No status: the page did not answer.
+			show( 'error', xhr.status ? config.foreign.replace( '%d', xhr.status ) : config.failed, '', '' );
 		}
 	} );
 }( window.jQuery ) );

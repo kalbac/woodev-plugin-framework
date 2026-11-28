@@ -9801,8 +9801,10 @@ msgid "Не удалось запомнить, что мастер пропущ�
 msgstr ""
 
 #. translators: %d: the HTTP status code of the answer.
+#: marketplace/admin/shared/class-foreign-answer-text.php:29
+#: assets/build/marketplace-admin/index.js:2
 #: assets/build/shipping-orders-page/index.js:2
-#, js-format
+#, php-format,js-format
 msgid "Ответ пришёл не от плагина (HTTP %d) — возможно, его подменила защита или другой сервис перед сайтом."
 msgstr ""
 
@@ -10702,7 +10704,6 @@ msgstr ""
 msgctxt "block description"
 msgid "Lets the shopper choose a pickup point on the map for the selected shipping method."
 msgstr ""
-
 
 #: box-packer/class-packer-dispatcher.php:101
 msgid "Single box (items stacked along one axis)"

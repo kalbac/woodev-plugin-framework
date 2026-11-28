@@ -42,9 +42,20 @@
 		} );
 
 		return fetch( dialog.getAttribute( 'data-url' ), { method: 'POST', credentials: 'same-origin', body: body } )
-			.then( function ( response ) {
-				return response.json();
-			} );
+			.then( read );
+	}
+
+	// An answer that is neither a success nor explains itself was replaced on the way: its status is all there is to show.
+	function read( response ) {
+		return response.json().catch( function () {
+			return null;
+		} ).then( function ( answer ) {
+			if ( answer && ( answer.success || ( answer.data && answer.data.message ) ) ) {
+				return answer;
+			}
+
+			return { success: false, data: { message: dialog.getAttribute( 'data-foreign' ).replace( '%d', response.status ) } };
+		} );
 	}
 
 	function say( sentence ) {
