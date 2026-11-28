@@ -12,7 +12,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Thrown by the framework when the account or the licence does not allow an action, and by an adapter when nothing of a call was
  * done. The message is a sentence for the merchant; the status is the HTTP status of the AJAX answer (403 no right or no licence,
- * 404 not a marketplace order, 409 wrong state, 502 the marketplace refused or did not answer).
+ * 404 not a marketplace order, 409 wrong state, 502 the answer was lost). An adapter may say 502 when the marketplace refused or
+ * did not answer: {@see Seller_Action_Runner} passes such a refusal on as 422.
  *
  * @since 2.1.27
  */

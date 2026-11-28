@@ -313,8 +313,8 @@ final class Mapping_Editor {
 	 *
 	 * @param int|null            $mapping_id Mapping id, null for a new one.
 	 * @param array<string,mixed> $body       Decoded request body.
-	 * @return array{status:string,id:int,errors:string[],notices:string[]} Status `saved`, `invalid`, `missing`,
-	 *   `unavailable` or `failed`.
+	 * @return array{status:string,id:int,errors:string[],notices:string[],cause?:\Throwable} Status `saved`, `invalid`,
+	 *   `missing`, `unavailable` or `failed`; `cause` is what the adapter threw, with `unavailable` (since 2.1.29).
 	 */
 	public function save( ?int $mapping_id, array $body ): array {
 		$stored = null === $mapping_id ? null : $this->mappings->find( $mapping_id );
@@ -327,7 +327,7 @@ final class Mapping_Editor {
 			$chosen = $this->chosen_category( $body );
 			$fields = null === $chosen['entry'] ? [] : $this->field_map( $chosen['entry']['identity'] );
 		} catch ( \Throwable $e ) {
-			return self::result( 'unavailable', 0, [ Mapping_Messages::marketplace_failure( $e->getMessage() ) ] );
+			return self::result( 'unavailable', 0, [ Mapping_Messages::marketplace_failure( $e->getMessage() ) ] ) + [ 'cause' => $e ];
 		}
 
 		if ( null !== $chosen['error'] ) {

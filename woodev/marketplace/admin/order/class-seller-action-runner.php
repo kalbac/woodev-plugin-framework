@@ -315,7 +315,7 @@ final class Seller_Action_Runner {
 		} catch ( Seller_Action_Refused $e ) {
 			$this->settle( $tokens, null ); // Nothing was done: every unit can be sent again.
 
-			throw $e;
+			throw self::passed_on( $e ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not HTML output.
 		} catch ( \Throwable $e ) {
 			$this->log( 'Running the seller action ' . $action->id() . ' failed', $e );
 			$this->settle( $tokens, Wpdb_Seller_Action_Store::UNKNOWN ); // The answer was lost: the action may have gone through.
@@ -330,6 +330,17 @@ final class Seller_Action_Runner {
 		$this->refresh( $account, $targets );
 
 		return $report;
+	}
+
+	/**
+	 * An adapter's refusal as the framework passes it on: never a 5xx, whose body a proxy or a bot filter in front of the shop
+	 * may replace.
+	 *
+	 * @param Seller_Action_Refused $refusal What the adapter threw.
+	 * @return Seller_Action_Refused The same refusal, or its sentence as a 422.
+	 */
+	private static function passed_on( Seller_Action_Refused $refusal ): Seller_Action_Refused {
+		return $refusal->status() < 500 ? $refusal : new Seller_Action_Refused( $refusal->getMessage(), 422 );
 	}
 
 	/**
