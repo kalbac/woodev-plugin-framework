@@ -1700,7 +1700,8 @@ cannot be loaded fails the run unless a successful read of the order store finds
 ## A carrier for a seller-delivered order (#2010)
 
 Card WD1 of the Wildberries design (`2.1.29`), the one marketplace card that changes the shipping module (owner's exception, T2).
-The shipping module knows no marketplace: it offers a registry, and **nothing registers an entry yet** — WF10 does.
+The shipping module knows no marketplace: it offers a registry; the marketplace module registers into it
+([the bridge below](#the-delivery-service-of-a-seller-delivered-order-2008)).
 
 **Seams** (`woodev/shipping-method/admin/orders/`).
 
@@ -1711,11 +1712,6 @@ The shipping module knows no marketplace: it offers a registry, and **nothing re
 | `Delivery_Entry::notices( $order )` | warnings above the address in the wizard, plain text |
 | `Orders_Registry::register_delivery_entry( $entry )` | on every request |
 | `Orders_Registry::get_delivery_url( $order )` | the «Оформить доставку» link; `''` when there is nothing to open |
-
-**What WF10 wires** (design §7.4–7.5): claim `Flows\Seller_Order::is_seller_delivered()` orders of its own marketplace; refuse
-until the units are in `confirm`; in `notices()` give the phone-extension warning of `Seller_Delivery_Panel` (D13: the extension
-is not passed to a carrier) and the day and time the buyer chose; print the button from `get_delivery_url()`. The licence of the
-marketplace plugin is that module's to check in `refusal_reason()`.
 
 **Behaviour.** `GET /shipping/orders/{id}/edit` answers `entry: 'delivery'` and `notices` for a claimed order, a row or not, and
 `PUT /shipping/orders/{id}` writes the delivery only (`Order_Payload_Validator::validate_delivery()`,
@@ -1738,6 +1734,55 @@ picked through the search. Without a registered entry (the marketplace plugin of
 any order. The orders table names both shipping lines and the buyer-paid sum (#2073). Yandex Delivery builds its rate without
 the insurance the shop pays itself, so the stored cost lacks it until the plugin names its carrier price (#2075). A carrier must find its line by method id
 (CDEK, Yandex, Russian Post and Ozon Delivery were read on 28.11.2026 and do).
+
+## The delivery service of a seller-delivered order (#2008)
+
+Card WF10 of the Wildberries design (`2.1.29`). Optional: an adapter that declares nothing gets no hook and no button, and no
+delivery code changed.
+
+**Adapter side.** `Admin\Order\Carrier_Actions extends Seller_Actions` names a declared action per piece of news:
+
+| News | When | The framework |
+|---|---|---|
+| `HANDED_OVER` | `woodev_shipping_order_exported` | sends the action; «Оформить доставку» is on only while a unit takes it |
+| `DELIVERED` | `woodev_shipping_delivery_status_changed` to `delivered` | hands over first if the marketplace still waits, then sends the action **once, without input** |
+| `RETURNED` | the same to `returning` / `returned` | sends nothing: the order asks the merchant to run the action |
+
+- The actions are sent with **no input**: no required field, and `check_seller_input()` accepts empty values.
+- «The buyer's code is needed» is answered per unit with `Seller_Unit_Result::code_required()` — also when the marketplace
+  refused the request as a whole. Which refusals mean that is the adapter's reading (design §7.4: «not found», «wrong status»
+  and «marking code missing» are plain `refused()`). `Seller_Action_Refused` and other throwables mean «nothing decided»: the
+  call is retried, so a permanent refusal must not be thrown.
+- A seller-delivered order is the marketplace's when `Seller_Order::belongs_to()` says so (the mark and `created_via`).
+
+**The job** (`Flows\Carrier_Bridge`, `{plugin id}_carrier_action( account_id, order_id, news )`). The listeners only queue it,
+so nothing is sent inside the delivery service's request. Sending goes through `Seller_Action_Runner`, so the claims of
+[seller actions](#seller-actions-on-an-order-2003) apply: a unit already sent is not sent again.
+
+| What the send came to | Then |
+|---|---|
+| accepted | done; in a delivery, an accepted hand-over runs the job again until the status moves |
+| no answer, nothing done, or an earlier send still undecided | retried on the `Backoff` ladder, 24 runs at most (about ten hours), then a notice |
+| refused by the marketplace or by `seller_action_refusal()` | never repeated; the notice gives the reason |
+| refused for the code | the account is remembered (`Flows\Code_Required_Accounts`, forgotten with the account): this and later deliveries ask the merchant instead |
+
+A paused account or a lapsed licence waits without spending a run; a switched-off account ends the job.
+
+**What the merchant sees** (`Admin\Shared\Carrier_State`, one reading for both screens):
+
+- a notice (order meta `_woodev_mp_carrier_notice`, tied to an action) in the details box and under the status in «Заказы», shown
+  only while a unit still takes that action — «Подтвердите вручение: нужен код покупателя.», the return, or why an action did
+  not go through;
+- «Оформить доставку» / «Изменить доставку» in the details box and as a row link in «Заказы», where a delivery plugin that takes
+  orders from the admin is active; off with the reason before the hand-over is available; gone once the shipment is created;
+- the delivery service and its tracking numbers (what the buyer sees) in the details box.
+
+`Admin\Order\Carrier_Delivery_Entry` is the [WD1 entry](#a-carrier-for-a-seller-delivered-order-2010): it refuses without the
+account, the right to write, the licence, or a unit in the hand-over's status, and warns in the wizard about a phone extension
+(D13: not passed to a delivery service), the day the buyer chose and a pickup point address.
+
+**Limit.** A grouped order with some units not yet confirmed can get a delivery as soon as one unit takes the hand-over; the
+others are not handed over by the export and need the button.
 
 ## Sticker documents (#2005)
 

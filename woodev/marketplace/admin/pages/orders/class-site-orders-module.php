@@ -9,12 +9,14 @@ namespace Woodev\Framework\Marketplace\Admin\Pages\Orders;
 
 use Woodev\Framework\Admin\Records\Records_Definition;
 use Woodev\Framework\Admin\Records\Records_Registry;
+use Woodev\Framework\Marketplace\Admin\Order\Carrier_Actions;
 use Woodev\Framework\Marketplace\Admin\Order\Delivery_Schemes;
 use Woodev\Framework\Marketplace\Admin\Order\Order_Canceller;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Action_Runner;
 use Woodev\Framework\Marketplace\Admin\Order\Seller_Actions;
 use Woodev\Framework\Marketplace\Admin\Order\Unit_Orders;
 use Woodev\Framework\Marketplace\Admin\Pages\Shipments\Shipments_Module;
+use Woodev\Framework\Marketplace\Admin\Shared\Carrier_State;
 use Woodev\Framework\Marketplace\Admin\Shared\Order_Unit_Text;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Action_Gate;
 use Woodev\Framework\Marketplace\Admin\Shared\Posting_Status_Names;
@@ -150,7 +152,8 @@ final class Site_Orders_Module {
 				},
 				$adapter instanceof Posting_Status_Names ? $adapter : null,
 				$gate,
-				$schemes
+				$schemes,
+				$adapter instanceof Carrier_Actions ? new Site_Orders_Carrier( new Carrier_State( $adapter, $adapter->order_meta()->created_via() ) ) : null
 			),
 			new Site_Orders_Activity(),
 			$labels,

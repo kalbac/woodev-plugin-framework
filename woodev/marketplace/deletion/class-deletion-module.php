@@ -22,6 +22,7 @@ use Woodev\Framework\Marketplace\Data\Wpdb_Catalog_Cache;
 use Woodev\Framework\Marketplace\Data\Wpdb_Label_Store;
 use Woodev\Framework\Marketplace\Data\Wpdb_Link_Store;
 use Woodev\Framework\Marketplace\Diagnostics\Api_Error_Ring;
+use Woodev\Framework\Marketplace\Flows\Code_Required_Accounts;
 use Woodev\Framework\Marketplace\Governor\Wpdb_Throttle_Store;
 use Woodev\Framework\Marketplace\Jobs\Account_Pause;
 use Woodev\Framework\Marketplace\Jobs\Job_Gate;
@@ -247,12 +248,14 @@ final class Deletion_Module {
 		$reports  = new Link_Report_Store( $options );
 		$cutoffs  = new Posting_History_Cutoffs( $plugin_id );
 		$polls    = new Posting_Poll_Times( $plugin_id );
+		$codes    = new Code_Required_Accounts( $plugin_id );
 
-		return static function ( int $account_id ) use ( $progress, $reports, $cutoffs, $polls, $cards, $cache, $shipments ): int {
+		return static function ( int $account_id ) use ( $progress, $reports, $cutoffs, $polls, $codes, $cards, $cache, $shipments ): int {
 			$progress->forget_account( $account_id );
 			$reports->forget_account( $account_id );
 			$cutoffs->forget( $account_id );
 			$polls->forget( $account_id );
+			$codes->forget( $account_id );
 			$cards->forget( $account_id );
 			$shipments->forget( $account_id );
 			$cache->delete_keys( [ Warehouse_Options::key_for( $account_id ) ] );

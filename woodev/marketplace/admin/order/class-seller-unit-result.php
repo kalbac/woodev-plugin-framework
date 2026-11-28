@@ -28,12 +28,21 @@ final class Seller_Unit_Result {
 	private $reason;
 
 	/**
-	 * @param Seller_Action_Target $target Unit.
-	 * @param string               $reason Refusal; empty for done.
+	 * Whether the refusal means that the buyer's confirmation code is needed.
+	 *
+	 * @var bool
 	 */
-	private function __construct( Seller_Action_Target $target, string $reason ) {
-		$this->target = $target;
-		$this->reason = $reason;
+	private $asks_code;
+
+	/**
+	 * @param Seller_Action_Target $target    Unit.
+	 * @param string               $reason    Refusal; empty for done.
+	 * @param bool                 $asks_code Whether the refusal asks for the buyer's confirmation code.
+	 */
+	private function __construct( Seller_Action_Target $target, string $reason, bool $asks_code = false ) {
+		$this->target    = $target;
+		$this->reason    = $reason;
+		$this->asks_code = $asks_code;
 	}
 
 	/**
@@ -64,6 +73,21 @@ final class Seller_Unit_Result {
 	}
 
 	/**
+	 * The marketplace refused a unit because it needs the buyer's confirmation code. Meaningful for the action a marketplace
+	 * names under {@see Carrier_Actions::DELIVERED}, which the framework sends without a code: this answer makes it ask the
+	 * merchant for the code instead.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param Seller_Action_Target $target Unit of the call.
+	 * @param string               $reason The sentence for the merchant, in Russian.
+	 * @return self
+	 */
+	public static function code_required( Seller_Action_Target $target, string $reason ): self {
+		return new self( $target, self::refused( $target, $reason )->reason(), true );
+	}
+
+	/**
 	 * @since 2.1.27
 	 *
 	 * @return Seller_Action_Target
@@ -88,5 +112,14 @@ final class Seller_Unit_Result {
 	 */
 	public function reason(): string {
 		return $this->reason;
+	}
+
+	/**
+	 * @since 2.1.29
+	 *
+	 * @return bool Whether the unit was refused for the lack of the buyer's confirmation code.
+	 */
+	public function asks_code(): bool {
+		return $this->asks_code;
 	}
 }

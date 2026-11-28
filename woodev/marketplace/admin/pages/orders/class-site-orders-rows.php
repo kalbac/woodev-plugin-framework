@@ -79,6 +79,13 @@ final class Site_Orders_Rows {
 	private $schemes;
 
 	/**
+	 * The delivery service's link and notice of a seller-delivered order; null for a marketplace that has none.
+	 *
+	 * @var Site_Orders_Carrier|null
+	 */
+	private $carrier;
+
+	/**
 	 * Creates the builder.
 	 *
 	 * @since 2.1.5
@@ -89,8 +96,10 @@ final class Site_Orders_Rows {
 	 * @param Posting_Status_Names|null $status_names The adapter's own names of posting statuses, when it has them.
 	 * @param Posting_Action_Gate|null  $gate        Whether «Отменить» and «Этикетки» are on offer for a posting (since 2.1.17); null offers them to everyone who may edit the order.
 	 * @param array<string,string>      $schemes     Names of the delivery schemes by code, when the table shows them (since 2.1.29, {@see Site_Orders_Definition::has_scheme_choice()}).
+	 * @param Site_Orders_Carrier|null  $carrier     The delivery service's link and notice (since 2.1.29).
 	 */
-	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null, ?Posting_Action_Gate $gate = null, array $schemes = [] ) {
+	public function __construct( array $offered, callable $can_edit, callable $is_finished, ?Posting_Status_Names $status_names = null, ?Posting_Action_Gate $gate = null, array $schemes = [], ?Site_Orders_Carrier $carrier = null ) {
+		$this->carrier      = $carrier;
 		$this->schemes      = Site_Orders_Definition::has_scheme_choice( $schemes ) ? $schemes : [];
 		$this->offered      = $offered;
 		$this->can_edit     = $can_edit;
@@ -131,6 +140,18 @@ final class Site_Orders_Rows {
 	}
 
 	/**
+	 * Adds to the table's definition what the rows can carry beyond it: the delivery service's links.
+	 *
+	 * @since 2.1.29
+	 *
+	 * @param array<string,mixed> $definition The table's definition.
+	 * @return array<string,mixed>
+	 */
+	public function extend_definition( array $definition ): array {
+		return null === $this->carrier ? $definition : $this->carrier->extend_definition( $definition );
+	}
+
+	/**
 	 * Builds a row.
 	 *
 	 * @since 2.1.5
@@ -151,6 +172,11 @@ final class Site_Orders_Rows {
 		$url      = $editable ? (string) $order->get_edit_order_url() : '';
 		$cells    = $this->cells( $item, $order, $url );
 		$actions  = $this->with_seller_actions( $this->actions( $item, $order, $editable, $url, $write_refusal, $label_stored ), $seller_actions, $editable );
+
+		if ( null !== $this->carrier ) {
+			$actions         = $this->carrier->with_link( $actions, $order );
+			$cells['status'] = $this->carrier->with_notice( $cells['status'], $order );
+		}
 
 		return [
 			'id'           => Site_Orders_Ids::row_id( $account_id, $item['order_id'] ),

@@ -606,7 +606,8 @@ final class Seller_Action_Runner {
 	 *
 	 * @param Seller_Action_Target $target Unit.
 	 * @param string               $state  State of the stored claim.
-	 * @return array{order:\WC_Order,unit:string,reason:string}
+	 * @return array{order:\WC_Order,unit:string,reason:string,state:string} `state` is the claim's, for a caller that must tell
+	 *                                                                      «already sent» from «may still have to be sent».
 	 */
 	private static function held( Seller_Action_Target $target, string $state ): array {
 		if ( Wpdb_Seller_Action_Store::SENT === $state ) {
@@ -621,6 +622,7 @@ final class Seller_Action_Runner {
 			'order'  => $target->order(),
 			'unit'   => $target->unit()->label(),
 			'reason' => $reason,
+			'state'  => $state,
 		];
 	}
 
