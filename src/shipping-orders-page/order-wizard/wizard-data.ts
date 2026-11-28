@@ -295,6 +295,31 @@ export function buildPayload( data: WizardData ): Record<string, unknown> {
 	return payload;
 }
 
+/**
+ * A delivery-only edit's starting state (#2010). The order's address often has no country — the module that owns the
+ * order stores it as one line of text — so the shop's own country is offered.
+ */
+export function deliveryPrefillToData( prefill: OrderPrefill, defaultCountry: string ): WizardData {
+	const data = prefillToData( prefill );
+
+	return { ...data, shipping: { ...data.shipping, country: data.shipping.country || defaultCountry } };
+}
+
+/**
+ * The request body of a delivery-only save (`Order_Payload_Validator::validate_delivery()`): the delivery address
+ * with the recipient exactly as typed, the chosen tariff and what belongs to it.
+ */
+export function buildDeliveryPayload( data: WizardData ): Record<string, unknown> {
+	return {
+		shipping: data.shipping,
+		shipping_line: data.rest.shipping_line,
+		pickup_point: data.rest.pickup_point,
+		fields: data.rest.fields,
+		carrier_fields: data.rest.carrier_fields,
+		...( data.settlementRecord ? { location: data.settlementRecord } : {} ),
+	};
+}
+
 /** Whether two states differ — the unsaved-input check behind the close confirmation (C3). */
 export function isDirty( initial: WizardData, current: WizardData ): boolean {
 	return JSON.stringify( withoutDerived( initial ) ) !== JSON.stringify( withoutDerived( current ) );

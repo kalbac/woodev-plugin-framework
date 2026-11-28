@@ -15,7 +15,8 @@
  *
  * **Price (O8).** Starts at the carrier's own and is a plain number field; the carrier's price
  * stays visible beside it with «вернуть цену тарифа». The number sent is the FINAL one
- * (`shipping_line.cost`), the rate's `meta` travels with it.
+ * (`shipping_line.cost`), the rate's `meta` travels with it. In a delivery-only edit (#2010) the price is not the
+ * order's: it is the shop's own cost of the delivery, so it is shown, never typed, and follows every fresh quote.
  *
  * **Pickup point (O10, D3).** A pickup tariff shows the point list and map in this step — the
  * framework's own picker over the admin points routes, told the order's weight, the payment
@@ -187,7 +188,7 @@ function CarrierFields( { schema, values, errors, onChange }: CarrierFieldsProps
 	);
 }
 
-export default function StepDelivery( { data, setData, errors }: StepProps ) {
+export default function StepDelivery( { data, setData, errors, delivery }: StepProps ) {
 	const { nonce, wizard } = getWizardContext();
 	const symbol = wizard.currency?.symbol || '';
 	const [ rates, setRates ] = useState<RatesState>( { phase: 'idle', response: null, error: '' } );
@@ -235,7 +236,9 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 				settled = true;
 				setGone( isChosenRateGone( latest.current, response ) );
 				setData( ( d ) => {
-					const reconciled = applyRates( d, response );
+					// A delivery-only edit has no price of the manager's to keep: the cost is what the carrier asks now.
+					const applied = applyRates( d, response );
+					const reconciled = delivery ? resetDeliveryCost( applied ) : applied;
 
 					return { ...reconciled, rest: { ...reconciled.rest, rates_pending: false } };
 				} );
@@ -369,7 +372,9 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 
 			{ 'idle' === rates.phase && (
 				<Notice status="warning" isDismissible={ false }>
-					{ __( 'Чтобы посчитать доставку, укажите на предыдущих шагах страну и товары.', 'woodev-plugin-framework' ) }
+					{ delivery
+						? __( 'Тарифы не посчитать: проверьте страну доставки и то, что товары заказа есть в магазине.', 'woodev-plugin-framework' )
+						: __( 'Чтобы посчитать доставку, укажите на предыдущих шагах страну и товары.', 'woodev-plugin-framework' ) }
 				</Notice>
 			) }
 
@@ -410,7 +415,20 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 
 			<FieldErrorList messages={ errorsFor( errors, 'shipping_line', 'shipping_line.method_id' ) } />
 
-			{ line && (
+			{ line && delivery && (
+				<div className="woodev-order-wizard__delivery-price">
+					<p className="woodev-order-wizard__hint">
+						{ sprintf(
+							/* translators: %s: the carrier's price of the delivery, e.g. "250,00 ₽". */
+							__( 'Ваш расход на доставку: %s. Сумма заказа не изменится.', 'woodev-plugin-framework' ),
+							formatMoney( Number( line.cost ), symbol )
+						) }
+					</p>
+					<FieldErrorList messages={ errorsFor( errors, 'shipping_line.cost' ) } />
+				</div>
+			) }
+
+			{ line && ! delivery && (
 				<div className="woodev-order-wizard__delivery-price">
 					<TextField
 						label={ __( 'Стоимость доставки', 'woodev-plugin-framework' ) }

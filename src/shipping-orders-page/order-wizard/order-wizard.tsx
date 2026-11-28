@@ -20,6 +20,10 @@
  * «Редактировать» row action that opens it is #972. An edit of a PAID order warns on ⑤ when the
  * total changes (O14, `paidTotalChange()`), measured against the total the loaded order came to.
  *
+ * **Delivery only** (#2010). When the prefill says the order is another module's (`entry: 'delivery'`), the wizard
+ * shows ② and ④ alone ({@link DELIVERY_STEPS}) and «Сохранить доставку» ends it: it arranges, or changes, the
+ * carrier's delivery of an order whose items, totals and payment are not the wizard's.
+ *
  * **Closing** with unsaved input asks first (C3); nothing is persisted as a draft.
  *
  * @package woodev-plugin-framework
@@ -41,16 +45,18 @@ import StepPayment from './step-payment';
 import { pickedPointId } from './delivery-state';
 import { isPickupRuntimeAvailable } from './pickup-session';
 import type { PickupWizardConfig } from './pickup-session';
-import type { SetWizardData, StepRenderers } from './step-props';
-import { WIZARD_STEPS } from './types';
+import type { DeliveryOnly, SetWizardData, StepRenderers } from './step-props';
+import { DELIVERY_STEPS, WIZARD_STEPS } from './types';
 import type { FieldErrors, PrefillOrder, SaveResult, WizardData, WizardStepId } from './types';
 import { errorsOfStep, firstStepWithErrors, groupServerErrors, validateAll, validateStep } from './validation';
 import { orderTotals } from './payment-state';
-import { buildPayload, emptyWizardData, isDirty, prefillToData } from './wizard-data';
+import { buildDeliveryPayload, buildPayload, deliveryPrefillToData, emptyWizardData, isDirty, prefillToData } from './wizard-data';
 
 export interface OrderWizardProps {
 	/** The order to edit; absent = create a new one. */
 	orderId?: number | null;
+	/** Opened by an «Оформить доставку» link (#2010): names the window before the order has loaded. */
+	forDelivery?: boolean;
 	/** Called when the wizard should disappear (cancelled, confirmed, or saved). */
 	onClose: () => void;
 	/** Called once with the saved order, right before `onClose`. */
@@ -90,7 +96,7 @@ export type HeartbeatJquery = {
 
 export type HeartbeatJqueryFactory = ( element: Document ) => HeartbeatJquery;
 
-export default function OrderWizard( { orderId = null, onClose, onSaved, renderers = {} }: OrderWizardProps ) {
+export default function OrderWizard( { orderId = null, forDelivery = false, onClose, onSaved, renderers = {} }: OrderWizardProps ) {
 	const editing = null !== orderId;
 	const mode = editing ? 'edit' : 'create';
 	const { wizard } = getWizardContext();
@@ -104,6 +110,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	const initial = useRef<WizardData>( emptyWizardData( wizard.defaultCountry || '' ) );
 	const [ data, setDataState ] = useState<WizardData>( initial.current );
 	const [ order, setOrder ] = useState<PrefillOrder | null>( null );
+	const [ delivery, setDelivery ] = useState<DeliveryOnly | null>( null );
 	// O14's yardstick: the wizard's own total for the order as loaded (see `StepProps.baselineTotal`).
 	const [ baselineTotal, setBaselineTotal ] = useState<number | null>( null );
 	const [ errors, setErrors ] = useState<FieldErrors>( {} );
@@ -133,8 +140,11 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 				if ( cancelled ) {
 					return;
 				}
-				initial.current = prefillToData( prefill );
+				const deliveryOnly = 'delivery' === prefill.entry;
+
+				initial.current = deliveryOnly ? deliveryPrefillToData( prefill, wizard.defaultCountry || '' ) : prefillToData( prefill );
 				setDataState( initial.current );
+				setDelivery( deliveryOnly ? { notices: prefill.notices || [], arranged: '' !== prefill.carrier } : null );
 				setOrder( prefill.order );
 				setBaselineTotal( orderTotals( initial.current ).total );
 				setPhase( 'ready' );
@@ -190,8 +200,16 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 
 	const setData: SetWizardData = ( update ) => setDataState( ( current ) => update( current ) );
 
-	const ids = WIZARD_STEPS;
+	const ids: readonly WizardStepId[] = delivery ? DELIVERY_STEPS : WIZARD_STEPS;
 	const stepId = ids[ index ];
+	// The checks number the steps as the whole wizard does.
+	const stepNumber = WIZARD_STEPS.indexOf( stepId );
+	/** The position, among the steps shown, of the earliest one with a problem; -1 for none. */
+	const firstShownStepWithErrors = ( found: FieldErrors ): number => {
+		const first = firstStepWithErrors( found );
+
+		return first < 0 ? -1 : ids.indexOf( WIZARD_STEPS[ first ] );
+	};
 	const labels = stepLabels();
 	const isLast = index === ids.length - 1;
 	// The checkout's rules for the delivery address (#985). Asked while ② is on screen — the country is picked there,
@@ -214,7 +232,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			return;
 		}
 
-		const fresh = validateStep( index, data, countries, states, statuses, addressPolicy );
+		const fresh = validateStep( stepNumber, data, countries, states, statuses, addressPolicy );
 
 		setErrors( ( current ) => ( { ...withoutStep( current, stepId ), ...fresh } ) );
 		// Only an edit re-checks; the errors themselves changing must not loop.
@@ -237,8 +255,12 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		onClose();
 	};
 
-	const goNext = async (): Promise<void> => {
-		const found = validateStep( index, data, countries, states, statuses, addressPolicy );
+	/**
+	 * Runs `then` once the step on screen may be left: its own checks, and the carrier's word on a hand-typed pickup
+	 * point. Without such a point `then` runs at once, in the click that asked.
+	 */
+	const leaveStep = async ( then: () => void ): Promise<void> => {
+		const found = validateStep( stepNumber, data, countries, states, statuses, addressPolicy );
 
 		setErrors( ( current ) => ( { ...withoutStep( current, stepId ), ...found } ) );
 
@@ -280,9 +302,14 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			}
 		}
 
-		setSubmitError( '' );
-		setIndex( Math.min( index + 1, ids.length - 1 ) );
+		then();
 	};
+
+	const goNext = (): Promise<void> =>
+		leaveStep( () => {
+			setSubmitError( '' );
+			setIndex( Math.min( index + 1, ids.length - 1 ) );
+		} );
 
 	const submit = async (): Promise<void> => {
 		if ( busy || submitting.current ) {
@@ -291,8 +318,8 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 
 		// The last look: every step once more. The manager passed each on the way here, but a step's data
 		// can move behind its back (a tariff dropping out, the tariffs still being asked).
-		const problems = validateAll( data, countries, states, statuses, addressPolicy );
-		const first = firstStepWithErrors( problems );
+		const problems = validateAll( data, countries, states, statuses, addressPolicy, ids );
+		const first = firstShownStepWithErrors( problems );
 
 		if ( first >= 0 ) {
 			setErrors( problems );
@@ -311,7 +338,9 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		setSubmitError( '' );
 
 		try {
-			const result = await saveOrder( editing ? ( orderId as number ) : null, buildPayload( data ) );
+			// The latest state: «Сохранить доставку» may have waited for the carrier's word on a typed point.
+			const payload = delivery ? buildDeliveryPayload( latest.current.data ) : buildPayload( latest.current.data );
+			const result = await saveOrder( editing ? ( orderId as number ) : null, payload );
 
 			saved.current = true;
 			submitting.current = false;
@@ -321,7 +350,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		} catch ( raw ) {
 			const error = toRequestError( raw );
 			const grouped = groupServerErrors( error.errors );
-			const target = firstStepWithErrors( grouped );
+			const target = firstShownStepWithErrors( grouped );
 
 			submitting.current = false;
 			setBusy( false );
@@ -334,8 +363,11 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		}
 	};
 
+	/** «Сохранить доставку»: a delivery-only edit has no step ⑤ to send from. */
+	const saveDelivery = (): Promise<void> => leaveStep( () => void submit() );
+
 	const goToStep = ( step: WizardStepId ) => setIndex( Math.max( 0, ids.indexOf( step ) ) );
-	const props = { data, setData, errors, mode, order, baselineTotal, submit, busy, goToStep, addressPolicy } as const;
+	const props = { data, setData, errors, mode, order, baselineTotal, submit, busy, goToStep, addressPolicy, delivery } as const;
 	const body = ( () => {
 		const custom = renderers[ stepId ];
 
@@ -357,8 +389,23 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		}
 	} )();
 
-	const title =
-		editing && order
+	const title = ( () => {
+		if ( delivery && order ) {
+			return sprintf(
+				delivery.arranged
+					? /* translators: %s: order number, e.g. "301". */
+					  __( 'Изменить доставку заказа №%s', 'woodev-plugin-framework' )
+					: /* translators: %s: order number, e.g. "301". */
+					  __( 'Оформить доставку заказа №%s', 'woodev-plugin-framework' ),
+				order.number
+			);
+		}
+
+		if ( forDelivery ) {
+			return __( 'Оформить доставку', 'woodev-plugin-framework' );
+		}
+
+		return editing && order
 			? sprintf(
 					/* translators: %s: order number, e.g. "301". */
 					__( 'Редактировать заказ №%s', 'woodev-plugin-framework' ),
@@ -367,6 +414,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			: editing
 				? __( 'Редактировать заказ', 'woodev-plugin-framework' )
 				: __( 'Создать заказ', 'woodev-plugin-framework' );
+	} )();
 
 	return (
 		<Modal
@@ -438,6 +486,11 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 							{ ! isLast && (
 								<Button variant="primary" onClick={ () => void goNext() } disabled={ busy }>
 									{ __( 'Далее', 'woodev-plugin-framework' ) }
+								</Button>
+							) }
+							{ isLast && delivery && (
+								<Button variant="primary" onClick={ () => void saveDelivery() } isBusy={ busy } disabled={ busy }>
+									{ __( 'Сохранить доставку', 'woodev-plugin-framework' ) }
 								</Button>
 							) }
 						</div>

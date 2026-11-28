@@ -590,6 +590,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Query' => 'woodev/shipping-method/admin/orders/class-analytics-query.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Report' => 'woodev/shipping-method/admin/orders/class-analytics-report.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Carrier_Field_Set' => 'woodev/shipping-method/admin/orders/class-carrier-field-set.php',
+	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Delivery_Entry' => 'woodev/shipping-method/admin/orders/interface-delivery-entry.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Export_Queue_Notice' => 'woodev/shipping-method/admin/orders/class-export-queue-notice.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action_Fields' => 'woodev/shipping-method/admin/orders/class-order-action-fields.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Actions' => 'woodev/shipping-method/admin/orders/class-order-actions.php',

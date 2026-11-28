@@ -14272,3 +14272,57 @@ msgstr ""
 msgctxt "shipment noun: of cargo places"
 msgid "грузовых мест"
 msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:368
+msgid "Изменить доставку"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:371
+msgid "Изменить получателя, адрес и тариф, пока заказ не выгружен перевозчику"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:807
+msgid "Ваш расход на доставку"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:1601
+msgid "Не все товары заказа есть в магазине — тарифы считаются без их веса и размеров."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:4
+msgid "Кому и куда доставить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:4
+msgid "Телефон получателя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:10
+msgid "Тарифы не посчитать: проверьте страну доставки и то, что товары заказа есть в магазине."
+msgstr ""
+
+#. translators: %s: the carrier's price of the delivery, e.g. "250,00 ₽".
+#: assets/build/shipping-orders-page/index.js:11
+#, js-format
+msgid "Ваш расход на доставку: %s. Сумма заказа не изменится."
+msgstr ""
+
+#. translators: %s: order number, e.g. "301".
+#: assets/build/shipping-orders-page/index.js:21
+#, js-format
+msgid "Изменить доставку заказа №%s"
+msgstr ""
+
+#. translators: %s: order number, e.g. "301".
+#: assets/build/shipping-orders-page/index.js:22
+#, js-format
+msgid "Оформить доставку заказа №%s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:22
+msgid "Оформить доставку"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Сохранить доставку"
+msgstr ""

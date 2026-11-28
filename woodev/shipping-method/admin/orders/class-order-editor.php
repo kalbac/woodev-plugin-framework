@@ -128,6 +128,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		public const UPDATE_LOCK_TIMEOUT = 10;
 
 		/**
+		 * Item meta of a carrier's shipping line added for an order a {@see Delivery_Entry} claims: the carrier's price of the
+		 * delivery, the shop's own cost. The line's total is 0, since the buyer does not pay the shop for this delivery.
+		 *
+		 * Installed-site data contract (a meta key of the framework's own): keep byte-for-byte.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @var string
+		 */
+		public const SELLER_COST_ITEM_META = '_woodev_shipping_seller_cost';
+
+		/**
 		 * Carrier registry.
 		 *
 		 * @since 2.0.2
@@ -251,8 +263,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * writes, because the row can have been exported while the manager typed (spec D5, the
 		 * stale-row race; an export does not take this lock).
 		 *
+		 * For an order a {@see Delivery_Entry} claims, only the delivery is written ({@see self::write_delivery()}), whether the
+		 * order has a carrier yet or not; the rest of the body is ignored.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 #981 round 4: serialised per order through a MySQL named lock.
+		 * @since 2.1.29 Card #2010: saves the delivery of an order a {@see Delivery_Entry} claims.
 		 *
 		 * @param int                  $order_id the order.
 		 * @param array<string, mixed> $payload  the request body.
@@ -294,7 +310,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 			Order_Actions::refresh_edit_lock( $row['order'] );
 
-			$checked = $this->validator->validate( $payload, true );
+			$checked = null === $row['entry']
+				? $this->validator->validate( $payload, true )
+				: $this->validator->validate_delivery( $payload );
 
 			if ( [] !== $checked['errors'] ) {
 				return self::validation_error( $checked['errors'] );
@@ -306,19 +324,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				return $row;
 			}
 
-			$data = $checked['data'];
+			$data  = $checked['data'];
+			$order = $row['order'];
 
-			$customer_id = $this->resolve_customer( $data );
+			if ( null === $row['entry'] ) {
+				$customer_id = $this->resolve_customer( $data );
 
-			if ( $customer_id instanceof \WP_Error ) {
-				return $customer_id;
+				if ( $customer_id instanceof \WP_Error ) {
+					return $customer_id;
+				}
+
+				$order->set_customer_id( $customer_id );
 			}
 
-			$order = $row['order'];
-			$order->set_customer_id( $customer_id );
-
 			try {
-				$this->write( $order, $data, true );
+				if ( null === $row['entry'] ) {
+					$this->write( $order, $data, true );
+				} else {
+					$this->write_delivery( $order, $data );
+				}
 			} catch ( \Throwable $exception ) {
 				self::log( sprintf( 'updating order %1$d failed: %2$s', $order_id, $exception->getMessage() ) );
 
@@ -375,9 +399,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * The wizard's prefill for one order — everything the steps hold, read back.
 		 *
 		 * Gated exactly like {@see self::update()}: an order that cannot be edited has nothing to
-		 * prefill.
+		 * prefill. For an order a {@see Delivery_Entry} claims, the answer carries `entry: 'delivery'` and `notices`
+		 * ({@see self::build_delivery_prefill()}), which opens the wizard on the delivery alone.
 		 *
 		 * @since 2.0.2
+		 * @since 2.1.29 Card #2010: prefills the delivery of an order a {@see Delivery_Entry} claims.
 		 *
 		 * @param int $order_id the order.
 		 * @return array<string, mixed>|\WP_Error the prefill, or the transport-contract error.
@@ -397,7 +423,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 			Order_Actions::refresh_edit_lock( $row['order'] );
 
-			return $this->build_prefill( $row['order'], $row['provider'] );
+			return null === $row['entry']
+				? $this->build_prefill( $row['order'], $row['provider'] )
+				: $this->build_delivery_prefill( $row['order'], $row['provider'], $row['entry'] );
 		}
 
 		/**
@@ -490,11 +518,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * Reads through {@see \WC_Order::read_meta_data()} with `$force_read`, so a marker or an
 		 * export id written a moment ago by another request is seen.
 		 *
+		 * An order a {@see Delivery_Entry} claims is open before it is a row: it has no carrier until the wizard gives it one.
+		 *
 		 * @since 2.0.2
+		 * @since 2.1.29 Card #2010: answers the claiming entry, and then possibly no provider.
 		 *
 		 * @param int $order_id the order id.
-		 * @return array{order: \WC_Order, provider: Orders_Provider}|\WP_Error 404 when the order does
-		 *         not exist or is not a row of the page (a shop order of any other kind is not this
+		 * @return array{order: \WC_Order, provider: Orders_Provider|null, entry: Delivery_Entry|null}|\WP_Error 404 when the order does
+		 *         not exist or is neither a row of the page nor claimed by an entry (a shop order of any other kind is not this
 		 *         page's to reveal), 409 when the policy refuses it.
 		 */
 		private function find_editable_row( int $order_id ) {
@@ -508,11 +539,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 			$provider = $this->registry->resolve_provider_for_order( $order );
 
-			if ( null === $provider ) {
+			$entry = $this->registry->get_delivery_entry( $order );
+
+			if ( null === $provider && null === $entry ) {
 				return self::unknown_order();
 			}
 
-			$reason = Order_Actions::not_editable_reason( $order, $provider );
+			$reason = null === $entry
+				? Order_Actions::not_editable_reason( $order, $provider )
+				: Order_Actions::delivery_refusal_reason( $order, $provider, $entry );
 
 			if ( '' !== $reason ) {
 				return self::error( 'woodev_shipping_order_not_editable', $reason, 409 );
@@ -521,6 +556,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			return [
 				'order'    => $order,
 				'provider' => $provider,
+				'entry'    => $entry,
 			];
 		}
 
@@ -625,6 +661,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				);
 			}
 
+			$this->announce_saved( $order, $data, $written, $is_update );
+		}
+
+		/**
+		 * Writes the delivery of an order a {@see Delivery_Entry} claims: the recipient, the phone, the shipping address and the
+		 * carrier's shipping line. Items, prices, totals, payment, status and the other shipping lines are not written, and no
+		 * total is recalculated — the carrier's line adds 0.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order            $order the order.
+		 * @param array<string, mixed> $data  the payload {@see Order_Payload_Validator::validate_delivery()} checked.
+		 * @return void
+		 *
+		 * @throws \Exception When something below fails; the caller decides what the failure means.
+		 */
+		private function write_delivery( \WC_Order $order, array $data ): void {
+			// The tariff about to be replaced may have asked for fields the new one does not (D7).
+			$previous_fields = $this->current_field_set( $order );
+
+			$this->apply_recipient( $order, $data['shipping'] );
+			$this->replace_carrier_line( $order, $data['shipping_line'] );
+
+			$order->save();
+
+			$written = $this->persist( $order, $data, true, $previous_fields );
+
+			$order->save();
+
+			$this->announce_saved( $order, $data, $written, true );
+		}
+
+		/**
+		 * Tells the carrier plugin the editor saved an order of its.
+		 *
+		 * @since 2.1.29 Extracted from {@see self::write()}.
+		 *
+		 * @param \WC_Order            $order     the saved order.
+		 * @param array<string, mixed> $data      the validated payload.
+		 * @param array<string, mixed> $written   the managed field values that were written.
+		 * @param bool                 $is_update whether the order already existed.
+		 * @return void
+		 */
+		private function announce_saved( \WC_Order $order, array $data, array $written, bool $is_update ): void {
 			$plugin  = $this->registry->get_provider_plugin( $data['shipping_line']['provider']->get_id() );
 			$handler = null !== $plugin ? $plugin->get_checkout_handler() : null;
 
@@ -640,6 +720,114 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					]
 				);
 			}
+		}
+
+		/**
+		 * Writes the delivery address with its recipient and phone. A name or a phone the manager changed goes to the billing
+		 * side too: the orders table and some carriers read it there.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order             $order    the order.
+		 * @param array<string, string> $shipping the checked delivery address.
+		 * @return void
+		 */
+		private function apply_recipient( \WC_Order $order, array $shipping ): void {
+			$before = $this->read_recipient( $order );
+
+			$order->set_address( $shipping, 'shipping' );
+
+			foreach ( $before as $key => $value ) {
+				if ( $shipping[ $key ] !== $value ) {
+					$order->{"set_billing_$key"}( $shipping[ $key ] );
+				}
+			}
+		}
+
+		/**
+		 * Who receives the order and on what phone: the shipping value, else the billing one.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order $order the order.
+		 * @return array{first_name: string, last_name: string, phone: string}
+		 */
+		private function read_recipient( \WC_Order $order ): array {
+			$shipping  = $this->read_address( $order, 'shipping' );
+			$billing   = $this->read_address( $order, 'billing' );
+			$recipient = [];
+
+			foreach ( [ 'first_name', 'last_name', 'phone' ] as $key ) {
+				$recipient[ $key ] = '' !== $shipping[ $key ] ? $shipping[ $key ] : $billing[ $key ];
+			}
+
+			return $recipient;
+		}
+
+		/**
+		 * Puts the chosen rate on an order beside the shipping lines that are not a carrier's: the previous carrier line goes, the
+		 * new one totals 0 and keeps the carrier's price as the shop's cost.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order            $order the order.
+		 * @param array<string, mixed> $line  the validated shipping line.
+		 * @return void
+		 */
+		private function replace_carrier_line( \WC_Order $order, array $line ): void {
+			foreach ( $order->get_shipping_methods() as $existing_id => $existing ) {
+				foreach ( $this->registry->get_providers() as $provider ) {
+					if ( in_array( $existing->get_method_id(), $provider->get_method_ids(), true ) ) {
+						$order->remove_item( (int) $existing_id );
+
+						break;
+					}
+				}
+			}
+
+			$item = self::new_shipping_item( $line, '0' );
+			$item->add_meta_data( self::SELLER_COST_ITEM_META, (string) $line['cost'], true );
+
+			$order->add_item( $item );
+		}
+
+		/**
+		 * Names the seller's delivery cost on the order screen.
+		 *
+		 * @internal Hooked to `woocommerce_order_item_display_meta_key`.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param mixed $display_key what WooCommerce shows for the key.
+		 * @param mixed $meta        the item meta entry.
+		 * @return mixed
+		 */
+		public static function seller_cost_meta_label( $display_key, $meta = null ) {
+			return is_object( $meta ) && self::SELLER_COST_ITEM_META === ( $meta->key ?? '' )
+				? __( 'Ваш расход на доставку', 'woodev-plugin-framework' )
+				: $display_key;
+		}
+
+		/**
+		 * Shows the seller's delivery cost as money in the order's currency.
+		 *
+		 * @internal Hooked to `woocommerce_order_item_display_meta_value`.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param mixed $display_value what WooCommerce shows for the value.
+		 * @param mixed $meta          the item meta entry.
+		 * @param mixed $item          the order item.
+		 * @return mixed
+		 */
+		public static function seller_cost_meta_value( $display_value, $meta = null, $item = null ) {
+			if ( ! is_object( $meta ) || self::SELLER_COST_ITEM_META !== ( $meta->key ?? '' ) || ! $item instanceof \WC_Order_Item ) {
+				return $display_value;
+			}
+
+			$order = $item->get_order();
+
+			return $order instanceof \WC_Order ? wc_price( (float) $meta->value, [ 'currency' => $order->get_currency() ] ) : $display_value;
 		}
 
 		/**
@@ -850,17 +1038,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				$order->remove_item( (int) $existing_id );
 			}
 
+			$order->add_item( self::new_shipping_item( $line, (string) $line['cost'] ) );
+		}
+
+		/**
+		 * A shipping line of the chosen rate, with the rate's meta.
+		 *
+		 * @since 2.1.29 Extracted from {@see self::apply_shipping_line()}.
+		 *
+		 * @param array<string, mixed> $line  the validated shipping line.
+		 * @param string               $total what the line adds to the order.
+		 * @return \WC_Order_Item_Shipping
+		 */
+		private static function new_shipping_item( array $line, string $total ): \WC_Order_Item_Shipping {
 			$item = new \WC_Order_Item_Shipping();
 			$item->set_method_title( (string) $line['label'] );
 			$item->set_method_id( (string) $line['method_id'] );
 			$item->set_instance_id( (int) $line['instance_id'] );
-			$item->set_total( (string) $line['cost'] );
+			$item->set_total( $total );
 
 			foreach ( $line['meta'] as $key => $value ) {
 				$item->add_meta_data( (string) $key, $value, true );
 			}
 
-			$order->add_item( $item );
+			return $item;
 		}
 
 		/**
@@ -1258,13 +1459,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * The prefill the wizard opens an edit with.
 		 *
 		 * @since 2.0.2
+		 * @since 2.1.29 `$provider` may be null — an order with no carrier yet ({@see self::build_delivery_prefill()}).
 		 *
-		 * @param \WC_Order       $order    the order.
-		 * @param Orders_Provider $provider the order's carrier.
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the order's carrier.
 		 * @return array<string, mixed>
 		 */
-		private function build_prefill( \WC_Order $order, Orders_Provider $provider ): array {
-			$plugin  = $this->registry->get_provider_plugin( $provider->get_id() );
+		private function build_prefill( \WC_Order $order, ?Orders_Provider $provider ): array {
+			$plugin  = null !== $provider ? $this->registry->get_provider_plugin( $provider->get_id() ) : null;
 			$handler = null !== $plugin ? $plugin->get_checkout_handler() : null;
 			$fields  = null !== $handler ? $handler->read_values( $order ) : [];
 			$shipping_address = $this->read_address( $order, 'shipping' );
@@ -1300,9 +1502,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			}
 
 			$shipping_line = null;
+			$method_ids    = null !== $provider ? $provider->get_method_ids() : [];
 
 			foreach ( $order->get_shipping_methods() as $line ) {
-				if ( ! in_array( $line->get_method_id(), $provider->get_method_ids(), true ) ) {
+				if ( ! in_array( $line->get_method_id(), $method_ids, true ) ) {
 					continue;
 				}
 
@@ -1343,7 +1546,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					'total'       => (string) $order->get_total(),
 					'currency'    => (string) $order->get_currency(),
 				],
-				'carrier'        => $provider->get_id(),
+				'carrier'        => null !== $provider ? $provider->get_id() : '',
 				'customer'       => [
 					'id'             => (int) $order->get_customer_id(),
 					'create_account' => false,
@@ -1352,7 +1555,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				'shipping'       => $shipping_address,
 				'items'          => $items,
 				'shipping_line'  => $shipping_line,
-				'pickup_point'   => $this->read_pickup_point( $order, $provider, $handler, $fields ),
+				'pickup_point'   => null !== $provider ? $this->read_pickup_point( $order, $provider, $handler, $fields ) : null,
 				'location'       => $location,
 				'requires_settlement_selection' => '' !== trim( $delivery_city ) && null === $location_record,
 				'fields'         => $fields,
@@ -1363,6 +1566,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				'payment_method' => (string) $order->get_payment_method(),
 				'status'         => (string) $order->get_status(),
 			];
+		}
+
+		/**
+		 * The prefill of an order a {@see Delivery_Entry} claims: {@see self::build_prefill()} with the recipient and the phone
+		 * on the delivery address, `entry: 'delivery'` and the `notices` the wizard shows above the address. The delivery price
+		 * of a carrier line is the shop's cost kept on it, not the line's total of 0; a product that no longer exists is sent
+		 * as none, so the rates are asked for the rest.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the order's carrier, null before the delivery is first arranged.
+		 * @param Delivery_Entry       $entry    the entry that claims the order.
+		 * @return array<string, mixed>
+		 */
+		private function build_delivery_prefill( \WC_Order $order, ?Orders_Provider $provider, Delivery_Entry $entry ): array {
+			$prefill             = $this->build_prefill( $order, $provider );
+			$prefill['shipping'] = array_merge( $prefill['shipping'], $this->read_recipient( $order ) );
+			$notices             = array_values( $entry->notices( $order ) );
+			$unlinked            = false;
+
+			foreach ( $prefill['items'] as $index => $item ) {
+				$product_id = $item['variation_id'] > 0 ? $item['variation_id'] : $item['product_id'];
+
+				if ( $product_id < 1 || ! wc_get_product( $product_id ) ) {
+					$prefill['items'][ $index ]['product_id']   = 0;
+					$prefill['items'][ $index ]['variation_id'] = 0;
+					$unlinked                                   = true;
+				}
+			}
+
+			if ( $unlinked ) {
+				$notices[] = __( 'Не все товары заказа есть в магазине — тарифы считаются без их веса и размеров.', 'woodev-plugin-framework' );
+			}
+
+			if ( null !== $prefill['shipping_line'] && isset( $prefill['shipping_line']['meta'][ self::SELLER_COST_ITEM_META ] ) ) {
+				$prefill['shipping_line']['cost'] = (string) $prefill['shipping_line']['meta'][ self::SELLER_COST_ITEM_META ];
+				unset( $prefill['shipping_line']['meta'][ self::SELLER_COST_ITEM_META ] );
+			}
+
+			$prefill['entry']   = 'delivery';
+			$prefill['notices'] = $notices;
+
+			return $prefill;
 		}
 
 		/**

@@ -39,6 +39,19 @@ export interface StepProps {
 	 * server has answered (or when it had nothing to say): the step then asks only for a country and a city.
 	 */
 	addressPolicy?: AddressPolicy | null;
+	/**
+	 * Set for a delivery-only edit (`OrderPrefill.entry`, #2010): step ② also asks who receives the order and shows
+	 * the notices, step ④ shows the carrier's price as the shop's own cost, not as an editable order amount.
+	 */
+	delivery?: DeliveryOnly | null;
+}
+
+/** What a delivery-only edit carries beside the order's data. */
+export interface DeliveryOnly {
+	/** Sentences the module that owns the order wants the manager to read first. */
+	notices: string[];
+	/** The order already has a carrier: the wizard changes the delivery rather than arranges it. */
+	arranged: boolean;
 }
 
 /** Renders one step's body — a host may replace any of the five through {@link StepRenderers}. */

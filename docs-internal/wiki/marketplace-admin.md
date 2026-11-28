@@ -1683,6 +1683,41 @@ removes the module's buyer meta from the account's orders (`Deletion\Posting_Era
 read of the postings is a failed run (retried), never «none left». A posting stays until its order's data is gone: an order that
 cannot be loaded fails the run unless a successful read of the order store finds no such order.
 
+## A carrier for a seller-delivered order (#2010)
+
+Card WD1 of the Wildberries design (`2.1.29`), the one marketplace card that changes the shipping module (owner's exception, T2).
+The shipping module knows no marketplace: it offers a registry, and **nothing registers an entry yet** — WF10 does.
+
+**Seams** (`woodev/shipping-method/admin/orders/`).
+
+| Seam | Use |
+|---|---|
+| `Delivery_Entry::claims( $order )` | the order is the module's: only its delivery is the wizard's. Asked per orders-page row — local data only |
+| `Delivery_Entry::refusal_reason( $order )` | why it cannot be arranged or changed now; the framework adds «exported» and final statuses itself |
+| `Delivery_Entry::notices( $order )` | warnings above the address in the wizard, plain text |
+| `Orders_Registry::register_delivery_entry( $entry )` | on every request |
+| `Orders_Registry::get_delivery_url( $order )` | the «Оформить доставку» link; `''` when there is nothing to open |
+
+**What WF10 wires** (design §7.4–7.5): claim `Flows\Seller_Order::is_seller_delivered()` orders of its own marketplace; refuse
+until the units are in `confirm`; in `notices()` give the phone-extension warning of `Seller_Delivery_Panel` (D13: the extension
+is not passed to a carrier) and the day and time the buyer chose; print the button from `get_delivery_url()`. The licence of the
+marketplace plugin is that module's to check in `refusal_reason()`.
+
+**Behaviour.** `GET /shipping/orders/{id}/edit` answers `entry: 'delivery'` and `notices` for a claimed order, a row or not, and
+`PUT /shipping/orders/{id}` writes the delivery only (`Order_Payload_Validator::validate_delivery()`,
+`Order_Editor::write_delivery()`): shipping address, recipient and phone, the carrier's line (an earlier carrier line is replaced,
+the framework's «Доставка …» line is not touched), the marker, point, carrier fields and settlement. No total is recalculated.
+The line totals 0; the price is item meta `_woodev_shipping_seller_cost` (installed-site contract). The checkout's «removed»
+address fields keep their stored value. The row action reads «Изменить доставку».
+
+**With WF9's seed-then-leave-alone:** the address is the merchant's after the save; a name or phone the manager did not change
+still follows the marketplace's later reads.
+
+**Limits.** As for any wizard edit, an order whose city is filled but has no saved settlement record asks for the settlement to be
+picked through the search. Without a registered entry (the marketplace plugin off) such a row is edited by the full editor, like
+any order. The orders table names both shipping lines and the buyer-paid sum (#2073). A carrier must find its line by method id
+(CDEK, Yandex, Russian Post and Ozon Delivery were read on 28.11.2026 and do).
+
 ## Sticker documents (#2005)
 
 Card WF7 of the Wildberries design (`2.1.28`). A label answer may hold several files, and a marketplace may answer without a

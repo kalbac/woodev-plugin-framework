@@ -330,6 +330,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * {@see self::for_order()} stay behind the handler.
 		 *
 		 * @since 2.0.2
+		 * @since 2.1.29 Card #2010: for an order a {@see Delivery_Entry} claims the button reads «Изменить доставку».
 		 *
 		 * @param \WC_Order            $order    the order.
 		 * @param Orders_Provider|null $provider the matched carrier, or null when it could not be resolved.
@@ -355,10 +356,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				return $actions;
 			}
 
+			// #2010: of another module's order only the delivery is edited, and only while that module allows it.
+			$entry = $this->registry->get_delivery_entry( $order );
+
+			if ( null !== $entry && '' !== $entry->refusal_reason( $order ) ) {
+				return $actions;
+			}
+
 			$edit_action = self::build_action(
 				self::EDIT,
-				__( 'Редактировать', 'woodev-plugin-framework' ),
-				__( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' ),
+				null === $entry ? __( 'Редактировать', 'woodev-plugin-framework' ) : __( 'Изменить доставку', 'woodev-plugin-framework' ),
+				null === $entry
+					? __( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' )
+					: __( 'Изменить получателя, адрес и тариф, пока заказ не выгружен перевозчику', 'woodev-plugin-framework' ),
 				false,
 				'edit'
 			);
@@ -991,6 +1001,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
+		 * Why the delivery of an order a {@see Delivery_Entry} claims cannot be arranged or changed — or `''` when it can (#2010).
+		 *
+		 * An order with a carrier is held to {@see self::not_editable_reason()}; one without a carrier yet only to the final statuses,
+		 * there being nothing exported to speak of. The entry's own reason is asked last.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the order's carrier, null before the delivery is first arranged.
+		 * @param Delivery_Entry       $entry    the entry that claims the order.
+		 * @return string a sentence for the manager; empty when the delivery may be arranged.
+		 */
+		public static function delivery_refusal_reason( \WC_Order $order, ?Orders_Provider $provider, Delivery_Entry $entry ): string {
+			$reason = '';
+
+			if ( null !== $provider ) {
+				$reason = self::not_editable_reason( $order, $provider );
+			} elseif ( in_array( $order->get_status(), self::FINAL_STATUSES, true ) ) {
+				$reason = self::final_status_reason( $order );
+			}
+
+			return '' !== $reason ? $reason : $entry->refusal_reason( $order );
+		}
+
+		/**
+		 * Why an order in one of the {@see self::FINAL_STATUSES} cannot be edited.
+		 *
+		 * @since 2.1.29
+		 *
+		 * @param \WC_Order $order the order.
+		 * @return string
+		 */
+		private static function final_status_reason( \WC_Order $order ): string {
+			return sprintf(
+				/* translators: %s: WooCommerce order status name, e.g. "Выполнен". */
+				__( 'Заказ в статусе «%s» — редактировать его нельзя.', 'woodev-plugin-framework' ),
+				wc_get_order_status_name( $order->get_status() )
+			);
+		}
+
+		/**
 		 * Why an order cannot be edited, in one merchant-readable sentence — or `''` when it can.
 		 *
 		 * Editable means ALL of: the order is a row of this page (`$provider` resolved, spec O3);
@@ -1016,11 +1067,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			}
 
 			if ( in_array( $order->get_status(), self::FINAL_STATUSES, true ) ) {
-				return sprintf(
-					/* translators: %s: WooCommerce order status name, e.g. "Выполнен". */
-					__( 'Заказ в статусе «%s» — редактировать его нельзя.', 'woodev-plugin-framework' ),
-					wc_get_order_status_name( $order->get_status() )
-				);
+				return self::final_status_reason( $order );
 			}
 
 			// The framework's own cancellation marker does not count: a cancelled shipment may be edited and exported again.

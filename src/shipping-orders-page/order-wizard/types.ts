@@ -190,6 +190,13 @@ export interface OrderPrefill {
 	requires_settlement_selection?: boolean;
 	/** Stored checkout locality, returned only when it still matches the order and active provider. */
 	location?: Record<string, unknown> | null;
+	/**
+	 * `delivery` — the order belongs to another module (`Delivery_Entry`, #2010): the wizard edits the recipient,
+	 * the address and the carrier's tariff, nothing else. Absent for an order of the shop's own.
+	 */
+	entry?: 'delivery';
+	/** With `entry`: what the manager must know before choosing the delivery, one sentence each. */
+	notices?: string[];
 }
 
 /**
@@ -295,3 +302,6 @@ export interface AddressPolicyResponse {
 export const WIZARD_STEPS = [ 'customer', 'address', 'items', 'delivery', 'payment' ] as const;
 
 export type WizardStepId = typeof WIZARD_STEPS[ number ];
+
+/** The steps of a delivery-only edit (#2010). */
+export const DELIVERY_STEPS: readonly WizardStepId[] = [ 'address', 'delivery' ];

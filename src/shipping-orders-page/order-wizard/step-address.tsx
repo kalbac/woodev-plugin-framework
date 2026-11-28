@@ -16,6 +16,9 @@
  * free text otherwise. A picked settlement fills it only when its region name matches exactly
  * one code ({@see matchState}).
  *
+ * In a delivery-only edit (#2010) the step is also where the recipient is: steps ① and ③ are skipped, so the name and
+ * the phone the carrier will get are asked here, under the notices of the module that owns the order.
+ *
  * The checkout's own field policy (`Checkout_Field_Policy`, #985) decides which fields are required
  * (marked with «*», checked on «Далее» by `validateAddress()`) and which are not shown at all — a
  * field the merchant removed, or one hidden for a pickup tariff. The policy arrives from the server
@@ -35,7 +38,7 @@ import { SelectField, TextField, errorsFor } from './fields';
 import type { StepProps } from './step-props';
 import { matchState } from './wizard-data';
 
-export default function StepAddress( { data, setData, errors, addressPolicy }: StepProps ) {
+export default function StepAddress( { data, setData, errors, addressPolicy, delivery }: StepProps ) {
 	const { apiRoot, nonce, wizard } = getWizardContext();
 	const countries = wizard.countries || {};
 	const states = wizard.states || {};
@@ -103,11 +106,47 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 
 	return (
 		<div className="woodev-order-wizard__step">
-			<h3 className="woodev-order-wizard__step-title">{ __( 'Куда доставить', 'woodev-plugin-framework' ) }</h3>
+			<h3 className="woodev-order-wizard__step-title">
+				{ delivery
+					? __( 'Кому и куда доставить', 'woodev-plugin-framework' )
+					: __( 'Куда доставить', 'woodev-plugin-framework' ) }
+			</h3>
+			{ delivery?.notices.map( ( notice ) => (
+				<Notice key={ notice } status="warning" isDismissible={ false }>
+					{ notice }
+				</Notice>
+			) ) }
 			{ data.settlementSelectionRequired && ! data.settlementRecord && (
 				<Notice status="warning" isDismissible={ false }>
 					{ __( 'Выберите населённый пункт через поиск, чтобы получить тарифы доставки.', 'woodev-plugin-framework' ) }
 				</Notice>
+			) }
+
+			{ delivery && (
+				<div className="woodev-order-wizard__grid">
+					<TextField
+						label={ __( 'Имя получателя', 'woodev-plugin-framework' ) }
+						value={ shipping.first_name }
+						errors={ errorsFor( errors, 'shipping.first_name' ) }
+						autoComplete="off"
+						onChange={ ( first_name ) => setShipping( { first_name } ) }
+					/>
+					<TextField
+						label={ __( 'Фамилия получателя', 'woodev-plugin-framework' ) }
+						value={ shipping.last_name }
+						errors={ errorsFor( errors, 'shipping.last_name' ) }
+						autoComplete="off"
+						onChange={ ( last_name ) => setShipping( { last_name } ) }
+					/>
+					<TextField
+						label={ __( 'Телефон получателя', 'woodev-plugin-framework' ) }
+						type="tel"
+						value={ shipping.phone }
+						errors={ errorsFor( errors, 'shipping.phone' ) }
+						autoComplete="off"
+						onChange={ ( phone ) => setShipping( { phone } ) }
+					/>
+				</div>
 			) }
 
 			<div className="woodev-order-wizard__grid">
@@ -176,7 +215,7 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 					label={ __( 'Город или населённый пункт', 'woodev-plugin-framework' ) }
 					value={ shipping.city }
 					required={ rules.city.required }
-					errors={ errorsFor( errors, 'shipping.city', 'billing.city', 'shipping.settlement_record' ) }
+					errors={ errorsFor( errors, 'shipping.city', 'billing.city', 'shipping.settlement_record', 'location' ) }
 					onChange={ ( city ) =>
 						setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '', settlementRecord: null, settlementSelectionRequired: d.settlementSelectionRequired || ( d.isOrderEdit && null !== d.settlementRecord ) } ) )
 					}

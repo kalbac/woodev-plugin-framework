@@ -183,6 +183,22 @@ function getQuery(): Record<string, string | undefined> {
 	return window.wc?.navigation?.getQuery() || {};
 }
 
+/** The query argument of an «Оформить доставку» link (`Orders_Registry::get_delivery_url()`, #2010). */
+const DELIVERY_PARAM = 'deliver_order';
+
+/** What the order wizard is open on: `orderId: null` creates; `forDelivery` — opened by an «Оформить доставку» link. */
+interface WizardTarget {
+	orderId: number | null;
+	forDelivery?: boolean;
+}
+
+/** The wizard an «Оформить доставку» link asks for, or `null` for any other address. */
+function deliveryTargetOfQuery( query: Record<string, string | undefined> ): WizardTarget | null {
+	const orderId = Number( query[ DELIVERY_PARAM ] );
+
+	return Number.isInteger( orderId ) && orderId > 0 ? { orderId, forDelivery: true } : null;
+}
+
 /** Builds one comparable snapshot of every URL-driven filter (`filters.ts`) from the current query. */
 function readUrlFilters( query: Record<string, string | undefined> ): UrlFilters {
 	const dateApi = window.wc?.date;
@@ -1673,9 +1689,20 @@ export default function OrdersPage() {
 	const [ bulkConfirming, setBulkConfirming ] = useState<BulkAction | null>( null );
 	/**
 	 * #969 — the order wizard (#710): `null` closed, `{ orderId: null }` creating a new order,
-	 * `{ orderId }` editing that one — the «Редактировать» row action (#972) opens it so.
+	 * `{ orderId }` editing that one — the «Редактировать» row action (#972) opens it so. A page opened by an
+	 * «Оформить доставку» link (#2010) starts with the wizard open on that order.
 	 */
-	const [ wizard, setWizard ] = useState<{ orderId: number | null } | null>( null );
+	const [ wizard, setWizard ] = useState<WizardTarget | null>( () => deliveryTargetOfQuery( getQuery() ) );
+	/** Closes the wizard and takes the link's argument out of the address, so a reload does not open it again. */
+	const closeWizard = () => {
+		setWizard( null );
+
+		const navigation = window.wc?.navigation;
+
+		if ( navigation && undefined !== navigation.getQuery()[ DELIVERY_PARAM ] ) {
+			navigation.updateQueryString?.( { [ DELIVERY_PARAM ]: undefined }, navigation.getPath(), navigation.getQuery() );
+		}
+	};
 	/**
 	 * #969 — bumped when the wizard saves an order, so the fetch effect below runs again and the
 	 * new order appears in the table (O9). A counter rather than a flag: two saves in a row
@@ -2947,7 +2974,8 @@ export default function OrdersPage() {
 			{ null !== wizard && (
 				<OrderWizard
 					orderId={ wizard.orderId }
-					onClose={ () => setWizard( null ) }
+					forDelivery={ wizard.forDelivery }
+					onClose={ closeWizard }
 					onSaved={ onWizardSaved }
 				/>
 			) }

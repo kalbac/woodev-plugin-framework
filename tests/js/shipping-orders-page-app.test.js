@@ -4885,3 +4885,36 @@ describe( 'page-size picker of a result of 25 rows or fewer (#1903)', () => {
 		expect( pageSizePicker() ).not.toBeInTheDocument();
 	} );
 } );
+
+describe( 'the «Оформить доставку» link (#2010)', () => {
+	beforeEach( () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+	} );
+
+	test( 'a page opened by the link starts with the wizard on that order, and closing takes the argument out of the address', async () => {
+		fakeQuery = { path: '/woodev-shipping-orders', deliver_order: '77' };
+
+		render( <App /> );
+		await screen.findByText( 'Иван Петров' );
+
+		expect( screen.getByTestId( 'order-wizard' ) ).toHaveAttribute( 'data-order-id', '77' );
+		expect( mockWizardProps.forDelivery ).toBe( true );
+
+		act( () => mockWizardProps.onClose() );
+
+		expect( screen.queryByTestId( 'order-wizard' ) ).toBeNull();
+		expect( updateQueryStringCalls ).toHaveLength( 1 );
+		expect( updateQueryStringCalls[ 0 ].query ).toEqual( { deliver_order: undefined } );
+	} );
+
+	test( 'an argument that is not an order id opens nothing', async () => {
+		fakeQuery = { deliver_order: 'abc' };
+
+		render( <App /> );
+		await screen.findByText( 'Иван Петров' );
+
+		expect( screen.queryByTestId( 'order-wizard' ) ).toBeNull();
+	} );
+} );
+
